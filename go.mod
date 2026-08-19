@@ -17,6 +17,7 @@ require (
 // now so `go mod tidy` doesn't need google.golang.org reachable.
 
 require (
+	filippo.io/age v1.3.1
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
