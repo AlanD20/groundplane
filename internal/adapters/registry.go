@@ -8,7 +8,10 @@
 // "The backing-service contract".
 package adapters
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // StepOp is a member of the known step catalog the Agent executes. A
 // step kind that doesn't exist here is an ADDITIVE CORE EXTENSION — it
@@ -96,10 +99,9 @@ type Adapter interface {
 
 var registry = map[string]Adapter{}
 
-// Register adds a kind to the registry. Call from each adapter
-// package's init(). This is the ONLY entry point: the Console, CLI, and
-// API learn kinds (labels, requires, steps) from this map — core never
-// switches on kind.
+// Register adds a kind to the registry. Call each adapter package's explicit
+// Register function from internal/app. This is the ONLY entry point: the
+// Console, CLI, and API learn kinds from this map; core never switches on kind.
 func Register(a Adapter) {
 	if _, exists := registry[a.Key()]; exists {
 		panic(fmt.Sprintf("adapters: duplicate registration for key %q", a.Key()))
@@ -120,5 +122,8 @@ func All() []Adapter {
 	for _, a := range registry {
 		out = append(out, a)
 	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Key() < out[j].Key()
+	})
 	return out
 }
