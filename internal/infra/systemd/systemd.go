@@ -16,7 +16,10 @@ package systemd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -25,10 +28,22 @@ import (
 // validate a backup policy's Frequency before it's saved.
 func ValidateCalendar(ctx context.Context, expr string) error {
 	cmd := exec.CommandContext(ctx, "systemd-analyze", "calendar", expr)
-	if err := cmd.Run(); err != nil {
-		return errs.Newf(errs.CodeValidationFailed, "systemd: invalid calendar expression: %s", expr)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
 	}
-	return nil
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: execute calendar validator: %w", err))
+	}
+	detail := strings.TrimSpace(string(output))
+	if detail == "" {
+		detail = exitErr.Error()
+	}
+	return errs.Newf(errs.CodeValidationFailed, "systemd: invalid calendar expression %q: %s", expr, detail)
 }
 
 // InstallUnit writes a unit file and runs `systemctl daemon-reload`.
