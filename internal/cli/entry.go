@@ -55,7 +55,15 @@ func newEntryAddCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 
-			source, err := buildEntrySource(literal, secretRef, factAttach, factKey)
+			source, err := buildEntrySource(entrySourceOptions{
+				literal:      literal,
+				literalSet:   cmd.Flags().Changed("literal"),
+				secretRef:    secretRef,
+				secretRefSet: cmd.Flags().Changed("secret-ref"),
+				factAttach:   factAttach,
+				factKey:      factKey,
+				factSet:      cmd.Flags().Changed("fact-attach") || cmd.Flags().Changed("fact-key"),
+			})
 			if err != nil {
 				return err
 			}
@@ -104,8 +112,19 @@ func newEntryEditCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body := map[string]interface{}{}
-			if literal != "" || secretRef != "" || factAttach != "" {
-				source, err := buildEntrySource(literal, secretRef, factAttach, factKey)
+			literalSet := cmd.Flags().Changed("literal")
+			secretRefSet := cmd.Flags().Changed("secret-ref")
+			factSet := cmd.Flags().Changed("fact-attach") || cmd.Flags().Changed("fact-key")
+			if literalSet || secretRefSet || factSet {
+				source, err := buildEntrySource(entrySourceOptions{
+					literal:      literal,
+					literalSet:   literalSet,
+					secretRef:    secretRef,
+					secretRefSet: secretRefSet,
+					factAttach:   factAttach,
+					factKey:      factKey,
+					factSet:      factSet,
+				})
 				if err != nil {
 					return err
 				}
@@ -127,17 +146,27 @@ func newEntryEditCmd() *cobra.Command {
 	return cmd
 }
 
+type entrySourceOptions struct {
+	literal      string
+	literalSet   bool
+	secretRef    string
+	secretRefSet bool
+	factAttach   string
+	factKey      string
+	factSet      bool
+}
+
 // buildEntrySource enforces the locked mutual exclusivity: literal,
 // secret_ref, and fact are mutually exclusive (api-cli.md, section 4).
-func buildEntrySource(literal, secretRef, factAttach, factKey string) (map[string]interface{}, error) {
+func buildEntrySource(options entrySourceOptions) (map[string]interface{}, error) {
 	set := 0
-	if literal != "" {
+	if options.literalSet {
 		set++
 	}
-	if secretRef != "" {
+	if options.secretRefSet {
 		set++
 	}
-	if factAttach != "" || factKey != "" {
+	if options.factSet {
 		set++
 	}
 	if set != 1 {
@@ -145,17 +174,20 @@ func buildEntrySource(literal, secretRef, factAttach, factKey string) (map[strin
 	}
 
 	switch {
-	case literal != "":
-		return map[string]interface{}{"kind": "literal", "literal": literal}, nil
-	case secretRef != "":
-		return map[string]interface{}{"kind": "secret_ref", "secret_ref": secretRef}, nil
+	case options.literalSet:
+		return map[string]interface{}{"kind": "literal", "literal": options.literal}, nil
+	case options.secretRefSet:
+		if options.secretRef == "" {
+			return nil, fmt.Errorf("--secret-ref must not be empty")
+		}
+		return map[string]interface{}{"kind": "secret_ref", "secret_ref": options.secretRef}, nil
 	default:
-		if factAttach == "" || factKey == "" {
+		if options.factAttach == "" || options.factKey == "" {
 			return nil, fmt.Errorf("--fact-attach and --fact-key must both be set")
 		}
 		return map[string]interface{}{
 			"kind": "fact",
-			"fact": map[string]string{"attach_id": factAttach, "fact": factKey},
+			"fact": map[string]string{"attach_id": options.factAttach, "fact": options.factKey},
 		}, nil
 	}
 }
