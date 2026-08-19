@@ -44,6 +44,8 @@ func NewWorkerPool(size int, r runner.Runner, logger *slog.Logger) *WorkerPool {
 
 // Capacity reports free slots — sent as Ready{capacity} on every pull tick.
 func (p *WorkerPool) Capacity() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.size - len(p.cancels)
 }
 
