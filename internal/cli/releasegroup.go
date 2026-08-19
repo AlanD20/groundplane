@@ -56,7 +56,7 @@ func newReleaseGroupCmd() *cobra.Command {
 			if len(editOrder) > 0 {
 				body["order"] = editOrder
 			}
-			return runEdit(cmd, "/api/v1/release-groups/"+target(fromContext(cmd), args[0]), body)
+			return runPatch(cmd, "/api/v1/release-groups/"+target(fromContext(cmd), args[0]), body)
 		},
 	}
 	edit.Flags().StringSliceVar(&editServices, "service", nil, "new member list (repeatable)")
