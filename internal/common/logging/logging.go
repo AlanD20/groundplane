@@ -51,33 +51,33 @@ type Options struct {
 
 // ResolveLevel implements the locked priority order:
 // --debug > --verbose > GROUNDPLANE_LOG_LEVEL env > config-file log.level > WARN.
-func ResolveLevel(debug, verbose bool, envLevel, configLevel string) slog.Level {
+func ResolveLevel(debug, verbose bool, envLevel, configLevel string) (slog.Level, error) {
 	switch {
 	case debug:
-		return slog.LevelDebug
+		return slog.LevelDebug, nil
 	case verbose:
-		return slog.LevelInfo
+		return slog.LevelInfo, nil
 	case envLevel != "":
 		return parseLevel(envLevel)
 	case configLevel != "":
 		return parseLevel(configLevel)
 	default:
-		return slog.LevelWarn
+		return slog.LevelWarn, nil
 	}
 }
 
-func parseLevel(s string) slog.Level {
+func parseLevel(s string) (slog.Level, error) {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
 	case "DEBUG":
-		return slog.LevelDebug
+		return slog.LevelDebug, nil
 	case "INFO":
-		return slog.LevelInfo
+		return slog.LevelInfo, nil
 	case "WARN", "WARNING":
-		return slog.LevelWarn
+		return slog.LevelWarn, nil
 	case "ERROR":
-		return slog.LevelError
+		return slog.LevelError, nil
 	default:
-		return slog.LevelWarn
+		return 0, fmt.Errorf("logging: unknown level %q (want DEBUG, INFO, WARN, or ERROR)", s)
 	}
 }
 

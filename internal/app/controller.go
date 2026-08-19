@@ -54,8 +54,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, err
 	}
 
+	level, err := logging.ResolveLevel(false, false, os.Getenv("GROUNDPLANE_LOG_LEVEL"), cfg.Log.Level)
+	if err != nil {
+		return nil, err
+	}
 	logger, err := logging.Setup(logging.Options{
-		Level:   logging.ResolveLevel(false, false, os.Getenv("GROUNDPLANE_LOG_LEVEL"), cfg.Log.Level),
+		Level:   level,
 		Console: logging.ConsoleConfig{Enabled: cfg.Log.Console.Enabled},
 		File:    logging.FileConfig{Enabled: cfg.Log.File.Enabled, Path: cfg.Log.File.Path},
 	})
