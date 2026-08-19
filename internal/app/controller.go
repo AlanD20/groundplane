@@ -62,7 +62,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 
 	store, err := etcd.New(ctx, cfg.Etcd.Endpoints, cfg.Etcd.KeyPrefix)
 	if err != nil {
-		logger.Warn("controller: etcd not wired yet, continuing with a nil store for scaffolding", slog.Any("error", err))
+		return nil, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
 
 	srv := controller.New(store, logger, controller.Options{
@@ -71,7 +71,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 
 	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
 	if err != nil {
-		tick = 30 * time.Second
+		return nil, fmt.Errorf("controller: parse scheduler tick interval: %w", err)
+	}
+	if tick <= 0 {
+		return nil, fmt.Errorf("controller: scheduler tick interval must be positive")
 	}
 
 	return &Controller{
