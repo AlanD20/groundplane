@@ -97,6 +97,9 @@ func (w *Writer) RenderOne(fields []string, values []string, v any) error {
 	if w.Format != FormatTable {
 		return w.Render(nil, nil, v)
 	}
+	if len(fields) != len(values) {
+		return fmt.Errorf("output: field/value length mismatch: %d fields, %d values", len(fields), len(values))
+	}
 	rows := make([][]string, len(fields))
 	for i := range fields {
 		rows[i] = []string{fields[i], values[i]}
@@ -126,6 +129,22 @@ func Tabulate(items []map[string]any) ([]string, [][]string) {
 			keys = append(keys, p)
 		}
 	}
+	if len(headers) == 0 && len(items) > 0 {
+		allKeys := map[string]struct{}{}
+		for _, item := range items {
+			for key := range item {
+				allKeys[key] = struct{}{}
+			}
+		}
+		keys = make([]string, 0, len(allKeys))
+		for key := range allKeys {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			headers = append(headers, strings.ToUpper(key))
+		}
+	}
 	if len(headers) == 0 {
 		headers = []string{"VALUE"}
 	}
@@ -134,7 +153,9 @@ func Tabulate(items []map[string]any) ([]string, [][]string) {
 	for _, it := range items {
 		row := make([]string, len(headers))
 		for i, k := range keys {
-			row[i] = fmt.Sprint(it[k])
+			if value, ok := it[k]; ok {
+				row[i] = fmt.Sprint(value)
+			}
 		}
 		rows = append(rows, row)
 	}
