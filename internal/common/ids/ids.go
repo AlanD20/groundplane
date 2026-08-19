@@ -9,9 +9,15 @@ package ids
 
 import (
 	"crypto/rand"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+)
+
+var (
+	monotonicMu      sync.Mutex
+	monotonicEntropy = ulid.Monotonic(rand.Reader, 0)
 )
 
 // Kind is the short, readable prefix on every id.
@@ -40,14 +46,15 @@ const (
 	KindNetwork        Kind = "net" // blueprint.md: "network zone maps directly to a Compose network"; x-gp-network id: net_01J...
 	KindBackingService Kind = "bks"
 	KindReleaseGroup   Kind = "rg"
-	KindComponent          Kind = "component"
+	KindComponent      Kind = "component"
 )
 
 // New returns a fresh id: <kind>_<ULID>, using crypto/rand entropy and
 // the current time — the normal, non-fixture path.
 func New(kind Kind) string {
-	entropy := ulid.Monotonic(rand.Reader, 0)
-	return string(kind) + "_" + ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
+	monotonicMu.Lock()
+	defer monotonicMu.Unlock()
+	return string(kind) + "_" + ulid.MustNew(ulid.Timestamp(time.Now()), monotonicEntropy).String()
 }
 
 // NewAt is New with an explicit timestamp — for mock fixtures, which use
