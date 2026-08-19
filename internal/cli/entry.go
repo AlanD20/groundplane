@@ -133,7 +133,7 @@ func newEntryEditCmd() *cobra.Command {
 			if len(services) > 0 || all {
 				body["exposure"] = entryExposure(services, all)
 			}
-			return runEdit(cmd, "/api/v1/entries/"+target(fromContext(cmd), args[0]), body)
+			return runPatch(cmd, "/api/v1/entries/"+target(fromContext(cmd), args[0]), body)
 		},
 	}
 

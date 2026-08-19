@@ -46,7 +46,7 @@ func newSecretCmd() *cobra.Command {
 		Short:   "Remove a secret",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRemove(cmd, "/api/v1/secrets/"+target(fromContext(cmd), args[0]))
+			return runDestroy(cmd, "/api/v1/secrets/"+target(fromContext(cmd), args[0]))
 		},
 	})
 
