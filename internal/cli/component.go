@@ -20,8 +20,8 @@ func newComponentCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := scopeQuery(fromContext(cmd), "environment")
 			if platform {
-				query.Del("environment")
-				query.Set("platform", "true")
+				delete(query, "environment")
+				query["platform"] = "true"
 			}
 			return runList(cmd, "/api/v1/components", query)
 		},
