@@ -14,6 +14,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 )
 
 // Server holds everything a request handler needs. Construct once in
@@ -23,11 +25,33 @@ type Server struct {
 	Store  etcd.Store
 	Logger *slog.Logger
 	Mux    *http.ServeMux
+	API    huma.API
+
+	etcdEndpoints []string
 }
 
-func New(store etcd.Store, logger *slog.Logger) *Server {
-	s := &Server{Store: store, Logger: logger, Mux: http.NewServeMux()}
+type Options struct {
+	EtcdEndpoints []string
+}
+
+func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
+	configureProblemResponses()
+	mux := http.NewServeMux()
+	config := huma.DefaultConfig("Groundplane API", "dev")
+	config.OpenAPIPath = ""
+	config.DocsPath = ""
+	config.SchemasPath = ""
+	config.RejectUnknownQueryParameters = true
+
+	s := &Server{
+		Store:         store,
+		Logger:        logger,
+		Mux:           mux,
+		API:           humago.NewWithPrefix(mux, "/api/v1", config),
+		etcdEndpoints: append([]string(nil), options.EtcdEndpoints...),
+	}
 	s.routes()
+	s.registerHost()
 	return s
 }
 
@@ -168,7 +192,6 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/activity", s.notImplemented) // documented alias of GET /tasks?workspace=
 
 	// host / agents
-	mux.HandleFunc("GET /api/v1/host", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/agent-join-tokens", s.notImplemented) // mint; consumed once by gRPC Connect
 	mux.HandleFunc("GET /api/v1/agents", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.notImplemented)

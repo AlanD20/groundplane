@@ -30,6 +30,7 @@ type Event struct {
 // swapping the etcd client library, or pointing at a disposable
 // containerized etcd for dev, never ripples past this package.
 type Store interface {
+	Health(ctx context.Context) error
 	Get(ctx context.Context, key string) ([]byte, error)
 	Put(ctx context.Context, key string, value []byte) error
 	Delete(ctx context.Context, key string) error

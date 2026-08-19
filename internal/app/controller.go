@@ -10,13 +10,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/manual"
 	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
+	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/logging"
 	agentcomponent "github.com/AlanD20/groundplane/internal/components/agent"
 	"github.com/AlanD20/groundplane/internal/components/caddy"
 	"github.com/AlanD20/groundplane/internal/components/cloudflaretunnel"
-	"github.com/AlanD20/groundplane/internal/components/coredns"
 	controllercomponent "github.com/AlanD20/groundplane/internal/components/controller"
-	"github.com/AlanD20/groundplane/internal/common/config"
-	"github.com/AlanD20/groundplane/internal/common/logging"
+	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
@@ -65,7 +65,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		logger.Warn("controller: etcd not wired yet, continuing with a nil store for scaffolding", slog.Any("error", err))
 	}
 
-	srv := controller.New(store, logger)
+	srv := controller.New(store, logger, controller.Options{
+		EtcdEndpoints: cfg.Etcd.Endpoints,
+	})
 
 	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
 	if err != nil {
