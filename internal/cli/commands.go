@@ -8,7 +8,7 @@ import "github.com/spf13/cobra"
 // and `router` are deliberately absent — DNS settings live under `core
 // component coredns config` now, and the Router is a read-only
 // projection surfaced via `environment show`/the Console, replaced as a
-// CLI verb by `addon enable|disable|config` (see api-cli.md's command
+// CLI verb by `component enable|disable|config` (see api-cli.md's command
 // tree — both nouns were dropped from the locked tree).
 func addCommands(root *cobra.Command) {
 	root.AddCommand(
@@ -23,7 +23,7 @@ func addCommands(root *cobra.Command) {
 		newScriptCmd(),
 		newReleaseGroupCmd(),
 		newBackupCmd(),
-		newAddonCmd(),
+		newComponentCmd(),
 		newBackingServiceCmd(),
 		newSecretCmd(),
 		newConnectorCmd(),
@@ -32,7 +32,6 @@ func addCommands(root *cobra.Command) {
 		newTaskCmd(),
 		newActivityCmd(),
 		newHostCmd(),
-		newCoreCmd(),
 		newControllerCmd(),
 		newAgentRunCmd(),
 		newVersionCmd(),

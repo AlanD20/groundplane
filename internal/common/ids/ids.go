@@ -40,7 +40,7 @@ const (
 	KindNetwork        Kind = "net" // blueprint.md: "network zone maps directly to a Compose network"; x-gp-network id: net_01J...
 	KindBackingService Kind = "bks"
 	KindReleaseGroup   Kind = "rg"
-	KindAddon          Kind = "addon"
+	KindComponent          Kind = "component"
 )
 
 // New returns a fresh id: <kind>_<ULID>, using crypto/rand entropy and

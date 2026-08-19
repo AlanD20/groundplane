@@ -79,9 +79,9 @@ func (e Environment) Validate() error {
 		}
 	}
 
-	// Public routes with no enabled ingress addon is a WARNING in the
+	// Public routes with no enabled ingress component is a WARNING in the
 	// Console (mvp.md), not a hard validation failure here — checked by
-	// the renderer, which has the addon state to compare against.
+	// the renderer, which has the component state to compare against.
 
 	return nil
 }
@@ -236,9 +236,9 @@ func (a Attach) Validate() error {
 	return nil
 }
 
-func (a Addon) Validate() error {
+func (a Component) Validate() error {
 	if a.ID == "" || a.EnvironmentID == "" || a.Kind == "" {
-		return fmt.Errorf("addon: id, environment_id, and kind are required")
+		return fmt.Errorf("component: id, environment_id, and kind are required")
 	}
 	return nil
 }

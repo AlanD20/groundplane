@@ -10,8 +10,8 @@ import (
 	"github.com/sample-tenant/groundplane/internal/adapters/manual"
 	"github.com/sample-tenant/groundplane/internal/adapters/postgres16"
 	"github.com/sample-tenant/groundplane/internal/adapters/valkey9"
-	"github.com/sample-tenant/groundplane/internal/addons/caddy"
-	"github.com/sample-tenant/groundplane/internal/addons/cloudflaretunnel"
+	"github.com/sample-tenant/groundplane/internal/components/caddy"
+	"github.com/sample-tenant/groundplane/internal/components/cloudflaretunnel"
 	"github.com/sample-tenant/groundplane/internal/common/config"
 	"github.com/sample-tenant/groundplane/internal/common/logging"
 	"github.com/sample-tenant/groundplane/internal/controller"
@@ -31,7 +31,7 @@ type Controller struct {
 }
 
 // NewController performs every piece of this binary's DI wiring, once,
-// explicitly — including adapter and addon registration
+// explicitly — including adapter and component registration
 // (postgres16.Register(), valkey9.Register(), manual.Register(),
 // caddy.Register(), cloudflaretunnel.Register()), which replaces the
 // init()-based self-registration architecture.md originally sketched:
@@ -41,7 +41,7 @@ type Controller struct {
 // import's side effect.
 func NewController(ctx context.Context, configPath string) (*Controller, error) {
 	registerAdapters()
-	registerAddons()
+	registerComponents()
 
 	cfg := config.DefaultControllerConfig()
 	if err := config.Load(ctx, configPath, &cfg); err != nil {
@@ -86,10 +86,10 @@ func registerAdapters() {
 	manual.Register()
 }
 
-// registerAddons is registerAdapters' twin for the environment-addon
+// registerComponents is registerAdapters' twin for the environment-component
 // seam (architecture.md's third extension seam, alongside adapters and
 // core components).
-func registerAddons() {
+func registerComponents() {
 	caddy.Register()
 	cloudflaretunnel.Register()
 }

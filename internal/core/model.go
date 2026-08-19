@@ -57,7 +57,7 @@ type Environment struct {
 	Services map[string]Service `yaml:"services,omitempty" json:"services,omitempty"`
 	Attaches []Attach           `yaml:"attaches,omitempty" json:"attaches,omitempty"`
 	Routes   []Route            `yaml:"routes,omitempty" json:"routes,omitempty"`
-	Addons   []Addon            `yaml:"addons,omitempty" json:"addons,omitempty"`
+	Components   []Component            `yaml:"components,omitempty" json:"components,omitempty"`
 	Volumes  map[string]Volume  `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 	Entries  []EnvEntry         `yaml:"entries,omitempty" json:"entries,omitempty"`
 	Scripts  map[string]Script  `yaml:"scripts,omitempty" json:"scripts,omitempty"`
@@ -67,21 +67,21 @@ type Environment struct {
 }
 
 // Router is a READ-ONLY projection assembled from the environment's
-// ingress-kind Addons (kind "ingress.caddy", "edge.cloudflare-tunnel",
+// ingress-kind Components (kind "ingress.caddy", "edge.cloudflare-tunnel",
 // …) — it is never authored or PUT directly. See api-cli.md: "router |
 // GET /environments/{id}/router read-only projection grouping ingress
-// addons", and blueprint.md: "The Router page is a UI grouping for
-// ingress addons; it is not a separate runtime model."
+// components", and blueprint.md: "The Router page is a UI grouping for
+// ingress components; it is not a separate runtime model."
 type Router struct {
-	Caddy  *AddonProjection `yaml:"caddy,omitempty" json:"caddy,omitempty"`
-	Tunnel *AddonProjection `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
+	Caddy  *ComponentProjection `yaml:"caddy,omitempty" json:"caddy,omitempty"`
+	Tunnel *ComponentProjection `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
 }
 
-// AddonProjection is Router's per-addon summary view — the full Addon
-// record (config, generated services, health) lives in Addon itself;
+// ComponentProjection is Router's per-component summary view — the full Component
+// record (config, generated services, health) lives in Component itself;
 // this is just what the read-only projection surfaces.
-type AddonProjection struct {
-	AddonID    string `yaml:"addon_id" json:"addon_id"`
+type ComponentProjection struct {
+	ComponentID    string `yaml:"component_id" json:"component_id"`
 	Enabled    bool   `yaml:"enabled" json:"enabled"`
 	PinnedIPv4 string `yaml:"pinned_ipv4,omitempty" json:"pinned_ipv4,omitempty"` // Caddy only; durable while enabled, released on disable
 }
@@ -311,34 +311,34 @@ type Grant struct {
 	AttachID string `yaml:"attach_id" json:"attach_id"`
 }
 
-// AddonKind namespaces addon kinds by category: "ingress.*" (Caddy),
+// ComponentKind namespaces component kinds by category: "ingress.*" (Caddy),
 // "edge.*" (Cloudflare Tunnel), and future kinds (e.g. "ingress.traefik")
-// register the same way. See blueprint.md, "x-gp-addons": "Adding
-// Traefik later is an addon package and registration, not a new router
+// register the same way. See blueprint.md, "x-gp-components": "Adding
+// Traefik later is an component package and registration, not a new router
 // architecture."
-type AddonKind string
+type ComponentKind string
 
 const (
-	AddonKindIngressCaddy   AddonKind = "ingress.caddy"
-	AddonKindEdgeCloudflare AddonKind = "edge.cloudflare-tunnel"
+	ComponentKindIngressCaddy   ComponentKind = "ingress.caddy"
+	ComponentKindEdgeCloudflare ComponentKind = "edge.cloudflare-tunnel"
 )
 
-// Addon is the generic environment-scoped addon contract — Caddy and
-// Cloudflare Tunnel are addon KINDS, not bespoke toggles; a future
-// ingress kind is a new AddonKind plus a registration, never a new
-// runtime model. See blueprint.md, "x-gp-addons".
-type Addon struct {
-	ID                string         `yaml:"id" json:"id"` // addon_<ulid>
+// Component is the generic environment-scoped component contract — Caddy and
+// Cloudflare Tunnel are component KINDS, not bespoke toggles; a future
+// ingress kind is a new ComponentKind plus a registration, never a new
+// runtime model. See blueprint.md, "x-gp-components".
+type Component struct {
+	ID                string         `yaml:"id" json:"id"` // component_<ulid>
 	EnvironmentID     string         `yaml:"environment_id" json:"environment_id"`
-	Kind              AddonKind      `yaml:"kind" json:"kind"`
+	Kind              ComponentKind      `yaml:"kind" json:"kind"`
 	Enabled           bool           `yaml:"enabled" json:"enabled"`
-	Config            map[string]any `yaml:"config,omitempty" json:"config,omitempty"` // typed per kind at the registry level; kept generic here (see internal/adapters-style addon registry, TODO)
+	Config            map[string]any `yaml:"config,omitempty" json:"config,omitempty"` // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
 	GeneratedServices []string       `yaml:"generated_services,omitempty" json:"generated_services,omitempty"`
 	Healthy           bool           `yaml:"healthy" json:"healthy"`
 }
 
 // Route is a domain or path routed to a Service. Public routes require
-// an enabled ingress addon to be served.
+// an enabled ingress component to be served.
 type Route struct {
 	ID          string `yaml:"id" json:"id"` // rte_<ulid>
 	Host        string `yaml:"host,omitempty" json:"host,omitempty"`

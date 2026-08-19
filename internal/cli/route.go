@@ -3,7 +3,7 @@ package cli
 import "github.com/spf13/cobra"
 
 // route: list | add | edit | remove. Public routes need an enabled
-// ingress addon to be served. See mvp.md, "Route", and blueprint.md,
+// ingress component to be served. See mvp.md, "Route", and blueprint.md,
 // "x-gp-route".
 func newRouteCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "route", Short: "Routes — a domain or path sending traffic to a service"}
@@ -30,7 +30,7 @@ func newRouteCmd() *cobra.Command {
 	add.Flags().StringVar(&host, "host", "", "hostname")
 	add.Flags().StringVar(&path, "path", "/", "path prefix")
 	add.Flags().StringVar(&service, "service", "", "target service name")
-	add.Flags().StringVar(&exposure, "exposure", "internal", "public | internal (public needs an enabled ingress addon)")
+	add.Flags().StringVar(&exposure, "exposure", "internal", "public | internal (public needs an enabled ingress component)")
 	_ = add.MarkFlagRequired("service")
 	cmd.AddCommand(add)
 

@@ -27,7 +27,7 @@ const (
 	CodeRunnerNotFound         = errs.CodeRunnerNotFound
 	CodeAgentNotFound          = errs.CodeAgentNotFound
 	CodeReleaseGroupNotFound   = errs.CodeReleaseGroupNotFound
-	CodeAddonNotFound          = errs.CodeAddonNotFound
+	CodeComponentNotFound          = errs.CodeComponentNotFound
 	CodeRecoveryPointNotFound  = errs.CodeRecoveryPointNotFound
 	CodeDeployInFlight         = errs.CodeDeployInFlight
 	CodeSlugConflict           = errs.CodeSlugConflict

@@ -1,7 +1,7 @@
 # The one hand-run bootstrap compose file — brings up the Agent, which
 # then applies everything else the Controller renders (including
 # groundplane-infra: CoreDNS + the Agent itself). See mvp.md, "Core
-# (locked) — the groundplane-infra add-on".
+# (locked) — the groundplane-infra component".
 #
 #   systemctl start groundplane-agent
 #   docker compose -f /etc/groundplane/groundplane-bootstrap.yaml up -d

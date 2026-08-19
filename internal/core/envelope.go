@@ -110,7 +110,7 @@ type EnvironmentDocument struct {
 	Attachments   map[string]AttachmentSpec   `yaml:"x-gp-attachments,omitempty"`
 	Entries       map[string]EntrySpec        `yaml:"x-gp-entry,omitempty"`
 	Routes        []RouteSpec                 `yaml:"x-gp-routes,omitempty"`
-	Addons        map[string]AddonSpec        `yaml:"x-gp-addons,omitempty"`
+	Components        map[string]ComponentSpec        `yaml:"x-gp-components,omitempty"`
 	Backup        *BackupSpec                 `yaml:"x-gp-backup,omitempty"`
 	ReleaseGroups map[string]ReleaseGroupSpec `yaml:"x-gp-release-group,omitempty"`
 }
@@ -172,11 +172,11 @@ type RouteSpec struct {
 	Exposure string `yaml:"exposure"` // "public" | "internal"
 }
 
-// AddonSpec is one x-gp-addons entry, keyed by addon name. Config is
-// typed per-kind at the addon registry level (TODO, mirrors the adapter
+// ComponentSpec is one x-gp-components entry, keyed by component name. Config is
+// typed per-kind at the component registry level (TODO, mirrors the adapter
 // registry pattern in internal/adapters); kept generic here.
-type AddonSpec struct {
-	Kind    AddonKind      `yaml:"kind"`
+type ComponentSpec struct {
+	Kind    ComponentKind      `yaml:"kind"`
 	Enabled bool           `yaml:"enabled"`
 	Config  map[string]any `yaml:"config,omitempty"`
 }

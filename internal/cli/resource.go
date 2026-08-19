@@ -81,7 +81,7 @@ func runRemove(cmd *cobra.Command, path string) error {
 
 // runDestroy is DELETE for resources whose deletion is destructive and
 // therefore a task — tenant, project, environment, zone, route, volume,
-// entry, script, release-group, addon, backing-service, connector,
+// entry, script, release-group, component, backing-service, connector,
 // secret, and attach all fall under api-cli.md's resource-map rows
 // marked "destructive DELETE …/{id} → 202 {task_id}". `runner` is the
 // one CLI noun that stays synchronous (runRemove) — deregistration has

@@ -117,10 +117,10 @@ type Script struct {
 	When        string `json:"when"`
 }
 
-// Addon is the generic environment-addon record. Caddy and Cloudflare
-// Tunnel are addon KINDS ("ingress.caddy", "edge.cloudflare-tunnel"),
-// not bespoke resources — see blueprint.md, "x-gp-addons".
-type Addon struct {
+// Component is the generic environment-component record. Caddy and Cloudflare
+// Tunnel are component KINDS ("ingress.caddy", "edge.cloudflare-tunnel"),
+// not bespoke resources — see blueprint.md, "x-gp-components".
+type Component struct {
 	ID                string         `json:"id"`
 	EnvironmentID     string         `json:"environment_id"`
 	Kind              string         `json:"kind"`
@@ -130,16 +130,16 @@ type Addon struct {
 	Healthy           bool           `json:"healthy"`
 }
 
-// Router is the READ-ONLY projection grouping ingress addons — GET
+// Router is the READ-ONLY projection grouping ingress components — GET
 // only, never PUT (api-cli.md: "router | GET /environments/{id}/router
-// read-only projection grouping ingress addons").
+// read-only projection grouping ingress components").
 type Router struct {
-	Caddy  *AddonProjection `json:"caddy,omitempty"`
-	Tunnel *AddonProjection `json:"tunnel,omitempty"`
+	Caddy  *ComponentProjection `json:"caddy,omitempty"`
+	Tunnel *ComponentProjection `json:"tunnel,omitempty"`
 }
 
-type AddonProjection struct {
-	AddonID    string `json:"addon_id"`
+type ComponentProjection struct {
+	ComponentID    string `json:"component_id"`
 	Enabled    bool   `json:"enabled"`
 	PinnedIPv4 string `json:"pinned_ipv4,omitempty"`
 }
@@ -264,7 +264,7 @@ type ScriptRunRequest struct {
 	Parameters map[string]string `json:"parameters,omitempty"`
 }
 
-type AddonEnableRequest struct {
+type ComponentEnableRequest struct {
 	Config map[string]any `json:"config,omitempty"`
 }
 

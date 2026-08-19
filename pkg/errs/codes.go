@@ -24,7 +24,7 @@ const (
 	CodeRunnerNotFound         Code = "runner.not_found"
 	CodeAgentNotFound          Code = "agent.not_found"
 	CodeReleaseGroupNotFound   Code = "release_group.not_found"
-	CodeAddonNotFound          Code = "addon.not_found"
+	CodeComponentNotFound          Code = "component.not_found"
 	CodeRecoveryPointNotFound  Code = "recovery_point.not_found"
 
 	// --- conflict / in-flight ---
@@ -55,7 +55,7 @@ func classify(code Code) Class {
 	case CodeTenantNotFound, CodeProjectNotFound, CodeEnvironmentNotFound, CodeServiceNotFound,
 		CodeBackingServiceNotFound, CodeAttachNotFound, CodeTaskNotFound, CodeSecretNotFound,
 		CodeConnectorNotFound, CodeRunnerNotFound, CodeAgentNotFound, CodeReleaseGroupNotFound,
-		CodeAddonNotFound, CodeRecoveryPointNotFound:
+		CodeComponentNotFound, CodeRecoveryPointNotFound:
 		return ClassNotFound
 
 	case CodeDeployInFlight, CodeSlugConflict:

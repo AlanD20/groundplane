@@ -76,8 +76,8 @@ func (s *Server) routes() {
 	mux.HandleFunc("POST /api/v1/environments/{id}/restore", s.acceptTask)
 	mux.HandleFunc("POST /api/v1/environments/{id}/rotate-key", s.acceptTask)
 	mux.HandleFunc("POST /api/v1/environments/{id}/export-key", s.notImplemented)
-	// router: READ-ONLY projection grouping ingress addons — GET only,
-	// never PUT (api-cli.md, section 4). Managed entirely through /addons.
+	// router: READ-ONLY projection grouping ingress components — GET only,
+	// never PUT (api-cli.md, section 4). Managed entirely through /components.
 	mux.HandleFunc("GET /api/v1/environments/{id}/router", s.notImplemented)
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
@@ -120,14 +120,17 @@ func (s *Server) routes() {
 	}
 	mux.HandleFunc("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
-	// addon (?environment=) — Caddy/Tunnel are addon kinds, not bespoke resources
-	mux.HandleFunc("GET /api/v1/addons", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/addons", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/addons/{id}", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/addons/{id}", s.notImplemented) // singleton config sub-resource shape
-	mux.HandleFunc("DELETE /api/v1/addons/{id}", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/addons/{id}/enable", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/addons/{id}/disable", s.acceptTask)
+	// component (?environment= or ?platform=true) — one resource across both owners
+	mux.HandleFunc("GET /api/v1/components", s.notImplemented)
+	mux.HandleFunc("POST /api/v1/components", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/components/{id}", s.notImplemented)
+	mux.HandleFunc("PUT /api/v1/components/{id}", s.notImplemented)
+	mux.HandleFunc("DELETE /api/v1/components/{id}", s.acceptTask)
+	mux.HandleFunc("POST /api/v1/components/{id}/enable", s.acceptTask)
+	mux.HandleFunc("POST /api/v1/components/{id}/disable", s.acceptTask)
+	mux.HandleFunc("POST /api/v1/components/{id}/update", s.acceptTask)
+	mux.HandleFunc("GET /api/v1/components/{id}/config", s.notImplemented)
+	mux.HandleFunc("PUT /api/v1/components/{id}/config", s.notImplemented)
 
 	// backing-service
 	mux.HandleFunc("GET /api/v1/backing-services", s.notImplemented)
@@ -164,18 +167,13 @@ func (s *Server) routes() {
 	mux.HandleFunc("POST /api/v1/tasks/{id}/abort", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/activity", s.notImplemented) // documented alias of GET /tasks?workspace=
 
-	// host / agents / core
+	// host / agents
 	mux.HandleFunc("GET /api/v1/host", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/agents", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/agents/pair", s.notImplemented) // {join_token} -> paired agent/config
 	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("PUT /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/core", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/core/components/{kind}", s.notImplemented) // includes the read-only agent view
-	mux.HandleFunc("GET /api/v1/core/components/{kind}/config", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/core/components/{kind}/config", s.notImplemented) // coredns's DNS settings live here now — no dedicated /dns surface
-	mux.HandleFunc("POST /api/v1/core/components/{kind}/update", s.acceptTask)
 }
 
 func (s *Server) notImplemented(w http.ResponseWriter, r *http.Request) {

@@ -5,7 +5,7 @@ hand-maintaining Docker Compose. Desired state is a **Compose-compatible
 document plus a namespaced `x-gp-*` extension grammar** — not a bespoke
 YAML schema (see `blueprint.md`). This is the **implementation
 boilerplate**: package layout, entry points, the shared "common" project,
-the domain model, the adapter/addon registries, and the full CLI command
+the domain model, the adapter/component registries, and the full CLI command
 tree, wired but not yet backed by real etcd/docker/gRPC calls. Every
 `TODO` marks where real logic replaces a stub.
 
@@ -29,7 +29,7 @@ console/             React 19 + Vite + Tailwind v4 static SPA
                       (go:embed'd into the Controller binary)
 
 internal/app         DI wiring, per binary: config load, logging setup,
-                      explicit adapter AND addon registration,
+                      explicit adapter AND component registration,
                       store/server/scheduler construction. The only thing
                       cmd/* is allowed to import.
 internal/cli         Cobra commands — one file per noun, zero logic
@@ -47,10 +47,9 @@ internal/core        Domain model (model.go) + the authored Blueprint
 internal/adapters    Backing-service adapter registry — one package per
                       kind (postgres16, valkey9, manual), each exporting
                       an explicit Register()
-internal/addons      Environment-addon registry — architecture.md's third
-                      extension seam, mirrors internal/adapters exactly
-                      (caddy = ingress.caddy, cloudflaretunnel =
-                      edge.cloudflare-tunnel)
+internal/components   Unified component registry — environment-owned Caddy
+                      and Cloudflare Tunnel plus platform-owned CoreDNS,
+                      Controller, and Agent share one noun and owner-aware seam
 internal/infra       Server-side platform integrations (etcd, age,
                       systemd, docker) — ONLY the daemons import this;
                       the CLI never does
@@ -83,16 +82,16 @@ Two structural shifts are worth knowing about before reading the code:
   Compose document (parsed by a real Compose library, never
   reimplemented — see `internal/core/envelope.go`'s `TODO`) plus
   `x-gp-*` extensions for everything Compose has no opinion on
-  (releases, attachments, entries, requires, routes, addons, backups).
+  (releases, attachments, entries, requires, routes, components, backups).
   `internal/core/model.go` is the Controller's *typed* internal
   representation the Controller compiles a Blueprint into — the two are
   deliberately different shapes; see `envelope.go`'s package comment for
   the layering.
 - **The Router is a projection, not a resource.** Caddy and Cloudflare
-  Tunnel used to be bespoke on/off toggles. They're now addon *kinds*
-  under a generic `internal/addons` registry, managed by `addon
+  Tunnel used to be bespoke on/off toggles. They're now component *kinds*
+  under a generic `internal/components` registry, managed by `component
   enable|disable|config`; `GET /environments/{id}/router` is a read-only
-  view grouping whichever ingress addons happen to be enabled.
+  view grouping whichever ingress components happen to be enabled.
 
 ## The import matrix (locked)
 
@@ -115,7 +114,7 @@ load-bearing rules:
 
 ## Building
 
-Requires Go 1.22+, Node 20+ (for the Console), and `protoc` +
+Requires Go 1.26+, Node 20+ (for the Console), and `protoc` +
 `protoc-gen-go` + `protoc-gen-go-grpc` (for `proto/agent.proto`).
 
 ```sh
@@ -128,10 +127,10 @@ make ci                         # the full local gate: tidy, gofmt, vet, race te
 
 This has been built, `go vet`'d, `gofmt`'d, and exercised end-to-end
 (the CLI binary really does round-trip HTTP requests against the
-Controller binary for every noun — including `release-group`, `addon`,
+Controller binary for every noun — including `release-group`, `component`,
 and the discriminated `entry` model — and decode its RFC 7807 error
 responses) — but `internal/infra`'s etcd/docker/age/systemd
-integrations, and `internal/addons`' Render/Healthy implementations,
+integrations, and `internal/components`' Render/Healthy implementations,
 all still return `errs.CodeNotImplemented`. Start there;
 `internal/agent/worker.go`'s `runStep` and
 `internal/controller/server.go`'s `acceptTask` are the two places that
