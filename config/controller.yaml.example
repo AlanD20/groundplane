@@ -1,0 +1,21 @@
+# /etc/groundplane/controller.yaml — the DR contract's "minimal startup
+# config". This file plus /etc/groundplane/controller.age are the only
+# two things etcd itself cannot hold. See mvp.md, "Everything is etcd
+# (locked)".
+etcd:
+  endpoints:
+    - 127.0.0.1:2379
+  key_prefix: /groundplane/
+listen:
+  http: 127.0.0.1:8080   # human API (REST/JSON)
+  grpc: 127.0.0.1:8081   # agent channel
+scheduler:
+  tick_interval: 30s
+age_key_path: /etc/groundplane/controller.age
+log:
+  level: warn            # --debug > --verbose > GROUNDPLANE_LOG_LEVEL > this > WARN
+  console:
+    enabled: true
+  file:
+    enabled: true
+    path: /var/log/groundplane/controller.log

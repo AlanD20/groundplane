@@ -1,0 +1,7 @@
+# ~/.config/groundplane/config.yaml — the CLI's global config.
+host: http://127.0.0.1:8080
+# tenant: sample-tenant
+# project: sample-project
+# env: production
+output: TABLE
+no_color: false

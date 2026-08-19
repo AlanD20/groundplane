@@ -1,0 +1,105 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"time"
+
+	"github.com/sample-tenant/groundplane/internal/adapters/manual"
+	"github.com/sample-tenant/groundplane/internal/adapters/postgres16"
+	"github.com/sample-tenant/groundplane/internal/adapters/valkey9"
+	"github.com/sample-tenant/groundplane/internal/addons/caddy"
+	"github.com/sample-tenant/groundplane/internal/addons/cloudflaretunnel"
+	"github.com/sample-tenant/groundplane/internal/common/config"
+	"github.com/sample-tenant/groundplane/internal/common/logging"
+	"github.com/sample-tenant/groundplane/internal/controller"
+	"github.com/sample-tenant/groundplane/internal/infra/etcd"
+)
+
+const DefaultControllerConfigPath = "/etc/groundplane/controller.yaml"
+
+// Controller is the wired Controller binary: config, logging, the
+// adapter registry, the etcd store, the HTTP server, and the scheduler.
+// cmd/controller/main.go is nothing but NewController + Run.
+type Controller struct {
+	Config config.ControllerConfig
+	Logger *slog.Logger
+	Server *controller.Server
+	Sched  *controller.Scheduler
+}
+
+// NewController performs every piece of this binary's DI wiring, once,
+// explicitly — including adapter and addon registration
+// (postgres16.Register(), valkey9.Register(), manual.Register(),
+// caddy.Register(), cloudflaretunnel.Register()), which replaces the
+// init()-based self-registration architecture.md originally sketched:
+// this project bans init() globals (docs/standards.md, section 11), so
+// the "one package + one registration line" extensibility promise is
+// kept by putting the registration line here instead of behind a blank
+// import's side effect.
+func NewController(ctx context.Context, configPath string) (*Controller, error) {
+	registerAdapters()
+	registerAddons()
+
+	cfg := config.DefaultControllerConfig()
+	if err := config.Load(ctx, configPath, &cfg); err != nil {
+		return nil, err
+	}
+
+	logger, err := logging.Setup(logging.Options{
+		Level:   logging.ResolveLevel(false, false, os.Getenv("GROUNDPLANE_LOG_LEVEL"), cfg.Log.Level),
+		Console: logging.ConsoleConfig{Enabled: cfg.Log.Console.Enabled},
+		File:    logging.FileConfig{Enabled: cfg.Log.File.Enabled, Path: cfg.Log.File.Path},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	store, err := etcd.New(ctx, cfg.Etcd.Endpoints, cfg.Etcd.KeyPrefix)
+	if err != nil {
+		logger.Warn("controller: etcd not wired yet, continuing with a nil store for scaffolding", slog.Any("error", err))
+	}
+
+	srv := controller.New(store, logger)
+
+	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
+	if err != nil {
+		tick = 30 * time.Second
+	}
+
+	return &Controller{
+		Config: cfg,
+		Logger: logger,
+		Server: srv,
+		Sched:  controller.NewScheduler(srv, tick),
+	}, nil
+}
+
+// registerAdapters is the ONE explicit registration point — the
+// extensibility seam's actual "one line" per adapter, called from here
+// instead of relying on package-import side effects.
+func registerAdapters() {
+	postgres16.Register()
+	valkey9.Register()
+	manual.Register()
+}
+
+// registerAddons is registerAdapters' twin for the environment-addon
+// seam (architecture.md's third extension seam, alongside adapters and
+// core components).
+func registerAddons() {
+	caddy.Register()
+	cloudflaretunnel.Register()
+}
+
+// Run starts the scheduler and blocks serving HTTP until ctx is
+// cancelled.
+func (c *Controller) Run(ctx context.Context) error {
+	go c.Sched.Run(ctx)
+	if err := c.Server.Serve(ctx, c.Config.Listen.HTTP); err != nil {
+		return fmt.Errorf("controller: serve: %w", err)
+	}
+	return nil
+}

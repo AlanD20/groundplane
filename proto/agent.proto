@@ -1,0 +1,133 @@
+// The Controller <-> Agent machine contract. This .proto is the single
+// source of truth — both sides compile against it, so a contract change
+// is a build error, never a silent runtime mismatch. See mvp.md, "Agent
+// channel (locked): gRPC + protobuf".
+//
+// One long-lived bidirectional stream per agent, INITIATED BY THE AGENT
+// (dial-out, pull model): the Agent signals Ready and the Controller
+// assigns work; nothing is ever pushed to an unconnected agent.
+syntax = "proto3";
+
+package groundplane.agent.v1;
+
+option go_package = "github.com/sample-tenant/groundplane/proto/agentpb";
+
+// AgentChannel is the one bidirectional stream. The Agent calls Channel
+// once after Connect and keeps it open for the life of the process,
+// reconnecting with exponential backoff on drop.
+service AgentChannel {
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  rpc Channel(stream AgentMessage) returns (stream ControllerMessage);
+}
+
+message ConnectRequest {
+  string join_token = 1;
+  string agent_id = 2; // empty on first connect; Controller assigns one
+}
+
+message ConnectResponse {
+  string agent_id = 1;
+  AgentConfig config = 2;
+}
+
+message AgentConfig {
+  int32 pull_interval_seconds = 1;
+  int32 max_concurrent_tasks = 2;
+  map<string, string> labels = 3;
+}
+
+// ---- Agent -> Controller ----
+
+message AgentMessage {
+  oneof payload {
+    Ready ready = 1;               // idle Ready IS the heartbeat; authoritative for dead-agent detection
+    TaskEvent task_event = 2;      // step progress + streamed output
+    ObservedState observed_state = 3; // drift-detection feed for reconciliation
+    TaskAck task_ack = 4;          // completed / failed
+  }
+}
+
+message Ready {
+  int32 capacity = 1; // free worker-pool slots
+}
+
+message TaskEvent {
+  string task_id = 1;
+  string step = 2;
+  TaskState state = 3;
+  bytes chunk = 4; // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
+}
+
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_PENDING = 1;
+  TASK_STATE_RUNNING = 2;
+  TASK_STATE_COMPLETED = 3;
+  TASK_STATE_FAILED = 4;
+  TASK_STATE_ABORTED = 5;
+  TASK_STATE_TIMED_OUT = 6;
+}
+
+message ObservedState {
+  repeated ContainerState containers = 1;
+}
+
+message ContainerState {
+  string name = 1;
+  string image = 2;
+  bool healthy = 3;
+  map<string, string> labels = 4; // groundplane.managed, .tenant, .project, .environment, .service, .release, .slot
+}
+
+message TaskAck {
+  string task_id = 1;
+  bool success = 2;
+  int32 exit_code = 3;
+  string result = 4; // JSON-encoded, task-type-specific
+}
+
+// ---- Controller -> Agent ----
+
+message ControllerMessage {
+  oneof payload {
+    TaskAssignment task_assignment = 1; // the full procedure: steps, params, timeout
+    TaskAbort task_abort = 2;           // cancel in-flight work NOW
+    ConfigUpdate config_update = 3;     // applied on next Ready, no restart
+    ImageUpdate image_update = 4;       // self-update: acked, THEN the agent recreates its own container
+    Shutdown shutdown = 5;
+  }
+}
+
+message TaskAssignment {
+  string task_id = 1;
+  string operation_id = 2;    // stable across retries — see internal/controller/task.go
+  string retry_of = 3;        // set iff this is a retry of a prior task_id
+  string plan_id = 4;         // the ExecutionPlan this task dispatches — see internal/controller/plan.go
+  string plan_hash = 5;       // sha256 of the plan's canonical serialization; the Agent rejects a mismatch against its own projection
+  int32 render_generation = 6;
+  string type = 7;            // deploy | rollback | backup | restore | attach | detach | run | script | provision | create | start | stop | destroy | rotate
+  string target = 8;
+  bytes params = 9;           // JSON-encoded, typed per task type
+  repeated Step steps = 10;
+  int32 timeout_seconds = 11;
+}
+
+message Step {
+  string op = 1; // exec | sql | dump | restore | encrypt | upload | verify | prune | ack — the known step catalog (see internal/adapters)
+  map<string, string> params = 2;
+}
+
+message TaskAbort {
+  string task_id = 1;
+  string reason = 2;
+}
+
+message ConfigUpdate {
+  AgentConfig agent_config = 1;
+}
+
+message ImageUpdate {
+  string tag = 1;
+}
+
+message Shutdown {}

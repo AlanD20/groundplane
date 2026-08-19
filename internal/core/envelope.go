@@ -1,0 +1,255 @@
+// envelope.go represents the AUTHORED Blueprint shape — the Controller
+// envelope plus the Compose body and its x-gp-* extensions, exactly as
+// blueprint.md defines it. This is the outer layer of the pipeline
+// sketched in blueprint.md's "The layers":
+//
+//	Blueprint envelope + Compose body + x-gp-* extensions
+//	                         |
+//	                         v
+//	              typed Controller desired state   <- model.go's types
+//	                         |
+//	                         v
+//	           durable records + render/task plan
+//
+// Parsing an Envelope into model.go's typed structs (Environment,
+// Service, Attach, …) is internal/controller's job (the Controller is
+// the ONLY interpreter — blueprint.md, "The laws", #3); this file only
+// carries the authored shape and the envelope-level parse/validate
+// entry point.
+package core
+
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Kind is the Blueprint envelope's document discriminator.
+type Kind string
+
+const (
+	KindDocEnvironment Kind = "environment"
+	KindDocBacking     Kind = "backing"
+	KindDocConnector   Kind = "connector"
+	KindDocProject     Kind = "project"
+	KindDocTenant      Kind = "tenant"
+)
+
+// EnvelopeSchema is the current Groundplane envelope/extension grammar
+// version this Controller understands. A schema bump is required when a
+// change cannot be accepted without changing interpretation (blueprint.md,
+// "Envelope and placement").
+const EnvelopeSchema = 1
+
+// Envelope is the Controller-only wrapper stripped before the remaining
+// document is passed to the Compose parser (blueprint.md, "Envelope and
+// placement").
+type Envelope struct {
+	Kind     Kind             `yaml:"kind"`
+	Schema   int              `yaml:"schema"`
+	Metadata EnvelopeMetadata `yaml:"metadata"`
+}
+
+// EnvelopeMetadata addresses the document by human-facing slugs; the
+// Controller resolves these to stable ids before storing anything (see
+// model.go's Tenant/Project/Environment.ID). Which fields are required
+// depends on Kind: an environment document sets all three; a connector
+// document sets only what ConnectorScope needs (see ConnectorDocument).
+type EnvelopeMetadata struct {
+	Tenant      string `yaml:"tenant,omitempty"`
+	Project     string `yaml:"project,omitempty"`
+	Environment string `yaml:"environment,omitempty"`
+	Name        string `yaml:"name,omitempty"`  // connector documents: the connector's slug
+	Scope       string `yaml:"scope,omitempty"` // connector documents: "environment" | "platform"
+}
+
+// ConnectorDocument is a `kind: connector` Blueprint document — see
+// blueprint.md's envelope example. It compiles to model.go's Connector.
+type ConnectorDocument struct {
+	Envelope
+	Connector ConnectorBody `yaml:"connector"`
+}
+
+type ConnectorBody struct {
+	Kind        string                   `yaml:"kind"` // "s3-compatible", …
+	Endpoint    string                   `yaml:"endpoint,omitempty"`
+	Bucket      string                   `yaml:"bucket,omitempty"`
+	Prefix      string                   `yaml:"prefix,omitempty"`
+	Region      string                   `yaml:"region,omitempty"`
+	Credentials map[string]CredentialRef `yaml:"credentials,omitempty"`
+}
+
+// CredentialRef is either a secret-store reference or (less commonly) a
+// direct value baked in and stored encrypted — never emitted into
+// Compose either way (blueprint.md: "Connector credentials are
+// references or encrypted direct values and are never emitted into
+// Compose").
+type CredentialRef struct {
+	SecretRef string `yaml:"secret_ref,omitempty"`
+	Value     string `yaml:"value,omitempty"` // stored encrypted at rest; never round-tripped back into an authored document
+}
+
+// EnvironmentDocument is a `kind: environment` Blueprint document: the
+// envelope plus a raw Compose body (parsed by the Compose parser, not
+// re-implemented here — see blueprint.md, "The laws", #1) plus the
+// typed x-gp-* extension families at document scope. Per-service
+// extensions (x-gp-resource, x-gp-release, x-gp-depends_on, …) live
+// inside each Compose service's mapping and are out of scope for this
+// struct; the Controller's Compose-body walk extracts them (TODO).
+type EnvironmentDocument struct {
+	Envelope
+
+	// ComposeBody is deliberately untyped here: Groundplane does not
+	// clone or reimplement Compose's grammar (blueprint.md, "The laws",
+	// #1). TODO: parse this with a real Compose library (e.g.
+	// compose-spec/compose-go) into a typed Compose project rather than
+	// a bare map, then extract the x-gp-* extensions found within it.
+	ComposeBody map[string]any `yaml:",inline"`
+
+	Requires      []Requirement               `yaml:"x-gp-requires,omitempty"`
+	Attachments   map[string]AttachmentSpec   `yaml:"x-gp-attachments,omitempty"`
+	Entries       map[string]EntrySpec        `yaml:"x-gp-entry,omitempty"`
+	Routes        []RouteSpec                 `yaml:"x-gp-routes,omitempty"`
+	Addons        map[string]AddonSpec        `yaml:"x-gp-addons,omitempty"`
+	Backup        *BackupSpec                 `yaml:"x-gp-backup,omitempty"`
+	ReleaseGroups map[string]ReleaseGroupSpec `yaml:"x-gp-release-group,omitempty"`
+}
+
+// Requirement is x-gp-requires' authored shape — a Controller-level
+// prerequisite, possibly crossing Compose project boundaries.
+// `condition` is one of exists|ready|healthy|completed_successfully;
+// `phases` is start|deploy|rollback|always. See blueprint.md,
+// "x-gp-requires".
+type Requirement struct {
+	Target    RequirementTarget `yaml:"target"`
+	Condition string            `yaml:"condition"`
+	Phases    []string          `yaml:"phases,omitempty"`
+}
+
+type RequirementTarget struct {
+	Kind string `yaml:"kind"` // e.g. "backing-attach"
+	Name string `yaml:"name"`
+}
+
+// AttachmentSpec is one x-gp-attachments entry, keyed by attach name.
+// See blueprint.md, "x-gp-attachments".
+type AttachmentSpec struct {
+	BackingProject string   `yaml:"backing_project"`
+	BackingService string   `yaml:"backing_service"`
+	Services       []string `yaml:"services"`
+	Grants         []string `yaml:"grants,omitempty"` // other attach names/ids
+}
+
+// EntrySpec is one x-gp-entry entry, keyed by entry name. Mirrors
+// EnvEntry (model.go) in authored form — kind/source/exposure/secret.
+// See blueprint.md, "x-gp-entry".
+type EntrySpec struct {
+	Kind     EntryKind       `yaml:"kind"`
+	Path     string          `yaml:"path,omitempty"` // Kind=file only
+	Source   EntrySourceSpec `yaml:"source"`
+	Exposure []string        `yaml:"exposure"`
+	Secret   bool            `yaml:"secret,omitempty"`
+}
+
+// EntrySourceSpec is the authored YAML shape of a fact/secret_ref/
+// literal source — a nested object per kind, e.g.:
+//
+//	source:
+//	  fact: {attach: api-db, key: pg16_URL}
+//
+// or `source: {secret_ref: sec_01J...}`, or a bare literal value.
+type EntrySourceSpec struct {
+	Fact      *FactRef `yaml:"fact,omitempty"`
+	SecretRef string   `yaml:"secret_ref,omitempty"`
+	Literal   string   `yaml:"literal,omitempty"`
+}
+
+// RouteSpec is one x-gp-routes entry. See blueprint.md, "x-gp-route".
+type RouteSpec struct {
+	Hostname string `yaml:"hostname,omitempty"`
+	Path     string `yaml:"path,omitempty"`
+	Target   string `yaml:"target"`
+	Exposure string `yaml:"exposure"` // "public" | "internal"
+}
+
+// AddonSpec is one x-gp-addons entry, keyed by addon name. Config is
+// typed per-kind at the addon registry level (TODO, mirrors the adapter
+// registry pattern in internal/adapters); kept generic here.
+type AddonSpec struct {
+	Kind    AddonKind      `yaml:"kind"`
+	Enabled bool           `yaml:"enabled"`
+	Config  map[string]any `yaml:"config,omitempty"`
+}
+
+// BackupSpec is x-gp-backup's authored shape. See blueprint.md,
+// "x-gp-backup".
+type BackupSpec struct {
+	Enabled    bool               `yaml:"enabled"`
+	Schedule   string             `yaml:"schedule,omitempty"`
+	Keep       int                `yaml:"keep,omitempty"`
+	Encryption string             `yaml:"encryption,omitempty"`
+	Connector  string             `yaml:"connector,omitempty"`
+	Sources    []BackupSourceSpec `yaml:"sources,omitempty"`
+}
+
+type BackupSourceSpec struct {
+	Kind BackupSourceKind `yaml:"kind"`
+	Ref  string           `yaml:"ref,omitempty"`
+}
+
+// ReleaseGroupSpec is x-gp-release-group's authored shape. See
+// blueprint.md, "x-gp-release-group".
+type ReleaseGroupSpec struct {
+	Name     string   `yaml:"name"`
+	Services []string `yaml:"services"`
+	Order    []string `yaml:"order,omitempty"`
+	Tag      string   `yaml:"tag,omitempty"`
+}
+
+// ParseEnvelope reads just the envelope fields (kind/schema/metadata)
+// from a raw Blueprint document — the first step of blueprint.md's
+// lifecycle ("Parse the envelope and Compose body"). Callers dispatch on
+// Kind to decode the rest (EnvironmentDocument, ConnectorDocument, …).
+func ParseEnvelope(raw []byte) (Envelope, error) {
+	var env Envelope
+	if err := yaml.Unmarshal(raw, &env); err != nil {
+		return Envelope{}, fmt.Errorf("envelope: %w", err)
+	}
+	if env.Schema == 0 {
+		env.Schema = EnvelopeSchema
+	}
+	return env, nil
+}
+
+// ParseEnvironmentDocument decodes a full `kind: environment` document.
+// TODO: replace the inline ComposeBody map with a real Compose-spec
+// parse (compose-go or equivalent) once the render path needs typed
+// Compose fields rather than pass-through validation.
+func ParseEnvironmentDocument(raw []byte) (EnvironmentDocument, error) {
+	var doc EnvironmentDocument
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return EnvironmentDocument{}, fmt.Errorf("environment document: %w", err)
+	}
+	if doc.Kind != KindDocEnvironment {
+		return EnvironmentDocument{}, fmt.Errorf("environment document: envelope kind is %q, want %q", doc.Kind, KindDocEnvironment)
+	}
+	return doc, nil
+}
+
+// ParseConnectorDocument decodes a full `kind: connector` document.
+func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
+	var doc ConnectorDocument
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return ConnectorDocument{}, fmt.Errorf("connector document: %w", err)
+	}
+	if doc.Kind != KindDocConnector {
+		return ConnectorDocument{}, fmt.Errorf("connector document: envelope kind is %q, want %q", doc.Kind, KindDocConnector)
+	}
+	if doc.Metadata.Scope != "environment" && doc.Metadata.Scope != "platform" {
+		return ConnectorDocument{}, fmt.Errorf("connector document: metadata.scope must be %q or %q, got %q", "environment", "platform", doc.Metadata.Scope)
+	}
+	if doc.Metadata.Scope == "environment" && doc.Metadata.Environment == "" {
+		return ConnectorDocument{}, fmt.Errorf("connector document: metadata.scope=environment requires metadata.environment")
+	}
+	return doc, nil
+}
