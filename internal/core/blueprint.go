@@ -135,6 +135,9 @@ func (s Service) Validate() error {
 		return fmt.Errorf("healthcheck must set exactly one of http/tcp/pgrep, got %d", set)
 	}
 	for _, m := range s.Mounts {
+		if m.Mount == "" {
+			return fmt.Errorf("mount target is required")
+		}
 		if (m.Volume == "") == (m.File == "") {
 			return fmt.Errorf("mount %q must set exactly one of volume or file", m.Mount)
 		}
@@ -171,9 +174,15 @@ func (e EnvEntry) Validate() error {
 		if e.Key == "" {
 			return fmt.Errorf("entry %s: kind=env requires key", e.ID)
 		}
+		if e.Path != "" {
+			return fmt.Errorf("entry %s: kind=env must not set path", e.ID)
+		}
 	case EntryKindFile:
 		if e.Path == "" {
 			return fmt.Errorf("entry %s: kind=file requires path", e.ID)
+		}
+		if e.Key != "" {
+			return fmt.Errorf("entry %s: kind=file must not set key", e.ID)
 		}
 	default:
 		return fmt.Errorf("entry %s: kind must be %q or %q", e.ID, EntryKindEnv, EntryKindFile)
@@ -204,6 +213,9 @@ func (e EnvEntry) Validate() error {
 	case SourceFact:
 		if e.Source.Fact == nil {
 			return fmt.Errorf("entry %s: source.kind=%q requires fact", e.ID, SourceFact)
+		}
+		if e.Source.Fact.Attach == "" || e.Source.Fact.Key == "" {
+			return fmt.Errorf("entry %s: fact source requires attach and key", e.ID)
 		}
 	default:
 		return fmt.Errorf("entry %s: source.kind must be %q, %q, or %q", e.ID, SourceLiteral, SourceSecretRef, SourceFact)
