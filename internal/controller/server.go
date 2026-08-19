@@ -169,8 +169,8 @@ func (s *Server) routes() {
 
 	// host / agents
 	mux.HandleFunc("GET /api/v1/host", s.notImplemented)
+	mux.HandleFunc("POST /api/v1/agent-join-tokens", s.notImplemented) // mint; consumed once by gRPC Connect
 	mux.HandleFunc("GET /api/v1/agents", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/agents/pair", s.notImplemented) // {join_token} -> paired agent/config
 	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("PUT /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)

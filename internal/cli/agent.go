@@ -2,7 +2,7 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// agent: list | show | join | approve <token> | config set | update.
+// agent: list | show | join | config set | update.
 // The operational surface for pairing and per-instance config (distinct
 // from `core component agent`, which is the read-only view). See
 // api-cli.md, "Agent vs `core component agent` (locked split)".
@@ -28,18 +28,9 @@ func newAgentCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "join",
-		Short: "Print a one-time join token for a new agent (see cmd/agent + groundplane-agent.service)",
+		Short: "Mint and print a one-time Agent join token",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreate(cmd, "/api/v1/agents", nil)
-		},
-	})
-
-	cmd.AddCommand(&cobra.Command{
-		Use:   "approve <token>",
-		Short: "Approve a pending agent's join token (the operator-side half of pairing — POST /agents/pair)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreate(cmd, "/api/v1/agents/pair", map[string]string{"join_token": args[0]})
+			return runCreate(cmd, "/api/v1/agent-join-tokens", nil)
 		},
 	})
 
