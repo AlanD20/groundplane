@@ -20,6 +20,7 @@ package core
 
 import (
 	"fmt"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
@@ -86,6 +87,13 @@ type ConnectorBody struct {
 type CredentialRef struct {
 	SecretRef string `yaml:"secret_ref,omitempty"`
 	Value     string `yaml:"value,omitempty"` // stored encrypted at rest; never round-tripped back into an authored document
+}
+
+func (r CredentialRef) Validate() error {
+	if (r.SecretRef == "") == (r.Value == "") {
+		return fmt.Errorf("exactly one of secret_ref or value is required")
+	}
+	return nil
 }
 
 // EnvironmentDocument is a `kind: environment` Blueprint document: the
@@ -249,6 +257,22 @@ func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
 	}
 	if doc.Metadata.Name == "" || doc.Metadata.Tenant == "" || doc.Metadata.Project == "" || doc.Metadata.Environment == "" {
 		return ConnectorDocument{}, fmt.Errorf("connector document: metadata.name, tenant, project, and environment are required")
+	}
+	if doc.Connector.Kind == "" {
+		return ConnectorDocument{}, fmt.Errorf("connector document: connector.kind is required")
+	}
+	credentialNames := make([]string, 0, len(doc.Connector.Credentials))
+	for name := range doc.Connector.Credentials {
+		credentialNames = append(credentialNames, name)
+	}
+	sort.Strings(credentialNames)
+	for _, name := range credentialNames {
+		if name == "" {
+			return ConnectorDocument{}, fmt.Errorf("connector document: credential name is required")
+		}
+		if err := doc.Connector.Credentials[name].Validate(); err != nil {
+			return ConnectorDocument{}, fmt.Errorf("connector document: credential %q: %w", name, err)
+		}
 	}
 	return doc, nil
 }
