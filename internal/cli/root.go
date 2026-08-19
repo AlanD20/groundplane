@@ -77,7 +77,6 @@ func NewRootCmd() *cobra.Command {
 		if err := config.Load(cmd.Context(), flags.config, &cfg); err != nil {
 			return err
 		}
-
 		// Merge order everywhere: built-in defaults < config file < env vars < flags.
 		host := firstNonEmpty(flags.host, os.Getenv("GROUNDPLANE_HOST"), cfg.Host)
 		tenant := firstNonEmpty(flags.tenant, cfg.Tenant)
@@ -85,6 +84,15 @@ func NewRootCmd() *cobra.Command {
 		env := firstNonEmpty(flags.env, cfg.Environment)
 		outFmt := firstNonEmpty(flags.output, cfg.Output)
 		noColor := flags.noColor || cfg.NoColor
+		cfg.Host = host
+		cfg.Tenant = tenant
+		cfg.Project = project
+		cfg.Environment = env
+		cfg.Output = outFmt
+		cfg.NoColor = noColor
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
 
 		format, err := clicommon.ParseFormat(outFmt)
 		if err != nil {

@@ -50,6 +50,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err := config.Load(ctx, configPath, &cfg); err != nil {
 		return nil, err
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 
 	logger, err := logging.Setup(logging.Options{
 		Level:   logging.ResolveLevel(false, false, os.Getenv("GROUNDPLANE_LOG_LEVEL"), cfg.Log.Level),

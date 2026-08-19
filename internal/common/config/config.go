@@ -11,7 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -103,6 +108,85 @@ func DefaultCLIConfig() CLIConfig {
 		Host:   "http://127.0.0.1:8080",
 		Output: "TABLE",
 	}
+}
+
+func (c ControllerConfig) Validate() error {
+	if len(c.Etcd.Endpoints) == 0 {
+		return fmt.Errorf("config: controller etcd.endpoints must contain at least one endpoint")
+	}
+	for i, endpoint := range c.Etcd.Endpoints {
+		if strings.TrimSpace(endpoint) == "" {
+			return fmt.Errorf("config: controller etcd.endpoints[%d] is empty", i)
+		}
+	}
+	if !strings.HasPrefix(c.Etcd.KeyPrefix, "/") || !strings.HasSuffix(c.Etcd.KeyPrefix, "/") {
+		return fmt.Errorf("config: controller etcd.key_prefix must begin and end with /")
+	}
+	if err := validateAddress("controller listen.http", c.Listen.HTTP); err != nil {
+		return err
+	}
+	if err := validateAddress("controller listen.grpc", c.Listen.GRPC); err != nil {
+		return err
+	}
+	tick, err := time.ParseDuration(c.Scheduler.TickInterval)
+	if err != nil {
+		return fmt.Errorf("config: controller scheduler.tick_interval: %w", err)
+	}
+	if tick <= 0 {
+		return fmt.Errorf("config: controller scheduler.tick_interval must be positive")
+	}
+	if !filepath.IsAbs(c.AgeKeyPath) {
+		return fmt.Errorf("config: controller age_key_path must be absolute")
+	}
+	return validateLog("controller", c.Log)
+}
+
+func (c AgentConfig) Validate() error {
+	if err := validateAddress("agent controller.address", c.Controller.Address); err != nil {
+		return err
+	}
+	if !filepath.IsAbs(c.JoinTokenPath) {
+		return fmt.Errorf("config: agent join_token_path must be absolute")
+	}
+	return validateLog("agent", c.Log)
+}
+
+func (c CLIConfig) Validate() error {
+	host, err := url.Parse(c.Host)
+	if err != nil {
+		return fmt.Errorf("config: cli host: %w", err)
+	}
+	if (host.Scheme != "http" && host.Scheme != "https") || host.Host == "" {
+		return fmt.Errorf("config: cli host must be an absolute http or https URL")
+	}
+	if host.User != nil || (host.Path != "" && host.Path != "/") || host.RawQuery != "" || host.Fragment != "" {
+		return fmt.Errorf("config: cli host must contain only scheme and authority")
+	}
+	switch strings.ToUpper(strings.TrimSpace(c.Output)) {
+	case "TABLE", "JSON", "YAML":
+		return nil
+	default:
+		return fmt.Errorf("config: cli output must be TABLE, JSON, or YAML")
+	}
+}
+
+func validateAddress(label, address string) error {
+	if _, _, err := net.SplitHostPort(address); err != nil {
+		return fmt.Errorf("config: %s must be host:port: %w", label, err)
+	}
+	return nil
+}
+
+func validateLog(label string, c LogConfig) error {
+	switch strings.ToUpper(strings.TrimSpace(c.Level)) {
+	case "DEBUG", "INFO", "WARN", "WARNING", "ERROR":
+	default:
+		return fmt.Errorf("config: %s log.level must be DEBUG, INFO, WARN, or ERROR", label)
+	}
+	if c.File.Enabled && !filepath.IsAbs(c.File.Path) {
+		return fmt.Errorf("config: %s log.file.path must be absolute when file logging is enabled", label)
+	}
+	return nil
 }
 
 // Load reads path into out, which must already hold the applicable
