@@ -40,20 +40,21 @@ func fromContext(cmd *cobra.Command) *App {
 	return cmd.Context().Value(appKey{}).(*App)
 }
 
-var (
-	flagConfig  string
-	flagHost    string
-	flagTenant  string
-	flagProject string
-	flagEnv     string
-	flagOutput  string
-	flagNoColor bool
-	flagAsID    bool
-)
+type rootFlags struct {
+	config  string
+	host    string
+	tenant  string
+	project string
+	env     string
+	output  string
+	noColor bool
+	asID    bool
+}
 
 // NewRootCmd builds the full command tree from api-cli.md, section 3,
 // verbatim: flat nouns, verbs last, scope resolved once.
 func NewRootCmd() *cobra.Command {
+	flags := rootFlags{}
 	root := &cobra.Command{
 		Use:           "groundplane",
 		Short:         "Run many projects on one machine without hand-maintaining Docker Compose",
@@ -62,27 +63,27 @@ func NewRootCmd() *cobra.Command {
 		SilenceErrors: true,
 	}
 
-	root.PersistentFlags().StringVarP(&flagConfig, "config", "c", defaultConfigPath(), "config file")
-	root.PersistentFlags().StringVar(&flagHost, "host", "", "controller address (default http://127.0.0.1:8080)")
-	root.PersistentFlags().StringVarP(&flagTenant, "tenant", "t", "", "scope: tenant slug")
-	root.PersistentFlags().StringVarP(&flagProject, "project", "p", "", "scope: project slug")
-	root.PersistentFlags().StringVarP(&flagEnv, "env", "e", "", "scope: environment slug")
-	root.PersistentFlags().StringVarP(&flagOutput, "output", "o", "", "output format: TABLE|JSON|YAML (default TABLE)")
-	root.PersistentFlags().BoolVar(&flagNoColor, "no-color", false, "plain output")
-	root.PersistentFlags().BoolVar(&flagAsID, "id", false, "treat targets as ids instead of slugs (ids never change; slugs can be renamed)")
+	root.PersistentFlags().StringVarP(&flags.config, "config", "c", defaultConfigPath(), "config file")
+	root.PersistentFlags().StringVar(&flags.host, "host", "", "controller address (default http://127.0.0.1:8080)")
+	root.PersistentFlags().StringVarP(&flags.tenant, "tenant", "t", "", "scope: tenant slug")
+	root.PersistentFlags().StringVarP(&flags.project, "project", "p", "", "scope: project slug")
+	root.PersistentFlags().StringVarP(&flags.env, "env", "e", "", "scope: environment slug")
+	root.PersistentFlags().StringVarP(&flags.output, "output", "o", "", "output format: TABLE|JSON|YAML (default TABLE)")
+	root.PersistentFlags().BoolVar(&flags.noColor, "no-color", false, "plain output")
+	root.PersistentFlags().BoolVar(&flags.asID, "id", false, "treat targets as ids instead of slugs (ids never change; slugs can be renamed)")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		cfg := config.DefaultCLIConfig()
-		if err := config.Load(cmd.Context(), flagConfig, &cfg); err != nil {
+		if err := config.Load(cmd.Context(), flags.config, &cfg); err != nil {
 			return err
 		}
 
 		// Merge order everywhere: built-in defaults < config file < env vars < flags.
-		host := firstNonEmpty(flagHost, os.Getenv("GROUNDPLANE_HOST"), cfg.Host)
-		tenant := firstNonEmpty(flagTenant, cfg.Tenant)
-		project := firstNonEmpty(flagProject, cfg.Project)
-		env := firstNonEmpty(flagEnv, cfg.Environment)
-		outFmt := firstNonEmpty(flagOutput, cfg.Output)
+		host := firstNonEmpty(flags.host, os.Getenv("GROUNDPLANE_HOST"), cfg.Host)
+		tenant := firstNonEmpty(flags.tenant, cfg.Tenant)
+		project := firstNonEmpty(flags.project, cfg.Project)
+		env := firstNonEmpty(flags.env, cfg.Environment)
+		outFmt := firstNonEmpty(flags.output, cfg.Output)
 
 		format, err := clicommon.ParseFormat(outFmt)
 		if err != nil {
@@ -91,12 +92,12 @@ func NewRootCmd() *cobra.Command {
 
 		app := &App{
 			Client: apiclient.New(host),
-			Out:    clicommon.NewWriter(format, flagNoColor, cmd.OutOrStdout()),
+			Out:    clicommon.NewWriter(format, flags.noColor, cmd.OutOrStdout()),
 			Scope: Scope{
 				Tenant:      tenant,
 				Project:     project,
 				Environment: env,
-				AsID:        flagAsID,
+				AsID:        flags.asID,
 			},
 		}
 		cmd.SetContext(context.WithValue(cmd.Context(), appKey{}, app))
