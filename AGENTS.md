@@ -29,6 +29,8 @@ Console (`console/`), and the Go implementation scaffold.
   Reach for it before changing multiple layers or moving a contract.
 - **docs/delivery.md** — the delivery and commit contract. Reach for it
   before committing, opening a PR, or declaring a change complete.
+- **docs/capabilities.md** — the implementation ledger and vertical delivery
+  order. Reach for it before selecting or declaring an MVP slice complete.
 - **docs/decisions/** — accepted architectural decisions. Reach for the
   relevant ADR before changing a recorded seam or dependency choice.
 
