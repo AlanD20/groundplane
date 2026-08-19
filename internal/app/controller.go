@@ -10,8 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/manual"
 	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
+	agentcomponent "github.com/AlanD20/groundplane/internal/components/agent"
 	"github.com/AlanD20/groundplane/internal/components/caddy"
 	"github.com/AlanD20/groundplane/internal/components/cloudflaretunnel"
+	"github.com/AlanD20/groundplane/internal/components/coredns"
+	controllercomponent "github.com/AlanD20/groundplane/internal/components/controller"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -33,7 +36,7 @@ type Controller struct {
 // NewController performs every piece of this binary's DI wiring, once,
 // explicitly — including adapter and component registration
 // (postgres16.Register(), valkey9.Register(), manual.Register(),
-// caddy.Register(), cloudflaretunnel.Register()), which replaces the
+// and all five component registrations), which replaces the
 // init()-based self-registration architecture.md originally sketched:
 // this project bans init() globals (docs/standards.md, section 11), so
 // the "one package + one registration line" extensibility promise is
@@ -86,12 +89,14 @@ func registerAdapters() {
 	manual.Register()
 }
 
-// registerComponents is registerAdapters' twin for the environment-component
-// seam (architecture.md's third extension seam, alongside adapters and
-// core components).
+// registerComponents is registerAdapters' twin for the owner-aware component
+// seam.
 func registerComponents() {
 	caddy.Register()
 	cloudflaretunnel.Register()
+	coredns.Register()
+	controllercomponent.Register()
+	agentcomponent.Register()
 }
 
 // Run starts the scheduler and blocks serving HTTP until ctx is

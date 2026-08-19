@@ -2,12 +2,9 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// component: list | show | enable | disable | config. Caddy and Cloudflare
-// Tunnel are component KINDS ("ingress.caddy", "edge.cloudflare-tunnel"),
-// not bespoke resources — replaces the old `router caddy|tunnel on|off`
-// pair. The Router itself is now a read-only projection (see
-// `environment show` / the Console); there is no `router` CLI noun. See
-// blueprint.md, "x-gp-components", and api-cli.md's command tree.
+// component: list | show | enable | disable | config | update. One noun spans
+// environment and platform owners; each kind's registration declares which
+// owner is valid.
 func newComponentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "component",
@@ -32,7 +29,7 @@ func newComponentCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "show <id>",
-		Short: "Show an component (status, generated services, health)",
+		Short: "Show a component (status, generated services, health)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShow(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0]))
@@ -42,24 +39,25 @@ func newComponentCmd() *cobra.Command {
 	var kind string
 	enable := &cobra.Command{
 		Use:   "enable",
-		Short: "Enable (creating if needed) an component by kind",
+		Short: "Enable (creating if needed) a component by kind",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runCreate(cmd, "/api/v1/components", map[string]interface{}{
-				"kind":        kind,
-				"enabled":     true,
-				"environment": app.Scope.Environment,
-				"platform":    platform,
-			})
+			body := map[string]interface{}{"kind": kind, "enabled": true}
+			if platform {
+				body["platform"] = true
+			} else {
+				body["environment"] = app.Scope.Environment
+			}
+			return runCreate(cmd, "/api/v1/components", body)
 		},
 	}
-	enable.Flags().StringVar(&kind, "kind", "", "ingress.caddy | edge.cloudflare-tunnel")
+	enable.Flags().StringVar(&kind, "kind", "", "ingress.caddy | edge.cloudflare-tunnel | coredns | controller | agent")
 	_ = enable.MarkFlagRequired("kind")
 	cmd.AddCommand(enable)
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "disable <id>",
-		Short: "Disable an component",
+		Short: "Disable a component",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAction(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/disable", nil)
@@ -68,7 +66,7 @@ func newComponentCmd() *cobra.Command {
 
 	config := &cobra.Command{
 		Use:   "config <id>",
-		Short: "Set an component's kind-specific config (e.g. the Caddyfile template, tunnel hostnames)",
+		Short: "Set a component's kind-specific config (e.g. the Caddyfile template, tunnel hostnames)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// TODO: kind-specific flags once the component registry (mirroring

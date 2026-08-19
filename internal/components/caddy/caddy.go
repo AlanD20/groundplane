@@ -13,16 +13,18 @@ import (
 // Register adds this component to the registry. Called once, explicitly,
 // from internal/app.NewController.
 func Register() {
-	components.Register(&component{})
+	implementation := &component{}
+	components.Register(components.Registration{
+		Kind:          core.ComponentKindIngressCaddy,
+		Label:         "Caddy (entry router)",
+		AllowedOwners: []core.ComponentOwner{core.ComponentOwnerEnvironment},
+		ApplyStrategy: components.EnvironmentRender,
+		ConfigSchema:  []string{"caddyfile_template"},
+		Environment:   implementation,
+	})
 }
 
 type component struct{}
-
-func (a *component) Kind() core.ComponentKind { return core.ComponentKindIngressCaddy }
-func (a *component) Label() string        { return "Caddy (entry router)" }
-func (a *component) ConfigSchema() []string {
-	return []string{"caddyfile_template"} // {slot}/{host} placeholders — see mvp.md
-}
 
 func (a *component) Render(env core.Environment, ad core.Component) (map[string]core.Service, map[string][]byte, error) {
 	// TODO: render the Caddy service (pinned IPv4 on the frontend

@@ -1,77 +1,144 @@
-// Package components is the ONE registry every environment-component kind
-// registers into — the third extension seam alongside internal/adapters
-// (backing services) and core components. Adding a kind is "an component
-// package: config schema, renderer, generated service(s), health/
-// reconcile contract + one registration" (architecture.md,
-// "Extensibility: adapters and core components"). Like internal/adapters,
-// registration is an explicit Register() function called from
-// internal/app.NewController — never an init() (standards.md, section 11).
+// Package components owns the single compiled-in registry for every
+// environment- and platform-owned component kind.
 package components
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Renderer produces this component's generated Compose service(s) plus
-// whatever config file(s) they need (a Caddyfile, cloudflared config,
-// …) from the environment's current desired state. Reuses the shared
-// service model and the validate-before-reload render path — an component
-// never invents its own apply mechanism (architecture.md, "The
-// core-component seam", which this seam mirrors).
+// ApplyStrategy declares which shared pipeline applies a component kind.
+// Implementations contribute typed knowledge; they never invent an apply
+// mechanism outside these strategies.
+type ApplyStrategy string
+
+const (
+	EnvironmentRender ApplyStrategy = "environment_render"
+	PlatformUpdate    ApplyStrategy = "platform_update"
+)
+
+// Renderer produces an environment component's generated Compose services and
+// materialized configuration files.
 type Renderer interface {
-	// Render returns the component's generated Compose service fragment(s)
-	// (service name -> core.Service) and any config file content keyed
-	// by its materialized path.
 	Render(env core.Environment, component core.Component) (services map[string]core.Service, files map[string][]byte, err error)
 }
 
-// HealthChecker reports whether an enabled component's generated service(s)
-// are healthy — "the component's health decides if the reload took;
-// unhealthy -> rollback" (architecture.md).
+// HealthChecker reports whether an enabled environment component is healthy.
 type HealthChecker interface {
 	Healthy(env core.Environment, component core.Component) (bool, error)
 }
 
-// Component is the contract every environment-component kind implements.
-type Component interface {
-	Kind() core.ComponentKind
-	Label() string // display only
+// EnvironmentComponent is the strategy implementation required by every
+// EnvironmentRender registration.
+type EnvironmentComponent interface {
 	Renderer
 	HealthChecker
-	// ConfigSchema names the typed config fields this kind accepts in
-	// core.Component.Config / api.Component.Config — TODO: a real schema type
-	// once the Console's component-config forms are generated from it,
-	// mirroring how internal/adapters' ProvisionParams are typed rather
-	// than a bag of strings.
-	ConfigSchema() []string
 }
 
-var registry = map[core.ComponentKind]Component{}
+// Registration is the complete catalog entry for one component kind. Owner
+// support and apply strategy are data, so API validation and the task pipeline
+// never switch on concrete kinds.
+type Registration struct {
+	Kind          core.ComponentKind
+	Label         string
+	AllowedOwners []core.ComponentOwner
+	ApplyStrategy ApplyStrategy
+	ConfigSchema  []string
+	Environment   EnvironmentComponent
+}
 
-// Register adds a kind to the registry. Called once, explicitly, from
-// internal/app.NewController — see internal/adapters' Register()
-// pattern, which this mirrors exactly.
-func Register(a Component) {
-	if _, exists := registry[a.Kind()]; exists {
-		panic(fmt.Sprintf("components: duplicate registration for kind %q", a.Kind()))
+// Allows reports whether this kind can be created for owner.
+func (r Registration) Allows(owner core.ComponentOwner) bool {
+	for _, allowed := range r.AllowedOwners {
+		if allowed == owner {
+			return true
+		}
 	}
-	registry[a.Kind()] = a
+	return false
 }
 
-// Get looks up an component implementation by kind (core.Component.Kind).
-func Get(kind core.ComponentKind) (Component, bool) {
-	a, ok := registry[kind]
-	return a, ok
-}
+var registry = map[core.ComponentKind]Registration{}
 
-// All returns every registered component kind, for the Console's "enable an
-// component" picker and the CLI's `component enable --help`.
-func All() []Component {
-	out := make([]Component, 0, len(registry))
-	for _, a := range registry {
-		out = append(out, a)
+// Register adds a kind to the registry. It is called explicitly from
+// internal/app.NewController; packages never self-register through init.
+func Register(registration Registration) {
+	validateRegistration(registration)
+	if _, exists := registry[registration.Kind]; exists {
+		panic(fmt.Sprintf("components: duplicate registration for kind %q", registration.Kind))
 	}
+	registry[registration.Kind] = clone(registration)
+}
+
+// Get looks up a component registration by kind.
+func Get(kind core.ComponentKind) (Registration, bool) {
+	registration, ok := registry[kind]
+	return clone(registration), ok
+}
+
+// All returns every registration in deterministic kind order.
+func All() []Registration {
+	out := make([]Registration, 0, len(registry))
+	for _, registration := range registry {
+		out = append(out, clone(registration))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
 	return out
+}
+
+// ValidateOwner is the API-boundary guard for a requested kind and owner.
+func ValidateOwner(kind core.ComponentKind, owner core.ComponentOwner) error {
+	registration, ok := registry[kind]
+	if !ok {
+		return errs.Newf(errs.CodeValidationFailed, "component: unknown kind %q", kind)
+	}
+	if !registration.Allows(owner) {
+		return errs.Newf(errs.CodeValidationFailed, "component: kind %q does not allow owner %q", kind, owner)
+	}
+	return nil
+}
+
+func validateRegistration(registration Registration) {
+	if registration.Kind == "" || registration.Label == "" {
+		panic("components: registration kind and label are required")
+	}
+	if len(registration.AllowedOwners) == 0 {
+		panic(fmt.Sprintf("components: kind %q has no allowed owner", registration.Kind))
+	}
+	seenOwners := map[core.ComponentOwner]struct{}{}
+	for _, owner := range registration.AllowedOwners {
+		if owner != core.ComponentOwnerEnvironment && owner != core.ComponentOwnerPlatform {
+			panic(fmt.Sprintf("components: kind %q has invalid owner %q", registration.Kind, owner))
+		}
+		if _, exists := seenOwners[owner]; exists {
+			panic(fmt.Sprintf("components: kind %q repeats owner %q", registration.Kind, owner))
+		}
+		seenOwners[owner] = struct{}{}
+	}
+	switch registration.ApplyStrategy {
+	case EnvironmentRender:
+		if len(registration.AllowedOwners) != 1 || registration.AllowedOwners[0] != core.ComponentOwnerEnvironment {
+			panic(fmt.Sprintf("components: kind %q uses environment_render without exactly the environment owner", registration.Kind))
+		}
+		if registration.Environment == nil {
+			panic(fmt.Sprintf("components: kind %q has no environment implementation", registration.Kind))
+		}
+	case PlatformUpdate:
+		if len(registration.AllowedOwners) != 1 || registration.AllowedOwners[0] != core.ComponentOwnerPlatform {
+			panic(fmt.Sprintf("components: kind %q uses platform_update without exactly the platform owner", registration.Kind))
+		}
+		if registration.Environment != nil {
+			panic(fmt.Sprintf("components: platform kind %q carries an environment implementation", registration.Kind))
+		}
+	default:
+		panic(fmt.Sprintf("components: kind %q has invalid apply strategy %q", registration.Kind, registration.ApplyStrategy))
+	}
+}
+
+func clone(registration Registration) Registration {
+	registration.AllowedOwners = append([]core.ComponentOwner(nil), registration.AllowedOwners...)
+	registration.ConfigSchema = append([]string(nil), registration.ConfigSchema...)
+	return registration
 }

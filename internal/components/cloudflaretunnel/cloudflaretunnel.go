@@ -13,16 +13,18 @@ import (
 // Register adds this component to the registry. Called once, explicitly,
 // from internal/app.NewController.
 func Register() {
-	components.Register(&component{})
+	implementation := &component{}
+	components.Register(components.Registration{
+		Kind:          core.ComponentKindEdgeCloudflare,
+		Label:         "Cloudflare Tunnel (outbound edge)",
+		AllowedOwners: []core.ComponentOwner{core.ComponentOwnerEnvironment},
+		ApplyStrategy: components.EnvironmentRender,
+		ConfigSchema:  []string{"tunnel_id"},
+		Environment:   implementation,
+	})
 }
 
 type component struct{}
-
-func (a *component) Kind() core.ComponentKind { return core.ComponentKindEdgeCloudflare }
-func (a *component) Label() string        { return "Cloudflare Tunnel (outbound edge)" }
-func (a *component) ConfigSchema() []string {
-	return []string{"tunnel_id"} // the token itself lives in the secret store, never in Config — see mvp.md
-}
 
 func (a *component) Render(env core.Environment, ad core.Component) (map[string]core.Service, map[string][]byte, error) {
 	// TODO: render the cloudflared service wired from the

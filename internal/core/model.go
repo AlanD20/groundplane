@@ -321,15 +321,26 @@ type ComponentKind string
 const (
 	ComponentKindIngressCaddy   ComponentKind = "ingress.caddy"
 	ComponentKindEdgeCloudflare ComponentKind = "edge.cloudflare-tunnel"
+	ComponentKindCoreDNS         ComponentKind = "coredns"
+	ComponentKindController      ComponentKind = "controller"
+	ComponentKindAgent           ComponentKind = "agent"
 )
 
-// Component is the generic environment-scoped component contract — Caddy and
-// Cloudflare Tunnel are component KINDS, not bespoke toggles; a future
-// ingress kind is a new ComponentKind plus a registration, never a new
-// runtime model. See blueprint.md, "x-gp-components".
+// ComponentOwner discriminates the two valid component ownership scopes.
+type ComponentOwner string
+
+const (
+	ComponentOwnerEnvironment ComponentOwner = "environment"
+	ComponentOwnerPlatform    ComponentOwner = "platform"
+)
+
+// Component is the generic component record shared by environment-owned and
+// platform-owned kinds. OwnerID is the environment id for environment owners
+// and empty for the singleton platform owner.
 type Component struct {
-	ID                string         `yaml:"id" json:"id"` // component_<ulid>
-	EnvironmentID     string         `yaml:"environment_id" json:"environment_id"`
+	ID                string         `yaml:"id" json:"id"` // cmp_<ulid>
+	Owner             ComponentOwner `yaml:"owner" json:"owner"`
+	OwnerID           string         `yaml:"owner_id,omitempty" json:"owner_id,omitempty"`
 	Kind              ComponentKind      `yaml:"kind" json:"kind"`
 	Enabled           bool           `yaml:"enabled" json:"enabled"`
 	Config            map[string]any `yaml:"config,omitempty" json:"config,omitempty"` // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
