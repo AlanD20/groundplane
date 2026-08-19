@@ -63,7 +63,7 @@ func newEnvironmentCmd() *cobra.Command {
 		Short: "Tail every service's logs across the environment",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			path := "/api/v1/environments/" + app.Scope.Environment + "/logs"
+			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/logs"
 			q := map[string]string{}
 			if follow {
 				q["follow"] = "true"

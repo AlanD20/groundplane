@@ -47,7 +47,7 @@ func newScriptCmd() *cobra.Command {
 			if editWhen != "" {
 				body["when"] = editWhen
 			}
-			return runEdit(cmd, "/api/v1/scripts/"+target(fromContext(cmd), args[0]), body)
+			return runPatch(cmd, "/api/v1/scripts/"+target(fromContext(cmd), args[0]), body)
 		},
 	}
 	edit.Flags().StringVar(&editBody, "script", "", "new script body")
