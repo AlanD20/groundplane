@@ -117,7 +117,10 @@ func DefaultCLIConfig() CLIConfig {
 // takes ctx first, no exceptions — so a future context-aware file read
 // (e.g. reading config from a mounted secret store with a timeout) never
 // needs a signature change at every call site.
-func Load(ctx context.Context, path string, out interface{}) error {
+func Load(ctx context.Context, path string, out any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -134,6 +137,16 @@ func Load(ctx context.Context, path string, out interface{}) error {
 			return nil // an empty file is absence, same as a missing one — defaults stand
 		}
 		return fmt.Errorf("config: %s: %w", path, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("config: %s: multiple YAML documents are not allowed", path)
+		}
+		return fmt.Errorf("config: %s: trailing document: %w", path, err)
 	}
 	return nil
 }
