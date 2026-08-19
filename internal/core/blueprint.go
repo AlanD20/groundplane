@@ -71,11 +71,25 @@ func (e Environment) Validate() error {
 		if err := entry.Validate(); err != nil {
 			return fmt.Errorf("entry: %w", err)
 		}
+		for _, target := range entry.Exposure {
+			if target == "all" {
+				if len(entry.Exposure) != 1 {
+					return fmt.Errorf("entry %s: exposure %q must be the only target", entry.ID, target)
+				}
+				continue
+			}
+			if _, ok := e.Services[target]; !ok {
+				return fmt.Errorf("entry %s: exposure target %q is not a declared service", entry.ID, target)
+			}
+		}
 	}
 
 	for _, route := range e.Routes {
 		if err := route.Validate(); err != nil {
 			return fmt.Errorf("route: %w", err)
+		}
+		if _, ok := e.Services[route.ServiceName]; !ok {
+			return fmt.Errorf("route: target service %q is not declared on this environment", route.ServiceName)
 		}
 	}
 
@@ -179,8 +193,18 @@ func (e EnvEntry) Validate() error {
 		return fmt.Errorf("entry %s: source must set exactly one of literal, secret_ref, or fact (got %d)", e.ID, set)
 	}
 	switch e.Source.Kind {
-	case SourceLiteral, SourceSecretRef, SourceFact:
-		// ok
+	case SourceLiteral:
+		if e.Source.Literal == "" {
+			return fmt.Errorf("entry %s: source.kind=%q requires literal", e.ID, SourceLiteral)
+		}
+	case SourceSecretRef:
+		if e.Source.SecretRef == "" {
+			return fmt.Errorf("entry %s: source.kind=%q requires secret_ref", e.ID, SourceSecretRef)
+		}
+	case SourceFact:
+		if e.Source.Fact == nil {
+			return fmt.Errorf("entry %s: source.kind=%q requires fact", e.ID, SourceFact)
+		}
 	default:
 		return fmt.Errorf("entry %s: source.kind must be %q, %q, or %q", e.ID, SourceLiteral, SourceSecretRef, SourceFact)
 	}
