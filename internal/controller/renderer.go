@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/sample-tenant/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 // RenderCompose maps an Environment's zones/services to a docker-compose

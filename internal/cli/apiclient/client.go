@@ -22,7 +22,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Client struct {

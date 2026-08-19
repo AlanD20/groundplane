@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sample-tenant/groundplane/internal/adapters"
-	"github.com/sample-tenant/groundplane/internal/common/ids"
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type TaskType string

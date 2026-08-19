@@ -10,7 +10,7 @@
 package controller
 
 import (
-	"github.com/sample-tenant/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/adapters"
 )
 
 // ExecutionPlan is what internal/controller/renderer.go ultimately

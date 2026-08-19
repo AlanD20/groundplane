@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	clicommon "github.com/sample-tenant/groundplane/internal/cli/common"
+	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 )
 
 func runList(cmd *cobra.Command, path string, query map[string]string) error {

@@ -5,9 +5,9 @@
 package caddy
 
 import (
-	"github.com/sample-tenant/groundplane/internal/components"
-	"github.com/sample-tenant/groundplane/internal/core"
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/components"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Register adds this component to the registry. Called once, explicitly,

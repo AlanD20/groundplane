@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/sample-tenant/groundplane/internal/adapters"
-	"github.com/sample-tenant/groundplane/internal/common/runner"
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Assignment is a Controller-issued task the worker pool executes.

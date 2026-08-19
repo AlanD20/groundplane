@@ -1,6 +1,6 @@
 package api
 
-import "github.com/sample-tenant/groundplane/pkg/errs"
+import "github.com/AlanD20/groundplane/pkg/errs"
 
 // Re-exported so API consumers (the CLI's apiclient, external scripts)
 // can decode RFC 7807 problem+json and construct/inspect domain errors

@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/sample-tenant/groundplane/internal/agent"
-	"github.com/sample-tenant/groundplane/internal/common/config"
-	"github.com/sample-tenant/groundplane/internal/common/logging"
+	"github.com/AlanD20/groundplane/internal/agent"
+	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/logging"
 )
 
 const DefaultAgentConfigPath = "/etc/groundplane/agent.yaml"

@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/sample-tenant/groundplane/internal/common/runner"
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Client owns the one long-lived bidirectional stream to the

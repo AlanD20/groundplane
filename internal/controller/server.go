@@ -12,8 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/sample-tenant/groundplane/internal/infra/etcd"
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Server holds everything a request handler needs. Construct once in

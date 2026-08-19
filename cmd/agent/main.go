@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sample-tenant/groundplane/internal/app"
+	"github.com/AlanD20/groundplane/internal/app"
 )
 
 func main() {

@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sample-tenant/groundplane/internal/cli/apiclient"
-	clicommon "github.com/sample-tenant/groundplane/internal/cli/common"
-	"github.com/sample-tenant/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/cli/apiclient"
+	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
+	"github.com/AlanD20/groundplane/internal/common/config"
 )
 
 // Scope carries the resolved tenant/project/environment slugs (or ids,

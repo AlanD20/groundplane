@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is set via -ldflags "-X github.com/sample-tenant/groundplane/internal/cli.Version=..." at build time.
+// Version is set via -ldflags "-X github.com/AlanD20/groundplane/internal/cli.Version=..." at build time.
 var Version = "dev"
 
 func newVersionCmd() *cobra.Command {

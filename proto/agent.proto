@@ -10,7 +10,7 @@ syntax = "proto3";
 
 package groundplane.agent.v1;
 
-option go_package = "github.com/sample-tenant/groundplane/proto/agentpb";
+option go_package = "github.com/AlanD20/groundplane/proto/agentpb";
 
 // AgentChannel is the one bidirectional stream. The Agent calls Channel
 // once after Connect and keeps it open for the life of the process,

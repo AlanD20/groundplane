@@ -8,7 +8,7 @@
 name: groundplane-bootstrap
 services:
   agent:
-    image: ghcr.io/sample-tenant/groundplane-agent:latest
+    image: ghcr.io/aland20/groundplane-agent:latest
     restart: unless-stopped
     network_mode: host
     volumes:

@@ -12,7 +12,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // HandleErrors is the CLI's single shared error handler (the mvmctl

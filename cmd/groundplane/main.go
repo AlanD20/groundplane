@@ -11,8 +11,8 @@ package main
 import (
 	"os"
 
-	"github.com/sample-tenant/groundplane/internal/app"
-	"github.com/sample-tenant/groundplane/internal/cli"
+	"github.com/AlanD20/groundplane/internal/app"
+	"github.com/AlanD20/groundplane/internal/cli"
 )
 
 func main() {

@@ -5,7 +5,7 @@
 // is an explicit function rather than an init().
 package manual
 
-import "github.com/sample-tenant/groundplane/internal/adapters"
+import "github.com/AlanD20/groundplane/internal/adapters"
 
 // Register adds this adapter to the registry. Called once, explicitly,
 // from internal/app.NewController.

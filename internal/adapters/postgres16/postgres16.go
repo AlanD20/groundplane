@@ -9,7 +9,7 @@
 // holds; the registration line just lives in internal/app now.
 package postgres16
 
-import "github.com/sample-tenant/groundplane/internal/adapters"
+import "github.com/AlanD20/groundplane/internal/adapters"
 
 // Register adds this adapter to the registry. Called once, explicitly,
 // from internal/app.NewController.

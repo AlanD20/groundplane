@@ -9,7 +9,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // EventType distinguishes a put from a delete in a Watch stream.

@@ -11,7 +11,7 @@ package components
 import (
 	"fmt"
 
-	"github.com/sample-tenant/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 // Renderer produces this component's generated Compose service(s) plus

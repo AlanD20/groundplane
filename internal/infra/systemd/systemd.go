@@ -18,7 +18,7 @@ import (
 	"context"
 	"os/exec"
 
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // ValidateCalendar shells out to `systemd-analyze calendar <expr>` to

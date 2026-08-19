@@ -13,7 +13,7 @@ package docker
 import (
 	"context"
 
-	"github.com/sample-tenant/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // ComposeProject is a rendered docker-compose.yml plus the project name
