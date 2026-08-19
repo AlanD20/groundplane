@@ -39,7 +39,7 @@ const (
 	// --- validation / scope ---
 	CodeValidationFailed      Code = "validation.failed"
 	CodeScopeUnauthorized     Code = "scope.unauthorized"      // cross-tenant access attempt
-	CodeConnectorScopeInvalid Code = "connector.scope_invalid" // a project-scoped connector was attempted — connectors are environment- or platform-scoped only (see blueprint.md, "Envelope and placement")
+	CodeConnectorScopeInvalid Code = "connector.scope_invalid" // a connector without exactly one environment owner was attempted
 
 	// --- scaffolding / catch-all ---
 	CodeNotImplemented Code = "not_implemented" // this boilerplate's stub handlers; HTTPStatus() special-cases it to 501

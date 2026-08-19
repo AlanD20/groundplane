@@ -53,14 +53,13 @@ type Envelope struct {
 // EnvelopeMetadata addresses the document by human-facing slugs; the
 // Controller resolves these to stable ids before storing anything (see
 // model.go's Tenant/Project/Environment.ID). Which fields are required
-// depends on Kind: an environment document sets all three; a connector
-// document sets only what ConnectorScope needs (see ConnectorDocument).
+// depends on Kind: environment and connector documents set the complete
+// tenant/project/environment chain.
 type EnvelopeMetadata struct {
 	Tenant      string `yaml:"tenant,omitempty"`
 	Project     string `yaml:"project,omitempty"`
 	Environment string `yaml:"environment,omitempty"`
-	Name        string `yaml:"name,omitempty"`  // connector documents: the connector's slug
-	Scope       string `yaml:"scope,omitempty"` // connector documents: "environment" | "platform"
+	Name        string `yaml:"name,omitempty"` // connector documents: the connector's slug
 }
 
 // ConnectorDocument is a `kind: connector` Blueprint document — see
@@ -245,11 +244,11 @@ func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
 	if doc.Kind != KindDocConnector {
 		return ConnectorDocument{}, fmt.Errorf("connector document: envelope kind is %q, want %q", doc.Kind, KindDocConnector)
 	}
-	if doc.Metadata.Scope != "environment" && doc.Metadata.Scope != "platform" {
-		return ConnectorDocument{}, fmt.Errorf("connector document: metadata.scope must be %q or %q, got %q", "environment", "platform", doc.Metadata.Scope)
+	if doc.Schema != EnvelopeSchema {
+		return ConnectorDocument{}, fmt.Errorf("connector document: schema is %d, want %d", doc.Schema, EnvelopeSchema)
 	}
-	if doc.Metadata.Scope == "environment" && doc.Metadata.Environment == "" {
-		return ConnectorDocument{}, fmt.Errorf("connector document: metadata.scope=environment requires metadata.environment")
+	if doc.Metadata.Name == "" || doc.Metadata.Tenant == "" || doc.Metadata.Project == "" || doc.Metadata.Environment == "" {
+		return ConnectorDocument{}, fmt.Errorf("connector document: metadata.name, tenant, project, and environment are required")
 	}
 	return doc, nil
 }

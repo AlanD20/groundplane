@@ -149,7 +149,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("DELETE /api/v1/secrets/{id}", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/secrets/{id}/value", s.notImplemented) // reveal — Console-only preference, not access control
 
-	// connector (?environment= or ?platform=true) — NEVER project-scoped
+	// connector (?environment= required) — environment-scoped only
 	mux.HandleFunc("GET /api/v1/connectors", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/connectors", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/connectors/{id}", s.notImplemented)

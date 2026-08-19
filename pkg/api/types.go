@@ -188,13 +188,10 @@ type Secret struct {
 	Ref       string `json:"ref"`
 }
 
-// Connector is environment-scoped OR the platform default — NEVER
-// project-scoped (blueprint.md, "Envelope and placement"). Exactly one
-// of EnvironmentID or Platform=true is set.
+// Connector is owned by exactly one environment.
 type Connector struct {
 	ID            string            `json:"id"`
-	EnvironmentID string            `json:"environment_id,omitempty"`
-	Platform      bool              `json:"platform,omitempty"`
+	EnvironmentID string            `json:"environment_id"`
 	Kind          string            `json:"kind"`
 	Credentials   map[string]string `json:"credentials,omitempty"`
 }

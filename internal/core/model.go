@@ -469,14 +469,11 @@ type Secret struct {
 	Ref       string     `yaml:"ref" json:"ref"` // env file name or file path — never an inline value
 }
 
-// Connector is a backup destination + credentials. NEVER project-scoped
-// (locked, blueprint.md, "Envelope and placement"): an environment
-// resolves its connector by EnvironmentID, falling back to the platform
-// default (Platform=true, EnvironmentID empty).
+// Connector is a backup destination + credentials owned by exactly one
+// environment. There are no project or platform connectors.
 type Connector struct {
-	ID            string            `yaml:"id" json:"id"`                                             // con_<ulid>
-	EnvironmentID string            `yaml:"environment_id,omitempty" json:"environment_id,omitempty"` // empty + Platform=true for the platform default
-	Platform      bool              `yaml:"platform,omitempty" json:"platform,omitempty"`
+	ID            string            `yaml:"id" json:"id"`                         // con_<ulid>
+	EnvironmentID string            `yaml:"environment_id" json:"environment_id"`
 	Kind          string            `yaml:"kind" json:"kind"`                                   // "s3-compatible", later s3/minio/b2
 	Credentials   map[string]string `yaml:"credentials,omitempty" json:"credentials,omitempty"` // value is either a secret-store ref or a stored-encrypted direct value
 }

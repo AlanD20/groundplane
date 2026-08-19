@@ -137,13 +137,8 @@ func (c Connector) Validate() error {
 	if c.ID == "" || c.Kind == "" {
 		return fmt.Errorf("connector: id and kind are required")
 	}
-	// Locked: no project-scoped connector — see blueprint.md, "Envelope
-	// and placement": "There is no project-scoped connector."
-	if c.Platform && c.EnvironmentID != "" {
-		return fmt.Errorf("connector: platform=true and environment_id are mutually exclusive")
-	}
-	if !c.Platform && c.EnvironmentID == "" {
-		return fmt.Errorf("connector: exactly one of platform=true or environment_id is required")
+	if c.EnvironmentID == "" {
+		return fmt.Errorf("connector: environment_id is required")
 	}
 	return nil
 }
