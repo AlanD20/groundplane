@@ -67,7 +67,7 @@ type Environment struct {
 }
 
 // Router is a READ-ONLY projection assembled from the environment's
-// ingress-kind Components (kind "ingress.caddy", "edge.cloudflare-tunnel",
+// ingress-kind Components (kind "caddy", "cloudflare-tunnel",
 // …) — it is never authored or PUT directly. See api-cli.md: "router |
 // GET /environments/{id}/router read-only projection grouping ingress
 // components", and blueprint.md: "The Router page is a UI grouping for
@@ -319,8 +319,8 @@ type Grant struct {
 type ComponentKind string
 
 const (
-	ComponentKindIngressCaddy   ComponentKind = "ingress.caddy"
-	ComponentKindEdgeCloudflare ComponentKind = "edge.cloudflare-tunnel"
+	ComponentKindIngressCaddy   ComponentKind = "caddy"
+	ComponentKindEdgeCloudflare ComponentKind = "cloudflare-tunnel"
 	ComponentKindCoreDNS         ComponentKind = "coredns"
 	ComponentKindController      ComponentKind = "controller"
 	ComponentKindAgent           ComponentKind = "agent"

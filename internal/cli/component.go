@@ -51,7 +51,7 @@ func newComponentCmd() *cobra.Command {
 			return runCreate(cmd, "/api/v1/components", body)
 		},
 	}
-	enable.Flags().StringVar(&kind, "kind", "", "ingress.caddy | edge.cloudflare-tunnel | coredns | controller | agent")
+	enable.Flags().StringVar(&kind, "kind", "", "caddy | cloudflare-tunnel | coredns | controller | agent")
 	_ = enable.MarkFlagRequired("kind")
 	cmd.AddCommand(enable)
 

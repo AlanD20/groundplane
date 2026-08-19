@@ -118,7 +118,7 @@ type Script struct {
 }
 
 // Component is the generic environment-component record. Caddy and Cloudflare
-// Tunnel are component KINDS ("ingress.caddy", "edge.cloudflare-tunnel"),
+// Tunnel are component KINDS ("caddy", "cloudflare-tunnel"),
 // not bespoke resources — see blueprint.md, "x-gp-components".
 type Component struct {
 	ID                string         `json:"id"`

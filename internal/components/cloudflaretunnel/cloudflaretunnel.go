@@ -1,4 +1,4 @@
-// Package cloudflaretunnel is the "edge.cloudflare-tunnel" component — the
+// Package cloudflaretunnel is the "cloudflare-tunnel" component — the
 // outbound-only edge gateway. See mvp.md, "Router (ingress components)":
 // the token registers the tunnel but cannot modify DNS; the operator is
 // guided through the manual DNS process.

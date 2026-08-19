@@ -1,4 +1,4 @@
-// Package caddy is the "ingress.caddy" component — the entry router. See
+// Package caddy is the "caddy" component — the entry router. See
 // mvp.md, "Router (ingress components)": one host-reachable service on a
 // statically pinned IPv4, the documented exception to "no host port
 // publishing".
