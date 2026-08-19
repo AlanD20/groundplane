@@ -40,7 +40,7 @@ func HandleErrors(err error) int {
 		return 1
 	}
 
-	fmt.Fprintln(os.Stderr, "error:", err)
+	fmt.Fprintf(os.Stderr, "error: %s: unexpected error\n", errs.CodeInternal)
 	return 1
 }
 
