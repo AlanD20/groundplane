@@ -131,8 +131,9 @@ func newServiceCmd() *cobra.Command {
 			if follow {
 				q["follow"] = "true"
 			}
-			return app.Client.Stream(cmd.Context(), path, q, func(line string) {
-				fmt.Fprintln(cmd.OutOrStdout(), line)
+			return app.Client.Stream(cmd.Context(), path, q, func(line string) error {
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), line)
+				return err
 			})
 		},
 	}

@@ -13,27 +13,32 @@
 package apiclient
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type Client struct {
-	BaseURL string
-	HTTP    *http.Client
+	BaseURL       string
+	HTTP          *http.Client
+	StreamingHTTP *http.Client
 }
 
 func New(baseURL string) *Client {
 	return &Client{
-		BaseURL: baseURL,
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		BaseURL:       baseURL,
+		HTTP:          &http.Client{Timeout: 30 * time.Second},
+		StreamingHTTP: &http.Client{},
 	}
 }
 
@@ -104,12 +109,117 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 	return nil
 }
 
-// Stream opens an SSE connection (task events, logs, activity).
-//
-// TODO: implement proper SSE framing (event:/data:/id: fields, retry).
-// This scaffold is enough for `service logs --follow` and `task show
-// --follow` to be wired against once the Controller's SSE endpoints
-// exist.
-func (c *Client) Stream(ctx context.Context, path string, query map[string]string, onLine func(line string)) error {
-	return errs.New(errs.CodeNotImplemented, "apiclient: Stream not implemented")
+// Stream opens one SSE connection and invokes onEvent for each complete event
+// data payload. Reconnection policy belongs to the calling command because
+// finite and follow streams have different lifecycles.
+func (c *Client) Stream(ctx context.Context, path string, query map[string]string, onEvent func(data string) error) error {
+	u, err := url.Parse(c.BaseURL + path)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: bad stream url: %w", err))
+	}
+	if len(query) > 0 {
+		q := u.Query()
+		for key, value := range query {
+			if value != "" {
+				q.Set(key, value)
+			}
+		}
+		u.RawQuery = q.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: build stream request: %w", err))
+	}
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := c.StreamingHTTP.Do(req)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: stream %s: %w", path, err))
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return responseProblem(http.MethodGet, path, resp)
+	}
+	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil || mediaType != "text/event-stream" {
+		return errs.Newf(errs.CodeInternal, "apiclient: stream %s returned content type %q", path, resp.Header.Get("Content-Type"))
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Split(splitEventStreamLines)
+	scanner.Buffer(make([]byte, 4096), 1024*1024)
+	var data []string
+	firstLine := true
+	for scanner.Scan() {
+		line := strings.ToValidUTF8(scanner.Text(), "\uFFFD")
+		if firstLine {
+			line = strings.TrimPrefix(line, "\uFEFF")
+			firstLine = false
+		}
+		if line == "" {
+			if data != nil {
+				if err := onEvent(strings.Join(data, "\n")); err != nil {
+					return err
+				}
+				data = nil
+			}
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		field, value, found := strings.Cut(line, ":")
+		if !found {
+			value = ""
+		} else {
+			value = strings.TrimPrefix(value, " ")
+		}
+		if field == "data" {
+			data = append(data, value)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: read stream %s: %w", path, err))
+	}
+	return nil
+}
+
+func splitEventStreamLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for i, value := range data {
+		switch value {
+		case '\n':
+			end := i
+			if end > 0 && data[end-1] == '\r' {
+				end--
+			}
+			return i + 1, data[:end], nil
+		case '\r':
+			if i+1 == len(data) && !atEOF {
+				return 0, nil, nil
+			}
+			advance := i + 1
+			if i+1 < len(data) && data[i+1] == '\n' {
+				advance++
+			}
+			return advance, data[:i], nil
+		}
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
+func responseProblem(method, path string, resp *http.Response) error {
+	var problem errs.Problem
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1024*1024)).Decode(&problem); err != nil || problem.Code == "" {
+		return errs.Newf(errs.CodeInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
+	}
+	return errs.New(problem.Code, problem.Detail, errs.WithDetails(problem.Details))
 }
