@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -37,7 +38,7 @@ type Options struct {
 func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	configureProblemResponses()
 	mux := http.NewServeMux()
-	config := huma.DefaultConfig("Groundplane API", "dev")
+	config := huma.DefaultConfig("Groundplane API", version.Value)
 	config.OpenAPIPath = ""
 	config.DocsPath = ""
 	config.SchemasPath = ""
