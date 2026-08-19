@@ -33,5 +33,8 @@ func (f *FakeRunner) Stream(ctx context.Context, opts RunCmdOpts, onLine func(st
 	for _, line := range splitLines(res.Stdout) {
 		onLine(false, line)
 	}
+	for _, line := range splitLines(res.Stderr) {
+		onLine(true, line)
+	}
 	return res, err
 }

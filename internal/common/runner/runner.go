@@ -73,11 +73,18 @@ func (r *OSRunner) Run(ctx context.Context, opts RunCmdOpts) (Result, error) {
 	cmd.Stderr = &stderr
 
 	if r.Logger != nil {
-		r.Logger.Debug("runner: exec", "name", opts.Name, "args", opts.Args, "dir", opts.Dir)
+		r.Logger.Debug("runner: exec", "name", opts.Name, "arg_count", len(opts.Args), "dir", opts.Dir)
 	}
 
 	err := cmd.Run()
-	res := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: cmd.ProcessState.ExitCode()}
+	exitCode := -1
+	if cmd.ProcessState != nil {
+		exitCode = cmd.ProcessState.ExitCode()
+	}
+	res := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: exitCode}
+	if err != nil && ctx.Err() != nil {
+		return res, ctx.Err()
+	}
 	return res, err
 }
 
@@ -113,7 +120,11 @@ func splitLines(b []byte) []string {
 	start := 0
 	for i, c := range b {
 		if c == '\n' {
-			lines = append(lines, string(b[start:i]))
+			end := i
+			if end > start && b[end-1] == '\r' {
+				end--
+			}
+			lines = append(lines, string(b[start:end]))
 			start = i + 1
 		}
 	}
