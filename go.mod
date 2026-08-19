@@ -11,6 +11,11 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+require (
+	filippo.io/hpke v0.4.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+)
+
 // google.golang.org/grpc and google.golang.org/protobuf are needed once
 // `make proto` generates proto/agentpb/*.pb.go and internal/agent starts
 // importing it — add them back with `go get` at that point. Left out for
@@ -22,6 +27,5 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	go.etcd.io/etcd/client/v3 v3.6.13
 	golang.org/x/sys v0.47.0 // indirect
 )
