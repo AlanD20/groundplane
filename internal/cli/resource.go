@@ -7,6 +7,7 @@ package cli
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/spf13/cobra"
 
@@ -75,8 +76,8 @@ func runRemove(cmd *cobra.Command, path string) error {
 	if err := app.Client.Do(cmd.Context(), "DELETE", path, nil, nil, nil); err != nil {
 		return err
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), "removed")
-	return nil
+	_, err := fmt.Fprintln(cmd.OutOrStdout(), "removed")
+	return err
 }
 
 // runDestroy is DELETE for resources whose deletion is destructive and
@@ -109,8 +110,11 @@ func runActionMethod(cmd *cobra.Command, method, path string, body any) error {
 	if err := app.Client.Do(cmd.Context(), method, path, nil, body, &res); err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "task %s dispatched — `groundplane task show %s` to follow\n", res.TaskID, res.TaskID)
-	return nil
+	if res.TaskID == "" {
+		return fmt.Errorf("cli: action response is missing task_id")
+	}
+	_, err := fmt.Fprintf(cmd.OutOrStdout(), "task %s dispatched — `groundplane task show %s` to follow\n", res.TaskID, res.TaskID)
+	return err
 }
 
 func runReveal(cmd *cobra.Command, path string) error {
@@ -121,8 +125,8 @@ func runReveal(cmd *cobra.Command, path string) error {
 	if err := app.Client.Do(cmd.Context(), "GET", path, nil, nil, &res); err != nil {
 		return err
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), res.Value)
-	return nil
+	_, err := fmt.Fprintln(cmd.OutOrStdout(), res.Value)
+	return err
 }
 
 // scopeQuery builds the ?tenant=&project=&environment= filter set from
@@ -150,7 +154,7 @@ func scopeQuery(app *App, keys ...string) map[string]string {
 // active scope chain (tenant -> project -> environment) — never
 // ambiguous, since slugs are scoped-unique.
 func target(app *App, arg string) string {
-	return arg
+	return url.PathEscape(arg)
 }
 
 func tabulateVia(app *App, items []map[string]any) ([]string, [][]string) {
