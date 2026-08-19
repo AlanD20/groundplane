@@ -1,6 +1,13 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
+)
 
 // backup: policy show | policy set [...] | run | points | restore
 // <source> | rotate-key | export-key. Per-environment, toggleable off,
@@ -15,7 +22,7 @@ func newBackupCmd() *cobra.Command {
 		Short: "Show the backup policy",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runShow(cmd, "/api/v1/environments/"+app.Scope.Environment+"/backup-policy")
+			return runShow(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/backup-policy")
 		},
 	})
 
@@ -29,7 +36,7 @@ func newBackupCmd() *cobra.Command {
 		Short: "Set the backup policy",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			path := "/api/v1/environments/" + app.Scope.Environment + "/backup-policy"
+			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/backup-policy"
 			return runEdit(cmd, path, map[string]interface{}{
 				"frequency": frequency, "keep": keep, "encryption": encryption,
 				"sources": sources, "enabled": !off,
@@ -50,7 +57,7 @@ func newBackupCmd() *cobra.Command {
 		Short: "Run a backup now",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			path := "/api/v1/environments/" + app.Scope.Environment + "/backup-run"
+			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/backup-run"
 			return runAction(cmd, path, map[string]interface{}{"source_ids": runSources})
 		},
 	}
@@ -62,26 +69,34 @@ func newBackupCmd() *cobra.Command {
 		Short: "List recovery points (visible only after dump/encrypt/upload/verify all succeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runList(cmd, "/api/v1/environments/"+app.Scope.Environment+"/recovery-points", nil)
+			return runList(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/recovery-points", nil)
 		},
 	}
 	cmd.AddCommand(points)
 
-	var point, ageIdentity string
+	var point, ageIdentityPath string
 	restore := &cobra.Command{
 		Use:   "restore <source>",
 		Short: "Restore a source from a recovery point (defaults to the latest)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			path := "/api/v1/environments/" + app.Scope.Environment + "/restore"
+			ageIdentity := ""
+			if ageIdentityPath != "" {
+				var err error
+				ageIdentity, err = readAgeIdentity(ageIdentityPath)
+				if err != nil {
+					return err
+				}
+			}
+			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/restore"
 			return runAction(cmd, path, map[string]string{
 				"source_id": args[0], "recovery_point_id": point, "age_identity": ageIdentity,
 			})
 		},
 	}
 	restore.Flags().StringVar(&point, "point", "", "recovery point id (default: latest)")
-	restore.Flags().StringVar(&ageIdentity, "age-identity", "", "exported age identity file (needed if the recovery point's key era was rotated away)")
+	restore.Flags().StringVar(&ageIdentityPath, "age-identity", "", "exported age identity file (needed if the recovery point's key era was rotated away)")
 	cmd.AddCommand(restore)
 
 	cmd.AddCommand(&cobra.Command{
@@ -89,7 +104,7 @@ func newBackupCmd() *cobra.Command {
 		Short: "Rotate the environment's backup encryption age key (bumps key_era; affects new recovery points only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runAction(cmd, "/api/v1/environments/"+app.Scope.Environment+"/rotate-key", nil)
+			return runAction(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/rotate-key", nil)
 		},
 	})
 
@@ -98,9 +113,30 @@ func newBackupCmd() *cobra.Command {
 		Short: "Export the current age identity for off-host disaster recovery",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runReveal(cmd, "/api/v1/environments/"+app.Scope.Environment+"/export-key")
+			return runReveal(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/export-key")
 		},
 	})
 
 	return cmd
+}
+
+func readAgeIdentity(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("backup: open age identity: %w", err)
+	}
+	defer file.Close()
+	const maxIdentitySize = 4096
+	contents, err := io.ReadAll(io.LimitReader(file, maxIdentitySize+1))
+	if err != nil {
+		return "", fmt.Errorf("backup: read age identity: %w", err)
+	}
+	if len(contents) > maxIdentitySize {
+		return "", fmt.Errorf("backup: age identity exceeds %d bytes", maxIdentitySize)
+	}
+	identity := strings.TrimSpace(string(contents))
+	if identity == "" {
+		return "", fmt.Errorf("backup: age identity is empty")
+	}
+	return identity, nil
 }
