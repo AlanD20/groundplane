@@ -14,8 +14,9 @@ Console (`console/`), and the Go implementation scaffold.
   product or Console behavior. "If it isn't in the Console store, it
   doesn't exist in the product."
 - **docs/api-cli.md** — the CLI command tree and the REST API. Reach for
-  it on any command or endpoint work. The 1:1 rule: every Console action
-  = exactly one CLI command = exactly one API endpoint.
+  it on any command or endpoint work. The 1:1 rule: every operator-facing
+  Controller capability has exactly one Console action, CLI command, and API
+  endpoint; local tooling and machine bootstrap are explicitly exempt.
 - **docs/blueprint.md** — the spec-file grammar (desired state). Reach
   for it on any spec/desired-state/YAML work. The one law: specs are pure
   inputs of decisions — nothing derived, nothing non-reproducible.
@@ -45,8 +46,10 @@ API contract. UI questions are answered here; product questions in mvp.md.
 
 - Docs stay in sync: mvp.md is authoritative; the other docs and Console
   mirror it.
-- The 1:1 rule always holds — no Console action without a CLI command
-  and API endpoint, and vice versa.
+- The 1:1 rule always holds for operator-facing Controller capabilities — no
+  Console action without a CLI command and API endpoint, and vice versa. Local
+  process/tooling commands and machine bootstrap surfaces are exempt exactly
+  as listed in `docs/api-cli.md`.
 - Replace superseded contracts cleanly. Remove old nouns, routes, files,
   and adapters in the same change; do not add compatibility layers.
 - Slugs are renamable labels (scoped uniqueness); ids are the stable
