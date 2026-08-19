@@ -2,7 +2,7 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// secret: list | add | show | reveal | remove. Scope = project (plus
+// secret: list | add | show | remove. Scope = project (plus
 // the platform default). See mvp.md, "Secrets" and "Secret kinds".
 func newSecretCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "secret", Short: "Project-scoped secrets (env variable or file secret)"}
@@ -37,15 +37,6 @@ func newSecretCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShow(cmd, "/api/v1/secrets/"+target(fromContext(cmd), args[0]))
-		},
-	})
-
-	cmd.AddCommand(&cobra.Command{
-		Use:   "reveal <id>",
-		Short: "Reveal a secret's value (CLI/API return it directly — the typed-confirmation preference is Console-only)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReveal(cmd, "/api/v1/secrets/"+target(fromContext(cmd), args[0])+"/value")
 		},
 	})
 
