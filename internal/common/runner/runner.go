@@ -10,10 +10,14 @@
 package runner
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"os/exec"
+	"sync"
 	"time"
 )
 
@@ -88,21 +92,103 @@ func (r *OSRunner) Run(ctx context.Context, opts RunCmdOpts) (Result, error) {
 	return res, err
 }
 
-// Stream is a minimal implementation for this scaffold: it runs to
-// completion via Run and replays the captured output through onLine
-// line-by-line, rather than streaming live. TODO: wire cmd.StdoutPipe /
-// cmd.StderrPipe + bufio.Scanner for true live streaming (needed once
-// `service logs --follow` and long-running steps want incremental
-// TaskEvent output — see proto/agent.proto's TaskEvent.chunk).
 func (r *OSRunner) Stream(ctx context.Context, opts RunCmdOpts, onLine func(stderr bool, line string)) (Result, error) {
-	res, err := r.Run(ctx, opts)
-	for _, line := range splitLines(res.Stdout) {
-		onLine(false, line)
+	ctx, cancel := withTimeout(ctx, opts.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, opts.Name, opts.Args...)
+	cmd.Dir = opts.Dir
+	cmd.Env = append(cmd.Environ(), opts.Env...)
+	if opts.Stdin != nil {
+		cmd.Stdin = bytes.NewReader(opts.Stdin)
 	}
-	for _, line := range splitLines(res.Stderr) {
-		onLine(true, line)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return Result{ExitCode: -1}, err
 	}
-	return res, err
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return Result{ExitCode: -1}, err
+	}
+
+	if r.Logger != nil {
+		r.Logger.Debug("runner: stream", "name", opts.Name, "arg_count", len(opts.Args), "dir", opts.Dir)
+	}
+	if err := cmd.Start(); err != nil {
+		if ctx.Err() != nil {
+			return Result{ExitCode: -1}, ctx.Err()
+		}
+		return Result{ExitCode: -1}, err
+	}
+
+	lines := make(chan streamedLine, 32)
+	results := make(chan streamResult, 2)
+	var readers sync.WaitGroup
+	readers.Add(2)
+	go readStream(stdout, false, lines, results, &readers)
+	go readStream(stderr, true, lines, results, &readers)
+	go func() {
+		readers.Wait()
+		close(lines)
+	}()
+	for line := range lines {
+		onLine(line.stderr, line.value)
+	}
+
+	first := <-results
+	second := <-results
+	var stdoutBytes, stderrBytes []byte
+	var readErrors []error
+	for _, result := range []streamResult{first, second} {
+		if result.stderr {
+			stderrBytes = result.output
+		} else {
+			stdoutBytes = result.output
+		}
+		if result.err != nil {
+			readErrors = append(readErrors, result.err)
+		}
+	}
+	waitErr := cmd.Wait()
+	exitCode := -1
+	if cmd.ProcessState != nil {
+		exitCode = cmd.ProcessState.ExitCode()
+	}
+	result := Result{Stdout: stdoutBytes, Stderr: stderrBytes, ExitCode: exitCode}
+	if ctx.Err() != nil {
+		return result, ctx.Err()
+	}
+	return result, errors.Join(append(readErrors, waitErr)...)
+}
+
+type streamedLine struct {
+	stderr bool
+	value  string
+}
+
+type streamResult struct {
+	stderr bool
+	output []byte
+	err    error
+}
+
+func readStream(reader io.Reader, stderr bool, lines chan<- streamedLine, results chan<- streamResult, readers *sync.WaitGroup) {
+	defer readers.Done()
+	var captured bytes.Buffer
+	scanner := bufio.NewScanner(io.TeeReader(reader, &captured))
+	scanner.Buffer(make([]byte, 4096), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		line = string(bytes.TrimSuffix([]byte(line), []byte{'\r'}))
+		lines <- streamedLine{stderr: stderr, value: line}
+	}
+	scanErr := scanner.Err()
+	if scanErr != nil {
+		if _, err := io.Copy(&captured, reader); err != nil {
+			scanErr = errors.Join(scanErr, err)
+		}
+	}
+	results <- streamResult{stderr: stderr, output: captured.Bytes(), err: scanErr}
 }
 
 func withTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
