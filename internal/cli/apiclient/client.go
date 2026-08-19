@@ -86,18 +86,15 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
 		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: %s %s: %w (is the Controller running? --host / GROUNDPLANE_HOST)", method, path, err))
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		var problem errs.Problem
-		_ = json.NewDecoder(resp.Body).Decode(&problem)
-		if problem.Code == "" {
-			problem.Code = errs.CodeInternal
-			problem.Detail = fmt.Sprintf("%s %s: unexpected status %d", method, path, resp.StatusCode)
-		}
-		return errs.New(problem.Code, problem.Detail, errs.WithDetails(problem.Details))
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return responseProblem(method, path, resp)
 	}
 
 	if out == nil || resp.StatusCode == http.StatusNoContent {
