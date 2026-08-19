@@ -84,6 +84,7 @@ func NewRootCmd() *cobra.Command {
 		project := firstNonEmpty(flags.project, cfg.Project)
 		env := firstNonEmpty(flags.env, cfg.Environment)
 		outFmt := firstNonEmpty(flags.output, cfg.Output)
+		noColor := flags.noColor || cfg.NoColor
 
 		format, err := clicommon.ParseFormat(outFmt)
 		if err != nil {
@@ -92,7 +93,7 @@ func NewRootCmd() *cobra.Command {
 
 		app := &App{
 			Client: apiclient.New(host),
-			Out:    clicommon.NewWriter(format, flags.noColor, cmd.OutOrStdout()),
+			Out:    clicommon.NewWriter(format, noColor, cmd.OutOrStdout()),
 			Scope: Scope{
 				Tenant:      tenant,
 				Project:     project,
