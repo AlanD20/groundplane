@@ -28,13 +28,14 @@ test:
 tidy:
 	go mod tidy
 
-# ci mirrors docs/coding-standards.md, section 14, exactly — a task is
+# ci mirrors docs/standards.md, section 14, exactly — a task is
 # not complete until this passes locally, same as the CI pipeline. The
 # `go generate` line is commented out until proto/agentpb and an
 # OpenAPI-generated client actually exist to regenerate.
 ci:
 	go mod tidy && git diff --exit-code go.mod go.sum
 	test -z "$$(gofmt -l .)"
+	golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/
 	go vet ./...
 	go test ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
 	# go generate ./...
