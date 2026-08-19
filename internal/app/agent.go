@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/common/config"
@@ -44,9 +46,16 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 // JoinTokenPath) and runs the Agent's channel loop until ctx is
 // cancelled.
 func (a *Agent) Run(ctx context.Context) error {
-	joinToken, _ := os.ReadFile(a.Config.JoinTokenPath)
-	if err := a.Client.Connect(ctx, string(joinToken)); err != nil {
-		a.Logger.Warn("agent: connect not wired yet, running worker pool standalone for scaffolding", slog.Any("error", err))
+	joinToken, err := os.ReadFile(a.Config.JoinTokenPath)
+	if err != nil {
+		return fmt.Errorf("agent: read join token: %w", err)
+	}
+	token := strings.TrimSpace(string(joinToken))
+	if token == "" {
+		return fmt.Errorf("agent: join token is empty")
+	}
+	if err := a.Client.Connect(ctx, token); err != nil {
+		return fmt.Errorf("agent: connect: %w", err)
 	}
 	return a.Client.Run(ctx)
 }
