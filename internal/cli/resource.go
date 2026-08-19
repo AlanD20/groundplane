@@ -16,12 +16,15 @@ import (
 
 func runList(cmd *cobra.Command, path string, query map[string]string) error {
 	app := fromContext(cmd)
-	var items []map[string]any
-	if err := app.Client.Do(cmd.Context(), "GET", path, query, nil, &items); err != nil {
+	var page struct {
+		Items      []map[string]any `json:"items" yaml:"items"`
+		NextCursor string           `json:"next_cursor,omitempty" yaml:"next_cursor,omitempty"`
+	}
+	if err := app.Client.Do(cmd.Context(), "GET", path, query, nil, &page); err != nil {
 		return err
 	}
-	headers, rows := tabulateVia(app, items)
-	return app.Out.Render(headers, rows, items)
+	headers, rows := tabulateVia(app, page.Items)
+	return app.Out.Render(headers, rows, page)
 }
 
 func runShow(cmd *cobra.Command, path string) error {
