@@ -22,7 +22,7 @@ type Token [tokenSize]byte
 // Authorization is the non-secret result of successful Agent authentication.
 type Authorization struct {
 	Generation uint64
-	Config     agentpb.AgentConfig
+	Config     *agentpb.AgentConfig
 }
 
 // Authenticator authenticates one Agent generation without retaining or
@@ -70,6 +70,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if authErr != nil {
 		return unauthenticated()
 	}
+	if authorization.Config == nil {
+		return status.Error(codes.Internal, "agent configuration is not available")
+	}
 
 	session, err := s.sessions.Open(stream.Context(), authenticate.AgentId, authorization.Generation)
 	if err != nil {
@@ -77,7 +80,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	}
 	defer session.Close()
 
-	config := proto.Clone(&authorization.Config).(*agentpb.AgentConfig)
+	config := proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 	if err := stream.Send(&agentpb.ControllerMessage{
 		Payload: &agentpb.ControllerMessage_ConfigUpdate{
 			ConfigUpdate: &agentpb.ConfigUpdate{AgentConfig: config},

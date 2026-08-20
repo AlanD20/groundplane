@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -79,6 +80,23 @@ func TestConnectRequiresAuthenticateFirst(t *testing.T) {
 	}
 	if authenticator.calls != 0 || len(stream.sent) != 0 {
 		t.Fatalf("auth calls = %d, sent = %d", authenticator.calls, len(stream.sent))
+	}
+}
+
+// Rationale: successful authentication without a runtime configuration is a
+// Controller wiring failure and must fail closed before opening a session.
+func TestConnectRejectsMissingAuthorizedConfig(t *testing.T) {
+	authenticator := &fakeAuthenticator{authorization: Authorization{Generation: 1}}
+	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
+		authenticateMessage("agt_01J00000000000000000000000", testToken('m')),
+	}}
+
+	err := New(authenticator, NewRegistry()).Connect(stream)
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("status = %v, want Internal", status.Code(err))
+	}
+	if len(stream.sent) != 0 {
+		t.Fatalf("sent = %d messages, want zero", len(stream.sent))
 	}
 }
 
@@ -226,7 +244,7 @@ func TestAuthenticationFailureDoesNotLeakToken(t *testing.T) {
 func authorizedAuthenticator() *fakeAuthenticator {
 	return &fakeAuthenticator{authorization: Authorization{
 		Generation: 1,
-		Config: agentpb.AgentConfig{
+		Config: &agentpb.AgentConfig{
 			PullIntervalSeconds: 5,
 			MaxConcurrentTasks:  4,
 			Labels:              map[string]string{"role": "local"},
