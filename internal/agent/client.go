@@ -52,8 +52,8 @@ func (c *Client) Connect(ctx context.Context, joinToken string) error {
 }
 
 // Run opens the Channel stream and blocks, sending an idle Ready at
-// PullInterval, receiving TaskAssignment/TaskAbort/ConfigUpdate/
-// ImageUpdate/Shutdown, and feeding assignments to the worker pool.
+// PullInterval, receiving TaskAssignment/TaskAbort/ConfigUpdate/Shutdown,
+// and feeding assignments to the worker pool.
 // Reconnects with exponential backoff on a dropped stream.
 func (c *Client) Run(ctx context.Context) error {
 	c.pool = NewWorkerPool(c.MaxConcurrentTasks, runner.New(c.Logger), c.Logger)

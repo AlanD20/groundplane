@@ -1,5 +1,5 @@
 // Package systemd handles the host-level systemd surfaces: installing
-// unit files (groundplane-controller.service, groundplane-agent.service,
+// unit files (groundplane-controller.service and
 // groundplane-etcd.service), the Controller's self-update via staged-
 // binary swap, and validating backup-schedule calendar expressions with
 // `systemd-analyze calendar`. See mvp.md, "Core (locked)" and
@@ -30,7 +30,6 @@ import (
 const systemUnitDirectory = "/etc/systemd/system"
 
 var managedUnits = map[string]struct{}{
-	"groundplane-agent.service":      {},
 	"groundplane-controller.service": {},
 	"groundplane-etcd.service":       {},
 }

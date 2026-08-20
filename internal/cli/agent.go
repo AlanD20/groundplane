@@ -57,7 +57,7 @@ func newAgentCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "update <id>",
-		Short: "Self-update an agent (ImageUpdate: acked before the agent recreates its own container)",
+		Short: "Update an agent through the Controller-owned container lifecycle",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAction(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0])+"/update", nil)
@@ -66,7 +66,7 @@ func newAgentCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "remove <id>",
-		Short: "Remove an agent and revoke its certificate",
+		Short: "Remove an agent container and revoke its channel token",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDeleteAction(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0]))

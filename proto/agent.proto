@@ -93,8 +93,7 @@ message ControllerMessage {
     TaskAssignment task_assignment = 1; // the full procedure: steps, params, timeout
     TaskAbort task_abort = 2;           // cancel in-flight work NOW
     ConfigUpdate config_update = 3;     // applied on next Ready, no restart
-    ImageUpdate image_update = 4;       // self-update: acked, THEN the agent recreates its own container
-    Shutdown shutdown = 5;
+    Shutdown shutdown = 4;
   }
 }
 
@@ -124,10 +123,6 @@ message TaskAbort {
 
 message ConfigUpdate {
   AgentConfig agent_config = 1;
-}
-
-message ImageUpdate {
-  string tag = 1;
 }
 
 message Shutdown {}
