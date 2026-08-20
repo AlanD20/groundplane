@@ -17,6 +17,7 @@ func newEntryCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List entries",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, "/api/v1/entries", scopeQuery(fromContext(cmd), "environment"))
 		},
@@ -52,6 +53,7 @@ func newEntryAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Add an entry",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 

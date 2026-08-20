@@ -17,6 +17,7 @@ func newComponentCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List components",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := scopeQuery(fromContext(cmd), "environment")
 			if platform {
@@ -40,6 +41,7 @@ func newComponentCmd() *cobra.Command {
 	enable := &cobra.Command{
 		Use:   "enable",
 		Short: "Enable (creating if needed) a component by kind",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			body := map[string]interface{}{"kind": kind, "enabled": true}

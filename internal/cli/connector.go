@@ -9,6 +9,7 @@ func newConnectorCmd() *cobra.Command {
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List connectors",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runList(cmd, "/api/v1/connectors", scopeQuery(app, "environment"))

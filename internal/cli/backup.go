@@ -20,6 +20,7 @@ func newBackupCmd() *cobra.Command {
 	policy.AddCommand(&cobra.Command{
 		Use:   "show",
 		Short: "Show the backup policy",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runShow(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/backup-policy")
@@ -34,6 +35,7 @@ func newBackupCmd() *cobra.Command {
 	set := &cobra.Command{
 		Use:   "set",
 		Short: "Set the backup policy",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/backup-policy"
@@ -55,6 +57,7 @@ func newBackupCmd() *cobra.Command {
 	run := &cobra.Command{
 		Use:   "run",
 		Short: "Run a backup now",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/backup-run"
@@ -67,6 +70,7 @@ func newBackupCmd() *cobra.Command {
 	points := &cobra.Command{
 		Use:   "points",
 		Short: "List recovery points (visible only after dump/encrypt/upload/verify all succeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runList(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/recovery-points", nil)
@@ -102,6 +106,7 @@ func newBackupCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "rotate-key",
 		Short: "Rotate the environment's backup encryption age key (bumps key_era; affects new recovery points only)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runAction(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/rotate-key", nil)
@@ -111,6 +116,7 @@ func newBackupCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "export-key",
 		Short: "Export the current age identity for off-host disaster recovery",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runExportKey(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/export-key")

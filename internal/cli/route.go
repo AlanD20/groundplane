@@ -11,6 +11,7 @@ func newRouteCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List routes",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, "/api/v1/routes", scopeQuery(fromContext(cmd), "environment"))
 		},
@@ -20,6 +21,7 @@ func newRouteCmd() *cobra.Command {
 	add := &cobra.Command{
 		Use:   "add",
 		Short: "Add a route",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runCreate(cmd, "/api/v1/routes", map[string]string{

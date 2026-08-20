@@ -12,6 +12,7 @@ func newReleaseGroupCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List release groups",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, "/api/v1/release-groups", scopeQuery(fromContext(cmd), "environment"))
 		},

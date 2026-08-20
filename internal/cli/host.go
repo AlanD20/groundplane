@@ -10,6 +10,7 @@ func newHostCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "show",
 		Short: "Show host status",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShow(cmd, "/api/v1/host")
 		},

@@ -12,6 +12,7 @@ func newRunnerCmd() *cobra.Command {
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List runners",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			query := scopeQuery(app, "tenant")
@@ -27,6 +28,7 @@ func newRunnerCmd() *cobra.Command {
 	add := &cobra.Command{
 		Use:   "add",
 		Short: "Register a runner (repo-scoped with -p/--project, org-scoped without)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			proj := project

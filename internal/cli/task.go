@@ -12,6 +12,7 @@ func newTaskCmd() *cobra.Command {
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List tasks",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			q := scopeQuery(app, "environment")

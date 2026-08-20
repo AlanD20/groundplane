@@ -11,6 +11,7 @@ func newVolumeCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List volumes",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, "/api/v1/volumes", scopeQuery(fromContext(cmd), "environment"))
 		},

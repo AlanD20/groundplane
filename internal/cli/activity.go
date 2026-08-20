@@ -11,6 +11,7 @@ func newActivityCmd() *cobra.Command {
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List activity",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			q := map[string]string{}
 			if workspace != "" {

@@ -12,6 +12,7 @@ func newProjectCmd() *cobra.Command {
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List projects",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			q := scopeQuery(app, "tenant")

@@ -10,6 +10,7 @@ func newSecretCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List secrets",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, "/api/v1/secrets", scopeQuery(fromContext(cmd), "project"))
 		},

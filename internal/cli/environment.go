@@ -16,6 +16,7 @@ func newEnvironmentCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List environments",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, "/api/v1/environments", scopeQuery(fromContext(cmd), "project"))
 		},
@@ -61,6 +62,7 @@ func newEnvironmentCmd() *cobra.Command {
 	logs := &cobra.Command{
 		Use:   "logs",
 		Short: "Tail every service's logs across the environment",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/logs"
