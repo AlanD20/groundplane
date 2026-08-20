@@ -443,12 +443,12 @@ func TestValidateRejectsInvalidEntryAndExemptionShapes(t *testing.T) {
 			entry: Entry{
 				ID: "unknown",
 				Exemption: &Exemption{
-					CLI:    CLILeaf{Path: []string{"local", "show"}},
+					CLI:    CLILeaf{Path: []string{"controller", "serve"}},
 					Class:  ExemptionClass("convenience"),
-					Reason: "not an accepted ADR 0006 class",
+					Reason: "not the accepted ADR 0006 class",
 				},
 			},
-			want: `exemption class "convenience" is not accepted`,
+			want: `requires class "local_process", got "convenience"`,
 		},
 	}
 
@@ -463,6 +463,250 @@ func TestValidateRejectsInvalidEntryAndExemptionShapes(t *testing.T) {
 	}
 }
 
+// Rationale: ADR 0006 and api-cli.md close exemptions to eight exact CLI
+// leaves, so each accepted leaf and its class must remain executable data.
+func TestValidateAcceptsClosedExemptionCatalog(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		path  []string
+		class ExemptionClass
+	}{
+		{name: "controller serve", path: []string{"controller", "serve"}, class: ExemptionLocalProcess},
+		{name: "agent run", path: []string{"agent-run", "run"}, class: ExemptionLocalProcess},
+		{name: "controller key", path: []string{"controller", "key", "show"}, class: ExemptionLocalDiagnostic},
+		{name: "controller etcd", path: []string{"controller", "etcd", "show"}, class: ExemptionLocalDiagnostic},
+		{name: "version", path: []string{"version"}, class: ExemptionLocalTooling},
+		{name: "completion bash", path: []string{"completion", "bash"}, class: ExemptionLocalTooling},
+		{name: "completion zsh", path: []string{"completion", "zsh"}, class: ExemptionLocalTooling},
+		{name: "completion fish", path: []string{"completion", "fish"}, class: ExemptionLocalTooling},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest := Manifest{Entries: []Entry{{
+				ID: "local.exemption",
+				Exemption: &Exemption{
+					CLI:    CLILeaf{Path: test.path},
+					Class:  test.class,
+					Reason: "accepted by ADR 0006",
+				},
+			}}}
+			var capture Capture
+			capture.RecordCLI(test.path...)
+			if err := Validate(manifest, capture); err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+// Rationale: a broad exemption class must never become an escape hatch for a
+// new CLI leaf, and an accepted leaf cannot move between exemption classes.
+func TestValidateRejectsClosedExemptionCatalogDrift(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		path  []string
+		class ExemptionClass
+		want  string
+	}{
+		{
+			name:  "unaccepted leaf",
+			path:  []string{"controller", "inspect"},
+			class: ExemptionLocalDiagnostic,
+			want:  `exemption cli leaf "controller inspect" is not accepted by ADR 0006`,
+		},
+		{
+			name:  "wrong class",
+			path:  []string{"controller", "serve"},
+			class: ExemptionLocalTooling,
+			want:  `requires class "local_process", got "local_tooling"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest := Manifest{Entries: []Entry{{
+				ID: "local.exemption",
+				Exemption: &Exemption{
+					CLI:    CLILeaf{Path: test.path},
+					Class:  test.class,
+					Reason: "candidate exemption",
+				},
+			}}}
+			var capture Capture
+			capture.RecordCLI(test.path...)
+			assertViolation(t, Validate(manifest, capture), test.want)
+		})
+	}
+}
+
+// Rationale: parity cannot be proved from absent expected inventory or absent
+// implementation evidence, even when both empty values are internally consistent.
+func TestValidateRejectsEmptyManifestAndCapture(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*Manifest, *Capture)
+		want   string
+	}{
+		{
+			name: "manifest",
+			mutate: func(manifest *Manifest, _ *Capture) {
+				manifest.Entries = nil
+			},
+			want: "manifest must not be empty",
+		},
+		{
+			name: "capture",
+			mutate: func(_ *Manifest, capture *Capture) {
+				*capture = Capture{}
+			},
+			want: "capture must not be empty",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest, capture := validFixture()
+			test.mutate(&manifest, &capture)
+			assertViolation(t, Validate(manifest, capture), test.want)
+		})
+	}
+}
+
+// Rationale: a manifest mismatch is a private programming defect, not public
+// operator input validation, while its diagnostic must remain useful in CI.
+func TestValidateReturnsPrivateInternalError(t *testing.T) {
+	t.Parallel()
+
+	manifest, capture := validFixture()
+	capture.RecordConsole("orphan.action")
+	err := Validate(manifest, capture)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want internal error")
+	}
+	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindInternal {
+		t.Fatalf("errs.KindOf() = (%v, %t), want (%v, true)", kind, ok, errs.KindInternal)
+	}
+	if !strings.Contains(err.Error(), "orphan.action") {
+		t.Fatalf("Validate() private diagnostic = %q, want orphan identity", err)
+	}
+	typed, ok := err.(*errs.Error)
+	if !ok {
+		t.Fatalf("Validate() error type = %T, want *errs.Error", err)
+	}
+	if detail := typed.ToProblem().Detail; strings.Contains(detail, "orphan.action") {
+		t.Fatalf("Validate() public detail = %q, must not expose private diagnostic", detail)
+	}
+}
+
+// Rationale: transport direction and no-content semantics are universal HTTP
+// invariants, so matching malformed manifest and capture values must still fail.
+func TestValidateRejectsInvalidPayloadDirectionsAndNoContentBodies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*APIContract)
+		want   string
+	}{
+		{
+			name: "event stream request",
+			mutate: func(api *APIContract) {
+				api.Request = Payload{Kind: PayloadEventStream, Schema: "ExampleEvent"}
+			},
+			want: "request payload kind event_stream is response-only",
+		},
+		{
+			name: "multipart response",
+			mutate: func(api *APIContract) {
+				api.Response = Payload{Kind: PayloadMultipart, Schema: "ExampleArchive"}
+			},
+			want: "response payload kind multipart is request-only",
+		},
+		{
+			name: "204 response body",
+			mutate: func(api *APIContract) {
+				api.SuccessStatus = 204
+			},
+			want: "success status 204 requires response payload kind none",
+		},
+		{
+			name: "205 response body",
+			mutate: func(api *APIContract) {
+				api.SuccessStatus = 205
+			},
+			want: "success status 205 requires response payload kind none",
+		},
+		{
+			name: "none with schema",
+			mutate: func(api *APIContract) {
+				api.Request = Payload{Kind: PayloadNone, Schema: "Unexpected"}
+			},
+			want: `payload kind none must not declare schema "Unexpected"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest, capture := validFixture()
+			test.mutate(&manifest.Entries[0].Operation.API)
+			test.mutate(&capture.API[0])
+			assertViolation(t, Validate(manifest, capture), test.want)
+		})
+	}
+}
+
+// Rationale: the directional rules must retain multipart requests and event
+// stream responses, the two payload forms used by the accepted human API.
+func TestValidateAcceptsDirectionalPayloadKinds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*APIContract)
+	}{
+		{
+			name: "multipart request",
+			mutate: func(api *APIContract) {
+				api.Request = Payload{Kind: PayloadMultipart, Schema: "ExampleBundle"}
+			},
+		},
+		{
+			name: "event stream response",
+			mutate: func(api *APIContract) {
+				api.Response = Payload{Kind: PayloadEventStream, Schema: "ExampleEvent"}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest, capture := validFixture()
+			test.mutate(&manifest.Entries[0].Operation.API)
+			test.mutate(&capture.API[0])
+			if err := Validate(manifest, capture); err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func validFixture() (Manifest, Capture) {
 	operation := Operation{
 		Console: ConsoleAction{ID: "example.show"},
@@ -470,7 +714,7 @@ func validFixture() (Manifest, Capture) {
 		API:     validAPI("example-show", "/examples/{id}"),
 	}
 	exemption := Exemption{
-		CLI:    CLILeaf{Path: []string{"controller", "inspect"}},
+		CLI:    CLILeaf{Path: []string{"controller", "key", "show"}},
 		Class:  ExemptionLocalDiagnostic,
 		Reason: "reads same-host state without calling the human API",
 	}

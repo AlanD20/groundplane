@@ -1,7 +1,9 @@
 // Package operationmanifest defines the executable parity contract shared by
-// Console, CLI, and human API contract tests. It contains no product operation
-// inventory: concrete mappings are added only after their product vocabulary is
-// accepted.
+// Console, CLI, and human API contract tests.
+//
+// This package is only the validation foundation. It is not a complete parity
+// proof until the concrete product inventory and independent Console, Cobra,
+// and OpenAPI captures are wired into CI.
 package operationmanifest
 
 import (
@@ -103,7 +105,7 @@ func Validate(manifest Manifest, capture Capture) error {
 
 	sort.Strings(validator.issues)
 	return errs.New(
-		errs.KindValidationFailed,
+		errs.KindInternal,
 		"invalid operation manifest: "+strings.Join(validator.issues, "; "),
 	)
 }
@@ -135,6 +137,9 @@ func newValidator(capture Capture) *validator {
 		capturedAPI:     make(map[string][]APIContract),
 		capturedAPIIDs:  make(map[string]int),
 	}
+	if len(capture.Console) == 0 && len(capture.CLI) == 0 && len(capture.API) == 0 {
+		value.add("capture must not be empty")
+	}
 	for _, action := range capture.Console {
 		value.capturedConsole[action.ID]++
 		value.validateIdentifier("captured console action id", action.ID)
@@ -153,6 +158,9 @@ func newValidator(capture Capture) *validator {
 }
 
 func (v *validator) validateManifest(manifest Manifest) {
+	if len(manifest.Entries) == 0 {
+		v.add("manifest must not be empty")
+	}
 	for index := range manifest.Entries {
 		entry := manifest.Entries[index]
 		v.entryIDs[entry.ID]++
@@ -210,12 +218,19 @@ func (v *validator) validateOperation(entryID string, operation Operation) {
 
 func (v *validator) validateExemption(entryID string, exemption Exemption) {
 	v.validateCLI("entry "+quoted(entryID)+" exemption cli leaf", exemption.CLI)
-	switch exemption.Class {
-	case ExemptionLocalProcess, ExemptionLocalDiagnostic, ExemptionLocalTooling:
-	default:
+	acceptedClass, ok := acceptedExemptionClass(exemption.CLI)
+	if !ok {
 		v.add(
-			"entry %s exemption class %s is not accepted",
+			"entry %s exemption cli leaf %s is not accepted by ADR 0006",
 			quoted(entryID),
+			quoted(cliKey(exemption.CLI)),
+		)
+	} else if exemption.Class != acceptedClass {
+		v.add(
+			"entry %s exemption cli leaf %s requires class %s, got %s",
+			quoted(entryID),
+			quoted(cliKey(exemption.CLI)),
+			quoted(string(acceptedClass)),
 			quoted(string(exemption.Class)),
 		)
 	}
@@ -330,6 +345,20 @@ func (v *validator) validateAPI(label string, operation APIContract) {
 	}
 	v.validatePayload(label+" request", operation.Request)
 	v.validatePayload(label+" response", operation.Response)
+	if operation.Request.Kind == PayloadEventStream {
+		v.add("%s request payload kind event_stream is response-only", label)
+	}
+	if operation.Response.Kind == PayloadMultipart {
+		v.add("%s response payload kind multipart is request-only", label)
+	}
+	if (operation.SuccessStatus == 204 || operation.SuccessStatus == 205) &&
+		operation.Response.Kind != PayloadNone {
+		v.add(
+			"%s success status %d requires response payload kind none",
+			label,
+			operation.SuccessStatus,
+		)
+	}
 	v.validateErrors(label, operation.Errors)
 }
 
@@ -402,6 +431,19 @@ func validMethod(method string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func acceptedExemptionClass(leaf CLILeaf) (ExemptionClass, bool) {
+	switch cliKey(leaf) {
+	case "controller serve", "agent-run run":
+		return ExemptionLocalProcess, true
+	case "controller key show", "controller etcd show":
+		return ExemptionLocalDiagnostic, true
+	case "version", "completion bash", "completion zsh", "completion fish":
+		return ExemptionLocalTooling, true
+	default:
+		return "", false
 	}
 }
 
