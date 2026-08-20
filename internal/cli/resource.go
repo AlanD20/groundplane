@@ -132,12 +132,27 @@ func runActionMethod(cmd *cobra.Command, method, path string, body any) error {
 	return err
 }
 
-func runReveal(cmd *cobra.Command, path string) error {
+func runDeleteAction(cmd *cobra.Command, path string) error {
+	app := fromContext(cmd)
+	var res struct {
+		TaskID string `json:"task_id"`
+	}
+	if err := app.Client.Do(cmd.Context(), "DELETE", path, nil, nil, &res); err != nil {
+		return err
+	}
+	if res.TaskID == "" {
+		return fmt.Errorf("cli: action response is missing task_id")
+	}
+	_, err := fmt.Fprintf(cmd.OutOrStdout(), "task %s dispatched — `groundplane task show %s` to follow\n", res.TaskID, res.TaskID)
+	return err
+}
+
+func runExportKey(cmd *cobra.Command, path string) error {
 	app := fromContext(cmd)
 	var res struct {
 		Value string `json:"value"`
 	}
-	if err := app.Client.Do(cmd.Context(), "GET", path, nil, nil, &res); err != nil {
+	if err := app.Client.Do(cmd.Context(), "POST", path, nil, nil, &res); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintln(cmd.OutOrStdout(), res.Value)

@@ -2,7 +2,7 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// agent: list | show | join | config set | update.
+// agent: list | show | join | config set | update | remove.
 // The operational surface for pairing and per-instance config (distinct
 // from `core component agent`, which is the read-only view). See
 // api-cli.md, "Agent vs `core component agent` (locked split)".
@@ -60,6 +60,15 @@ func newAgentCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAction(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0])+"/update", nil)
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "remove <id>",
+		Short: "Remove an agent and revoke its certificate",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDeleteAction(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0]))
 		},
 	})
 

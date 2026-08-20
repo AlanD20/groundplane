@@ -113,7 +113,7 @@ func newBackupCmd() *cobra.Command {
 		Short: "Export the current age identity for off-host disaster recovery",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runReveal(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/export-key")
+			return runExportKey(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/export-key")
 		},
 	})
 

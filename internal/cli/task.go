@@ -3,7 +3,7 @@ package cli
 import "github.com/spf13/cobra"
 
 // task: list [--env NAME | --workspace platform|<tenant>] | show <id> |
-// abort <id>. The activity journal IS this record set. See mvp.md,
+// retry <id> | abort <id>. The activity journal IS this record set. See mvp.md,
 // "Baked-in actions become Tasks" and "Activity IS tasks (locked)".
 func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "task", Short: "Tasks — the one record set behind every action and the activity journal"}
@@ -30,6 +30,15 @@ func newTaskCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShow(cmd, "/api/v1/tasks/"+target(fromContext(cmd), args[0]))
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "retry <id>",
+		Short: "Retry a failed task",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAction(cmd, "/api/v1/tasks/"+target(fromContext(cmd), args[0])+"/retry", nil)
 		},
 	})
 

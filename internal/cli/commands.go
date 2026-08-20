@@ -5,11 +5,9 @@ import "github.com/spf13/cobra"
 // addCommands registers every top-level noun — flat, never nested (see
 // api-cli.md, "Flat nouns (locked)"). This is the single place the tree
 // is assembled; each noun's own file only builds its own subtree. `dns`
-// and `router` are deliberately absent — DNS settings live under `core
-// component coredns config` now, and the Router is a read-only
-// projection surfaced via `environment show`/the Console, replaced as a
-// CLI verb by `component enable|disable|config` (see api-cli.md's command
-// tree — both nouns were dropped from the locked tree).
+// is deliberately absent because DNS settings live under `component
+// config coredns --platform`. `router` remains the locked read-only
+// projection noun; mutations stay on `component`.
 func addCommands(root *cobra.Command) {
 	root.AddCommand(
 		newTenantCmd(),
@@ -24,6 +22,7 @@ func addCommands(root *cobra.Command) {
 		newReleaseGroupCmd(),
 		newBackupCmd(),
 		newComponentCmd(),
+		newRouterCmd(),
 		newBackingServiceCmd(),
 		newSecretCmd(),
 		newConnectorCmd(),
