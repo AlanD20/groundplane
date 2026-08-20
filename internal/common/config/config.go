@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"gopkg.in/yaml.v3"
@@ -69,12 +70,22 @@ func DefaultControllerConfig() ControllerConfig {
 	return c
 }
 
-// AgentConfig is the Controller-owned runtime document injected into the
-// managed Agent container. Channel configuration arrives over the authenticated
-// stream; this file contains only stable identity and logging configuration.
+// AgentRuntimeConfig is the durable execution policy in the Controller-owned
+// Agent runtime document. The Controller sends the same values over the
+// authenticated stream so reconnects and runtime materialization share one
+// contract.
+type AgentRuntimeConfig struct {
+	PullIntervalSeconds int32             `yaml:"pull_interval_seconds"`
+	MaxConcurrentTasks  int32             `yaml:"max_concurrent_tasks"`
+	Labels              map[string]string `yaml:"labels"`
+}
+
+// AgentConfig is the complete Controller-owned runtime document injected into
+// the managed Agent container.
 type AgentConfig struct {
-	AgentID string    `yaml:"agent_id"`
-	Log     LogConfig `yaml:"log"`
+	AgentID string             `yaml:"agent_id"`
+	Log     LogConfig          `yaml:"log"`
+	Runtime AgentRuntimeConfig `yaml:"runtime"`
 }
 
 func DefaultAgentConfig() AgentConfig {
@@ -135,6 +146,18 @@ func (c ControllerConfig) Validate() error {
 func (c AgentConfig) Validate() error {
 	if err := ids.Validate(ids.KindAgent, c.AgentID); err != nil {
 		return fmt.Errorf("config: agent agent_id must be a canonical agt-prefixed ULID: %w", err)
+	}
+	if c.Runtime.PullIntervalSeconds <= 0 {
+		return fmt.Errorf("config: agent runtime.pull_interval_seconds must be positive")
+	}
+	if c.Runtime.MaxConcurrentTasks <= 0 {
+		return fmt.Errorf("config: agent runtime.max_concurrent_tasks must be positive")
+	}
+	for key, value := range c.Runtime.Labels {
+		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||
+			!utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
+			return fmt.Errorf("config: agent runtime.labels must contain valid NUL-free UTF-8")
+		}
 	}
 	return validateLog("agent", c.Log)
 }

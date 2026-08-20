@@ -62,10 +62,57 @@ func TestAgentConfigRequiresCanonicalAgentID(t *testing.T) {
 			t.Parallel()
 			cfg := DefaultAgentConfig()
 			cfg.AgentID = test.agentID
+			cfg.Runtime.PullIntervalSeconds = 2
+			cfg.Runtime.MaxConcurrentTasks = 3
 			err := cfg.Validate()
 			if (err != nil) != test.wantErr {
 				t.Fatalf("AgentConfig.Validate() error = %v, want error = %t", err, test.wantErr)
 			}
 		})
 	}
+}
+
+// Rationale: the injected runtime document must fail before the Agent starts
+// when Controller-owned execution limits or labels are unusable.
+func TestAgentConfigRequiresValidRuntimePolicy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*AgentConfig)
+	}{
+		{name: "valid"},
+		{name: "missing pull interval", mutate: func(cfg *AgentConfig) {
+			cfg.Runtime.PullIntervalSeconds = 0
+		}},
+		{name: "missing concurrency", mutate: func(cfg *AgentConfig) {
+			cfg.Runtime.MaxConcurrentTasks = 0
+		}},
+		{name: "invalid label", mutate: func(cfg *AgentConfig) {
+			cfg.Runtime.Labels = map[string]string{"role": "worker\x00admin"}
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := validAgentConfig()
+			if test.mutate != nil {
+				test.mutate(&cfg)
+			}
+			err := cfg.Validate()
+			if (err != nil) != (test.mutate != nil) {
+				t.Fatalf("AgentConfig.Validate() error = %v, want error = %t", err, test.mutate != nil)
+			}
+		})
+	}
+}
+
+func validAgentConfig() AgentConfig {
+	cfg := DefaultAgentConfig()
+	cfg.AgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	cfg.Runtime.PullIntervalSeconds = 2
+	cfg.Runtime.MaxConcurrentTasks = 3
+	cfg.Runtime.Labels = map[string]string{"arch": "arm64"}
+	return cfg
 }
