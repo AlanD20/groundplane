@@ -134,7 +134,12 @@ func (d *Dispatcher) Retry(ctx context.Context, taskID string) (*Task, error) {
 	for _, candidate := range d.tasks {
 		if candidate.OperationID == original.OperationID && candidate.RetryOf != "" &&
 			(candidate.Status == StatusPending || candidate.Status == StatusRunning) {
-			return nil, errs.Newf(errs.KindTaskRetryInFlight, "operation %s already has retry task %s in flight", original.OperationID, candidate.ID)
+			return nil, errs.Newf(
+				errs.KindTaskRetryInFlight,
+				"operation %s already has retry task %s in flight",
+				original.OperationID,
+				candidate.ID,
+			)
 		}
 	}
 	return d.dispatchLocked(DispatchRequest{

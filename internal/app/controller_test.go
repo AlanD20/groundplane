@@ -14,7 +14,9 @@ import (
 
 func TestNewControllerRejectsInvalidHTTPListenerBeforeEtcdConstruction(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "controller.yaml")
-	contents := []byte("etcd:\n  endpoints: [\"://invalid\"]\nlisten:\n  http: 0.0.0.0:8080\nlog:\n  file:\n    enabled: false\n")
+	contents := []byte(
+		"etcd:\n  endpoints: [\"://invalid\"]\nlisten:\n  http: 0.0.0.0:8080\nlog:\n  file:\n    enabled: false\n",
+	)
 	if err := os.WriteFile(configPath, contents, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -97,10 +99,18 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 				t.Fatalf("Controller.Run error = %v, want canonical %q error", err, errs.CodeInternal)
 			}
 			if errors.Is(err, serveFailure) != test.wantServe {
-				t.Fatalf("Controller.Run preserves serve failure = %t, want %t", errors.Is(err, serveFailure), test.wantServe)
+				t.Fatalf(
+					"Controller.Run preserves serve failure = %t, want %t",
+					errors.Is(err, serveFailure),
+					test.wantServe,
+				)
 			}
 			if errors.Is(err, closeFailure) != test.wantClose {
-				t.Fatalf("Controller.Run preserves close failure = %t, want %t", errors.Is(err, closeFailure), test.wantClose)
+				t.Fatalf(
+					"Controller.Run preserves close failure = %t, want %t",
+					errors.Is(err, closeFailure),
+					test.wantClose,
+				)
 			}
 		})
 	}

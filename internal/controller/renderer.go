@@ -92,7 +92,11 @@ func RenderServiceEnvFile(serviceName string, entries []core.EnvEntry, resolved 
 	})
 }
 
-func renderEnvFile(entries []core.EnvEntry, resolved map[string]string, include func(core.EnvEntry) bool) ([]byte, error) {
+func renderEnvFile(
+	entries []core.EnvEntry,
+	resolved map[string]string,
+	include func(core.EnvEntry) bool,
+) ([]byte, error) {
 	selected := make([]core.EnvEntry, 0, len(entries))
 	for _, entry := range entries {
 		if include(entry) {
@@ -109,14 +113,28 @@ func renderEnvFile(entries []core.EnvEntry, resolved map[string]string, include 
 	var output []byte
 	for i, entry := range selected {
 		if i > 0 && selected[i-1].Key == entry.Key {
-			return nil, errs.Newf(errs.KindValidationFailed, "renderer: duplicate env key %q in one exposure scope", entry.Key)
+			return nil, errs.Newf(
+				errs.KindValidationFailed,
+				"renderer: duplicate env key %q in one exposure scope",
+				entry.Key,
+			)
 		}
 		value, ok := resolved[entry.ID]
 		if !ok {
-			return nil, errs.Newf(errs.KindInternal, "renderer: no resolved value for entry %s (%s)", entry.ID, entry.Key)
+			return nil, errs.Newf(
+				errs.KindInternal,
+				"renderer: no resolved value for entry %s (%s)",
+				entry.ID,
+				entry.Key,
+			)
 		}
 		if strings.IndexByte(value, 0) >= 0 {
-			return nil, errs.Newf(errs.KindValidationFailed, "renderer: env entry %s (%s) contains NUL", entry.ID, entry.Key)
+			return nil, errs.Newf(
+				errs.KindValidationFailed,
+				"renderer: env entry %s (%s) contains NUL",
+				entry.ID,
+				entry.Key,
+			)
 		}
 		output = append(output, entry.Key...)
 		output = append(output, '=', '"')
@@ -137,7 +155,12 @@ func renderEnvFile(entries []core.EnvEntry, resolved map[string]string, include 
 		value := resolved[entry.ID]
 		parsedValue, ok := parsed[entry.Key]
 		if !ok || parsedValue != value {
-			return nil, errs.Newf(errs.KindInternal, "renderer: generated env file changed entry %s (%s)", entry.ID, entry.Key)
+			return nil, errs.Newf(
+				errs.KindInternal,
+				"renderer: generated env file changed entry %s (%s)",
+				entry.ID,
+				entry.Key,
+			)
 		}
 	}
 	return output, nil

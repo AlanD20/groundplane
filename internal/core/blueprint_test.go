@@ -95,7 +95,13 @@ func TestProjectValidate_BackingProjectMustNotHaveTenant(t *testing.T) {
 	// projects have no owning Tenant — a TenantID slipping onto one
 	// would silently break the "backing services are platform-wide"
 	// assumption everywhere else in the Controller.
-	p := Project{ID: "prj_x", TenantID: "tnt_x", Slug: "shared-postgres", Name: "Shared PostgreSQL", Kind: ProjectKindBacking}
+	p := Project{
+		ID:       "prj_x",
+		TenantID: "tnt_x",
+		Slug:     "shared-postgres",
+		Name:     "Shared PostgreSQL",
+		Kind:     ProjectKindBacking,
+	}
 	if err := p.Validate(); err == nil {
 		t.Error("expected Validate() to reject a backing project with a tenant_id, got nil")
 	}

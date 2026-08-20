@@ -39,7 +39,11 @@ func newZoneCmd() *cobra.Command {
 		Short: "Edit a zone",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/zones/"+target(fromContext(cmd), args[0]), changedStringFields(cmd, map[string]string{"subnet": editSubnet}))
+			return runPatch(
+				cmd,
+				"/api/v1/zones/"+target(fromContext(cmd), args[0]),
+				changedStringFields(cmd, map[string]string{"subnet": editSubnet}),
+			)
 		},
 	}
 	edit.Flags().StringVar(&editSubnet, "subnet", "", "new CIDR")

@@ -79,7 +79,12 @@ func TestGenerateFailsClosedWithoutCredentialArtifact(t *testing.T) {
 				strings.Contains(err.Error(), string(raw)) {
 				t.Fatalf("Generate() error leaked token plaintext: %v", err)
 			}
-			if _, statErr := os.Lstat(manager.testPath("run/groundplane/agents/" + testAgentID)); !errors.Is(statErr, os.ErrNotExist) {
+			if _, statErr := os.Lstat(
+				manager.testPath("run/groundplane/agents/" + testAgentID),
+			); !errors.Is(
+				statErr,
+				os.ErrNotExist,
+			) {
 				t.Fatalf("runtime directory stat error = %v, want not exist", statErr)
 			}
 		})

@@ -123,7 +123,10 @@ func (m *Manager) Close() error {
 
 func RuntimePathsForAgent(agentID string) (RuntimePaths, error) {
 	if !isCanonicalAgentID(agentID) {
-		return RuntimePaths{}, errs.New(errs.KindValidationFailed, "agent container: agent id must be agt_<26 uppercase Crockford ULID>")
+		return RuntimePaths{}, errs.New(
+			errs.KindValidationFailed,
+			"agent container: agent id must be agt_<26 uppercase Crockford ULID>",
+		)
 	}
 	return runtimePaths(agentID), nil
 }
@@ -336,7 +339,10 @@ func mountKeys(mounts []mount.Mount) []string {
 
 func validateDesired(desired Desired) error {
 	if !imageref.IsDigestPinned(desired.Image) {
-		return errs.New(errs.KindValidationFailed, "agent container: image must be a caller-supplied sha256 digest reference")
+		return errs.New(
+			errs.KindValidationFailed,
+			"agent container: image must be a caller-supplied sha256 digest reference",
+		)
 	}
 	if _, err := RuntimePathsForAgent(desired.AgentID); err != nil {
 		return err
@@ -371,5 +377,9 @@ func operationError(ctx context.Context, operation string, err error) error {
 }
 
 func unownedCollision() error {
-	return errs.Newf(errs.KindInternal, "agent container: %q exists without Groundplane Agent ownership labels", ContainerName)
+	return errs.Newf(
+		errs.KindInternal,
+		"agent container: %q exists without Groundplane Agent ownership labels",
+		ContainerName,
+	)
 }

@@ -40,7 +40,8 @@ func newRunnerCmd() *cobra.Command {
 			})
 		},
 	}
-	add.Flags().StringVar(&project, "project", "", "repo-scoped: the project slug (defaults to -p/--project; omit both for org-scoped)")
+	add.Flags().
+		StringVar(&project, "project", "", "repo-scoped: the project slug (defaults to -p/--project; omit both for org-scoped)")
 	add.Flags().StringVar(&token, "token", "", "short-lived GitHub registration token (obtained manually — see mvp.md)")
 	_ = add.MarkFlagRequired("token")
 	cmd.AddCommand(add)

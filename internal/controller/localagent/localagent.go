@@ -118,7 +118,10 @@ func (manager *Manager) Enroll(ctx context.Context, request EnrollRequest) (Agen
 		return Agent{}, safePortError(ctx, err, "local agent credential generation failed")
 	}
 	if err := validateCredential(credential, false); err != nil {
-		return Agent{}, errs.Wrap(errs.KindInternal, fmt.Errorf("local agent runtime returned an invalid credential: %w", err))
+		return Agent{}, errs.Wrap(
+			errs.KindInternal,
+			fmt.Errorf("local agent runtime returned an invalid credential: %w", err),
+		)
 	}
 	record := Record{
 		ID:         request.AgentID,

@@ -176,7 +176,10 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/secrets", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/secrets/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/secrets/{id}", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/secrets/{id}/value", s.notImplemented) // reveal — Console-only preference, not access control
+	mux.HandleFunc(
+		"GET /api/v1/secrets/{id}/value",
+		s.notImplemented,
+	) // reveal — Console-only preference, not access control
 
 	// connector (?environment= required) — environment-scoped only
 	mux.HandleFunc("GET /api/v1/connectors", s.notImplemented)
@@ -186,7 +189,10 @@ func (s *Server) routes() {
 
 	// runner (?tenant= or ?project=) — org-scoped or repo-scoped
 	mux.HandleFunc("GET /api/v1/runners", s.notImplemented)
-	s.jsonRoute("POST /api/v1/runners", s.notImplemented) // {tenant_id|project_id, registration_token} — token discarded after registration
+	s.jsonRoute(
+		"POST /api/v1/runners",
+		s.notImplemented,
+	) // {tenant_id|project_id, registration_token} — token discarded after registration
 	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.notImplemented)
 
 	// task / activity

@@ -30,7 +30,12 @@ func TestDispatcherRetryPreservesOperationContract(t *testing.T) {
 	if retry.ID == original.ID || retry.RetryOf != original.ID {
 		t.Fatalf("retry identity = %#v", retry)
 	}
-	if retry.OperationID != original.OperationID || retry.IdempotencyKey != original.IdempotencyKey || retry.PlanHash != original.PlanHash || retry.Target != original.Target || retry.Timeout != original.Timeout || !reflect.DeepEqual(retry.Params, original.Params) || !reflect.DeepEqual(retry.Steps, original.Steps) {
+	if retry.OperationID != original.OperationID || retry.IdempotencyKey != original.IdempotencyKey ||
+		retry.PlanHash != original.PlanHash ||
+		retry.Target != original.Target ||
+		retry.Timeout != original.Timeout ||
+		!reflect.DeepEqual(retry.Params, original.Params) ||
+		!reflect.DeepEqual(retry.Steps, original.Steps) {
 		t.Fatalf("retry did not preserve operation contract: original=%#v retry=%#v", original, retry)
 	}
 }
@@ -41,14 +46,26 @@ func TestDispatcherRetryRejectsInvalidSourceAndActiveDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dispatch() error = %v", err)
 	}
-	if _, err := dispatcher.Retry(context.Background(), original.ID); !errors.Is(err, errs.New(errs.KindTaskNotRetryable, "")) {
+	if _, err := dispatcher.Retry(
+		context.Background(),
+		original.ID,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindTaskNotRetryable, ""),
+	) {
 		t.Fatalf("Retry(pending) error = %v, want task.not_retryable", err)
 	}
 	original.Status = StatusAborted
 	if _, err := dispatcher.Retry(context.Background(), original.ID); err != nil {
 		t.Fatalf("Retry(aborted) error = %v", err)
 	}
-	if _, err := dispatcher.Retry(context.Background(), original.ID); !errors.Is(err, errs.New(errs.KindTaskRetryInFlight, "")) {
+	if _, err := dispatcher.Retry(
+		context.Background(),
+		original.ID,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindTaskRetryInFlight, ""),
+	) {
 		t.Fatalf("second Retry() error = %v, want task.retry_in_flight", err)
 	}
 }

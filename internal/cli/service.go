@@ -39,13 +39,18 @@ func newServiceCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runCreate(cmd, "/api/v1/services", map[string]string{
-				"name": args[0], "image": image, "strategy": strategy, "on_failure": onFailure, "environment": app.Scope.Environment,
+				"name":        args[0],
+				"image":       image,
+				"strategy":    strategy,
+				"on_failure":  onFailure,
+				"environment": app.Scope.Environment,
 			})
 		},
 	}
 	add.Flags().StringVar(&image, "image", "", "container image")
 	add.Flags().StringVar(&strategy, "strategy", "", "declared default strategy: blue-green | recreate")
-	add.Flags().StringVar(&onFailure, "on-failure", "", "declared default: switch-back | leave-active (defaults to switch-back)")
+	add.Flags().
+		StringVar(&onFailure, "on-failure", "", "declared default: switch-back | leave-active (defaults to switch-back)")
 	cmd.AddCommand(add)
 
 	cmd.AddCommand(&cobra.Command{
@@ -74,11 +79,16 @@ func newServiceCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "/api/v1/services/" + target(fromContext(cmd), args[0]) + "/deploy"
-			return runAction(cmd, path, map[string]string{"tag": deployTag, "strategy": deployStrategy, "on_failure": deployOnFailure})
+			return runAction(
+				cmd,
+				path,
+				map[string]string{"tag": deployTag, "strategy": deployStrategy, "on_failure": deployOnFailure},
+			)
 		},
 	}
 	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag (defaults to the current tag)")
-	deploy.Flags().StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling (rolling is declared-deferred)")
+	deploy.Flags().
+		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling (rolling is declared-deferred)")
 	deploy.Flags().StringVar(&deployOnFailure, "on-failure", "", "switch-back | leave-active (defaults to switch-back)")
 	cmd.AddCommand(deploy)
 
@@ -157,7 +167,8 @@ func newServiceCmd() *cobra.Command {
 			})
 		},
 	}
-	attach.Flags().StringVar(&attachName, "name", "", "attach name (default: Controller-suggested, unique within the environment)")
+	attach.Flags().
+		StringVar(&attachName, "name", "", "attach name (default: Controller-suggested, unique within the environment)")
 	attach.Flags().StringSliceVar(&grants, "grant", nil, "other attach id/name(s) this attach's role may also access")
 	cmd.AddCommand(attach)
 

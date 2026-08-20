@@ -211,7 +211,11 @@ type responseDeadlineWriter struct {
 	startErr   error
 }
 
-func newResponseDeadlineWriter(w http.ResponseWriter, timeout time.Duration, now func() time.Time) *responseDeadlineWriter {
+func newResponseDeadlineWriter(
+	w http.ResponseWriter,
+	timeout time.Duration,
+	now func() time.Time,
+) *responseDeadlineWriter {
 	return &responseDeadlineWriter{
 		ResponseWriter: w,
 		controller:     http.NewResponseController(w),

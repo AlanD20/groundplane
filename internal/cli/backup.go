@@ -49,7 +49,8 @@ func newBackupCmd() *cobra.Command {
 	set.Flags().IntVar(&keep, "keep", 0, "how many previous recovery points to retain")
 	set.Flags().StringVar(&encryption, "encryption", "age", "age | none")
 	set.Flags().StringSliceVar(&sources, "source", nil, "repeatable: <attach-id> | volume:<name> | config")
-	set.Flags().BoolVar(&off, "off", false, "disable backups for this environment (policy and sources are kept, just don't run)")
+	set.Flags().
+		BoolVar(&off, "off", false, "disable backups for this environment (policy and sources are kept, just don't run)")
 	policy.AddCommand(set)
 	cmd.AddCommand(policy)
 
@@ -64,7 +65,8 @@ func newBackupCmd() *cobra.Command {
 			return runAction(cmd, path, map[string]interface{}{"source_ids": runSources})
 		},
 	}
-	run.Flags().StringSliceVar(&runSources, "source", nil, "restrict to specific source id(s) (default: every enabled source)")
+	run.Flags().
+		StringSliceVar(&runSources, "source", nil, "restrict to specific source id(s) (default: every enabled source)")
 	cmd.AddCommand(run)
 
 	points := &cobra.Command{
@@ -100,7 +102,8 @@ func newBackupCmd() *cobra.Command {
 		},
 	}
 	restore.Flags().StringVar(&point, "point", "", "recovery point id (default: latest)")
-	restore.Flags().StringVar(&ageIdentityPath, "age-identity", "", "exported age identity file (needed if the recovery point's key era was rotated away)")
+	restore.Flags().
+		StringVar(&ageIdentityPath, "age-identity", "", "exported age identity file (needed if the recovery point's key era was rotated away)")
 	cmd.AddCommand(restore)
 
 	cmd.AddCommand(&cobra.Command{

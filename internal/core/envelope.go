@@ -210,13 +210,20 @@ func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
 		return ConnectorDocument{}, fmt.Errorf("connector document: %w", err)
 	}
 	if doc.Kind != KindDocConnector {
-		return ConnectorDocument{}, fmt.Errorf("connector document: envelope kind is %q, want %q", doc.Kind, KindDocConnector)
+		return ConnectorDocument{}, fmt.Errorf(
+			"connector document: envelope kind is %q, want %q",
+			doc.Kind,
+			KindDocConnector,
+		)
 	}
 	if doc.Schema != EnvelopeSchema {
 		return ConnectorDocument{}, fmt.Errorf("connector document: schema is %d, want %d", doc.Schema, EnvelopeSchema)
 	}
-	if doc.Metadata.Name == "" || doc.Metadata.Tenant == "" || doc.Metadata.Project == "" || doc.Metadata.Environment == "" {
-		return ConnectorDocument{}, fmt.Errorf("connector document: metadata.name, tenant, project, and environment are required")
+	if doc.Metadata.Name == "" || doc.Metadata.Tenant == "" || doc.Metadata.Project == "" ||
+		doc.Metadata.Environment == "" {
+		return ConnectorDocument{}, fmt.Errorf(
+			"connector document: metadata.name, tenant, project, and environment are required",
+		)
 	}
 	if doc.Connector.Kind == "" {
 		return ConnectorDocument{}, fmt.Errorf("connector document: connector.kind is required")

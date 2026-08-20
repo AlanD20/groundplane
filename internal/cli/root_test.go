@@ -121,7 +121,10 @@ func TestCompletionCommandHasOnlyLockedShells(t *testing.T) {
 		t.Fatalf("completion shells = %v, want %v", got, want)
 	}
 
-	if command, _, findErr := root.Find([]string{"completion", "powershell"}); findErr == nil && command.Name() == "powershell" {
+	if command, _, findErr := root.Find(
+		[]string{"completion", "powershell"},
+	); findErr == nil &&
+		command.Name() == "powershell" {
 		t.Fatal("unexpected powershell completion command")
 	}
 	if !root.CompletionOptions.DisableDefaultCmd {

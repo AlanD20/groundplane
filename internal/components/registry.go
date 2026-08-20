@@ -23,7 +23,10 @@ const (
 // Renderer produces an environment component's generated Compose services and
 // materialized configuration files.
 type Renderer interface {
-	Render(env core.Environment, component core.Component) (services map[string]core.Service, files map[string][]byte, err error)
+	Render(
+		env core.Environment,
+		component core.Component,
+	) (services map[string]core.Service, files map[string][]byte, err error)
 }
 
 // HealthChecker reports whether an enabled environment component is healthy.
@@ -120,20 +123,36 @@ func validateRegistration(registration Registration) {
 	switch registration.ApplyStrategy {
 	case EnvironmentRender:
 		if len(registration.AllowedOwners) != 1 || registration.AllowedOwners[0] != core.ComponentOwnerEnvironment {
-			panic(fmt.Sprintf("components: kind %q uses environment_render without exactly the environment owner", registration.Kind))
+			panic(
+				fmt.Sprintf(
+					"components: kind %q uses environment_render without exactly the environment owner",
+					registration.Kind,
+				),
+			)
 		}
 		if registration.Environment == nil {
 			panic(fmt.Sprintf("components: kind %q has no environment implementation", registration.Kind))
 		}
 	case PlatformUpdate:
 		if len(registration.AllowedOwners) != 1 || registration.AllowedOwners[0] != core.ComponentOwnerPlatform {
-			panic(fmt.Sprintf("components: kind %q uses platform_update without exactly the platform owner", registration.Kind))
+			panic(
+				fmt.Sprintf(
+					"components: kind %q uses platform_update without exactly the platform owner",
+					registration.Kind,
+				),
+			)
 		}
 		if registration.Environment != nil {
 			panic(fmt.Sprintf("components: platform kind %q carries an environment implementation", registration.Kind))
 		}
 	default:
-		panic(fmt.Sprintf("components: kind %q has invalid apply strategy %q", registration.Kind, registration.ApplyStrategy))
+		panic(
+			fmt.Sprintf(
+				"components: kind %q has invalid apply strategy %q",
+				registration.Kind,
+				registration.ApplyStrategy,
+			),
+		)
 	}
 }
 

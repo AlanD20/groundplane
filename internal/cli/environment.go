@@ -11,7 +11,11 @@ import (
 // convenience — rename never breaks references. See mvp.md,
 // "Environment", and blueprint.md, "Identity and rename rules".
 func newEnvironmentCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "environment", Aliases: []string{"env"}, Short: "Environments — one deployable instance of a project"}
+	cmd := &cobra.Command{
+		Use:     "environment",
+		Aliases: []string{"env"},
+		Short:   "Environments — one deployable instance of a project",
+	}
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",

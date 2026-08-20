@@ -30,7 +30,8 @@ func newScriptCmd() *cobra.Command {
 	}
 	add.Flags().StringVar(&service, "service", "", "service the script runs against")
 	add.Flags().StringVar(&body, "script", "", "one-line or multi-line script body")
-	add.Flags().StringVar(&when, "when", "manual", "manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure")
+	add.Flags().
+		StringVar(&when, "when", "manual", "manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure")
 	_ = add.MarkFlagRequired("service")
 	_ = add.MarkFlagRequired("script")
 	cmd.AddCommand(add)
@@ -46,7 +47,8 @@ func newScriptCmd() *cobra.Command {
 		},
 	}
 	edit.Flags().StringVar(&editBody, "script", "", "new script body")
-	edit.Flags().StringVar(&editWhen, "when", "", "new hook: manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure")
+	edit.Flags().
+		StringVar(&editWhen, "when", "", "new hook: manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure")
 	cmd.AddCommand(edit)
 
 	cmd.AddCommand(&cobra.Command{

@@ -61,7 +61,10 @@ func PrepareDirectory(
 		}
 		if create && index >= managedFrom {
 			if err := root.Chmod(current, 0o700); err != nil {
-				return false, errs.Wrap(errs.KindInternal, fmt.Errorf("runtime path: set managed directory mode: %w", err))
+				return false, errs.Wrap(
+					errs.KindInternal,
+					fmt.Errorf("runtime path: set managed directory mode: %w", err),
+				)
 			}
 		}
 	}
@@ -74,7 +77,13 @@ func ValidateOwnership(info fs.FileInfo, expectedUID uint32, label string) error
 		return errs.Newf(errs.KindInternal, "runtime path: cannot determine %s ownership", label)
 	}
 	if stat.Uid != expectedUID {
-		return errs.Newf(errs.KindInternal, "runtime path: %s is owned by uid %d, want %d", label, stat.Uid, expectedUID)
+		return errs.Newf(
+			errs.KindInternal,
+			"runtime path: %s is owned by uid %d, want %d",
+			label,
+			stat.Uid,
+			expectedUID,
+		)
 	}
 	return nil
 }

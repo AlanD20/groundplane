@@ -50,7 +50,8 @@ func newReleaseGroupCmd() *cobra.Command {
 	}
 	add.Flags().StringSliceVar(&services, "service", nil, "member service name (repeatable); at least two required")
 	add.Flags().StringSliceVar(&order, "order", nil, "deploy order within the group (defaults to --service order)")
-	add.Flags().StringVar(&onFailure, "on-failure", "switch_back", "switch_back | leave_active (defaults to switch_back)")
+	add.Flags().
+		StringVar(&onFailure, "on-failure", "switch_back", "switch_back | leave_active (defaults to switch_back)")
 	_ = add.MarkFlagRequired("service")
 	cmd.AddCommand(add)
 

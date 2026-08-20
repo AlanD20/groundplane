@@ -172,7 +172,13 @@ type streamResult struct {
 	err    error
 }
 
-func readStream(reader io.Reader, stderr bool, lines chan<- streamedLine, results chan<- streamResult, readers *sync.WaitGroup) {
+func readStream(
+	reader io.Reader,
+	stderr bool,
+	lines chan<- streamedLine,
+	results chan<- streamResult,
+	readers *sync.WaitGroup,
+) {
 	defer readers.Done()
 	var captured bytes.Buffer
 	scanner := bufio.NewScanner(io.TeeReader(reader, &captured))

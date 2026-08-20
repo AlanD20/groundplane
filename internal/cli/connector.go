@@ -36,7 +36,8 @@ func newConnectorCmd() *cobra.Command {
 		},
 	}
 	add.Flags().StringVar(&kind, "kind", "s3-compatible", "s3-compatible (R2 today; S3/MinIO/B2 later)")
-	add.Flags().StringVar(&accessKeyRef, "access-key-ref", "", "secret-store env var name holding the access key (recommended over a direct value)")
+	add.Flags().
+		StringVar(&accessKeyRef, "access-key-ref", "", "secret-store env var name holding the access key (recommended over a direct value)")
 	add.Flags().StringVar(&secretKeyRef, "secret-key-ref", "", "secret-store env var name holding the secret key")
 	cmd.AddCommand(add)
 

@@ -21,7 +21,10 @@ func TestReconcileCreatesAndStartsMissingContainerWithExactPolicy(t *testing.T) 
 	t.Parallel()
 
 	desired := testDesired()
-	fake := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, createResult: client.ContainerCreateResult{ID: "created-id"}}
+	fake := &fakeEngine{
+		inspectErr:   containerderrdefs.ErrNotFound,
+		createResult: client.ContainerCreateResult{ID: "created-id"},
+	}
 	manager := &Manager{client: fake}
 
 	result, err := manager.Reconcile(context.Background(), desired)
@@ -143,7 +146,10 @@ func TestRemoveIsIdempotentAndOwnershipGuarded(t *testing.T) {
 	})
 
 	t.Run("concurrent disappearance", func(t *testing.T) {
-		fake := &fakeEngine{inspectResult: matchingInspect(testDesired(), true), removeErr: containerderrdefs.ErrNotFound}
+		fake := &fakeEngine{
+			inspectResult: matchingInspect(testDesired(), true),
+			removeErr:     containerderrdefs.ErrNotFound,
+		}
 		if err := (&Manager{client: fake}).Remove(context.Background()); err != nil {
 			t.Fatalf("Remove() error = %v", err)
 		}
@@ -183,10 +189,19 @@ func TestReconcileRejectsUnpinnedImageBeforeDockerCall(t *testing.T) {
 		image string
 	}{
 		{name: "tag only", image: "registry.example/groundplane-agent:latest"},
-		{name: "malformed prefix", image: "bad prefix@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
-		{name: "uppercase repository", image: "registry.example/Groundplane-Agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+		{
+			name:  "malformed prefix",
+			image: "bad prefix@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
+		{
+			name:  "uppercase repository",
+			image: "registry.example/Groundplane-Agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
 		{name: "short digest", image: "registry.example/groundplane-agent@sha256:0123456789abcdef"},
-		{name: "uppercase digest", image: "registry.example/groundplane-agent@sha256:0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"},
+		{
+			name:  "uppercase digest",
+			image: "registry.example/groundplane-agent@sha256:0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -293,9 +308,24 @@ func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions, des
 	wantMounts := []mount.Mount{
 		{Type: mount.TypeBind, Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
 		{Type: mount.TypeBind, Source: "/var/lib/groundplane/agent", Target: "/var/lib/groundplane/agent"},
-		{Type: mount.TypeBind, Source: "/run/groundplane/controller", Target: "/run/groundplane/controller", ReadOnly: true},
-		{Type: mount.TypeBind, Source: "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/config.yaml", Target: agentprotocol.RuntimeConfigPath, ReadOnly: true},
-		{Type: mount.TypeBind, Source: "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/token", Target: agentprotocol.TokenPath, ReadOnly: true},
+		{
+			Type:     mount.TypeBind,
+			Source:   "/run/groundplane/controller",
+			Target:   "/run/groundplane/controller",
+			ReadOnly: true,
+		},
+		{
+			Type:     mount.TypeBind,
+			Source:   "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/config.yaml",
+			Target:   agentprotocol.RuntimeConfigPath,
+			ReadOnly: true,
+		},
+		{
+			Type:     mount.TypeBind,
+			Source:   "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/token",
+			Target:   agentprotocol.TokenPath,
+			ReadOnly: true,
+		},
 	}
 	if !reflect.DeepEqual(options.HostConfig.Mounts, wantMounts) {
 		t.Errorf("mounts = %#v, want %#v", options.HostConfig.Mounts, wantMounts)
@@ -305,7 +335,12 @@ func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions, des
 func assertNoMutations(t *testing.T, fake *fakeEngine) {
 	t.Helper()
 	if len(fake.createCalls) != 0 || len(fake.startCalls) != 0 || len(fake.removeCalls) != 0 {
-		t.Fatalf("unexpected mutations: create=%d start=%d remove=%d", len(fake.createCalls), len(fake.startCalls), len(fake.removeCalls))
+		t.Fatalf(
+			"unexpected mutations: create=%d start=%d remove=%d",
+			len(fake.createCalls),
+			len(fake.startCalls),
+			len(fake.removeCalls),
+		)
 	}
 }
 
@@ -328,22 +363,37 @@ type fakeEngine struct {
 	closeErr      error
 }
 
-func (f *fakeEngine) ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error) {
+func (f *fakeEngine) ContainerInspect(
+	context.Context,
+	string,
+	client.ContainerInspectOptions,
+) (client.ContainerInspectResult, error) {
 	f.inspectCalls++
 	return f.inspectResult, f.inspectErr
 }
 
-func (f *fakeEngine) ContainerCreate(_ context.Context, options client.ContainerCreateOptions) (client.ContainerCreateResult, error) {
+func (f *fakeEngine) ContainerCreate(
+	_ context.Context,
+	options client.ContainerCreateOptions,
+) (client.ContainerCreateResult, error) {
 	f.createCalls = append(f.createCalls, options)
 	return f.createResult, f.createErr
 }
 
-func (f *fakeEngine) ContainerStart(_ context.Context, id string, _ client.ContainerStartOptions) (client.ContainerStartResult, error) {
+func (f *fakeEngine) ContainerStart(
+	_ context.Context,
+	id string,
+	_ client.ContainerStartOptions,
+) (client.ContainerStartResult, error) {
 	f.startCalls = append(f.startCalls, id)
 	return client.ContainerStartResult{}, f.startErr
 }
 
-func (f *fakeEngine) ContainerRemove(_ context.Context, id string, options client.ContainerRemoveOptions) (client.ContainerRemoveResult, error) {
+func (f *fakeEngine) ContainerRemove(
+	_ context.Context,
+	id string,
+	options client.ContainerRemoveOptions,
+) (client.ContainerRemoveResult, error) {
 	f.removeCalls = append(f.removeCalls, removeCall{id: id, options: options})
 	return client.ContainerRemoveResult{}, f.removeErr
 }

@@ -115,7 +115,10 @@ func TestHostServiceNormalizesSourceErrors(t *testing.T) {
 	want := acceptedHostFixture(api.HealthHealthy, api.HealthHealthy)
 	rawCause := errors.New("private endpoint diagnostic")
 	rawService := hostServiceFor(t, want, rawCause, nil, nil)
-	if _, err := rawService.Show(context.Background()); !errors.Is(err, errs.New(errs.KindInternal, "")) || !errors.Is(err, rawCause) {
+	if _, err := rawService.Show(
+		context.Background(),
+	); !errors.Is(err, errs.New(errs.KindInternal, "")) ||
+		!errors.Is(err, rawCause) {
 		t.Fatalf("raw source error = %v, want wrapped internal cause", err)
 	}
 	for _, dependencyCause := range []error{context.Canceled, context.DeadlineExceeded} {

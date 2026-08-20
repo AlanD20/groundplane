@@ -133,7 +133,12 @@ func runActionMethod(cmd *cobra.Command, method, path string, body any) error {
 	if res.TaskID == "" {
 		return fmt.Errorf("cli: action response is missing task_id")
 	}
-	_, err := fmt.Fprintf(cmd.OutOrStdout(), "task %s dispatched — `groundplane task show %s` to follow\n", res.TaskID, res.TaskID)
+	_, err := fmt.Fprintf(
+		cmd.OutOrStdout(),
+		"task %s dispatched — `groundplane task show %s` to follow\n",
+		res.TaskID,
+		res.TaskID,
+	)
 	return err
 }
 
@@ -149,7 +154,12 @@ func runDeleteAction(cmd *cobra.Command, path string) error {
 	if res.TaskID == "" {
 		return fmt.Errorf("cli: action response is missing task_id")
 	}
-	_, err := fmt.Fprintf(cmd.OutOrStdout(), "task %s dispatched — `groundplane task show %s` to follow\n", res.TaskID, res.TaskID)
+	_, err := fmt.Fprintf(
+		cmd.OutOrStdout(),
+		"task %s dispatched — `groundplane task show %s` to follow\n",
+		res.TaskID,
+		res.TaskID,
+	)
 	return err
 }
 

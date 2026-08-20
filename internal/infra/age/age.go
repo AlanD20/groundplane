@@ -273,7 +273,11 @@ func validateOwnedDirectory(path string, expectedUID uint32) error {
 		return errs.New(errs.KindInternal, "age: key parent is not a directory")
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		return errs.Newf(errs.KindInternal, "age: key directory mode is %04o, want no group or other access", info.Mode().Perm())
+		return errs.Newf(
+			errs.KindInternal,
+			"age: key directory mode is %04o, want no group or other access",
+			info.Mode().Perm(),
+		)
 	}
 	return validateOwnership(info, "key directory", expectedUID)
 }

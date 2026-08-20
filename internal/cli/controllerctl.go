@@ -17,7 +17,10 @@ import (
 // "The Controller itself is the one systemd unit that never becomes a
 // container."
 func newControllerCmd(deps Dependencies) *cobra.Command {
-	cmd := &cobra.Command{Use: "controller", Short: "Local Controller admin: run in the foreground, inspect the age key and etcd"}
+	cmd := &cobra.Command{
+		Use:   "controller",
+		Short: "Local Controller admin: run in the foreground, inspect the age key and etcd",
+	}
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "serve",
@@ -84,7 +87,17 @@ func newControllerCmd(deps Dependencies) *cobra.Command {
 				}
 			}
 			renderErr := fromContext(cmd).Out.Render(
-				[]string{"ENDPOINT", "HEALTH", "VERSION", "MEMBER", "LEADER", "REVISION", "DB_SIZE", "LATENCY", "ERROR"},
+				[]string{
+					"ENDPOINT",
+					"HEALTH",
+					"VERSION",
+					"MEMBER",
+					"LEADER",
+					"REVISION",
+					"DB_SIZE",
+					"LATENCY",
+					"ERROR",
+				},
 				rows,
 				results,
 			)

@@ -29,7 +29,14 @@ func TestRouterShowRequestsEnvironmentProjection(t *testing.T) {
 func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 	t.Parallel()
 
-	server := exactRequestServer(t, http.MethodDelete, "/api/v1/agents/agt_1", "", http.StatusAccepted, `{"task_id":"task_2"}`)
+	server := exactRequestServer(
+		t,
+		http.MethodDelete,
+		"/api/v1/agents/agt_1",
+		"",
+		http.StatusAccepted,
+		`{"task_id":"task_2"}`,
+	)
 	defer server.Close()
 
 	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "remove", "agt_1")
@@ -42,7 +49,14 @@ func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
 	t.Parallel()
 
-	server := exactRequestServer(t, http.MethodPost, "/api/v1/agents", "", http.StatusAccepted, `{"task_id":"task_join"}`)
+	server := exactRequestServer(
+		t,
+		http.MethodPost,
+		"/api/v1/agents",
+		"",
+		http.StatusAccepted,
+		`{"task_id":"task_join"}`,
+	)
 	defer server.Close()
 
 	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "join")
@@ -55,7 +69,14 @@ func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
 func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
 	t.Parallel()
 
-	server := exactRequestServer(t, http.MethodPost, "/api/v1/tasks/task_1/retry", "", http.StatusAccepted, `{"task_id":"task_2"}`)
+	server := exactRequestServer(
+		t,
+		http.MethodPost,
+		"/api/v1/tasks/task_1/retry",
+		"",
+		http.StatusAccepted,
+		`{"task_id":"task_2"}`,
+	)
 	defer server.Close()
 
 	output := executeNoun(t, newTaskCmd(), server.URL, Scope{}, "retry", "task_1")
@@ -68,7 +89,14 @@ func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
 func TestBackupExportKeyPostsAndPrintsIdentity(t *testing.T) {
 	t.Parallel()
 
-	server := exactRequestServer(t, http.MethodPost, "/api/v1/environments/production/export-key", "", http.StatusOK, `{"value":"AGE-SECRET-KEY-1TEST"}`)
+	server := exactRequestServer(
+		t,
+		http.MethodPost,
+		"/api/v1/environments/production/export-key",
+		"",
+		http.StatusOK,
+		`{"value":"AGE-SECRET-KEY-1TEST"}`,
+	)
 	defer server.Close()
 
 	output := executeNoun(t, newBackupCmd(), server.URL, Scope{Environment: "production"}, "export-key")

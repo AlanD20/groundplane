@@ -274,8 +274,14 @@ func TestParseRejectsUnsafeFileSurfaces(t *testing.T) {
 		{name: "build", body: "services:\n  web:\n    build: .\n"},
 		{name: "published port", body: "services:\n  web:\n    image: nginx\n    ports: [8080:80]\n"},
 		{name: "remote include", body: "include: [https://example.com/compose.yaml]\nservices: {}\n"},
-		{name: "network volume", body: "services:\n  web: {image: nginx, volumes: [data:/data]}\nvolumes:\n  data:\n    driver: local\n    driver_opts: {type: nfs, o: addr=10.0.0.2, device: :/data}\n"},
-		{name: "non-local volume driver", body: "services:\n  web: {image: nginx, volumes: [data:/data]}\nvolumes:\n  data: {driver: arbitrary-plugin}\n"},
+		{
+			name: "network volume",
+			body: "services:\n  web: {image: nginx, volumes: [data:/data]}\nvolumes:\n  data:\n    driver: local\n    driver_opts: {type: nfs, o: addr=10.0.0.2, device: :/data}\n",
+		},
+		{
+			name: "non-local volume driver",
+			body: "services:\n  web: {image: nginx, volumes: [data:/data]}\nvolumes:\n  data: {driver: arbitrary-plugin}\n",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -91,11 +91,15 @@ func newEntryAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&key, "key", "", "env var name (--type env)")
 	cmd.Flags().StringVar(&path, "path", "", "path relative to the environment's volume folder (--type file)")
 	cmd.Flags().StringVar(&literal, "literal", "", "a literal value (plain config, or a secret value with --secret)")
-	cmd.Flags().StringVar(&secretRef, "secret-ref", "", "a secret-store reference — mutually exclusive with --literal and --fact-*")
-	cmd.Flags().StringVar(&factAttach, "fact-attach", "", "a live fact source: the attach name/id — pairs with --fact-key")
-	cmd.Flags().StringVar(&factKey, "fact-key", "", "a live fact source: the fact key, e.g. pg16_URL — pairs with --fact-attach")
+	cmd.Flags().
+		StringVar(&secretRef, "secret-ref", "", "a secret-store reference — mutually exclusive with --literal and --fact-*")
+	cmd.Flags().
+		StringVar(&factAttach, "fact-attach", "", "a live fact source: the attach name/id — pairs with --fact-key")
+	cmd.Flags().
+		StringVar(&factKey, "fact-key", "", "a live fact source: the fact key, e.g. pg16_URL — pairs with --fact-attach")
 	cmd.Flags().StringSliceVar(&services, "service", nil, "expose to specific service(s) (repeatable); omit for --all")
-	cmd.Flags().BoolVar(&all, "all", true, "expose to all services in the environment (default; overridden by --service)")
+	cmd.Flags().
+		BoolVar(&all, "all", true, "expose to all services in the environment (default; overridden by --service)")
 	cmd.Flags().BoolVar(&secret, "secret", false, "store in the encrypted secret store instead of desired state")
 	return cmd
 }
@@ -141,7 +145,8 @@ func newEntryEditCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&literal, "literal", "", "replace the source with a literal value")
 	cmd.Flags().StringVar(&secretRef, "secret-ref", "", "replace the source with a secret-store reference")
-	cmd.Flags().StringVar(&factAttach, "fact-attach", "", "replace the source with a live fact reference: attach name/id")
+	cmd.Flags().
+		StringVar(&factAttach, "fact-attach", "", "replace the source with a live fact reference: attach name/id")
 	cmd.Flags().StringVar(&factKey, "fact-key", "", "replace the source with a live fact reference: fact key")
 	cmd.Flags().StringSliceVar(&services, "service", nil, "new exposure: specific service(s)")
 	cmd.Flags().BoolVar(&all, "all", false, "new exposure: all services")

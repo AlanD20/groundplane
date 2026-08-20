@@ -25,14 +25,19 @@ func newRouteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			return runCreate(cmd, "/api/v1/routes", map[string]string{
-				"host": host, "path": path, "service": service, "exposure": exposure, "environment": app.Scope.Environment,
+				"host":        host,
+				"path":        path,
+				"service":     service,
+				"exposure":    exposure,
+				"environment": app.Scope.Environment,
 			})
 		},
 	}
 	add.Flags().StringVar(&host, "host", "", "hostname")
 	add.Flags().StringVar(&path, "path", "/", "path prefix")
 	add.Flags().StringVar(&service, "service", "", "target service name")
-	add.Flags().StringVar(&exposure, "exposure", "internal", "public | internal (public needs an enabled ingress component)")
+	add.Flags().
+		StringVar(&exposure, "exposure", "internal", "public | internal (public needs an enabled ingress component)")
 	_ = add.MarkFlagRequired("service")
 	cmd.AddCommand(add)
 
@@ -42,7 +47,11 @@ func newRouteCmd() *cobra.Command {
 		Short: "Edit a route",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/routes/"+target(fromContext(cmd), args[0]), changedStringFields(cmd, map[string]string{"exposure": editExposure}))
+			return runPatch(
+				cmd,
+				"/api/v1/routes/"+target(fromContext(cmd), args[0]),
+				changedStringFields(cmd, map[string]string{"exposure": editExposure}),
+			)
 		},
 	}
 	edit.Flags().StringVar(&editExposure, "exposure", "", "public | internal")

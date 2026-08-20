@@ -218,7 +218,13 @@ func (e EnvEntry) Validate() error {
 			return fmt.Errorf("entry %s: fact source requires attach and key", e.ID)
 		}
 	default:
-		return fmt.Errorf("entry %s: source.kind must be %q, %q, or %q", e.ID, SourceLiteral, SourceSecretRef, SourceFact)
+		return fmt.Errorf(
+			"entry %s: source.kind must be %q, %q, or %q",
+			e.ID,
+			SourceLiteral,
+			SourceSecretRef,
+			SourceFact,
+		)
 	}
 
 	if len(e.Exposure) == 0 {

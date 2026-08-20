@@ -100,9 +100,11 @@ func NewRootCmd(deps Dependencies) *cobra.Command {
 	root.PersistentFlags().StringVarP(&flags.tenant, "tenant", "t", "", "scope: tenant slug")
 	root.PersistentFlags().StringVarP(&flags.project, "project", "p", "", "scope: project slug")
 	root.PersistentFlags().StringVarP(&flags.env, "env", "e", "", "scope: environment slug")
-	root.PersistentFlags().StringVarP(&flags.output, "output", "o", "", "output format: TABLE|JSON|YAML (default TABLE)")
+	root.PersistentFlags().
+		StringVarP(&flags.output, "output", "o", "", "output format: TABLE|JSON|YAML (default TABLE)")
 	root.PersistentFlags().BoolVar(&flags.noColor, "no-color", false, "plain output")
-	root.PersistentFlags().BoolVar(&flags.asID, "id", false, "treat targets as ids instead of slugs (ids never change; slugs can be renamed)")
+	root.PersistentFlags().
+		BoolVar(&flags.asID, "id", false, "treat targets as ids instead of slugs (ids never change; slugs can be renamed)")
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		cfg := config.DefaultCLIConfig()

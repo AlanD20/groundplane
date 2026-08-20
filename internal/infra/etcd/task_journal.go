@@ -292,7 +292,10 @@ func prepareTaskEvent(
 		return PreparedTaskEvent{}, errs.New(errs.KindValidationFailed, "task event identity does not match its task")
 	}
 	if !taskContainsStep(task, input.Identity.StepID) {
-		return PreparedTaskEvent{}, errs.New(errs.KindValidationFailed, "task event step id does not belong to its task")
+		return PreparedTaskEvent{}, errs.New(
+			errs.KindValidationFailed,
+			"task event step id does not belong to its task",
+		)
 	}
 	if err := validateTimestamp("task event received_at", receivedAt); err != nil {
 		return PreparedTaskEvent{}, err
@@ -310,7 +313,10 @@ func prepareTaskEvent(
 			return PreparedTaskEvent{}, errs.New(errs.KindInternal, "task event dedupe identity mismatch")
 		}
 		if existing.PayloadSHA256 != hash {
-			return PreparedTaskEvent{}, errs.New(errs.KindInternal, "task event identity was reused with a different payload")
+			return PreparedTaskEvent{}, errs.New(
+				errs.KindInternal,
+				"task event identity was reused with a different payload",
+			)
 		}
 		return PreparedTaskEvent{
 			Task: cloneTaskRecord(task), Sequence: existing.Sequence, Duplicate: true,

@@ -116,7 +116,9 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 	mutationMethods := []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 	for _, method := range mutationMethods {
 		for _, key := range validKeys {
-			if err := validateIdempotencyKey(Request{Method: method, Path: "/resource", IdempotencyKey: key}); err != nil {
+			if err := validateIdempotencyKey(
+				Request{Method: method, Path: "/resource", IdempotencyKey: key},
+			); err != nil {
 				t.Errorf("validateIdempotencyKey(%s, %q) error = %v", method, key, err)
 			}
 		}

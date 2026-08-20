@@ -136,7 +136,11 @@ func (p *WorkerPool) runStep(ctx context.Context, step adapters.Step) error {
 		return errs.Newf(errs.KindNotImplemented, "agent: runStep %s not implemented", step.Op)
 
 	default:
-		return errs.Newf(errs.KindValidationFailed, "agent: unknown step op %q — not in the known step catalog", step.Op)
+		return errs.Newf(
+			errs.KindValidationFailed,
+			"agent: unknown step op %q — not in the known step catalog",
+			step.Op,
+		)
 	}
 }
 

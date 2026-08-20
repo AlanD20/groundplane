@@ -23,7 +23,12 @@ func TestRequestProblemUsesClosedKinds(t *testing.T) {
 		{http.StatusMethodNotAllowed, errs.KindRequestMethodNotAllowed, errs.CodeRequestMethodNotAllowed, 405},
 		{http.StatusNotAcceptable, errs.KindRequestNotAcceptable, errs.CodeRequestNotAcceptable, 406},
 		{http.StatusRequestEntityTooLarge, errs.KindRequestTooLarge, errs.CodeRequestFailed, 413},
-		{http.StatusUnsupportedMediaType, errs.KindRequestUnsupportedMediaType, errs.CodeRequestUnsupportedMediaType, 415},
+		{
+			http.StatusUnsupportedMediaType,
+			errs.KindRequestUnsupportedMediaType,
+			errs.CodeRequestUnsupportedMediaType,
+			415,
+		},
 		{http.StatusServiceUnavailable, errs.KindRequestUnavailable, errs.CodeRequestFailed, 503},
 		{http.StatusNotImplemented, errs.KindNotImplemented, errs.CodeNotImplemented, 501},
 		{http.StatusTeapot, errs.KindRequestFailed, errs.CodeRequestFailed, 500},

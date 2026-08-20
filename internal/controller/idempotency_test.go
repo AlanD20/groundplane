@@ -41,7 +41,12 @@ func TestMutationIdempotencyKeyBoundaryRejectsMissingAndInvalidHeaders(t *testin
 			server.requestHandler().ServeHTTP(response, request)
 
 			if response.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
+				t.Fatalf(
+					"status = %d, want %d; body=%s",
+					response.Code,
+					http.StatusUnprocessableEntity,
+					response.Body.String(),
+				)
 			}
 			if *calls != 0 {
 				t.Fatalf("downstream calls = %d, want 0", *calls)

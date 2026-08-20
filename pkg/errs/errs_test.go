@@ -97,7 +97,8 @@ func TestKindCatalogIsCompleteAndExact(t *testing.T) {
 // than creating a dynamic public error identity escape hatch.
 func TestUnknownKindFailsClosedAsInternal(t *testing.T) {
 	err := New(Kind(65535), "programming error")
-	if err.Kind() != KindInternal || err.Code != CodeInternal || err.Class() != ClassInternal || err.HTTPStatus() != 500 {
+	if err.Kind() != KindInternal || err.Code != CodeInternal || err.Class() != ClassInternal ||
+		err.HTTPStatus() != 500 {
 		t.Fatalf("unknown Kind produced %#v", err)
 	}
 }

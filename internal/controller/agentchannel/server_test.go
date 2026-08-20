@@ -93,7 +93,12 @@ func TestConnectRejectsMalformedAndMismatchedAuthentication(t *testing.T) {
 	}{
 		{name: "malformed id", id: "agent-1", token: testToken(1)},
 		{name: "short token", id: testAgentID, token: []byte("short")},
-		{name: "mismatch", id: testAgentID, token: testToken(2), authErr: errs.New(errs.KindAgentNotFound, "credential mismatch")},
+		{
+			name:    "mismatch",
+			id:      testAgentID,
+			token:   testToken(2),
+			authErr: errs.New(errs.KindAgentNotFound, "credential mismatch"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

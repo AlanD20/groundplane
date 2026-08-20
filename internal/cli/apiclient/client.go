@@ -130,7 +130,15 @@ func (c *Client) Do(ctx context.Context, request Request, out any) error {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return contextErr
 		}
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("apiclient: %s %s: %w (is the Controller running? --host / GROUNDPLANE_HOST)", request.Method, request.Path, err))
+		return errs.Wrap(
+			errs.KindInternal,
+			fmt.Errorf(
+				"apiclient: %s %s: %w (is the Controller running? --host / GROUNDPLANE_HOST)",
+				request.Method,
+				request.Path,
+				err,
+			),
+		)
 	}
 	defer resp.Body.Close()
 
@@ -142,7 +150,12 @@ func (c *Client) Do(ctx context.Context, request Request, out any) error {
 		return nil
 	}
 	if resp.StatusCode == http.StatusNoContent {
-		return errs.Newf(errs.KindInternal, "apiclient: %s %s returned 204 with an output target", request.Method, request.Path)
+		return errs.Newf(
+			errs.KindInternal,
+			"apiclient: %s %s returned 204 with an output target",
+			request.Method,
+			request.Path,
+		)
 	}
 	return decodeSingleJSON(request.Method, request.Path, resp.Body, out)
 }
@@ -159,10 +172,19 @@ func requiresIdempotencyKey(method string) bool {
 func validateIdempotencyKey(request Request) error {
 	required := requiresIdempotencyKey(request.Method)
 	if required && !idempotencyKeyPattern.MatchString(request.IdempotencyKey) {
-		return errs.Newf(errs.KindInternal, "apiclient: %s %s has an invalid Idempotency-Key", request.Method, request.Path)
+		return errs.Newf(
+			errs.KindInternal,
+			"apiclient: %s %s has an invalid Idempotency-Key",
+			request.Method,
+			request.Path,
+		)
 	}
 	if !required && request.IdempotencyKey != "" {
-		return errs.Newf(errs.KindInternal, "apiclient: safe method %s must not carry an Idempotency-Key", request.Method)
+		return errs.Newf(
+			errs.KindInternal,
+			"apiclient: safe method %s must not carry an Idempotency-Key",
+			request.Method,
+		)
 	}
 	return nil
 }
@@ -177,7 +199,10 @@ func decodeSingleJSON(method, path string, body io.Reader, out any) error {
 		if err == nil {
 			return errs.Newf(errs.KindInternal, "apiclient: %s %s returned multiple JSON documents", method, path)
 		}
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("apiclient: %s %s decode trailing response: %w", method, path, err))
+		return errs.Wrap(
+			errs.KindInternal,
+			fmt.Errorf("apiclient: %s %s decode trailing response: %w", method, path, err),
+		)
 	}
 	return nil
 }
@@ -185,7 +210,12 @@ func decodeSingleJSON(method, path string, body io.Reader, out any) error {
 // Stream opens one SSE connection and invokes onEvent for each complete event
 // data payload. Reconnection policy belongs to the calling command because
 // finite and follow streams have different lifecycles.
-func (c *Client) Stream(ctx context.Context, path string, query map[string]string, onEvent func(data string) error) error {
+func (c *Client) Stream(
+	ctx context.Context,
+	path string,
+	query map[string]string,
+	onEvent func(data string) error,
+) error {
 	u, err := url.Parse(c.BaseURL + path)
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, fmt.Errorf("apiclient: bad stream url: %w", err))
@@ -218,7 +248,12 @@ func (c *Client) Stream(ctx context.Context, path string, query map[string]strin
 	}
 	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil || mediaType != "text/event-stream" {
-		return errs.Newf(errs.KindInternal, "apiclient: stream %s returned content type %q", path, resp.Header.Get("Content-Type"))
+		return errs.Newf(
+			errs.KindInternal,
+			"apiclient: stream %s returned content type %q",
+			path,
+			resp.Header.Get("Content-Type"),
+		)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)

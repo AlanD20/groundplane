@@ -35,7 +35,13 @@ func TestEnrollCommitsCredentialBeforeRuntimeAndEnforcesSingletonCAS(t *testing.
 	}
 	second := newTestManager(t, repository, trace)
 	second.sessions.ready = closedSignal()
-	if _, err := second.manager.Enroll(context.Background(), testRequest(testOtherAgentID)); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+	if _, err := second.manager.Enroll(
+		context.Background(),
+		testRequest(testOtherAgentID),
+	); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
 		t.Fatalf("second Enroll() error = %v, want %s", err, errs.CodeStateConflict)
 	}
 
@@ -236,7 +242,13 @@ func TestRemoveFailureNeverAdvancesPastTheFailedBoundary(t *testing.T) {
 			harness := newTestManager(t, repository, trace)
 			failure := errors.New("injected failure")
 			test.configure(harness, failure)
-			if err := harness.manager.Remove(context.Background(), testAgentID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			if err := harness.manager.Remove(
+				context.Background(),
+				testAgentID,
+			); !errors.Is(
+				err,
+				errs.New(errs.KindInternal, ""),
+			) {
 				t.Fatalf("Remove() error = %v, want %s", err, errs.CodeInternal)
 			}
 			if trace.contains(test.forbidden) {
@@ -393,7 +405,13 @@ func TestEnrollRejectsMutableOrMalformedImageIdentity(t *testing.T) {
 			harness := newTestManager(t, repository, trace)
 			request := testRequest(testAgentID)
 			request.Image = test.image
-			if _, err := harness.manager.Enroll(context.Background(), request); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+			if _, err := harness.manager.Enroll(
+				context.Background(),
+				request,
+			); !errors.Is(
+				err,
+				errs.New(errs.KindValidationFailed, ""),
+			) {
 				t.Fatalf("Enroll() error = %v, want %s", err, errs.CodeValidationFailed)
 			}
 			if harness.runtime.generateCalls != 0 || repository.exists {
@@ -440,7 +458,13 @@ func TestConfigLabelsRequireNULFreeUTF8AtInputAndPersistence(t *testing.T) {
 		harness := newTestManager(t, repository, trace)
 		request := testRequest(testAgentID)
 		request.Config.Labels = labels
-		if _, err := harness.manager.Enroll(context.Background(), request); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		if _, err := harness.manager.Enroll(
+			context.Background(),
+			request,
+		); !errors.Is(
+			err,
+			errs.New(errs.KindValidationFailed, ""),
+		) {
 			t.Fatalf("case %d Enroll() error = %v, want %s", index, err, errs.CodeValidationFailed)
 		}
 		if harness.runtime.generateCalls != 0 || repository.exists {
@@ -929,7 +953,14 @@ func TestSafePortErrorUsesCallerContextOnly(t *testing.T) {
 
 	deadline, deadlineCancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer deadlineCancel()
-	if err := safePortError(deadline, errors.New("dependency secret"), "safe"); !errors.Is(err, context.DeadlineExceeded) {
+	if err := safePortError(
+		deadline,
+		errors.New("dependency secret"),
+		"safe",
+	); !errors.Is(
+		err,
+		context.DeadlineExceeded,
+	) {
 		t.Fatalf("caller deadline = %v", err)
 	}
 

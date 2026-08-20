@@ -166,7 +166,9 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 			continue
 		}
 		if strings.HasPrefix(key, "x-gp-") {
-			return core.Envelope{}, Extensions{}, nil, validationError("blueprint root has an unknown Groundplane extension")
+			return core.Envelope{}, Extensions{}, nil, validationError(
+				"blueprint root has an unknown Groundplane extension",
+			)
 		}
 		composeNodes = append(composeNodes, root.Content[index], root.Content[index+1])
 	}
@@ -189,7 +191,9 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 		switch group.OnFailure {
 		case core.OnFailureSwitchBack, core.OnFailureLeaveActive:
 		default:
-			return core.Envelope{}, Extensions{}, nil, validationError("blueprint release group failure policy is invalid")
+			return core.Envelope{}, Extensions{}, nil, validationError(
+				"blueprint release group failure policy is invalid",
+			)
 		}
 		authored.ReleaseGroups[name] = group
 	}

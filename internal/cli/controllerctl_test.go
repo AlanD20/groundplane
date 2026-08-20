@@ -142,7 +142,17 @@ func TestControllerEtcdShowFormats(t *testing.T) {
 		})
 	}
 	output, err := executeControllerEtcdShow(t, "TABLE", results)
-	wantHeaders := []string{"ENDPOINT", "HEALTH", "VERSION", "MEMBER", "LEADER", "REVISION", "DB_SIZE", "LATENCY", "ERROR"}
+	wantHeaders := []string{
+		"ENDPOINT",
+		"HEALTH",
+		"VERSION",
+		"MEMBER",
+		"LEADER",
+		"REVISION",
+		"DB_SIZE",
+		"LATENCY",
+		"ERROR",
+	}
 	if !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) ||
 		!reflect.DeepEqual(tableHeaders(output), wantHeaders) {
 		t.Fatalf("controller etcd TABLE = %q, %v; headers=%#v", output, err, tableHeaders(output))

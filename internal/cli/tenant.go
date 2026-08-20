@@ -43,7 +43,11 @@ func newTenantCmd() *cobra.Command {
 		Short: "Edit a tenant's fields (partial update)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/tenants/"+target(fromContext(cmd), args[0]), changedStringFields(cmd, map[string]string{"name": editName}))
+			return runPatch(
+				cmd,
+				"/api/v1/tenants/"+target(fromContext(cmd), args[0]),
+				changedStringFields(cmd, map[string]string{"name": editName}),
+			)
 		},
 	}
 	edit.Flags().StringVar(&editName, "name", "", "new display name")
@@ -55,7 +59,11 @@ func newTenantCmd() *cobra.Command {
 		Short: "Rename a tenant's slug (id unchanged; a stale slug simply fails to resolve afterward)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/tenants/"+target(fromContext(cmd), args[0]), map[string]string{"slug": newSlug})
+			return runPatch(
+				cmd,
+				"/api/v1/tenants/"+target(fromContext(cmd), args[0]),
+				map[string]string{"slug": newSlug},
+			)
 		},
 	}
 	rename.Flags().StringVar(&newSlug, "slug", "", "new slug (globally unique)")

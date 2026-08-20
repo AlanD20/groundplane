@@ -155,7 +155,8 @@ func TestStoreGetManyUsesOneHistoricalRevision(t *testing.T) {
 		t.Fatalf("GetMany() operations = %#v", backend.transaction.operations)
 	}
 	for index, operation := range backend.transaction.operations {
-		if operation.Rev() != 14 || string(operation.KeyBytes()) != "/groundplane/services/svc_"+string(rune('1'+index)) {
+		if operation.Rev() != 14 ||
+			string(operation.KeyBytes()) != "/groundplane/services/svc_"+string(rune('1'+index)) {
 			t.Fatalf("GetMany() operation %d = key %q revision %d", index, operation.KeyBytes(), operation.Rev())
 		}
 	}

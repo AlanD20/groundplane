@@ -55,7 +55,11 @@ func newProjectCmd() *cobra.Command {
 		Short: "Edit a project's fields (partial update)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/projects/"+target(fromContext(cmd), args[0]), changedStringFields(cmd, map[string]string{"name": editName}))
+			return runPatch(
+				cmd,
+				"/api/v1/projects/"+target(fromContext(cmd), args[0]),
+				changedStringFields(cmd, map[string]string{"name": editName}),
+			)
 		},
 	}
 	edit.Flags().StringVar(&editName, "name", "", "new display name")
@@ -67,7 +71,11 @@ func newProjectCmd() *cobra.Command {
 		Short: "Rename a project's slug (id unchanged)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/projects/"+target(fromContext(cmd), args[0]), map[string]string{"slug": newSlug})
+			return runPatch(
+				cmd,
+				"/api/v1/projects/"+target(fromContext(cmd), args[0]),
+				map[string]string{"slug": newSlug},
+			)
 		},
 	}
 	rename.Flags().StringVar(&newSlug, "slug", "", "new slug (unique within the tenant)")

@@ -23,7 +23,11 @@ func newVolumeCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runCreate(cmd, "/api/v1/volumes", map[string]string{"name": args[0], "environment": app.Scope.Environment})
+			return runCreate(
+				cmd,
+				"/api/v1/volumes",
+				map[string]string{"name": args[0], "environment": app.Scope.Environment},
+			)
 		},
 	}
 	cmd.AddCommand(add)
@@ -34,7 +38,11 @@ func newVolumeCmd() *cobra.Command {
 		Short: "Edit a volume",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/volumes/"+target(fromContext(cmd), args[0]), changedStringFields(cmd, map[string]string{"name": newName}))
+			return runPatch(
+				cmd,
+				"/api/v1/volumes/"+target(fromContext(cmd), args[0]),
+				changedStringFields(cmd, map[string]string{"name": newName}),
+			)
 		},
 	}
 	edit.Flags().StringVar(&newName, "name", "", "new name")

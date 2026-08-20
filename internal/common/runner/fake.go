@@ -28,7 +28,11 @@ func (f *FakeRunner) Run(ctx context.Context, opts RunCmdOpts) (Result, error) {
 	return f.Results[opts.Name], nil
 }
 
-func (f *FakeRunner) Stream(ctx context.Context, opts RunCmdOpts, onLine func(stderr bool, line string)) (Result, error) {
+func (f *FakeRunner) Stream(
+	ctx context.Context,
+	opts RunCmdOpts,
+	onLine func(stderr bool, line string),
+) (Result, error) {
 	res, err := f.Run(ctx, opts)
 	for _, line := range splitLines(res.Stdout) {
 		onLine(false, line)

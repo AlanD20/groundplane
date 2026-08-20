@@ -14,7 +14,10 @@ import (
 
 func TestTaskRetryRouteReturnsNewAttempt(t *testing.T) {
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
-	original, err := server.dispatcher.Dispatch(context.Background(), DispatchRequest{Type: TaskScript, Target: "svc_1", IdempotencyKey: "operation-key", PlanHash: "plan-hash"})
+	original, err := server.dispatcher.Dispatch(
+		context.Background(),
+		DispatchRequest{Type: TaskScript, Target: "svc_1", IdempotencyKey: "operation-key", PlanHash: "plan-hash"},
+	)
 	if err != nil {
 		t.Fatalf("Dispatch() error = %v", err)
 	}

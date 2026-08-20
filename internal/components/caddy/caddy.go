@@ -26,7 +26,10 @@ func Register() {
 
 type component struct{}
 
-func (a *component) Render(env core.Environment, ad core.Component) (map[string]core.Service, map[string][]byte, error) {
+func (a *component) Render(
+	env core.Environment,
+	ad core.Component,
+) (map[string]core.Service, map[string][]byte, error) {
 	// TODO: render the Caddy service (pinned IPv4 on the frontend
 	// bridge) plus the Caddyfile from ad.Config["caddyfile_template"],
 	// validated before reload (StepReload) per the shared render path.

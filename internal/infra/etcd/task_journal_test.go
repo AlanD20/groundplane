@@ -38,7 +38,8 @@ func TestTaskRecordCodecPreservesRestartSafeJournalState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareTaskEvent(second) error = %v", err)
 	}
-	if first.Sequence != 1 || second.Sequence != 2 || second.Task.NextEventSequence != 3 || second.Task.EventCount != 2 {
+	if first.Sequence != 1 || second.Sequence != 2 || second.Task.NextEventSequence != 3 ||
+		second.Task.EventCount != 2 {
 		t.Fatalf("journal summaries = first %#v, second %#v", first, second)
 	}
 	if first.Task.Status != TaskStatusPending || second.Task.Status != TaskStatusPending {
@@ -239,7 +240,12 @@ func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
 		t.Fatalf("decodeTaskRecord(corrupt) error = %v, want internal", err)
 	}
 
-	prepared, err := prepareTaskEvent(task, taskEventInput(task.ID, 1, TaskEventStateRunning), nil, now.Add(time.Second))
+	prepared, err := prepareTaskEvent(
+		task,
+		taskEventInput(task.ID, 1, TaskEventStateRunning),
+		nil,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatalf("prepareTaskEvent() error = %v", err)
 	}
@@ -266,7 +272,15 @@ func TestTaskJournalRequiresCanonicalUTCTimestamps(t *testing.T) {
 	task = validTaskRecord(now)
 	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
 	noncanonical := time.Date(2026, time.August, 20, 12, 0, 1, 0, time.FixedZone("zero-offset", 0))
-	if _, err := prepareTaskEvent(task, input, nil, noncanonical); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := prepareTaskEvent(
+		task,
+		input,
+		nil,
+		noncanonical,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("prepareTaskEvent(noncanonical UTC) error = %v, want validation.failed", err)
 	}
 }

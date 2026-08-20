@@ -7,7 +7,11 @@ import "github.com/spf13/cobra"
 // service form plus adapter + facts-prefix fields. See mvp.md, "Backing
 // services are created explicitly."
 func newBackingServiceCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "backing-service", Aliases: []string{"bs"}, Short: "Backing services — shared datastores/caches/queues"}
+	cmd := &cobra.Command{
+		Use:     "backing-service",
+		Aliases: []string{"bs"},
+		Short:   "Backing services — shared datastores/caches/queues",
+	}
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -38,10 +42,12 @@ func newBackingServiceCmd() *cobra.Command {
 			})
 		},
 	}
-	create.Flags().StringVar(&adapter, "adapter", "", "adapter key, e.g. postgres:16 (see `groundplane backing-service create --help` for the registry)")
+	create.Flags().
+		StringVar(&adapter, "adapter", "", "adapter key, e.g. postgres:16 (see `groundplane backing-service create --help` for the registry)")
 	create.Flags().StringVar(&image, "image", "", "container image (defaults to the adapter's default image)")
 	create.Flags().StringVar(&name, "name", "", "unique DNS-resolvable service name, e.g. 'postgres'")
-	create.Flags().StringVar(&prefix, "facts-prefix", "", "facts key prefix, e.g. 'pg16_' (defaults to the adapter's default)")
+	create.Flags().
+		StringVar(&prefix, "facts-prefix", "", "facts key prefix, e.g. 'pg16_' (defaults to the adapter's default)")
 	_ = create.MarkFlagRequired("adapter")
 	_ = create.MarkFlagRequired("name")
 	cmd.AddCommand(create)

@@ -158,9 +158,11 @@ func testLogger() *slog.Logger {
 }
 
 func configMessage(pullInterval, capacity int32) *agentpb.ControllerMessage {
-	return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ConfigUpdate{ConfigUpdate: &agentpb.ConfigUpdate{
-		AgentConfig: &agentpb.AgentConfig{PullIntervalSeconds: pullInterval, MaxConcurrentTasks: capacity},
-	}}}
+	return &agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_ConfigUpdate{ConfigUpdate: &agentpb.ConfigUpdate{
+			AgentConfig: &agentpb.AgentConfig{PullIntervalSeconds: pullInterval, MaxConcurrentTasks: capacity},
+		}},
+	}
 }
 
 type fakeStream struct {

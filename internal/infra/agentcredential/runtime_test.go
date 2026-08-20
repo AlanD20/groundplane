@@ -129,7 +129,12 @@ func TestMaterializeFailsClosedBeforeFilesystemMutation(t *testing.T) {
 			if strings.Contains(err.Error(), "secret") {
 				t.Fatalf("Materialize() error leaked plaintext: %v", err)
 			}
-			if _, statErr := os.Lstat(manager.testPath("run/groundplane/agents/" + testAgentID)); !errors.Is(statErr, os.ErrNotExist) {
+			if _, statErr := os.Lstat(
+				manager.testPath("run/groundplane/agents/" + testAgentID),
+			); !errors.Is(
+				statErr,
+				os.ErrNotExist,
+			) {
 				t.Fatalf("runtime directory stat error = %v, want not exist", statErr)
 			}
 			if test.opener.returned != nil && !allZero(test.opener.returned) {
@@ -178,7 +183,12 @@ func TestMaterializeClassifiesInvalidDurableStateAsInternal(t *testing.T) {
 			if opener.calls != 0 {
 				t.Fatalf("opener calls = %d, want 0 before durable-state validation", opener.calls)
 			}
-			if _, statErr := os.Lstat(manager.testPath("run/groundplane/agents/" + testAgentID)); !errors.Is(statErr, os.ErrNotExist) {
+			if _, statErr := os.Lstat(
+				manager.testPath("run/groundplane/agents/" + testAgentID),
+			); !errors.Is(
+				statErr,
+				os.ErrNotExist,
+			) {
 				t.Fatalf("runtime directory stat error = %v, want not exist", statErr)
 			}
 		})

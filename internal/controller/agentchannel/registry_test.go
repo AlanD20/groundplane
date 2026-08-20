@@ -56,11 +56,15 @@ func TestRegistryRemovalHooksAndOfflineWait(t *testing.T) {
 
 	var revokedID string
 	var revokedGeneration uint64
-	err = registry.Revoke(context.Background(), testAgentID, func(_ context.Context, id string, generation uint64) error {
-		revokedID = id
-		revokedGeneration = generation
-		return nil
-	})
+	err = registry.Revoke(
+		context.Background(),
+		testAgentID,
+		func(_ context.Context, id string, generation uint64) error {
+			revokedID = id
+			revokedGeneration = generation
+			return nil
+		},
+	)
 	if err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
@@ -140,9 +144,12 @@ func TestRegistryRejectsOpenWhileRevocationIsInProgress(t *testing.T) {
 
 	_, err = registry.Open(context.Background(), testAgentID, 9)
 	assertStateConflict(t, err)
-	assertStateConflict(t, registry.Revoke(context.Background(), testAgentID, func(context.Context, string, uint64) error {
-		return nil
-	}))
+	assertStateConflict(
+		t,
+		registry.Revoke(context.Background(), testAgentID, func(context.Context, string, uint64) error {
+			return nil
+		}),
+	)
 	close(releaseHook)
 	if err := <-revokeDone; err != nil {
 		t.Fatalf("revoke: %v", err)
