@@ -24,18 +24,18 @@ const (
 
 // Tenant is a strict isolation boundary (mvp.md, "Model").
 type Tenant struct {
-	ID   string `yaml:"id" json:"id"`     // tnt_<ulid>
+	ID   string `yaml:"id"   json:"id"`   // tnt_<ulid>
 	Slug string `yaml:"slug" json:"slug"` // globally unique, renamable
 	Name string `yaml:"name" json:"name"`
 }
 
 // Project is either a tenant application or a backing service.
 type Project struct {
-	ID       string      `yaml:"id" json:"id"`                                   // prj_<ulid>
+	ID       string      `yaml:"id"                  json:"id"`                  // prj_<ulid>
 	TenantID string      `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty"` // empty for backing
-	Slug     string      `yaml:"slug" json:"slug"`                               // unique within tenant
-	Name     string      `yaml:"name" json:"name"`
-	Kind     ProjectKind `yaml:"kind" json:"kind"`
+	Slug     string      `yaml:"slug"                json:"slug"`                // unique within tenant
+	Name     string      `yaml:"name"                json:"name"`
+	Kind     ProjectKind `yaml:"kind"                json:"kind"`
 }
 
 // Environment is one deployable instance of a Project. Its id is static
@@ -46,22 +46,22 @@ type Project struct {
 // the Compose project identity. See blueprint.md, "Identity and rename
 // rules".
 type Environment struct {
-	ID        string `yaml:"id" json:"id"` // env_<ulid>, generated once, never regenerated
+	ID        string `yaml:"id"         json:"id"` // env_<ulid>, generated once, never regenerated
 	ProjectID string `yaml:"project_id" json:"project_id"`
-	Slug      string `yaml:"slug" json:"slug"` // unique within project, freely renamable
-	Name      string `yaml:"name" json:"name"` // label only
+	Slug      string `yaml:"slug"       json:"slug"` // unique within project, freely renamable
+	Name      string `yaml:"name"       json:"name"` // label only
 
-	VolumeDir string `yaml:"volume_dir" json:"volume_dir"` // derived from ID: /var/lib/groundplane/vol/<tenant-id>/<project-id>/<environment-id>
+	VolumeDir string `yaml:"volume_dir" json:"volume_dir"` // derived from ID: /infra/vol/<tenant-id>/<project-id>/<environment-id>
 
-	Zones      map[string]Zone    `yaml:"zones,omitempty" json:"zones,omitempty"` // Groundplane's "zone" IS a Compose network — see blueprint.md
-	Services   map[string]Service `yaml:"services,omitempty" json:"services,omitempty"`
-	Attaches   []Attach           `yaml:"attaches,omitempty" json:"attaches,omitempty"`
-	Routes     []Route            `yaml:"routes,omitempty" json:"routes,omitempty"`
+	Zones      map[string]Zone    `yaml:"zones,omitempty"      json:"zones,omitempty"` // Groundplane's "zone" IS a Compose network — see blueprint.md
+	Services   map[string]Service `yaml:"services,omitempty"   json:"services,omitempty"`
+	Attaches   []Attach           `yaml:"attaches,omitempty"   json:"attaches,omitempty"`
+	Routes     []Route            `yaml:"routes,omitempty"     json:"routes,omitempty"`
 	Components []Component        `yaml:"components,omitempty" json:"components,omitempty"`
-	Volumes    map[string]Volume  `yaml:"volumes,omitempty" json:"volumes,omitempty"`
-	Entries    []EnvEntry         `yaml:"entries,omitempty" json:"entries,omitempty"`
-	Scripts    map[string]Script  `yaml:"scripts,omitempty" json:"scripts,omitempty"`
-	Backup     BackupPolicy       `yaml:"backup,omitempty" json:"backup,omitempty"`
+	Volumes    map[string]Volume  `yaml:"volumes,omitempty"    json:"volumes,omitempty"`
+	Entries    []EnvEntry         `yaml:"entries,omitempty"    json:"entries,omitempty"`
+	Scripts    map[string]Script  `yaml:"scripts,omitempty"    json:"scripts,omitempty"`
+	Backup     BackupPolicy       `yaml:"backup,omitempty"     json:"backup,omitempty"`
 
 	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
 }
@@ -73,7 +73,7 @@ type Environment struct {
 // components", and blueprint.md: "The Router page is a UI grouping for
 // ingress components; it is not a separate runtime model."
 type Router struct {
-	Caddy  *ComponentProjection `yaml:"caddy,omitempty" json:"caddy,omitempty"`
+	Caddy  *ComponentProjection `yaml:"caddy,omitempty"  json:"caddy,omitempty"`
 	Tunnel *ComponentProjection `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
 }
 
@@ -81,8 +81,8 @@ type Router struct {
 // record (config, generated services, health) lives in Component itself;
 // this is just what the read-only projection surfaces.
 type ComponentProjection struct {
-	ComponentID string `yaml:"component_id" json:"component_id"`
-	Enabled     bool   `yaml:"enabled" json:"enabled"`
+	ComponentID string `yaml:"component_id"          json:"component_id"`
+	Enabled     bool   `yaml:"enabled"               json:"enabled"`
 	PinnedIPv4  string `yaml:"pinned_ipv4,omitempty" json:"pinned_ipv4,omitempty"` // Caddy only; durable while enabled, released on disable
 }
 
@@ -90,8 +90,8 @@ type ComponentProjection struct {
 // domain term for a Compose `network`; there is no second zone topology
 // grammar (blueprint.md). A Service on two zones is a bridge.
 type Zone struct {
-	ID     string `yaml:"id" json:"id"` // net_<ulid> — see blueprint.md's x-gp-network example
-	Name   string `yaml:"name" json:"name"`
+	ID     string `yaml:"id"               json:"id"` // net_<ulid> — see blueprint.md's x-gp-network example
+	Name   string `yaml:"name"             json:"name"`
 	Subnet string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
 	// Internal marks the zone as having no route to the host's default
 	// gateway (e.g. prod_identity_private_net's "no host egress").
@@ -107,18 +107,18 @@ type Zone struct {
 // blueprint.md's Compose base document example: `test: [CMD, curl, -f,
 // http://localhost/up]`).
 type Healthcheck struct {
-	HTTP  string `yaml:"http,omitempty" json:"http,omitempty"`   // path, e.g. "/up"
-	TCP   string `yaml:"tcp,omitempty" json:"tcp,omitempty"`     // host:port
+	HTTP  string `yaml:"http,omitempty"  json:"http,omitempty"`  // path, e.g. "/up"
+	TCP   string `yaml:"tcp,omitempty"   json:"tcp,omitempty"`   // host:port
 	Pgrep string `yaml:"pgrep,omitempty" json:"pgrep,omitempty"` // process name/cmd
 
-	Interval    string `yaml:"interval,omitempty" json:"interval,omitempty"`
-	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Interval    string `yaml:"interval,omitempty"     json:"interval,omitempty"`
+	Timeout     string `yaml:"timeout,omitempty"      json:"timeout,omitempty"`
 	StartPeriod string `yaml:"start_period,omitempty" json:"start_period,omitempty"`
-	Retries     int    `yaml:"retries,omitempty" json:"retries,omitempty"`
+	Retries     int    `yaml:"retries,omitempty"      json:"retries,omitempty"`
 }
 
 type Resources struct {
-	Mem  string  `yaml:"mem,omitempty" json:"mem,omitempty"` // e.g. "512m" — compiles to Compose deploy.resources.limits
+	Mem  string  `yaml:"mem,omitempty"  json:"mem,omitempty"` // e.g. "512m" — compiles to Compose deploy.resources.limits
 	CPUs float64 `yaml:"cpus,omitempty" json:"cpus,omitempty"`
 }
 
@@ -128,9 +128,9 @@ type Resources struct {
 // "Groundplane entries compile to native Compose resources by type").
 type Mount struct {
 	Volume string `yaml:"volume,omitempty" json:"volume,omitempty"`
-	File   string `yaml:"file,omitempty" json:"file,omitempty"` // references an EnvEntry with Kind=EntryKindFile
-	Mount  string `yaml:"mount" json:"mount"`                   // container path
-	RO     bool   `yaml:"ro,omitempty" json:"ro,omitempty"`
+	File   string `yaml:"file,omitempty"   json:"file,omitempty"` // references an EnvEntry with Kind=EntryKindFile
+	Mount  string `yaml:"mount"            json:"mount"`          // container path
+	RO     bool   `yaml:"ro,omitempty"     json:"ro,omitempty"`
 }
 
 // Strategy is a deploy strategy. "rolling" is declared-deferred (rejected
@@ -170,25 +170,25 @@ func (o OnFailure) WithDefault() OnFailure {
 // never appears in names or env var keys. See mvp.md, "Service", and
 // blueprint.md's "x-gp-release" / "x-gp-resource".
 type Service struct {
-	ID   string `yaml:"id" json:"id"`     // svc_<ulid>
+	ID   string `yaml:"id"   json:"id"`   // svc_<ulid>
 	Name string `yaml:"name" json:"name"` // unique within the environment; the Compose service key for `recreate` strategy, or the logical-service prefix for blue-green slots (`<name>__blue`, `<name>__green`)
 
-	Image     string    `yaml:"image" json:"image"`
-	Zones     []string  `yaml:"zones,omitempty" json:"zones,omitempty"`
-	Strategy  Strategy  `yaml:"strategy,omitempty" json:"strategy,omitempty"`     // declared default; overridden per-deploy
+	Image     string    `yaml:"image"                json:"image"`
+	Zones     []string  `yaml:"zones,omitempty"      json:"zones,omitempty"`
+	Strategy  Strategy  `yaml:"strategy,omitempty"   json:"strategy,omitempty"`   // declared default; overridden per-deploy
 	OnFailure OnFailure `yaml:"on_failure,omitempty" json:"on_failure,omitempty"` // declared default (switch_back); overridden per-deploy
 
 	Healthcheck Healthcheck `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty"`
-	Resources   Resources   `yaml:"resources,omitempty" json:"resources,omitempty"`
-	Command     []string    `yaml:"command,omitempty" json:"command,omitempty"`
+	Resources   Resources   `yaml:"resources,omitempty"   json:"resources,omitempty"`
+	Command     []string    `yaml:"command,omitempty"     json:"command,omitempty"`
 
-	Mounts      []Mount    `yaml:"mounts,omitempty" json:"mounts,omitempty"`
+	Mounts      []Mount    `yaml:"mounts,omitempty"      json:"mounts,omitempty"`
 	Environment []EnvEntry `yaml:"environment,omitempty" json:"environment,omitempty"` // service-scoped entries, wins on key conflict with the environment's all-services file
 
-	Aliases   map[string][]string          `yaml:"aliases,omitempty" json:"aliases,omitempty"` // per-zone; blue-green also gets a per-slot alias, see blueprint.md
+	Aliases   map[string][]string          `yaml:"aliases,omitempty"    json:"aliases,omitempty"` // per-zone; blue-green also gets a per-slot alias, see blueprint.md
 	DependsOn map[string]ServiceDependency `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 
-	Expose  []string `yaml:"expose,omitempty" json:"expose,omitempty"` // internal-only, no host publishing (ports is rejected for tenant services — see blueprint.md's MVP Compose surface table)
+	Expose  []string `yaml:"expose,omitempty"  json:"expose,omitempty"` // internal-only, no host publishing (ports is rejected for tenant services — see blueprint.md's MVP Compose surface table)
 	Restart string   `yaml:"restart,omitempty" json:"restart,omitempty"`
 
 	Logging struct {
@@ -199,16 +199,16 @@ type Service struct {
 	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"` // native Compose deploy.replicas
 
 	// For a backing project's single service only — see x-gp-adapter:
-	Adapter     string `yaml:"adapter,omitempty" json:"adapter,omitempty"`           // e.g. "postgres:16" — looks up internal/adapters
+	Adapter     string `yaml:"adapter,omitempty"      json:"adapter,omitempty"`      // e.g. "postgres:16" — looks up internal/adapters
 	FactsPrefix string `yaml:"facts_prefix,omitempty" json:"facts_prefix,omitempty"` // optional override; adapter supplies a default
-	Label       string `yaml:"label,omitempty" json:"label,omitempty"`               // display only
+	Label       string `yaml:"label,omitempty"        json:"label,omitempty"`        // display only
 }
 
 // ServiceDependency is x-gp-depends_on's per-dependency shape:
 // Compose health/start condition plus which lifecycle phases it applies
 // to. See blueprint.md, "x-gp-depends_on".
 type ServiceDependency struct {
-	Condition string   `yaml:"condition" json:"condition"`               // Compose condition, e.g. "service_completed_successfully", "service_healthy"
+	Condition string   `yaml:"condition"        json:"condition"`        // Compose condition, e.g. "service_completed_successfully", "service_healthy"
 	Phases    []string `yaml:"phases,omitempty" json:"phases,omitempty"` // "start" | "deploy" | "rollback" | "always"; empty = normal Compose startup only
 }
 
@@ -238,10 +238,10 @@ const (
 // EntrySource is a tagged union over SourceKind — exactly one of
 // Literal/SecretRef/Fact is populated, matching SourceKind.
 type EntrySource struct {
-	Kind      EntrySourceKind `yaml:"kind" json:"kind"`
-	Literal   string          `yaml:"literal,omitempty" json:"literal,omitempty"`
+	Kind      EntrySourceKind `yaml:"kind"                 json:"kind"`
+	Literal   string          `yaml:"literal,omitempty"    json:"literal,omitempty"`
 	SecretRef string          `yaml:"secret_ref,omitempty" json:"secret_ref,omitempty"` // secret-store id/ref
-	Fact      *FactRef        `yaml:"fact,omitempty" json:"fact,omitempty"`
+	Fact      *FactRef        `yaml:"fact,omitempty"       json:"fact,omitempty"`
 }
 
 // FactRef is a LIVE reference: the Controller resolves {attach, key}
@@ -250,7 +250,7 @@ type EntrySource struct {
 // Blueprint. See blueprint.md, "x-gp-entry": "A fact source is live".
 type FactRef struct {
 	Attach string `yaml:"attach" json:"attach"` // the attach name (or id)
-	Key    string `yaml:"key" json:"key"`       // e.g. "pg16_URL"
+	Key    string `yaml:"key"    json:"key"`    // e.g. "pg16_URL"
 }
 
 // EnvEntry is one destination — reusing a fact under a different env
@@ -258,18 +258,18 @@ type FactRef struct {
 // facts are never auto-injected because an attach exists. See
 // blueprint.md, "x-gp-entry": "One x-gp-entry is one destination."
 type EnvEntry struct {
-	ID     string      `yaml:"id" json:"id"` // ev_<ulid>
-	Kind   EntryKind   `yaml:"kind" json:"kind"`
-	Key    string      `yaml:"key,omitempty" json:"key,omitempty"`   // Kind=env: the env var name
+	ID     string      `yaml:"id"             json:"id"` // ev_<ulid>
+	Kind   EntryKind   `yaml:"kind"           json:"kind"`
+	Key    string      `yaml:"key,omitempty"  json:"key,omitempty"`  // Kind=env: the env var name
 	Path   string      `yaml:"path,omitempty" json:"path,omitempty"` // Kind=file: relative to the environment's volume folder — never escapes it
-	Source EntrySource `yaml:"source" json:"source"`
+	Source EntrySource `yaml:"source"         json:"source"`
 	// Exposure is a list of service names, OR the single literal
 	// sentinel "all" meaning every service in the environment
 	// (blueprint.md: "exposure: [all] means the entry is written to the
 	// canonical secrets/.env.<environment-id> file"). Multiple explicit
 	// service names create per-service generated files.
 	Exposure []string `yaml:"exposure" json:"exposure"`
-	Secret   bool     `yaml:"secret" json:"secret"` // true -> Source must not be SourceLiteral with a plaintext value visible in desired state
+	Secret   bool     `yaml:"secret"   json:"secret"` // true -> Source must not be SourceLiteral with a plaintext value visible in desired state
 }
 
 // ExposesAll reports whether this entry's Exposure is the "all services"
@@ -300,15 +300,15 @@ const (
 // separate explicit operation and never recalculated by unrelated
 // renames. See mvp.md, "Attach", and blueprint.md, "x-gp-attachments".
 type Attach struct {
-	ID                   string       `yaml:"id" json:"id"` // att_<ulid> — its random tail's first 6 chars disambiguate provisioned names
-	Name                 string       `yaml:"name" json:"name"`
-	BackingProjectID     string       `yaml:"backing_project_id" json:"backing_project_id"`
+	ID                   string       `yaml:"id"                               json:"id"` // att_<ulid> — its random tail's first 6 chars disambiguate provisioned names
+	Name                 string       `yaml:"name"                             json:"name"`
+	BackingProjectID     string       `yaml:"backing_project_id"               json:"backing_project_id"`
 	BackingEnvironmentID string       `yaml:"backing_environment_id,omitempty" json:"backing_environment_id,omitempty"` // always "main" for a backing project, but resolved to an id like any environment
-	BackingServiceID     string       `yaml:"backing_service_id,omitempty" json:"backing_service_id,omitempty"`
-	Services             []string     `yaml:"services" json:"services"` // attaching service name(s) sharing this attach
-	Grants               []Grant      `yaml:"grants,omitempty" json:"grants,omitempty"`
-	Status               AttachStatus `yaml:"status" json:"status"`
-	CreatedAt            time.Time    `yaml:"created_at" json:"created_at"`
+	BackingServiceID     string       `yaml:"backing_service_id,omitempty"     json:"backing_service_id,omitempty"`
+	Services             []string     `yaml:"services"                         json:"services"` // attaching service name(s) sharing this attach
+	Grants               []Grant      `yaml:"grants,omitempty"                 json:"grants,omitempty"`
+	Status               AttachStatus `yaml:"status"                           json:"status"`
+	CreatedAt            time.Time    `yaml:"created_at"                       json:"created_at"`
 }
 
 // Grant lets an attach's role also access another attach's database.
@@ -346,23 +346,23 @@ const (
 // platform-owned kinds. OwnerID is the environment id for environment owners
 // and empty for the singleton platform owner.
 type Component struct {
-	ID                string         `yaml:"id" json:"id"` // cmp_<ulid>
-	Owner             ComponentOwner `yaml:"owner" json:"owner"`
-	OwnerID           string         `yaml:"owner_id,omitempty" json:"owner_id,omitempty"`
-	Kind              ComponentKind  `yaml:"kind" json:"kind"`
-	Enabled           bool           `yaml:"enabled" json:"enabled"`
-	Config            map[string]any `yaml:"config,omitempty" json:"config,omitempty"` // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
+	ID                string         `yaml:"id"                           json:"id"` // cmp_<ulid>
+	Owner             ComponentOwner `yaml:"owner"                        json:"owner"`
+	OwnerID           string         `yaml:"owner_id,omitempty"           json:"owner_id,omitempty"`
+	Kind              ComponentKind  `yaml:"kind"                         json:"kind"`
+	Enabled           bool           `yaml:"enabled"                      json:"enabled"`
+	Config            map[string]any `yaml:"config,omitempty"             json:"config,omitempty"` // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
 	GeneratedServices []string       `yaml:"generated_services,omitempty" json:"generated_services,omitempty"`
-	Healthy           bool           `yaml:"healthy" json:"healthy"`
+	Healthy           bool           `yaml:"healthy"                      json:"healthy"`
 }
 
 // Route is a domain or path routed to a Service. Public routes require
 // an enabled ingress component to be served.
 type Route struct {
-	ID          string `yaml:"id" json:"id"` // rte_<ulid>
+	ID          string `yaml:"id"             json:"id"` // rte_<ulid>
 	Host        string `yaml:"host,omitempty" json:"host,omitempty"`
 	Path        string `yaml:"path,omitempty" json:"path,omitempty"`
-	ServiceName string `yaml:"service" json:"service"`
+	ServiceName string `yaml:"service"        json:"service"`
 	Exposure    string `yaml:"exposure"` // "public" | "internal"
 }
 
@@ -370,7 +370,7 @@ type Route struct {
 // referenced by service mounts; the bind mount is
 // <volume_dir>/<name> and cannot traverse outside it.
 type Volume struct {
-	ID   string `yaml:"id" json:"id"` // vol_<ulid>
+	ID   string `yaml:"id"   json:"id"` // vol_<ulid>
 	Name string `yaml:"name" json:"name"`
 }
 
@@ -389,11 +389,11 @@ const (
 )
 
 type Script struct {
-	ID          string     `yaml:"id" json:"id"` // scr_<ulid>
-	Name        string     `yaml:"name" json:"name"`
+	ID          string     `yaml:"id"      json:"id"` // scr_<ulid>
+	Name        string     `yaml:"name"    json:"name"`
 	ServiceName string     `yaml:"service" json:"service"`
-	Body        string     `yaml:"script" json:"script"` // one line or many
-	When        ScriptHook `yaml:"when" json:"when"`
+	Body        string     `yaml:"script"  json:"script"` // one line or many
+	When        ScriptHook `yaml:"when"    json:"when"`
 }
 
 // BackupSource selects what a backup run backs up. Kind selects the
@@ -408,8 +408,8 @@ const (
 )
 
 type BackupSource struct {
-	ID   string           `yaml:"id" json:"id"` // spt_<ulid>
-	Kind BackupSourceKind `yaml:"kind" json:"kind"`
+	ID   string           `yaml:"id"            json:"id"` // spt_<ulid>
+	Kind BackupSourceKind `yaml:"kind"          json:"kind"`
 	Ref  string           `yaml:"ref,omitempty" json:"ref,omitempty"` // attach id/name or volume name; unused for config
 }
 
@@ -419,12 +419,12 @@ type BackupSource struct {
 // remain addressable until explicit deletion or retention pruning (see
 // blueprint.md, "x-gp-backup").
 type BackupPolicy struct {
-	Enabled     bool           `yaml:"enabled" json:"enabled"`
-	Frequency   string         `yaml:"frequency,omitempty" json:"frequency,omitempty"` // systemd calendar expr
-	Keep        int            `yaml:"keep,omitempty" json:"keep,omitempty"`
-	Encryption  string         `yaml:"encryption,omitempty" json:"encryption,omitempty"` // "age" | "none"
+	Enabled     bool           `yaml:"enabled"                json:"enabled"`
+	Frequency   string         `yaml:"frequency,omitempty"    json:"frequency,omitempty"` // systemd calendar expr
+	Keep        int            `yaml:"keep,omitempty"         json:"keep,omitempty"`
+	Encryption  string         `yaml:"encryption,omitempty"   json:"encryption,omitempty"` // "age" | "none"
 	ConnectorID string         `yaml:"connector_id,omitempty" json:"connector_id,omitempty"`
-	Sources     []BackupSource `yaml:"sources,omitempty" json:"sources,omitempty"`
+	Sources     []BackupSource `yaml:"sources,omitempty"      json:"sources,omitempty"`
 
 	// AgeRecipient is the public half of the CURRENT per-environment
 	// keypair, generated LAZILY on first backup enable. Safe in desired
@@ -432,7 +432,7 @@ type BackupPolicy struct {
 	// records the era it was encrypted under (see RecoveryPoint), so
 	// restore knows which identity it needs.
 	AgeRecipient string `yaml:"age_recipient,omitempty" json:"age_recipient,omitempty"`
-	KeyEra       int    `yaml:"key_era,omitempty" json:"key_era,omitempty"`
+	KeyEra       int    `yaml:"key_era,omitempty"       json:"key_era,omitempty"`
 }
 
 // RecoveryPointStatus tracks the commit sequence: a recovery point is
@@ -447,26 +447,26 @@ const (
 
 // RecoveryPoint is one backup run's immutable output for one source.
 type RecoveryPoint struct {
-	ID         string              `yaml:"id" json:"id"` // rp_<ulid>
-	SourceID   string              `yaml:"source_id" json:"source_id"`
-	SourceKind BackupSourceKind    `yaml:"source_kind" json:"source_kind"`
-	CreatedAt  time.Time           `yaml:"created_at" json:"created_at"`
-	Locator    string              `yaml:"locator" json:"locator"` // e.g. r2://<connector>/<environment-id>/<source-id>/<point-id>
-	Size       int64               `yaml:"size,omitempty" json:"size,omitempty"`
-	Encrypted  bool                `yaml:"encrypted" json:"encrypted"`
+	ID         string              `yaml:"id"                json:"id"` // rp_<ulid>
+	SourceID   string              `yaml:"source_id"         json:"source_id"`
+	SourceKind BackupSourceKind    `yaml:"source_kind"       json:"source_kind"`
+	CreatedAt  time.Time           `yaml:"created_at"        json:"created_at"`
+	Locator    string              `yaml:"locator"           json:"locator"` // e.g. r2://<connector>/<environment-id>/<source-id>/<point-id>
+	Size       int64               `yaml:"size,omitempty"    json:"size,omitempty"`
+	Encrypted  bool                `yaml:"encrypted"         json:"encrypted"`
 	KeyEra     int                 `yaml:"key_era,omitempty" json:"key_era,omitempty"` // which age keypair generation encrypted this point
-	Status     RecoveryPointStatus `yaml:"status" json:"status"`
+	Status     RecoveryPointStatus `yaml:"status"            json:"status"`
 }
 
 // Runner is a GitHub Actions self-hosted runner registration, scoped to
 // a tenant (org) OR a project (repo) — exactly one of TenantID/ProjectID
 // is the owning scope; ProjectID set implies repo-scoped.
 type Runner struct {
-	ID        string   `yaml:"id" json:"id"` // run_<ulid>
-	TenantID  string   `yaml:"tenant_id" json:"tenant_id"`
+	ID        string   `yaml:"id"                   json:"id"` // run_<ulid>
+	TenantID  string   `yaml:"tenant_id"            json:"tenant_id"`
 	ProjectID string   `yaml:"project_id,omitempty" json:"project_id,omitempty"` // set for repo-scoped
-	Labels    []string `yaml:"labels,omitempty" json:"labels,omitempty"`
-	Online    bool     `yaml:"online" json:"online"`
+	Labels    []string `yaml:"labels,omitempty"     json:"labels,omitempty"`
+	Online    bool     `yaml:"online"               json:"online"`
 }
 
 // Secret is project-scoped (with platform fallback) — see mvp.md,
@@ -482,18 +482,18 @@ const (
 )
 
 type Secret struct {
-	ID        string     `yaml:"id" json:"id"` // sec_<ulid>
+	ID        string     `yaml:"id"         json:"id"` // sec_<ulid>
 	ProjectID string     `yaml:"project_id" json:"project_id"`
-	Kind      SecretKind `yaml:"kind" json:"kind"`
-	Ref       string     `yaml:"ref" json:"ref"` // env file name or file path — never an inline value
+	Kind      SecretKind `yaml:"kind"       json:"kind"`
+	Ref       string     `yaml:"ref"        json:"ref"` // env file name or file path — never an inline value
 }
 
 // Connector is a backup destination + credentials owned by exactly one
 // environment. There are no project or platform connectors.
 type Connector struct {
-	ID            string            `yaml:"id" json:"id"` // con_<ulid>
-	EnvironmentID string            `yaml:"environment_id" json:"environment_id"`
-	Kind          string            `yaml:"kind" json:"kind"`                                   // "s3-compatible", later s3/minio/b2
+	ID            string            `yaml:"id"                    json:"id"` // con_<ulid>
+	EnvironmentID string            `yaml:"environment_id"        json:"environment_id"`
+	Kind          string            `yaml:"kind"                  json:"kind"`                  // "s3-compatible", later s3/minio/b2
 	Credentials   map[string]string `yaml:"credentials,omitempty" json:"credentials,omitempty"` // value is either a secret-store ref or a stored-encrypted direct value
 }
 
@@ -529,17 +529,17 @@ const (
 // the current one. See blueprint.md, "x-gp-release" for the full field
 // set (this mirrors it exactly).
 type ReleaseRecord struct {
-	DeploymentID string       `yaml:"deployment_id" json:"deployment_id"` // dep_<ulid>
-	ServiceID    string       `yaml:"service_id" json:"service_id"`
-	Image        string       `yaml:"image" json:"image"`
-	Tag          string       `yaml:"tag" json:"tag"`
-	Digest       string       `yaml:"digest,omitempty" json:"digest,omitempty"`
-	Strategy     Strategy     `yaml:"strategy" json:"strategy"`
-	Slot         string       `yaml:"slot,omitempty" json:"slot,omitempty"` // "blue" | "green"; empty for recreate
-	OnFailure    OnFailure    `yaml:"on_failure" json:"on_failure"`
-	TaskID       string       `yaml:"task_id" json:"task_id"`
-	Status       DeployStatus `yaml:"status" json:"status"`
-	StartedAt    time.Time    `yaml:"started_at" json:"started_at"`
+	DeploymentID string       `yaml:"deployment_id"          json:"deployment_id"` // dep_<ulid>
+	ServiceID    string       `yaml:"service_id"             json:"service_id"`
+	Image        string       `yaml:"image"                  json:"image"`
+	Tag          string       `yaml:"tag"                    json:"tag"`
+	Digest       string       `yaml:"digest,omitempty"       json:"digest,omitempty"`
+	Strategy     Strategy     `yaml:"strategy"               json:"strategy"`
+	Slot         string       `yaml:"slot,omitempty"         json:"slot,omitempty"` // "blue" | "green"; empty for recreate
+	OnFailure    OnFailure    `yaml:"on_failure"             json:"on_failure"`
+	TaskID       string       `yaml:"task_id"                json:"task_id"`
+	Status       DeployStatus `yaml:"status"                 json:"status"`
+	StartedAt    time.Time    `yaml:"started_at"             json:"started_at"`
 	CompletedAt  *time.Time   `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
 }
 
@@ -549,10 +549,10 @@ type ReleaseRecord struct {
 // release records and observed state. See blueprint.md,
 // "x-gp-release-group".
 type ReleaseGroup struct {
-	ID        string    `yaml:"id" json:"id"` // rg_<ulid>
-	Name      string    `yaml:"name" json:"name"`
-	Services  []string  `yaml:"services" json:"services"`
-	Order     []string  `yaml:"order,omitempty" json:"order,omitempty"` // deploy order within the group; defaults to Services order
-	Tag       string    `yaml:"tag,omitempty" json:"tag,omitempty"`
+	ID        string    `yaml:"id"                   json:"id"` // rg_<ulid>
+	Name      string    `yaml:"name"                 json:"name"`
+	Services  []string  `yaml:"services"             json:"services"`
+	Order     []string  `yaml:"order,omitempty"      json:"order,omitempty"` // deploy order within the group; defaults to Services order
+	Tag       string    `yaml:"tag,omitempty"        json:"tag,omitempty"`
 	OnFailure OnFailure `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`
 }
