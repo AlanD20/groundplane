@@ -17,6 +17,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -32,6 +33,7 @@ type Server struct {
 	API    huma.API
 
 	etcdEndpoints []string
+	dispatcher    *Dispatcher
 }
 
 type Options struct {
@@ -53,6 +55,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		Mux:           mux,
 		API:           humago.NewWithPrefix(mux, "/api/v1", config),
 		etcdEndpoints: append([]string(nil), options.EtcdEndpoints...),
+		dispatcher:    NewDispatcher(),
 	}
 	s.routes()
 	s.registerHost()
@@ -192,6 +195,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/tasks", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/tasks/{id}", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/tasks/{id}/events", s.notImplemented) // SSE
+	mux.HandleFunc("POST /api/v1/tasks/{id}/retry", s.retryTask)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/abort", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/activity", s.notImplemented) // documented alias of GET /tasks?workspace=
 
@@ -203,6 +207,24 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("PUT /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)
+}
+
+func (s *Server) retryTask(w http.ResponseWriter, r *http.Request) {
+	task, err := s.dispatcher.Retry(r.Context(), r.PathValue("id"))
+	if err != nil {
+		var domainError *errs.Error
+		if errors.As(err, &domainError) {
+			s.writeProblem(w, domainError)
+			return
+		}
+		s.writeProblem(w, errs.Wrap(errs.CodeInternal, err))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	if err := json.NewEncoder(w).Encode(apiTypes.TaskAccepted{TaskID: task.ID}); err != nil {
+		s.Logger.Error("controller: write retry response", slog.Any("error", err))
+	}
 }
 
 func (s *Server) notImplemented(w http.ResponseWriter, r *http.Request) {

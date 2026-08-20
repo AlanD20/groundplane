@@ -25,8 +25,10 @@ const (
 	CodeRecoveryPointNotFound  Code = "recovery_point.not_found"
 
 	// --- conflict / in-flight ---
-	CodeDeployInFlight Code = "deploy.in_flight"
-	CodeSlugConflict   Code = "slug.conflict"
+	CodeDeployInFlight    Code = "deploy.in_flight"
+	CodeTaskNotRetryable  Code = "task.not_retryable"
+	CodeTaskRetryInFlight Code = "task.retry_in_flight"
+	CodeSlugConflict      Code = "slug.conflict"
 
 	// --- declared-deferred / not-yet-implemented product surface ---
 	CodeStrategyNotImplemented Code = "strategy.not_implemented"
@@ -65,7 +67,7 @@ func classify(code Code) Class {
 		CodeComponentNotFound, CodeRecoveryPointNotFound, CodeRequestNotFound:
 		return ClassNotFound
 
-	case CodeDeployInFlight, CodeSlugConflict:
+	case CodeDeployInFlight, CodeTaskNotRetryable, CodeTaskRetryInFlight, CodeSlugConflict:
 		return ClassConflict
 
 	case CodeRequestMethodNotAllowed:
