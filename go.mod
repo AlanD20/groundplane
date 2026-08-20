@@ -7,6 +7,7 @@ require (
 	github.com/jedib0t/go-pretty/v6 v6.5.9
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/spf13/cobra v1.10.2
+	go.etcd.io/etcd/api/v3 v3.6.13
 	go.etcd.io/etcd/client/v3 v3.6.13
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -14,13 +15,11 @@ require (
 
 require (
 	filippo.io/hpke v0.4.0 // indirect
-	github.com/compose-spec/compose-go/v2 v2.14.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
-	go.etcd.io/etcd/api/v3 v3.6.13 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.13 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
