@@ -27,6 +27,8 @@ const (
 	TaskScript    TaskType = "script"
 	TaskProvision TaskType = "provision"
 	TaskCreate    TaskType = "create"
+	TaskUpdate    TaskType = "update"
+	TaskRemove    TaskType = "remove"
 	TaskStart     TaskType = "start"
 	TaskStop      TaskType = "stop"
 	TaskDestroy   TaskType = "destroy"

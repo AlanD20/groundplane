@@ -747,7 +747,7 @@ type TaskAssignment struct {
 	PlanId           string                 `protobuf:"bytes,4,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`                // the ExecutionPlan this task dispatches — see internal/controller/plan.go
 	PlanHash         string                 `protobuf:"bytes,5,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`          // sha256 of the plan's canonical serialization; the Agent rejects a mismatch against its own projection
 	RenderGeneration int32                  `protobuf:"varint,6,opt,name=render_generation,json=renderGeneration,proto3" json:"render_generation,omitempty"`
-	Type             string                 `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"` // deploy | rollback | backup | restore | attach | detach | run | script | provision | create | start | stop | destroy | rotate
+	Type             string                 `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"` // deploy | rollback | backup | restore | attach | detach | run | script | provision | create | update | remove | start | stop | destroy | rotate
 	Target           string                 `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
 	Params           []byte                 `protobuf:"bytes,9,opt,name=params,proto3" json:"params,omitempty"` // JSON-encoded, typed per task type
 	Steps            []*Step                `protobuf:"bytes,10,rep,name=steps,proto3" json:"steps,omitempty"`
