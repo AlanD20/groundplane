@@ -68,7 +68,7 @@ proto/                agent.proto — the Controller↔Agent gRPC contract,
                       including the ExecutionPlan's plan_id/plan_hash/
                       render_generation carried over the live channel
 
-config/               Example config files (controller.yaml, agent.yaml, …)
+config/               Example Controller and CLI config files
 docs/                 Pointer to the companion docs (kept outside the repo)
 ```
 
