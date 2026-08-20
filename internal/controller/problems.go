@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -15,6 +16,15 @@ func configureProblemResponses() {
 }
 
 func requestProblem(status int, message string, details []error) errs.Problem {
+	for _, detail := range details {
+		var tooLarge *http.MaxBytesError
+		if errors.As(detail, &tooLarge) {
+			status = http.StatusRequestEntityTooLarge
+			message = "request body exceeds route limit"
+			details = nil
+			break
+		}
+	}
 	code := requestProblemCode(status)
 	if len(details) > 0 {
 		messages := make([]string, 0, len(details))

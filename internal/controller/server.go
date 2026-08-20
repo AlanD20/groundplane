@@ -7,13 +7,10 @@
 package controller
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"net"
 	"net/http"
-	"sync"
 
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -34,6 +31,7 @@ type Server struct {
 
 	etcdEndpoints []string
 	dispatcher    *Dispatcher
+	routePolicies map[string]routePolicy
 }
 
 type Options struct {
@@ -56,6 +54,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		API:           humago.NewWithPrefix(mux, "/api/v1", config),
 		etcdEndpoints: append([]string(nil), options.EtcdEndpoints...),
 		dispatcher:    NewDispatcher(),
+		routePolicies: make(map[string]routePolicy),
 	}
 	s.routes()
 	s.registerHost()
@@ -76,36 +75,36 @@ func (s *Server) routes() {
 
 	// tenant — destructive delete is a task (api-cli.md's resource map)
 	mux.HandleFunc("GET /api/v1/tenants", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/tenants", s.notImplemented)
+	s.jsonRoute("POST /api/v1/tenants", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/tenants/{id}", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/tenants/{id}", s.notImplemented)
-	mux.HandleFunc("PATCH /api/v1/tenants/{id}", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/tenants/{id}", s.notImplemented)
+	s.jsonRoute("PATCH /api/v1/tenants/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/tenants/{id}", s.acceptTask)
 
 	// project (?kind=tenant|backing)
 	mux.HandleFunc("GET /api/v1/projects", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/projects", s.notImplemented)
+	s.jsonRoute("POST /api/v1/projects", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/projects/{id}", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/projects/{id}", s.notImplemented)
-	mux.HandleFunc("PATCH /api/v1/projects/{id}", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/projects/{id}", s.notImplemented)
+	s.jsonRoute("PATCH /api/v1/projects/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.acceptTask)
 
 	// environment (?project=)
 	mux.HandleFunc("GET /api/v1/environments", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/environments", s.notImplemented)
+	s.jsonRoute("POST /api/v1/environments", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/environments/{id}", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/environments/{id}", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/environments/{id}/rename", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/environments/{id}/logs", s.notImplemented) // SSE
+	s.jsonRoute("PUT /api/v1/environments/{id}", s.notImplemented)
+	s.jsonRoute("POST /api/v1/environments/{id}/rename", s.notImplemented)
+	s.streamRoute("GET /api/v1/environments/{id}/logs", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.acceptTask)
 
 	// environment singleton sub-resources
 	mux.HandleFunc("GET /api/v1/environments/{id}/backup-policy", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/environments/{id}/backup-policy", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/environments/{id}/backup-policy", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/environments/{id}/restore", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/environments/{id}/rotate-key", s.acceptTask)
+	s.jsonRoute("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
+	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
+	s.jsonRoute("POST /api/v1/environments/{id}/rotate-key", s.acceptTask)
 	mux.HandleFunc("POST /api/v1/environments/{id}/export-key", s.notImplemented)
 	// router: READ-ONLY projection grouping ingress components — GET only,
 	// never PUT (api-cli.md, section 4). Managed entirely through /components.
@@ -113,99 +112,101 @@ func (s *Server) routes() {
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
 	mux.HandleFunc("GET /api/v1/services", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/services", s.notImplemented)
+	s.jsonRoute("POST /api/v1/services", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/services/{id}", s.notImplemented) // includes the release ledger
-	mux.HandleFunc("PUT /api/v1/services/{id}", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/services/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/services/{id}/deploy", s.acceptTask) // {tag?, strategy?, on_failure?}
-	mux.HandleFunc("POST /api/v1/services/{id}/rollback", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/services/{id}/start", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/services/{id}/stop", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/services/{id}/destroy", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/services/{id}/logs", s.notImplemented) // SSE
+	s.jsonRoute("POST /api/v1/services/{id}/deploy", s.acceptTask) // {tag?, strategy?, on_failure?}
+	s.jsonRoute("POST /api/v1/services/{id}/rollback", s.acceptTask)
+	s.jsonRoute("POST /api/v1/services/{id}/start", s.acceptTask)
+	s.jsonRoute("POST /api/v1/services/{id}/stop", s.acceptTask)
+	s.jsonRoute("POST /api/v1/services/{id}/destroy", s.acceptTask)
+	s.streamRoute("GET /api/v1/services/{id}/logs", s.notImplemented)
 
 	// release-group (?environment=)
 	mux.HandleFunc("GET /api/v1/release-groups", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/release-groups", s.notImplemented)
+	s.jsonRoute("POST /api/v1/release-groups", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/release-groups/{id}", s.notImplemented)
-	mux.HandleFunc("PATCH /api/v1/release-groups/{id}", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/release-groups/{id}", s.notImplemented)
+	s.jsonRoute("PATCH /api/v1/release-groups/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/release-groups/{id}", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
+	s.jsonRoute("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
+	s.jsonRoute("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
 
 	// attach — attach provisions (joins the owned external network,
 	// publishes facts), detach deprovisions; both tasks
 	mux.HandleFunc("GET /api/v1/attaches", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/attaches", s.acceptTask) // {service_id, backing_service_id, name?, grants?}
+	s.jsonRoute("POST /api/v1/attaches", s.acceptTask) // {service_id, backing_service_id, name?, grants?}
 	mux.HandleFunc("DELETE /api/v1/attaches/{id}", s.acceptTask)
 
 	// zone / route / volume / entry / script (?environment=) — destructive delete is a task
 	for _, res := range []string{"zones", "routes", "volumes", "entries", "scripts"} {
 		mux.HandleFunc("GET /api/v1/"+res, s.notImplemented)
-		mux.HandleFunc("POST /api/v1/"+res, s.notImplemented)
+		s.jsonRoute("POST /api/v1/"+res, s.notImplemented)
 		mux.HandleFunc("GET /api/v1/"+res+"/{id}", s.notImplemented)
-		mux.HandleFunc("PUT /api/v1/"+res+"/{id}", s.notImplemented)
-		mux.HandleFunc("PATCH /api/v1/"+res+"/{id}", s.notImplemented)
+		s.jsonRoute("PUT /api/v1/"+res+"/{id}", s.notImplemented)
+		s.jsonRoute("PATCH /api/v1/"+res+"/{id}", s.notImplemented)
 		mux.HandleFunc("DELETE /api/v1/"+res+"/{id}", s.acceptTask)
 	}
-	mux.HandleFunc("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
+	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
 	// component (?environment= or ?platform=true) — one resource across both owners
 	mux.HandleFunc("GET /api/v1/components", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/components", s.notImplemented)
+	s.jsonRoute("POST /api/v1/components", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/components/{id}", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/components/{id}", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/components/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/components/{id}", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/components/{id}/enable", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/components/{id}/disable", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/components/{id}/update", s.acceptTask)
+	s.jsonRoute("POST /api/v1/components/{id}/enable", s.acceptTask)
+	s.jsonRoute("POST /api/v1/components/{id}/disable", s.acceptTask)
+	s.jsonRoute("POST /api/v1/components/{id}/update", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/components/{id}/config", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/components/{id}/config", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/components/{id}/config", s.notImplemented)
 
 	// backing-service
 	mux.HandleFunc("GET /api/v1/backing-services", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/backing-services", s.notImplemented)
+	s.jsonRoute("POST /api/v1/backing-services", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/backing-services/{project_id}", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/backing-services/{project_id}", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/backing-services/{project_id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/backing-services/{project_id}", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/backing-services/{project_id}/start", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/backing-services/{project_id}/stop", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/backing-services/{project_id}/destroy", s.acceptTask)
+	s.jsonRoute("POST /api/v1/backing-services/{project_id}/start", s.acceptTask)
+	s.jsonRoute("POST /api/v1/backing-services/{project_id}/stop", s.acceptTask)
+	s.jsonRoute("POST /api/v1/backing-services/{project_id}/destroy", s.acceptTask)
 
 	// secret (?project=) — project-scoped, locked
 	mux.HandleFunc("GET /api/v1/secrets", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/secrets", s.notImplemented)
+	s.jsonRoute("POST /api/v1/secrets", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/secrets/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/secrets/{id}", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/secrets/{id}/value", s.notImplemented) // reveal — Console-only preference, not access control
 
 	// connector (?environment= required) — environment-scoped only
 	mux.HandleFunc("GET /api/v1/connectors", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/connectors", s.notImplemented)
+	s.jsonRoute("POST /api/v1/connectors", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/connectors/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/connectors/{id}", s.acceptTask)
 
 	// runner (?tenant= or ?project=) — org-scoped or repo-scoped
 	mux.HandleFunc("GET /api/v1/runners", s.notImplemented)
-	mux.HandleFunc("POST /api/v1/runners", s.notImplemented) // {tenant_id|project_id, registration_token} — token discarded after registration
+	s.jsonRoute("POST /api/v1/runners", s.notImplemented) // {tenant_id|project_id, registration_token} — token discarded after registration
 	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.notImplemented)
 
 	// task / activity
 	mux.HandleFunc("GET /api/v1/tasks", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/tasks/{id}", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/tasks/{id}/events", s.notImplemented) // SSE
-	mux.HandleFunc("POST /api/v1/tasks/{id}/retry", s.retryTask)
-	mux.HandleFunc("POST /api/v1/tasks/{id}/abort", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/activity", s.notImplemented) // documented alias of GET /tasks?workspace=
+	s.streamRoute("GET /api/v1/tasks/{id}/events", s.notImplemented)
+	s.jsonRoute("POST /api/v1/tasks/{id}/retry", s.retryTask)
+	s.jsonRoute("POST /api/v1/tasks/{id}/abort", s.acceptTask)
+	s.streamRoute("GET /api/v1/activity", s.notImplemented) // JSON task-list alias or SSE through Accept negotiation
 
 	// host / agents
-	mux.HandleFunc("POST /api/v1/agents", s.acceptTask)
+	s.jsonRoute("POST /api/v1/agents", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/agents", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/agents/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/agents/{id}", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.notImplemented)
-	mux.HandleFunc("PUT /api/v1/agents/{id}/config", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/agents/{id}/config", s.notImplemented)
+	// The signed update transport still needs its own independent limit
+	// decision; it must never inherit the ordinary JSON or Blueprint ceiling.
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)
 }
 
@@ -251,68 +252,4 @@ func (s *Server) writeProblem(w http.ResponseWriter, err *errs.Error) {
 	if encodeErr := json.NewEncoder(w).Encode(err.ToProblem()); encodeErr != nil {
 		s.Logger.Error("controller: write problem response", slog.Any("error", encodeErr))
 	}
-}
-
-type readyListener struct {
-	net.Listener
-	ready chan struct{}
-	once  sync.Once
-}
-
-func (l *readyListener) Accept() (net.Conn, error) {
-	l.once.Do(func() { close(l.ready) })
-	return l.Listener.Accept()
-}
-
-// Serve starts the HTTP server and blocks until ctx is cancelled.
-func (s *Server) Serve(ctx context.Context, addr string) error {
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return errs.Wrap(errs.CodeInternal, err)
-	}
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: s.requestHandler(),
-		BaseContext: func(net.Listener) context.Context {
-			return ctx
-		},
-	}
-	trackedListener := &readyListener{Listener: listener, ready: make(chan struct{})}
-	serveErr := make(chan error, 1)
-	go func() {
-		serveErr <- srv.Serve(trackedListener)
-	}()
-	s.Logger.Info("controller: listening", "addr", addr)
-
-	// net/http tracks the listener before its first Accept call. Wait for
-	// that point so cancellation cannot race with Serve registration and
-	// leave an untracked listener blocked forever.
-	select {
-	case <-trackedListener.ready:
-	case err := <-serveErr:
-		return classifyServeError(err)
-	}
-
-	select {
-	case err := <-serveErr:
-		return classifyServeError(err)
-	case <-ctx.Done():
-		closeErr := srv.Close()
-		err := <-serveErr
-		if closeErr != nil {
-			return errs.Wrap(errs.CodeInternal, closeErr)
-		}
-		classifiedErr := classifyServeError(err)
-		if classifiedErr != nil && !errors.Is(classifiedErr, http.ErrServerClosed) {
-			return classifiedErr
-		}
-		return nil
-	}
-}
-
-func classifyServeError(err error) error {
-	if err == nil || errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return errs.Wrap(errs.CodeInternal, err)
 }
