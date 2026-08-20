@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const DefaultControllerConfigPath = "/etc/groundplane/controller.yaml"
@@ -29,8 +31,22 @@ const DefaultControllerConfigPath = "/etc/groundplane/controller.yaml"
 type Controller struct {
 	Config config.ControllerConfig
 	Logger *slog.Logger
-	Server *controller.Server
-	Sched  *controller.Scheduler
+
+	server    controllerServer
+	scheduler controllerScheduler
+	store     ownedStore
+}
+
+type controllerServer interface {
+	Serve(ctx context.Context, addr string) error
+}
+
+type controllerScheduler interface {
+	Run(ctx context.Context)
+}
+
+type ownedStore interface {
+	Close() error
 }
 
 // NewController performs every piece of this binary's DI wiring, once,
@@ -52,6 +68,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
+	}
+	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
+	if err != nil {
+		return nil, fmt.Errorf("controller: parse scheduler tick interval: %w", err)
+	}
+	if tick <= 0 {
+		return nil, fmt.Errorf("controller: scheduler tick interval must be positive")
 	}
 
 	level, err := logging.ResolveLevel(false, false, os.Getenv("GROUNDPLANE_LOG_LEVEL"), cfg.Log.Level)
@@ -76,19 +99,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		EtcdEndpoints: cfg.Etcd.Endpoints,
 	})
 
-	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
-	if err != nil {
-		return nil, fmt.Errorf("controller: parse scheduler tick interval: %w", err)
-	}
-	if tick <= 0 {
-		return nil, fmt.Errorf("controller: scheduler tick interval must be positive")
-	}
-
 	return &Controller{
-		Config: cfg,
-		Logger: logger,
-		Server: srv,
-		Sched:  controller.NewScheduler(srv, tick),
+		Config:    cfg,
+		Logger:    logger,
+		server:    srv,
+		scheduler: controller.NewScheduler(srv, tick),
+		store:     store,
 	}, nil
 }
 
@@ -111,12 +127,35 @@ func registerComponents() {
 	agentcomponent.Register()
 }
 
-// Run starts the scheduler and blocks serving HTTP until ctx is
-// cancelled.
+// Run starts the scheduler and blocks serving HTTP until ctx is cancelled.
+// Once serving stops, Run joins the scheduler before closing the etcd Store
+// that NewController created.
 func (c *Controller) Run(ctx context.Context) error {
-	go c.Sched.Run(ctx)
-	if err := c.Server.Serve(ctx, c.Config.Listen.HTTP); err != nil {
-		return fmt.Errorf("controller: serve: %w", err)
+	runCtx, cancel := context.WithCancel(ctx)
+	schedulerDone := make(chan struct{})
+	go func() {
+		defer close(schedulerDone)
+		c.scheduler.Run(runCtx)
+	}()
+
+	serveErr := c.server.Serve(runCtx, c.Config.Listen.HTTP)
+	cancel()
+	<-schedulerDone
+
+	closeErr := c.store.Close()
+	joined := errors.Join(
+		wrapControllerRunError("serve", serveErr),
+		wrapControllerRunError("close etcd", closeErr),
+	)
+	if joined != nil {
+		return errs.Wrap(errs.CodeInternal, joined)
 	}
 	return nil
+}
+
+func wrapControllerRunError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("controller: %s: %w", operation, err)
 }

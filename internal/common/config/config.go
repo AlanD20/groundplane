@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -122,7 +123,7 @@ func (c ControllerConfig) Validate() error {
 	if !strings.HasPrefix(c.Etcd.KeyPrefix, "/") || !strings.HasSuffix(c.Etcd.KeyPrefix, "/") {
 		return fmt.Errorf("config: controller etcd.key_prefix must begin and end with /")
 	}
-	if err := validateAddress("controller listen.http", c.Listen.HTTP); err != nil {
+	if err := validateHumanHTTPAddress("controller listen.http", c.Listen.HTTP); err != nil {
 		return err
 	}
 	if err := validateAddress("controller listen.grpc", c.Listen.GRPC); err != nil {
@@ -173,6 +174,21 @@ func (c CLIConfig) Validate() error {
 func validateAddress(label, address string) error {
 	if _, _, err := net.SplitHostPort(address); err != nil {
 		return fmt.Errorf("config: %s must be host:port: %w", label, err)
+	}
+	return nil
+}
+
+func validateHumanHTTPAddress(label, address string) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("config: %s must be host:port: %w", label, err)
+	}
+	if host != "127.0.0.1" {
+		return fmt.Errorf("config: %s host must be exactly 127.0.0.1", label)
+	}
+	portNumber, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || portNumber == 0 {
+		return fmt.Errorf("config: %s port must be an integer from 1 through 65535", label)
 	}
 	return nil
 }
