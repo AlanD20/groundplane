@@ -139,9 +139,9 @@ type Router struct {
 }
 
 type ComponentProjection struct {
-	ComponentID    string `json:"component_id"`
-	Enabled    bool   `json:"enabled"`
-	PinnedIPv4 string `json:"pinned_ipv4,omitempty"`
+	ComponentID string `json:"component_id"`
+	Enabled     bool   `json:"enabled"`
+	PinnedIPv4  string `json:"pinned_ipv4,omitempty"`
 }
 
 type BackupPolicy struct {
@@ -269,10 +269,6 @@ type RunnerCreateRequest struct {
 	TenantID          string `json:"tenant_id,omitempty"`
 	ProjectID         string `json:"project_id,omitempty"`
 	RegistrationToken string `json:"registration_token"` // discarded by the Controller after registration
-}
-
-type AgentPairRequest struct {
-	JoinToken string `json:"join_token"`
 }
 
 // --- Task / activity ---
