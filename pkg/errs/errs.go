@@ -18,12 +18,15 @@ import (
 type Class string
 
 const (
-	ClassValidation       Class = "validation"
-	ClassNotFound         Class = "not_found"
-	ClassConflict         Class = "conflict"
-	ClassRetryable        Class = "retryable"
-	ClassNeedsInteraction Class = "needs_interaction"
-	ClassInternal         Class = "internal"
+	ClassValidation           Class = "validation"
+	ClassNotFound             Class = "not_found"
+	ClassConflict             Class = "conflict"
+	ClassRetryable            Class = "retryable"
+	ClassNeedsInteraction     Class = "needs_interaction"
+	ClassMethodNotAllowed     Class = "method_not_allowed"
+	ClassNotAcceptable        Class = "not_acceptable"
+	ClassUnsupportedMediaType Class = "unsupported_media_type"
+	ClassInternal             Class = "internal"
 )
 
 // Code is a stable, machine-readable error code — the RFC 7807 "code"
@@ -132,8 +135,14 @@ func (e *Error) HTTPStatus() int {
 		return 400
 	case ClassNotFound:
 		return 404
+	case ClassMethodNotAllowed:
+		return 405
+	case ClassNotAcceptable:
+		return 406
 	case ClassConflict, ClassNeedsInteraction:
 		return 409
+	case ClassUnsupportedMediaType:
+		return 415
 	case ClassRetryable:
 		return 503
 	default:

@@ -24,7 +24,7 @@ const (
 	CodeRunnerNotFound         Code = "runner.not_found"
 	CodeAgentNotFound          Code = "agent.not_found"
 	CodeReleaseGroupNotFound   Code = "release_group.not_found"
-	CodeComponentNotFound          Code = "component.not_found"
+	CodeComponentNotFound      Code = "component.not_found"
 	CodeRecoveryPointNotFound  Code = "recovery_point.not_found"
 
 	// --- conflict / in-flight ---
@@ -41,6 +41,16 @@ const (
 	CodeScopeUnauthorized     Code = "scope.unauthorized"      // cross-tenant access attempt
 	CodeConnectorScopeInvalid Code = "connector.scope_invalid" // a connector without exactly one environment owner was attempted
 
+	// --- framework request parsing and transport ---
+	// These strings are the request-error catalog locked by api-cli.md.
+	// The framework supplies the exact HTTP status for these failures;
+	// requestProblem preserves it rather than deriving a replacement.
+	CodeRequestNotFound             Code = "request.not_found"
+	CodeRequestMethodNotAllowed     Code = "request.method_not_allowed"
+	CodeRequestNotAcceptable        Code = "request.not_acceptable"
+	CodeRequestUnsupportedMediaType Code = "request.unsupported_media_type"
+	CodeRequestFailed               Code = "request.failed"
+
 	// --- scaffolding / catch-all ---
 	CodeNotImplemented Code = "not_implemented" // this boilerplate's stub handlers; HTTPStatus() special-cases it to 501
 	CodeInternal       Code = "internal"
@@ -55,11 +65,20 @@ func classify(code Code) Class {
 	case CodeTenantNotFound, CodeProjectNotFound, CodeEnvironmentNotFound, CodeServiceNotFound,
 		CodeBackingServiceNotFound, CodeAttachNotFound, CodeTaskNotFound, CodeSecretNotFound,
 		CodeConnectorNotFound, CodeRunnerNotFound, CodeAgentNotFound, CodeReleaseGroupNotFound,
-		CodeComponentNotFound, CodeRecoveryPointNotFound:
+		CodeComponentNotFound, CodeRecoveryPointNotFound, CodeRequestNotFound:
 		return ClassNotFound
 
 	case CodeDeployInFlight, CodeSlugConflict:
 		return ClassConflict
+
+	case CodeRequestMethodNotAllowed:
+		return ClassMethodNotAllowed
+
+	case CodeRequestNotAcceptable:
+		return ClassNotAcceptable
+
+	case CodeRequestUnsupportedMediaType:
+		return ClassUnsupportedMediaType
 
 	case CodeStrategyNotImplemented, CodeRotationNotImplemented, CodeAdapterManualOnly,
 		CodeValidationFailed, CodeScopeUnauthorized, CodeConnectorScopeInvalid:
@@ -68,7 +87,7 @@ func classify(code Code) Class {
 	case CodeTaskTimedOut:
 		return ClassRetryable
 
-	case CodeNotImplemented, CodeInternal:
+	case CodeNotImplemented, CodeInternal, CodeRequestFailed:
 		return ClassInternal
 
 	default:

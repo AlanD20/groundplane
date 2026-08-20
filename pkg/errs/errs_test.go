@@ -22,6 +22,11 @@ func TestNew_DerivesClassAndOpFromCode(t *testing.T) {
 		{CodeDeployInFlight, ClassConflict, "deploy_in_flight"}, // flat code -> Op is the whole code
 		{CodeStrategyNotImplemented, ClassValidation, "strategy_not_implemented"},
 		{CodeTaskTimedOut, ClassRetryable, "task"},
+		{CodeRequestNotFound, ClassNotFound, "request"},
+		{CodeRequestMethodNotAllowed, ClassMethodNotAllowed, "request"},
+		{CodeRequestNotAcceptable, ClassNotAcceptable, "request"},
+		{CodeRequestUnsupportedMediaType, ClassUnsupportedMediaType, "request"},
+		{CodeRequestFailed, ClassInternal, "request"},
 	}
 	for _, c := range cases {
 		e := New(c.code, "message")
@@ -51,12 +56,15 @@ func TestHTTPStatus_DerivesFromClass(t *testing.T) {
 	// mapping is the ONLY place status codes are decided (the Controller
 	// never special-cases a Code directly).
 	cases := map[Class]int{
-		ClassValidation:       400,
-		ClassNotFound:         404,
-		ClassConflict:         409,
-		ClassNeedsInteraction: 409,
-		ClassRetryable:        503,
-		ClassInternal:         500,
+		ClassValidation:           400,
+		ClassNotFound:             404,
+		ClassMethodNotAllowed:     405,
+		ClassNotAcceptable:        406,
+		ClassConflict:             409,
+		ClassNeedsInteraction:     409,
+		ClassUnsupportedMediaType: 415,
+		ClassRetryable:            503,
+		ClassInternal:             500,
 	}
 	for class, want := range cases {
 		e := &Error{Class: class}

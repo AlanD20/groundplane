@@ -31,27 +31,27 @@ func requestProblem(status int, message string, details []error) errs.Problem {
 	}
 
 	return errs.Problem{
-		Type:   problemTypeBase + strings.ReplaceAll(code, ".", "/"),
+		Type:   problemTypeBase + strings.ReplaceAll(string(code), ".", "/"),
 		Title:  http.StatusText(status),
 		Status: status,
 		Detail: message,
-		Code:   errs.Code(code),
+		Code:   code,
 	}
 }
 
-func requestProblemCode(status int) string {
+func requestProblemCode(status int) errs.Code {
 	switch status {
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
-		return "validation.failed"
+		return errs.CodeValidationFailed
 	case http.StatusNotFound:
-		return "request.not_found"
+		return errs.CodeRequestNotFound
 	case http.StatusMethodNotAllowed:
-		return "request.method_not_allowed"
+		return errs.CodeRequestMethodNotAllowed
 	case http.StatusNotAcceptable:
-		return "request.not_acceptable"
+		return errs.CodeRequestNotAcceptable
 	case http.StatusUnsupportedMediaType:
-		return "request.unsupported_media_type"
+		return errs.CodeRequestUnsupportedMediaType
 	default:
-		return "request.failed"
+		return errs.CodeRequestFailed
 	}
 }
