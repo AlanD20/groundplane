@@ -20,7 +20,8 @@ func runList(cmd *cobra.Command, path string, query map[string]string) error {
 		Items      []map[string]any `json:"items" yaml:"items"`
 		NextCursor string           `json:"next_cursor,omitempty" yaml:"next_cursor,omitempty"`
 	}
-	if err := app.Client.Do(cmd.Context(), "GET", path, query, nil, &page); err != nil {
+	request := app.Client.NewRequest("GET", path, query, nil)
+	if err := app.Client.Do(cmd.Context(), request, &page); err != nil {
 		return err
 	}
 	headers, rows := tabulateVia(app, page.Items)
@@ -30,7 +31,8 @@ func runList(cmd *cobra.Command, path string, query map[string]string) error {
 func runShow(cmd *cobra.Command, path string) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	if err := app.Client.Do(cmd.Context(), "GET", path, nil, nil, &item); err != nil {
+	request := app.Client.NewRequest("GET", path, nil, nil)
+	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
 	fields, values := fieldsOfVia(item)
@@ -43,7 +45,8 @@ func runShow(cmd *cobra.Command, path string) error {
 func runCreate(cmd *cobra.Command, path string, body any) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	if err := app.Client.Do(cmd.Context(), "POST", path, nil, body, &item); err != nil {
+	request := app.Client.NewRequest("POST", path, nil, body)
+	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
 	fields, values := fieldsOfVia(item)
@@ -53,7 +56,8 @@ func runCreate(cmd *cobra.Command, path string, body any) error {
 func runEdit(cmd *cobra.Command, path string, body any) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	if err := app.Client.Do(cmd.Context(), "PUT", path, nil, body, &item); err != nil {
+	request := app.Client.NewRequest("PUT", path, nil, body)
+	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
 	fields, values := fieldsOfVia(item)
@@ -67,7 +71,8 @@ func runEdit(cmd *cobra.Command, path string, body any) error {
 func runPatch(cmd *cobra.Command, path string, body any) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	if err := app.Client.Do(cmd.Context(), "PATCH", path, nil, body, &item); err != nil {
+	request := app.Client.NewRequest("PATCH", path, nil, body)
+	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
 	fields, values := fieldsOfVia(item)
@@ -88,7 +93,8 @@ func changedStringFields(cmd *cobra.Command, values map[string]string) map[strin
 
 func runRemove(cmd *cobra.Command, path string) error {
 	app := fromContext(cmd)
-	if err := app.Client.Do(cmd.Context(), "DELETE", path, nil, nil, nil); err != nil {
+	request := app.Client.NewRequest("DELETE", path, nil, nil)
+	if err := app.Client.Do(cmd.Context(), request, nil); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintln(cmd.OutOrStdout(), "removed")
@@ -122,7 +128,8 @@ func runActionMethod(cmd *cobra.Command, method, path string, body any) error {
 	var res struct {
 		TaskID string `json:"task_id"`
 	}
-	if err := app.Client.Do(cmd.Context(), method, path, nil, body, &res); err != nil {
+	request := app.Client.NewRequest(method, path, nil, body)
+	if err := app.Client.Do(cmd.Context(), request, &res); err != nil {
 		return err
 	}
 	if res.TaskID == "" {
@@ -137,7 +144,8 @@ func runDeleteAction(cmd *cobra.Command, path string) error {
 	var res struct {
 		TaskID string `json:"task_id"`
 	}
-	if err := app.Client.Do(cmd.Context(), "DELETE", path, nil, nil, &res); err != nil {
+	request := app.Client.NewRequest("DELETE", path, nil, nil)
+	if err := app.Client.Do(cmd.Context(), request, &res); err != nil {
 		return err
 	}
 	if res.TaskID == "" {
@@ -152,7 +160,8 @@ func runExportKey(cmd *cobra.Command, path string) error {
 	var res struct {
 		Value string `json:"value"`
 	}
-	if err := app.Client.Do(cmd.Context(), "POST", path, nil, nil, &res); err != nil {
+	request := app.Client.NewRequest("POST", path, nil, nil)
+	if err := app.Client.Do(cmd.Context(), request, &res); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintln(cmd.OutOrStdout(), res.Value)

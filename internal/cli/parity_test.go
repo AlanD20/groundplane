@@ -111,6 +111,17 @@ func exactRequestServer(t *testing.T, method, path, body string, status int, res
 		if request.URL.RequestURI() != path {
 			t.Errorf("path = %q, want %q", request.URL.RequestURI(), path)
 		}
+		key := request.Header.Get("Idempotency-Key")
+		switch method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			if key == "" {
+				t.Error("mutation request is missing Idempotency-Key")
+			}
+		default:
+			if key != "" {
+				t.Errorf("safe request Idempotency-Key = %q, want empty", key)
+			}
+		}
 
 		gotBody, err := io.ReadAll(request.Body)
 		if err != nil {

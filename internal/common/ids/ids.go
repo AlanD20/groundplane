@@ -46,15 +46,22 @@ const (
 	KindNetwork        Kind = "net" // blueprint.md: "network zone maps directly to a Compose network"; x-gp-network id: net_01J...
 	KindBackingService Kind = "bks"
 	KindReleaseGroup   Kind = "rg"
-	KindComponent      Kind = "component"
+	KindComponent      Kind = "cmp"
 )
+
+// NewULID returns a fresh raw ULID with no kind prefix. It is used where a
+// sortable unique token is required but the value is not a durable domain id,
+// such as a human mutation's Idempotency-Key.
+func NewULID() string {
+	monotonicMu.Lock()
+	defer monotonicMu.Unlock()
+	return ulid.MustNew(ulid.Timestamp(time.Now()), monotonicEntropy).String()
+}
 
 // New returns a fresh id: <kind>_<ULID>, using crypto/rand entropy and
 // the current time — the normal, non-fixture path.
 func New(kind Kind) string {
-	monotonicMu.Lock()
-	defer monotonicMu.Unlock()
-	return string(kind) + "_" + ulid.MustNew(ulid.Timestamp(time.Now()), monotonicEntropy).String()
+	return string(kind) + "_" + NewULID()
 }
 
 // NewAt is New with an explicit timestamp — for mock fixtures, which use

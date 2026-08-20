@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/oklog/ulid/v2"
 )
 
 // L0 — pure function tests. See docs/standards.md, section 13.
@@ -25,6 +27,71 @@ func TestNew_HasKindPrefixAndCorrectShape(t *testing.T) {
 	}
 	if strings.Contains(parts[1], "-") {
 		t.Error("ULID body must not contain hyphens")
+	}
+}
+
+func TestKindsHaveCanonicalPrefixesAndShape(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		kind   Kind
+		prefix string
+	}{
+		{KindTenant, "tnt"},
+		{KindProject, "prj"},
+		{KindEnvironment, "env"},
+		{KindService, "svc"},
+		{KindDeployment, "dep"},
+		{KindEnvEntry, "ev"},
+		{KindVolume, "vol"},
+		{KindAttach, "att"},
+		{KindRoute, "rte"},
+		{KindSecret, "sec"},
+		{KindConnector, "con"},
+		{KindRunner, "run"},
+		{KindScript, "scr"},
+		{KindBackupSource, "spt"},
+		{KindRecoveryPoint, "rp"},
+		{KindTask, "task"},
+		{KindOperation, "op"},
+		{KindPlan, "plan"},
+		{KindAgent, "agt"},
+		{KindNetwork, "net"},
+		{KindBackingService, "bks"},
+		{KindReleaseGroup, "rg"},
+		{KindComponent, "cmp"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.prefix, func(t *testing.T) {
+			if string(test.kind) != test.prefix {
+				t.Fatalf("kind prefix = %q, want %q", test.kind, test.prefix)
+			}
+			id := New(test.kind)
+			wantPrefix := test.prefix + "_"
+			if !strings.HasPrefix(id, wantPrefix) {
+				t.Fatalf("id = %q, want prefix %q", id, wantPrefix)
+			}
+			body := strings.TrimPrefix(id, wantPrefix)
+			if len(body) != 26 {
+				t.Fatalf("ULID body length = %d, want 26", len(body))
+			}
+			if _, err := ulid.ParseStrict(body); err != nil {
+				t.Fatalf("ULID body %q is invalid: %v", body, err)
+			}
+		})
+	}
+}
+
+func TestNewULIDReturnsRawULID(t *testing.T) {
+	t.Parallel()
+
+	id := NewULID()
+	if len(id) != 26 {
+		t.Fatalf("NewULID() length = %d, want 26", len(id))
+	}
+	if _, err := ulid.ParseStrict(id); err != nil {
+		t.Fatalf("NewULID() = %q, want valid ULID: %v", id, err)
 	}
 }
 

@@ -22,11 +22,27 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+const idempotencyKeyHeader = "Idempotency-Key"
+
+var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
+
+// Request is one transport request for one human intent. Reusing this value
+// preserves its Idempotency-Key; Do never generates or replaces the key.
+type Request struct {
+	Method         string
+	Path           string
+	Query          map[string]string
+	Body           any
+	IdempotencyKey string
+}
 
 type Client struct {
 	BaseURL       string
@@ -42,23 +58,42 @@ func New(baseURL string) *Client {
 	}
 }
 
-// Do sends method+path (BaseURL-relative, e.g. "/api/v1/services") with
-// optional query params and a JSON body, and decodes a JSON response
-// into out (nil to discard the body). body/out are `any` here for the
+// NewRequest creates one reusable request. Human mutation methods receive one
+// raw ULID at intent construction; safe methods never receive a key.
+func (c *Client) NewRequest(method, path string, query map[string]string, body any) Request {
+	request := Request{
+		Method: strings.ToUpper(method),
+		Path:   path,
+		Query:  query,
+		Body:   body,
+	}
+	if requiresIdempotencyKey(request.Method) {
+		request.IdempotencyKey = ids.NewULID()
+	}
+	return request
+}
+
+// Do sends a BaseURL-relative request with optional query params and a JSON
+// body, and decodes exactly one JSON response document into out (nil to
+// discard the body). Request.Body/out are `any` here for the
 // same reason json.Marshal/json.Decoder.Decode are — this is a generic
 // transport helper, not a model field.
 //
 // A non-2xx response is decoded as RFC 7807 problem+json and returned as
 // an *errs.Error carrying the same Code the Controller sent — see
 // api-cli.md, "Errors".
-func (c *Client) Do(ctx context.Context, method, path string, query map[string]string, body any, out any) error {
-	u, err := url.Parse(c.BaseURL + path)
+func (c *Client) Do(ctx context.Context, request Request, out any) error {
+	if err := validateIdempotencyKey(request); err != nil {
+		return err
+	}
+
+	u, err := url.Parse(c.BaseURL + request.Path)
 	if err != nil {
 		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: bad url: %w", err))
 	}
-	if len(query) > 0 {
+	if len(request.Query) > 0 {
 		q := u.Query()
-		for k, v := range query {
+		for k, v := range request.Query {
 			if v != "" {
 				q.Set(k, v)
 			}
@@ -67,21 +102,24 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 	}
 
 	var reader io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
+	if request.Body != nil {
+		b, err := json.Marshal(request.Body)
 		if err != nil {
 			return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: marshal body: %w", err))
 		}
 		reader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
+	req, err := http.NewRequestWithContext(ctx, request.Method, u.String(), reader)
 	if err != nil {
 		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: build request: %w", err))
 	}
 	req.Header.Set("Accept", "application/json")
-	if body != nil {
+	if request.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if request.IdempotencyKey != "" {
+		req.Header.Set(idempotencyKeyHeader, request.IdempotencyKey)
 	}
 
 	resp, err := c.HTTP.Do(req)
@@ -89,19 +127,54 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 		if contextErr := ctx.Err(); contextErr != nil {
 			return contextErr
 		}
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: %s %s: %w (is the Controller running? --host / GROUNDPLANE_HOST)", method, path, err))
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: %s %s: %w (is the Controller running? --host / GROUNDPLANE_HOST)", request.Method, request.Path, err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return responseProblem(method, path, resp)
+		return responseProblem(request.Method, request.Path, resp)
 	}
 
-	if out == nil || resp.StatusCode == http.StatusNoContent {
+	if out == nil {
 		return nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil && err != io.EOF {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: decode response: %w", err))
+	if resp.StatusCode == http.StatusNoContent {
+		return errs.Newf(errs.CodeInternal, "apiclient: %s %s returned 204 with an output target", request.Method, request.Path)
+	}
+	return decodeSingleJSON(request.Method, request.Path, resp.Body, out)
+}
+
+func requiresIdempotencyKey(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateIdempotencyKey(request Request) error {
+	required := requiresIdempotencyKey(request.Method)
+	if required && !idempotencyKeyPattern.MatchString(request.IdempotencyKey) {
+		return errs.Newf(errs.CodeInternal, "apiclient: %s %s has an invalid Idempotency-Key", request.Method, request.Path)
+	}
+	if !required && request.IdempotencyKey != "" {
+		return errs.Newf(errs.CodeInternal, "apiclient: safe method %s must not carry an Idempotency-Key", request.Method)
+	}
+	return nil
+}
+
+func decodeSingleJSON(method, path string, body io.Reader, out any) error {
+	decoder := json.NewDecoder(body)
+	if err := decoder.Decode(out); err != nil {
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: %s %s decode response: %w", method, path, err))
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errs.Newf(errs.CodeInternal, "apiclient: %s %s returned multiple JSON documents", method, path)
+		}
+		return errs.Wrap(errs.CodeInternal, fmt.Errorf("apiclient: %s %s decode trailing response: %w", method, path, err))
 	}
 	return nil
 }
