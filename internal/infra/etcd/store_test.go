@@ -5,12 +5,16 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestStoreScopesCRUDAndRangeKeys(t *testing.T) {
@@ -331,22 +335,78 @@ func TestStoreTransactScopesAtomicCompareAndMutations(t *testing.T) {
 	}
 }
 
-func TestStorePreservesContextErrors(t *testing.T) {
-	// Rationale: callers must be able to detect cancellation through the one
-	// Groundplane error wrapper rather than losing context propagation.
-	backend := &fakeClient{getError: context.DeadlineExceeded}
-	store, err := newStore(backend, "/groundplane/")
+func TestStoreSeparatesCallerContextFromBackendStatus(t *testing.T) {
+	// Rationale: only the caller context decides caller cancellation; an
+	// independent gRPC outage is retryable storage state, while a plain
+	// dependency context sentinel has no trusted transport classification.
+	for _, test := range []struct {
+		name    string
+		ctx     func() context.Context
+		backend error
+		want    error
+	}{
+		{
+			name: "caller canceled",
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+			backend: status.Error(codes.Unavailable, "backend secret"),
+			want:    context.Canceled,
+		},
+		{
+			name: "caller deadline",
+			ctx: func() context.Context {
+				ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+				t.Cleanup(cancel)
+				return ctx
+			},
+			backend: status.Error(codes.Unavailable, "backend secret"),
+			want:    context.DeadlineExceeded,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store, err := newStore(&fakeClient{getError: test.backend}, "/groundplane/")
+			if err != nil {
+				t.Fatalf("newStore() error = %v", err)
+			}
+			_, err = store.Get(test.ctx(), "/tasks/task_1")
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Get() error = %v, want %v", err, test.want)
+			}
+			var domainError *errs.Error
+			if errors.As(err, &domainError) {
+				t.Fatalf("caller context was wrapped as %#v", domainError)
+			}
+		})
+	}
+
+	for _, backend := range []error{
+		status.Error(codes.Unavailable, "password=secret"),
+		status.Error(codes.DeadlineExceeded, "password=secret"),
+	} {
+		store, err := newStore(&fakeClient{getError: backend}, "/groundplane/")
+		if err != nil {
+			t.Fatalf("newStore() error = %v", err)
+		}
+		_, err = store.Get(context.Background(), "/tasks/task_1")
+		if !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) || !errors.Is(err, backend) {
+			t.Fatalf("backend error = %v", err)
+		}
+		var domainError *errs.Error
+		if !errors.As(err, &domainError) || strings.Contains(domainError.ToProblem().Detail, "secret") {
+			t.Fatalf("backend problem = %#v", domainError)
+		}
+	}
+
+	store, err := newStore(&fakeClient{getError: context.DeadlineExceeded}, "/groundplane/")
 	if err != nil {
 		t.Fatalf("newStore() error = %v", err)
 	}
-
 	_, err = store.Get(context.Background(), "/tasks/task_1")
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Get() error = %v; want deadline in error chain", err)
-	}
-	var groundplaneError *errs.Error
-	if !errors.As(err, &groundplaneError) || groundplaneError.Code != errs.CodeStorageUnavailable {
-		t.Fatalf("Get() error = %#v; want storage.unavailable Groundplane error", err)
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("plain dependency deadline = %v, want internal", err)
 	}
 }
 

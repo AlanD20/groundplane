@@ -13,7 +13,7 @@ func (s *Server) requestHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if requiresIdempotencyKey(r) && !hasValidIdempotencyKey(r.Header.Values(idempotencyKeyHeader)) {
 			s.writeProblem(w, errs.New(
-				errs.CodeValidationFailed,
+				errs.KindValidationFailed,
 				"Idempotency-Key must occur exactly once and contain 16 to 128 characters matching [A-Za-z0-9._:-]+",
 			))
 			return

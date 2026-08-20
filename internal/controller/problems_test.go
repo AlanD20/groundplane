@@ -1,48 +1,69 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestRequestProblemCodeUsesPublicCatalog(t *testing.T) {
-	// Rationale: framework failures must use the same stable public code
-	// catalog as domain failures while preserving framework HTTP status.
+// Rationale: framework statuses must select one closed Kind, including the
+// deliberate 400/422 and request-failure distinctions.
+func TestRequestProblemUsesClosedKinds(t *testing.T) {
 	tests := []struct {
-		status int
-		code   errs.Code
+		status     int
+		wantKind   errs.Kind
+		wantCode   errs.Code
+		wantStatus int
 	}{
-		{http.StatusBadRequest, errs.CodeValidationFailed},
-		{http.StatusUnprocessableEntity, errs.CodeValidationFailed},
-		{http.StatusNotFound, errs.CodeRequestNotFound},
-		{http.StatusMethodNotAllowed, errs.CodeRequestMethodNotAllowed},
-		{http.StatusNotAcceptable, errs.CodeRequestNotAcceptable},
-		{http.StatusUnsupportedMediaType, errs.CodeRequestUnsupportedMediaType},
-		{http.StatusTeapot, errs.CodeRequestFailed},
+		{http.StatusBadRequest, errs.KindMalformedRequest, errs.CodeValidationFailed, 400},
+		{http.StatusUnprocessableEntity, errs.KindValidationFailed, errs.CodeValidationFailed, 422},
+		{http.StatusNotFound, errs.KindRequestNotFound, errs.CodeRequestNotFound, 404},
+		{http.StatusMethodNotAllowed, errs.KindRequestMethodNotAllowed, errs.CodeRequestMethodNotAllowed, 405},
+		{http.StatusNotAcceptable, errs.KindRequestNotAcceptable, errs.CodeRequestNotAcceptable, 406},
+		{http.StatusRequestEntityTooLarge, errs.KindRequestTooLarge, errs.CodeRequestFailed, 413},
+		{http.StatusUnsupportedMediaType, errs.KindRequestUnsupportedMediaType, errs.CodeRequestUnsupportedMediaType, 415},
+		{http.StatusServiceUnavailable, errs.KindRequestUnavailable, errs.CodeRequestFailed, 503},
+		{http.StatusNotImplemented, errs.KindNotImplemented, errs.CodeNotImplemented, 501},
+		{http.StatusTeapot, errs.KindRequestFailed, errs.CodeRequestFailed, 500},
 	}
 
 	for _, test := range tests {
-		if got := requestProblemCode(test.status); got != test.code {
-			t.Errorf("requestProblemCode(%d) = %q, want %q", test.status, got, test.code)
+		domainError := requestProblem(test.status, "request failed", nil)
+		problem := domainError.ToProblem()
+		if domainError.Kind() != test.wantKind || problem.Code != test.wantCode ||
+			domainError.HTTPStatus() != test.wantStatus {
+			t.Errorf("requestProblem(%d) = kind %d, code %q, status %d",
+				test.status, domainError.Kind(), problem.Code, domainError.HTTPStatus())
 		}
 	}
 }
 
-func TestRequestProblemPreservesFrameworkValidationStatus(t *testing.T) {
-	// Rationale: malformed transport/decode input remains 400, while Huma's
-	// decoded parameter/schema validation remains 422.
-	for _, status := range []int{http.StatusBadRequest, http.StatusUnprocessableEntity} {
-		problem := requestProblem(status, "validation failed", nil)
-		if problem.Status != status {
-			t.Errorf("requestProblem(%d).Status = %d, want %d", status, problem.Status, status)
-		}
-		if problem.Code != errs.CodeValidationFailed {
-			t.Errorf("requestProblem(%d).Code = %q, want %q", status, problem.Code, errs.CodeValidationFailed)
-		}
-		if problem.Type != errs.ProblemType {
-			t.Errorf("requestProblem(%d).Type = %q, want %q", status, problem.Type, errs.ProblemType)
-		}
+// Rationale: malformed syntax and semantic validation share a public code but
+// must remain different Kinds so transport behavior cannot collapse them.
+func TestFrameworkValidationKindsRemainDistinct(t *testing.T) {
+	malformed := requestProblem(http.StatusBadRequest, "malformed", nil)
+	semantic := requestProblem(http.StatusUnprocessableEntity, "invalid", nil)
+	if errors.Is(malformed, semantic) {
+		t.Fatal("framework 400 and 422 must not share internal Kind")
+	}
+	if malformed.ToProblem().Type != errs.ProblemType || semantic.ToProblem().Type != errs.ProblemType {
+		t.Fatal("framework errors must use about:blank")
+	}
+}
+
+// Rationale: Huma may report body overflow as a nominal bad-request detail;
+// the boundary must promote it to the descriptor-owned 413 Kind.
+func TestHumaMaxBytesErrorSelectsRequestTooLargeKind(t *testing.T) {
+	domainError := requestProblem(
+		http.StatusBadRequest,
+		"decode failed",
+		[]error{&http.MaxBytesError{Limit: 32}},
+	)
+	problem := domainError.ToProblem()
+	if domainError.Kind() != errs.KindRequestTooLarge || problem.Code != errs.CodeRequestFailed ||
+		domainError.HTTPStatus() != http.StatusRequestEntityTooLarge {
+		t.Fatalf("problem = %#v", domainError)
 	}
 }

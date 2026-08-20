@@ -161,7 +161,7 @@ func TestUnimplementedLocalCommandsFailClosedWithoutCLIConfig(t *testing.T) {
 		root := NewRootCmd(Dependencies{})
 		root.SetArgs(append([]string{"--config", configPath}, args...))
 		err := root.ExecuteContext(context.Background())
-		if !errors.Is(err, errs.New(errs.CodeNotImplemented, "")) {
+		if !errors.Is(err, errs.New(errs.KindNotImplemented, "")) {
 			t.Fatalf("execute %v error = %v, want %q", args, err, errs.CodeNotImplemented)
 		}
 	}

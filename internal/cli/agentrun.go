@@ -15,7 +15,7 @@ func newAgentRunCmd() *cobra.Command {
 		Short: "Run the Agent in the foreground",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New(errs.CodeNotImplemented, "Agent foreground execution awaits the Controller-owned runtime cutover")
+			return errs.New(errs.KindNotImplemented, "Agent foreground execution awaits the Controller-owned runtime cutover")
 		},
 	})
 	return cmd

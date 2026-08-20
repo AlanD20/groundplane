@@ -69,7 +69,7 @@ func TestRenderEnvFileRejectsNUL(t *testing.T) {
 	}
 
 	_, err := RenderEnvFile(entries, map[string]string{"ev_nul": "before\x00after"})
-	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("RenderEnvFile() error = %v, want %q", err, errs.CodeValidationFailed)
 	}
 }
@@ -80,7 +80,7 @@ func TestRenderServiceEnvFileRejectsDuplicateScopedKeys(t *testing.T) {
 		{ID: "ev_b", Kind: core.EntryKindEnv, Key: "TOKEN", Exposure: []string{"worker", "api"}},
 	}
 	_, err := RenderServiceEnvFile("api", entries, map[string]string{"ev_a": "one", "ev_b": "two"})
-	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("RenderServiceEnvFile() error = %v, want %q", err, errs.CodeValidationFailed)
 	}
 }
@@ -90,14 +90,14 @@ func TestRenderEnvFileClassifiesMissingResolvedValueAsInternal(t *testing.T) {
 		{ID: "ev_a", Kind: core.EntryKindEnv, Key: "TOKEN", Exposure: []string{"all"}},
 	}
 	_, err := RenderEnvFile(entries, nil)
-	if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("RenderEnvFile() error = %v, want %q", err, errs.CodeInternal)
 	}
 }
 
 func TestRenderCorefileFailsClosedUntilComplete(t *testing.T) {
 	_, err := RenderCorefile(nil, nil, false)
-	if !errors.Is(err, errs.New(errs.CodeNotImplemented, "")) {
+	if !errors.Is(err, errs.New(errs.KindNotImplemented, "")) {
 		t.Fatalf("RenderCorefile() error = %v, want %q", err, errs.CodeNotImplemented)
 	}
 }

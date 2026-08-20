@@ -168,7 +168,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		wrapControllerRunError("close etcd", closeErr),
 	)
 	if joined != nil {
-		return errs.Wrap(errs.CodeInternal, joined)
+		return errs.Wrap(errs.KindInternal, joined)
 	}
 	return nil
 }

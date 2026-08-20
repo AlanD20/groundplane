@@ -60,8 +60,8 @@ const (
 
 	// --- framework request parsing and transport ---
 	// These strings are the request-error catalog locked by api-cli.md.
-	// The framework supplies the exact HTTP status for these failures;
-	// requestProblem preserves it rather than deriving a replacement.
+	// Internal request Kinds bind each accepted framework status; an unknown
+	// framework status fails closed as request.failed/500.
 	CodeRequestNotFound             Code = "request.not_found"
 	CodeRequestMethodNotAllowed     Code = "request.method_not_allowed"
 	CodeRequestNotAcceptable        Code = "request.not_acceptable"
@@ -69,54 +69,144 @@ const (
 	CodeRequestFailed               Code = "request.failed"
 
 	// --- scaffolding / catch-all ---
-	CodeNotImplemented Code = "not_implemented" // this boilerplate's stub handlers; HTTPStatus() special-cases it to 501
+	CodeNotImplemented Code = "not_implemented" // scaffold stub handlers; KindNotImplemented owns HTTP 501
 	CodeInternal       Code = "internal"
 )
 
-// classify maps every Code above to its Class. This is the ONE place a
-// new Code's semantics are decided — HTTP status, retry behavior, and
-// IsNotFound/IsRetryable all derive from this table, never from a
-// per-call-site judgment call.
-func classify(code Code) Class {
-	switch code {
-	case CodeTenantNotFound, CodeProjectNotFound, CodeEnvironmentNotFound, CodeServiceNotFound,
-		CodeBackingServiceNotFound, CodeAttachNotFound, CodeTaskNotFound, CodeSecretNotFound,
-		CodeConnectorNotFound, CodeRunnerNotFound, CodeAgentNotFound, CodeReleaseGroupNotFound,
-		CodeComponentNotFound, CodeRecoveryPointNotFound, CodeZoneNotFound, CodeRouteNotFound,
-		CodeVolumeNotFound, CodeEntryNotFound, CodeScriptNotFound, CodeReleaseNotFound,
-		CodeBackupSourceNotFound, CodeRequestNotFound:
-		return ClassNotFound
+// Kind is the closed internal error identity. Constructors accept Kind, never
+// the public Code string, so a caller cannot choose a Code without also
+// choosing its one accepted class and HTTP status.
+type Kind uint16
 
-	case CodeDeployInFlight, CodeTaskNotRetryable, CodeTaskRetryInFlight, CodeSlugConflict,
-		CodeNameConflict, CodeStateConflict, CodeResourceInUse, CodeCursorExpired,
-		CodeIdempotencyInProgress:
-		return ClassConflict
+const (
+	kindInvalid Kind = iota
+	KindTenantNotFound
+	KindProjectNotFound
+	KindEnvironmentNotFound
+	KindServiceNotFound
+	KindBackingServiceNotFound
+	KindAttachNotFound
+	KindTaskNotFound
+	KindTaskTimedOut
+	KindSecretNotFound
+	KindConnectorNotFound
+	KindRunnerNotFound
+	KindAgentNotFound
+	KindReleaseGroupNotFound
+	KindComponentNotFound
+	KindRecoveryPointNotFound
+	KindDeployInFlight
+	KindTaskNotRetryable
+	KindTaskRetryInFlight
+	KindSlugConflict
+	KindNameConflict
+	KindStateConflict
+	KindResourceInUse
+	KindCursorExpired
+	KindIdempotencyInProgress
+	KindIdempotencyMismatch
+	KindStorageUnavailable
+	KindZoneNotFound
+	KindRouteNotFound
+	KindVolumeNotFound
+	KindEntryNotFound
+	KindScriptNotFound
+	KindReleaseNotFound
+	KindBackupSourceNotFound
+	KindStrategyNotImplemented
+	KindRotationNotImplemented
+	KindAdapterManualOnly
+	KindValidationFailed
+	KindMalformedRequest
+	KindScopeUnauthorized
+	KindConnectorScopeInvalid
+	KindRequestNotFound
+	KindRequestMethodNotAllowed
+	KindRequestNotAcceptable
+	KindRequestUnsupportedMediaType
+	KindRequestTooLarge
+	KindRequestUnavailable
+	KindRequestFailed
+	KindNotImplemented
+	KindInternal
+	kindLimit
+)
 
-	case CodeIdempotencyMismatch:
-		return ClassBadRequest
+type descriptor struct {
+	Code   Code
+	Class  Class
+	Status int
+}
 
-	case CodeRequestMethodNotAllowed:
-		return ClassMethodNotAllowed
+var kindDescriptors = [kindLimit]descriptor{
+	KindTenantNotFound:              {CodeTenantNotFound, ClassNotFound, 404},
+	KindProjectNotFound:             {CodeProjectNotFound, ClassNotFound, 404},
+	KindEnvironmentNotFound:         {CodeEnvironmentNotFound, ClassNotFound, 404},
+	KindServiceNotFound:             {CodeServiceNotFound, ClassNotFound, 404},
+	KindBackingServiceNotFound:      {CodeBackingServiceNotFound, ClassNotFound, 404},
+	KindAttachNotFound:              {CodeAttachNotFound, ClassNotFound, 404},
+	KindTaskNotFound:                {CodeTaskNotFound, ClassNotFound, 404},
+	KindTaskTimedOut:                {CodeTaskTimedOut, ClassRetryable, 503},
+	KindSecretNotFound:              {CodeSecretNotFound, ClassNotFound, 404},
+	KindConnectorNotFound:           {CodeConnectorNotFound, ClassNotFound, 404},
+	KindRunnerNotFound:              {CodeRunnerNotFound, ClassNotFound, 404},
+	KindAgentNotFound:               {CodeAgentNotFound, ClassNotFound, 404},
+	KindReleaseGroupNotFound:        {CodeReleaseGroupNotFound, ClassNotFound, 404},
+	KindComponentNotFound:           {CodeComponentNotFound, ClassNotFound, 404},
+	KindRecoveryPointNotFound:       {CodeRecoveryPointNotFound, ClassNotFound, 404},
+	KindDeployInFlight:              {CodeDeployInFlight, ClassConflict, 409},
+	KindTaskNotRetryable:            {CodeTaskNotRetryable, ClassConflict, 409},
+	KindTaskRetryInFlight:           {CodeTaskRetryInFlight, ClassConflict, 409},
+	KindSlugConflict:                {CodeSlugConflict, ClassConflict, 409},
+	KindNameConflict:                {CodeNameConflict, ClassConflict, 409},
+	KindStateConflict:               {CodeStateConflict, ClassConflict, 409},
+	KindResourceInUse:               {CodeResourceInUse, ClassConflict, 409},
+	KindCursorExpired:               {CodeCursorExpired, ClassConflict, 409},
+	KindIdempotencyInProgress:       {CodeIdempotencyInProgress, ClassConflict, 409},
+	KindIdempotencyMismatch:         {CodeIdempotencyMismatch, ClassBadRequest, 400},
+	KindStorageUnavailable:          {CodeStorageUnavailable, ClassRetryable, 503},
+	KindZoneNotFound:                {CodeZoneNotFound, ClassNotFound, 404},
+	KindRouteNotFound:               {CodeRouteNotFound, ClassNotFound, 404},
+	KindVolumeNotFound:              {CodeVolumeNotFound, ClassNotFound, 404},
+	KindEntryNotFound:               {CodeEntryNotFound, ClassNotFound, 404},
+	KindScriptNotFound:              {CodeScriptNotFound, ClassNotFound, 404},
+	KindReleaseNotFound:             {CodeReleaseNotFound, ClassNotFound, 404},
+	KindBackupSourceNotFound:        {CodeBackupSourceNotFound, ClassNotFound, 404},
+	KindStrategyNotImplemented:      {CodeStrategyNotImplemented, ClassValidation, 422},
+	KindRotationNotImplemented:      {CodeRotationNotImplemented, ClassValidation, 422},
+	KindAdapterManualOnly:           {CodeAdapterManualOnly, ClassValidation, 422},
+	KindValidationFailed:            {CodeValidationFailed, ClassValidation, 422},
+	KindMalformedRequest:            {CodeValidationFailed, ClassBadRequest, 400},
+	KindScopeUnauthorized:           {CodeScopeUnauthorized, ClassValidation, 422},
+	KindConnectorScopeInvalid:       {CodeConnectorScopeInvalid, ClassValidation, 422},
+	KindRequestNotFound:             {CodeRequestNotFound, ClassNotFound, 404},
+	KindRequestMethodNotAllowed:     {CodeRequestMethodNotAllowed, ClassMethodNotAllowed, 405},
+	KindRequestNotAcceptable:        {CodeRequestNotAcceptable, ClassNotAcceptable, 406},
+	KindRequestUnsupportedMediaType: {CodeRequestUnsupportedMediaType, ClassUnsupportedMediaType, 415},
+	KindRequestTooLarge:             {CodeRequestFailed, ClassBadRequest, 413},
+	KindRequestUnavailable:          {CodeRequestFailed, ClassRetryable, 503},
+	KindRequestFailed:               {CodeRequestFailed, ClassInternal, 500},
+	KindNotImplemented:              {CodeNotImplemented, ClassInternal, 501},
+	KindInternal:                    {CodeInternal, ClassInternal, 500},
+}
 
-	case CodeRequestNotAcceptable:
-		return ClassNotAcceptable
-
-	case CodeRequestUnsupportedMediaType:
-		return ClassUnsupportedMediaType
-
-	case CodeStrategyNotImplemented, CodeRotationNotImplemented, CodeAdapterManualOnly,
-		CodeValidationFailed, CodeScopeUnauthorized, CodeConnectorScopeInvalid:
-		return ClassValidation
-
-	case CodeTaskTimedOut, CodeStorageUnavailable:
-		return ClassRetryable
-
-	case CodeNotImplemented, CodeInternal, CodeRequestFailed:
-		return ClassInternal
-
-	default:
-		// An unregistered Code is a programming error, not a client
-		// error — fail toward 500/internal rather than guessing.
-		return ClassInternal
+func descriptorFor(kind Kind) (descriptor, bool) {
+	if kind <= kindInvalid || kind >= kindLimit {
+		return kindDescriptors[KindInternal], false
 	}
+	value := kindDescriptors[kind]
+	if value.Code == "" {
+		return kindDescriptors[KindInternal], false
+	}
+	return value, true
+}
+
+func kindForProblem(code Code, status int) (Kind, bool) {
+	for kind := Kind(1); kind < kindLimit; kind++ {
+		value, ok := descriptorFor(kind)
+		if ok && value.Code == code && value.Status == status {
+			return kind, true
+		}
+	}
+	return kindInvalid, false
 }

@@ -129,18 +129,18 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 		} {
 			request := Request{Method: method, Path: "/resource", IdempotencyKey: key}
 			err := client.Do(context.Background(), request, nil)
-			if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Errorf("Do(%s, key=%q) error = %v, want %q", method, key, err, errs.CodeInternal)
 			}
 		}
 	}
 	request := Request{Method: "post", Path: "/resource"}
-	if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Errorf("Do(lowercase POST without key) error = %v, want %q", err, errs.CodeInternal)
 	}
 	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
 		request := Request{Method: method, Path: "/resource", IdempotencyKey: strings.Repeat("a", 16)}
-		if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+		if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 			t.Errorf("Do(%s with key) error = %v, want %q", method, err, errs.CodeInternal)
 		}
 	}
@@ -184,7 +184,7 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 				}
 				return
 			}
-			if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("Do() error = %v, want %q", err, errs.CodeInternal)
 			}
 		})
@@ -250,7 +250,7 @@ func TestStreamRejectsNonEventStreamResponse(t *testing.T) {
 		t.Fatal("onEvent called for a non-SSE response")
 		return nil
 	})
-	if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Stream() error = %v, want %q", err, errs.CodeInternal)
 	}
 }

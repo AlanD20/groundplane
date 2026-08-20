@@ -116,14 +116,14 @@ func (p *WorkerPool) runStep(ctx context.Context, step adapters.Step) error {
 		// TODO: dispatch to internal/infra/docker (Applier.Up/Down, alias/
 		// route switching against the rendered Compose project) or
 		// internal/agent's own materializers (StepWriteFile), per step.Op.
-		return errs.Newf(errs.CodeNotImplemented, "agent: runStep %s not implemented", step.Op)
+		return errs.Newf(errs.KindNotImplemented, "agent: runStep %s not implemented", step.Op)
 
 	case adapters.StepRunScript:
 		// The explicit, operator-authored automation exception — its own
 		// task boundary, never a generic exec escape hatch
 		// (architecture.md, "The guardrail"). TODO: run the script body
 		// through p.runner against the target service's container.
-		return errs.New(errs.CodeNotImplemented, "agent: runStep run_script not implemented")
+		return errs.New(errs.KindNotImplemented, "agent: runStep run_script not implemented")
 
 	case adapters.StepExec, adapters.StepSQL, adapters.StepDump, adapters.StepRestore,
 		adapters.StepEncrypt, adapters.StepUpload, adapters.StepVerify, adapters.StepPrune, adapters.StepAck:
@@ -133,10 +133,10 @@ func (p *WorkerPool) runStep(ctx context.Context, step adapters.Step) error {
 		// internal/infra/age instead, and for upload/verify the connector's
 		// client. p.runner is already wired (see client.go's Run) so this is
 		// purely the per-Op translation, not new plumbing.
-		return errs.Newf(errs.CodeNotImplemented, "agent: runStep %s not implemented", step.Op)
+		return errs.Newf(errs.KindNotImplemented, "agent: runStep %s not implemented", step.Op)
 
 	default:
-		return errs.Newf(errs.CodeValidationFailed, "agent: unknown step op %q — not in the known step catalog", step.Op)
+		return errs.Newf(errs.KindValidationFailed, "agent: unknown step op %q — not in the known step catalog", step.Op)
 	}
 }
 

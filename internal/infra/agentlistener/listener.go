@@ -25,7 +25,7 @@ func listenAt(ctx context.Context, hostRoot string, expectedUID uint32) (net.Lis
 	}
 	root, err := os.OpenRoot(hostRoot)
 	if err != nil {
-		return nil, errs.Wrap(errs.CodeInternal, fmt.Errorf("agent listener: open host root: %w", err))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("agent listener: open host root: %w", err))
 	}
 	defer root.Close()
 
@@ -44,24 +44,24 @@ func listenAt(ctx context.Context, hostRoot string, expectedUID uint32) (net.Lis
 	hostSocket := filepath.Join(hostRoot, filepath.FromSlash(socketName))
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: hostSocket, Net: "unix"})
 	if err != nil {
-		return nil, errs.Wrap(errs.CodeInternal, fmt.Errorf("agent listener: listen: %w", err))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("agent listener: listen: %w", err))
 	}
 	listener.SetUnlinkOnClose(true)
 	if err := root.Chmod(socketName, 0o600); err != nil {
 		// Best-effort cleanup follows the primary mode-setting failure.
 		_ = listener.Close()
-		return nil, errs.Wrap(errs.CodeInternal, fmt.Errorf("agent listener: set socket mode: %w", err))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("agent listener: set socket mode: %w", err))
 	}
 	info, err := root.Lstat(socketName)
 	if err != nil {
 		// Best-effort cleanup follows the primary inspection failure.
 		_ = listener.Close()
-		return nil, errs.Wrap(errs.CodeInternal, fmt.Errorf("agent listener: inspect socket: %w", err))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("agent listener: inspect socket: %w", err))
 	}
 	if info.Mode()&os.ModeSocket == 0 || info.Mode()&os.ModeSymlink != 0 {
 		// Best-effort cleanup follows the primary type-validation failure.
 		_ = listener.Close()
-		return nil, errs.New(errs.CodeInternal, "agent listener: created path is not a Unix socket")
+		return nil, errs.New(errs.KindInternal, "agent listener: created path is not a Unix socket")
 	}
 	if err := runtimepath.ValidateOwnership(info, expectedUID, "Agent socket"); err != nil {
 		// Best-effort cleanup follows the primary ownership failure.
@@ -77,16 +77,16 @@ func removeStaleSocket(root *os.Root, name string, expectedUID uint32) error {
 		return nil
 	}
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent listener: inspect stale socket: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent listener: inspect stale socket: %w", err))
 	}
 	if info.Mode()&os.ModeSocket == 0 || info.Mode()&os.ModeSymlink != 0 {
-		return errs.New(errs.CodeInternal, "agent listener: stale path is not a Unix socket")
+		return errs.New(errs.KindInternal, "agent listener: stale path is not a Unix socket")
 	}
 	if err := runtimepath.ValidateOwnership(info, expectedUID, "stale Agent socket"); err != nil {
 		return err
 	}
 	if err := root.Remove(name); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent listener: remove stale socket: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent listener: remove stale socket: %w", err))
 	}
 	return nil
 }

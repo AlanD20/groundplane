@@ -7,14 +7,15 @@
 package errs
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
-// Class categorizes an error semantically. HTTP status mapping and
-// retry decisions derive from Class, not from Code — a new Code never
-// needs a new switch statement anywhere else in the codebase.
+// Class categorizes an error semantically for retry and control-flow
+// decisions. HTTP status is owned independently by the Kind descriptor.
 type Class string
 
 const (
@@ -23,7 +24,6 @@ const (
 	ClassNotFound             Class = "not_found"
 	ClassConflict             Class = "conflict"
 	ClassRetryable            Class = "retryable"
-	ClassNeedsInteraction     Class = "needs_interaction"
 	ClassMethodNotAllowed     Class = "method_not_allowed"
 	ClassNotAcceptable        Class = "not_acceptable"
 	ClassUnsupportedMediaType Class = "unsupported_media_type"
@@ -37,8 +37,37 @@ const (
 // and their Class.
 type Code string
 
-// Option configures an *Error at construction time.
-type Option func(*Error)
+// ProblemType is the single RFC 7807 type used for domain and framework
+// problems. Stable machine handling belongs to Code, not a type URI.
+const ProblemType = "about:blank"
+
+// Problem is the public RFC 7807 representation. It is a transport DTO, not
+// an error type; only *Error implements error.
+type Problem struct {
+	Type    string         `json:"type"`
+	Title   string         `json:"title"`
+	Status  int            `json:"status"`
+	Detail  string         `json:"detail"`
+	Code    Code           `json:"code"`
+	Details map[string]any `json:"details,omitempty"`
+}
+
+// Option is closed to this package so callers can attach approved
+// presentation metadata without overriding Kind, Code, Class, or status.
+type Option interface {
+	apply(*Error)
+	errorOption()
+}
+
+type detailsOption map[string]any
+
+func (option detailsOption) apply(target *Error) { target.details = cloneDetails(option) }
+func (detailsOption) errorOption()               {}
+
+type titleOption string
+
+func (option titleOption) apply(target *Error) { target.title = string(option) }
+func (titleOption) errorOption()               {}
 
 // WithDetails attaches structured metadata rendered into the RFC 7807
 // response's extension members (never into `detail`, which stays a
@@ -46,68 +75,110 @@ type Option func(*Error)
 // package — the same stdlib-driven exception as json.Decoder.Decode,
 // since Details is opaque metadata, not a model field or a validator.
 func WithDetails(details map[string]any) Option {
-	return func(e *Error) { e.Details = details }
+	return detailsOption(details)
 }
 
-// Error is the one error type every layer returns — comparable via
-// errors.Is/As, carrying a stable Code, an auto-derived Class and Op,
-// and an optional wrapped cause.
+// WithTitle changes only the RFC 7807 presentation title. It cannot alter the
+// machine identity, class, or status.
+func WithTitle(title string) Option {
+	return titleOption(title)
+}
+
+// Error is the one error type every layer returns. Its embedded Problem gives
+// Huma the exact RFC 7807 schema; MarshalJSON and ToProblem always restore the
+// descriptor-owned Code and status.
 type Error struct {
-	Code    Code
-	Class   Class
-	Op      string // the domain segment of Code, auto-derived (e.g. "service" from "service.not_found")
-	Message string
-	Err     error
-	Details map[string]any
+	Problem
+
+	kind    Kind
+	message string
+	title   string
+	details map[string]any
+	err     error
 }
 
 func (e *Error) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("%s: %s: %v", e.Code, e.Message, e.Err)
+	kind := e.Kind()
+	value, _ := descriptorFor(kind)
+	message := e.message
+	if message == "" {
+		message = defaultPublicDetail(kind)
 	}
-	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+	if e.err != nil {
+		return fmt.Sprintf("%s: %s: %v", value.Code, message, e.err)
+	}
+	return fmt.Sprintf("%s: %s", value.Code, message)
 }
 
-func (e *Error) Unwrap() error { return e.Err }
+func (e *Error) Unwrap() error { return e.err }
 
-// Is compares by Code alone — errors.Is(err, errs.New(SomeCode, "")).
+// Is compares by internal Kind. Kinds may intentionally share one public Code
+// while retaining different semantics, such as malformed 400 and validated
+// 422 input failures.
 func (e *Error) Is(target error) bool {
 	var te *Error
 	if errors.As(target, &te) {
-		return e.Code == te.Code
+		return e.Kind() == te.Kind()
 	}
 	return false
 }
 
-// New creates an *Error. Class and Op are auto-derived from Code —
-// callers never set them directly, so a Code's meaning can't drift from
-// its classification at one call site and not another.
-func New(code Code, message string, opts ...Option) *Error {
+// New creates an *Error from the closed Kind catalog. Unknown Kind values
+// fail closed as internal programming errors.
+func New(kind Kind, message string, opts ...Option) *Error {
+	value, ok := descriptorFor(kind)
+	if !ok {
+		kind = KindInternal
+		value, _ = descriptorFor(kind)
+	}
 	e := &Error{
-		Code:    code,
-		Class:   classify(code),
-		Op:      opOf(code),
-		Message: message,
+		kind:    kind,
+		message: message,
+		title:   string(value.Code),
 	}
 	for _, opt := range opts {
-		opt(e)
+		if opt != nil {
+			opt.apply(e)
+		}
 	}
+	e.Problem = e.ToProblem()
 	return e
 }
 
 // Newf is New with fmt.Sprintf-style formatting.
-func Newf(code Code, format string, args ...any) *Error {
-	return New(code, fmt.Sprintf(format, args...))
+func Newf(kind Kind, format string, args ...any) *Error {
+	return New(kind, fmt.Sprintf(format, args...))
 }
 
-// Wrap attaches a Code to an existing error, taking the wrapped error's
-// message as its own — no separate message needed at the call site.
-func Wrap(code Code, err error) *Error {
-	msg := ""
-	if err != nil {
-		msg = err.Error()
+// Wrap attaches a Kind to a private cause. The public detail is the safe HTTP
+// status phrase; Error and Unwrap retain the cause for diagnostics.
+func Wrap(kind Kind, err error) *Error {
+	result := New(kind, defaultPublicDetail(kind))
+	result.err = err
+	return result
+}
+
+// Kind, Class, and Op expose descriptor-derived internal semantics without
+// making them mutable fields.
+func (e *Error) Kind() Kind { return normalizeKind(e.kind) }
+
+func (e *Error) Class() Class {
+	value, _ := descriptorFor(e.Kind())
+	return value.Class
+}
+
+func (e *Error) Op() string {
+	value, _ := descriptorFor(e.Kind())
+	return opOf(value.Code)
+}
+
+// KindOf returns the closed Kind carried anywhere in an error chain.
+func KindOf(err error) (Kind, bool) {
+	var value *Error
+	if !errors.As(err, &value) {
+		return kindInvalid, false
 	}
-	return &Error{Code: code, Class: classify(code), Op: opOf(code), Message: msg, Err: err}
+	return value.Kind(), true
 }
 
 // opOf derives the domain segment from a dot-namespaced code
@@ -121,60 +192,85 @@ func opOf(code Code) string {
 	return s
 }
 
-// HTTPStatus derives the Controller's RFC 7807 status from Class, with
-// one special case: CodeNotImplemented always maps to 501 regardless of
-// its (internal) Class, since that's the literal HTTP meaning.
+// HTTPStatus returns the descriptor-owned status. Call sites cannot override
+// it independently of Kind.
 func (e *Error) HTTPStatus() int {
-	if e.Code == CodeNotImplemented {
-		return 501
-	}
-	switch e.Class {
-	case ClassBadRequest:
-		return 400
-	case ClassValidation:
-		return 422
-	case ClassNotFound:
-		return 404
-	case ClassMethodNotAllowed:
-		return 405
-	case ClassNotAcceptable:
-		return 406
-	case ClassConflict, ClassNeedsInteraction:
-		return 409
-	case ClassUnsupportedMediaType:
-		return 415
-	case ClassRetryable:
-		return 503
-	default:
-		return 500
-	}
+	value, _ := descriptorFor(e.Kind())
+	return value.Status
 }
 
-// ProblemType is the single RFC 7807 type used for domain and framework
-// problems. Stable machine handling belongs to Code, not a type URI.
-const ProblemType = "about:blank"
-
-// Problem is the RFC 7807 problem+json shape the Controller's HTTP layer
-// serializes every *Error into. See api-cli.md, "Errors".
-type Problem struct {
-	Type    string         `json:"type"`
-	Title   string         `json:"title"`
-	Status  int            `json:"status"`
-	Detail  string         `json:"detail"`
-	Code    Code           `json:"code"`
-	Details map[string]any `json:"details,omitempty"`
-}
-
-// ToProblem renders e as an RFC 7807 problem at its derived HTTPStatus().
+// ToProblem renders the error using the descriptor-owned machine fields.
 func (e *Error) ToProblem() Problem {
+	kind := e.Kind()
+	value, _ := descriptorFor(kind)
+	title := e.title
+	detail := e.message
+	if kind == KindInternal || kind == KindRequestFailed {
+		title = http.StatusText(http.StatusInternalServerError)
+		detail = http.StatusText(http.StatusInternalServerError)
+	} else {
+		if title == "" {
+			title = string(value.Code)
+		}
+		if detail == "" {
+			detail = defaultPublicDetail(kind)
+		}
+	}
 	return Problem{
 		Type:    ProblemType,
-		Title:   string(e.Code),
-		Status:  e.HTTPStatus(),
-		Detail:  e.Message,
-		Code:    e.Code,
-		Details: e.Details,
+		Title:   title,
+		Status:  value.Status,
+		Detail:  detail,
+		Code:    value.Code,
+		Details: cloneDetails(e.details),
 	}
+}
+
+// MarshalJSON keeps direct Huma serialization on the same projection as
+// ToProblem, even if a caller mutates an embedded transport field.
+func (e *Error) MarshalJSON() ([]byte, error) {
+	return json.Marshal(e.ToProblem())
+}
+
+// FromProblem validates an untrusted public problem tuple and reconstructs its
+// internal Kind. Unknown codes and impossible code/status combinations are
+// rejected rather than becoming dynamic internal identities.
+func FromProblem(problem Problem) (*Error, bool) {
+	if problem.Type != ProblemType {
+		return nil, false
+	}
+	kind, ok := kindForProblem(problem.Code, problem.Status)
+	if !ok {
+		return nil, false
+	}
+	result := New(kind, problem.Detail, WithTitle(problem.Title), WithDetails(problem.Details))
+	return result, true
+}
+
+func defaultPublicDetail(kind Kind) string {
+	value, _ := descriptorFor(normalizeKind(kind))
+	if detail := http.StatusText(value.Status); detail != "" {
+		return detail
+	}
+	return "Request failed"
+}
+
+func normalizeKind(kind Kind) Kind {
+	if _, ok := descriptorFor(kind); !ok {
+		return KindInternal
+	}
+	return kind
+}
+
+func cloneDetails(details map[string]any) map[string]any {
+	if details == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(details))
+	for key, value := range details {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 // IsNotFound and IsRetryable classify any error (not just *Error) by
@@ -186,7 +282,7 @@ func IsRetryable(err error) bool { return hasClass(err, ClassRetryable) }
 func hasClass(err error, class Class) bool {
 	var e *Error
 	if errors.As(err, &e) {
-		return e.Class == class
+		return e.Class() == class
 	}
 	return false
 }

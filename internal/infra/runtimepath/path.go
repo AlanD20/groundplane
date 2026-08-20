@@ -28,7 +28,7 @@ func PrepareDirectory(
 ) (bool, error) {
 	components := strings.Split(relative, "/")
 	if relative == "" || strings.HasPrefix(relative, "/") || managedFrom < 0 || managedFrom >= len(components) {
-		return false, errs.New(errs.CodeInternal, "runtime path: invalid directory policy")
+		return false, errs.New(errs.KindInternal, "runtime path: invalid directory policy")
 	}
 
 	current := ""
@@ -37,7 +37,7 @@ func PrepareDirectory(
 			return false, err
 		}
 		if component == "" || component == "." || component == ".." {
-			return false, errs.New(errs.CodeInternal, "runtime path: invalid directory component")
+			return false, errs.New(errs.KindInternal, "runtime path: invalid directory component")
 		}
 		current = path.Join(current, component)
 		info, err := root.Lstat(current)
@@ -46,22 +46,22 @@ func PrepareDirectory(
 				return false, nil
 			}
 			if err := root.Mkdir(current, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
-				return false, errs.Wrap(errs.CodeInternal, fmt.Errorf("runtime path: create directory: %w", err))
+				return false, errs.Wrap(errs.KindInternal, fmt.Errorf("runtime path: create directory: %w", err))
 			}
 			info, err = root.Lstat(current)
 		}
 		if err != nil {
-			return false, errs.Wrap(errs.CodeInternal, fmt.Errorf("runtime path: inspect directory: %w", err))
+			return false, errs.Wrap(errs.KindInternal, fmt.Errorf("runtime path: inspect directory: %w", err))
 		}
 		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return false, errs.New(errs.CodeInternal, "runtime path: component is not a real directory")
+			return false, errs.New(errs.KindInternal, "runtime path: component is not a real directory")
 		}
 		if err := ValidateOwnership(info, expectedUID, "directory component"); err != nil {
 			return false, err
 		}
 		if create && index >= managedFrom {
 			if err := root.Chmod(current, 0o700); err != nil {
-				return false, errs.Wrap(errs.CodeInternal, fmt.Errorf("runtime path: set managed directory mode: %w", err))
+				return false, errs.Wrap(errs.KindInternal, fmt.Errorf("runtime path: set managed directory mode: %w", err))
 			}
 		}
 	}
@@ -71,10 +71,10 @@ func PrepareDirectory(
 func ValidateOwnership(info fs.FileInfo, expectedUID uint32, label string) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return errs.Newf(errs.CodeInternal, "runtime path: cannot determine %s ownership", label)
+		return errs.Newf(errs.KindInternal, "runtime path: cannot determine %s ownership", label)
 	}
 	if stat.Uid != expectedUID {
-		return errs.Newf(errs.CodeInternal, "runtime path: %s is owned by uid %d, want %d", label, stat.Uid, expectedUID)
+		return errs.Newf(errs.KindInternal, "runtime path: %s is owned by uid %d, want %d", label, stat.Uid, expectedUID)
 	}
 	return nil
 }
@@ -85,11 +85,11 @@ func SyncDirectory(ctx context.Context, root *os.Root) error {
 	}
 	directory, err := root.Open(".")
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("runtime path: open directory for sync: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("runtime path: open directory for sync: %w", err))
 	}
 	defer directory.Close()
 	if err := directory.Sync(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("runtime path: sync directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("runtime path: sync directory: %w", err))
 	}
 	return nil
 }

@@ -62,10 +62,10 @@ func NewRegistry() *Registry {
 // replaces and fences the previous connection; an older generation is rejected.
 func (r *Registry) Open(parent context.Context, agentID string, generation uint64) (*Session, error) {
 	if agentID == "" {
-		return nil, errs.New(errs.CodeValidationFailed, "agent id is required")
+		return nil, errs.New(errs.KindValidationFailed, "agent id is required")
 	}
 	if parent == nil {
-		return nil, errs.New(errs.CodeInternal, "agent session context is required")
+		return nil, errs.New(errs.KindInternal, "agent session context is required")
 	}
 
 	r.mu.Lock()
@@ -74,10 +74,10 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 	current := r.agents[agentID]
 	if current != nil {
 		if current.revoked || current.revoking {
-			return nil, errs.New(errs.CodeValidationFailed, "agent session is revoked")
+			return nil, errs.New(errs.KindStateConflict, "agent session is revoked")
 		}
 		if generation < current.generation {
-			return nil, errs.New(errs.CodeValidationFailed, "agent session generation is stale")
+			return nil, errs.New(errs.KindStateConflict, "agent session generation is stale")
 		}
 		if current.online {
 			current.cancel()
@@ -111,7 +111,7 @@ func (s *Session) Done() <-chan struct{} {
 // RecordReady records the most recent reported free capacity for this session.
 func (s *Session) RecordReady(at time.Time, capacity int32) error {
 	if capacity < 0 {
-		return errs.New(errs.CodeValidationFailed, "agent Ready capacity must be non-negative")
+		return errs.New(errs.KindValidationFailed, "agent Ready capacity must be non-negative")
 	}
 
 	s.registry.mu.Lock()
@@ -119,7 +119,7 @@ func (s *Session) RecordReady(at time.Time, capacity int32) error {
 
 	current := s.registry.agents[s.agentID]
 	if current != s.state || current.fence != s.state.fence || !current.online || current.revoked {
-		return errs.New(errs.CodeValidationFailed, "agent session is fenced")
+		return errs.New(errs.KindStateConflict, "agent session is fenced")
 	}
 	current.lastReady = at
 	current.capacity = capacity
@@ -177,7 +177,7 @@ func (r *Registry) StopAssignments(agentID string) error {
 
 	state, ok := r.agents[agentID]
 	if !ok {
-		return errs.New(errs.CodeAgentNotFound, "agent session was not found")
+		return errs.New(errs.KindAgentNotFound, "agent session was not found")
 	}
 	state.assignmentsStopped = true
 	return nil
@@ -187,14 +187,14 @@ func (r *Registry) StopAssignments(agentID string) error {
 // Callers stop assignments and abort active tasks before invoking this method.
 func (r *Registry) Revoke(ctx context.Context, agentID string, hook RevocationHook) error {
 	if hook == nil {
-		return errs.New(errs.CodeInternal, "agent revocation hook is required")
+		return errs.New(errs.KindInternal, "agent revocation hook is required")
 	}
 
 	r.mu.Lock()
 	state, ok := r.agents[agentID]
 	if !ok {
 		r.mu.Unlock()
-		return errs.New(errs.CodeAgentNotFound, "agent session was not found")
+		return errs.New(errs.KindAgentNotFound, "agent session was not found")
 	}
 	if state.revoked {
 		r.mu.Unlock()
@@ -202,7 +202,7 @@ func (r *Registry) Revoke(ctx context.Context, agentID string, hook RevocationHo
 	}
 	if state.revoking {
 		r.mu.Unlock()
-		return errs.New(errs.CodeValidationFailed, "agent revocation is already in progress")
+		return errs.New(errs.KindStateConflict, "agent revocation is already in progress")
 	}
 	state.assignmentsStopped = true
 	state.revoking = true
@@ -218,7 +218,7 @@ func (r *Registry) Revoke(ctx context.Context, agentID string, hook RevocationHo
 		if errors.As(err, &domainErr) {
 			return domainErr
 		}
-		return errs.Wrap(errs.CodeInternal, err)
+		return errs.Wrap(errs.KindInternal, err)
 	}
 
 	r.mu.Lock()

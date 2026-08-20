@@ -21,7 +21,7 @@ import (
 // TODO: full field-by-field mapping (healthcheck kinds, mounts, aliases,
 // depends_on conditions, logging limits, replicas).
 func RenderCompose(env core.Environment) ([]byte, error) {
-	return nil, errs.New(errs.CodeNotImplemented, "Compose renderer is not implemented")
+	return nil, errs.New(errs.KindNotImplemented, "Compose renderer is not implemented")
 }
 
 // RenderCorefile renders CoreDNS's config from platform DNS settings
@@ -30,7 +30,7 @@ func RenderCompose(env core.Environment) ([]byte, error) {
 // invalid Corefile is rejected while the old instance keeps serving
 // (zero-downtime, per mvp.md's "DNS resolver (locked)").
 func RenderCorefile(zones []DNSZoneEntry, forwarders []DNSForwarder, tailnetDelegation bool) ([]byte, error) {
-	return nil, errs.New(errs.CodeNotImplemented, "CoreDNS renderer is not implemented")
+	return nil, errs.New(errs.KindNotImplemented, "CoreDNS renderer is not implemented")
 }
 
 type DNSZoneEntry struct {
@@ -109,14 +109,14 @@ func renderEnvFile(entries []core.EnvEntry, resolved map[string]string, include 
 	var output []byte
 	for i, entry := range selected {
 		if i > 0 && selected[i-1].Key == entry.Key {
-			return nil, errs.Newf(errs.CodeValidationFailed, "renderer: duplicate env key %q in one exposure scope", entry.Key)
+			return nil, errs.Newf(errs.KindValidationFailed, "renderer: duplicate env key %q in one exposure scope", entry.Key)
 		}
 		value, ok := resolved[entry.ID]
 		if !ok {
-			return nil, errs.Newf(errs.CodeInternal, "renderer: no resolved value for entry %s (%s)", entry.ID, entry.Key)
+			return nil, errs.Newf(errs.KindInternal, "renderer: no resolved value for entry %s (%s)", entry.ID, entry.Key)
 		}
 		if strings.IndexByte(value, 0) >= 0 {
-			return nil, errs.Newf(errs.CodeValidationFailed, "renderer: env entry %s (%s) contains NUL", entry.ID, entry.Key)
+			return nil, errs.Newf(errs.KindValidationFailed, "renderer: env entry %s (%s) contains NUL", entry.ID, entry.Key)
 		}
 		output = append(output, entry.Key...)
 		output = append(output, '=', '"')
@@ -128,16 +128,16 @@ func renderEnvFile(entries []core.EnvEntry, resolved map[string]string, include 
 		return "", false
 	})
 	if err != nil {
-		return nil, errs.New(errs.CodeInternal, "renderer: generated env file is not valid Compose dotenv")
+		return nil, errs.New(errs.KindInternal, "renderer: generated env file is not valid Compose dotenv")
 	}
 	if len(parsed) != len(selected) {
-		return nil, errs.New(errs.CodeInternal, "renderer: generated env file changed entry membership")
+		return nil, errs.New(errs.KindInternal, "renderer: generated env file changed entry membership")
 	}
 	for _, entry := range selected {
 		value := resolved[entry.ID]
 		parsedValue, ok := parsed[entry.Key]
 		if !ok || parsedValue != value {
-			return nil, errs.Newf(errs.CodeInternal, "renderer: generated env file changed entry %s (%s)", entry.ID, entry.Key)
+			return nil, errs.Newf(errs.KindInternal, "renderer: generated env file changed entry %s (%s)", entry.ID, entry.Key)
 		}
 	}
 	return output, nil

@@ -203,7 +203,7 @@ func cloneRetryTask(source TaskRecord, id string, createdAt time.Time) (TaskReco
 	}
 	if source.Status != TaskStatusFailed && source.Status != TaskStatusTimedOut && source.Status != TaskStatusAborted {
 		return TaskRecord{}, errs.Newf(
-			errs.CodeTaskNotRetryable,
+			errs.KindTaskNotRetryable,
 			"task %s has status %s",
 			source.ID,
 			source.Status,
@@ -213,7 +213,7 @@ func cloneRetryTask(source TaskRecord, id string, createdAt time.Time) (TaskReco
 		return TaskRecord{}, err
 	}
 	if id == source.ID {
-		return TaskRecord{}, errs.New(errs.CodeValidationFailed, "a retry requires a new task id")
+		return TaskRecord{}, errs.New(errs.KindValidationFailed, "a retry requires a new task id")
 	}
 
 	retry := TaskRecord{
@@ -240,7 +240,7 @@ func transitionTaskStatus(
 	}
 	if record.Status != expected {
 		return TaskRecord{}, errs.Newf(
-			errs.CodeStateConflict,
+			errs.KindStateConflict,
 			"task %s status changed from %s to %s",
 			record.ID,
 			expected,
@@ -249,7 +249,7 @@ func transitionTaskStatus(
 	}
 	if expected == next || !validTaskTransition(expected, next) {
 		return TaskRecord{}, errs.Newf(
-			errs.CodeStateConflict,
+			errs.KindStateConflict,
 			"task %s cannot transition from %s to %s",
 			record.ID,
 			expected,
@@ -289,10 +289,10 @@ func prepareTaskEvent(
 		return PreparedTaskEvent{}, err
 	}
 	if input.Identity.TaskID != task.ID {
-		return PreparedTaskEvent{}, errs.New(errs.CodeValidationFailed, "task event identity does not match its task")
+		return PreparedTaskEvent{}, errs.New(errs.KindValidationFailed, "task event identity does not match its task")
 	}
 	if !taskContainsStep(task, input.Identity.StepID) {
-		return PreparedTaskEvent{}, errs.New(errs.CodeValidationFailed, "task event step id does not belong to its task")
+		return PreparedTaskEvent{}, errs.New(errs.KindValidationFailed, "task event step id does not belong to its task")
 	}
 	if err := validateTimestamp("task event received_at", receivedAt); err != nil {
 		return PreparedTaskEvent{}, err
@@ -307,10 +307,10 @@ func prepareTaskEvent(
 			return PreparedTaskEvent{}, err
 		}
 		if existing.Identity != input.Identity {
-			return PreparedTaskEvent{}, errs.New(errs.CodeInternal, "task event dedupe identity mismatch")
+			return PreparedTaskEvent{}, errs.New(errs.KindInternal, "task event dedupe identity mismatch")
 		}
 		if existing.PayloadSHA256 != hash {
-			return PreparedTaskEvent{}, errs.New(errs.CodeInternal, "task event identity was reused with a different payload")
+			return PreparedTaskEvent{}, errs.New(errs.KindInternal, "task event identity was reused with a different payload")
 		}
 		return PreparedTaskEvent{
 			Task: cloneTaskRecord(task), Sequence: existing.Sequence, Duplicate: true,
@@ -319,7 +319,7 @@ func prepareTaskEvent(
 
 	if task.EventCount >= MaximumTaskEvents {
 		return PreparedTaskEvent{}, errs.Newf(
-			errs.CodeValidationFailed,
+			errs.KindValidationFailed,
 			"task %s already has the maximum of %d durable events",
 			task.ID,
 			MaximumTaskEvents,
@@ -375,26 +375,26 @@ func validateTaskRecord(record TaskRecord) error {
 			return err
 		}
 		if record.RetryOf == record.ID {
-			return errs.New(errs.CodeValidationFailed, "task retry_of must name another task")
+			return errs.New(errs.KindValidationFailed, "task retry_of must name another task")
 		}
 	}
 	if !validTaskType(record.Type) {
-		return errs.New(errs.CodeValidationFailed, "task type is not in the durable task catalog")
+		return errs.New(errs.KindValidationFailed, "task type is not in the durable task catalog")
 	}
 	if record.Target == "" || !utf8.ValidString(record.Target) {
-		return errs.New(errs.CodeValidationFailed, "task target is required and must be valid UTF-8")
+		return errs.New(errs.KindValidationFailed, "task target is required and must be valid UTF-8")
 	}
 	if record.PlanHash != "" && !validSHA256(record.PlanHash) {
-		return errs.New(errs.CodeValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
+		return errs.New(errs.KindValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
 	}
 	if record.TimeoutSeconds <= 0 {
-		return errs.New(errs.CodeValidationFailed, "task timeout_seconds must be positive")
+		return errs.New(errs.KindValidationFailed, "task timeout_seconds must be positive")
 	}
 	if !validTaskStatus(record.Status) {
-		return errs.New(errs.CodeValidationFailed, "task status is invalid")
+		return errs.New(errs.KindValidationFailed, "task status is invalid")
 	}
 	if record.EventCount > MaximumTaskEvents || record.NextEventSequence != uint64(record.EventCount)+1 {
-		return errs.New(errs.CodeInternal, "task event summary is inconsistent")
+		return errs.New(errs.KindInternal, "task event summary is inconsistent")
 	}
 	if err := validateTimestamp("task created_at", record.CreatedAt); err != nil {
 		return err
@@ -411,12 +411,12 @@ func validateTaskTimeline(record TaskRecord) error {
 			return err
 		}
 		if record.StartedAt.Before(record.CreatedAt) {
-			return errs.New(errs.CodeInternal, "task started_at precedes created_at")
+			return errs.New(errs.KindInternal, "task started_at precedes created_at")
 		}
 	}
 	if isTerminalTaskStatus(record.Status) {
 		if record.TerminalAt == nil || record.RetainUntil == nil {
-			return errs.New(errs.CodeInternal, "terminal task is missing retention timestamps")
+			return errs.New(errs.KindInternal, "terminal task is missing retention timestamps")
 		}
 		if err := validateTimestamp("task terminal_at", *record.TerminalAt); err != nil {
 			return err
@@ -426,21 +426,21 @@ func validateTaskTimeline(record TaskRecord) error {
 		}
 		if record.TerminalAt.Before(record.CreatedAt) ||
 			(record.StartedAt != nil && record.TerminalAt.Before(*record.StartedAt)) {
-			return errs.New(errs.CodeInternal, "task terminal_at precedes its lifecycle")
+			return errs.New(errs.KindInternal, "task terminal_at precedes its lifecycle")
 		}
 		if !record.RetainUntil.Equal(record.TerminalAt.Add(TaskRetention)) {
-			return errs.New(errs.CodeInternal, "task retention deadline is inconsistent")
+			return errs.New(errs.KindInternal, "task retention deadline is inconsistent")
 		}
 		return nil
 	}
 	if record.TerminalAt != nil || record.RetainUntil != nil {
-		return errs.New(errs.CodeInternal, "nonterminal task has terminal retention timestamps")
+		return errs.New(errs.KindInternal, "nonterminal task has terminal retention timestamps")
 	}
 	if record.Status == TaskStatusPending && record.StartedAt != nil {
-		return errs.New(errs.CodeInternal, "pending task has a started_at timestamp")
+		return errs.New(errs.KindInternal, "pending task has a started_at timestamp")
 	}
 	if record.Status == TaskStatusRunning && record.StartedAt == nil {
-		return errs.New(errs.CodeInternal, "running task is missing started_at")
+		return errs.New(errs.KindInternal, "running task is missing started_at")
 	}
 	return nil
 }
@@ -452,11 +452,11 @@ func validateTaskSteps(steps []TaskStepRecord) error {
 			return err
 		}
 		if _, exists := seen[step.ID]; exists {
-			return errs.New(errs.CodeValidationFailed, "task step ids must be unique")
+			return errs.New(errs.KindValidationFailed, "task step ids must be unique")
 		}
 		seen[step.ID] = struct{}{}
 		if step.Op == "" || !utf8.ValidString(step.Op) {
-			return errs.New(errs.CodeValidationFailed, "task step operation is required and must be valid UTF-8")
+			return errs.New(errs.KindValidationFailed, "task step operation is required and must be valid UTF-8")
 		}
 	}
 	return nil
@@ -470,20 +470,20 @@ func validateTaskEventIdentity(identity TaskEventIdentity) error {
 		return err
 	}
 	if identity.Attempt == 0 || identity.Ordinal == 0 {
-		return errs.New(errs.CodeValidationFailed, "task event attempt and ordinal must start at one")
+		return errs.New(errs.KindValidationFailed, "task event attempt and ordinal must start at one")
 	}
 	return nil
 }
 
 func validateTaskEventRecord(record TaskEventRecord) error {
 	if record.Sequence == 0 {
-		return errs.New(errs.CodeInternal, "task event sequence must start at one")
+		return errs.New(errs.KindInternal, "task event sequence must start at one")
 	}
 	if err := validateTaskEventIdentity(record.Identity); err != nil {
 		return err
 	}
 	if !validTaskEventState(record.State) {
-		return errs.New(errs.CodeInternal, "task event status is invalid")
+		return errs.New(errs.KindInternal, "task event status is invalid")
 	}
 	if err := validateTimestamp("task event received_at", record.ReceivedAt); err != nil {
 		return err
@@ -493,7 +493,7 @@ func validateTaskEventRecord(record TaskEventRecord) error {
 		return err
 	}
 	if !bytes.Equal(payload, record.Payload) || hash != record.PayloadSHA256 {
-		return errs.New(errs.CodeInternal, "task event payload or digest is not canonical")
+		return errs.New(errs.KindInternal, "task event payload or digest is not canonical")
 	}
 	return nil
 }
@@ -503,7 +503,7 @@ func validateTaskEventDedupRecord(record TaskEventDedupRecord) error {
 		return err
 	}
 	if record.Sequence == 0 || !validSHA256(record.PayloadSHA256) {
-		return errs.New(errs.CodeInternal, "task event dedupe record is invalid")
+		return errs.New(errs.KindInternal, "task event dedupe record is invalid")
 	}
 	return nil
 }
@@ -541,7 +541,7 @@ func validTaskEventState(state TaskEventState) bool {
 
 func validateStableID(kind ids.Kind, value string) error {
 	if err := ids.Validate(kind, value); err != nil {
-		return errs.New(errs.CodeValidationFailed, err.Error())
+		return errs.New(errs.KindValidationFailed, err.Error())
 	}
 	return nil
 }
@@ -556,26 +556,26 @@ func validSHA256(value string) bool {
 
 func validateTimestamp(field string, value time.Time) error {
 	if value.IsZero() || value.Location() != time.UTC {
-		return errs.Newf(errs.CodeValidationFailed, "%s must be a non-zero UTC timestamp", field)
+		return errs.Newf(errs.KindValidationFailed, "%s must be a non-zero UTC timestamp", field)
 	}
 	return nil
 }
 
 func canonicalTaskEventPayload(state TaskEventState, value json.RawMessage) (json.RawMessage, string, error) {
 	if !validTaskEventState(state) {
-		return nil, "", errs.New(errs.CodeValidationFailed, "task event status is invalid")
+		return nil, "", errs.New(errs.KindValidationFailed, "task event status is invalid")
 	}
 	if len(value) == 0 || rejectDuplicateJSONFields(value) != nil {
-		return nil, "", errs.New(errs.CodeValidationFailed, "task event payload must be one valid JSON value")
+		return nil, "", errs.New(errs.KindValidationFailed, "task event payload must be one valid JSON value")
 	}
 	var compact bytes.Buffer
 	if err := json.Compact(&compact, value); err != nil {
-		return nil, "", errs.New(errs.CodeValidationFailed, "task event payload must be valid JSON")
+		return nil, "", errs.New(errs.KindValidationFailed, "task event payload must be valid JSON")
 	}
 	payload := json.RawMessage(append([]byte(nil), compact.Bytes()...))
 	fingerprint, err := json.Marshal(taskEventFingerprint{State: state, Payload: payload})
 	if err != nil {
-		return nil, "", errs.Wrap(errs.CodeInternal, err)
+		return nil, "", errs.Wrap(errs.KindInternal, err)
 	}
 	hash := sha256.Sum256(fingerprint)
 	return payload, hex.EncodeToString(hash[:]), nil
@@ -591,7 +591,7 @@ func encodeTaskRecord(record TaskRecord) ([]byte, error) {
 	}
 	if len(value) > MaximumTaskRecordBytes {
 		return nil, errs.Newf(
-			errs.CodeValidationFailed,
+			errs.KindValidationFailed,
 			"task record exceeds the %d-byte durable record limit",
 			MaximumTaskRecordBytes,
 		)
@@ -606,7 +606,7 @@ func decodeTaskRecord(value []byte) (TaskRecord, error) {
 	}
 	record, err := taskRecordFromData(data)
 	if err != nil {
-		return TaskRecord{}, errs.New(errs.CodeInternal, "task record has invalid timestamps")
+		return TaskRecord{}, errs.New(errs.KindInternal, "task record has invalid timestamps")
 	}
 	if err := validateTaskRecord(record); err != nil {
 		return TaskRecord{}, corruptRecord()
@@ -628,7 +628,7 @@ func encodeTaskEventRecord(record TaskEventRecord) ([]byte, error) {
 	}
 	if len(value) > MaximumTaskEventBytes {
 		return nil, errs.Newf(
-			errs.CodeValidationFailed,
+			errs.KindValidationFailed,
 			"task event exceeds the %d-byte durable event limit",
 			MaximumTaskEventBytes,
 		)
@@ -643,7 +643,7 @@ func decodeTaskEventRecord(value []byte) (TaskEventRecord, error) {
 	}
 	receivedAt, err := parseCanonicalTimestamp(data.ReceivedAt)
 	if err != nil {
-		return TaskEventRecord{}, errs.New(errs.CodeInternal, "task event record has an invalid received_at")
+		return TaskEventRecord{}, errs.New(errs.KindInternal, "task event record has an invalid received_at")
 	}
 	record := TaskEventRecord{
 		Sequence: data.Sequence, Identity: data.Identity, State: data.State,
@@ -721,7 +721,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 func parseCanonicalTimestamp(value string) (time.Time, error) {
 	parsed, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil || value != parsed.UTC().Format(time.RFC3339Nano) {
-		return time.Time{}, errs.New(errs.CodeInternal, "timestamp is not canonical UTC")
+		return time.Time{}, errs.New(errs.KindInternal, "timestamp is not canonical UTC")
 	}
 	return parsed, nil
 }

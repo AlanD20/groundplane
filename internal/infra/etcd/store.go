@@ -172,7 +172,7 @@ func New(ctx context.Context, endpoints []string, keyPrefix string) (Store, erro
 		Endpoints: append([]string(nil), endpoints...),
 	})
 	if err != nil {
-		return nil, errs.Wrap(errs.CodeInternal, err)
+		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 
 	return newStore(cli, keyPrefix)
@@ -180,10 +180,10 @@ func New(ctx context.Context, endpoints []string, keyPrefix string) (Store, erro
 
 func newStore(cli client, keyPrefix string) (*store, error) {
 	if cli == nil {
-		return nil, errs.New(errs.CodeValidationFailed, "etcd client is required")
+		return nil, errs.New(errs.KindValidationFailed, "etcd client is required")
 	}
 	if !strings.HasPrefix(keyPrefix, "/") || !strings.HasSuffix(keyPrefix, "/") {
-		return nil, errs.New(errs.CodeValidationFailed, "etcd key prefix must begin and end with /")
+		return nil, errs.New(errs.KindValidationFailed, "etcd key prefix must begin and end with /")
 	}
 
 	return &store{client: cli, root: strings.TrimSuffix(keyPrefix, "/")}, nil
@@ -191,15 +191,15 @@ func newStore(cli client, keyPrefix string) (*store, error) {
 
 func validateConfig(endpoints []string, keyPrefix string) error {
 	if len(endpoints) == 0 {
-		return errs.New(errs.CodeValidationFailed, "at least one etcd endpoint is required")
+		return errs.New(errs.KindValidationFailed, "at least one etcd endpoint is required")
 	}
 	for _, endpoint := range endpoints {
 		if strings.TrimSpace(endpoint) == "" {
-			return errs.New(errs.CodeValidationFailed, "etcd endpoints must not be empty")
+			return errs.New(errs.KindValidationFailed, "etcd endpoints must not be empty")
 		}
 	}
 	if !strings.HasPrefix(keyPrefix, "/") || !strings.HasSuffix(keyPrefix, "/") {
-		return errs.New(errs.CodeValidationFailed, "etcd key prefix must begin and end with /")
+		return errs.New(errs.KindValidationFailed, "etcd key prefix must begin and end with /")
 	}
 	return nil
 }
@@ -208,7 +208,7 @@ func (s *store) Health(ctx context.Context) error {
 	// Default etcd reads are linearizable. Reading a deliberately absent key
 	// proves that the cluster can serve a consistent request without mutating it.
 	_, err := s.client.Get(ctx, s.root+"/.health", clientv3.WithLimit(1))
-	return wrap(err)
+	return wrap(ctx, err)
 }
 
 func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
@@ -219,10 +219,10 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 
 	response, err := s.client.Get(ctx, physical)
 	if err != nil {
-		return nil, wrap(err)
+		return nil, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return nil, errs.New(errs.CodeInternal, "etcd get response is missing its read revision")
+		return nil, errs.New(errs.KindInternal, "etcd get response is missing its read revision")
 	}
 	result := &GetResult{ReadRevision: response.Header.Revision}
 	if len(response.Kvs) == 0 {
@@ -231,7 +231,7 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	item := response.Kvs[0]
 	logical, ok := s.logicalKey(string(item.Key))
 	if !ok {
-		return nil, errs.New(errs.CodeInternal, "etcd returned a key outside the configured prefix")
+		return nil, errs.New(errs.KindInternal, "etcd returned a key outside the configured prefix")
 	}
 	result.Entry = &KeyValue{
 		Key:         logical,
@@ -243,10 +243,10 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 
 func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyResult, error) {
 	if len(request.Keys) == 0 {
-		return nil, errs.New(errs.CodeValidationFailed, "etcd multi-get requires at least one key")
+		return nil, errs.New(errs.KindValidationFailed, "etcd multi-get requires at least one key")
 	}
 	if request.Revision < 0 {
-		return nil, errs.New(errs.CodeValidationFailed, "etcd multi-get revision must not be negative")
+		return nil, errs.New(errs.KindValidationFailed, "etcd multi-get revision must not be negative")
 	}
 
 	physicalKeys := make([]string, len(request.Keys))
@@ -266,13 +266,13 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 
 	response, err := s.client.Txn(ctx).Then(operations...).Commit()
 	if err != nil {
-		return nil, wrap(err)
+		return nil, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return nil, errs.New(errs.CodeInternal, "etcd multi-get response is missing its revision")
+		return nil, errs.New(errs.KindInternal, "etcd multi-get response is missing its revision")
 	}
 	if len(response.Responses) != len(request.Keys) {
-		return nil, errs.New(errs.CodeInternal, "etcd multi-get returned an unexpected response count")
+		return nil, errs.New(errs.KindInternal, "etcd multi-get returned an unexpected response count")
 	}
 
 	result := &GetManyResult{
@@ -283,18 +283,18 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 	for index, operation := range response.Responses {
 		rangeResponse := operation.GetResponseRange()
 		if rangeResponse == nil || len(rangeResponse.Kvs) > 1 {
-			return nil, errs.New(errs.CodeInternal, "etcd multi-get returned an invalid range response")
+			return nil, errs.New(errs.KindInternal, "etcd multi-get returned an invalid range response")
 		}
 		if len(rangeResponse.Kvs) == 0 {
 			continue
 		}
 		item := rangeResponse.Kvs[0]
 		if string(item.Key) != physicalKeys[index] {
-			return nil, errs.New(errs.CodeInternal, "etcd multi-get returned an unexpected key")
+			return nil, errs.New(errs.KindInternal, "etcd multi-get returned an unexpected key")
 		}
 		logical, ok := s.logicalKey(string(item.Key))
 		if !ok {
-			return nil, errs.New(errs.CodeInternal, "etcd returned a key outside the configured prefix")
+			return nil, errs.New(errs.KindInternal, "etcd returned a key outside the configured prefix")
 		}
 		result.Values[index] = &KeyValue{
 			Key:         logical,
@@ -312,10 +312,10 @@ func (s *store) Put(ctx context.Context, key string, value []byte) (int64, error
 	}
 	response, err := s.client.Put(ctx, physical, string(value))
 	if err != nil {
-		return 0, wrap(err)
+		return 0, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return 0, errs.New(errs.CodeInternal, "etcd put response is missing its revision")
+		return 0, errs.New(errs.KindInternal, "etcd put response is missing its revision")
 	}
 	return response.Header.Revision, nil
 }
@@ -327,20 +327,20 @@ func (s *store) Delete(ctx context.Context, key string) (int64, error) {
 	}
 	response, err := s.client.Delete(ctx, physical)
 	if err != nil {
-		return 0, wrap(err)
+		return 0, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return 0, errs.New(errs.CodeInternal, "etcd delete response is missing its revision")
+		return 0, errs.New(errs.KindInternal, "etcd delete response is missing its revision")
 	}
 	return response.Header.Revision, nil
 }
 
 func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, error) {
 	if request.Limit <= 0 {
-		return nil, errs.New(errs.CodeValidationFailed, "etcd range limit must be positive")
+		return nil, errs.New(errs.KindValidationFailed, "etcd range limit must be positive")
 	}
 	if request.Revision < 0 {
-		return nil, errs.New(errs.CodeValidationFailed, "etcd range revision must not be negative")
+		return nil, errs.New(errs.KindValidationFailed, "etcd range revision must not be negative")
 	}
 
 	physicalPrefix, err := s.physicalKey(request.Prefix)
@@ -350,7 +350,7 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 	start := physicalPrefix
 	if request.StartExclusive != "" {
 		if !strings.HasPrefix(request.StartExclusive, request.Prefix) {
-			return nil, errs.New(errs.CodeValidationFailed, "etcd range start must be within its prefix")
+			return nil, errs.New(errs.KindValidationFailed, "etcd range start must be within its prefix")
 		}
 		physicalStart, err := s.physicalKey(request.StartExclusive)
 		if err != nil {
@@ -369,10 +369,10 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 	}
 	response, err := s.client.Get(ctx, start, options...)
 	if err != nil {
-		return nil, wrap(err)
+		return nil, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return nil, errs.New(errs.CodeInternal, "etcd range response is missing its revision")
+		return nil, errs.New(errs.KindInternal, "etcd range response is missing its revision")
 	}
 
 	result := &RangeResult{
@@ -384,10 +384,10 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 	for _, item := range response.Kvs {
 		key, ok := s.logicalKey(string(item.Key))
 		if !ok {
-			return nil, errs.New(errs.CodeInternal, "etcd returned a key outside the configured prefix")
+			return nil, errs.New(errs.KindInternal, "etcd returned a key outside the configured prefix")
 		}
 		if !strings.HasPrefix(key, request.Prefix) {
-			return nil, errs.New(errs.CodeInternal, "etcd range returned a key outside the requested prefix")
+			return nil, errs.New(errs.KindInternal, "etcd range returned a key outside the requested prefix")
 		}
 		result.Values = append(result.Values, KeyValue{
 			Key:         key,
@@ -411,14 +411,14 @@ func (s *store) Transact(
 	mutations []Mutation,
 ) (TransactionResult, error) {
 	if len(mutations) == 0 {
-		return TransactionResult{}, errs.New(errs.CodeValidationFailed, "etcd transaction requires a mutation")
+		return TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
 	}
 
 	comparisons := make([]clientv3.Cmp, 0, len(conditions))
 	for _, condition := range conditions {
 		if condition.ModRevision < 0 {
 			return TransactionResult{}, errs.New(
-				errs.CodeValidationFailed,
+				errs.KindValidationFailed,
 				"etcd transaction revisions must not be negative",
 			)
 		}
@@ -444,7 +444,7 @@ func (s *store) Transact(
 		case MutationDelete:
 			operations = append(operations, clientv3.OpDelete(key))
 		default:
-			return TransactionResult{}, errs.New(errs.CodeValidationFailed, "invalid etcd transaction mutation")
+			return TransactionResult{}, errs.New(errs.KindValidationFailed, "invalid etcd transaction mutation")
 		}
 	}
 
@@ -454,10 +454,10 @@ func (s *store) Transact(
 	}
 	response, err := transaction.Then(operations...).Commit()
 	if err != nil {
-		return TransactionResult{}, wrap(err)
+		return TransactionResult{}, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return TransactionResult{}, errs.New(errs.CodeInternal, "etcd transaction response is missing its revision")
+		return TransactionResult{}, errs.New(errs.KindInternal, "etcd transaction response is missing its revision")
 	}
 	return TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}, nil
 }
@@ -468,7 +468,7 @@ func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (
 		return nil, err
 	}
 	if startRevision < 0 {
-		return nil, errs.New(errs.CodeValidationFailed, "etcd watch revision must not be negative")
+		return nil, errs.New(errs.KindValidationFailed, "etcd watch revision must not be negative")
 	}
 
 	options := []clientv3.OpOption{clientv3.WithPrefix()}
@@ -483,7 +483,7 @@ func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (
 		defer close(watchErrors)
 		for response := range upstream {
 			if err := response.Err(); err != nil {
-				deliverWatchError(ctx, watchErrors, wrap(err))
+				deliverWatchError(ctx, watchErrors, wrap(ctx, err))
 				return
 			}
 			for _, item := range response.Events {
@@ -491,7 +491,7 @@ func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (
 					deliverWatchError(
 						ctx,
 						watchErrors,
-						errs.New(errs.CodeInternal, "etcd watch returned an empty event"),
+						errs.New(errs.KindInternal, "etcd watch returned an empty event"),
 					)
 					return
 				}
@@ -500,7 +500,7 @@ func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (
 					deliverWatchError(
 						ctx,
 						watchErrors,
-						errs.New(errs.CodeInternal, "etcd watch returned a key outside the configured prefix"),
+						errs.New(errs.KindInternal, "etcd watch returned a key outside the configured prefix"),
 					)
 					return
 				}
@@ -539,28 +539,28 @@ func deliverWatchError(ctx context.Context, destination chan<- error, err error)
 
 func (s *store) Snapshot(ctx context.Context, w io.Writer) error {
 	if w == nil {
-		return errs.New(errs.CodeValidationFailed, "snapshot writer is required")
+		return errs.New(errs.KindValidationFailed, "snapshot writer is required")
 	}
 
 	reader, err := s.client.Snapshot(ctx)
 	if err != nil {
-		return wrap(err)
+		return wrap(ctx, err)
 	}
 	_, copyErr := io.Copy(w, reader)
 	closeErr := reader.Close()
 	if copyErr != nil {
-		return wrap(copyErr)
+		return wrap(ctx, copyErr)
 	}
-	return wrap(closeErr)
+	return wrap(ctx, closeErr)
 }
 
 func (s *store) Close() error {
-	return wrap(s.client.Close())
+	return wrap(context.Background(), s.client.Close())
 }
 
 func (s *store) physicalKey(key string) (string, error) {
 	if key == "" || !strings.HasPrefix(key, "/") {
-		return "", errs.New(errs.CodeValidationFailed, "etcd logical keys must begin with /")
+		return "", errs.New(errs.KindValidationFailed, "etcd logical keys must begin with /")
 	}
 	return s.root + key, nil
 }
@@ -572,19 +572,20 @@ func (s *store) logicalKey(key string) (string, bool) {
 	return strings.TrimPrefix(key, s.root), true
 }
 
-func wrap(err error) error {
+func wrap(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
+	if ctx != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+	}
 	if errors.Is(err, rpctypes.ErrCompacted) {
-		return errs.Wrap(errs.CodeCursorExpired, err)
+		return errs.Wrap(errs.KindCursorExpired, err)
 	}
-	if errors.Is(err, context.Canceled) {
-		return errs.Wrap(errs.CodeInternal, err)
+	if status.Code(err) == codes.Unavailable || status.Code(err) == codes.DeadlineExceeded {
+		return errs.Wrap(errs.KindStorageUnavailable, err)
 	}
-	if errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.Unavailable ||
-		status.Code(err) == codes.DeadlineExceeded {
-		return errs.Wrap(errs.CodeStorageUnavailable, err)
-	}
-	return errs.Wrap(errs.CodeInternal, err)
+	return errs.Wrap(errs.KindInternal, err)
 }

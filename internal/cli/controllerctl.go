@@ -22,7 +22,7 @@ func newControllerCmd(runController ControllerRunner) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runController == nil {
-				return errs.New(errs.CodeInternal, "controller runner is not configured")
+				return errs.New(errs.KindInternal, "controller runner is not configured")
 			}
 			return runController(cmd.Context())
 		},
@@ -34,7 +34,7 @@ func newControllerCmd(runController ControllerRunner) *cobra.Command {
 		Short: "Show the controller age key's path and fingerprint (never its value)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New(errs.CodeNotImplemented, "controller key diagnostics are not implemented")
+			return errs.New(errs.KindNotImplemented, "controller key diagnostics are not implemented")
 		},
 	})
 	cmd.AddCommand(key)
@@ -45,7 +45,7 @@ func newControllerCmd(runController ControllerRunner) *cobra.Command {
 		Short: "Show etcd endpoint status",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New(errs.CodeNotImplemented, "controller etcd diagnostics are not implemented")
+			return errs.New(errs.KindNotImplemented, "controller etcd diagnostics are not implemented")
 		},
 	})
 	cmd.AddCommand(etcd)

@@ -100,21 +100,21 @@ func encodeDynamicSegment(value string) string {
 
 func validateContext(ctx context.Context) error {
 	if ctx == nil {
-		return errs.New(errs.CodeInternal, "hierarchy context is required")
+		return errs.New(errs.KindInternal, "hierarchy context is required")
 	}
 	return ctx.Err()
 }
 
 func validateID(kind ids.Kind, id string) error {
 	if err := ids.Validate(kind, id); err != nil {
-		return errs.New(errs.CodeValidationFailed, err.Error())
+		return errs.New(errs.KindValidationFailed, err.Error())
 	}
 	return nil
 }
 
 func validateLabel(field string, value string) error {
 	if value == "" || !utf8.ValidString(value) {
-		return errs.Newf(errs.CodeValidationFailed, "%s is required and must be valid UTF-8", field)
+		return errs.Newf(errs.KindValidationFailed, "%s is required and must be valid UTF-8", field)
 	}
 	return nil
 }
@@ -144,11 +144,11 @@ func validateProject(record ProjectRecord) error {
 		return validateID(ids.KindTenant, record.TenantID)
 	case ProjectKindBacking:
 		if record.TenantID != "" {
-			return errs.New(errs.CodeValidationFailed, "backing projects must not have a tenant id")
+			return errs.New(errs.KindValidationFailed, "backing projects must not have a tenant id")
 		}
 		return nil
 	default:
-		return errs.New(errs.CodeValidationFailed, "project kind must be tenant or backing")
+		return errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
 	}
 }
 
@@ -170,7 +170,7 @@ func validateEnvironment(record EnvironmentRecord) error {
 	}
 	_, offset := record.CreatedAt.Zone()
 	if record.CreatedAt.IsZero() || offset != 0 {
-		return errs.New(errs.CodeValidationFailed, "environment created_at must be a non-zero UTC timestamp")
+		return errs.New(errs.KindValidationFailed, "environment created_at must be a non-zero UTC timestamp")
 	}
 	return nil
 }
@@ -178,7 +178,7 @@ func validateEnvironment(record EnvironmentRecord) error {
 func encodeEnvelope[T any](kind string, record T) ([]byte, error) {
 	value, err := json.Marshal(recordEnvelope[T]{Schema: 1, Kind: kind, Data: record})
 	if err != nil {
-		return nil, errs.Wrap(errs.CodeInternal, err)
+		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	return value, nil
 }
@@ -237,7 +237,7 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 	}
 	createdAt, err := time.Parse(time.RFC3339Nano, data.CreatedAt)
 	if err != nil || data.CreatedAt != createdAt.UTC().Format(time.RFC3339Nano) {
-		return EnvironmentRecord{}, errs.New(errs.CodeInternal, "environment record has an invalid created_at")
+		return EnvironmentRecord{}, errs.New(errs.KindInternal, "environment record has an invalid created_at")
 	}
 	record := EnvironmentRecord{
 		ID: data.ID, ProjectID: data.ProjectID, Slug: data.Slug, Name: data.Name,
@@ -252,19 +252,19 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 func decodeEnvelope[T any](value []byte, kind string) (T, error) {
 	var zero T
 	if err := rejectDuplicateJSONFields(value); err != nil {
-		return zero, errs.New(errs.CodeInternal, "durable record contains duplicate or malformed JSON fields")
+		return zero, errs.New(errs.KindInternal, "durable record contains duplicate or malformed JSON fields")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var envelope recordEnvelope[T]
 	if err := decoder.Decode(&envelope); err != nil {
-		return zero, errs.New(errs.CodeInternal, "durable record schema is invalid")
+		return zero, errs.New(errs.KindInternal, "durable record schema is invalid")
 	}
 	if err := requireJSONEOF(decoder); err != nil {
-		return zero, errs.New(errs.CodeInternal, "durable record has trailing JSON data")
+		return zero, errs.New(errs.KindInternal, "durable record has trailing JSON data")
 	}
 	if envelope.Schema != 1 || envelope.Kind != kind {
-		return zero, errs.New(errs.CodeInternal, "durable record envelope does not match its repository")
+		return zero, errs.New(errs.KindInternal, "durable record envelope does not match its repository")
 	}
 	return envelope.Data, nil
 }
@@ -338,7 +338,7 @@ func requireJSONEOF(decoder *json.Decoder) error {
 }
 
 func corruptRecord() error {
-	return errs.New(errs.CodeInternal, "durable record violates its repository schema")
+	return errs.New(errs.KindInternal, "durable record violates its repository schema")
 }
 
 func getRecord[T any](
@@ -346,7 +346,7 @@ func getRecord[T any](
 	store hierarchyStore,
 	key string,
 	id string,
-	notFound errs.Code,
+	notFound errs.Kind,
 	decode func([]byte) (T, error),
 	identity func(T) string,
 ) (Versioned[T], error) {
@@ -362,7 +362,7 @@ func getRecord[T any](
 		return Versioned[T]{}, err
 	}
 	if identity(record) != id {
-		return Versioned[T]{}, errs.New(errs.CodeInternal, "primary key does not match its record id")
+		return Versioned[T]{}, errs.New(errs.KindInternal, "primary key does not match its record id")
 	}
 	return Versioned[T]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
@@ -375,7 +375,7 @@ func resolveRecord[T any](
 	indexKey string,
 	primaryKey func(string) string,
 	idKind ids.Kind,
-	notFound errs.Code,
+	notFound errs.Kind,
 	decode func([]byte) (T, error),
 	identity func(T) string,
 	matches func(T) bool,
@@ -389,24 +389,24 @@ func resolveRecord[T any](
 	}
 	id := string(index.Entry.Value)
 	if ids.Validate(idKind, id) != nil {
-		return Versioned[T]{}, errs.New(errs.CodeInternal, "slug index contains an invalid stable id")
+		return Versioned[T]{}, errs.New(errs.KindInternal, "slug index contains an invalid stable id")
 	}
 	result, err := store.GetMany(ctx, GetManyRequest{Keys: []string{primaryKey(id)}, Revision: index.ReadRevision})
 	if err != nil {
 		return Versioned[T]{}, err
 	}
 	if len(result.Values) != 1 || result.Values[0] == nil {
-		return Versioned[T]{}, errs.New(errs.CodeInternal, "slug index references a missing primary record")
+		return Versioned[T]{}, errs.New(errs.KindInternal, "slug index references a missing primary record")
 	}
 	record, err := decode(result.Values[0].Value)
 	if err != nil {
 		return Versioned[T]{}, err
 	}
 	if identity(record) != id {
-		return Versioned[T]{}, errs.New(errs.CodeInternal, "slug index id does not match its primary record")
+		return Versioned[T]{}, errs.New(errs.KindInternal, "slug index id does not match its primary record")
 	}
 	if !matches(record) {
-		return Versioned[T]{}, errs.New(errs.CodeInternal, "slug index ownership does not match its primary record")
+		return Versioned[T]{}, errs.New(errs.KindInternal, "slug index ownership does not match its primary record")
 	}
 	return Versioned[T]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
@@ -438,16 +438,16 @@ func renameRecord[T any](
 	}
 	if len(secondary.Values) != len(secondaryKeys) || secondary.Values[0] == nil ||
 		string(secondary.Values[0].Value) != id {
-		return Versioned[T]{}, errs.New(errs.CodeInternal, "slug index is missing or mismatched")
+		return Versioned[T]{}, errs.New(errs.KindInternal, "slug index is missing or mismatched")
 	}
 	for index := range membershipKeys {
 		value := secondary.Values[index+1]
 		if value == nil || string(value.Value) != id {
-			return Versioned[T]{}, errs.New(errs.CodeInternal, "owner index is missing or mismatched")
+			return Versioned[T]{}, errs.New(errs.KindInternal, "owner index is missing or mismatched")
 		}
 	}
 	if newSlugOffset >= 0 && secondary.Values[newSlugOffset] != nil {
-		return Versioned[T]{}, errs.New(errs.CodeSlugConflict, "slug is already in use")
+		return Versioned[T]{}, errs.New(errs.KindSlugConflict, "slug is already in use")
 	}
 	value, err := encode(replacement)
 	if err != nil {
@@ -479,7 +479,7 @@ func renameRecord[T any](
 				return Versioned[T]{}, readErr
 			}
 			if occupied.Entry != nil {
-				return Versioned[T]{}, errs.New(errs.CodeSlugConflict, "slug is already in use")
+				return Versioned[T]{}, errs.New(errs.KindSlugConflict, "slug is already in use")
 			}
 		}
 		return Versioned[T]{}, stateConflict(kind, id)
@@ -488,7 +488,7 @@ func renameRecord[T any](
 }
 
 func stateConflict(kind string, id string) error {
-	return errs.Newf(errs.CodeStateConflict, "%s %s changed", kind, id)
+	return errs.Newf(errs.KindStateConflict, "%s %s changed", kind, id)
 }
 
 func normalizePageRequest(
@@ -505,7 +505,7 @@ func normalizePageRequest(
 	}
 	if limit < 1 || limit > MaximumPageLimit {
 		return 0, 0, "", "", errs.New(
-			errs.CodeValidationFailed,
+			errs.KindValidationFailed,
 			"page limit must be between 1 and 200",
 		)
 	}
@@ -521,10 +521,10 @@ func normalizePageRequest(
 		return 0, 0, "", "", err
 	}
 	if cursor.Query != query {
-		return 0, 0, "", "", errs.New(errs.CodeValidationFailed, "cursor does not match the list query")
+		return 0, 0, "", "", errs.New(errs.KindMalformedRequest, "cursor does not match the list query")
 	}
 	if ids.Validate(idKind, cursor.LastID) != nil {
-		return 0, 0, "", "", errs.New(errs.CodeValidationFailed, "cursor contains an invalid last id")
+		return 0, 0, "", "", errs.New(errs.KindMalformedRequest, "cursor contains an invalid last id")
 	}
 	return limit, cursor.Revision, prefix + cursor.LastID, query, nil
 }
@@ -538,7 +538,7 @@ func queryDigest(collection string, ownerKind string, ownerID string, limit int)
 		Limit:      limit,
 	})
 	if err != nil {
-		return "", errs.Wrap(errs.CodeInternal, err)
+		return "", errs.Wrap(errs.KindInternal, err)
 	}
 	digest := sha256.Sum256(encoded)
 	return base64.RawURLEncoding.EncodeToString(digest[:]), nil
@@ -547,30 +547,30 @@ func queryDigest(collection string, ownerKind string, ownerID string, limit int)
 func encodeCursor(cursor cursorPayload) (string, error) {
 	encoded, err := json.Marshal(cursor)
 	if err != nil {
-		return "", errs.Wrap(errs.CodeInternal, err)
+		return "", errs.Wrap(errs.KindInternal, err)
 	}
 	return base64.RawURLEncoding.EncodeToString(encoded), nil
 }
 
 func decodeCursor(value string) (cursorPayload, error) {
 	if len(value) > maximumEncodedCursorBytes {
-		return cursorPayload{}, errs.New(errs.CodeValidationFailed, "cursor is too long")
+		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is too long")
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(value)
 	if err != nil || base64.RawURLEncoding.EncodeToString(decoded) != value {
-		return cursorPayload{}, errs.New(errs.CodeValidationFailed, "cursor is malformed")
+		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is malformed")
 	}
 	if err := rejectDuplicateJSONFields(decoded); err != nil {
-		return cursorPayload{}, errs.New(errs.CodeValidationFailed, "cursor is malformed")
+		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is malformed")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(decoded))
 	decoder.DisallowUnknownFields()
 	var cursor cursorPayload
 	if err := decoder.Decode(&cursor); err != nil || requireJSONEOF(decoder) != nil {
-		return cursorPayload{}, errs.New(errs.CodeValidationFailed, "cursor is malformed")
+		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is malformed")
 	}
 	if cursor.Version != cursorVersion || cursor.Revision <= 0 || cursor.LastID == "" || cursor.Query == "" {
-		return cursorPayload{}, errs.New(errs.CodeValidationFailed, "cursor is malformed")
+		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is malformed")
 	}
 	return cursor, nil
 }
@@ -617,7 +617,7 @@ func listPrimaryPage[T any](
 	items := make([]Versioned[T], 0, len(rangeResult.Values))
 	for _, value := range rangeResult.Values {
 		if err := validateListKey(prefix, value.Key, idKind); err != nil {
-			return Page[T]{}, errs.New(errs.CodeInternal, "primary list contains an invalid key")
+			return Page[T]{}, errs.New(errs.KindInternal, "primary list contains an invalid key")
 		}
 		record, err := decode(value.Value)
 		if err != nil {
@@ -625,10 +625,10 @@ func listPrimaryPage[T any](
 		}
 		expectedID := strings.TrimPrefix(value.Key, prefix)
 		if identity(record) != expectedID {
-			return Page[T]{}, errs.New(errs.CodeInternal, "primary list key does not match its record id")
+			return Page[T]{}, errs.New(errs.KindInternal, "primary list key does not match its record id")
 		}
 		if !matches(record) {
-			return Page[T]{}, errs.New(errs.CodeInternal, "primary list contains a record outside its scope")
+			return Page[T]{}, errs.New(errs.KindInternal, "primary list contains a record outside its scope")
 		}
 		items = append(items, Versioned[T]{
 			Record: record, Revision: value.ModRevision, ReadRevision: rangeResult.ReadRevision,
@@ -677,11 +677,11 @@ func listIndexPage[T any](
 	expectedIDs := make([]string, len(rangeResult.Values))
 	for index, value := range rangeResult.Values {
 		if err := validateListKey(prefix, value.Key, idKind); err != nil {
-			return Page[T]{}, errs.New(errs.CodeInternal, "owner index contains an invalid key")
+			return Page[T]{}, errs.New(errs.KindInternal, "owner index contains an invalid key")
 		}
 		id := strings.TrimPrefix(value.Key, prefix)
 		if string(value.Value) != id {
-			return Page[T]{}, errs.New(errs.CodeInternal, "owner index value does not match its key")
+			return Page[T]{}, errs.New(errs.KindInternal, "owner index value does not match its key")
 		}
 		primaryKeys[index] = primaryKey(id)
 		expectedIDs[index] = id
@@ -691,22 +691,22 @@ func listIndexPage[T any](
 		return Page[T]{}, err
 	}
 	if len(primaries.Values) != len(primaryKeys) {
-		return Page[T]{}, errs.New(errs.CodeInternal, "owner index read returned an invalid primary count")
+		return Page[T]{}, errs.New(errs.KindInternal, "owner index read returned an invalid primary count")
 	}
 	items := make([]Versioned[T], 0, len(primaryKeys))
 	for index, value := range primaries.Values {
 		if value == nil {
-			return Page[T]{}, errs.New(errs.CodeInternal, "owner index references a missing primary record")
+			return Page[T]{}, errs.New(errs.KindInternal, "owner index references a missing primary record")
 		}
 		record, err := decode(value.Value)
 		if err != nil {
 			return Page[T]{}, err
 		}
 		if identity(record) != expectedIDs[index] {
-			return Page[T]{}, errs.New(errs.CodeInternal, "owner index id does not match its primary record")
+			return Page[T]{}, errs.New(errs.KindInternal, "owner index id does not match its primary record")
 		}
 		if !matches(record) {
-			return Page[T]{}, errs.New(errs.CodeInternal, "owner index does not match its primary record")
+			return Page[T]{}, errs.New(errs.KindInternal, "owner index does not match its primary record")
 		}
 		items = append(items, Versioned[T]{
 			Record: record, Revision: value.ModRevision, ReadRevision: rangeResult.ReadRevision,
@@ -724,11 +724,11 @@ func nextPageCursor(result *RangeResult, query string, kind ids.Kind, prefix str
 		return "", nil
 	}
 	if len(result.Values) == 0 || result.ReadRevision <= 0 {
-		return "", errs.New(errs.CodeInternal, "paginated range returned an invalid continuation")
+		return "", errs.New(errs.KindInternal, "paginated range returned an invalid continuation")
 	}
 	lastKey := result.Values[len(result.Values)-1].Key
 	if err := validateListKey(prefix, lastKey, kind); err != nil {
-		return "", errs.New(errs.CodeInternal, "paginated range returned an invalid continuation key")
+		return "", errs.New(errs.KindInternal, "paginated range returned an invalid continuation key")
 	}
 	lastID := strings.TrimPrefix(lastKey, prefix)
 	return encodeCursor(cursorPayload{

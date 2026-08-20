@@ -23,7 +23,7 @@ const (
 // ordered Compose sources of an already structurally validated bundle.
 func Preflight(ctx context.Context, bundle core.BlueprintBundle) error {
 	if ctx == nil {
-		return errs.New(errs.CodeInternal, "blueprint preflight context is required")
+		return errs.New(errs.KindInternal, "blueprint preflight context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -204,5 +204,5 @@ func graphEdge(node *yaml.Node, index int) (*yaml.Node, int) {
 }
 
 func validationError(message string) error {
-	return errs.New(errs.CodeValidationFailed, message)
+	return errs.New(errs.KindValidationFailed, message)
 }

@@ -45,20 +45,20 @@ type Client struct {
 
 func NewClient(socketPath, agentID string, token []byte, logger *slog.Logger) (*Client, error) {
 	if socketPath != agentprotocol.SocketPath {
-		return nil, errs.New(errs.CodeValidationFailed, "agent: invalid Controller socket path")
+		return nil, errs.New(errs.KindValidationFailed, "agent: invalid Controller socket path")
 	}
 	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
-		return nil, errs.New(errs.CodeValidationFailed, "agent: invalid Agent id")
+		return nil, errs.New(errs.KindValidationFailed, "agent: invalid Agent id")
 	}
 	if len(token) != agentprotocol.RawTokenBytes {
 		return nil, errs.Newf(
-			errs.CodeValidationFailed,
+			errs.KindValidationFailed,
 			"agent: channel token must contain exactly %d decoded bytes",
 			agentprotocol.RawTokenBytes,
 		)
 	}
 	if logger == nil {
-		return nil, errs.New(errs.CodeValidationFailed, "agent: logger is required")
+		return nil, errs.New(errs.KindValidationFailed, "agent: logger is required")
 	}
 
 	client := &Client{
@@ -114,10 +114,10 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	config := initial.GetConfigUpdate().GetAgentConfig()
 	if config == nil {
-		return errs.New(errs.CodeInternal, "agent: Controller did not send configuration first")
+		return errs.New(errs.KindInternal, "agent: Controller did not send configuration first")
 	}
 	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
-		return errs.New(errs.CodeInternal, "agent: Controller sent invalid initial configuration")
+		return errs.New(errs.KindInternal, "agent: Controller sent invalid initial configuration")
 	}
 
 	pullInterval := time.Duration(config.PullIntervalSeconds) * time.Second
@@ -168,7 +168,7 @@ func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.started {
-		return [agentprotocol.RawTokenBytes]byte{}, errs.New(errs.CodeInternal, "agent: client has already started")
+		return [agentprotocol.RawTokenBytes]byte{}, errs.New(errs.KindInternal, "agent: client has already started")
 	}
 	c.started = true
 	token := c.token
@@ -199,9 +199,9 @@ func (c *Client) handleControllerMessage(message *agentpb.ControllerMessage) (bo
 		return true, nil
 	}
 	if message.GetConfigUpdate() != nil {
-		return false, errs.New(errs.CodeNotImplemented, "agent: live configuration update is not implemented")
+		return false, errs.New(errs.KindNotImplemented, "agent: live configuration update is not implemented")
 	}
-	return false, errs.New(errs.CodeInternal, "agent: Controller sent an empty message")
+	return false, errs.New(errs.KindInternal, "agent: Controller sent an empty message")
 }
 
 type receiveResult struct {
@@ -247,5 +247,5 @@ func transportError(ctx context.Context, message string) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	return errs.New(errs.CodeInternal, message)
+	return errs.New(errs.KindInternal, message)
 }

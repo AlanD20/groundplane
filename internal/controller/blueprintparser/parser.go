@@ -58,7 +58,7 @@ var rootGroundplaneFields = map[string]struct{}{
 // Parse validates and loads a closed Blueprint bundle without ambient input.
 func Parse(ctx context.Context, bundle core.BlueprintBundle) (Result, error) {
 	if ctx == nil {
-		return Result{}, errs.New(errs.CodeInternal, "blueprint parser context is required")
+		return Result{}, errs.New(errs.KindInternal, "blueprint parser context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
@@ -82,7 +82,7 @@ func Parse(ctx context.Context, bundle core.BlueprintBundle) (Result, error) {
 
 	workspace, err := os.MkdirTemp("", "groundplane-blueprint-")
 	if err != nil {
-		return Result{}, errs.New(errs.CodeInternal, "blueprint workspace creation failed")
+		return Result{}, errs.New(errs.KindInternal, "blueprint workspace creation failed")
 	}
 	defer func() {
 		// Cleanup is best-effort: the private workspace contains no durable
@@ -91,7 +91,7 @@ func Parse(ctx context.Context, bundle core.BlueprintBundle) (Result, error) {
 	}()
 	emptyEnv, err := createEmptyEnvironmentFile(workspace)
 	if err != nil {
-		return Result{}, errs.New(errs.CodeInternal, "blueprint workspace creation failed")
+		return Result{}, errs.New(errs.KindInternal, "blueprint workspace creation failed")
 	}
 
 	plan := newParsePlan(bundle, rootCompose, projectName, emptyEnv)
@@ -114,7 +114,7 @@ func Parse(ctx context.Context, bundle core.BlueprintBundle) (Result, error) {
 		return Result{}, err
 	}
 	if err := plan.materialize(workspace); err != nil {
-		return Result{}, errs.New(errs.CodeInternal, "blueprint workspace materialization failed")
+		return Result{}, errs.New(errs.KindInternal, "blueprint workspace materialization failed")
 	}
 
 	configFiles := make([]types.ConfigFile, 0, len(bundle.ComposeSources))
@@ -197,7 +197,7 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	root.Content = composeNodes
 	compose, err := yaml.Marshal(document)
 	if err != nil {
-		return core.Envelope{}, Extensions{}, nil, errs.New(errs.CodeInternal, "blueprint root preparation failed")
+		return core.Envelope{}, Extensions{}, nil, errs.New(errs.KindInternal, "blueprint root preparation failed")
 	}
 	extensions := Extensions{
 		Requires: authored.Requires, Attachments: authored.Attachments, Entries: authored.Entries,

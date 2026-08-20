@@ -47,23 +47,23 @@ func ValidateCalendar(ctx context.Context, expr string) error {
 	}
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: execute calendar validator: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: execute calendar validator: %w", err))
 	}
 	detail := strings.TrimSpace(string(output))
 	if detail == "" {
 		detail = exitErr.Error()
 	}
-	return errs.Newf(errs.CodeValidationFailed, "systemd: invalid calendar expression %q: %s", expr, detail)
+	return errs.Newf(errs.KindValidationFailed, "systemd: invalid calendar expression %q: %s", expr, detail)
 }
 
 // InstallUnit validates and atomically replaces one Groundplane-owned service
 // unit, then reloads systemd. A failed reload restores the previous file.
 func InstallUnit(ctx context.Context, name, contents string) error {
 	if _, ok := managedUnits[name]; !ok {
-		return errs.Newf(errs.CodeValidationFailed, "systemd: unit %q is not Groundplane-managed", name)
+		return errs.Newf(errs.KindValidationFailed, "systemd: unit %q is not Groundplane-managed", name)
 	}
 	if strings.TrimSpace(contents) == "" {
-		return errs.Newf(errs.CodeValidationFailed, "systemd: unit %q is empty", name)
+		return errs.Newf(errs.KindValidationFailed, "systemd: unit %q is empty", name)
 	}
 	if err := verifyUnit(ctx, name, contents); err != nil {
 		return err
@@ -73,7 +73,7 @@ func InstallUnit(ctx context.Context, name, contents string) error {
 	}
 
 	if err := os.MkdirAll(systemUnitDirectory, 0o755); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: create unit directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: create unit directory: %w", err))
 	}
 	target := filepath.Join(systemUnitDirectory, name)
 	previous, previousMode, existed, err := readExistingUnit(target)
@@ -92,7 +92,7 @@ func InstallUnit(ctx context.Context, name, contents string) error {
 			rollbackErr = daemonReload(ctx)
 		}
 		if rollbackErr != nil {
-			return errs.Wrap(errs.CodeInternal, errors.Join(reloadErr,
+			return errs.Wrap(errs.KindInternal, errors.Join(reloadErr,
 				fmt.Errorf("systemd: rollback failed: %w", rollbackErr)))
 		}
 		return reloadErr
@@ -102,12 +102,12 @@ func InstallUnit(ctx context.Context, name, contents string) error {
 func verifyUnit(ctx context.Context, name, contents string) error {
 	directory, err := os.MkdirTemp("", "groundplane-unit-")
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: create verification directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: create verification directory: %w", err))
 	}
 	defer os.RemoveAll(directory)
 	path := filepath.Join(directory, name)
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: write unit for verification: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: write unit for verification: %w", err))
 	}
 
 	cmd := exec.CommandContext(ctx, "systemd-analyze", "verify", path)
@@ -120,9 +120,9 @@ func verifyUnit(ctx context.Context, name, contents string) error {
 	}
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: execute unit validator: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: execute unit validator: %w", err))
 	}
-	return errs.Newf(errs.CodeValidationFailed, "systemd: invalid unit %q: %s", name, commandDetail(output, exitErr))
+	return errs.Newf(errs.KindValidationFailed, "systemd: invalid unit %q: %s", name, commandDetail(output, exitErr))
 }
 
 func daemonReload(ctx context.Context) error {
@@ -134,7 +134,7 @@ func daemonReload(ctx context.Context) error {
 	if contextErr := ctx.Err(); contextErr != nil {
 		return contextErr
 	}
-	return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: daemon-reload: %s", commandDetail(output, err)))
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: daemon-reload: %s", commandDetail(output, err)))
 }
 
 func readExistingUnit(path string) ([]byte, fs.FileMode, bool, error) {
@@ -143,14 +143,14 @@ func readExistingUnit(path string) ([]byte, fs.FileMode, bool, error) {
 		return nil, 0, false, nil
 	}
 	if err != nil {
-		return nil, 0, false, errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: inspect existing unit: %w", err))
+		return nil, 0, false, errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: inspect existing unit: %w", err))
 	}
 	if !info.Mode().IsRegular() {
-		return nil, 0, false, errs.New(errs.CodeInternal, "systemd: existing managed unit is not a regular file")
+		return nil, 0, false, errs.New(errs.KindInternal, "systemd: existing managed unit is not a regular file")
 	}
 	contents, err := os.ReadFile(path)
 	if err != nil {
-		return nil, 0, false, errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: read existing unit: %w", err))
+		return nil, 0, false, errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: read existing unit: %w", err))
 	}
 	return contents, info.Mode().Perm(), true, nil
 }
@@ -160,7 +160,7 @@ func restoreUnit(path string, contents []byte, mode fs.FileMode, existed bool) e
 		return writeAtomicFile(path, contents, mode)
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: remove failed unit: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: remove failed unit: %w", err))
 	}
 	return syncDirectory(filepath.Dir(path))
 }
@@ -169,7 +169,7 @@ func writeAtomicFile(path string, contents []byte, mode fs.FileMode) error {
 	directory := filepath.Dir(path)
 	temporary, err := os.CreateTemp(directory, ".groundplane-unit-")
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: create temporary unit: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: create temporary unit: %w", err))
 	}
 	temporaryPath := temporary.Name()
 	keepTemporary := true
@@ -180,19 +180,19 @@ func writeAtomicFile(path string, contents []byte, mode fs.FileMode) error {
 		}
 	}()
 	if err := temporary.Chmod(mode); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: set unit mode: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: set unit mode: %w", err))
 	}
 	if _, err := temporary.Write(contents); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: write temporary unit: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: write temporary unit: %w", err))
 	}
 	if err := temporary.Sync(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: sync temporary unit: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: sync temporary unit: %w", err))
 	}
 	if err := temporary.Close(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: close temporary unit: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: close temporary unit: %w", err))
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: replace unit: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: replace unit: %w", err))
 	}
 	keepTemporary = false
 	return syncDirectory(directory)
@@ -201,11 +201,11 @@ func writeAtomicFile(path string, contents []byte, mode fs.FileMode) error {
 func syncDirectory(path string) error {
 	directory, err := os.Open(path)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: open unit directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: open unit directory: %w", err))
 	}
 	defer directory.Close()
 	if err := directory.Sync(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("systemd: sync unit directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("systemd: sync unit directory: %w", err))
 	}
 	return nil
 }
@@ -234,5 +234,5 @@ func commandDetail(output []byte, fallback error) string {
 // running process can't itself go through a Runner it's in the process
 // of superseding.
 func SelfUpdate(ctx context.Context, newBinaryPath string) error {
-	return errs.New(errs.CodeNotImplemented, "systemd: not implemented")
+	return errs.New(errs.KindNotImplemented, "systemd: not implemented")
 }

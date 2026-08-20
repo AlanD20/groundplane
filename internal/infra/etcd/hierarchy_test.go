@@ -51,7 +51,7 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	if renamed.Record.ID != tenantID || renamed.Record.Slug != "acme-group" {
 		t.Fatalf("renamed tenant = %+v", renamed.Record)
 	}
-	if _, err := repository.ResolveTenant(ctx, "acme"); !errors.Is(err, errs.New(errs.CodeTenantNotFound, "")) {
+	if _, err := repository.ResolveTenant(ctx, "acme"); !errors.Is(err, errs.New(errs.KindTenantNotFound, "")) {
 		t.Fatalf("ResolveTenant(old slug) error = %v, want tenant.not_found", err)
 	}
 	resolved, err := repository.ResolveTenant(ctx, "acme-group")
@@ -60,7 +60,7 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	}
 	if _, err := repository.RenameProject(
 		ctx, projectID, project.Revision-1, "console-next", "Console Next",
-	); !errors.Is(err, errs.New(errs.CodeStateConflict, "")) {
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("RenameProject(stale revision) error = %v, want state.conflict", err)
 	}
 }
@@ -86,7 +86,7 @@ func TestHierarchyScopedSlugUniquenessIsAtomic(t *testing.T) {
 	}
 	if _, err := repository.CreateTenant(ctx, TenantRecord{
 		ID: hierarchyTestID(ids.KindTenant, 12), Slug: "a", Name: "Duplicate",
-	}); !errors.Is(err, errs.New(errs.CodeSlugConflict, "")) {
+	}); !errors.Is(err, errs.New(errs.KindSlugConflict, "")) {
 		t.Fatalf("CreateTenant(duplicate slug) error = %v, want slug.conflict", err)
 	}
 	for index, tenantID := range []string{tenantA, tenantB} {
@@ -101,7 +101,7 @@ func TestHierarchyScopedSlugUniquenessIsAtomic(t *testing.T) {
 	if _, err := repository.CreateProject(ctx, ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 22), TenantID: tenantA,
 		Slug: "shared-name", Name: "Duplicate", Kind: ProjectKindTenant,
-	}); !errors.Is(err, errs.New(errs.CodeSlugConflict, "")) {
+	}); !errors.Is(err, errs.New(errs.KindSlugConflict, "")) {
 		t.Fatalf("CreateProject(duplicate scoped slug) error = %v, want slug.conflict", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestHierarchyOwnerMustExistAtCreateCommit(t *testing.T) {
 		ID: hierarchyTestID(ids.KindProject, 31), TenantID: hierarchyTestID(ids.KindTenant, 30),
 		Slug: "orphan", Name: "Orphan", Kind: ProjectKindTenant,
 	})
-	if !errors.Is(err, errs.New(errs.CodeTenantNotFound, "")) {
+	if !errors.Is(err, errs.New(errs.KindTenantNotFound, "")) {
 		t.Fatalf("CreateProject(orphan) error = %v, want tenant.not_found", err)
 	}
 }
@@ -170,7 +170,7 @@ func TestHierarchyPaginationPinsRevisionAndOrdersByID(t *testing.T) {
 	}
 	if _, err := repository.ListTenants(ctx, PageRequest{
 		Limit: 1, Cursor: pageOne.NextCursor,
-	}); !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	}); !errors.Is(err, errs.New(errs.KindMalformedRequest, "")) {
 		t.Fatalf("ListTenants(query mismatch) error = %v, want validation.failed", err)
 	}
 }
@@ -255,7 +255,7 @@ func TestHierarchyRejectsCorruptDurableEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed corrupt record: %v", err)
 	}
-	if _, err := repository.GetTenant(context.Background(), id); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if _, err := repository.GetTenant(context.Background(), id); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("GetTenant(corrupt) error = %v, want internal", err)
 	}
 }
@@ -363,7 +363,7 @@ func TestHierarchyRejectsStandaloneBackingEnvironmentCreation(t *testing.T) {
 		Slug: "main", Name: "Main", VolumeDir: "/infra/vol/main",
 		CreatedAt: time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC),
 	})
-	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("CreateEnvironment(backing) error = %v, want validation.failed", err)
 	}
 }
@@ -385,7 +385,7 @@ func seedHierarchyTest(t *testing.T, store *memoryHierarchyStore, mutations []Mu
 
 func assertInternalHierarchyError(t *testing.T, err error) {
 	t.Helper()
-	if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("read error = %v, want internal", err)
 	}
 }
@@ -487,7 +487,7 @@ func (store *memoryHierarchyStore) Transact(
 			version.value = append([]byte(nil), mutation.Value...)
 		case MutationDelete:
 		default:
-			return TransactionResult{}, errs.New(errs.CodeInternal, "fake store received invalid mutation")
+			return TransactionResult{}, errs.New(errs.KindInternal, "fake store received invalid mutation")
 		}
 		store.history[mutation.Key] = append(store.history[mutation.Key], version)
 	}

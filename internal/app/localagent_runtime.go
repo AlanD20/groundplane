@@ -22,7 +22,7 @@ type credentialCipher struct {
 
 func newCredentialCipher(key controllerKey) (*credentialCipher, error) {
 	if key == nil {
-		return nil, errs.New(errs.CodeInternal, "agent runtime controller key is required")
+		return nil, errs.New(errs.KindInternal, "agent runtime controller key is required")
 	}
 	return &credentialCipher{key: key}, nil
 }
@@ -38,7 +38,14 @@ func (cipher *credentialCipher) Open(ctx context.Context, ciphertext []byte) ([]
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return cipher.key.Unwrap(ciphertext)
+	plaintext, err := cipher.key.Unwrap(ciphertext)
+	if err == nil {
+		return plaintext, nil
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return nil, contextErr
+	}
+	return nil, errs.Wrap(errs.KindInternal, err)
 }
 
 type credentialRuntime interface {
@@ -65,7 +72,7 @@ func newLocalAgentRuntimeAdapter(
 	logConfig config.LogConfig,
 ) (*localAgentRuntimeAdapter, error) {
 	if runtime == nil {
-		return nil, errs.New(errs.CodeInternal, "local agent credential runtime is required")
+		return nil, errs.New(errs.KindInternal, "local agent credential runtime is required")
 	}
 	return &localAgentRuntimeAdapter{runtime: runtime, log: logConfig}, nil
 }

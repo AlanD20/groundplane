@@ -35,7 +35,7 @@ func TestEnrollCommitsCredentialBeforeRuntimeAndEnforcesSingletonCAS(t *testing.
 	}
 	second := newTestManager(t, repository, trace)
 	second.sessions.ready = closedSignal()
-	if _, err := second.manager.Enroll(context.Background(), testRequest(testOtherAgentID)); !errors.Is(err, errs.New(errs.CodeStateConflict, "")) {
+	if _, err := second.manager.Enroll(context.Background(), testRequest(testOtherAgentID)); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("second Enroll() error = %v, want %s", err, errs.CodeStateConflict)
 	}
 
@@ -109,7 +109,7 @@ func TestEnrollUsesExactReadinessDeadlineAndLeavesRetryablePhase(t *testing.T) {
 		t.Fatalf("readiness timer = %s, want %s", timer.duration, ReadyTimeout)
 	}
 	timer.fire(testNow.Add(ReadyTimeout))
-	if err := <-result; !errors.Is(err, errs.New(errs.CodeTaskTimedOut, "")) {
+	if err := <-result; !errors.Is(err, errs.New(errs.KindTaskTimedOut, "")) {
 		t.Fatalf("Enroll() error = %v, want %s", err, errs.CodeTaskTimedOut)
 	}
 	if repository.record.Record.Phase != PhaseProvisioning {
@@ -236,7 +236,7 @@ func TestRemoveFailureNeverAdvancesPastTheFailedBoundary(t *testing.T) {
 			harness := newTestManager(t, repository, trace)
 			failure := errors.New("injected failure")
 			test.configure(harness, failure)
-			if err := harness.manager.Remove(context.Background(), testAgentID); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+			if err := harness.manager.Remove(context.Background(), testAgentID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("Remove() error = %v, want %s", err, errs.CodeInternal)
 			}
 			if trace.contains(test.forbidden) {
@@ -356,7 +356,7 @@ func TestHealthRejectsNilContext(t *testing.T) {
 
 	trace := &traceLog{}
 	harness := newTestManager(t, seededRepository(trace, PhaseReady), trace)
-	if _, err := harness.manager.Health(nil, testAgentID); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if _, err := harness.manager.Health(nil, testAgentID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Health(nil) error = %v, want %s", err, errs.CodeInternal)
 	}
 }
@@ -393,7 +393,7 @@ func TestEnrollRejectsMutableOrMalformedImageIdentity(t *testing.T) {
 			harness := newTestManager(t, repository, trace)
 			request := testRequest(testAgentID)
 			request.Image = test.image
-			if _, err := harness.manager.Enroll(context.Background(), request); !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+			if _, err := harness.manager.Enroll(context.Background(), request); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 				t.Fatalf("Enroll() error = %v, want %s", err, errs.CodeValidationFailed)
 			}
 			if harness.runtime.generateCalls != 0 || repository.exists {
@@ -415,7 +415,7 @@ func TestSystemClockAndDurableCreationTimesAreUTC(t *testing.T) {
 	repository := seededRepository(trace, PhaseReady)
 	repository.record.Record.CreatedAt = testNow.In(time.FixedZone("non-UTC", 3600))
 	harness := newTestManager(t, repository, trace)
-	if err := harness.manager.Reconcile(context.Background()); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if err := harness.manager.Reconcile(context.Background()); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Reconcile() error = %v, want %s", err, errs.CodeInternal)
 	}
 	if harness.runtime.materializeCalls != 0 {
@@ -440,7 +440,7 @@ func TestConfigLabelsRequireNULFreeUTF8AtInputAndPersistence(t *testing.T) {
 		harness := newTestManager(t, repository, trace)
 		request := testRequest(testAgentID)
 		request.Config.Labels = labels
-		if _, err := harness.manager.Enroll(context.Background(), request); !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+		if _, err := harness.manager.Enroll(context.Background(), request); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 			t.Fatalf("case %d Enroll() error = %v, want %s", index, err, errs.CodeValidationFailed)
 		}
 		if harness.runtime.generateCalls != 0 || repository.exists {
@@ -452,7 +452,7 @@ func TestConfigLabelsRequireNULFreeUTF8AtInputAndPersistence(t *testing.T) {
 	repository := seededRepository(trace, PhaseReady)
 	repository.record.Record.Config.Labels = map[string]string{"bad\x00key": "value"}
 	harness := newTestManager(t, repository, trace)
-	if err := harness.manager.Reconcile(context.Background()); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if err := harness.manager.Reconcile(context.Background()); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("stored-label Reconcile() error = %v, want %s", err, errs.CodeInternal)
 	}
 }
@@ -595,7 +595,7 @@ func (repository *fakeRepository) CreateSingleton(
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	if repository.exists {
-		return StoredRecord{}, errs.New(errs.CodeStateConflict, "local Agent already exists")
+		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent already exists")
 	}
 	repository.exists = true
 	repository.record = StoredRecord{Record: cloneRecord(record), Revision: 1}
@@ -609,7 +609,7 @@ func (repository *fakeRepository) GetSingleton(ctx context.Context) (StoredRecor
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	if !repository.exists {
-		return StoredRecord{}, errs.New(errs.CodeAgentNotFound, "local Agent was not found")
+		return StoredRecord{}, errs.New(errs.KindAgentNotFound, "local Agent was not found")
 	}
 	return cloneStored(repository.record), nil
 }
@@ -627,7 +627,7 @@ func (repository *fakeRepository) MarkReady(
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	if !repository.matches(id, generation, revision) || repository.record.Record.Phase != PhaseProvisioning {
-		return StoredRecord{}, errs.New(errs.CodeStateConflict, "local Agent changed")
+		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
 	}
 	repository.record.Record.Phase = PhaseReady
 	repository.record.Revision++
@@ -647,7 +647,7 @@ func (repository *fakeRepository) BeginDelete(
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	if !repository.matches(id, generation, revision) {
-		return StoredRecord{}, errs.New(errs.CodeStateConflict, "local Agent changed")
+		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
 	}
 	repository.record.Record.Phase = PhaseDeleting
 	repository.record.Record.Credential.Digest = ""
@@ -668,10 +668,10 @@ func (repository *fakeRepository) Delete(
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	if !repository.exists {
-		return errs.New(errs.CodeAgentNotFound, "local Agent was not found")
+		return errs.New(errs.KindAgentNotFound, "local Agent was not found")
 	}
 	if !repository.matches(id, generation, revision) || repository.record.Record.Phase != PhaseDeleting {
-		return errs.New(errs.CodeStateConflict, "local Agent changed")
+		return errs.New(errs.KindStateConflict, "local Agent changed")
 	}
 	repository.exists = false
 	return nil
@@ -913,4 +913,55 @@ func closedSignal() <-chan struct{} {
 	ready := make(chan struct{})
 	close(ready)
 	return ready
+}
+
+// Rationale: only cancellation owned by the caller context may cross a port
+// unchanged; dependency cancellation and deadline failures have unknown origin
+// and must become sanitized internal errors.
+func TestSafePortErrorUsesCallerContextOnly(t *testing.T) {
+	t.Parallel()
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := safePortError(cancelled, errors.New("dependency secret"), "safe"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("caller cancellation = %v", err)
+	}
+
+	deadline, deadlineCancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer deadlineCancel()
+	if err := safePortError(deadline, errors.New("dependency secret"), "safe"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("caller deadline = %v", err)
+	}
+
+	for _, dependencyErr := range []error{context.Canceled, context.DeadlineExceeded} {
+		err := safePortError(context.Background(), dependencyErr, "safe port failure")
+		if !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Fatalf("dependency error %v became %v", dependencyErr, err)
+		}
+		problem := err.(*errs.Error).ToProblem()
+		if problem.Detail != "Internal Server Error" || strings.Contains(problem.Detail, "dependency") {
+			t.Fatalf("dependency problem = %#v", problem)
+		}
+	}
+}
+
+// Rationale: a domain Kind may cross a port, but its private cause and message
+// must be replaced so secret-bearing backend text cannot reach an API problem.
+func TestSafePortErrorPreservesKindWithoutPrivateCause(t *testing.T) {
+	t.Parallel()
+
+	const secret = "token=super-secret"
+	cause := errors.New(secret)
+	backendErr := errs.Wrap(errs.KindStorageUnavailable, cause)
+	err := safePortError(context.Background(), backendErr, "durable store unavailable")
+	if !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
+		t.Fatalf("safe port error = %v", err)
+	}
+	if errors.Is(err, cause) {
+		t.Fatal("safe port error retained private backend cause")
+	}
+	problem := err.(*errs.Error).ToProblem()
+	if problem.Detail != "durable store unavailable" || strings.Contains(problem.Detail, secret) {
+		t.Fatalf("safe port problem = %#v", problem)
+	}
 }

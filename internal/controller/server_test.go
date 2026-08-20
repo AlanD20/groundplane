@@ -47,7 +47,7 @@ func TestServeClassifiesListenFailureAsInternal(t *testing.T) {
 		Mux:    http.NewServeMux(),
 	}
 	err = server.Serve(context.Background(), listener.Addr().String())
-	if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Serve() error = %v, want %q", err, errs.CodeInternal)
 	}
 }
@@ -62,7 +62,7 @@ func TestClassifyServeError(t *testing.T) {
 
 	cause := errors.New("accept failed")
 	err := classifyServeError(cause)
-	if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("classifyServeError(cause) = %v, want %q", err, errs.CodeInternal)
 	}
 	if !errors.Is(err, cause) {

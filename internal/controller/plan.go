@@ -48,5 +48,5 @@ type ExecutionStep struct {
 // sequenced and hashed. Pure w.r.t. its inputs, like the rest of the
 // renderer (architecture.md, "State translation and materialization").
 func BuildPlan(operation, projectID string, renderGeneration int) (ExecutionPlan, error) {
-	return ExecutionPlan{}, errs.New(errs.CodeNotImplemented, "execution plan builder is not implemented")
+	return ExecutionPlan{}, errs.New(errs.KindNotImplemented, "execution plan builder is not implemented")
 }

@@ -30,9 +30,9 @@ func (a *component) Render(env core.Environment, ad core.Component) (map[string]
 	// TODO: render the cloudflared service wired from the
 	// CLOUDFLARE_TUNNEL_TOKEN secret (secrets/.env.edge, exposed only to
 	// this service) — see mvp.md's "Router" section.
-	return nil, nil, errs.New(errs.CodeNotImplemented, "cloudflaretunnel: Render not implemented")
+	return nil, nil, errs.New(errs.KindNotImplemented, "cloudflaretunnel: Render not implemented")
 }
 
 func (a *component) Healthy(env core.Environment, ad core.Component) (bool, error) {
-	return false, errs.New(errs.CodeNotImplemented, "cloudflaretunnel: Healthy not implemented")
+	return false, errs.New(errs.KindNotImplemented, "cloudflaretunnel: Healthy not implemented")
 }

@@ -85,7 +85,7 @@ func NewHierarchyRepository(store Store) (*HierarchyRepository, error) {
 
 func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) {
 	if store == nil {
-		return nil, errs.New(errs.CodeInternal, "hierarchy store is required")
+		return nil, errs.New(errs.KindInternal, "hierarchy store is required")
 	}
 	return &HierarchyRepository{store: store}, nil
 }
@@ -178,7 +178,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	}
 	if owner.Record.Kind == ProjectKindBacking {
 		return Versioned[EnvironmentRecord]{}, errs.New(
-			errs.CodeValidationFailed,
+			errs.KindValidationFailed,
 			"backing project environments are created by the backing-service workflow",
 		)
 	}
@@ -222,7 +222,7 @@ func (repository *HierarchyRepository) GetTenant(
 		return Versioned[TenantRecord]{}, err
 	}
 	return getRecord(
-		ctx, repository.store, tenantKey(id), id, errs.CodeTenantNotFound, decodeTenant,
+		ctx, repository.store, tenantKey(id), id, errs.KindTenantNotFound, decodeTenant,
 		func(record TenantRecord) string { return record.ID },
 	)
 }
@@ -238,7 +238,7 @@ func (repository *HierarchyRepository) GetProject(
 		return Versioned[ProjectRecord]{}, err
 	}
 	return getRecord(
-		ctx, repository.store, projectKey(id), id, errs.CodeProjectNotFound, decodeProject,
+		ctx, repository.store, projectKey(id), id, errs.KindProjectNotFound, decodeProject,
 		func(record ProjectRecord) string { return record.ID },
 	)
 }
@@ -254,7 +254,7 @@ func (repository *HierarchyRepository) GetEnvironment(
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	return getRecord(
-		ctx, repository.store, environmentKey(id), id, errs.CodeEnvironmentNotFound, decodeEnvironment,
+		ctx, repository.store, environmentKey(id), id, errs.KindEnvironmentNotFound, decodeEnvironment,
 		func(record EnvironmentRecord) string { return record.ID },
 	)
 }
@@ -275,7 +275,7 @@ func (repository *HierarchyRepository) ResolveTenant(
 		tenantSlugKey(slug),
 		tenantKey,
 		ids.KindTenant,
-		errs.CodeTenantNotFound,
+		errs.KindTenantNotFound,
 		decodeTenant,
 		func(record TenantRecord) string { return record.ID },
 		func(record TenantRecord) bool { return record.Slug == slug },
@@ -302,7 +302,7 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 		projectTenantSlugKey(tenantID, slug),
 		projectKey,
 		ids.KindProject,
-		errs.CodeProjectNotFound,
+		errs.KindProjectNotFound,
 		decodeProject,
 		func(record ProjectRecord) string { return record.ID },
 		func(record ProjectRecord) bool {
@@ -327,7 +327,7 @@ func (repository *HierarchyRepository) ResolveBackingProject(
 		projectPlatformSlugKey(slug),
 		projectKey,
 		ids.KindProject,
-		errs.CodeProjectNotFound,
+		errs.KindProjectNotFound,
 		decodeProject,
 		func(record ProjectRecord) string { return record.ID },
 		func(record ProjectRecord) bool {
@@ -356,7 +356,7 @@ func (repository *HierarchyRepository) ResolveEnvironment(
 		environmentSlugKey(projectID, slug),
 		environmentKey,
 		ids.KindEnvironment,
-		errs.CodeEnvironmentNotFound,
+		errs.KindEnvironmentNotFound,
 		decodeEnvironment,
 		func(record EnvironmentRecord) string { return record.ID },
 		func(record EnvironmentRecord) bool { return record.ProjectID == projectID && record.Slug == slug },
@@ -569,10 +569,10 @@ func (repository *HierarchyRepository) diagnoseCreate(ctx context.Context, prima
 		return err
 	}
 	if slugResult.Entry != nil {
-		return errs.New(errs.CodeSlugConflict, "slug is already in use")
+		return errs.New(errs.KindSlugConflict, "slug is already in use")
 	}
 	if primaryResult.Entry != nil {
-		return errs.New(errs.CodeStateConflict, "stable id is already in use")
+		return errs.New(errs.KindStateConflict, "stable id is already in use")
 	}
-	return errs.New(errs.CodeStateConflict, "hierarchy changed during create")
+	return errs.New(errs.KindStateConflict, "hierarchy changed during create")
 }

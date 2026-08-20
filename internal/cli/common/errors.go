@@ -36,7 +36,8 @@ func HandleErrors(err error) int {
 
 	var de *errs.Error
 	if errors.As(err, &de) {
-		fmt.Fprintf(os.Stderr, "error: %s: %s\n", de.Code, de.Message)
+		problem := de.ToProblem()
+		fmt.Fprintf(os.Stderr, "error: %s: %s\n", problem.Code, problem.Detail)
 		return 1
 	}
 

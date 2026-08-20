@@ -51,7 +51,7 @@ func TestReleaseGroupOnFailureRejectsInvalidValue(t *testing.T) {
 	t.Parallel()
 
 	_, err := releaseGroupOnFailure("continue")
-	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("releaseGroupOnFailure() error = %v, want %q", err, errs.CodeValidationFailed)
 	}
 }

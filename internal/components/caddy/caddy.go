@@ -30,9 +30,9 @@ func (a *component) Render(env core.Environment, ad core.Component) (map[string]
 	// TODO: render the Caddy service (pinned IPv4 on the frontend
 	// bridge) plus the Caddyfile from ad.Config["caddyfile_template"],
 	// validated before reload (StepReload) per the shared render path.
-	return nil, nil, errs.New(errs.CodeNotImplemented, "caddy: Render not implemented")
+	return nil, nil, errs.New(errs.KindNotImplemented, "caddy: Render not implemented")
 }
 
 func (a *component) Healthy(env core.Environment, ad core.Component) (bool, error) {
-	return false, errs.New(errs.CodeNotImplemented, "caddy: Healthy not implemented")
+	return false, errs.New(errs.KindNotImplemented, "caddy: Healthy not implemented")
 }

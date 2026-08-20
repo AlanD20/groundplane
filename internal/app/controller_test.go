@@ -93,7 +93,7 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			if (err != nil) != test.wantFailure {
 				t.Fatalf("Controller.Run error = %v, want failure = %t", err, test.wantFailure)
 			}
-			if test.wantFailure && !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+			if test.wantFailure && !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("Controller.Run error = %v, want canonical %q error", err, errs.CodeInternal)
 			}
 			if errors.Is(err, serveFailure) != test.wantServe {

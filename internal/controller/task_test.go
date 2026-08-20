@@ -41,14 +41,14 @@ func TestDispatcherRetryRejectsInvalidSourceAndActiveDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dispatch() error = %v", err)
 	}
-	if _, err := dispatcher.Retry(context.Background(), original.ID); !errors.Is(err, errs.New(errs.CodeTaskNotRetryable, "")) {
+	if _, err := dispatcher.Retry(context.Background(), original.ID); !errors.Is(err, errs.New(errs.KindTaskNotRetryable, "")) {
 		t.Fatalf("Retry(pending) error = %v, want task.not_retryable", err)
 	}
 	original.Status = StatusAborted
 	if _, err := dispatcher.Retry(context.Background(), original.ID); err != nil {
 		t.Fatalf("Retry(aborted) error = %v", err)
 	}
-	if _, err := dispatcher.Retry(context.Background(), original.ID); !errors.Is(err, errs.New(errs.CodeTaskRetryInFlight, "")) {
+	if _, err := dispatcher.Retry(context.Background(), original.ID); !errors.Is(err, errs.New(errs.KindTaskRetryInFlight, "")) {
 		t.Fatalf("second Retry() error = %v, want task.retry_in_flight", err)
 	}
 }

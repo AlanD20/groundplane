@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const testAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -26,17 +28,14 @@ func TestRegistryFencesReplacementSessions(t *testing.T) {
 	default:
 		t.Fatal("replaced session was not canceled")
 	}
-	if err := first.RecordReady(testTime(), 3); err == nil {
-		t.Fatal("replaced session retained authority")
-	}
+	assertStateConflict(t, first.RecordReady(testTime(), 3))
 	first.Close()
 	snapshot, ok := registry.Snapshot(testAgentID)
 	if !ok || !snapshot.Online || snapshot.Generation != 2 {
 		t.Fatalf("replacement snapshot = %+v, found = %v", snapshot, ok)
 	}
-	if _, err := registry.Open(context.Background(), testAgentID, 1); err == nil {
-		t.Fatal("older generation was accepted")
-	}
+	_, err = registry.Open(context.Background(), testAgentID, 1)
+	assertStateConflict(t, err)
 	second.Close()
 }
 
@@ -82,6 +81,8 @@ func TestRegistryRemovalHooksAndOfflineWait(t *testing.T) {
 	if snapshot.Online || !snapshot.Revoked || !snapshot.AssignmentsStopped {
 		t.Fatalf("removal snapshot = %+v", snapshot)
 	}
+	_, err = registry.Open(context.Background(), testAgentID, 8)
+	assertStateConflict(t, err)
 }
 
 func TestRegistryRevocationFailureRollsBackRevokingState(t *testing.T) {
@@ -137,9 +138,11 @@ func TestRegistryRejectsOpenWhileRevocationIsInProgress(t *testing.T) {
 	}()
 	<-hookEntered
 
-	if _, err := registry.Open(context.Background(), testAgentID, 9); err == nil {
-		t.Fatal("Open succeeded while revocation hook was running")
-	}
+	_, err = registry.Open(context.Background(), testAgentID, 9)
+	assertStateConflict(t, err)
+	assertStateConflict(t, registry.Revoke(context.Background(), testAgentID, func(context.Context, string, uint64) error {
+		return nil
+	}))
 	close(releaseHook)
 	if err := <-revokeDone; err != nil {
 		t.Fatalf("revoke: %v", err)
@@ -150,4 +153,18 @@ func TestRegistryRejectsOpenWhileRevocationIsInProgress(t *testing.T) {
 		t.Fatal("successful revocation did not cancel the session")
 	}
 	session.Close()
+}
+
+func assertStateConflict(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("expected state conflict, got %v", err)
+	}
+	var domainError *errs.Error
+	if !errors.As(err, &domainError) {
+		t.Fatalf("expected domain error, got %T", err)
+	}
+	if got := domainError.HTTPStatus(); got != 409 {
+		t.Fatalf("expected status 409, got %d", got)
+	}
 }

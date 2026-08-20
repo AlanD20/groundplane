@@ -182,7 +182,7 @@ func (l *httpLifecycle) serveOrdinary(
 	if route.body != bodyless {
 		controller := http.NewResponseController(w)
 		if err := controller.SetReadDeadline(l.policy.now().Add(l.policy.bodyReadTimeout)); err != nil {
-			l.server.writeProblem(writer, errs.New(errs.CodeInternal, "request deadline is unavailable"))
+			l.server.writeProblem(writer, errs.New(errs.KindInternal, "request deadline is unavailable"))
 			return
 		}
 		defer clearReadDeadline(controller, l.server.Logger)
@@ -326,7 +326,7 @@ func (s *Server) writeBodyReadProblem(w http.ResponseWriter, err error) {
 func (s *Server) writeRequestProblem(w http.ResponseWriter, status int, detail string) {
 	problem := requestProblem(status, detail, nil)
 	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
+	w.WriteHeader(problem.HTTPStatus())
 	if err := json.NewEncoder(w).Encode(problem); err != nil && s.Logger != nil {
 		s.Logger.Error("controller: write request problem", slog.Any("error", err))
 	}
@@ -337,7 +337,7 @@ func (s *Server) writeRequestProblem(w http.ResponseWriter, status int, detail s
 func (s *Server) writeSSE(w http.ResponseWriter, r *http.Request, events <-chan []byte) {
 	lifecycle, ok := r.Context().Value(lifecycleContextKey{}).(*httpLifecycle)
 	if !ok {
-		s.writeProblem(w, errs.New(errs.CodeInternal, "HTTP lifecycle is unavailable"))
+		s.writeProblem(w, errs.New(errs.KindInternal, "HTTP lifecycle is unavailable"))
 		return
 	}
 	lifecycle.serveSSE(w, r, events)
@@ -429,7 +429,7 @@ func (l *readyListener) Accept() (net.Conn, error) {
 func (s *Server) Serve(ctx context.Context, addr string) error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, err)
+		return errs.Wrap(errs.KindInternal, err)
 	}
 	return s.serveListener(ctx, listener, productionHTTPPolicy())
 }
@@ -512,7 +512,7 @@ func classifyShutdownErrors(serveErr, shutdownErr, closeErr error) error {
 		unexpected = append(unexpected, closeErr)
 	}
 	if err := errors.Join(unexpected...); err != nil {
-		return errs.Wrap(errs.CodeInternal, err)
+		return errs.Wrap(errs.KindInternal, err)
 	}
 	return nil
 }
@@ -521,5 +521,5 @@ func classifyServeError(err error) error {
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
-	return errs.Wrap(errs.CodeInternal, err)
+	return errs.Wrap(errs.KindInternal, err)
 }

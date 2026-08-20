@@ -109,21 +109,21 @@ func New(ctx context.Context) (*Manager, error) {
 	}
 	engine, err := client.New(client.WithHost(dockerHost))
 	if err != nil {
-		return nil, errs.Wrap(errs.CodeInternal, fmt.Errorf("agent container: create Docker client: %w", err))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: create Docker client: %w", err))
 	}
 	return &Manager{client: engine}, nil
 }
 
 func (m *Manager) Close() error {
 	if err := m.client.Close(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent container: close Docker client: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: close Docker client: %w", err))
 	}
 	return nil
 }
 
 func RuntimePathsForAgent(agentID string) (RuntimePaths, error) {
 	if !isCanonicalAgentID(agentID) {
-		return RuntimePaths{}, errs.New(errs.CodeValidationFailed, "agent container: agent id must be agt_<26 uppercase Crockford ULID>")
+		return RuntimePaths{}, errs.New(errs.KindValidationFailed, "agent container: agent id must be agt_<26 uppercase Crockford ULID>")
 	}
 	return runtimePaths(agentID), nil
 }
@@ -229,7 +229,7 @@ func (m *Manager) createAndStart(ctx context.Context, desired Desired) (State, e
 		return State{}, operationError(ctx, "create container", err)
 	}
 	if created.ID == "" {
-		return State{}, errs.New(errs.CodeInternal, "agent container: Docker returned an empty container id")
+		return State{}, errs.New(errs.KindInternal, "agent container: Docker returned an empty container id")
 	}
 	if _, err := m.client.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return State{}, operationError(ctx, "start created container", err)
@@ -336,13 +336,13 @@ func mountKeys(mounts []mount.Mount) []string {
 
 func validateDesired(desired Desired) error {
 	if !imageref.IsDigestPinned(desired.Image) {
-		return errs.New(errs.CodeValidationFailed, "agent container: image must be a caller-supplied sha256 digest reference")
+		return errs.New(errs.KindValidationFailed, "agent container: image must be a caller-supplied sha256 digest reference")
 	}
 	if _, err := RuntimePathsForAgent(desired.AgentID); err != nil {
 		return err
 	}
 	if strings.TrimSpace(desired.Generation) == "" {
-		return errs.New(errs.CodeValidationFailed, "agent container: generation is required")
+		return errs.New(errs.KindValidationFailed, "agent container: generation is required")
 	}
 	return nil
 }
@@ -367,9 +367,9 @@ func operationError(ctx context.Context, operation string, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent container: %s: %w", operation, err))
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: %s: %w", operation, err))
 }
 
 func unownedCollision() error {
-	return errs.Newf(errs.CodeInternal, "agent container: %q exists without Groundplane Agent ownership labels", ContainerName)
+	return errs.Newf(errs.KindInternal, "agent container: %q exists without Groundplane Agent ownership labels", ContainerName)
 }

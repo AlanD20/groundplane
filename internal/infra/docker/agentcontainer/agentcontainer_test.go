@@ -105,7 +105,7 @@ func TestReconcileRefusesUnownedNameCollision(t *testing.T) {
 	delete(inspect.Container.Config.Labels, labelManaged)
 	fake := &fakeEngine{inspectResult: inspect}
 	_, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
-	if err == nil || !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if err == nil || !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Reconcile() error = %v, want canonical internal collision", err)
 	}
 	assertNoMutations(t, fake)
@@ -155,7 +155,7 @@ func TestInspectWrapsDockerDaemonError(t *testing.T) {
 
 	daemonErr := errors.New("daemon unavailable")
 	_, err := (&Manager{client: &fakeEngine{inspectErr: daemonErr}}).Inspect(context.Background())
-	if err == nil || !errors.Is(err, daemonErr) || !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if err == nil || !errors.Is(err, daemonErr) || !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Inspect() error = %v, want wrapped canonical internal daemon error", err)
 	}
 }
@@ -195,7 +195,7 @@ func TestReconcileRejectsUnpinnedImageBeforeDockerCall(t *testing.T) {
 			desired.Image = test.image
 			fake := &fakeEngine{}
 			_, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
-			if err == nil || !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+			if err == nil || !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 				t.Fatalf("Reconcile() error = %v, want validation.failed", err)
 			}
 			if fake.inspectCalls != 0 {
@@ -225,7 +225,7 @@ func TestReconcileRejectsInvalidAgentIDsBeforeDockerCall(t *testing.T) {
 			desired.AgentID = test.agentID
 			fake := &fakeEngine{}
 			_, err := (&Manager{client: fake}).Reconcile(context.Background(), desired)
-			if err == nil || !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+			if err == nil || !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 				t.Fatalf("Reconcile() error = %v, want validation.failed", err)
 			}
 			if fake.inspectCalls != 0 {

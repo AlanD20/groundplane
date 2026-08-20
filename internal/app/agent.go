@@ -74,46 +74,46 @@ func readAgentTokenForUID(ctx context.Context, tokenPath string, expectedUID uin
 		return nil, err
 	}
 	if !filepath.IsAbs(tokenPath) || filepath.Clean(tokenPath) != tokenPath {
-		return nil, errs.New(errs.CodeValidationFailed, "agent: invalid channel token path")
+		return nil, errs.New(errs.KindValidationFailed, "agent: invalid channel token path")
 	}
 	directory, err := os.OpenRoot(filepath.Dir(tokenPath))
 	if err != nil {
-		return nil, errs.New(errs.CodeInternal, "agent: read channel token")
+		return nil, errs.New(errs.KindInternal, "agent: read channel token")
 	}
 	defer directory.Close()
 	name := filepath.Base(tokenPath)
 	entry, err := directory.Lstat(name)
 	if err != nil || !secureTokenFile(entry, expectedUID) {
-		return nil, errs.New(errs.CodeValidationFailed, "agent: invalid channel token file")
+		return nil, errs.New(errs.KindValidationFailed, "agent: invalid channel token file")
 	}
 	file, err := directory.Open(name)
 	if err != nil {
-		return nil, errs.New(errs.CodeInternal, "agent: read channel token")
+		return nil, errs.New(errs.KindInternal, "agent: read channel token")
 	}
 	opened, err := file.Stat()
 	if err != nil || !os.SameFile(entry, opened) || !secureTokenFile(opened, expectedUID) {
 		// Best effort: preserve the validation failure if closing also fails.
 		_ = file.Close()
-		return nil, errs.New(errs.CodeValidationFailed, "agent: invalid channel token file")
+		return nil, errs.New(errs.KindValidationFailed, "agent: invalid channel token file")
 	}
 	encoded, readErr := io.ReadAll(io.LimitReader(file, agentprotocol.EncodedTokenBytes+1))
 	closeErr := file.Close()
 	if readErr != nil || closeErr != nil {
 		clear(encoded)
-		return nil, errs.New(errs.CodeInternal, "agent: read channel token")
+		return nil, errs.New(errs.KindInternal, "agent: read channel token")
 	}
 	defer clear(encoded)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if len(encoded) != agentprotocol.EncodedTokenBytes {
-		return nil, errs.New(errs.CodeValidationFailed, "agent: channel token has invalid encoding")
+		return nil, errs.New(errs.KindValidationFailed, "agent: channel token has invalid encoding")
 	}
 	token := make([]byte, agentprotocol.RawTokenBytes)
 	written, err := base64.RawURLEncoding.Strict().Decode(token, encoded)
 	if err != nil || written != agentprotocol.RawTokenBytes {
 		clear(token)
-		return nil, errs.New(errs.CodeValidationFailed, "agent: channel token has invalid encoding")
+		return nil, errs.New(errs.KindValidationFailed, "agent: channel token has invalid encoding")
 	}
 	return token, nil
 }

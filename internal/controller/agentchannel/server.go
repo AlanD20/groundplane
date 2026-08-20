@@ -139,14 +139,14 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 
 func validateAuthenticate(message *agentpb.AgentMessage) (*agentpb.Authenticate, Token, error) {
 	if message == nil || message.GetAuthenticate() == nil {
-		return nil, Token{}, errs.New(errs.CodeValidationFailed, "Authenticate must be the first Agent message")
+		return nil, Token{}, errs.New(errs.KindValidationFailed, "Authenticate must be the first Agent message")
 	}
 	authenticate := message.GetAuthenticate()
 	if err := ids.Validate(ids.KindAgent, authenticate.AgentId); err != nil {
-		return nil, Token{}, errs.New(errs.CodeValidationFailed, "agent id is invalid")
+		return nil, Token{}, errs.New(errs.KindValidationFailed, "agent id is invalid")
 	}
 	if len(authenticate.Token) != tokenSize {
-		return nil, Token{}, errs.New(errs.CodeValidationFailed, "agent token has an invalid length")
+		return nil, Token{}, errs.New(errs.KindValidationFailed, "agent token has an invalid length")
 	}
 
 	var token Token

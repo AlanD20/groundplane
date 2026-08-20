@@ -172,7 +172,7 @@ func (p *parsePlan) sanitizedCompose(ctx context.Context, filename string) ([]by
 	}
 	sanitized, err := yaml.Marshal(model)
 	if err != nil {
-		return nil, errs.New(errs.CodeInternal, "blueprint Compose source preparation failed")
+		return nil, errs.New(errs.KindInternal, "blueprint Compose source preparation failed")
 	}
 	p.compose[filename] = sanitized
 	p.prepared[filename] = true

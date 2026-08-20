@@ -57,7 +57,7 @@ type ContainerState struct {
 // layer... quarantined from the shared core"); only this package cares
 // which.
 func New(ctx context.Context) (Applier, error) {
-	return nil, errs.New(errs.CodeNotImplemented, "docker: not implemented — wire the docker client in internal/infra/docker")
+	return nil, errs.New(errs.KindNotImplemented, "docker: not implemented — wire the docker client in internal/infra/docker")
 }
 
 // Env-file and resolv.conf materialization live in internal/agent

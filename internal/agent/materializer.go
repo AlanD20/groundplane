@@ -37,26 +37,26 @@ func materializeFile(ctx context.Context, rootDir, relPath string, content []byt
 		return err
 	}
 	if !filepath.IsLocal(relPath) || filepath.Clean(relPath) == "." {
-		return errs.Newf(errs.CodeValidationFailed, "materializer: path %q is not root-relative", relPath)
+		return errs.Newf(errs.KindValidationFailed, "materializer: path %q is not root-relative", relPath)
 	}
 	if err := os.MkdirAll(rootDir, 0o700); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: create root: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: create root: %w", err))
 	}
 
 	root, err := os.OpenRoot(rootDir)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: open root: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: open root: %w", err))
 	}
 	defer root.Close()
 
 	cleanPath := filepath.Clean(relPath)
 	parentPath := filepath.Dir(cleanPath)
 	if err := root.MkdirAll(parentPath, 0o700); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: create parent: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: create parent: %w", err))
 	}
 	parent, err := root.OpenRoot(parentPath)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: open parent: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: open parent: %w", err))
 	}
 	defer parent.Close()
 
@@ -66,7 +66,7 @@ func materializeFile(ctx context.Context, rootDir, relPath string, content []byt
 func writeAtomic(ctx context.Context, root *os.Root, name string, content []byte) error {
 	temporary, temporaryName, err := createTemporary(root)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: create temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: create temporary file: %w", err))
 	}
 	keepTemporary := true
 	defer func() {
@@ -79,17 +79,17 @@ func writeAtomic(ctx context.Context, root *os.Root, name string, content []byte
 		return err
 	}
 	if err := root.Rename(temporaryName, name); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: replace destination: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: replace destination: %w", err))
 	}
 	keepTemporary = false
 
 	directory, err := root.Open(".")
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: open destination directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: open destination directory: %w", err))
 	}
 	defer directory.Close()
 	if err := directory.Sync(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: sync destination directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: sync destination directory: %w", err))
 	}
 	return nil
 }
@@ -119,14 +119,14 @@ func writeAndClose(ctx context.Context, file *os.File, content []byte) error {
 	}
 	if _, err := file.Write(content); err != nil {
 		_ = file.Close()
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: write temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: write temporary file: %w", err))
 	}
 	if err := file.Sync(); err != nil {
 		_ = file.Close()
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: sync temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: sync temporary file: %w", err))
 	}
 	if err := file.Close(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("materializer: close temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("materializer: close temporary file: %w", err))
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -142,5 +142,5 @@ func writeAndClose(ctx context.Context, file *os.File, content []byte) error {
 // this runs, so removal can restore it exactly (see mvp.md, "DNS
 // resolver (locked)").
 func RewriteResolvConf(ctx context.Context, pointAtLocalhost bool) error {
-	return errs.New(errs.CodeNotImplemented, "materializer: RewriteResolvConf not implemented")
+	return errs.New(errs.KindNotImplemented, "materializer: RewriteResolvConf not implemented")
 }

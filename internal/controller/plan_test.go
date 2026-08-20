@@ -9,7 +9,7 @@ import (
 
 func TestBuildPlanFailsClosedUntilImplemented(t *testing.T) {
 	_, err := BuildPlan("deploy", "prj_test", 1)
-	if !errors.Is(err, errs.New(errs.CodeNotImplemented, "")) {
+	if !errors.Is(err, errs.New(errs.KindNotImplemented, "")) {
 		t.Fatalf("BuildPlan() error = %v, want %q", err, errs.CodeNotImplemented)
 	}
 }

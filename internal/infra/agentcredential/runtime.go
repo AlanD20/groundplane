@@ -50,24 +50,24 @@ func (m *Manager) Materialize(
 		return err
 	}
 	if runtimeConfig.AgentID != agentID {
-		return errs.New(errs.CodeInternal, "agent runtime: durable config agent id does not match runtime path")
+		return errs.New(errs.KindInternal, "agent runtime: durable config agent id does not match runtime path")
 	}
 	if err := runtimeConfig.Validate(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: invalid durable config: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: invalid durable config: %w", err))
 	}
 	if len(encryptedToken.Ciphertext) == 0 {
-		return errs.New(errs.CodeInternal, "agent runtime: encrypted token is empty")
+		return errs.New(errs.KindInternal, "agent runtime: encrypted token is empty")
 	}
 
 	ciphertext := append([]byte(nil), encryptedToken.Ciphertext...)
 	defer clear(ciphertext)
 	rawToken, err := m.opener.Open(ctx, ciphertext)
 	if err != nil {
-		return errs.New(errs.CodeInternal, "agent runtime: decrypt token")
+		return errs.New(errs.KindInternal, "agent runtime: decrypt token")
 	}
 	defer clear(rawToken)
 	if len(rawToken) != agentprotocol.RawTokenBytes {
-		return errs.New(errs.CodeInternal, "agent runtime: decrypted token has invalid length")
+		return errs.New(errs.KindInternal, "agent runtime: decrypted token has invalid length")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -78,12 +78,12 @@ func (m *Manager) Materialize(
 	base64.RawURLEncoding.Encode(encodedToken, rawToken)
 	configContents, err := yaml.Marshal(runtimeConfig)
 	if err != nil {
-		return errs.New(errs.CodeInternal, "agent runtime: encode config")
+		return errs.New(errs.KindInternal, "agent runtime: encode config")
 	}
 
 	root, err := os.OpenRoot(m.hostRoot)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: open host root: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: open host root: %w", err))
 	}
 	defer root.Close()
 
@@ -93,7 +93,7 @@ func (m *Manager) Materialize(
 	}
 	directory, err := root.OpenRoot(directoryName)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: open runtime directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: open runtime directory: %w", err))
 	}
 	defer directory.Close()
 
@@ -134,7 +134,7 @@ func (m *Manager) writeRuntimeFile(ctx context.Context, directory *os.Root, file
 
 	temporary, err := directory.OpenFile(file.temporaryName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, file.mode)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: create temporary %s: %w", file.label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: create temporary %s: %w", file.label, err))
 	}
 	temporaryOpen := true
 	temporaryExists := true
@@ -149,30 +149,30 @@ func (m *Manager) writeRuntimeFile(ctx context.Context, directory *os.Root, file
 		}
 	}()
 	if err := temporary.Chmod(file.mode); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: set temporary %s mode: %w", file.label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: set temporary %s mode: %w", file.label, err))
 	}
 	temporaryInfo, err := temporary.Stat()
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: inspect temporary %s: %w", file.label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: inspect temporary %s: %w", file.label, err))
 	}
 	if err := runtimepath.ValidateOwnership(temporaryInfo, m.expectedUID, "temporary "+file.label); err != nil {
 		return err
 	}
 	if _, err := temporary.Write(file.contents); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: write temporary %s: %w", file.label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: write temporary %s: %w", file.label, err))
 	}
 	if err := temporary.Sync(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: sync temporary %s: %w", file.label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: sync temporary %s: %w", file.label, err))
 	}
 	if err := temporary.Close(); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: close temporary %s: %w", file.label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: close temporary %s: %w", file.label, err))
 	}
 	temporaryOpen = false
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := m.rename(directory, file.temporaryName, file.name); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: replace %s: %w", file.label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: replace %s: %w", file.label, err))
 	}
 	temporaryExists = false
 	return runtimepath.SyncDirectory(ctx, directory)
@@ -193,7 +193,7 @@ func (m *Manager) Remove(ctx context.Context, agentID string) error {
 	}
 	root, err := os.OpenRoot(m.hostRoot)
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: open host root: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: open host root: %w", err))
 	}
 	defer root.Close()
 
@@ -209,11 +209,11 @@ func (m *Manager) Remove(ctx context.Context, agentID string) error {
 		return err
 	}
 	if err := root.RemoveAll(directoryName); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: remove runtime directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: remove runtime directory: %w", err))
 	}
 	parent, err := root.OpenRoot(path.Dir(directoryName))
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: open runtime parent: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: open runtime parent: %w", err))
 	}
 	defer parent.Close()
 	return runtimepath.SyncDirectory(ctx, parent)
@@ -225,10 +225,10 @@ func validateReplaceTarget(root *os.Root, name, label string, expectedUID uint32
 		return nil
 	}
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: inspect existing %s: %w", label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: inspect existing %s: %w", label, err))
 	}
 	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return errs.Newf(errs.CodeInternal, "agent runtime: existing %s is not a regular file", label)
+		return errs.Newf(errs.KindInternal, "agent runtime: existing %s is not a regular file", label)
 	}
 	return runtimepath.ValidateOwnership(info, expectedUID, "existing "+label)
 }
@@ -239,16 +239,16 @@ func removeStaleTemporary(root *os.Root, name, label string, expectedUID uint32)
 		return nil
 	}
 	if err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: inspect stale temporary %s: %w", label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: inspect stale temporary %s: %w", label, err))
 	}
 	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return errs.Newf(errs.CodeInternal, "agent runtime: stale temporary %s is not a regular file", label)
+		return errs.Newf(errs.KindInternal, "agent runtime: stale temporary %s is not a regular file", label)
 	}
 	if err := runtimepath.ValidateOwnership(info, expectedUID, "stale temporary "+label); err != nil {
 		return err
 	}
 	if err := root.Remove(name); err != nil {
-		return errs.Wrap(errs.CodeInternal, fmt.Errorf("agent runtime: remove stale temporary %s: %w", label, err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent runtime: remove stale temporary %s: %w", label, err))
 	}
 	return nil
 }

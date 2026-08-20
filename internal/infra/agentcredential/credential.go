@@ -59,16 +59,16 @@ func New(random io.Reader, sealer Sealer, opener Opener) (*Manager, error) {
 
 func newManager(random io.Reader, sealer Sealer, opener Opener, hostRoot string, expectedUID uint32) (*Manager, error) {
 	if random == nil {
-		return nil, errs.New(errs.CodeInternal, "agent credential: randomness source is required")
+		return nil, errs.New(errs.KindInternal, "agent credential: randomness source is required")
 	}
 	if sealer == nil {
-		return nil, errs.New(errs.CodeInternal, "agent credential: sealer is required")
+		return nil, errs.New(errs.KindInternal, "agent credential: sealer is required")
 	}
 	if opener == nil {
-		return nil, errs.New(errs.CodeInternal, "agent credential: opener is required")
+		return nil, errs.New(errs.KindInternal, "agent credential: opener is required")
 	}
 	if hostRoot == "" {
-		return nil, errs.New(errs.CodeInternal, "agent credential: host root is required")
+		return nil, errs.New(errs.KindInternal, "agent credential: host root is required")
 	}
 	return &Manager{
 		random:      random,
@@ -99,7 +99,7 @@ func (m *Manager) Generate(ctx context.Context, agentID string) (Credential, err
 	var raw [agentprotocol.RawTokenBytes]byte
 	defer clear(raw[:])
 	if _, err := io.ReadFull(m.random, raw[:]); err != nil {
-		return Credential{}, errs.New(errs.CodeInternal, "agent credential: generate token entropy")
+		return Credential{}, errs.New(errs.KindInternal, "agent credential: generate token entropy")
 	}
 	if err := ctx.Err(); err != nil {
 		return Credential{}, err
@@ -109,10 +109,10 @@ func (m *Manager) Generate(ctx context.Context, agentID string) (Credential, err
 	digestText := base64.RawURLEncoding.EncodeToString(digest[:])
 	ciphertext, err := m.sealer.Seal(ctx, raw[:])
 	if err != nil {
-		return Credential{}, errs.New(errs.CodeInternal, "agent credential: seal token")
+		return Credential{}, errs.New(errs.KindInternal, "agent credential: seal token")
 	}
 	if len(ciphertext) == 0 {
-		return Credential{}, errs.New(errs.CodeInternal, "agent credential: sealer returned empty ciphertext")
+		return Credential{}, errs.New(errs.KindInternal, "agent credential: sealer returned empty ciphertext")
 	}
 	if err := ctx.Err(); err != nil {
 		return Credential{}, err

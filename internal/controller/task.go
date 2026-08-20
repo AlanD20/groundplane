@@ -126,15 +126,15 @@ func (d *Dispatcher) Retry(ctx context.Context, taskID string) (*Task, error) {
 	defer d.mu.Unlock()
 	original, ok := d.tasks[taskID]
 	if !ok {
-		return nil, errs.Newf(errs.CodeTaskNotFound, "task %s not found", taskID)
+		return nil, errs.Newf(errs.KindTaskNotFound, "task %s not found", taskID)
 	}
 	if original.Status != StatusFailed && original.Status != StatusTimedOut && original.Status != StatusAborted {
-		return nil, errs.Newf(errs.CodeTaskNotRetryable, "task %s has status %s", taskID, original.Status)
+		return nil, errs.Newf(errs.KindTaskNotRetryable, "task %s has status %s", taskID, original.Status)
 	}
 	for _, candidate := range d.tasks {
 		if candidate.OperationID == original.OperationID && candidate.RetryOf != "" &&
 			(candidate.Status == StatusPending || candidate.Status == StatusRunning) {
-			return nil, errs.Newf(errs.CodeTaskRetryInFlight, "operation %s already has retry task %s in flight", original.OperationID, candidate.ID)
+			return nil, errs.Newf(errs.KindTaskRetryInFlight, "operation %s already has retry task %s in flight", original.OperationID, candidate.ID)
 		}
 	}
 	return d.dispatchLocked(DispatchRequest{
@@ -146,7 +146,7 @@ func (d *Dispatcher) Retry(ctx context.Context, taskID string) (*Task, error) {
 func (d *Dispatcher) dispatchLocked(request DispatchRequest, operationID, retryOf string) (*Task, error) {
 	if request.Type == TaskDeploy || request.Type == TaskRollback {
 		if existing, ok := d.inFlight[request.Target]; ok {
-			return nil, errs.Newf(errs.CodeDeployInFlight,
+			return nil, errs.Newf(errs.KindDeployInFlight,
 				"a deploy or rollback (task %s) is already in flight for %s", existing, request.Target)
 		}
 	}

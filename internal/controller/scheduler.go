@@ -46,5 +46,5 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return errs.New(errs.CodeNotImplemented, "backup scheduler is not implemented")
+	return errs.New(errs.KindNotImplemented, "backup scheduler is not implemented")
 }

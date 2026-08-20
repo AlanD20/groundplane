@@ -75,7 +75,7 @@ func TestTaskEventDeduplicationReturnsSequenceAndRejectsPayloadMismatch(t *testi
 	mismatch := input
 	mismatch.Payload = json.RawMessage(`{"message":"different"}`)
 	_, err = prepareTaskEvent(prepared.Task, mismatch, &prepared.Dedup, now.Add(2*time.Second))
-	if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("prepareTaskEvent(mismatch) error = %v, want internal", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestTaskEventRequiresADeclaredTaskStep(t *testing.T) {
 	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
 	input.Identity.StepID = ids.NewAt(ids.KindStep, now, 6)
 	_, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
-	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("prepareTaskEvent(unknown step) error = %v, want validation.failed", err)
 	}
 }
@@ -145,7 +145,7 @@ func TestTaskEventOrderingAndLimitsAreDeterministic(t *testing.T) {
 		nil,
 		now.Add(time.Hour),
 	)
-	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("prepareTaskEvent(limit) error = %v, want validation.failed", err)
 	}
 }
@@ -158,7 +158,7 @@ func TestTaskEventDurableJSONLimitIncludesEnvelope(t *testing.T) {
 	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
 	input.Payload = json.RawMessage(`{"message":"` + strings.Repeat("x", MaximumTaskEventBytes) + `"}`)
 	_, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
-	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("prepareTaskEvent(oversized) error = %v, want validation.failed", err)
 	}
 }
@@ -173,7 +173,7 @@ func TestTaskStatusTransitionRejectsStaleAndInvalidState(t *testing.T) {
 		t.Fatalf("transitionTaskStatus(running) error = %v", err)
 	}
 	_, err = transitionTaskStatus(running, TaskStatusPending, TaskStatusRunning, now.Add(2*time.Second))
-	if !errors.Is(err, errs.New(errs.CodeStateConflict, "")) {
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("transitionTaskStatus(stale) error = %v, want state.conflict", err)
 	}
 	completed, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusCompleted, now.Add(2*time.Second))
@@ -181,7 +181,7 @@ func TestTaskStatusTransitionRejectsStaleAndInvalidState(t *testing.T) {
 		t.Fatalf("transitionTaskStatus(completed) error = %v", err)
 	}
 	_, err = transitionTaskStatus(completed, TaskStatusCompleted, TaskStatusRunning, now.Add(3*time.Second))
-	if !errors.Is(err, errs.New(errs.CodeStateConflict, "")) {
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("transitionTaskStatus(regression) error = %v, want state.conflict", err)
 	}
 	if completed.RetainUntil == nil || completed.TerminalAt == nil ||
@@ -235,7 +235,7 @@ func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
 		t.Fatalf("encodeTaskRecord() error = %v", err)
 	}
 	corruptTask := strings.Replace(string(encodedTask), `"next_event_sequence":1`, `"next_event_sequence":2`, 1)
-	if _, err := decodeTaskRecord([]byte(corruptTask)); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if _, err := decodeTaskRecord([]byte(corruptTask)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskRecord(corrupt) error = %v, want internal", err)
 	}
 
@@ -248,7 +248,7 @@ func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
 		t.Fatalf("encodeTaskEventRecord() error = %v", err)
 	}
 	corruptEvent := strings.Replace(string(encodedEvent), prepared.Event.PayloadSHA256, strings.Repeat("0", 64), 1)
-	if _, err := decodeTaskEventRecord([]byte(corruptEvent)); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+	if _, err := decodeTaskEventRecord([]byte(corruptEvent)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskEventRecord(corrupt) error = %v, want internal", err)
 	}
 }
@@ -259,14 +259,14 @@ func TestTaskJournalRequiresCanonicalUTCTimestamps(t *testing.T) {
 	now := taskJournalTime()
 	task := validTaskRecord(now)
 	task.CreatedAt = time.Date(2026, time.August, 20, 12, 0, 0, 0, time.FixedZone("zero-offset", 0))
-	if _, err := encodeTaskRecord(task); !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if _, err := encodeTaskRecord(task); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("encodeTaskRecord(noncanonical UTC) error = %v, want validation.failed", err)
 	}
 
 	task = validTaskRecord(now)
 	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
 	noncanonical := time.Date(2026, time.August, 20, 12, 0, 1, 0, time.FixedZone("zero-offset", 0))
-	if _, err := prepareTaskEvent(task, input, nil, noncanonical); !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+	if _, err := prepareTaskEvent(task, input, nil, noncanonical); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("prepareTaskEvent(noncanonical UTC) error = %v, want validation.failed", err)
 	}
 }

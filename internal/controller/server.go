@@ -218,7 +218,7 @@ func (s *Server) retryTask(w http.ResponseWriter, r *http.Request) {
 			s.writeProblem(w, domainError)
 			return
 		}
-		s.writeProblem(w, errs.Wrap(errs.CodeInternal, err))
+		s.writeProblem(w, errs.Wrap(errs.KindInternal, err))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -229,7 +229,7 @@ func (s *Server) retryTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) notImplemented(w http.ResponseWriter, r *http.Request) {
-	s.writeProblem(w, errs.New(errs.CodeNotImplemented, "not implemented"))
+	s.writeProblem(w, errs.New(errs.KindNotImplemented, "not implemented"))
 }
 
 // acceptTask is the shared shape for every action endpoint: dispatch a
@@ -238,14 +238,14 @@ func (s *Server) notImplemented(w http.ResponseWriter, r *http.Request) {
 func (s *Server) acceptTask(w http.ResponseWriter, r *http.Request) {
 	// TODO: decode the typed request body, validate, call into
 	// internal/controller's task dispatcher (serialization lock checked
-	// here — CodeDeployInFlight on a second in-flight deploy for the same
+	// here — KindDeployInFlight on a second in-flight deploy for the same
 	// service), write the task to etcd, return its id.
-	s.writeProblem(w, errs.New(errs.CodeNotImplemented, "not implemented"))
+	s.writeProblem(w, errs.New(errs.KindNotImplemented, "not implemented"))
 }
 
 // writeProblem serializes err as RFC 7807 problem+json at its own
-// HTTPStatus() — derived from Class, so a new Code never needs a new
-// status decision at the call site (see pkg/errs, "HTTPStatus").
+// descriptor-owned HTTPStatus; call sites cannot override the Kind's public
+// Code, Class, or status.
 func (s *Server) writeProblem(w http.ResponseWriter, err *errs.Error) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(err.HTTPStatus())

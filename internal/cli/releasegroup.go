@@ -124,7 +124,7 @@ func releaseGroupOnFailure(value string) (string, error) {
 	case "switch_back", "leave_active":
 		return value, nil
 	default:
-		return "", errs.Newf(errs.CodeValidationFailed,
+		return "", errs.Newf(errs.KindValidationFailed,
 			"invalid --on-failure %q: expected switch_back or leave_active", value)
 	}
 }

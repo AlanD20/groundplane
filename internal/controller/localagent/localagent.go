@@ -70,22 +70,22 @@ type Health struct {
 // New validates and constructs the local Agent lifecycle module.
 func New(dependencies Dependencies) (*Manager, error) {
 	if dependencies.Repository == nil {
-		return nil, errs.New(errs.CodeInternal, "local agent repository is required")
+		return nil, errs.New(errs.KindInternal, "local agent repository is required")
 	}
 	if dependencies.Runtime == nil {
-		return nil, errs.New(errs.CodeInternal, "local agent runtime is required")
+		return nil, errs.New(errs.KindInternal, "local agent runtime is required")
 	}
 	if dependencies.Container == nil {
-		return nil, errs.New(errs.CodeInternal, "local agent container lifecycle is required")
+		return nil, errs.New(errs.KindInternal, "local agent container lifecycle is required")
 	}
 	if dependencies.Sessions == nil {
-		return nil, errs.New(errs.CodeInternal, "local agent session registry is required")
+		return nil, errs.New(errs.KindInternal, "local agent session registry is required")
 	}
 	if dependencies.Tasks == nil {
-		return nil, errs.New(errs.CodeInternal, "local agent task aborter is required")
+		return nil, errs.New(errs.KindInternal, "local agent task aborter is required")
 	}
 	if dependencies.Clock == nil {
-		return nil, errs.New(errs.CodeInternal, "local agent clock is required")
+		return nil, errs.New(errs.KindInternal, "local agent clock is required")
 	}
 	return &Manager{
 		repository: dependencies.Repository,
@@ -111,14 +111,14 @@ func (manager *Manager) Enroll(ctx context.Context, request EnrollRequest) (Agen
 	}
 	createdAt := manager.clock.Now()
 	if !isNonzeroUTC(createdAt) {
-		return Agent{}, errs.New(errs.CodeInternal, "local agent clock returned a non-UTC time")
+		return Agent{}, errs.New(errs.KindInternal, "local agent clock returned a non-UTC time")
 	}
 	credential, err := manager.runtime.GenerateCredential(ctx, request.AgentID)
 	if err != nil {
-		return Agent{}, safePortError(err, "local agent credential generation failed")
+		return Agent{}, safePortError(ctx, err, "local agent credential generation failed")
 	}
 	if err := validateCredential(credential, false); err != nil {
-		return Agent{}, errs.Wrap(errs.CodeInternal, fmt.Errorf("local agent runtime returned an invalid credential: %w", err))
+		return Agent{}, errs.Wrap(errs.KindInternal, fmt.Errorf("local agent runtime returned an invalid credential: %w", err))
 	}
 	record := Record{
 		ID:         request.AgentID,
@@ -131,7 +131,7 @@ func (manager *Manager) Enroll(ctx context.Context, request EnrollRequest) (Agen
 	}
 	stored, err := manager.repository.CreateSingleton(ctx, cloneRecord(record))
 	if err != nil {
-		return Agent{}, safePortError(err, "local agent durable creation failed")
+		return Agent{}, safePortError(ctx, err, "local agent durable creation failed")
 	}
 	if err := validateStored(stored); err != nil {
 		return Agent{}, err
@@ -155,7 +155,7 @@ func (manager *Manager) Reconcile(ctx context.Context) error {
 		return nil
 	}
 	if err != nil {
-		return safePortError(err, "local agent durable record lookup failed")
+		return safePortError(ctx, err, "local agent durable record lookup failed")
 	}
 	if err := validateStored(stored); err != nil {
 		return err
@@ -170,7 +170,7 @@ func (manager *Manager) Reconcile(ctx context.Context) error {
 	case PhaseDeleting:
 		return manager.resumeDelete(ctx, stored)
 	default:
-		return errs.New(errs.CodeInternal, "local agent record has an invalid lifecycle phase")
+		return errs.New(errs.KindInternal, "local agent record has an invalid lifecycle phase")
 	}
 }
 
@@ -178,7 +178,7 @@ func (manager *Manager) Reconcile(ctx context.Context) error {
 // heartbeat. Transport keepalive and a mismatched generation never count.
 func (manager *Manager) Health(ctx context.Context, agentID string) (Health, error) {
 	if ctx == nil {
-		return Health{}, errs.New(errs.CodeInternal, "local agent context is required")
+		return Health{}, errs.New(errs.KindInternal, "local agent context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return Health{}, err
@@ -188,7 +188,7 @@ func (manager *Manager) Health(ctx context.Context, agentID string) (Health, err
 	}
 	stored, err := manager.repository.GetSingleton(ctx)
 	if err != nil {
-		return Health{}, safePortError(err, "local agent durable record lookup failed")
+		return Health{}, safePortError(ctx, err, "local agent durable record lookup failed")
 	}
 	if err := validateStored(stored); err != nil {
 		return Health{}, err
@@ -229,7 +229,7 @@ func (manager *Manager) Remove(ctx context.Context, agentID string) error {
 		return nil
 	}
 	if err != nil {
-		return safePortError(err, "local agent durable record lookup failed")
+		return safePortError(ctx, err, "local agent durable record lookup failed")
 	}
 	if err := validateStored(stored); err != nil {
 		return err
@@ -242,21 +242,21 @@ func (manager *Manager) Remove(ctx context.Context, agentID string) error {
 
 func (manager *Manager) provision(ctx context.Context, stored StoredRecord) (StoredRecord, error) {
 	if stored.Record.Phase != PhaseProvisioning {
-		return StoredRecord{}, errs.New(errs.CodeStateConflict, "local agent is not provisioning")
+		return StoredRecord{}, errs.New(errs.KindStateConflict, "local agent is not provisioning")
 	}
 	if err := manager.convergeRuntime(ctx, stored.Record); err != nil {
 		return StoredRecord{}, err
 	}
 	ready, err := manager.sessions.Ready(ctx, stored.Record.ID, stored.Record.Generation)
 	if err != nil {
-		return StoredRecord{}, safePortError(err, "local agent readiness subscription failed")
+		return StoredRecord{}, safePortError(ctx, err, "local agent readiness subscription failed")
 	}
 	if ready == nil {
-		return StoredRecord{}, errs.New(errs.CodeInternal, "local agent readiness subscription is nil")
+		return StoredRecord{}, errs.New(errs.KindInternal, "local agent readiness subscription is nil")
 	}
 	timer := manager.clock.NewTimer(ReadyTimeout)
 	if timer == nil {
-		return StoredRecord{}, errs.New(errs.CodeInternal, "local agent readiness timer is nil")
+		return StoredRecord{}, errs.New(errs.KindInternal, "local agent readiness timer is nil")
 	}
 	defer timer.Stop()
 
@@ -265,7 +265,7 @@ func (manager *Manager) provision(ctx context.Context, stored StoredRecord) (Sto
 		return StoredRecord{}, ctx.Err()
 	case <-timer.C():
 		return StoredRecord{}, errs.New(
-			errs.CodeTaskTimedOut,
+			errs.KindTaskTimedOut,
 			"agent did not report authenticated Ready within 120 seconds",
 		)
 	case <-ready:
@@ -280,13 +280,13 @@ func (manager *Manager) provision(ctx context.Context, stored StoredRecord) (Sto
 		stored.Revision,
 	)
 	if err != nil {
-		return StoredRecord{}, safePortError(err, "local agent ready transition failed")
+		return StoredRecord{}, safePortError(ctx, err, "local agent ready transition failed")
 	}
 	if err := validateStored(updated); err != nil {
 		return StoredRecord{}, err
 	}
 	if updated.Record.Phase != PhaseReady {
-		return StoredRecord{}, errs.New(errs.CodeInternal, "local agent repository did not mark the record ready")
+		return StoredRecord{}, errs.New(errs.KindInternal, "local agent repository did not mark the record ready")
 	}
 	return updated, nil
 }
@@ -299,7 +299,7 @@ func (manager *Manager) convergeRuntime(ctx context.Context, record Record) erro
 		EncryptedToken: append([]byte(nil), record.Credential.EncryptedToken...),
 	}
 	if err := manager.runtime.Materialize(ctx, material); err != nil {
-		return safePortError(err, "local agent runtime materialization failed")
+		return safePortError(ctx, err, "local agent runtime materialization failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -310,7 +310,7 @@ func (manager *Manager) convergeRuntime(ctx context.Context, record Record) erro
 		Generation: record.Generation,
 	}
 	if err := manager.container.Converge(ctx, desired); err != nil {
-		return safePortError(err, "local agent container convergence failed")
+		return safePortError(ctx, err, "local agent container convergence failed")
 	}
 	return ctx.Err()
 }
@@ -318,13 +318,13 @@ func (manager *Manager) convergeRuntime(ctx context.Context, record Record) erro
 func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) error {
 	record := stored.Record
 	if err := manager.sessions.StopAssignments(ctx, record.ID, record.Generation); err != nil {
-		return safePortError(err, "local agent assignment fencing failed")
+		return safePortError(ctx, err, "local agent assignment fencing failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := manager.tasks.AbortActive(ctx, record.ID, RemovedTaskReason); err != nil {
-		return safePortError(err, "local agent active task abortion failed")
+		return safePortError(ctx, err, "local agent active task abortion failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -333,38 +333,38 @@ func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) e
 	if record.Phase != PhaseDeleting {
 		deleting, err := manager.repository.BeginDelete(ctx, record.ID, record.Generation, stored.Revision)
 		if err != nil {
-			return safePortError(err, "local agent durable revocation failed")
+			return safePortError(ctx, err, "local agent durable revocation failed")
 		}
 		if err := validateStored(deleting); err != nil {
 			return err
 		}
 		if deleting.Record.Phase != PhaseDeleting || deleting.Record.Credential.Digest != "" {
-			return errs.New(errs.CodeInternal, "local agent repository did not durably revoke the credential")
+			return errs.New(errs.KindInternal, "local agent repository did not durably revoke the credential")
 		}
 		stored = deleting
 		record = deleting.Record
 	}
 
 	if err := manager.sessions.Revoke(ctx, record.ID, record.Generation); err != nil {
-		return safePortError(err, "local agent session revocation failed")
+		return safePortError(ctx, err, "local agent session revocation failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := manager.sessions.WaitOffline(ctx, record.ID, record.Generation); err != nil {
-		return safePortError(err, "local agent offline wait failed")
+		return safePortError(ctx, err, "local agent offline wait failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := manager.container.Remove(ctx, record.ID, record.Generation); err != nil {
-		return safePortError(err, "local agent container removal failed")
+		return safePortError(ctx, err, "local agent container removal failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := manager.runtime.Remove(ctx, record.ID); err != nil {
-		return safePortError(err, "local agent runtime removal failed")
+		return safePortError(ctx, err, "local agent runtime removal failed")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -373,14 +373,14 @@ func (manager *Manager) resumeDelete(ctx context.Context, stored StoredRecord) e
 		if isAgentNotFound(err) {
 			return nil
 		}
-		return safePortError(err, "local agent durable deletion failed")
+		return safePortError(ctx, err, "local agent durable deletion failed")
 	}
 	return nil
 }
 
 func (manager *Manager) enter(ctx context.Context) error {
 	if ctx == nil {
-		return errs.New(errs.CodeInternal, "local agent context is required")
+		return errs.New(errs.KindInternal, "local agent context is required")
 	}
 	select {
 	case manager.gate <- struct{}{}:
@@ -399,60 +399,60 @@ func validateEnrollRequest(request EnrollRequest) error {
 		return err
 	}
 	if !imageref.IsDigestPinned(request.Image) {
-		return errs.New(errs.CodeValidationFailed, "agent image must be a non-empty digest-pinned reference")
+		return errs.New(errs.KindValidationFailed, "agent image must be a non-empty digest-pinned reference")
 	}
 	if request.Config.PullIntervalSeconds <= 0 {
-		return errs.New(errs.CodeValidationFailed, "agent pull interval must be positive")
+		return errs.New(errs.KindValidationFailed, "agent pull interval must be positive")
 	}
 	if request.Config.MaxConcurrentTasks <= 0 {
-		return errs.New(errs.CodeValidationFailed, "agent maximum concurrent tasks must be positive")
+		return errs.New(errs.KindValidationFailed, "agent maximum concurrent tasks must be positive")
 	}
 	if !validLabels(request.Config.Labels) {
-		return errs.New(errs.CodeValidationFailed, "agent labels must contain valid NUL-free UTF-8")
+		return errs.New(errs.KindValidationFailed, "agent labels must contain valid NUL-free UTF-8")
 	}
 	return nil
 }
 
 func validateAgentID(agentID string) error {
 	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
-		return errs.New(errs.CodeValidationFailed, "agent id is invalid")
+		return errs.New(errs.KindValidationFailed, "agent id is invalid")
 	}
 	return nil
 }
 
 func validateStored(stored StoredRecord) error {
 	if stored.Revision <= 0 {
-		return errs.New(errs.CodeInternal, "local agent record has an invalid revision")
+		return errs.New(errs.KindInternal, "local agent record has an invalid revision")
 	}
 	if err := ids.Validate(ids.KindAgent, stored.Record.ID); err != nil {
-		return errs.New(errs.CodeInternal, "local agent record has an invalid id")
+		return errs.New(errs.KindInternal, "local agent record has an invalid id")
 	}
 	if !imageref.IsDigestPinned(stored.Record.Image) {
-		return errs.New(errs.CodeInternal, "local agent record has an invalid image")
+		return errs.New(errs.KindInternal, "local agent record has an invalid image")
 	}
 	if stored.Record.Generation == 0 {
-		return errs.New(errs.CodeInternal, "local agent record has an invalid generation")
+		return errs.New(errs.KindInternal, "local agent record has an invalid generation")
 	}
 	if !isNonzeroUTC(stored.Record.CreatedAt) {
-		return errs.New(errs.CodeInternal, "local agent record has an invalid creation time")
+		return errs.New(errs.KindInternal, "local agent record has an invalid creation time")
 	}
 	if stored.Record.Config.PullIntervalSeconds <= 0 || stored.Record.Config.MaxConcurrentTasks <= 0 {
-		return errs.New(errs.CodeInternal, "local agent record has an invalid runtime config")
+		return errs.New(errs.KindInternal, "local agent record has an invalid runtime config")
 	}
 	if !validLabels(stored.Record.Config.Labels) {
-		return errs.New(errs.CodeInternal, "local agent record has invalid labels")
+		return errs.New(errs.KindInternal, "local agent record has invalid labels")
 	}
 	switch stored.Record.Phase {
 	case PhaseProvisioning, PhaseReady:
 		if err := validateCredential(stored.Record.Credential, false); err != nil {
-			return errs.Wrap(errs.CodeInternal, fmt.Errorf("local agent record has an invalid credential: %w", err))
+			return errs.Wrap(errs.KindInternal, fmt.Errorf("local agent record has an invalid credential: %w", err))
 		}
 	case PhaseDeleting:
 		if err := validateCredential(stored.Record.Credential, true); err != nil {
-			return errs.Wrap(errs.CodeInternal, fmt.Errorf("local agent record has an invalid credential: %w", err))
+			return errs.Wrap(errs.KindInternal, fmt.Errorf("local agent record has an invalid credential: %w", err))
 		}
 	default:
-		return errs.New(errs.CodeInternal, "local agent record has an invalid lifecycle phase")
+		return errs.New(errs.KindInternal, "local agent record has an invalid lifecycle phase")
 	}
 	return nil
 }
@@ -523,18 +523,19 @@ func cloneCredential(credential Credential) Credential {
 	}
 }
 
-func safePortError(err error, message string) error {
+func safePortError(ctx context.Context, err error, message string) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return err
+	if ctx != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
 	}
-	var domainError *errs.Error
-	if errors.As(err, &domainError) {
-		return errs.New(domainError.Code, message)
+	if kind, ok := errs.KindOf(err); ok {
+		return errs.New(kind, message)
 	}
-	return errs.New(errs.CodeInternal, message)
+	return errs.New(errs.KindInternal, message)
 }
 
 func validLabels(labels map[string]string) bool {
@@ -552,9 +553,9 @@ func isNonzeroUTC(value time.Time) bool {
 }
 
 func isAgentNotFound(err error) bool {
-	return errors.Is(err, errs.New(errs.CodeAgentNotFound, ""))
+	return errors.Is(err, errs.New(errs.KindAgentNotFound, ""))
 }
 
 func agentNotFound(agentID string) error {
-	return errs.Newf(errs.CodeAgentNotFound, "agent %s was not found", agentID)
+	return errs.Newf(errs.KindAgentNotFound, "agent %s was not found", agentID)
 }

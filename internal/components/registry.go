@@ -92,10 +92,10 @@ func All() []Registration {
 func ValidateOwner(kind core.ComponentKind, owner core.ComponentOwner) error {
 	registration, ok := registry[kind]
 	if !ok {
-		return errs.Newf(errs.CodeValidationFailed, "component: unknown kind %q", kind)
+		return errs.Newf(errs.KindValidationFailed, "component: unknown kind %q", kind)
 	}
 	if !registration.Allows(owner) {
-		return errs.Newf(errs.CodeValidationFailed, "component: kind %q does not allow owner %q", kind, owner)
+		return errs.Newf(errs.KindValidationFailed, "component: kind %q does not allow owner %q", kind, owner)
 	}
 	return nil
 }

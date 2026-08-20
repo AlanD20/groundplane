@@ -93,7 +93,7 @@ func TestConnectRejectsMalformedAndMismatchedAuthentication(t *testing.T) {
 	}{
 		{name: "malformed id", id: "agent-1", token: testToken(1)},
 		{name: "short token", id: testAgentID, token: []byte("short")},
-		{name: "mismatch", id: testAgentID, token: testToken(2), authErr: errs.New(errs.CodeAgentNotFound, "credential mismatch")},
+		{name: "mismatch", id: testAgentID, token: testToken(2), authErr: errs.New(errs.KindAgentNotFound, "credential mismatch")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestConnectGatesInitialConfigOnAuthentication(t *testing.T) {
 		authenticateMessage(testAgentID, testToken(4)),
 	}}
 	failedAuth := authorizedAuthenticator()
-	failedAuth.err = errs.New(errs.CodeAgentNotFound, "mismatch")
+	failedAuth.err = errs.New(errs.KindAgentNotFound, "mismatch")
 	_ = New(failedAuth, NewRegistry()).Connect(failed)
 	if len(failed.sent) != 0 {
 		t.Fatalf("failed authentication sent %d messages", len(failed.sent))
