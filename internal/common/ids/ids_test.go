@@ -95,6 +95,35 @@ func TestNewULIDReturnsRawULID(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsOnlyTheRequestedCanonicalKind(t *testing.T) {
+	// Rationale: every boundary must share one strict parser for the locked
+	// <kind>_<26-char ULID> shape and reject a valid id of the wrong kind.
+	value := "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	if err := Validate(KindAgent, value); err != nil {
+		t.Fatalf("Validate(KindAgent, %q): %v", value, err)
+	}
+	if err := Validate(KindService, value); err == nil {
+		t.Fatal("Validate accepted an id of the wrong kind")
+	}
+}
+
+func TestValidateRejectsMalformedIDs(t *testing.T) {
+	// Rationale: accepting non-canonical case, missing separators, or malformed
+	// ULIDs would create ids that cannot be reliably indexed or round-tripped.
+	tests := []string{
+		"",
+		"agt01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"agt_01ARZ3NDEKTSV4RRFFQ69G5FA",
+		"agt_01arz3ndektsv4rrffq69g5fav",
+		"agt_01ARZ3NDEKTSV4RRFFQ69G5FA!",
+	}
+	for _, value := range tests {
+		if err := Validate(KindAgent, value); err == nil {
+			t.Errorf("Validate(KindAgent, %q) succeeded", value)
+		}
+	}
+}
+
 func TestNew_IsUnique(t *testing.T) {
 	// Rationale: two ids generated back-to-back must never collide —
 	// this is the whole point of the 80 bits of CSPRNG randomness.

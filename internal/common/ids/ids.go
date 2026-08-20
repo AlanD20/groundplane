@@ -9,6 +9,8 @@ package ids
 
 import (
 	"crypto/rand"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,6 +64,22 @@ func NewULID() string {
 // the current time — the normal, non-fixture path.
 func New(kind Kind) string {
 	return string(kind) + "_" + NewULID()
+}
+
+// Validate checks that value is a canonical stable id for kind.
+func Validate(kind Kind, value string) error {
+	prefix := string(kind) + "_"
+	if kind == "" || !strings.HasPrefix(value, prefix) {
+		return fmt.Errorf("invalid %s id", kind)
+	}
+	body := strings.TrimPrefix(value, prefix)
+	if len(body) != 26 || body != strings.ToUpper(body) {
+		return fmt.Errorf("invalid %s id", kind)
+	}
+	if _, err := ulid.ParseStrict(body); err != nil {
+		return fmt.Errorf("invalid %s id", kind)
+	}
+	return nil
 }
 
 // NewAt is New with an explicit timestamp — for mock fixtures, which use
