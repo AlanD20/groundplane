@@ -1,8 +1,8 @@
 // cmd/agent is the Agent entry point — thin: everything it does is call
 // into internal/app. Per docs/standards.md's import matrix, this
-// file imports internal/app and NOTHING else internal. Seeded once by
-// groundplane-agent.service (docker plus the bootstrap compose file, no
-// logic). See mvp.md, "Agent (execution plane)".
+// file imports internal/app and NOTHING else internal. The native Controller
+// owns this executable's OCI container lifecycle through Docker; there is no
+// Agent systemd unit or bootstrap Compose path. See ADR 0016.
 package main
 
 import (
