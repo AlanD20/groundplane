@@ -5,12 +5,16 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // EventType distinguishes a put from a delete in a Watch stream.
@@ -571,6 +575,16 @@ func (s *store) logicalKey(key string) (string, bool) {
 func wrap(err error) error {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, rpctypes.ErrCompacted) {
+		return errs.Wrap(errs.CodeCursorExpired, err)
+	}
+	if errors.Is(err, context.Canceled) {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.Unavailable ||
+		status.Code(err) == codes.DeadlineExceeded {
+		return errs.Wrap(errs.CodeStorageUnavailable, err)
 	}
 	return errs.Wrap(errs.CodeInternal, err)
 }

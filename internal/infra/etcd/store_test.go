@@ -256,8 +256,8 @@ func TestStoreWatchReportsTerminalErrors(t *testing.T) {
 		t.Fatal("Watch() terminal error = nil; want compaction error")
 	}
 	var groundplaneError *errs.Error
-	if !errors.As(watchErr, &groundplaneError) || groundplaneError.Code != errs.CodeInternal {
-		t.Fatalf("Watch() terminal error = %#v; want internal Groundplane error", watchErr)
+	if !errors.As(watchErr, &groundplaneError) || groundplaneError.Code != errs.CodeCursorExpired {
+		t.Fatalf("Watch() terminal error = %#v; want cursor.expired Groundplane error", watchErr)
 	}
 	if _, ok := <-stream.Events; ok {
 		t.Fatal("Watch() events channel remained open after terminal error")
@@ -345,8 +345,8 @@ func TestStorePreservesContextErrors(t *testing.T) {
 		t.Fatalf("Get() error = %v; want deadline in error chain", err)
 	}
 	var groundplaneError *errs.Error
-	if !errors.As(err, &groundplaneError) || groundplaneError.Code != errs.CodeInternal {
-		t.Fatalf("Get() error = %#v; want internal Groundplane error", err)
+	if !errors.As(err, &groundplaneError) || groundplaneError.Code != errs.CodeStorageUnavailable {
+		t.Fatalf("Get() error = %#v; want storage.unavailable Groundplane error", err)
 	}
 }
 

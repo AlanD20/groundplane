@@ -25,10 +25,28 @@ const (
 	CodeRecoveryPointNotFound  Code = "recovery_point.not_found"
 
 	// --- conflict / in-flight ---
-	CodeDeployInFlight    Code = "deploy.in_flight"
-	CodeTaskNotRetryable  Code = "task.not_retryable"
-	CodeTaskRetryInFlight Code = "task.retry_in_flight"
-	CodeSlugConflict      Code = "slug.conflict"
+	CodeDeployInFlight        Code = "deploy.in_flight"
+	CodeTaskNotRetryable      Code = "task.not_retryable"
+	CodeTaskRetryInFlight     Code = "task.retry_in_flight"
+	CodeSlugConflict          Code = "slug.conflict"
+	CodeNameConflict          Code = "name.conflict"
+	CodeStateConflict         Code = "state.conflict"
+	CodeResourceInUse         Code = "resource.in_use"
+	CodeCursorExpired         Code = "cursor.expired"
+	CodeIdempotencyInProgress Code = "idempotency.in_progress"
+
+	// --- malformed intent / retryable storage ---
+	CodeIdempotencyMismatch Code = "idempotency.mismatch"
+	CodeStorageUnavailable  Code = "storage.unavailable"
+
+	// --- not-found additions required by the durable record catalog ---
+	CodeZoneNotFound         Code = "zone.not_found"
+	CodeRouteNotFound        Code = "route.not_found"
+	CodeVolumeNotFound       Code = "volume.not_found"
+	CodeEntryNotFound        Code = "entry.not_found"
+	CodeScriptNotFound       Code = "script.not_found"
+	CodeReleaseNotFound      Code = "release.not_found"
+	CodeBackupSourceNotFound Code = "backup_source.not_found"
 
 	// --- declared-deferred / not-yet-implemented product surface ---
 	CodeStrategyNotImplemented Code = "strategy.not_implemented"
@@ -64,11 +82,18 @@ func classify(code Code) Class {
 	case CodeTenantNotFound, CodeProjectNotFound, CodeEnvironmentNotFound, CodeServiceNotFound,
 		CodeBackingServiceNotFound, CodeAttachNotFound, CodeTaskNotFound, CodeSecretNotFound,
 		CodeConnectorNotFound, CodeRunnerNotFound, CodeAgentNotFound, CodeReleaseGroupNotFound,
-		CodeComponentNotFound, CodeRecoveryPointNotFound, CodeRequestNotFound:
+		CodeComponentNotFound, CodeRecoveryPointNotFound, CodeZoneNotFound, CodeRouteNotFound,
+		CodeVolumeNotFound, CodeEntryNotFound, CodeScriptNotFound, CodeReleaseNotFound,
+		CodeBackupSourceNotFound, CodeRequestNotFound:
 		return ClassNotFound
 
-	case CodeDeployInFlight, CodeTaskNotRetryable, CodeTaskRetryInFlight, CodeSlugConflict:
+	case CodeDeployInFlight, CodeTaskNotRetryable, CodeTaskRetryInFlight, CodeSlugConflict,
+		CodeNameConflict, CodeStateConflict, CodeResourceInUse, CodeCursorExpired,
+		CodeIdempotencyInProgress:
 		return ClassConflict
+
+	case CodeIdempotencyMismatch:
+		return ClassBadRequest
 
 	case CodeRequestMethodNotAllowed:
 		return ClassMethodNotAllowed
@@ -83,7 +108,7 @@ func classify(code Code) Class {
 		CodeValidationFailed, CodeScopeUnauthorized, CodeConnectorScopeInvalid:
 		return ClassValidation
 
-	case CodeTaskTimedOut:
+	case CodeTaskTimedOut, CodeStorageUnavailable:
 		return ClassRetryable
 
 	case CodeNotImplemented, CodeInternal, CodeRequestFailed:

@@ -18,6 +18,7 @@ import (
 type Class string
 
 const (
+	ClassBadRequest           Class = "bad_request"
 	ClassValidation           Class = "validation"
 	ClassNotFound             Class = "not_found"
 	ClassConflict             Class = "conflict"
@@ -128,6 +129,8 @@ func (e *Error) HTTPStatus() int {
 		return 501
 	}
 	switch e.Class {
+	case ClassBadRequest:
+		return 400
 	case ClassValidation:
 		return 422
 	case ClassNotFound:

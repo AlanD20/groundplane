@@ -56,6 +56,7 @@ func TestHTTPStatus_DerivesFromClass(t *testing.T) {
 	// mapping is the ONLY place status codes are decided (the Controller
 	// never special-cases a Code directly).
 	cases := map[Class]int{
+		ClassBadRequest:           400,
 		ClassValidation:           422,
 		ClassNotFound:             404,
 		ClassMethodNotAllowed:     405,
@@ -70,6 +71,26 @@ func TestHTTPStatus_DerivesFromClass(t *testing.T) {
 		e := &Error{Class: class}
 		if got := e.HTTPStatus(); got != want {
 			t.Errorf("Class %s -> HTTPStatus() = %d, want %d", class, got, want)
+		}
+	}
+}
+
+func TestAcceptedPersistenceErrorsHaveStableStatuses(t *testing.T) {
+	// Rationale: storage conflicts and outages drive safe retry behavior;
+	// changing their classes would make callers retry conflicts or hide outages.
+	cases := []struct {
+		code   Code
+		status int
+	}{
+		{CodeStateConflict, 409},
+		{CodeResourceInUse, 409},
+		{CodeCursorExpired, 409},
+		{CodeIdempotencyMismatch, 400},
+		{CodeStorageUnavailable, 503},
+	}
+	for _, test := range cases {
+		if got := New(test.code, "test").HTTPStatus(); got != test.status {
+			t.Errorf("%s status = %d, want %d", test.code, got, test.status)
 		}
 	}
 }
