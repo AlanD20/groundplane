@@ -36,25 +36,36 @@ type Sealer interface {
 	Seal(ctx context.Context, plaintext []byte) ([]byte, error)
 }
 
+// Opener is implemented by the application layer that owns the Controller
+// encryption key. Open returns a caller-owned plaintext buffer. The Manager
+// clears that buffer before returning and never persists it.
+type Opener interface {
+	Open(ctx context.Context, ciphertext []byte) ([]byte, error)
+}
+
 type Manager struct {
 	mu          sync.Mutex
 	random      io.Reader
 	sealer      Sealer
+	opener      Opener
 	hostRoot    string
 	expectedUID uint32
 	rename      func(*os.Root, string, string) error
 }
 
-func New(random io.Reader, sealer Sealer) (*Manager, error) {
-	return newManager(random, sealer, "/", 0)
+func New(random io.Reader, sealer Sealer, opener Opener) (*Manager, error) {
+	return newManager(random, sealer, opener, "/", 0)
 }
 
-func newManager(random io.Reader, sealer Sealer, hostRoot string, expectedUID uint32) (*Manager, error) {
+func newManager(random io.Reader, sealer Sealer, opener Opener, hostRoot string, expectedUID uint32) (*Manager, error) {
 	if random == nil {
 		return nil, errs.New(errs.CodeInternal, "agent credential: randomness source is required")
 	}
 	if sealer == nil {
 		return nil, errs.New(errs.CodeInternal, "agent credential: sealer is required")
+	}
+	if opener == nil {
+		return nil, errs.New(errs.CodeInternal, "agent credential: opener is required")
 	}
 	if hostRoot == "" {
 		return nil, errs.New(errs.CodeInternal, "agent credential: host root is required")
@@ -62,6 +73,7 @@ func newManager(random io.Reader, sealer Sealer, hostRoot string, expectedUID ui
 	return &Manager{
 		random:      random,
 		sealer:      sealer,
+		opener:      opener,
 		hostRoot:    hostRoot,
 		expectedUID: expectedUID,
 		rename: func(root *os.Root, oldName, newName string) error {
@@ -70,10 +82,10 @@ func newManager(random io.Reader, sealer Sealer, hostRoot string, expectedUID ui
 	}, nil
 }
 
-// GenerateAndMaterialize creates one credential, seals its raw bytes, and
-// atomically writes its unpadded base64url encoding to the validated Agent
-// runtime token path. No plaintext value is returned.
-func (m *Manager) GenerateAndMaterialize(ctx context.Context, agentID string) (Credential, error) {
+// Generate creates one durable-safe credential without creating runtime files.
+// The caller must commit the returned ciphertext and digest with the Agent
+// record before invoking Materialize.
+func (m *Manager) Generate(ctx context.Context, agentID string) (Credential, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -103,13 +115,6 @@ func (m *Manager) GenerateAndMaterialize(ctx context.Context, agentID string) (C
 		return Credential{}, errs.New(errs.CodeInternal, "agent credential: sealer returned empty ciphertext")
 	}
 	if err := ctx.Err(); err != nil {
-		return Credential{}, err
-	}
-
-	encoded := make([]byte, base64.RawURLEncoding.EncodedLen(len(raw)))
-	defer clear(encoded)
-	base64.RawURLEncoding.Encode(encoded, raw[:])
-	if err := m.materializeToken(ctx, agentID, encoded); err != nil {
 		return Credential{}, err
 	}
 
