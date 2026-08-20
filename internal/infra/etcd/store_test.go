@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -21,33 +22,47 @@ func TestStoreScopesCRUDAndListKeys(t *testing.T) {
 		t.Fatalf("newStore() error = %v", err)
 	}
 
-	backend.getResponse = &clientv3.GetResponse{Kvs: []*mvccpb.KeyValue{{Value: []byte("task")}}}
+	backend.getResponse = &clientv3.GetResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 8},
+		Kvs: []*mvccpb.KeyValue{{
+			Key: []byte("/groundplane/tasks/task_1"), Value: []byte("task"), ModRevision: 7,
+		}},
+	}
 	value, err := store.Get(context.Background(), "/tasks/task_1")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if backend.getKey != "/groundplane/tasks/task_1" || string(value) != "task" {
-		t.Fatalf("Get() key/value = %q/%q", backend.getKey, value)
+	if backend.getKey != "/groundplane/tasks/task_1" || value.ReadRevision != 8 ||
+		value.Entry == nil || value.Entry.Key != "/tasks/task_1" ||
+		string(value.Entry.Value) != "task" || value.Entry.ModRevision != 7 {
+		t.Fatalf("Get() key/value = %q/%#v", backend.getKey, value)
 	}
 
-	if err := store.Put(context.Background(), "/tasks/task_1", []byte("updated")); err != nil {
+	backend.putResponse = &clientv3.PutResponse{Header: &etcdserverpb.ResponseHeader{Revision: 8}}
+	putRevision, err := store.Put(context.Background(), "/tasks/task_1", []byte("updated"))
+	if err != nil {
 		t.Fatalf("Put() error = %v", err)
 	}
-	if backend.putKey != "/groundplane/tasks/task_1" || backend.putValue != "updated" {
-		t.Fatalf("Put() key/value = %q/%q", backend.putKey, backend.putValue)
+	if backend.putKey != "/groundplane/tasks/task_1" || backend.putValue != "updated" || putRevision != 8 {
+		t.Fatalf("Put() key/value/revision = %q/%q/%d", backend.putKey, backend.putValue, putRevision)
 	}
 
-	if err := store.Delete(context.Background(), "/tasks/task_1"); err != nil {
+	backend.deleteResponse = &clientv3.DeleteResponse{Header: &etcdserverpb.ResponseHeader{Revision: 9}}
+	deleteRevision, err := store.Delete(context.Background(), "/tasks/task_1")
+	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	if backend.deleteKey != "/groundplane/tasks/task_1" {
-		t.Fatalf("Delete() key = %q", backend.deleteKey)
+	if backend.deleteKey != "/groundplane/tasks/task_1" || deleteRevision != 9 {
+		t.Fatalf("Delete() key/revision = %q/%d", backend.deleteKey, deleteRevision)
 	}
 
-	backend.getResponse = &clientv3.GetResponse{Kvs: []*mvccpb.KeyValue{
-		{Key: []byte("/groundplane/tasks/task_1"), Value: []byte("one")},
-		{Key: []byte("/groundplane/tasks/task_2"), Value: []byte("two")},
-	}}
+	backend.getResponse = &clientv3.GetResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 12},
+		Kvs: []*mvccpb.KeyValue{
+			{Key: []byte("/groundplane/tasks/task_1"), Value: []byte("one"), ModRevision: 10},
+			{Key: []byte("/groundplane/tasks/task_2"), Value: []byte("two"), ModRevision: 11},
+		},
+	}
 	values, err := store.List(context.Background(), "/tasks/")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
@@ -55,7 +70,9 @@ func TestStoreScopesCRUDAndListKeys(t *testing.T) {
 	if backend.getKey != "/groundplane/tasks/" || !clientv3.IsOptsWithPrefix(backend.getOptions) {
 		t.Fatalf("List() key/prefix option = %q/%v", backend.getKey, clientv3.IsOptsWithPrefix(backend.getOptions))
 	}
-	if string(values["/tasks/task_1"]) != "one" || string(values["/tasks/task_2"]) != "two" {
+	if values.ReadRevision != 12 || len(values.Values) != 2 ||
+		values.Values[0].Key != "/tasks/task_1" || string(values.Values[0].Value) != "one" ||
+		values.Values[0].ModRevision != 10 || values.Values[1].Key != "/tasks/task_2" {
 		t.Fatalf("List() values = %#v", values)
 	}
 }
@@ -63,15 +80,17 @@ func TestStoreScopesCRUDAndListKeys(t *testing.T) {
 func TestStoreGetMissingKey(t *testing.T) {
 	// Rationale: the Store interface has no found boolean, so absence must have
 	// one deterministic representation that repositories can map by resource.
-	backend := &fakeClient{getResponse: &clientv3.GetResponse{}}
+	backend := &fakeClient{getResponse: &clientv3.GetResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 14},
+	}}
 	store, err := newStore(backend, "/groundplane/")
 	if err != nil {
 		t.Fatalf("newStore() error = %v", err)
 	}
 
 	value, err := store.Get(context.Background(), "/missing")
-	if err != nil || value != nil {
-		t.Fatalf("Get() = %q, %v; want nil, nil", value, err)
+	if err != nil || value == nil || value.Entry != nil || value.ReadRevision != 14 {
+		t.Fatalf("Get() = %#v, %v; want absent entry at revision 14", value, err)
 	}
 }
 
@@ -84,12 +103,14 @@ func TestStoreWatchTranslatesLogicalEvents(t *testing.T) {
 		t.Fatalf("newStore() error = %v", err)
 	}
 
-	stream, err := store.Watch(context.Background(), "/tasks/")
+	stream, err := store.Watch(context.Background(), "/tasks/", 13)
 	if err != nil {
 		t.Fatalf("Watch() error = %v", err)
 	}
 	backend.watchResponses <- clientv3.WatchResponse{Events: []*clientv3.Event{
-		{Type: mvccpb.PUT, Kv: &mvccpb.KeyValue{Key: []byte("/groundplane/tasks/task_1"), Value: []byte("one")}},
+		{Type: mvccpb.PUT, Kv: &mvccpb.KeyValue{
+			Key: []byte("/groundplane/tasks/task_1"), Value: []byte("one"), ModRevision: 13,
+		}},
 		{Type: mvccpb.DELETE, Kv: &mvccpb.KeyValue{Key: []byte("/groundplane/tasks/task_2")}},
 	}}
 	close(backend.watchResponses)
@@ -104,8 +125,11 @@ func TestStoreWatchTranslatesLogicalEvents(t *testing.T) {
 	if backend.watchKey != "/groundplane/tasks/" || !clientv3.IsOptsWithPrefix(backend.watchOptions) {
 		t.Fatalf("Watch() key/prefix option = %q/%v", backend.watchKey, clientv3.IsOptsWithPrefix(backend.watchOptions))
 	}
+	if revision := clientv3.OpGet("key", backend.watchOptions...).Rev(); revision != 13 {
+		t.Fatalf("Watch() start revision = %d, want 13", revision)
+	}
 	if len(got) != 2 || got[0].Key != "/tasks/task_1" || got[0].Type != EventPut ||
-		got[1].Key != "/tasks/task_2" || got[1].Type != EventDelete {
+		got[0].ModRevision != 13 || got[1].Key != "/tasks/task_2" || got[1].Type != EventDelete {
 		t.Fatalf("Watch() events = %#v", got)
 	}
 }
@@ -119,7 +143,7 @@ func TestStoreWatchReportsTerminalErrors(t *testing.T) {
 		t.Fatalf("newStore() error = %v", err)
 	}
 
-	stream, err := store.Watch(context.Background(), "/tasks/")
+	stream, err := store.Watch(context.Background(), "/tasks/", 0)
 	if err != nil {
 		t.Fatalf("Watch() error = %v", err)
 	}
@@ -136,6 +160,73 @@ func TestStoreWatchReportsTerminalErrors(t *testing.T) {
 	}
 	if _, ok := <-stream.Events; ok {
 		t.Fatal("Watch() events channel remained open after terminal error")
+	}
+}
+
+func TestStoreWatchRejectsEventsOutsideConfiguredPrefix(t *testing.T) {
+	// Rationale: a prefix leak is an isolation failure, not an event that a
+	// reconciler may silently skip while believing its watch is complete.
+	backend := &fakeClient{watchResponses: make(chan clientv3.WatchResponse, 1)}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatalf("newStore() error = %v", err)
+	}
+
+	stream, err := store.Watch(context.Background(), "/tasks/", 0)
+	if err != nil {
+		t.Fatalf("Watch() error = %v", err)
+	}
+	backend.watchResponses <- clientv3.WatchResponse{Events: []*clientv3.Event{{
+		Type: mvccpb.PUT,
+		Kv:   &mvccpb.KeyValue{Key: []byte("/other/tasks/task_1")},
+	}}}
+	close(backend.watchResponses)
+
+	watchErr, ok := <-stream.Errors
+	if !ok || watchErr == nil {
+		t.Fatal("Watch() terminal error = nil; want prefix isolation error")
+	}
+	if _, ok := <-stream.Events; ok {
+		t.Fatal("Watch() events channel remained open after prefix isolation error")
+	}
+}
+
+func TestStoreTransactScopesAtomicCompareAndMutations(t *testing.T) {
+	// Rationale: token consumption and uniqueness reservations require one
+	// compare-and-mutate commit, not a racy read followed by independent writes.
+	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
+		Header:    &etcdserverpb.ResponseHeader{Revision: 22},
+		Succeeded: true,
+	}}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatalf("newStore() error = %v", err)
+	}
+
+	result, err := store.Transact(
+		context.Background(),
+		[]Condition{{Key: "/tokens/join_1", ModRevision: 19}},
+		[]Mutation{
+			{Type: MutationDelete, Key: "/tokens/join_1"},
+			{Type: MutationPut, Key: "/agents/agent_1", Value: []byte("agent")},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Transact() error = %v", err)
+	}
+	if !result.Succeeded || result.Revision != 22 {
+		t.Fatalf("Transact() result = %#v", result)
+	}
+	if len(backend.transaction.conditions) != 1 ||
+		string(backend.transaction.conditions[0].KeyBytes()) != "/groundplane/tokens/join_1" {
+		t.Fatalf("Transact() conditions = %#v", backend.transaction.conditions)
+	}
+	if len(backend.transaction.operations) != 2 || !backend.transaction.operations[0].IsDelete() ||
+		string(backend.transaction.operations[0].KeyBytes()) != "/groundplane/tokens/join_1" ||
+		!backend.transaction.operations[1].IsPut() ||
+		string(backend.transaction.operations[1].KeyBytes()) != "/groundplane/agents/agent_1" ||
+		string(backend.transaction.operations[1].ValueBytes()) != "agent" {
+		t.Fatalf("Transact() operations = %#v", backend.transaction.operations)
 	}
 }
 
@@ -178,19 +269,26 @@ func TestStoreSnapshotStreamsAndCloses(t *testing.T) {
 }
 
 type fakeClient struct {
-	getKey         string
-	getOptions     []clientv3.OpOption
-	getResponse    *clientv3.GetResponse
-	getError       error
-	putKey         string
-	putValue       string
-	deleteKey      string
-	watchKey       string
-	watchOptions   []clientv3.OpOption
-	watchResponses chan clientv3.WatchResponse
-	snapshotReader io.ReadCloser
-	snapshotError  error
-	closeError     error
+	getKey              string
+	getOptions          []clientv3.OpOption
+	getResponse         *clientv3.GetResponse
+	getError            error
+	putKey              string
+	putValue            string
+	putResponse         *clientv3.PutResponse
+	putError            error
+	deleteKey           string
+	deleteResponse      *clientv3.DeleteResponse
+	deleteError         error
+	transaction         *fakeTransaction
+	transactionResponse *clientv3.TxnResponse
+	transactionError    error
+	watchKey            string
+	watchOptions        []clientv3.OpOption
+	watchResponses      chan clientv3.WatchResponse
+	snapshotReader      io.ReadCloser
+	snapshotError       error
+	closeError          error
 }
 
 func (f *fakeClient) Get(_ context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
@@ -210,7 +308,7 @@ func (f *fakeClient) Put(
 ) (*clientv3.PutResponse, error) {
 	f.putKey = key
 	f.putValue = value
-	return &clientv3.PutResponse{}, nil
+	return f.putResponse, f.putError
 }
 
 func (f *fakeClient) Delete(
@@ -219,7 +317,12 @@ func (f *fakeClient) Delete(
 	_ ...clientv3.OpOption,
 ) (*clientv3.DeleteResponse, error) {
 	f.deleteKey = key
-	return &clientv3.DeleteResponse{}, nil
+	return f.deleteResponse, f.deleteError
+}
+
+func (f *fakeClient) Txn(context.Context) clientv3.Txn {
+	f.transaction = &fakeTransaction{response: f.transactionResponse, err: f.transactionError}
+	return f.transaction
 }
 
 func (f *fakeClient) Watch(_ context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
@@ -234,6 +337,33 @@ func (f *fakeClient) Snapshot(context.Context) (io.ReadCloser, error) {
 
 func (f *fakeClient) Close() error {
 	return f.closeError
+}
+
+type fakeTransaction struct {
+	conditions []clientv3.Cmp
+	operations []clientv3.Op
+	otherwise  []clientv3.Op
+	response   *clientv3.TxnResponse
+	err        error
+}
+
+func (t *fakeTransaction) If(conditions ...clientv3.Cmp) clientv3.Txn {
+	t.conditions = append(t.conditions, conditions...)
+	return t
+}
+
+func (t *fakeTransaction) Then(operations ...clientv3.Op) clientv3.Txn {
+	t.operations = append(t.operations, operations...)
+	return t
+}
+
+func (t *fakeTransaction) Else(operations ...clientv3.Op) clientv3.Txn {
+	t.otherwise = append(t.otherwise, operations...)
+	return t
+}
+
+func (t *fakeTransaction) Commit() (*clientv3.TxnResponse, error) {
+	return t.response, t.err
 }
 
 type trackingReadCloser struct {
