@@ -13,7 +13,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-func TestStoreScopesCRUDAndListKeys(t *testing.T) {
+func TestStoreScopesCRUDAndRangeKeys(t *testing.T) {
 	// Rationale: the configured key prefix must isolate every ordinary etcd
 	// operation while remaining invisible to Controller repository callers.
 	backend := &fakeClient{}
@@ -63,17 +63,118 @@ func TestStoreScopesCRUDAndListKeys(t *testing.T) {
 			{Key: []byte("/groundplane/tasks/task_2"), Value: []byte("two"), ModRevision: 11},
 		},
 	}
-	values, err := store.List(context.Background(), "/tasks/")
+	values, err := store.Range(context.Background(), RangeRequest{
+		Prefix:         "/tasks/",
+		StartExclusive: "/tasks/task_0",
+		Limit:          2,
+		Revision:       11,
+	})
 	if err != nil {
-		t.Fatalf("List() error = %v", err)
+		t.Fatalf("Range() error = %v", err)
 	}
-	if backend.getKey != "/groundplane/tasks/" || !clientv3.IsOptsWithPrefix(backend.getOptions) {
-		t.Fatalf("List() key/prefix option = %q/%v", backend.getKey, clientv3.IsOptsWithPrefix(backend.getOptions))
+	operation := clientv3.OpGet(backend.getKey, backend.getOptions...)
+	if backend.getKey != "/groundplane/tasks/task_0\x00" ||
+		string(operation.RangeBytes()) != clientv3.GetPrefixRangeEnd("/groundplane/tasks/") ||
+		operation.Limit() != 2 || operation.Rev() != 11 {
+		t.Fatalf(
+			"Range() key/end/limit/revision = %q/%q/%d/%d",
+			backend.getKey,
+			operation.RangeBytes(),
+			operation.Limit(),
+			operation.Rev(),
+		)
 	}
-	if values.ReadRevision != 12 || len(values.Values) != 2 ||
+	if values.ReadRevision != 11 || values.ResponseRevision != 12 || values.More || len(values.Values) != 2 ||
 		values.Values[0].Key != "/tasks/task_1" || string(values.Values[0].Value) != "one" ||
 		values.Values[0].ModRevision != 10 || values.Values[1].Key != "/tasks/task_2" {
-		t.Fatalf("List() values = %#v", values)
+		t.Fatalf("Range() values = %#v", values)
+	}
+}
+
+func TestStoreRangeRejectsInvalidInputs(t *testing.T) {
+	// Rationale: a low-level range must remain explicitly bounded and scoped;
+	// invalid cursor mechanics must fail before reaching etcd.
+	backend := &fakeClient{}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatalf("newStore() error = %v", err)
+	}
+
+	cases := []RangeRequest{
+		{Prefix: "/tasks/", Limit: 0},
+		{Prefix: "/tasks/", Limit: -1},
+		{Prefix: "/tasks/", Limit: 1, Revision: -1},
+		{Prefix: "tasks/", Limit: 1},
+		{Prefix: "/tasks/", StartExclusive: "tasks/task_1", Limit: 1},
+		{Prefix: "/tasks/", StartExclusive: "/agents/agent_1", Limit: 1},
+	}
+	for _, request := range cases {
+		if _, err := store.Range(context.Background(), request); err == nil {
+			t.Fatalf("Range(%#v) error = nil", request)
+		}
+	}
+}
+
+func TestStoreGetManyUsesOneHistoricalRevision(t *testing.T) {
+	// Rationale: index pagination must hydrate every primary from exactly one
+	// MVCC view while retaining request order and explicit missing entries.
+	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 18},
+		Responses: []*etcdserverpb.ResponseOp{
+			{Response: &etcdserverpb.ResponseOp_ResponseRange{ResponseRange: &etcdserverpb.RangeResponse{
+				Kvs: []*mvccpb.KeyValue{{
+					Key: []byte("/groundplane/services/svc_1"), Value: []byte("one"), ModRevision: 10,
+				}},
+			}}},
+			{Response: &etcdserverpb.ResponseOp_ResponseRange{ResponseRange: &etcdserverpb.RangeResponse{}}},
+		},
+	}}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatalf("newStore() error = %v", err)
+	}
+
+	result, err := store.GetMany(context.Background(), GetManyRequest{
+		Keys:     []string{"/services/svc_1", "/services/svc_2"},
+		Revision: 14,
+	})
+	if err != nil {
+		t.Fatalf("GetMany() error = %v", err)
+	}
+	if result.ReadRevision != 14 || result.ResponseRevision != 18 || len(result.Values) != 2 ||
+		result.Values[0] == nil || result.Values[0].Key != "/services/svc_1" ||
+		string(result.Values[0].Value) != "one" || result.Values[0].ModRevision != 10 ||
+		result.Values[1] != nil {
+		t.Fatalf("GetMany() result = %#v", result)
+	}
+	if len(backend.transaction.operations) != 2 {
+		t.Fatalf("GetMany() operations = %#v", backend.transaction.operations)
+	}
+	for index, operation := range backend.transaction.operations {
+		if operation.Rev() != 14 || string(operation.KeyBytes()) != "/groundplane/services/svc_"+string(rune('1'+index)) {
+			t.Fatalf("GetMany() operation %d = key %q revision %d", index, operation.KeyBytes(), operation.Rev())
+		}
+	}
+}
+
+func TestStoreGetManyRejectsInvalidInputs(t *testing.T) {
+	// Rationale: multi-get must reject empty batches, invalid revisions, and
+	// unscoped keys rather than issuing ambiguous or partially scoped reads.
+	backend := &fakeClient{}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatalf("newStore() error = %v", err)
+	}
+
+	cases := []GetManyRequest{
+		{},
+		{Keys: []string{"/services/svc_1"}, Revision: -1},
+		{Keys: []string{"services/svc_1"}},
+	}
+	for _, request := range cases {
+		if _, err := store.GetMany(context.Background(), request); err == nil {
+			t.Fatalf("GetMany(%#v) error = nil", request)
+		}
 	}
 }
 

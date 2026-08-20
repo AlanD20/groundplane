@@ -42,12 +42,39 @@ type GetResult struct {
 	ReadRevision int64
 }
 
-// Range is a consistent, key-ordered prefix read. ReadRevision+1 can be passed
-// as the start revision to Watch so no mutation is lost between listing and
-// starting reconciliation.
-type Range struct {
-	Values       []KeyValue
-	ReadRevision int64
+// RangeRequest describes a bounded prefix read. StartExclusive, when set,
+// must be a logical key within Prefix. Revision zero reads the current view;
+// a positive revision reads that historical MVCC view.
+type RangeRequest struct {
+	Prefix         string
+	StartExclusive string
+	Limit          int64
+	Revision       int64
+}
+
+// RangeResult is a deterministic key-ascending range page. ReadRevision is
+// the MVCC view that produced Values; ResponseRevision is etcd's latest store
+// revision when it served the request.
+type RangeResult struct {
+	Values           []KeyValue
+	ReadRevision     int64
+	ResponseRevision int64
+	More             bool
+}
+
+// GetManyRequest reads exact logical keys at one MVCC view. Values in the
+// result retain this key order and use nil for a missing key.
+type GetManyRequest struct {
+	Keys     []string
+	Revision int64
+}
+
+// GetManyResult preserves both the requested MVCC view and etcd's latest
+// response revision. Values has exactly one entry for each requested key.
+type GetManyResult struct {
+	Values           []*KeyValue
+	ReadRevision     int64
+	ResponseRevision int64
 }
 
 // Condition requires Key's current modification revision to equal
@@ -89,19 +116,20 @@ type WatchStream struct {
 }
 
 // Store is the persistence interface used by the Controller and Agent. A
-// missing exact key is returned as (nil, nil); deleting a missing key is
-// idempotent. List and Watch return logical keys with the configured storage
-// prefix removed.
+// missing exact key returns a GetResult with a nil Entry and its read revision;
+// deleting a missing key is idempotent. Range and Watch return logical keys
+// with the configured storage prefix removed.
 type Store interface {
 	Health(ctx context.Context) error
 	Get(ctx context.Context, key string) (*GetResult, error)
+	GetMany(ctx context.Context, request GetManyRequest) (*GetManyResult, error)
 	Put(ctx context.Context, key string, value []byte) (int64, error)
 	Delete(ctx context.Context, key string) (int64, error)
-	List(ctx context.Context, prefix string) (*Range, error)
+	Range(ctx context.Context, request RangeRequest) (*RangeResult, error)
 	Transact(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionResult, error)
 
 	// Watch starts at startRevision when it is positive. A zero revision uses
-	// etcd's current-watch semantics. After List, pass ReadRevision+1 to close
+	// etcd's current-watch semantics. After Range, pass ReadRevision+1 to close
 	// the read-to-watch race.
 	Watch(ctx context.Context, prefix string, startRevision int64) (*WatchStream, error)
 
@@ -209,6 +237,70 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	return result, nil
 }
 
+func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyResult, error) {
+	if len(request.Keys) == 0 {
+		return nil, errs.New(errs.CodeValidationFailed, "etcd multi-get requires at least one key")
+	}
+	if request.Revision < 0 {
+		return nil, errs.New(errs.CodeValidationFailed, "etcd multi-get revision must not be negative")
+	}
+
+	physicalKeys := make([]string, len(request.Keys))
+	operations := make([]clientv3.Op, len(request.Keys))
+	for index, key := range request.Keys {
+		physical, err := s.physicalKey(key)
+		if err != nil {
+			return nil, err
+		}
+		physicalKeys[index] = physical
+		options := make([]clientv3.OpOption, 0, 1)
+		if request.Revision > 0 {
+			options = append(options, clientv3.WithRev(request.Revision))
+		}
+		operations[index] = clientv3.OpGet(physical, options...)
+	}
+
+	response, err := s.client.Txn(ctx).Then(operations...).Commit()
+	if err != nil {
+		return nil, wrap(err)
+	}
+	if response.Header == nil {
+		return nil, errs.New(errs.CodeInternal, "etcd multi-get response is missing its revision")
+	}
+	if len(response.Responses) != len(request.Keys) {
+		return nil, errs.New(errs.CodeInternal, "etcd multi-get returned an unexpected response count")
+	}
+
+	result := &GetManyResult{
+		Values:           make([]*KeyValue, len(request.Keys)),
+		ReadRevision:     readRevision(request.Revision, response.Header.Revision),
+		ResponseRevision: response.Header.Revision,
+	}
+	for index, operation := range response.Responses {
+		rangeResponse := operation.GetResponseRange()
+		if rangeResponse == nil || len(rangeResponse.Kvs) > 1 {
+			return nil, errs.New(errs.CodeInternal, "etcd multi-get returned an invalid range response")
+		}
+		if len(rangeResponse.Kvs) == 0 {
+			continue
+		}
+		item := rangeResponse.Kvs[0]
+		if string(item.Key) != physicalKeys[index] {
+			return nil, errs.New(errs.CodeInternal, "etcd multi-get returned an unexpected key")
+		}
+		logical, ok := s.logicalKey(string(item.Key))
+		if !ok {
+			return nil, errs.New(errs.CodeInternal, "etcd returned a key outside the configured prefix")
+		}
+		result.Values[index] = &KeyValue{
+			Key:         logical,
+			Value:       append([]byte(nil), item.Value...),
+			ModRevision: item.ModRevision,
+		}
+	}
+	return result, nil
+}
+
 func (s *store) Put(ctx context.Context, key string, value []byte) (int64, error) {
 	physical, err := s.physicalKey(key)
 	if err != nil {
@@ -239,33 +331,59 @@ func (s *store) Delete(ctx context.Context, key string) (int64, error) {
 	return response.Header.Revision, nil
 }
 
-func (s *store) List(ctx context.Context, prefix string) (*Range, error) {
-	physical, err := s.physicalKey(prefix)
+func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, error) {
+	if request.Limit <= 0 {
+		return nil, errs.New(errs.CodeValidationFailed, "etcd range limit must be positive")
+	}
+	if request.Revision < 0 {
+		return nil, errs.New(errs.CodeValidationFailed, "etcd range revision must not be negative")
+	}
+
+	physicalPrefix, err := s.physicalKey(request.Prefix)
 	if err != nil {
 		return nil, err
 	}
+	start := physicalPrefix
+	if request.StartExclusive != "" {
+		if !strings.HasPrefix(request.StartExclusive, request.Prefix) {
+			return nil, errs.New(errs.CodeValidationFailed, "etcd range start must be within its prefix")
+		}
+		physicalStart, err := s.physicalKey(request.StartExclusive)
+		if err != nil {
+			return nil, err
+		}
+		start = physicalStart + "\x00"
+	}
 
-	response, err := s.client.Get(
-		ctx,
-		physical,
-		clientv3.WithPrefix(),
+	options := []clientv3.OpOption{
+		clientv3.WithRange(clientv3.GetPrefixRangeEnd(physicalPrefix)),
+		clientv3.WithLimit(request.Limit),
 		clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend),
-	)
+	}
+	if request.Revision > 0 {
+		options = append(options, clientv3.WithRev(request.Revision))
+	}
+	response, err := s.client.Get(ctx, start, options...)
 	if err != nil {
 		return nil, wrap(err)
 	}
 	if response.Header == nil {
-		return nil, errs.New(errs.CodeInternal, "etcd list response is missing its read revision")
+		return nil, errs.New(errs.CodeInternal, "etcd range response is missing its revision")
 	}
 
-	result := &Range{
-		Values:       make([]KeyValue, 0, len(response.Kvs)),
-		ReadRevision: response.Header.Revision,
+	result := &RangeResult{
+		Values:           make([]KeyValue, 0, len(response.Kvs)),
+		ReadRevision:     readRevision(request.Revision, response.Header.Revision),
+		ResponseRevision: response.Header.Revision,
+		More:             response.More,
 	}
 	for _, item := range response.Kvs {
 		key, ok := s.logicalKey(string(item.Key))
 		if !ok {
 			return nil, errs.New(errs.CodeInternal, "etcd returned a key outside the configured prefix")
+		}
+		if !strings.HasPrefix(key, request.Prefix) {
+			return nil, errs.New(errs.CodeInternal, "etcd range returned a key outside the requested prefix")
 		}
 		result.Values = append(result.Values, KeyValue{
 			Key:         key,
@@ -274,6 +392,13 @@ func (s *store) List(ctx context.Context, prefix string) (*Range, error) {
 		})
 	}
 	return result, nil
+}
+
+func readRevision(requested, response int64) int64 {
+	if requested > 0 {
+		return requested
+	}
+	return response
 }
 
 func (s *store) Transact(
