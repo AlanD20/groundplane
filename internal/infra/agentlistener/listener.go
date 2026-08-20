@@ -10,11 +10,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/infra/runtimepath"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-const SocketPath = "/run/groundplane/controller/agent.sock"
 
 func Listen(ctx context.Context) (net.Listener, error) {
 	return listenAt(ctx, "/", 0)
@@ -30,11 +29,11 @@ func listenAt(ctx context.Context, hostRoot string, expectedUID uint32) (net.Lis
 	}
 	defer root.Close()
 
-	directoryName := runtimepath.RootedName(filepath.Dir(SocketPath))
+	directoryName := runtimepath.RootedName(filepath.Dir(agentprotocol.SocketPath))
 	if _, err := runtimepath.PrepareDirectory(ctx, root, directoryName, expectedUID, 1, true); err != nil {
 		return nil, err
 	}
-	socketName := runtimepath.RootedName(SocketPath)
+	socketName := runtimepath.RootedName(agentprotocol.SocketPath)
 	if err := removeStaleSocket(root, socketName, expectedUID); err != nil {
 		return nil, err
 	}

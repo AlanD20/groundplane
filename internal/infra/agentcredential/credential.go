@@ -11,11 +11,10 @@ import (
 	"os"
 	"sync"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-const tokenBytes = 32
 
 type TokenDigest string
 
@@ -85,7 +84,7 @@ func (m *Manager) GenerateAndMaterialize(ctx context.Context, agentID string) (C
 		return Credential{}, err
 	}
 
-	var raw [tokenBytes]byte
+	var raw [agentprotocol.RawTokenBytes]byte
 	defer clear(raw[:])
 	if _, err := io.ReadFull(m.random, raw[:]); err != nil {
 		return Credential{}, errs.New(errs.CodeInternal, "agent credential: generate token entropy")

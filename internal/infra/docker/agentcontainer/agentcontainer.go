@@ -22,6 +22,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	digest "github.com/opencontainers/go-digest"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -33,8 +34,6 @@ const (
 	agentStatePath   = "/var/lib/groundplane/agent"
 	channelPath      = "/run/groundplane/controller"
 	agentRuntimeRoot = "/run/groundplane/agents"
-	agentConfigPath  = "/run/groundplane/agent.yaml"
-	agentTokenPath   = "/run/groundplane/agent.token"
 
 	labelManaged    = "groundplane.managed"
 	labelKind       = "groundplane.kind"
@@ -274,8 +273,8 @@ func desiredMounts(desired Desired) []mount.Mount {
 		{Type: mount.TypeBind, Source: dockerSocketPath, Target: dockerSocketPath},
 		{Type: mount.TypeBind, Source: agentStatePath, Target: agentStatePath},
 		{Type: mount.TypeBind, Source: channelPath, Target: channelPath, ReadOnly: true},
-		{Type: mount.TypeBind, Source: runtimePaths.Config, Target: agentConfigPath, ReadOnly: true},
-		{Type: mount.TypeBind, Source: runtimePaths.Token, Target: agentTokenPath, ReadOnly: true},
+		{Type: mount.TypeBind, Source: runtimePaths.Config, Target: agentprotocol.RuntimeConfigPath, ReadOnly: true},
+		{Type: mount.TypeBind, Source: runtimePaths.Token, Target: agentprotocol.TokenPath, ReadOnly: true},
 	}
 }
 

@@ -8,13 +8,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 )
 
 // Rationale: cleanup must remove only the selected Agent runtime and tolerate repetition.
 func TestDeleteRuntimeRemovesOnlyCanonicalAgentDirectoryAndIsIdempotent(t *testing.T) {
 	t.Parallel()
 
-	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x77}, tokenBytes)), &capturingSealer{ciphertext: []byte("sealed")})
+	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x77}, agentprotocol.RawTokenBytes)), &capturingSealer{ciphertext: []byte("sealed")})
 	if _, err := manager.GenerateAndMaterialize(context.Background(), testAgentID); err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
@@ -41,7 +43,7 @@ func TestDeleteRuntimeRemovesOnlyCanonicalAgentDirectoryAndIsIdempotent(t *testi
 func TestDeleteRuntimeRefusesInvalidIDAndDirectorySymlink(t *testing.T) {
 	t.Parallel()
 
-	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x88}, tokenBytes)), &capturingSealer{ciphertext: []byte("sealed")})
+	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x88}, agentprotocol.RawTokenBytes)), &capturingSealer{ciphertext: []byte("sealed")})
 	if err := manager.DeleteRuntime(context.Background(), "agt_../../target"); err == nil {
 		t.Fatal("DeleteRuntime() error = nil, want invalid ID rejection")
 	}

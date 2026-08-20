@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 )
 
 const testAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -20,7 +22,7 @@ const testAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 func TestGenerateAndMaterializeProducesExactCredentialAndModes(t *testing.T) {
 	t.Parallel()
 
-	raw := bytes.Repeat([]byte{0xa5}, tokenBytes)
+	raw := bytes.Repeat([]byte{0xa5}, agentprotocol.RawTokenBytes)
 	sealer := &capturingSealer{ciphertext: []byte("encrypted-token")}
 	manager := testManager(t, bytes.NewReader(raw), sealer)
 
@@ -71,11 +73,11 @@ func TestGenerateAndMaterializeEntropyFailureCreatesNoArtifact(t *testing.T) {
 func TestGenerateAndMaterializeAtomicallyReplacesToken(t *testing.T) {
 	t.Parallel()
 
-	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x11}, tokenBytes)), &capturingSealer{ciphertext: []byte("first")})
+	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x11}, agentprotocol.RawTokenBytes)), &capturingSealer{ciphertext: []byte("first")})
 	if _, err := manager.GenerateAndMaterialize(context.Background(), testAgentID); err != nil {
 		t.Fatalf("first materialization: %v", err)
 	}
-	manager.random = bytes.NewReader(bytes.Repeat([]byte{0x22}, tokenBytes))
+	manager.random = bytes.NewReader(bytes.Repeat([]byte{0x22}, agentprotocol.RawTokenBytes))
 	manager.sealer = &capturingSealer{ciphertext: []byte("second")}
 	if _, err := manager.GenerateAndMaterialize(context.Background(), testAgentID); err != nil {
 		t.Fatalf("replacement materialization: %v", err)
@@ -86,7 +88,7 @@ func TestGenerateAndMaterializeAtomicallyReplacesToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read replacement token: %v", err)
 	}
-	want := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x22}, tokenBytes))
+	want := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x22}, agentprotocol.RawTokenBytes))
 	if string(contents) != want {
 		t.Fatalf("replacement token = %q, want %q", contents, want)
 	}
@@ -99,7 +101,7 @@ func TestGenerateAndMaterializeAtomicallyReplacesToken(t *testing.T) {
 func TestGenerateAndMaterializeRefusesTokenSymlink(t *testing.T) {
 	t.Parallel()
 
-	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x33}, tokenBytes)), &capturingSealer{ciphertext: []byte("sealed")})
+	manager := testManager(t, bytes.NewReader(bytes.Repeat([]byte{0x33}, agentprotocol.RawTokenBytes)), &capturingSealer{ciphertext: []byte("sealed")})
 	directory := manager.testPath("run/groundplane/agents/" + testAgentID)
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		t.Fatalf("create runtime directory: %v", err)
@@ -126,7 +128,7 @@ func TestGenerateAndMaterializeRefusesTokenSymlink(t *testing.T) {
 func TestGenerateAndMaterializeCleansTemporaryAfterRenameFailureWithoutLeakingPlaintext(t *testing.T) {
 	t.Parallel()
 
-	raw := bytes.Repeat([]byte{0x44}, tokenBytes)
+	raw := bytes.Repeat([]byte{0x44}, agentprotocol.RawTokenBytes)
 	manager := testManager(t, bytes.NewReader(raw), &capturingSealer{ciphertext: []byte("sealed")})
 	manager.rename = func(*os.Root, string, string) error { return errors.New("rename blocked") }
 	_, err := manager.GenerateAndMaterialize(context.Background(), testAgentID)
@@ -147,7 +149,7 @@ func TestGenerateAndMaterializeCleansTemporaryAfterRenameFailureWithoutLeakingPl
 func TestGenerateAndMaterializeDoesNotLeakPlaintextFromSealerError(t *testing.T) {
 	t.Parallel()
 
-	raw := bytes.Repeat([]byte{0x55}, tokenBytes)
+	raw := bytes.Repeat([]byte{0x55}, agentprotocol.RawTokenBytes)
 	sealer := &capturingSealer{failWithPlaintext: true}
 	manager := testManager(t, bytes.NewReader(raw), sealer)
 	_, err := manager.GenerateAndMaterialize(context.Background(), testAgentID)
@@ -163,7 +165,7 @@ func TestGenerateAndMaterializeDoesNotLeakPlaintextFromSealerError(t *testing.T)
 func TestGenerateAndMaterializeHonorsCancellationWithoutArtifact(t *testing.T) {
 	t.Parallel()
 
-	reader := &countingReader{reader: bytes.NewReader(bytes.Repeat([]byte{0x66}, tokenBytes))}
+	reader := &countingReader{reader: bytes.NewReader(bytes.Repeat([]byte{0x66}, agentprotocol.RawTokenBytes))}
 	manager := testManager(t, reader, &capturingSealer{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -180,8 +182,8 @@ func TestGenerateAndMaterializeHonorsCancellationWithoutArtifact(t *testing.T) {
 func TestGenerateAndMaterializeSerializesConcurrentReplacements(t *testing.T) {
 	t.Parallel()
 
-	first := bytes.Repeat([]byte{0x21}, tokenBytes)
-	second := bytes.Repeat([]byte{0x42}, tokenBytes)
+	first := bytes.Repeat([]byte{0x21}, agentprotocol.RawTokenBytes)
+	second := bytes.Repeat([]byte{0x42}, agentprotocol.RawTokenBytes)
 	manager := testManager(t, bytes.NewReader(append(first, second...)), &capturingSealer{ciphertext: []byte("sealed")})
 	originalRename := manager.rename
 	renameEntered := make(chan struct{})

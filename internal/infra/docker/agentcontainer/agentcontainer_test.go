@@ -11,6 +11,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -293,8 +294,8 @@ func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions, des
 		{Type: mount.TypeBind, Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
 		{Type: mount.TypeBind, Source: "/var/lib/groundplane/agent", Target: "/var/lib/groundplane/agent"},
 		{Type: mount.TypeBind, Source: "/run/groundplane/controller", Target: "/run/groundplane/controller", ReadOnly: true},
-		{Type: mount.TypeBind, Source: "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/config.yaml", Target: "/run/groundplane/agent.yaml", ReadOnly: true},
-		{Type: mount.TypeBind, Source: "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/token", Target: "/run/groundplane/agent.token", ReadOnly: true},
+		{Type: mount.TypeBind, Source: "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/config.yaml", Target: agentprotocol.RuntimeConfigPath, ReadOnly: true},
+		{Type: mount.TypeBind, Source: "/run/groundplane/agents/agt_01ARZ3NDEKTSV4RRFFQ69G5FAV/token", Target: agentprotocol.TokenPath, ReadOnly: true},
 	}
 	if !reflect.DeepEqual(options.HostConfig.Mounts, wantMounts) {
 		t.Errorf("mounts = %#v, want %#v", options.HostConfig.Mounts, wantMounts)

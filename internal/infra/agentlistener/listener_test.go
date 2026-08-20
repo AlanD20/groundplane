@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 )
 
 func TestListenAtCreatesRestrictedConnectableSocket(t *testing.T) {
@@ -117,7 +119,7 @@ func TestListenAtHonorsCancellationBeforeCreatingRuntime(t *testing.T) {
 }
 
 func runtimeSocketName() string {
-	return filepath.ToSlash(SocketPath[1:])
+	return filepath.ToSlash(agentprotocol.SocketPath[1:])
 }
 
 func assertSocketMode(t *testing.T, name string, want os.FileMode, socket bool) {
