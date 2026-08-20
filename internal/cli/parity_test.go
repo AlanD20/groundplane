@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient"
 	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
+	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -111,15 +112,17 @@ func exactRequestServer(t *testing.T, method, path, body string, status int, res
 		if request.URL.RequestURI() != path {
 			t.Errorf("path = %q, want %q", request.URL.RequestURI(), path)
 		}
-		key := request.Header.Get("Idempotency-Key")
+		keys := request.Header.Values("Idempotency-Key")
 		switch method {
 		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			if key == "" {
-				t.Error("mutation request is missing Idempotency-Key")
+			if len(keys) != 1 {
+				t.Errorf("mutation Idempotency-Key values = %q, want exactly one", keys)
+			} else if _, err := ulid.ParseStrict(keys[0]); err != nil {
+				t.Errorf("mutation Idempotency-Key = %q, want raw ULID: %v", keys[0], err)
 			}
 		default:
-			if key != "" {
-				t.Errorf("safe request Idempotency-Key = %q, want empty", key)
+			if len(keys) != 0 {
+				t.Errorf("safe request Idempotency-Key values = %q, want none", keys)
 			}
 		}
 

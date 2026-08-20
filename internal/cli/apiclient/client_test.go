@@ -13,6 +13,8 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
+// Rationale: ordinary JSON calls must preserve the canonical Accept header and
+// normalized BaseURL behavior while using the typed request boundary.
 func TestDoNormalizesBaseURLAndRequestsJSON(t *testing.T) {
 	t.Parallel()
 
@@ -40,41 +42,53 @@ func TestDoNormalizesBaseURLAndRequestsJSON(t *testing.T) {
 	}
 }
 
+// Rationale: every mutation verb must send exactly one key and preserve that
+// same key when the same human-intent request is retried.
 func TestMutationRequestsCarryOneReusableRawULID(t *testing.T) {
 	t.Parallel()
 
-	var keys []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		keys = append(keys, request.Header.Get(idempotencyKeyHeader))
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			var keys [][]string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				keys = append(keys, request.Header.Values(idempotencyKeyHeader))
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
 
-	client := New(server.URL)
-	request := client.NewRequest(http.MethodPost, "/api/v1/tasks", nil, map[string]string{"action": "run"})
-	for range 2 {
-		if err := client.Do(context.Background(), request, nil); err != nil {
-			t.Fatalf("Do() error = %v", err)
-		}
-	}
+			client := New(server.URL)
+			request := client.NewRequest(method, "/resource", nil, map[string]string{"action": "run"})
+			for range 2 {
+				if err := client.Do(context.Background(), request, nil); err != nil {
+					t.Fatalf("Do() error = %v", err)
+				}
+			}
 
-	if len(keys) != 2 || keys[0] != keys[1] {
-		t.Fatalf("Idempotency-Key values = %q, want the same key twice", keys)
-	}
-	if len(keys[0]) != 26 {
-		t.Fatalf("Idempotency-Key length = %d, want raw 26-character ULID", len(keys[0]))
-	}
-	if _, err := ulid.ParseStrict(keys[0]); err != nil {
-		t.Fatalf("Idempotency-Key = %q, want raw ULID: %v", keys[0], err)
+			if len(keys) != 2 || len(keys[0]) != 1 || len(keys[1]) != 1 || keys[0][0] != keys[1][0] {
+				t.Fatalf("Idempotency-Key values = %q, want one identical key per request", keys)
+			}
+			if len(keys[0][0]) != 26 {
+				t.Fatalf("Idempotency-Key length = %d, want raw 26-character ULID", len(keys[0][0]))
+			}
+			if _, err := ulid.ParseStrict(keys[0][0]); err != nil {
+				t.Fatalf("Idempotency-Key = %q, want raw ULID: %v", keys[0][0], err)
+			}
+		})
 	}
 }
 
+// Rationale: generated requests must attach keys to all and only the four
+// accepted human mutation methods.
 func TestRequestIdempotencyKeyContract(t *testing.T) {
 	t.Parallel()
 
 	methods := []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 	for _, method := range methods {
-		request := New("http://invalid").NewRequest(method, "/resource", nil, nil)
+		request := New("http://invalid").NewRequest(strings.ToLower(method), "/resource", nil, nil)
+		if request.Method != method {
+			t.Errorf("NewRequest(%q) method = %q, want %q", strings.ToLower(method), request.Method, method)
+		}
 		if !idempotencyKeyPattern.MatchString(request.IdempotencyKey) {
 			t.Errorf("%s key = %q, want 16..128 allowed characters", method, request.IdempotencyKey)
 		}
@@ -88,26 +102,52 @@ func TestRequestIdempotencyKeyContract(t *testing.T) {
 	}
 }
 
+// Rationale: key validation must enforce both ASCII grammar boundaries for
+// every mutation verb and reject any key on safe methods before transport.
 func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 	t.Parallel()
 
-	tests := []Request{
-		{Method: http.MethodPost, Path: "/resource"},
-		{Method: http.MethodPost, Path: "/resource", IdempotencyKey: "too-short"},
-		{Method: http.MethodPost, Path: "/resource", IdempotencyKey: strings.Repeat("a", 129)},
-		{Method: http.MethodPost, Path: "/resource", IdempotencyKey: "invalid key spaces"},
-		{Method: http.MethodGet, Path: "/resource", IdempotencyKey: strings.Repeat("a", 16)},
+	validKeys := []string{
+		strings.Repeat("a", 16),
+		strings.Repeat("Z", 128),
+		"A0._:-A0._:-A0._:-",
 	}
-
 	client := New("http://127.0.0.1:1")
-	for _, request := range tests {
-		err := client.Do(context.Background(), request, nil)
-		if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
-			t.Errorf("Do(%s, key=%q) error = %v, want %q", request.Method, request.IdempotencyKey, err, errs.CodeInternal)
+	mutationMethods := []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
+	for _, method := range mutationMethods {
+		for _, key := range validKeys {
+			if err := validateIdempotencyKey(Request{Method: method, Path: "/resource", IdempotencyKey: key}); err != nil {
+				t.Errorf("validateIdempotencyKey(%s, %q) error = %v", method, key, err)
+			}
+		}
+		for _, key := range []string{
+			"",
+			strings.Repeat("a", 15),
+			strings.Repeat("a", 129),
+			"invalid key spaces",
+			strings.Repeat("é", 16),
+		} {
+			request := Request{Method: method, Path: "/resource", IdempotencyKey: key}
+			err := client.Do(context.Background(), request, nil)
+			if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+				t.Errorf("Do(%s, key=%q) error = %v, want %q", method, key, err, errs.CodeInternal)
+			}
+		}
+	}
+	request := Request{Method: "post", Path: "/resource"}
+	if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+		t.Errorf("Do(lowercase POST without key) error = %v, want %q", err, errs.CodeInternal)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
+		request := Request{Method: method, Path: "/resource", IdempotencyKey: strings.Repeat("a", 16)}
+		if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+			t.Errorf("Do(%s with key) error = %v, want %q", method, err, errs.CodeInternal)
 		}
 	}
 }
 
+// Rationale: an output target requires one complete JSON document; transport
+// truncation, ambiguity, or non-JSON success bodies must fail canonically.
 func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 	t.Parallel()
 
@@ -118,6 +158,7 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 		valid  bool
 	}{
 		{name: "one document", status: http.StatusOK, body: `{"ok":true}`, valid: true},
+		{name: "one document and trailing whitespace", status: http.StatusOK, body: "{\"ok\":true}\n\t  ", valid: true},
 		{name: "empty", status: http.StatusOK},
 		{name: "no content", status: http.StatusNoContent},
 		{name: "malformed", status: http.StatusOK, body: `{`},
@@ -150,6 +191,8 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 	}
 }
 
+// Rationale: 204 is a valid success only when the caller explicitly expects
+// no representation.
 func TestDoAcceptsNoContentOnlyWithoutOutput(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +208,8 @@ func TestDoAcceptsNoContentOnlyWithoutOutput(t *testing.T) {
 	}
 }
 
+// Rationale: event consumers require the SSE Accept contract rather than the
+// ordinary JSON transport representation.
 func TestStreamRequestsEventStream(t *testing.T) {
 	t.Parallel()
 
@@ -187,5 +232,25 @@ func TestStreamRequestsEventStream(t *testing.T) {
 	}
 	if len(events) != 1 || events[0] != "ready" {
 		t.Fatalf("events = %#v, want [ready]", events)
+	}
+}
+
+// Rationale: accepting a successful non-SSE response would feed arbitrary
+// bytes into the event parser and silently violate the streaming contract.
+func TestStreamRejectsNonEventStreamResponse(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}))
+	defer server.Close()
+
+	err := New(server.URL).Stream(context.Background(), "/events", nil, func(string) error {
+		t.Fatal("onEvent called for a non-SSE response")
+		return nil
+	})
+	if !errors.Is(err, errs.New(errs.CodeInternal, "")) {
+		t.Fatalf("Stream() error = %v, want %q", err, errs.CodeInternal)
 	}
 }

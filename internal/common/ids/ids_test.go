@@ -10,10 +10,9 @@ import (
 
 // L0 — pure function tests. See docs/standards.md, section 13.
 
+// Rationale: the locked shape is exactly <kind>_<26-char ULID>, so the
+// generator must preserve its prefix and separator contract.
 func TestNew_HasKindPrefixAndCorrectShape(t *testing.T) {
-	// Rationale: the locked shape is exactly <kind>_<26-char ULID>, no
-	// hyphens, no slugs (mvp.md, "Stable identifiers (locked)") — this
-	// guards the shape at the one place ids are generated.
 	id := New(KindService)
 	parts := strings.SplitN(id, "_", 2)
 	if len(parts) != 2 {
@@ -30,6 +29,7 @@ func TestNew_HasKindPrefixAndCorrectShape(t *testing.T) {
 	}
 }
 
+// Rationale: the shared kind table prevents prefix drift across durable IDs.
 func TestKindsHaveCanonicalPrefixesAndShape(t *testing.T) {
 	t.Parallel()
 
@@ -83,6 +83,8 @@ func TestKindsHaveCanonicalPrefixesAndShape(t *testing.T) {
 	}
 }
 
+// Rationale: mutation idempotency keys require the shared generator's raw,
+// unprefixed 26-character ULID form.
 func TestNewULIDReturnsRawULID(t *testing.T) {
 	t.Parallel()
 
@@ -95,9 +97,8 @@ func TestNewULIDReturnsRawULID(t *testing.T) {
 	}
 }
 
+// Rationale: every boundary must reject a valid ID carrying the wrong kind.
 func TestValidateAcceptsOnlyTheRequestedCanonicalKind(t *testing.T) {
-	// Rationale: every boundary must share one strict parser for the locked
-	// <kind>_<26-char ULID> shape and reject a valid id of the wrong kind.
 	value := "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	if err := Validate(KindAgent, value); err != nil {
 		t.Fatalf("Validate(KindAgent, %q): %v", value, err)
@@ -107,9 +108,8 @@ func TestValidateAcceptsOnlyTheRequestedCanonicalKind(t *testing.T) {
 	}
 }
 
+// Rationale: malformed IDs cannot be reliably indexed or round-tripped.
 func TestValidateRejectsMalformedIDs(t *testing.T) {
-	// Rationale: accepting non-canonical case, missing separators, or malformed
-	// ULIDs would create ids that cannot be reliably indexed or round-tripped.
 	tests := []string{
 		"",
 		"agt01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -124,9 +124,8 @@ func TestValidateRejectsMalformedIDs(t *testing.T) {
 	}
 }
 
+// Rationale: back-to-back generated IDs must not collide.
 func TestNew_IsUnique(t *testing.T) {
-	// Rationale: two ids generated back-to-back must never collide —
-	// this is the whole point of the 80 bits of CSPRNG randomness.
 	seen := map[string]bool{}
 	for i := 0; i < 1000; i++ {
 		id := New(KindTask)
@@ -137,11 +136,8 @@ func TestNew_IsUnique(t *testing.T) {
 	}
 }
 
+// Rationale: chronological ULID ordering supports etcd ranges and journal order.
 func TestNewAt_IsChronologicallySortable(t *testing.T) {
-	// Rationale: the 48-bit millisecond timestamp prefix is what makes
-	// etcd ranges and the activity journal orderable for free
-	// (architecture.md's "Unified logging"-adjacent ids section) — an
-	// earlier NewAt must sort lexicographically before a later one.
 	t1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	t2 := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
@@ -153,10 +149,8 @@ func TestNewAt_IsChronologicallySortable(t *testing.T) {
 	}
 }
 
+// Rationale: fixed timestamp and entropy inputs must keep fixtures reproducible.
 func TestNewAt_IsReproducibleForFixtures(t *testing.T) {
-	// Rationale: mock fixtures use static, reproducible ULIDs (mvp.md's
-	// locked rule: "fixtures never call time.Now()") — the same
-	// timestamp+seed must always produce the same id across test runs.
 	ts := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
 	a := NewAt(KindEnvironment, ts, 7)
 	b := NewAt(KindEnvironment, ts, 7)

@@ -83,6 +83,7 @@ func (c *Client) NewRequest(method, path string, query map[string]string, body a
 // an *errs.Error carrying the same Code the Controller sent — see
 // api-cli.md, "Errors".
 func (c *Client) Do(ctx context.Context, request Request, out any) error {
+	request.Method = strings.ToUpper(request.Method)
 	if err := validateIdempotencyKey(request); err != nil {
 		return err
 	}
