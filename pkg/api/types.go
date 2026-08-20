@@ -47,16 +47,27 @@ type Zone struct {
 	OwnedBy  string `json:"owned_by,omitempty"`
 }
 
+// ServiceRuntimeIntent is the Controller-owned operational state projected on
+// Service responses. It is separate from Blueprint desired-state input.
+type ServiceRuntimeIntent string
+
+const (
+	ServiceRuntimeIntentRunning ServiceRuntimeIntent = "running"
+	ServiceRuntimeIntentStopped ServiceRuntimeIntent = "stopped"
+	ServiceRuntimeIntentAbsent  ServiceRuntimeIntent = "absent"
+)
+
 type Service struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Image       string   `json:"image"`
-	Zones       []string `json:"zones,omitempty"`
-	Strategy    string   `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
-	OnFailure   string   `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
-	Replicas    int      `json:"replicas,omitempty"`
-	Adapter     string   `json:"adapter,omitempty"`
-	FactsPrefix string   `json:"facts_prefix,omitempty"`
+	ID            string               `json:"id"`
+	Name          string               `json:"name"`
+	Image         string               `json:"image"`
+	RuntimeIntent ServiceRuntimeIntent `json:"runtime_intent"`
+	Zones         []string             `json:"zones,omitempty"`
+	Strategy      string               `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
+	OnFailure     string               `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
+	Replicas      int                  `json:"replicas,omitempty"`
+	Adapter       string               `json:"adapter,omitempty"`
+	FactsPrefix   string               `json:"facts_prefix,omitempty"`
 }
 
 // EntrySource is the discriminated union api-cli.md section 4 shows:
