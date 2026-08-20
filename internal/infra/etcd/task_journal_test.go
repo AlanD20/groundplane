@@ -81,6 +81,53 @@ func TestTaskEventDeduplicationReturnsSequenceAndRejectsPayloadMismatch(t *testi
 	}
 }
 
+func TestTaskEventAcceptsTerminalReplayButRejectsNewTerminalIdentity(t *testing.T) {
+	// Rationale: an acknowledgement may race an Agent reconnect. The exact
+	// committed identity remains replayable, but a terminal Task cannot grow a
+	// new activity history after its lifecycle is closed.
+	now := taskJournalTime()
+	task := validTaskRecord(now)
+	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	prepared, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
+	if err != nil {
+		t.Fatalf("prepareTaskEvent(first) error = %v", err)
+	}
+	running, err := transitionTaskStatus(
+		prepared.Task,
+		TaskStatusPending,
+		TaskStatusRunning,
+		now.Add(2*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("transitionTaskStatus(running) error = %v", err)
+	}
+	terminal, err := transitionTaskStatus(
+		running,
+		TaskStatusRunning,
+		TaskStatusCompleted,
+		now.Add(3*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("transitionTaskStatus(terminal) error = %v", err)
+	}
+	replay, err := prepareTaskEvent(terminal, input, &prepared.Dedup, now.Add(4*time.Second))
+	if err != nil {
+		t.Fatalf("prepareTaskEvent(replay) error = %v", err)
+	}
+	if !replay.Duplicate || replay.Sequence != prepared.Sequence {
+		t.Fatalf("prepareTaskEvent(replay) = %#v", replay)
+	}
+	newIdentity := taskEventInput(task.ID, 2, TaskEventStateRunning)
+	if _, err := prepareTaskEvent(
+		terminal,
+		newIdentity,
+		nil,
+		now.Add(4*time.Second),
+	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("prepareTaskEvent(new terminal identity) error = %v, want internal", err)
+	}
+}
+
 func TestTaskEventRequiresADeclaredTaskStep(t *testing.T) {
 	// Rationale: accepting an Agent-supplied step id that is absent from the
 	// immutable procedure would create activity that cannot be correlated with

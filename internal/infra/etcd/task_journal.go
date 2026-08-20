@@ -322,6 +322,12 @@ func prepareTaskEvent(
 			Task: cloneTaskRecord(task), Sequence: existing.Sequence, Duplicate: true,
 		}, nil
 	}
+	if isTerminalTaskStatus(task.Status) {
+		return PreparedTaskEvent{}, errs.New(
+			errs.KindInternal,
+			"terminal task received a new event identity",
+		)
+	}
 
 	if task.EventCount >= MaximumTaskEvents {
 		return PreparedTaskEvent{}, errs.Newf(
