@@ -8,7 +8,7 @@ import "github.com/spf13/cobra"
 // is deliberately absent because DNS settings live under `component
 // config coredns --platform`. `router` remains the locked read-only
 // projection noun; mutations stay on `component`.
-func addCommands(root *cobra.Command) {
+func addCommands(root *cobra.Command, deps Dependencies) {
 	root.AddCommand(
 		newTenantCmd(),
 		newProjectCmd(),
@@ -31,8 +31,9 @@ func addCommands(root *cobra.Command) {
 		newTaskCmd(),
 		newActivityCmd(),
 		newHostCmd(),
-		newControllerCmd(),
-		newAgentRunCmd(),
-		newVersionCmd(),
+		withExecutionClass(newControllerCmd(deps.RunController), executionLocal),
+		withExecutionClass(newAgentRunCmd(), executionLocal),
+		withExecutionClass(newVersionCmd(), executionTool),
+		withExecutionClass(newCompletionCmd(root), executionTool),
 	)
 }

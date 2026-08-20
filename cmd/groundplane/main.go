@@ -19,5 +19,7 @@ func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
 
-	os.Exit(cli.Execute(ctx))
+	os.Exit(cli.Execute(ctx, cli.Dependencies{
+		RunController: app.RunController,
+	}))
 }

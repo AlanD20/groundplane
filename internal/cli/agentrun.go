@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // agent-run: run — foreground, for debugging (mirrors cmd/agent/main.go
@@ -13,9 +13,9 @@ func newAgentRunCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "run",
 		Short: "Run the Agent in the foreground",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), "agent-run run: run `go run ./cmd/agent` directly for now")
-			return nil
+			return errs.New(errs.CodeNotImplemented, "Agent foreground execution awaits the Controller-owned runtime cutover")
 		},
 	})
 	return cmd

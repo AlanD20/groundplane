@@ -14,18 +14,7 @@ func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
 
-	configPath := app.DefaultControllerConfigPath
-	if v := os.Getenv("GROUNDPLANE_CONTROLLER_CONFIG"); v != "" {
-		configPath = v
-	}
-
-	c, err := app.NewController(ctx, configPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "controller:", err)
-		os.Exit(1)
-	}
-
-	if err := c.Run(ctx); err != nil {
+	if err := app.RunController(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "controller:", err)
 		os.Exit(1)
 	}

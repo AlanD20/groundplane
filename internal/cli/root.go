@@ -34,6 +34,26 @@ type App struct {
 	Scope  Scope
 }
 
+// ControllerRunner starts the local Controller process and blocks until it
+// exits. It is injected by cmd/groundplane so constructing the command tree
+// never initializes Controller infrastructure.
+type ControllerRunner func(context.Context) error
+
+// Dependencies are the local process operations available to the CLI. Human
+// API commands continue to construct their REST client in PersistentPreRunE.
+type Dependencies struct {
+	RunController ControllerRunner
+}
+
+type executionClass string
+
+const (
+	executionAnnotation = "groundplane.io/execution-class"
+	executionAPI        = executionClass("api")
+	executionLocal      = executionClass("local")
+	executionTool       = executionClass("tool")
+)
+
 type appKey struct{}
 
 func fromContext(cmd *cobra.Command) *App {
@@ -52,8 +72,8 @@ type rootFlags struct {
 }
 
 // NewRootCmd builds the full command tree from api-cli.md, section 3,
-// verbatim: flat nouns, verbs last, scope resolved once.
-func NewRootCmd() *cobra.Command {
+// verbatim: flat nouns, verbs last, scope resolved once for API commands.
+func NewRootCmd(deps Dependencies) *cobra.Command {
 	flags := rootFlags{}
 	root := &cobra.Command{
 		Use:           "groundplane",
@@ -62,6 +82,7 @@ func NewRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	root.CompletionOptions.DisableDefaultCmd = true
 
 	root.PersistentFlags().StringVarP(&flags.config, "config", "c", defaultConfigPath(), "config file")
 	root.PersistentFlags().StringVar(&flags.host, "host", "", "controller address (default http://127.0.0.1:8080)")
@@ -74,8 +95,21 @@ func NewRootCmd() *cobra.Command {
 
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		cfg := config.DefaultCLIConfig()
-		if err := config.Load(cmd.Context(), flags.config, &cfg); err != nil {
-			return err
+		switch commandExecutionClass(cmd) {
+		case executionTool:
+			return nil
+		case executionLocal:
+			format, err := clicommon.ParseFormat(flags.output)
+			if err != nil {
+				return err
+			}
+			app := &App{Out: clicommon.NewWriter(format, flags.noColor, cmd.OutOrStdout())}
+			cmd.SetContext(context.WithValue(cmd.Context(), appKey{}, app))
+			return nil
+		case executionAPI:
+			if err := config.Load(cmd.Context(), flags.config, &cfg); err != nil {
+				return err
+			}
 		}
 		// Merge order everywhere: built-in defaults < config file < env vars < flags.
 		host := firstNonEmpty(flags.host, os.Getenv("GROUNDPLANE_HOST"), cfg.Host)
@@ -113,7 +147,7 @@ func NewRootCmd() *cobra.Command {
 		return nil
 	}
 
-	addCommands(root)
+	addCommands(root, deps)
 	return root
 }
 
@@ -121,10 +155,27 @@ func NewRootCmd() *cobra.Command {
 // runs the root command and returns a process exit code — errors are
 // routed through internal/cli/common.HandleErrors exactly once, so
 // cmd/groundplane never needs to import pkg/errs itself.
-func Execute(ctx context.Context) int {
-	root := NewRootCmd()
+func Execute(ctx context.Context, deps Dependencies) int {
+	root := NewRootCmd(deps)
 	root.SetContext(ctx)
 	return clicommon.HandleErrors(root.Execute())
+}
+
+func withExecutionClass(cmd *cobra.Command, class executionClass) *cobra.Command {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	cmd.Annotations[executionAnnotation] = string(class)
+	return cmd
+}
+
+func commandExecutionClass(cmd *cobra.Command) executionClass {
+	for current := cmd; current != nil; current = current.Parent() {
+		if class, ok := current.Annotations[executionAnnotation]; ok {
+			return executionClass(class)
+		}
+	}
+	return executionAPI
 }
 
 func defaultConfigPath() string {
