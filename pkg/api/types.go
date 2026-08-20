@@ -47,6 +47,14 @@ type Zone struct {
 	OwnedBy  string `json:"owned_by,omitempty"`
 }
 
+// OnFailure is the shared service and release-group failure policy.
+type OnFailure string
+
+const (
+	OnFailureSwitchBack  OnFailure = "switch_back"
+	OnFailureLeaveActive OnFailure = "leave_active"
+)
+
 // ServiceRuntimeIntent is the Controller-owned operational state projected on
 // Service responses. It is separate from Blueprint desired-state input.
 type ServiceRuntimeIntent string
@@ -64,7 +72,7 @@ type Service struct {
 	RuntimeIntent ServiceRuntimeIntent `json:"runtime_intent"`
 	Zones         []string             `json:"zones,omitempty"`
 	Strategy      string               `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
-	OnFailure     string               `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
+	OnFailure     OnFailure            `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
 	Replicas      int                  `json:"replicas,omitempty"`
 	Adapter       string               `json:"adapter,omitempty"`
 	FactsPrefix   string               `json:"facts_prefix,omitempty"`
@@ -210,37 +218,38 @@ type Connector struct {
 // ReleaseRecord is one per-service deploy/rollback ledger entry — see
 // blueprint.md, "x-gp-release" for the exact field set this mirrors.
 type ReleaseRecord struct {
-	DeploymentID string  `json:"deployment_id"`
-	ServiceID    string  `json:"service_id"`
-	Image        string  `json:"image"`
-	Tag          string  `json:"tag"`
-	Digest       string  `json:"digest,omitempty"`
-	Strategy     string  `json:"strategy"`
-	Slot         string  `json:"slot,omitempty"`
-	OnFailure    string  `json:"on_failure"`
-	TaskID       string  `json:"task_id"`
-	Status       string  `json:"status"` // pending|running|candidate_healthy|switching|active|failed|superseded|aborted|timed_out
-	StartedAt    string  `json:"started_at"`
-	CompletedAt  *string `json:"completed_at,omitempty"`
+	DeploymentID string    `json:"deployment_id"`
+	ServiceID    string    `json:"service_id"`
+	Image        string    `json:"image"`
+	Tag          string    `json:"tag"`
+	Digest       string    `json:"digest,omitempty"`
+	Strategy     string    `json:"strategy"`
+	Slot         string    `json:"slot,omitempty"`
+	OnFailure    OnFailure `json:"on_failure"`
+	TaskID       string    `json:"task_id"`
+	Status       string    `json:"status"` // pending|running|candidate_healthy|switching|active|failed|superseded|aborted|timed_out
+	StartedAt    string    `json:"started_at"`
+	CompletedAt  *string   `json:"completed_at,omitempty"`
 }
 
 // ReleaseGroup coordinates multiple services under one task lock and
 // one failure policy — never inferred, always explicit. See
 // blueprint.md, "x-gp-release-group".
 type ReleaseGroup struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Services []string `json:"services"`
-	Order    []string `json:"order,omitempty"`
-	Tag      string   `json:"tag,omitempty"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Services  []string  `json:"services"`
+	Order     []string  `json:"order,omitempty"`
+	Tag       string    `json:"tag,omitempty"`
+	OnFailure OnFailure `json:"on_failure"`
 }
 
 // --- Ops action request bodies (every action returns a TaskAccepted) ---
 
 type DeployRequest struct {
-	Tag       string `json:"tag,omitempty"`        // omitted => the service's current tag
-	Strategy  string `json:"strategy,omitempty"`   // omitted => the service's declared default
-	OnFailure string `json:"on_failure,omitempty"` // omitted => "switch_back"
+	Tag       string    `json:"tag,omitempty"`        // omitted => the service's current tag
+	Strategy  string    `json:"strategy,omitempty"`   // omitted => the service's declared default
+	OnFailure OnFailure `json:"on_failure,omitempty"` // omitted => "switch_back"
 }
 
 type RollbackRequest struct {

@@ -296,5 +296,11 @@ func (g ReleaseGroup) Validate() error {
 		// but a single-service group is a modeling error, not a feature.
 		return fmt.Errorf("release group %s: at least two services are required", g.Name)
 	}
+	switch g.OnFailure {
+	case "", OnFailureSwitchBack, OnFailureLeaveActive:
+		// Empty resolves to switch_back through OnFailure.WithDefault.
+	default:
+		return fmt.Errorf("release group %s: unknown on_failure %q", g.Name, g.OnFailure)
+	}
 	return nil
 }

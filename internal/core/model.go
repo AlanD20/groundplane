@@ -53,15 +53,15 @@ type Environment struct {
 
 	VolumeDir string `yaml:"volume_dir" json:"volume_dir"` // derived from ID: /var/lib/groundplane/vol/<tenant-id>/<project-id>/<environment-id>
 
-	Zones    map[string]Zone    `yaml:"zones,omitempty" json:"zones,omitempty"` // Groundplane's "zone" IS a Compose network — see blueprint.md
-	Services map[string]Service `yaml:"services,omitempty" json:"services,omitempty"`
-	Attaches []Attach           `yaml:"attaches,omitempty" json:"attaches,omitempty"`
-	Routes   []Route            `yaml:"routes,omitempty" json:"routes,omitempty"`
-	Components   []Component            `yaml:"components,omitempty" json:"components,omitempty"`
-	Volumes  map[string]Volume  `yaml:"volumes,omitempty" json:"volumes,omitempty"`
-	Entries  []EnvEntry         `yaml:"entries,omitempty" json:"entries,omitempty"`
-	Scripts  map[string]Script  `yaml:"scripts,omitempty" json:"scripts,omitempty"`
-	Backup   BackupPolicy       `yaml:"backup,omitempty" json:"backup,omitempty"`
+	Zones      map[string]Zone    `yaml:"zones,omitempty" json:"zones,omitempty"` // Groundplane's "zone" IS a Compose network — see blueprint.md
+	Services   map[string]Service `yaml:"services,omitempty" json:"services,omitempty"`
+	Attaches   []Attach           `yaml:"attaches,omitempty" json:"attaches,omitempty"`
+	Routes     []Route            `yaml:"routes,omitempty" json:"routes,omitempty"`
+	Components []Component        `yaml:"components,omitempty" json:"components,omitempty"`
+	Volumes    map[string]Volume  `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	Entries    []EnvEntry         `yaml:"entries,omitempty" json:"entries,omitempty"`
+	Scripts    map[string]Script  `yaml:"scripts,omitempty" json:"scripts,omitempty"`
+	Backup     BackupPolicy       `yaml:"backup,omitempty" json:"backup,omitempty"`
 
 	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
 }
@@ -81,9 +81,9 @@ type Router struct {
 // record (config, generated services, health) lives in Component itself;
 // this is just what the read-only projection surfaces.
 type ComponentProjection struct {
-	ComponentID    string `yaml:"component_id" json:"component_id"`
-	Enabled    bool   `yaml:"enabled" json:"enabled"`
-	PinnedIPv4 string `yaml:"pinned_ipv4,omitempty" json:"pinned_ipv4,omitempty"` // Caddy only; durable while enabled, released on disable
+	ComponentID string `yaml:"component_id" json:"component_id"`
+	Enabled     bool   `yaml:"enabled" json:"enabled"`
+	PinnedIPv4  string `yaml:"pinned_ipv4,omitempty" json:"pinned_ipv4,omitempty"` // Caddy only; durable while enabled, released on disable
 }
 
 // Zone is a named internal docker network grouping Services — Groundplane's
@@ -155,6 +155,14 @@ const (
 	OnFailureSwitchBack  OnFailure = "switch_back"
 	OnFailureLeaveActive OnFailure = "leave_active"
 )
+
+// WithDefault resolves an omitted failure policy to the contract default.
+func (o OnFailure) WithDefault() OnFailure {
+	if o == "" {
+		return OnFailureSwitchBack
+	}
+	return o
+}
 
 // Service is one container or shared runtime. Name is the stable,
 // human-referenced identifier (the Compose service key, DNS name); ID
@@ -321,9 +329,9 @@ type ComponentKind string
 const (
 	ComponentKindIngressCaddy   ComponentKind = "caddy"
 	ComponentKindEdgeCloudflare ComponentKind = "cloudflare-tunnel"
-	ComponentKindCoreDNS         ComponentKind = "coredns"
-	ComponentKindController      ComponentKind = "controller"
-	ComponentKindAgent           ComponentKind = "agent"
+	ComponentKindCoreDNS        ComponentKind = "coredns"
+	ComponentKindController     ComponentKind = "controller"
+	ComponentKindAgent          ComponentKind = "agent"
 )
 
 // ComponentOwner discriminates the two valid component ownership scopes.
@@ -341,7 +349,7 @@ type Component struct {
 	ID                string         `yaml:"id" json:"id"` // cmp_<ulid>
 	Owner             ComponentOwner `yaml:"owner" json:"owner"`
 	OwnerID           string         `yaml:"owner_id,omitempty" json:"owner_id,omitempty"`
-	Kind              ComponentKind      `yaml:"kind" json:"kind"`
+	Kind              ComponentKind  `yaml:"kind" json:"kind"`
 	Enabled           bool           `yaml:"enabled" json:"enabled"`
 	Config            map[string]any `yaml:"config,omitempty" json:"config,omitempty"` // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
 	GeneratedServices []string       `yaml:"generated_services,omitempty" json:"generated_services,omitempty"`
@@ -483,7 +491,7 @@ type Secret struct {
 // Connector is a backup destination + credentials owned by exactly one
 // environment. There are no project or platform connectors.
 type Connector struct {
-	ID            string            `yaml:"id" json:"id"`                         // con_<ulid>
+	ID            string            `yaml:"id" json:"id"` // con_<ulid>
 	EnvironmentID string            `yaml:"environment_id" json:"environment_id"`
 	Kind          string            `yaml:"kind" json:"kind"`                                   // "s3-compatible", later s3/minio/b2
 	Credentials   map[string]string `yaml:"credentials,omitempty" json:"credentials,omitempty"` // value is either a secret-store ref or a stored-encrypted direct value
@@ -541,9 +549,10 @@ type ReleaseRecord struct {
 // release records and observed state. See blueprint.md,
 // "x-gp-release-group".
 type ReleaseGroup struct {
-	ID       string   `yaml:"id" json:"id"` // rg_<ulid>
-	Name     string   `yaml:"name" json:"name"`
-	Services []string `yaml:"services" json:"services"`
-	Order    []string `yaml:"order,omitempty" json:"order,omitempty"` // deploy order within the group; defaults to Services order
-	Tag      string   `yaml:"tag,omitempty" json:"tag,omitempty"`
+	ID        string    `yaml:"id" json:"id"` // rg_<ulid>
+	Name      string    `yaml:"name" json:"name"`
+	Services  []string  `yaml:"services" json:"services"`
+	Order     []string  `yaml:"order,omitempty" json:"order,omitempty"` // deploy order within the group; defaults to Services order
+	Tag       string    `yaml:"tag,omitempty" json:"tag,omitempty"`
+	OnFailure OnFailure `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`
 }

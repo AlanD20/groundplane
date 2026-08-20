@@ -1,6 +1,9 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/spf13/cobra"
+)
 
 // release-group: list | show | add | edit | remove | deploy |
 // rollback. Coordinates multiple services under one task lock and one
@@ -28,23 +31,31 @@ func newReleaseGroupCmd() *cobra.Command {
 	})
 
 	var services, order []string
+	var onFailure string
 	add := &cobra.Command{
 		Use:   "add <name>",
 		Short: "Add a release group",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
+			policy, err := releaseGroupOnFailure(onFailure)
+			if err != nil {
+				return err
+			}
 			return runCreate(cmd, "/api/v1/release-groups", map[string]interface{}{
 				"name": args[0], "services": services, "order": order, "environment": app.Scope.Environment,
+				"on_failure": policy,
 			})
 		},
 	}
 	add.Flags().StringSliceVar(&services, "service", nil, "member service name (repeatable); at least two required")
 	add.Flags().StringSliceVar(&order, "order", nil, "deploy order within the group (defaults to --service order)")
+	add.Flags().StringVar(&onFailure, "on-failure", "switch_back", "switch_back | leave_active (defaults to switch_back)")
 	_ = add.MarkFlagRequired("service")
 	cmd.AddCommand(add)
 
 	var editServices, editOrder []string
+	var editOnFailure string
 	edit := &cobra.Command{
 		Use:   "edit <name>",
 		Short: "Edit a release group's membership or order",
@@ -57,11 +68,19 @@ func newReleaseGroupCmd() *cobra.Command {
 			if cmd.Flags().Changed("order") {
 				body["order"] = editOrder
 			}
+			if cmd.Flags().Changed("on-failure") {
+				policy, err := releaseGroupOnFailure(editOnFailure)
+				if err != nil {
+					return err
+				}
+				body["on_failure"] = policy
+			}
 			return runPatch(cmd, "/api/v1/release-groups/"+target(fromContext(cmd), args[0]), body)
 		},
 	}
 	edit.Flags().StringSliceVar(&editServices, "service", nil, "new member list (repeatable)")
 	edit.Flags().StringSliceVar(&editOrder, "order", nil, "new deploy order")
+	edit.Flags().StringVar(&editOnFailure, "on-failure", "", "new failure policy: switch_back | leave_active")
 	cmd.AddCommand(edit)
 
 	cmd.AddCommand(&cobra.Command{
@@ -98,4 +117,14 @@ func newReleaseGroupCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func releaseGroupOnFailure(value string) (string, error) {
+	switch value {
+	case "switch_back", "leave_active":
+		return value, nil
+	default:
+		return "", errs.Newf(errs.CodeValidationFailed,
+			"invalid --on-failure %q: expected switch_back or leave_active", value)
+	}
 }
