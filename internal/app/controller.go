@@ -112,9 +112,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
 
-	srv := controller.New(store, logger, controller.Options{
-		EtcdEndpoints: cfg.Etcd.Endpoints,
-	})
+	srv := controller.New(store, logger, controller.Options{})
 
 	return &Controller{
 		Config:    cfg,

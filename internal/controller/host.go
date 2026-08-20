@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -23,8 +24,12 @@ func (s *Server) registerHost() {
 }
 
 func (s *Server) showHost(ctx context.Context, _ *struct{}) (*hostOutput, error) {
-	response := &hostOutput{}
-	response.Body.Etcd.Endpoints = append([]string(nil), s.etcdEndpoints...)
-	response.Body.Etcd.Healthy = s.Store != nil && s.Store.Health(ctx) == nil
-	return response, nil
+	if s.host == nil {
+		return nil, errs.New(errs.KindInternal, "host service is not configured")
+	}
+	host, err := s.host.Show(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &hostOutput{Body: host}, nil
 }

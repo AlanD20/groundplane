@@ -29,13 +29,13 @@ type Server struct {
 	Mux    *http.ServeMux
 	API    huma.API
 
-	etcdEndpoints []string
+	host          HostReader
 	dispatcher    *Dispatcher
 	routePolicies map[string]routePolicy
 }
 
 type Options struct {
-	EtcdEndpoints []string
+	Host HostReader
 }
 
 func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
@@ -52,7 +52,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		Logger:        logger,
 		Mux:           mux,
 		API:           humago.NewWithPrefix(mux, "/api/v1", config),
-		etcdEndpoints: append([]string(nil), options.EtcdEndpoints...),
+		host:          options.Host,
 		dispatcher:    NewDispatcher(),
 		routePolicies: make(map[string]routePolicy),
 	}
@@ -62,10 +62,9 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 }
 
 // routes registers every endpoint from api-cli.md's resource map. Method
-// + pattern routing (Go 1.22 net/http). Each handler is a stub returning
-// 501 until backed by real logic — wire internal/controller/handlers as
-// each resource is implemented; this file's job is to keep the ROUTE
-// TABLE authoritative and complete, matching the CLI 1:1.
+// + pattern routing (Go 1.22 net/http). Unimplemented resources remain
+// explicit 501 handlers until their vertical is delivered; typed Huma routes,
+// such as GET /host, register alongside this table.
 func (s *Server) routes() {
 	mux := s.Mux
 
