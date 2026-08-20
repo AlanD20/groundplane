@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/cli/apiclient"
 	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/localdiag"
 )
 
 // Scope carries the resolved tenant/project/environment slugs (or ids,
@@ -39,10 +40,20 @@ type App struct {
 // never initializes Controller infrastructure.
 type ControllerRunner func(context.Context) error
 
+// ControllerKeyInspector reads the existing local Controller key's safe
+// projection. It never creates a key and never uses the human REST API.
+type ControllerKeyInspector func(context.Context) (localdiag.ControllerKey, error)
+
+// ControllerEtcdInspector probes the Controller's configured etcd endpoints
+// directly. Each endpoint has an independent result.
+type ControllerEtcdInspector func(context.Context) ([]localdiag.EtcdEndpoint, error)
+
 // Dependencies are the local process operations available to the CLI. Human
 // API commands continue to construct their REST client in PersistentPreRunE.
 type Dependencies struct {
-	RunController ControllerRunner
+	RunController         ControllerRunner
+	InspectControllerKey  ControllerKeyInspector
+	InspectControllerEtcd ControllerEtcdInspector
 }
 
 type executionClass string

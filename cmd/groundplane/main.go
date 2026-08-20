@@ -20,6 +20,8 @@ func main() {
 	defer stop()
 
 	os.Exit(cli.Execute(ctx, cli.Dependencies{
-		RunController: app.RunController,
+		RunController:         app.RunController,
+		InspectControllerKey:  app.InspectControllerKey,
+		InspectControllerEtcd: app.InspectControllerEtcd,
 	}))
 }

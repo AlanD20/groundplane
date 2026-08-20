@@ -82,11 +82,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	registerAdapters()
 	registerComponents()
 
-	cfg := config.DefaultControllerConfig()
-	if err := config.Load(ctx, configPath, &cfg); err != nil {
-		return nil, err
-	}
-	if err := cfg.Validate(); err != nil {
+	cfg, err := loadControllerConfig(ctx, configPath)
+	if err != nil {
 		return nil, err
 	}
 	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)

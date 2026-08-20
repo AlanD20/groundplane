@@ -31,7 +31,7 @@ func addCommands(root *cobra.Command, deps Dependencies) {
 		newTaskCmd(),
 		newActivityCmd(),
 		newHostCmd(),
-		withExecutionClass(newControllerCmd(deps.RunController), executionLocal),
+		withExecutionClass(newControllerCmd(deps), executionLocal),
 		withExecutionClass(newAgentRunCmd(), executionLocal),
 		withExecutionClass(newVersionCmd(), executionTool),
 		withExecutionClass(newCompletionCmd(root), executionTool),

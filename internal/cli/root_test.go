@@ -145,7 +145,7 @@ func TestAPICommandsStillLoadCLIConfig(t *testing.T) {
 	}
 }
 
-func TestUnimplementedLocalCommandsFailClosedWithoutCLIConfig(t *testing.T) {
+func TestUnimplementedAgentRunFailsClosedWithoutCLIConfig(t *testing.T) {
 	t.Parallel()
 
 	configPath := filepath.Join(t.TempDir(), "invalid-cli.yaml")
@@ -153,16 +153,11 @@ func TestUnimplementedLocalCommandsFailClosedWithoutCLIConfig(t *testing.T) {
 		t.Fatalf("write CLI config: %v", err)
 	}
 
-	for _, args := range [][]string{
-		{"controller", "key", "show"},
-		{"controller", "etcd", "show"},
-		{"agent-run", "run"},
-	} {
-		root := NewRootCmd(Dependencies{})
-		root.SetArgs(append([]string{"--config", configPath}, args...))
-		err := root.ExecuteContext(context.Background())
-		if !errors.Is(err, errs.New(errs.KindNotImplemented, "")) {
-			t.Fatalf("execute %v error = %v, want %q", args, err, errs.CodeNotImplemented)
-		}
+	args := []string{"agent-run", "run"}
+	root := NewRootCmd(Dependencies{})
+	root.SetArgs(append([]string{"--config", configPath}, args...))
+	err := root.ExecuteContext(context.Background())
+	if !errors.Is(err, errs.New(errs.KindNotImplemented, "")) {
+		t.Fatalf("execute %v error = %v, want %q", args, err, errs.CodeNotImplemented)
 	}
 }

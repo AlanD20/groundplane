@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"errors"
+	"strconv"
+
 	"github.com/spf13/cobra"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,7 +16,7 @@ import (
 // read local files/state rather than calling the HTTP API. See mvp.md,
 // "The Controller itself is the one systemd unit that never becomes a
 // container."
-func newControllerCmd(runController ControllerRunner) *cobra.Command {
+func newControllerCmd(deps Dependencies) *cobra.Command {
 	cmd := &cobra.Command{Use: "controller", Short: "Local Controller admin: run in the foreground, inspect the age key and etcd"}
 
 	cmd.AddCommand(&cobra.Command{
@@ -21,10 +24,10 @@ func newControllerCmd(runController ControllerRunner) *cobra.Command {
 		Short: "Run the Controller in the foreground (see cmd/controller for the systemd-managed entry point)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if runController == nil {
+			if deps.RunController == nil {
 				return errs.New(errs.KindInternal, "controller runner is not configured")
 			}
-			return runController(cmd.Context())
+			return deps.RunController(cmd.Context())
 		},
 	})
 
@@ -34,7 +37,18 @@ func newControllerCmd(runController ControllerRunner) *cobra.Command {
 		Short: "Show the controller age key's path and fingerprint (never its value)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New(errs.KindNotImplemented, "controller key diagnostics are not implemented")
+			if deps.InspectControllerKey == nil {
+				return errs.New(errs.KindInternal, "controller key inspector is not configured")
+			}
+			result, err := deps.InspectControllerKey(cmd.Context())
+			if err != nil {
+				return err
+			}
+			return fromContext(cmd).Out.Render(
+				[]string{"PATH", "FINGERPRINT"},
+				[][]string{{result.Path, result.Fingerprint}},
+				result,
+			)
 		},
 	})
 	cmd.AddCommand(key)
@@ -45,10 +59,49 @@ func newControllerCmd(runController ControllerRunner) *cobra.Command {
 		Short: "Show etcd endpoint status",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New(errs.KindNotImplemented, "controller etcd diagnostics are not implemented")
+			if deps.InspectControllerEtcd == nil {
+				return errs.New(errs.KindInternal, "controller etcd inspector is not configured")
+			}
+			results, inspectErr := deps.InspectControllerEtcd(cmd.Context())
+			if inspectErr != nil && !errors.Is(inspectErr, errs.New(errs.KindStorageUnavailable, "")) {
+				return inspectErr
+			}
+			if results == nil {
+				return inspectErr
+			}
+			rows := make([][]string, len(results))
+			for index, result := range results {
+				rows[index] = []string{
+					result.Endpoint,
+					strconv.FormatBool(result.Healthy),
+					result.Version,
+					result.MemberID,
+					result.LeaderID,
+					result.Revision,
+					formatOptionalInt64(result.DBSizeBytes),
+					formatOptionalInt64(result.LatencyMS),
+					result.Error,
+				}
+			}
+			renderErr := fromContext(cmd).Out.Render(
+				[]string{"ENDPOINT", "HEALTH", "VERSION", "MEMBER", "LEADER", "REVISION", "DB_SIZE", "LATENCY", "ERROR"},
+				rows,
+				results,
+			)
+			if renderErr != nil {
+				return renderErr
+			}
+			return inspectErr
 		},
 	})
 	cmd.AddCommand(etcd)
 
 	return cmd
+}
+
+func formatOptionalInt64(value *int64) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.FormatInt(*value, 10)
 }
