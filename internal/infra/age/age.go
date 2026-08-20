@@ -220,6 +220,10 @@ func decrypt(identity age.Identity, ciphertext []byte) ([]byte, error) {
 }
 
 func loadIdentity(root *os.Root, name string) (*age.X25519Identity, error) {
+	return loadIdentityOwnedBy(root, name, 0)
+}
+
+func loadIdentityOwnedBy(root *os.Root, name string, expectedUID uint32) (*age.X25519Identity, error) {
 	info, err := root.Lstat(name)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -233,7 +237,7 @@ func loadIdentity(root *os.Root, name string) (*age.X25519Identity, error) {
 	if info.Mode().Perm() != 0o600 {
 		return nil, errs.Newf(errs.KindInternal, "age: controller key mode is %04o, want 0600", info.Mode().Perm())
 	}
-	if err := validateRootOwnership(info, "controller key"); err != nil {
+	if err := validateOwnership(info, "controller key", expectedUID); err != nil {
 		return nil, err
 	}
 
@@ -257,6 +261,10 @@ func loadIdentity(root *os.Root, name string) (*age.X25519Identity, error) {
 }
 
 func validateRootOwnedDirectory(path string) error {
+	return validateOwnedDirectory(path, 0)
+}
+
+func validateOwnedDirectory(path string, expectedUID uint32) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, fmt.Errorf("age: inspect key directory: %w", err))
@@ -267,16 +275,16 @@ func validateRootOwnedDirectory(path string) error {
 	if info.Mode().Perm()&0o077 != 0 {
 		return errs.Newf(errs.KindInternal, "age: key directory mode is %04o, want no group or other access", info.Mode().Perm())
 	}
-	return validateRootOwnership(info, "key directory")
+	return validateOwnership(info, "key directory", expectedUID)
 }
 
-func validateRootOwnership(info fs.FileInfo, label string) error {
+func validateOwnership(info fs.FileInfo, label string, expectedUID uint32) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return errs.Newf(errs.KindInternal, "age: cannot determine %s ownership", label)
 	}
-	if stat.Uid != 0 {
-		return errs.Newf(errs.KindInternal, "age: %s is owned by uid %d, want 0", label, stat.Uid)
+	if stat.Uid != expectedUID {
+		return errs.Newf(errs.KindInternal, "age: %s is owned by uid %d, want %d", label, stat.Uid, expectedUID)
 	}
 	return nil
 }
