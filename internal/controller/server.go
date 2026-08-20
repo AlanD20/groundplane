@@ -9,8 +9,11 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"sync"
 
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -221,16 +224,71 @@ func (s *Server) acceptTask(w http.ResponseWriter, r *http.Request) {
 func (s *Server) writeProblem(w http.ResponseWriter, err *errs.Error) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(err.HTTPStatus())
-	_ = json.NewEncoder(w).Encode(err.ToProblem())
+	if encodeErr := json.NewEncoder(w).Encode(err.ToProblem()); encodeErr != nil {
+		s.Logger.Error("controller: write problem response", slog.Any("error", encodeErr))
+	}
+}
+
+type readyListener struct {
+	net.Listener
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (l *readyListener) Accept() (net.Conn, error) {
+	l.once.Do(func() { close(l.ready) })
+	return l.Listener.Accept()
 }
 
 // Serve starts the HTTP server and blocks until ctx is cancelled.
 func (s *Server) Serve(ctx context.Context, addr string) error {
-	srv := &http.Server{Addr: addr, Handler: s.Mux}
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: s.Mux,
+		BaseContext: func(net.Listener) context.Context {
+			return ctx
+		},
+	}
+	trackedListener := &readyListener{Listener: listener, ready: make(chan struct{})}
+	serveErr := make(chan error, 1)
 	go func() {
-		<-ctx.Done()
-		_ = srv.Close()
+		serveErr <- srv.Serve(trackedListener)
 	}()
 	s.Logger.Info("controller: listening", "addr", addr)
-	return srv.ListenAndServe()
+
+	// net/http tracks the listener before its first Accept call. Wait for
+	// that point so cancellation cannot race with Serve registration and
+	// leave an untracked listener blocked forever.
+	select {
+	case <-trackedListener.ready:
+	case err := <-serveErr:
+		return classifyServeError(err)
+	}
+
+	select {
+	case err := <-serveErr:
+		return classifyServeError(err)
+	case <-ctx.Done():
+		closeErr := srv.Close()
+		err := <-serveErr
+		if closeErr != nil {
+			return errs.Wrap(errs.CodeInternal, closeErr)
+		}
+		classifiedErr := classifyServeError(err)
+		if classifiedErr != nil && !errors.Is(classifiedErr, http.ErrServerClosed) {
+			return classifiedErr
+		}
+		return nil
+	}
+}
+
+func classifyServeError(err error) error {
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return errs.Wrap(errs.CodeInternal, err)
 }

@@ -11,6 +11,7 @@ package controller
 
 import (
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // ExecutionPlan is what internal/controller/renderer.go ultimately
@@ -47,5 +48,5 @@ type ExecutionStep struct {
 // sequenced and hashed. Pure w.r.t. its inputs, like the rest of the
 // renderer (architecture.md, "State translation and materialization").
 func BuildPlan(operation, projectID string, renderGeneration int) (ExecutionPlan, error) {
-	return ExecutionPlan{}, nil // TODO
+	return ExecutionPlan{}, errs.New(errs.CodeNotImplemented, "execution plan builder is not implemented")
 }

@@ -6,11 +6,11 @@
 package controller
 
 import (
-	"bytes"
-	"fmt"
-	"text/template"
+	"sort"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // RenderCompose maps an Environment's zones/services to a docker-compose
@@ -18,7 +18,7 @@ import (
 // TODO: full field-by-field mapping (healthcheck kinds, mounts, aliases,
 // depends_on conditions, logging limits, replicas).
 func RenderCompose(env core.Environment) ([]byte, error) {
-	return nil, fmt.Errorf("renderer: RenderCompose not implemented")
+	return nil, errs.New(errs.CodeNotImplemented, "Compose renderer is not implemented")
 }
 
 // RenderCorefile renders CoreDNS's config from platform DNS settings
@@ -27,23 +27,7 @@ func RenderCompose(env core.Environment) ([]byte, error) {
 // invalid Corefile is rejected while the old instance keeps serving
 // (zero-downtime, per mvp.md's "DNS resolver (locked)").
 func RenderCorefile(zones []DNSZoneEntry, forwarders []DNSForwarder, tailnetDelegation bool) ([]byte, error) {
-	const tpl = `{{ range .Zones }}{{ .Host }} IN A {{ .IP }}
-{{ end }}
-{{ range .Forwarders }}forward {{ .Domain }} {{ range .Resolvers }}{{ . }} {{ end }}
-{{ end }}
-{{ if .TailnetDelegation }}forward ts.net 100.100.100.100
-{{ end }}`
-	t, err := template.New("corefile").Parse(tpl)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	err = t.Execute(&buf, struct {
-		Zones             []DNSZoneEntry
-		Forwarders        []DNSForwarder
-		TailnetDelegation bool
-	}{zones, forwarders, tailnetDelegation})
-	return buf.Bytes(), err
+	return nil, errs.New(errs.CodeNotImplemented, "CoreDNS renderer is not implemented")
 }
 
 type DNSZoneEntry struct {
@@ -60,13 +44,11 @@ type DNSForwarder struct {
 // active {slot}/{host} placeholders. Validated before reload, same as
 // Corefile.
 func RenderCaddyfile(templateBody string, slot string, host string) ([]byte, error) {
-	t, err := template.New("caddyfile").Parse(templateBody)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	err = t.Execute(&buf, struct{ Slot, Host string }{slot, host})
-	return buf.Bytes(), err
+	rendered := strings.NewReplacer(
+		"{slot}", slot,
+		"{host}", host,
+	).Replace(templateBody)
+	return []byte(rendered), nil
 }
 
 // EnvFileName is the canonical, id-based all-services env file name for
@@ -93,39 +75,49 @@ func ServiceEnvFileName(environmentID, serviceName string) string {
 // decides file membership and formatting, never touches secrets storage
 // itself.
 func RenderEnvFile(entries []core.EnvEntry, resolved map[string]string) ([]byte, error) {
-	var buf bytes.Buffer
-	for _, e := range entries {
-		if e.Kind != core.EntryKindEnv || !e.ExposesAll() {
-			continue
-		}
-		v, ok := resolved[e.ID]
-		if !ok {
-			return nil, fmt.Errorf("renderer: no resolved value for entry %s (%s)", e.ID, e.Key)
-		}
-		fmt.Fprintf(&buf, "%s=%s\n", e.Key, v)
-	}
-	return buf.Bytes(), nil
+	return renderEnvFile(entries, resolved, func(entry core.EnvEntry) bool {
+		return entry.Kind == core.EntryKindEnv && entry.ExposesAll()
+	})
 }
 
 // RenderServiceEnvFile is RenderEnvFile for one service's generated
 // file — entries whose Exposure lists that service name specifically
 // (never the "all" sentinel, which belongs in the canonical file).
 func RenderServiceEnvFile(serviceName string, entries []core.EnvEntry, resolved map[string]string) ([]byte, error) {
-	var buf bytes.Buffer
-	for _, e := range entries {
-		if e.Kind != core.EntryKindEnv || e.ExposesAll() {
-			continue
+	return renderEnvFile(entries, resolved, func(entry core.EnvEntry) bool {
+		return entry.Kind == core.EntryKindEnv && !entry.ExposesAll() && containsString(entry.Exposure, serviceName)
+	})
+}
+
+func renderEnvFile(entries []core.EnvEntry, resolved map[string]string, include func(core.EnvEntry) bool) ([]byte, error) {
+	selected := make([]core.EnvEntry, 0, len(entries))
+	for _, entry := range entries {
+		if include(entry) {
+			selected = append(selected, entry)
 		}
-		if !containsString(e.Exposure, serviceName) {
-			continue
-		}
-		v, ok := resolved[e.ID]
-		if !ok {
-			return nil, fmt.Errorf("renderer: no resolved value for entry %s (%s)", e.ID, e.Key)
-		}
-		fmt.Fprintf(&buf, "%s=%s\n", e.Key, v)
 	}
-	return buf.Bytes(), nil
+	sort.Slice(selected, func(i, j int) bool {
+		if selected[i].Key == selected[j].Key {
+			return selected[i].ID < selected[j].ID
+		}
+		return selected[i].Key < selected[j].Key
+	})
+
+	var output []byte
+	for i, entry := range selected {
+		if i > 0 && selected[i-1].Key == entry.Key {
+			return nil, errs.Newf(errs.CodeValidationFailed, "renderer: duplicate env key %q in one exposure scope", entry.Key)
+		}
+		value, ok := resolved[entry.ID]
+		if !ok {
+			return nil, errs.Newf(errs.CodeInternal, "renderer: no resolved value for entry %s (%s)", entry.ID, entry.Key)
+		}
+		output = append(output, entry.Key...)
+		output = append(output, '=')
+		output = append(output, value...)
+		output = append(output, '\n')
+	}
+	return output, nil
 }
 
 func containsString(list []string, s string) bool {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Scheduler runs ONE tick that evaluates every backup schedule from
@@ -41,5 +43,8 @@ func (sch *Scheduler) Run(ctx context.Context) {
 // dispatch via the same task pipeline every other action uses (see
 // server.go's acceptTask) — one well-tested path, not N ad-hoc timers.
 func (sch *Scheduler) tick(ctx context.Context) error {
-	return nil
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errs.New(errs.CodeNotImplemented, "backup scheduler is not implemented")
 }
