@@ -2,7 +2,7 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// release-group: list | show | create | edit | delete | deploy |
+// release-group: list | show | add | edit | remove | deploy |
 // rollback. Coordinates multiple services under one task lock and one
 // failure policy — membership is always explicit, never inferred from
 // shared image or service names. See blueprint.md, "x-gp-release-group".
@@ -27,9 +27,9 @@ func newReleaseGroupCmd() *cobra.Command {
 	})
 
 	var services, order []string
-	create := &cobra.Command{
-		Use:   "create <name>",
-		Short: "Create a release group",
+	add := &cobra.Command{
+		Use:   "add <name>",
+		Short: "Add a release group",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
@@ -38,10 +38,10 @@ func newReleaseGroupCmd() *cobra.Command {
 			})
 		},
 	}
-	create.Flags().StringSliceVar(&services, "service", nil, "member service name (repeatable); at least two required")
-	create.Flags().StringSliceVar(&order, "order", nil, "deploy order within the group (defaults to --service order)")
-	_ = create.MarkFlagRequired("service")
-	cmd.AddCommand(create)
+	add.Flags().StringSliceVar(&services, "service", nil, "member service name (repeatable); at least two required")
+	add.Flags().StringSliceVar(&order, "order", nil, "deploy order within the group (defaults to --service order)")
+	_ = add.MarkFlagRequired("service")
+	cmd.AddCommand(add)
 
 	var editServices, editOrder []string
 	edit := &cobra.Command{
@@ -64,9 +64,9 @@ func newReleaseGroupCmd() *cobra.Command {
 	cmd.AddCommand(edit)
 
 	cmd.AddCommand(&cobra.Command{
-		Use:     "delete <name>",
-		Aliases: []string{"remove"},
-		Short:   "Delete a release group (dispatches a task; member services are untouched)",
+		Use:     "remove <name>",
+		Aliases: []string{"delete"},
+		Short:   "Remove a release group (dispatches a task; member services are untouched)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDestroy(cmd, "/api/v1/release-groups/"+target(fromContext(cmd), args[0]))
