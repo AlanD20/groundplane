@@ -96,32 +96,6 @@ func (r CredentialRef) Validate() error {
 	return nil
 }
 
-// EnvironmentDocument is a `kind: environment` Blueprint document: the
-// envelope plus a raw Compose body (parsed by the Compose parser, not
-// re-implemented here — see blueprint.md, "The laws", #1) plus the
-// typed x-gp-* extension families at document scope. Per-service
-// extensions (x-gp-resource, x-gp-release, x-gp-depends_on, …) live
-// inside each Compose service's mapping and are out of scope for this
-// struct; the Controller's Compose-body walk extracts them (TODO).
-type EnvironmentDocument struct {
-	Envelope
-
-	// ComposeBody is deliberately untyped here: Groundplane does not
-	// clone or reimplement Compose's grammar (blueprint.md, "The laws",
-	// #1). TODO: parse this with a real Compose library (e.g.
-	// compose-spec/compose-go) into a typed Compose project rather than
-	// a bare map, then extract the x-gp-* extensions found within it.
-	ComposeBody map[string]any `yaml:",inline"`
-
-	Requires      []Requirement               `yaml:"x-gp-requires,omitempty"`
-	Attachments   map[string]AttachmentSpec   `yaml:"x-gp-attachments,omitempty"`
-	Entries       map[string]EntrySpec        `yaml:"x-gp-entry,omitempty"`
-	Routes        []RouteSpec                 `yaml:"x-gp-routes,omitempty"`
-	Components        map[string]ComponentSpec        `yaml:"x-gp-components,omitempty"`
-	Backup        *BackupSpec                 `yaml:"x-gp-backup,omitempty"`
-	ReleaseGroups map[string]ReleaseGroupSpec `yaml:"x-gp-release-group,omitempty"`
-}
-
 // Requirement is x-gp-requires' authored shape — a Controller-level
 // prerequisite, possibly crossing Compose project boundaries.
 // `condition` is one of exists|ready|healthy|completed_successfully;
@@ -183,7 +157,7 @@ type RouteSpec struct {
 // typed per-kind at the component registry level (TODO, mirrors the adapter
 // registry pattern in internal/adapters); kept generic here.
 type ComponentSpec struct {
-	Kind    ComponentKind      `yaml:"kind"`
+	Kind    ComponentKind  `yaml:"kind"`
 	Enabled bool           `yaml:"enabled"`
 	Config  map[string]any `yaml:"config,omitempty"`
 }
@@ -207,10 +181,11 @@ type BackupSourceSpec struct {
 // ReleaseGroupSpec is x-gp-release-group's authored shape. See
 // blueprint.md, "x-gp-release-group".
 type ReleaseGroupSpec struct {
-	Name     string   `yaml:"name"`
-	Services []string `yaml:"services"`
-	Order    []string `yaml:"order,omitempty"`
-	Tag      string   `yaml:"tag,omitempty"`
+	Name      string    `yaml:"name"`
+	Services  []string  `yaml:"services"`
+	Order     []string  `yaml:"order,omitempty"`
+	Tag       string    `yaml:"tag,omitempty"`
+	OnFailure OnFailure `yaml:"on_failure,omitempty"`
 }
 
 // ParseEnvelope reads just the envelope fields (kind/schema/metadata)
@@ -226,21 +201,6 @@ func ParseEnvelope(raw []byte) (Envelope, error) {
 		env.Schema = EnvelopeSchema
 	}
 	return env, nil
-}
-
-// ParseEnvironmentDocument decodes a full `kind: environment` document.
-// TODO: replace the inline ComposeBody map with a real Compose-spec
-// parse (compose-go or equivalent) once the render path needs typed
-// Compose fields rather than pass-through validation.
-func ParseEnvironmentDocument(raw []byte) (EnvironmentDocument, error) {
-	var doc EnvironmentDocument
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return EnvironmentDocument{}, fmt.Errorf("environment document: %w", err)
-	}
-	if doc.Kind != KindDocEnvironment {
-		return EnvironmentDocument{}, fmt.Errorf("environment document: envelope kind is %q, want %q", doc.Kind, KindDocEnvironment)
-	}
-	return doc, nil
 }
 
 // ParseConnectorDocument decodes a full `kind: connector` document.
