@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"gopkg.in/yaml.v3"
 )
 
@@ -46,7 +47,6 @@ type ControllerConfig struct {
 	} `yaml:"etcd"`
 	Listen struct {
 		HTTP string `yaml:"http"` // human API (REST/JSON)
-		GRPC string `yaml:"grpc"` // agent channel
 	} `yaml:"listen"`
 	Scheduler struct {
 		TickInterval string `yaml:"tick_interval"` // e.g. "30s"
@@ -60,7 +60,6 @@ func DefaultControllerConfig() ControllerConfig {
 	c.Etcd.Endpoints = []string{"127.0.0.1:2379"}
 	c.Etcd.KeyPrefix = "/groundplane/"
 	c.Listen.HTTP = "127.0.0.1:8080"
-	c.Listen.GRPC = "127.0.0.1:8081"
 	c.Scheduler.TickInterval = "30s"
 	c.AgeKeyPath = "/etc/groundplane/controller.age"
 	c.Log.Level = "warn"
@@ -70,22 +69,16 @@ func DefaultControllerConfig() ControllerConfig {
 	return c
 }
 
-// AgentConfig is /etc/groundplane/agent.yaml — the bootstrap SEED only
-// (how to find the Controller, where to log). Runtime config (pull
-// interval, max concurrent tasks, labels) is Controller-owned in etcd and
-// served over the channel; `agent config set` writes to etcd, never here.
+// AgentConfig is the Controller-owned runtime document injected into the
+// managed Agent container. Channel configuration arrives over the authenticated
+// stream; this file contains only stable identity and logging configuration.
 type AgentConfig struct {
-	Controller struct {
-		Address string `yaml:"address"` // Controller gRPC address to dial out to
-	} `yaml:"controller"`
-	JoinTokenPath string    `yaml:"join_token_path"`
-	Log           LogConfig `yaml:"log"`
+	AgentID string    `yaml:"agent_id"`
+	Log     LogConfig `yaml:"log"`
 }
 
 func DefaultAgentConfig() AgentConfig {
 	var c AgentConfig
-	c.Controller.Address = "127.0.0.1:8081"
-	c.JoinTokenPath = "/etc/groundplane/agent.token"
 	c.Log.Level = "warn"
 	c.Log.Console.Enabled = true
 	c.Log.File.Enabled = true
@@ -126,9 +119,6 @@ func (c ControllerConfig) Validate() error {
 	if err := validateHumanHTTPAddress("controller listen.http", c.Listen.HTTP); err != nil {
 		return err
 	}
-	if err := validateAddress("controller listen.grpc", c.Listen.GRPC); err != nil {
-		return err
-	}
 	tick, err := time.ParseDuration(c.Scheduler.TickInterval)
 	if err != nil {
 		return fmt.Errorf("config: controller scheduler.tick_interval: %w", err)
@@ -143,11 +133,8 @@ func (c ControllerConfig) Validate() error {
 }
 
 func (c AgentConfig) Validate() error {
-	if err := validateAddress("agent controller.address", c.Controller.Address); err != nil {
-		return err
-	}
-	if !filepath.IsAbs(c.JoinTokenPath) {
-		return fmt.Errorf("config: agent join_token_path must be absolute")
+	if err := ids.Validate(ids.KindAgent, c.AgentID); err != nil {
+		return fmt.Errorf("config: agent agent_id must be a canonical agt-prefixed ULID: %w", err)
 	}
 	return validateLog("agent", c.Log)
 }
@@ -169,13 +156,6 @@ func (c CLIConfig) Validate() error {
 	default:
 		return fmt.Errorf("config: cli output must be TABLE, JSON, or YAML")
 	}
-}
-
-func validateAddress(label, address string) error {
-	if _, _, err := net.SplitHostPort(address); err != nil {
-		return fmt.Errorf("config: %s must be host:port: %w", label, err)
-	}
-	return nil
 }
 
 func validateHumanHTTPAddress(label, address string) error {

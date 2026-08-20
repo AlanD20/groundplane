@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// Rationale: the human API must remain loopback-only with a concrete numeric port.
 func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
 	t.Parallel()
 
@@ -39,18 +40,32 @@ func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
 	}
 }
 
-func TestConfigValidateKeepsAgentChannelAddressGeneric(t *testing.T) {
+// Rationale: a missing or noncanonical runtime identity must fail before the
+// Agent can authenticate or accept work.
+func TestAgentConfigRequiresCanonicalAgentID(t *testing.T) {
 	t.Parallel()
 
-	controller := DefaultControllerConfig()
-	controller.Listen.GRPC = "0.0.0.0:8081"
-	if err := controller.Validate(); err != nil {
-		t.Fatalf("ControllerConfig.Validate() error = %v, want wildcard Agent-channel listener allowed", err)
+	tests := []struct {
+		name    string
+		agentID string
+		wantErr bool
+	}{
+		{name: "canonical", agentID: "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+		{name: "missing", wantErr: true},
+		{name: "wrong kind", agentID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", wantErr: true},
+		{name: "lowercase", agentID: "agt_01arz3ndektsv4rrffq69g5fav", wantErr: true},
+		{name: "malformed", agentID: "agt_not-an-id", wantErr: true},
 	}
 
-	agent := DefaultAgentConfig()
-	agent.Controller.Address = "[::1]:8081"
-	if err := agent.Validate(); err != nil {
-		t.Fatalf("AgentConfig.Validate() error = %v, want IPv6 Agent-channel address allowed", err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := DefaultAgentConfig()
+			cfg.AgentID = test.agentID
+			err := cfg.Validate()
+			if (err != nil) != test.wantErr {
+				t.Fatalf("AgentConfig.Validate() error = %v, want error = %t", err, test.wantErr)
+			}
+		})
 	}
 }
