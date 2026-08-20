@@ -57,10 +57,10 @@ func newRunnerCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:     "remove <id>",
 		Aliases: []string{"delete"},
-		Short:   "Remove a runner",
+		Short:   "Remove the managed runner container and record (GitHub deregistration remains manual)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRemove(cmd, "/api/v1/runners/"+target(fromContext(cmd), args[0]))
+			return runDestroy(cmd, "/api/v1/runners/"+target(fromContext(cmd), args[0]))
 		},
 	})
 
