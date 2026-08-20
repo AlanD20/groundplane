@@ -1,2 +1,4 @@
 node_modules/
 console/dist/
+/bin/
+/coverage.out
