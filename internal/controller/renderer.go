@@ -6,8 +6,11 @@
 package controller
 
 import (
+	"bytes"
 	"sort"
 	"strings"
+
+	"github.com/compose-spec/compose-go/v2/dotenv"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -112,12 +115,62 @@ func renderEnvFile(entries []core.EnvEntry, resolved map[string]string, include 
 		if !ok {
 			return nil, errs.Newf(errs.CodeInternal, "renderer: no resolved value for entry %s (%s)", entry.ID, entry.Key)
 		}
+		if strings.IndexByte(value, 0) >= 0 {
+			return nil, errs.Newf(errs.CodeValidationFailed, "renderer: env entry %s (%s) contains NUL", entry.ID, entry.Key)
+		}
 		output = append(output, entry.Key...)
-		output = append(output, '=')
-		output = append(output, value...)
-		output = append(output, '\n')
+		output = append(output, '=', '"')
+		output = appendComposeDotEnvValue(output, value)
+		output = append(output, '"', '\n')
+	}
+
+	parsed, err := dotenv.ParseWithLookup(bytes.NewReader(output), func(string) (string, bool) {
+		return "", false
+	})
+	if err != nil {
+		return nil, errs.New(errs.CodeInternal, "renderer: generated env file is not valid Compose dotenv")
+	}
+	if len(parsed) != len(selected) {
+		return nil, errs.New(errs.CodeInternal, "renderer: generated env file changed entry membership")
+	}
+	for _, entry := range selected {
+		value := resolved[entry.ID]
+		parsedValue, ok := parsed[entry.Key]
+		if !ok || parsedValue != value {
+			return nil, errs.Newf(errs.CodeInternal, "renderer: generated env file changed entry %s (%s)", entry.ID, entry.Key)
+		}
 	}
 	return output, nil
+}
+
+func appendComposeDotEnvValue(output []byte, value string) []byte {
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case '\\':
+			output = append(output, '\\', '\\')
+		case '"':
+			output = append(output, '\\', '"')
+		case '$':
+			output = append(output, '$', '$')
+		case '\n':
+			output = append(output, '\\', 'n')
+		case '\r':
+			output = append(output, '\\', 'r')
+		case '\t':
+			output = append(output, '\\', 't')
+		case '\a':
+			output = append(output, '\\', 'a')
+		case '\b':
+			output = append(output, '\\', 'b')
+		case '\f':
+			output = append(output, '\\', 'f')
+		case '\v':
+			output = append(output, '\\', 'v')
+		default:
+			output = append(output, value[i])
+		}
+	}
+	return output
 }
 
 func containsString(list []string, s string) bool {

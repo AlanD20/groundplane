@@ -20,6 +20,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
+	github.com/sirupsen/logrus v1.9.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.13 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
@@ -35,6 +36,7 @@ require (
 require (
 	filippo.io/age v1.3.1
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/compose-spec/compose-go/v2 v2.14.0
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect

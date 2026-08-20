@@ -27,8 +27,50 @@ func TestRenderEnvFileIsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderEnvFile() error = %v", err)
 	}
-	if want := "A=one\nB=two\n"; string(got) != want {
+	if want := "A=\"one\"\nB=\"two\"\n"; string(got) != want {
 		t.Errorf("RenderEnvFile() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderEnvFileEscapesComposeDotEnvValues(t *testing.T) {
+	entries := []core.EnvEntry{
+		{ID: "ev_value", Kind: core.EntryKindEnv, Key: "VALUE", Exposure: []string{"all"}},
+	}
+	value := "\\\"$line\n\r\t\a\b\f\v# end "
+
+	got, err := RenderEnvFile(entries, map[string]string{"ev_value": value})
+	if err != nil {
+		t.Fatalf("RenderEnvFile() error = %v", err)
+	}
+	want := []byte(`VALUE="\\\"$$line\n\r\t\a\b\f\v# end "` + "\n")
+	if string(got) != string(want) {
+		t.Fatalf("RenderEnvFile() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderEnvFileEscapesEveryDollarForCompose(t *testing.T) {
+	entries := []core.EnvEntry{
+		{ID: "ev_token", Kind: core.EntryKindEnv, Key: "TOKEN", Exposure: []string{"all"}},
+	}
+
+	got, err := RenderEnvFile(entries, map[string]string{"ev_token": "$HOME ${TOKEN} $$"})
+	if err != nil {
+		t.Fatalf("RenderEnvFile() error = %v", err)
+	}
+	want := `TOKEN="$$HOME $${TOKEN} $$$$"` + "\n"
+	if string(got) != want {
+		t.Fatalf("RenderEnvFile() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderEnvFileRejectsNUL(t *testing.T) {
+	entries := []core.EnvEntry{
+		{ID: "ev_nul", Kind: core.EntryKindEnv, Key: "NUL", Exposure: []string{"all"}},
+	}
+
+	_, err := RenderEnvFile(entries, map[string]string{"ev_nul": "before\x00after"})
+	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
+		t.Fatalf("RenderEnvFile() error = %v, want %q", err, errs.CodeValidationFailed)
 	}
 }
 
