@@ -38,6 +38,19 @@ func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 	}
 }
 
+func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
+	t.Parallel()
+
+	server := exactRequestServer(t, http.MethodPost, "/api/v1/agents", "", http.StatusAccepted, `{"task_id":"task_join"}`)
+	defer server.Close()
+
+	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "join")
+	want := "task task_join dispatched — `groundplane task show task_join` to follow\n"
+	if output != want {
+		t.Fatalf("output = %q, want %q", output, want)
+	}
+}
+
 func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
 	t.Parallel()
 

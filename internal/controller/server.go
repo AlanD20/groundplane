@@ -196,8 +196,10 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/activity", s.notImplemented) // documented alias of GET /tasks?workspace=
 
 	// host / agents
-	mux.HandleFunc("POST /api/v1/agent-join-tokens", s.notImplemented) // mint; consumed once by gRPC Connect
+	mux.HandleFunc("POST /api/v1/agents", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/agents", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/agents/{id}", s.notImplemented)
+	mux.HandleFunc("DELETE /api/v1/agents/{id}", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("PUT /api/v1/agents/{id}/config", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)

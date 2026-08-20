@@ -28,9 +28,10 @@ func newAgentCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "join",
-		Short: "Mint and print a one-time Agent join token",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreate(cmd, "/api/v1/agent-join-tokens", nil)
+		Short: "Create and start the local Agent",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAction(cmd, "/api/v1/agents", nil)
 		},
 	})
 
