@@ -267,9 +267,21 @@ func (a Attach) Validate() error {
 	return nil
 }
 
-func (a Component) Validate() error {
-	if a.ID == "" || a.EnvironmentID == "" || a.Kind == "" {
-		return fmt.Errorf("component: id, environment_id, and kind are required")
+func (c Component) Validate() error {
+	if c.ID == "" || c.Kind == "" {
+		return fmt.Errorf("component: id and kind are required")
+	}
+	switch c.Owner {
+	case ComponentOwnerEnvironment:
+		if c.OwnerID == "" {
+			return fmt.Errorf("component %s: environment owner requires owner_id", c.ID)
+		}
+	case ComponentOwnerPlatform:
+		if c.OwnerID != "" {
+			return fmt.Errorf("component %s: platform owner must not set owner_id", c.ID)
+		}
+	default:
+		return fmt.Errorf("component %s: unknown owner %q", c.ID, c.Owner)
 	}
 	return nil
 }
