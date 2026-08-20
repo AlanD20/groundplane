@@ -12,22 +12,16 @@ package groundplane.agent.v1;
 
 option go_package = "github.com/AlanD20/groundplane/proto/agentpb";
 
-// AgentChannel is the one bidirectional stream. The Agent calls Channel
-// once after Connect and keeps it open for the life of the process,
-// reconnecting with exponential backoff on drop.
+// AgentChannel is the one authenticated bidirectional stream. The Agent
+// sends Authenticate as the first message and keeps the stream open for the
+// life of the process, reconnecting with exponential backoff on drop.
 service AgentChannel {
-  rpc Connect(ConnectRequest) returns (ConnectResponse);
-  rpc Channel(stream AgentMessage) returns (stream ControllerMessage);
+  rpc Connect(stream AgentMessage) returns (stream ControllerMessage);
 }
 
-message ConnectRequest {
-  string join_token = 1;
-  string agent_id = 2; // empty on first connect; Controller assigns one
-}
-
-message ConnectResponse {
+message Authenticate {
   string agent_id = 1;
-  AgentConfig config = 2;
+  bytes token = 2; // exactly 32 decoded bytes; never the base64url materialization
 }
 
 message AgentConfig {
@@ -40,10 +34,11 @@ message AgentConfig {
 
 message AgentMessage {
   oneof payload {
-    Ready ready = 1;               // idle Ready IS the heartbeat; authoritative for dead-agent detection
-    TaskEvent task_event = 2;      // step progress + streamed output
-    ObservedState observed_state = 3; // drift-detection feed for reconciliation
-    TaskAck task_ack = 4;          // completed / failed
+    Authenticate authenticate = 1; // mandatory first message; no config or work is served before it succeeds
+    Ready ready = 2;               // idle Ready IS the heartbeat; authoritative for dead-agent detection
+    TaskEvent task_event = 3;      // step progress + streamed output
+    ObservedState observed_state = 4; // drift-detection feed for reconciliation
+    TaskAck task_ack = 5;          // completed / failed
   }
 }
 
