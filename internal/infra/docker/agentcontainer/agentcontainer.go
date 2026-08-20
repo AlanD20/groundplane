@@ -15,14 +15,13 @@ import (
 	"strings"
 
 	containerderrdefs "github.com/containerd/errdefs"
-	"github.com/distribution/reference"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"github.com/oklog/ulid/v2"
-	digest "github.com/opencontainers/go-digest"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -336,7 +335,7 @@ func mountKeys(mounts []mount.Mount) []string {
 }
 
 func validateDesired(desired Desired) error {
-	if !isDigestPinned(desired.Image) {
+	if !imageref.IsDigestPinned(desired.Image) {
 		return errs.New(errs.CodeValidationFailed, "agent container: image must be a caller-supplied sha256 digest reference")
 	}
 	if _, err := RuntimePathsForAgent(desired.AgentID); err != nil {
@@ -356,19 +355,6 @@ func isCanonicalAgentID(agentID string) bool {
 	encoded := strings.TrimPrefix(agentID, prefix)
 	id, err := ulid.ParseStrict(encoded)
 	return err == nil && id.String() == encoded
-}
-
-func isDigestPinned(image string) bool {
-	named, err := reference.ParseNormalizedNamed(image)
-	if err != nil {
-		return false
-	}
-	digested, ok := named.(reference.Digested)
-	if !ok {
-		return false
-	}
-	parsed, err := digest.Parse(digested.Digest().String())
-	return err == nil && parsed.Algorithm() == digest.SHA256
 }
 
 func operationError(ctx context.Context, operation string, err error) error {
