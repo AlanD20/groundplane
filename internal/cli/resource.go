@@ -74,6 +74,18 @@ func runPatch(cmd *cobra.Command, path string, body any) error {
 	return app.Out.RenderOne(fields, values, item)
 }
 
+// changedStringFields builds a PATCH document from flags the operator
+// explicitly supplied. Unset flags must not clear existing server fields.
+func changedStringFields(cmd *cobra.Command, values map[string]string) map[string]string {
+	fields := make(map[string]string, len(values))
+	for name, value := range values {
+		if cmd.Flags().Changed(name) {
+			fields[name] = value
+		}
+	}
+	return fields
+}
+
 func runRemove(cmd *cobra.Command, path string) error {
 	app := fromContext(cmd)
 	if err := app.Client.Do(cmd.Context(), "DELETE", path, nil, nil, nil); err != nil {

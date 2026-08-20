@@ -40,7 +40,7 @@ func newRouteCmd() *cobra.Command {
 		Short: "Edit a route",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/routes/"+target(fromContext(cmd), args[0]), map[string]string{"exposure": editExposure})
+			return runPatch(cmd, "/api/v1/routes/"+target(fromContext(cmd), args[0]), changedStringFields(cmd, map[string]string{"exposure": editExposure}))
 		},
 	}
 	edit.Flags().StringVar(&editExposure, "exposure", "", "public | internal")

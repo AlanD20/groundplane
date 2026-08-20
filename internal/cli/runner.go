@@ -13,7 +13,12 @@ func newRunnerCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List runners",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/runners", scopeQuery(fromContext(cmd), "tenant", "project"))
+			app := fromContext(cmd)
+			query := scopeQuery(app, "tenant")
+			if app.Scope.Project != "" {
+				query = scopeQuery(app, "project")
+			}
+			return runList(cmd, "/api/v1/runners", query)
 		},
 	}
 	cmd.AddCommand(list)

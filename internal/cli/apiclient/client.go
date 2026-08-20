@@ -36,7 +36,7 @@ type Client struct {
 
 func New(baseURL string) *Client {
 	return &Client{
-		BaseURL:       baseURL,
+		BaseURL:       strings.TrimRight(baseURL, "/"),
 		HTTP:          &http.Client{Timeout: 30 * time.Second},
 		StreamingHTTP: &http.Client{},
 	}

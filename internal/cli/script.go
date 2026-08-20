@@ -40,13 +40,7 @@ func newScriptCmd() *cobra.Command {
 		Short: "Edit a script",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body := map[string]string{}
-			if editBody != "" {
-				body["script"] = editBody
-			}
-			if editWhen != "" {
-				body["when"] = editWhen
-			}
+			body := changedStringFields(cmd, map[string]string{"script": editBody, "when": editWhen})
 			return runPatch(cmd, "/api/v1/scripts/"+target(fromContext(cmd), args[0]), body)
 		},
 	}

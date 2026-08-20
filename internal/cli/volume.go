@@ -33,7 +33,7 @@ func newVolumeCmd() *cobra.Command {
 		Short: "Edit a volume",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(cmd, "/api/v1/volumes/"+target(fromContext(cmd), args[0]), map[string]string{"name": newName})
+			return runPatch(cmd, "/api/v1/volumes/"+target(fromContext(cmd), args[0]), changedStringFields(cmd, map[string]string{"name": newName}))
 		},
 	}
 	edit.Flags().StringVar(&newName, "name", "", "new name")

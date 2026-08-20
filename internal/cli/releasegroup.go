@@ -50,10 +50,10 @@ func newReleaseGroupCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body := map[string]interface{}{}
-			if len(editServices) > 0 {
+			if cmd.Flags().Changed("service") {
 				body["services"] = editServices
 			}
-			if len(editOrder) > 0 {
+			if cmd.Flags().Changed("order") {
 				body["order"] = editOrder
 			}
 			return runPatch(cmd, "/api/v1/release-groups/"+target(fromContext(cmd), args[0]), body)
