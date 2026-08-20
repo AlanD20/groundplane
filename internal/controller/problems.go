@@ -35,7 +35,7 @@ func requestProblem(status int, message string, details []error) errs.Problem {
 		Title:  http.StatusText(status),
 		Status: status,
 		Detail: message,
-		Code:   code,
+		Code:   errs.Code(code),
 	}
 }
 
