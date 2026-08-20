@@ -448,8 +448,8 @@ func validateTaskTimeline(record TaskRecord) error {
 func validateTaskSteps(steps []TaskStepRecord) error {
 	seen := make(map[string]struct{}, len(steps))
 	for _, step := range steps {
-		if step.ID == "" || !utf8.ValidString(step.ID) {
-			return errs.New(errs.CodeValidationFailed, "task step id is required and must be valid UTF-8")
+		if err := validateStableID(ids.KindStep, step.ID); err != nil {
+			return err
 		}
 		if _, exists := seen[step.ID]; exists {
 			return errs.New(errs.CodeValidationFailed, "task step ids must be unique")
@@ -466,8 +466,8 @@ func validateTaskEventIdentity(identity TaskEventIdentity) error {
 	if err := validateStableID(ids.KindTask, identity.TaskID); err != nil {
 		return err
 	}
-	if identity.StepID == "" || !utf8.ValidString(identity.StepID) {
-		return errs.New(errs.CodeValidationFailed, "task event step id is required and must be valid UTF-8")
+	if err := validateStableID(ids.KindStep, identity.StepID); err != nil {
+		return err
 	}
 	if identity.Attempt == 0 || identity.Ordinal == 0 {
 		return errs.New(errs.CodeValidationFailed, "task event attempt and ordinal must start at one")

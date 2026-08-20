@@ -55,6 +55,7 @@ func TestKindsHaveCanonicalPrefixesAndShape(t *testing.T) {
 		{KindTask, "task"},
 		{KindOperation, "op"},
 		{KindPlan, "plan"},
+		{KindStep, "step"},
 		{KindAgent, "agt"},
 		{KindNetwork, "net"},
 		{KindBackingService, "bks"},
@@ -80,6 +81,24 @@ func TestKindsHaveCanonicalPrefixesAndShape(t *testing.T) {
 				t.Fatalf("ULID body %q is invalid: %v", body, err)
 			}
 		})
+	}
+}
+
+// Rationale: task-event deduplication depends on step identity surviving
+// reconnects, so a step uses the same canonical stable-ID parser as every
+// other referenced entity rather than a free-form procedure label.
+func TestStepIDsUseTheCanonicalStableShape(t *testing.T) {
+	t.Parallel()
+
+	value := NewAt(KindStep, time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC), 11)
+	if !strings.HasPrefix(value, "step_") {
+		t.Fatalf("NewAt(KindStep) = %q, want step_ prefix", value)
+	}
+	if err := Validate(KindStep, value); err != nil {
+		t.Fatalf("Validate(KindStep, %q): %v", value, err)
+	}
+	if err := Validate(KindStep, strings.Replace(value, "step_", "plan_", 1)); err == nil {
+		t.Fatal("Validate(KindStep) accepted a plan id")
 	}
 }
 

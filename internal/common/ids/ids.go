@@ -44,6 +44,7 @@ const (
 	KindTask           Kind = "task" // blueprint.md: task_id: task_01J... (not the old 3-letter "tsk")
 	KindOperation      Kind = "op"   // blueprint.md: operation_id: op_01J... — stable across a task's retries
 	KindPlan           Kind = "plan" // blueprint.md: plan_id: plan_01J... — the ExecutionPlan
+	KindStep           Kind = "step" // mvp.md: immutable execution step identity carried by task events
 	KindAgent          Kind = "agt"
 	KindNetwork        Kind = "net" // blueprint.md: "network zone maps directly to a Compose network"; x-gp-network id: net_01J...
 	KindBackingService Kind = "bks"

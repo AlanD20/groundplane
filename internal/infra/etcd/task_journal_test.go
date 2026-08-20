@@ -87,7 +87,7 @@ func TestTaskEventRequiresADeclaredTaskStep(t *testing.T) {
 	now := taskJournalTime()
 	task := validTaskRecord(now)
 	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
-	input.Identity.StepID = "unknown-step"
+	input.Identity.StepID = ids.NewAt(ids.KindStep, now, 6)
 	_, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
 	if !errors.Is(err, errs.New(errs.CodeValidationFailed, "")) {
 		t.Fatalf("prepareTaskEvent(unknown step) error = %v, want validation.failed", err)
@@ -284,17 +284,21 @@ func validTaskRecord(now time.Time) TaskRecord {
 	task.PlanHash = strings.Repeat("a", 64)
 	task.Params = map[string]string{"name": "migrate"}
 	task.Steps = []TaskStepRecord{{
-		ID: "migrate", Op: "run_script", Params: map[string]string{"script": "migrate"},
+		ID: taskJournalStepID(), Op: "run_script", Params: map[string]string{"script": "migrate"},
 	}}
 	return task
 }
 
 func taskEventInput(taskID string, ordinal uint64, state TaskEventState) TaskEventInput {
 	return TaskEventInput{
-		Identity: TaskEventIdentity{TaskID: taskID, StepID: "migrate", Attempt: 1, Ordinal: ordinal},
+		Identity: TaskEventIdentity{TaskID: taskID, StepID: taskJournalStepID(), Attempt: 1, Ordinal: ordinal},
 		State:    state,
 		Payload:  json.RawMessage(`{"message":"progress"}`),
 	}
+}
+
+func taskJournalStepID() string {
+	return ids.NewAt(ids.KindStep, taskJournalTime(), 5)
 }
 
 func taskJournalTime() time.Time {
