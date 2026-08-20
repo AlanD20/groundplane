@@ -2,7 +2,6 @@ package agentchannel
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -19,15 +18,19 @@ type Snapshot struct {
 	Capacity           int32
 }
 
-// RevocationHook durably revokes the credential for an Agent generation.
-// Implementations should return the canonical errs.Error type.
-type RevocationHook func(context.Context, string, uint64) error
-
 // Registry owns the single active session for each Agent.
 type Registry struct {
-	mu     sync.Mutex
-	next   uint64
-	agents map[string]*sessionState
+	mu               sync.Mutex
+	nextFence        uint64
+	nextSubscription uint64
+	agents           map[string]*sessionState
+	lifecycle        map[string]*lifecycleFence
+	ready            map[readyKey]map[uint64]*readySubscription
+}
+
+type lifecycleFence struct {
+	quiescedThrough uint64
+	revokedThrough  uint64
 }
 
 type sessionState struct {
@@ -36,12 +39,22 @@ type sessionState struct {
 	online             bool
 	assignmentsStopped bool
 	revoked            bool
-	revoking           bool
 	lastReady          time.Time
+	readyReported      bool
 	capacity           int32
 	cancel             context.CancelFunc
 	offline            chan struct{}
 	offlineOnce        sync.Once
+}
+
+type readyKey struct {
+	agentID    string
+	generation uint64
+}
+
+type readySubscription struct {
+	signal chan struct{}
+	stop   func() bool
 }
 
 // Session is a fenced capability for mutating one active Agent session.
@@ -55,7 +68,11 @@ type Session struct {
 
 // NewRegistry returns an empty Agent session registry.
 func NewRegistry() *Registry {
-	return &Registry{agents: make(map[string]*sessionState)}
+	return &Registry{
+		agents:    make(map[string]*sessionState),
+		lifecycle: make(map[string]*lifecycleFence),
+		ready:     make(map[readyKey]map[uint64]*readySubscription),
+	}
 }
 
 // Open registers an authenticated session. An equal or newer generation
@@ -67,31 +84,42 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 	if parent == nil {
 		return nil, errs.New(errs.KindInternal, "agent session context is required")
 	}
+	if err := parent.Err(); err != nil {
+		return nil, err
+	}
+	if generation == 0 {
+		return nil, errs.New(errs.KindValidationFailed, "agent generation is required")
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	lifecycle := r.lifecycle[agentID]
+	if lifecycle != nil && generation <= lifecycle.revokedThrough {
+		return nil, errs.New(errs.KindStateConflict, "agent session generation is revoked")
+	}
 	current := r.agents[agentID]
 	if current != nil {
-		if current.revoked || current.revoking {
-			return nil, errs.New(errs.KindStateConflict, "agent session is revoked")
-		}
 		if generation < current.generation {
 			return nil, errs.New(errs.KindStateConflict, "agent session generation is stale")
+		}
+		if generation == current.generation && current.revoked {
+			return nil, errs.New(errs.KindStateConflict, "agent session generation is revoked")
 		}
 		if current.online {
 			current.cancel()
 		}
 	}
 
-	r.next++
+	r.nextFence++
 	ctx, cancel := context.WithCancel(parent)
 	state := &sessionState{
-		generation: generation,
-		fence:      r.next,
-		online:     true,
-		cancel:     cancel,
-		offline:    make(chan struct{}),
+		generation:         generation,
+		fence:              r.nextFence,
+		online:             true,
+		assignmentsStopped: lifecycle != nil && generation <= lifecycle.quiescedThrough,
+		cancel:             cancel,
+		offline:            make(chan struct{}),
 	}
 	r.agents[agentID] = state
 
@@ -122,7 +150,9 @@ func (s *Session) RecordReady(at time.Time, capacity int32) error {
 		return errs.New(errs.KindStateConflict, "agent session is fenced")
 	}
 	current.lastReady = at
+	current.readyReported = true
 	current.capacity = capacity
+	s.registry.notifyReadyLocked(readyKey{agentID: s.agentID, generation: current.generation})
 	return nil
 }
 
@@ -134,6 +164,35 @@ func (s *Session) AssignmentsAllowed() bool {
 	current := s.registry.agents[s.agentID]
 	return current == s.state && current.fence == s.state.fence && current.online &&
 		!current.assignmentsStopped && !current.revoked
+}
+
+// Ready atomically subscribes to the first authenticated Ready report for an
+// exact Agent generation. Cancellation closes and unregisters the subscription.
+func (r *Registry) Ready(ctx context.Context, agentID string, generation uint64) (<-chan struct{}, error) {
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	state := r.agents[agentID]
+	if state != nil && state.generation == generation && state.online && !state.revoked && state.readyReported {
+		return closedSignal(), nil
+	}
+
+	key := readyKey{agentID: agentID, generation: generation}
+	r.nextSubscription++
+	id := r.nextSubscription
+	subscription := &readySubscription{signal: make(chan struct{})}
+	if r.ready[key] == nil {
+		r.ready[key] = make(map[uint64]*readySubscription)
+	}
+	r.ready[key][id] = subscription
+	subscription.stop = context.AfterFunc(ctx, func() {
+		r.cancelReadySubscription(key, id, subscription)
+	})
+	return subscription.signal, nil
 }
 
 // Close marks this session offline if it still owns the active fence.
@@ -171,69 +230,77 @@ func (r *Registry) Snapshot(agentID string) (Snapshot, bool) {
 }
 
 // StopAssignments prevents the current session from receiving new work.
-func (r *Registry) StopAssignments(agentID string) error {
+func (r *Registry) StopAssignments(ctx context.Context, agentID string, generation uint64) error {
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	lifecycle := r.lifecycleFenceLocked(agentID)
+	if generation > lifecycle.quiescedThrough {
+		lifecycle.quiescedThrough = generation
+	}
 	state, ok := r.agents[agentID]
 	if !ok {
-		return errs.New(errs.KindAgentNotFound, "agent session was not found")
+		return nil
+	}
+	if state.generation > generation {
+		return generationConflict()
 	}
 	state.assignmentsStopped = true
 	return nil
 }
 
-// Revoke runs the durable revocation hook and then fences the active session.
-// Callers stop assignments and abort active tasks before invoking this method.
-func (r *Registry) Revoke(ctx context.Context, agentID string, hook RevocationHook) error {
-	if hook == nil {
-		return errs.New(errs.KindInternal, "agent revocation hook is required")
+// Revoke fences one exact in-memory generation after its credential has been
+// durably revoked by the lifecycle repository.
+func (r *Registry) Revoke(ctx context.Context, agentID string, generation uint64) error {
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return err
 	}
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lifecycle := r.lifecycleFenceLocked(agentID)
+	if generation > lifecycle.quiescedThrough {
+		lifecycle.quiescedThrough = generation
+	}
+	if generation > lifecycle.revokedThrough {
+		lifecycle.revokedThrough = generation
+	}
 	state, ok := r.agents[agentID]
 	if !ok {
-		r.mu.Unlock()
-		return errs.New(errs.KindAgentNotFound, "agent session was not found")
+		return nil
+	}
+	if state.generation > generation {
+		return generationConflict()
 	}
 	if state.revoked {
+		return nil
+	}
+	state.assignmentsStopped = true
+	state.revoked = true
+	state.cancel()
+	return nil
+}
+
+// WaitOffline waits until one exact registered generation has closed.
+func (r *Registry) WaitOffline(ctx context.Context, agentID string, generation uint64) error {
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	state, ok := r.agents[agentID]
+	if !ok {
 		r.mu.Unlock()
 		return nil
 	}
-	if state.revoking {
+	if state.generation > generation {
 		r.mu.Unlock()
-		return errs.New(errs.KindStateConflict, "agent revocation is already in progress")
+		return generationConflict()
 	}
-	state.assignmentsStopped = true
-	state.revoking = true
-	generation := state.generation
-	r.mu.Unlock()
-
-	if err := hook(ctx, agentID, generation); err != nil {
-		r.mu.Lock()
-		state.revoking = false
-		r.mu.Unlock()
-
-		var domainErr *errs.Error
-		if errors.As(err, &domainErr) {
-			return domainErr
-		}
-		return errs.Wrap(errs.KindInternal, err)
-	}
-
-	r.mu.Lock()
-	state.revoking = false
-	state.revoked = true
-	state.cancel()
-	r.mu.Unlock()
-	return nil
-}
-
-// WaitOffline waits until the latest registered session has closed.
-func (r *Registry) WaitOffline(ctx context.Context, agentID string) error {
-	r.mu.Lock()
-	state, ok := r.agents[agentID]
-	if !ok || !state.online {
+	if !state.online {
 		r.mu.Unlock()
 		return nil
 	}
@@ -246,4 +313,65 @@ func (r *Registry) WaitOffline(ctx context.Context, agentID string) error {
 	case <-offline:
 		return nil
 	}
+}
+
+func (r *Registry) lifecycleFenceLocked(agentID string) *lifecycleFence {
+	lifecycle := r.lifecycle[agentID]
+	if lifecycle == nil {
+		lifecycle = &lifecycleFence{}
+		r.lifecycle[agentID] = lifecycle
+	}
+	return lifecycle
+}
+
+func (r *Registry) notifyReadyLocked(key readyKey) {
+	subscriptions := r.ready[key]
+	delete(r.ready, key)
+	for _, subscription := range subscriptions {
+		if subscription.stop != nil {
+			subscription.stop()
+		}
+		close(subscription.signal)
+	}
+}
+
+func (r *Registry) cancelReadySubscription(key readyKey, id uint64, subscription *readySubscription) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	subscriptions := r.ready[key]
+	if subscriptions[id] != subscription {
+		return
+	}
+	delete(subscriptions, id)
+	if len(subscriptions) == 0 {
+		delete(r.ready, key)
+	}
+	close(subscription.signal)
+}
+
+func validateLifecycleTarget(ctx context.Context, agentID string, generation uint64) error {
+	if ctx == nil {
+		return errs.New(errs.KindInternal, "agent session context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if agentID == "" {
+		return errs.New(errs.KindValidationFailed, "agent id is required")
+	}
+	if generation == 0 {
+		return errs.New(errs.KindValidationFailed, "agent generation is required")
+	}
+	return nil
+}
+
+func generationConflict() error {
+	return errs.New(errs.KindStateConflict, "agent session generation does not match")
+}
+
+func closedSignal() <-chan struct{} {
+	signal := make(chan struct{})
+	close(signal)
+	return signal
 }

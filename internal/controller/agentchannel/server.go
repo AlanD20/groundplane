@@ -73,6 +73,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if authorization.Config == nil {
 		return status.Error(codes.Internal, "agent configuration is not available")
 	}
+	if authorization.Generation == 0 {
+		return status.Error(codes.Internal, "agent authorization generation is not available")
+	}
 
 	session, err := s.sessions.Open(stream.Context(), authenticate.AgentId, authorization.Generation)
 	if err != nil {

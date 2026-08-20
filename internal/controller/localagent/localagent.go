@@ -250,7 +250,9 @@ func (manager *Manager) provision(ctx context.Context, stored StoredRecord) (Sto
 	if err := manager.convergeRuntime(ctx, stored.Record); err != nil {
 		return StoredRecord{}, err
 	}
-	ready, err := manager.sessions.Ready(ctx, stored.Record.ID, stored.Record.Generation)
+	readyContext, cancelReady := context.WithCancel(ctx)
+	defer cancelReady()
+	ready, err := manager.sessions.Ready(readyContext, stored.Record.ID, stored.Record.Generation)
 	if err != nil {
 		return StoredRecord{}, safePortError(ctx, err, "local agent readiness subscription failed")
 	}

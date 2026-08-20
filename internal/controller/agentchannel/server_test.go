@@ -24,6 +24,22 @@ type fakeAuthenticator struct {
 	seenToken     Token
 }
 
+type pausedAuthenticator struct {
+	authorization Authorization
+	entered       chan struct{}
+	release       chan struct{}
+}
+
+func (a *pausedAuthenticator) Authenticate(ctx context.Context, _ string, _ Token) (Authorization, error) {
+	close(a.entered)
+	select {
+	case <-ctx.Done():
+		return Authorization{}, ctx.Err()
+	case <-a.release:
+		return a.authorization, nil
+	}
+}
+
 func (a *fakeAuthenticator) Authenticate(_ context.Context, id string, token Token) (Authorization, error) {
 	a.calls++
 	a.seenID = id
@@ -94,6 +110,54 @@ func TestConnectRejectsMissingAuthorizedConfig(t *testing.T) {
 	err := New(authenticator, NewRegistry()).Connect(stream)
 	if status.Code(err) != codes.Internal {
 		t.Fatalf("status = %v, want Internal", status.Code(err))
+	}
+	if len(stream.sent) != 0 {
+		t.Fatalf("sent = %d messages, want zero", len(stream.sent))
+	}
+}
+
+// Rationale: a zero generation can only come from a corrupt authenticator
+// result and must be classified as Controller failure, not client validation.
+func TestConnectTreatsImpossibleAuthorizationAsInternal(t *testing.T) {
+	authenticator := authorizedAuthenticator()
+	authenticator.authorization.Generation = 0
+	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
+		authenticateMessage(testAgentID, testToken('z')),
+	}}
+
+	err := New(authenticator, NewRegistry()).Connect(stream)
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("status = %v, want Internal", status.Code(err))
+	}
+	if len(stream.sent) != 0 {
+		t.Fatalf("sent = %d messages, want zero", len(stream.sent))
+	}
+}
+
+// Rationale: removal may revoke an authenticated identity while Authenticate
+// is paused before Registry.Open; releasing Authenticate must not resurrect it.
+func TestConnectCannotOpenGenerationRevokedDuringAuthentication(t *testing.T) {
+	registry := NewRegistry()
+	authenticator := &pausedAuthenticator{
+		authorization: authorizedAuthenticator().authorization,
+		entered:       make(chan struct{}),
+		release:       make(chan struct{}),
+	}
+	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
+		authenticateMessage(testAgentID, testToken('r')),
+	}}
+	result := make(chan error, 1)
+	go func() {
+		result <- New(authenticator, registry).Connect(stream)
+	}()
+	<-authenticator.entered
+	if err := registry.Revoke(context.Background(), testAgentID, 1); err != nil {
+		t.Fatalf("revoke during Authenticate: %v", err)
+	}
+	close(authenticator.release)
+
+	if err := <-result; status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("Connect() status = %v, want FailedPrecondition", status.Code(err))
 	}
 	if len(stream.sent) != 0 {
 		t.Fatalf("sent = %d messages, want zero", len(stream.sent))

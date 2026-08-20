@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	containerderrdefs "github.com/containerd/errdefs"
@@ -86,7 +87,7 @@ type Result struct {
 type Lifecycle interface {
 	Reconcile(ctx context.Context, desired Desired) (Result, error)
 	Inspect(ctx context.Context) (State, error)
-	Remove(ctx context.Context) error
+	Remove(ctx context.Context, agentID string, generation string) error
 }
 
 type engineClient interface {
@@ -193,7 +194,10 @@ func (m *Manager) Inspect(ctx context.Context) (State, error) {
 	return stateFromInspect(inspect), nil
 }
 
-func (m *Manager) Remove(ctx context.Context) error {
+func (m *Manager) Remove(ctx context.Context, agentID string, generation string) error {
+	if err := validateIdentity(agentID, generation); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -204,6 +208,12 @@ func (m *Manager) Remove(ctx context.Context) error {
 	state := stateFromInspect(inspect)
 	if !state.Owned {
 		return unownedCollision()
+	}
+	if state.AgentID != agentID || state.Generation != generation {
+		return errs.New(errs.KindStateConflict, "agent container: inspected identity does not match removal target")
+	}
+	if state.ID == "" {
+		return errs.New(errs.KindInternal, "agent container: Docker returned an empty inspected container id")
 	}
 	if _, err := m.client.ContainerRemove(ctx, state.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
 		if containerderrdefs.IsNotFound(err) {
@@ -344,11 +354,16 @@ func validateDesired(desired Desired) error {
 			"agent container: image must be a caller-supplied sha256 digest reference",
 		)
 	}
-	if _, err := RuntimePathsForAgent(desired.AgentID); err != nil {
+	return validateIdentity(desired.AgentID, desired.Generation)
+}
+
+func validateIdentity(agentID string, generation string) error {
+	if _, err := RuntimePathsForAgent(agentID); err != nil {
 		return err
 	}
-	if strings.TrimSpace(desired.Generation) == "" {
-		return errs.New(errs.KindValidationFailed, "agent container: generation is required")
+	parsed, err := strconv.ParseUint(generation, 10, 64)
+	if err != nil || parsed == 0 || strconv.FormatUint(parsed, 10) != generation {
+		return errs.New(errs.KindValidationFailed, "agent container: generation must be a canonical positive integer")
 	}
 	return nil
 }

@@ -121,6 +121,9 @@ func TestEnrollUsesExactReadinessDeadlineAndLeavesRetryablePhase(t *testing.T) {
 	if repository.record.Record.Phase != PhaseProvisioning {
 		t.Fatalf("phase after timeout = %q, want %q", repository.record.Record.Phase, PhaseProvisioning)
 	}
+	if !errors.Is(harness.sessions.readyContext.Err(), context.Canceled) {
+		t.Fatalf("readiness subscription context = %v, want canceled", harness.sessions.readyContext.Err())
+	}
 }
 
 func TestReconcileAndRemoveAreIdempotent(t *testing.T) {
@@ -781,6 +784,7 @@ func (container *fakeContainer) Remove(ctx context.Context, _ string, _ uint64) 
 type fakeSessions struct {
 	trace        *traceLog
 	ready        <-chan struct{}
+	readyContext context.Context
 	snapshot     SessionSnapshot
 	hasSnapshot  bool
 	stopError    error
@@ -796,6 +800,7 @@ func (sessions *fakeSessions) Ready(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	sessions.readyContext = ctx
 	return sessions.ready, nil
 }
 

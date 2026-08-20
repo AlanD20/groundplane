@@ -119,15 +119,25 @@ func TestRemoveIsIdempotentAndOwnershipGuarded(t *testing.T) {
 
 	t.Run("missing", func(t *testing.T) {
 		fake := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound}
-		if err := (&Manager{client: fake}).Remove(context.Background()); err != nil {
+		desired := testDesired()
+		if err := (&Manager{client: fake}).Remove(
+			context.Background(),
+			desired.AgentID,
+			desired.Generation,
+		); err != nil {
 			t.Fatalf("Remove() error = %v", err)
 		}
 		assertNoMutations(t, fake)
 	})
 
 	t.Run("owned", func(t *testing.T) {
-		fake := &fakeEngine{inspectResult: matchingInspect(testDesired(), true)}
-		if err := (&Manager{client: fake}).Remove(context.Background()); err != nil {
+		desired := testDesired()
+		fake := &fakeEngine{inspectResult: matchingInspect(desired, true)}
+		if err := (&Manager{client: fake}).Remove(
+			context.Background(),
+			desired.AgentID,
+			desired.Generation,
+		); err != nil {
 			t.Fatalf("Remove() error = %v", err)
 		}
 		if len(fake.removeCalls) != 1 || !fake.removeCalls[0].options.Force {
@@ -139,7 +149,11 @@ func TestRemoveIsIdempotentAndOwnershipGuarded(t *testing.T) {
 		inspect := matchingInspect(testDesired(), true)
 		inspect.Container.Config.Labels[labelKind] = "workload"
 		fake := &fakeEngine{inspectResult: inspect}
-		if err := (&Manager{client: fake}).Remove(context.Background()); err == nil {
+		if err := (&Manager{client: fake}).Remove(
+			context.Background(),
+			testDesired().AgentID,
+			testDesired().Generation,
+		); err == nil {
 			t.Fatal("Remove() error = nil, want unowned collision")
 		}
 		assertNoMutations(t, fake)
@@ -150,10 +164,63 @@ func TestRemoveIsIdempotentAndOwnershipGuarded(t *testing.T) {
 			inspectResult: matchingInspect(testDesired(), true),
 			removeErr:     containerderrdefs.ErrNotFound,
 		}
-		if err := (&Manager{client: fake}).Remove(context.Background()); err != nil {
+		desired := testDesired()
+		if err := (&Manager{client: fake}).Remove(
+			context.Background(),
+			desired.AgentID,
+			desired.Generation,
+		); err != nil {
 			t.Fatalf("Remove() error = %v", err)
 		}
 	})
+}
+
+// Rationale: an owned container for another Agent generation is not the
+// deletion target, even though it occupies the singleton container name.
+func TestRemoveRefusesAgentIdentityOrGenerationMismatch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		agentID    string
+		generation string
+	}{
+		{
+			name:       "agent id",
+			agentID:    "agt_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			generation: testDesired().Generation,
+		},
+		{name: "generation", agentID: testDesired().AgentID, generation: "8"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeEngine{inspectResult: matchingInspect(testDesired(), true)}
+			err := (&Manager{client: fake}).Remove(context.Background(), test.agentID, test.generation)
+			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+				t.Fatalf("Remove() error = %v, want state.conflict", err)
+			}
+			assertNoMutations(t, fake)
+		})
+	}
+}
+
+// Rationale: a name race must never retarget deletion at the replacement;
+// Docker removal uses only the immutable id returned by the guarded inspect.
+func TestRemoveUsesInspectedImmutableIDAcrossNameRace(t *testing.T) {
+	t.Parallel()
+
+	desired := testDesired()
+	fake := &fakeEngine{
+		inspectResult: matchingInspect(desired, true),
+		removeErr:     containerderrdefs.ErrNotFound,
+	}
+	if err := (&Manager{client: fake}).Remove(context.Background(), desired.AgentID, desired.Generation); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if len(fake.removeCalls) != 1 || fake.removeCalls[0].id != "existing-id" {
+		t.Fatalf("remove calls = %#v, want immutable existing-id only", fake.removeCalls)
+	}
 }
 
 func TestInspectWrapsDockerDaemonError(t *testing.T) {
