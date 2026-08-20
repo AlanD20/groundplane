@@ -19,8 +19,8 @@ func TestNew_DerivesClassAndOpFromCode(t *testing.T) {
 		wantOp    string
 	}{
 		{CodeServiceNotFound, ClassNotFound, "service"},
-		{CodeDeployInFlight, ClassConflict, "deploy_in_flight"}, // flat code -> Op is the whole code
-		{CodeStrategyNotImplemented, ClassValidation, "strategy_not_implemented"},
+		{CodeDeployInFlight, ClassConflict, "deploy"},
+		{CodeStrategyNotImplemented, ClassValidation, "strategy"},
 		{CodeTaskTimedOut, ClassRetryable, "task"},
 		{CodeRequestNotFound, ClassNotFound, "request"},
 		{CodeRequestMethodNotAllowed, ClassMethodNotAllowed, "request"},
@@ -56,7 +56,7 @@ func TestHTTPStatus_DerivesFromClass(t *testing.T) {
 	// mapping is the ONLY place status codes are decided (the Controller
 	// never special-cases a Code directly).
 	cases := map[Class]int{
-		ClassValidation:           400,
+		ClassValidation:           422,
 		ClassNotFound:             404,
 		ClassMethodNotAllowed:     405,
 		ClassNotAcceptable:        406,
@@ -138,10 +138,33 @@ func TestToProblem_CarriesCodeVerbatim(t *testing.T) {
 	if p.Code != CodeAttachNotFound {
 		t.Errorf("Problem.Code = %s, want %s", p.Code, CodeAttachNotFound)
 	}
+	if p.Type != ProblemType {
+		t.Errorf("Problem.Type = %q, want %q", p.Type, ProblemType)
+	}
 	if p.Status != 404 {
 		t.Errorf("Problem.Status = %d, want 404", p.Status)
 	}
 	if p.Details["attach_id"] != "att_xyz" {
 		t.Errorf("Problem.Details[attach_id] = %v, want att_xyz", p.Details["attach_id"])
+	}
+}
+
+func TestPublicCodesUseCanonicalDotNamespaces(t *testing.T) {
+	// Rationale: these code strings are part of the public API and must not
+	// regress to the superseded flat spellings.
+	if CodeDeployInFlight != "deploy.in_flight" {
+		t.Errorf("CodeDeployInFlight = %q, want deploy.in_flight", CodeDeployInFlight)
+	}
+	if CodeStrategyNotImplemented != "strategy.not_implemented" {
+		t.Errorf("CodeStrategyNotImplemented = %q, want strategy.not_implemented", CodeStrategyNotImplemented)
+	}
+}
+
+func TestValidationProblemUsesUnprocessableEntity(t *testing.T) {
+	// Rationale: once transport decoding succeeds, parameter, schema, and
+	// semantic validation failures use 422 rather than malformed-input 400.
+	problem := New(CodeValidationFailed, "invalid parameter").ToProblem()
+	if problem.Status != 422 {
+		t.Errorf("Problem.Status = %d, want 422", problem.Status)
 	}
 }

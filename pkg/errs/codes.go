@@ -1,10 +1,7 @@
 package errs
 
-// The full Code catalog, grouped by domain, dot-namespaced. Two codes
-// are flat and verbatim because api-cli.md and mvp.md already lock their
-// exact string ("deploy_in_flight", "strategy_not_implemented" appear as
-// literal RFC 7807 `code` examples in both docs) — renaming them to fit
-// the dot convention would break that lock, so they're kept as-is.
+// The full Code catalog, grouped by domain. Public domain codes use dot
+// namespaces so their stable API representation matches api-cli.md.
 //
 // Every new Code added here must also be added to api-cli.md's error
 // examples if it's part of the public contract (see the coding-standards
@@ -28,11 +25,11 @@ const (
 	CodeRecoveryPointNotFound  Code = "recovery_point.not_found"
 
 	// --- conflict / in-flight ---
-	CodeDeployInFlight Code = "deploy_in_flight" // locked verbatim — see api-cli.md, "Errors"
+	CodeDeployInFlight Code = "deploy.in_flight"
 	CodeSlugConflict   Code = "slug.conflict"
 
 	// --- declared-deferred / not-yet-implemented product surface ---
-	CodeStrategyNotImplemented Code = "strategy_not_implemented" // locked verbatim — "rolling" is declared-deferred
+	CodeStrategyNotImplemented Code = "strategy.not_implemented"
 	CodeRotationNotImplemented Code = "rotation.not_implemented"
 	CodeAdapterManualOnly      Code = "adapter.manual_only"
 

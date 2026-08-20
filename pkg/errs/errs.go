@@ -30,12 +30,10 @@ const (
 )
 
 // Code is a stable, machine-readable error code — the RFC 7807 "code"
-// value returned by the API, verbatim. Dot-namespaced and grouped by
-// domain (service.not_found, attach.not_found, …), EXCEPT the two codes
-// already locked verbatim elsewhere in the docs (deploy_in_flight,
-// strategy_not_implemented — api-cli.md cites these as literal examples,
-// so they stay flat rather than being renamed to fit the dot convention).
-// See codes.go for the full list and their Class.
+// value returned by the API, verbatim. Public domain codes are
+// dot-namespaced and grouped by domain (service.not_found,
+// attach.not_found, deploy.in_flight, …). See codes.go for the full list
+// and their Class.
 type Code string
 
 // Option configures an *Error at construction time.
@@ -112,9 +110,8 @@ func Wrap(code Code, err error) *Error {
 }
 
 // opOf derives the domain segment from a dot-namespaced code
-// ("service.not_found" -> "service"); flat, locked-verbatim codes
-// (deploy_in_flight, not_implemented, internal, …) use the whole code as
-// their own Op.
+// ("service.not_found" -> "service"); unnamespaced internal codes use
+// the whole code as their own Op.
 func opOf(code Code) string {
 	s := string(code)
 	if i := strings.IndexByte(s, '.'); i >= 0 {
@@ -132,7 +129,7 @@ func (e *Error) HTTPStatus() int {
 	}
 	switch e.Class {
 	case ClassValidation:
-		return 400
+		return 422
 	case ClassNotFound:
 		return 404
 	case ClassMethodNotAllowed:
@@ -150,6 +147,10 @@ func (e *Error) HTTPStatus() int {
 	}
 }
 
+// ProblemType is the single RFC 7807 type used for domain and framework
+// problems. Stable machine handling belongs to Code, not a type URI.
+const ProblemType = "about:blank"
+
 // Problem is the RFC 7807 problem+json shape the Controller's HTTP layer
 // serializes every *Error into. See api-cli.md, "Errors".
 type Problem struct {
@@ -164,7 +165,7 @@ type Problem struct {
 // ToProblem renders e as an RFC 7807 problem at its derived HTTPStatus().
 func (e *Error) ToProblem() Problem {
 	return Problem{
-		Type:    "about:blank",
+		Type:    ProblemType,
 		Title:   string(e.Code),
 		Status:  e.HTTPStatus(),
 		Detail:  e.Message,

@@ -8,8 +8,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-const problemTypeBase = "https://groundplane.dev/problems/"
-
 func configureProblemResponses() {
 	huma.NewError = func(status int, message string, details ...error) huma.StatusError {
 		return requestProblem(status, message, details)
@@ -31,7 +29,7 @@ func requestProblem(status int, message string, details []error) errs.Problem {
 	}
 
 	return errs.Problem{
-		Type:   problemTypeBase + strings.ReplaceAll(string(code), ".", "/"),
+		Type:   errs.ProblemType,
 		Title:  http.StatusText(status),
 		Status: status,
 		Detail: message,

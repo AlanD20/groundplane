@@ -8,6 +8,8 @@ import (
 )
 
 func TestRequestProblemCodeUsesPublicCatalog(t *testing.T) {
+	// Rationale: framework failures must use the same stable public code
+	// catalog as domain failures while preserving framework HTTP status.
 	tests := []struct {
 		status int
 		code   errs.Code
@@ -29,6 +31,8 @@ func TestRequestProblemCodeUsesPublicCatalog(t *testing.T) {
 }
 
 func TestRequestProblemPreservesFrameworkValidationStatus(t *testing.T) {
+	// Rationale: malformed transport/decode input remains 400, while Huma's
+	// decoded parameter/schema validation remains 422.
 	for _, status := range []int{http.StatusBadRequest, http.StatusUnprocessableEntity} {
 		problem := requestProblem(status, "validation failed", nil)
 		if problem.Status != status {
@@ -36,6 +40,9 @@ func TestRequestProblemPreservesFrameworkValidationStatus(t *testing.T) {
 		}
 		if problem.Code != errs.CodeValidationFailed {
 			t.Errorf("requestProblem(%d).Code = %q, want %q", status, problem.Code, errs.CodeValidationFailed)
+		}
+		if problem.Type != errs.ProblemType {
+			t.Errorf("requestProblem(%d).Type = %q, want %q", status, problem.Type, errs.ProblemType)
 		}
 	}
 }
