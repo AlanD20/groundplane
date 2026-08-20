@@ -272,7 +272,7 @@ func (s *Server) Serve(ctx context.Context, addr string) error {
 	}
 	srv := &http.Server{
 		Addr:    addr,
-		Handler: s.Mux,
+		Handler: s.requestHandler(),
 		BaseContext: func(net.Listener) context.Context {
 			return ctx
 		},
