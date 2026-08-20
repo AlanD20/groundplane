@@ -15,12 +15,14 @@ agent:
 
 proto:
 	protoc \
+		--plugin=protoc-gen-go="$$(go tool -n protoc-gen-go)" \
+		--plugin=protoc-gen-go-grpc="$$(go tool -n protoc-gen-go-grpc)" \
 		--go_out=. --go_opt=module=github.com/AlanD20/groundplane \
 		--go-grpc_out=. --go-grpc_opt=module=github.com/AlanD20/groundplane \
 		proto/agent.proto
 
 console:
-	cd console && npm install && npm run build
+	cd console && npm ci && npm run build
 
 test:
 	go test ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
@@ -35,7 +37,7 @@ tidy:
 ci:
 	go mod tidy && git diff --exit-code go.mod go.sum
 	test -z "$$(gofmt -l .)"
-	golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/
+	test -z "$$(golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/)"
 	go vet ./...
 	go test ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
 	# go generate ./...

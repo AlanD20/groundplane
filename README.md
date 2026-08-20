@@ -114,15 +114,16 @@ load-bearing rules:
 
 ## Building
 
-Requires Go 1.26+, Node 20+ (for the Console), and `protoc` +
-`protoc-gen-go` + `protoc-gen-go-grpc` (for `proto/agent.proto`).
+Requires Go 1.26+, Node 20+ (for the Console),
+`github.com/segmentio/golines@v0.12.2` (for `make ci`), and `protoc` +
+the repository-declared Go generator tools (for `proto/agent.proto`).
 
 ```sh
 go mod tidy                     # resolve the dependencies listed in go.mod
-make proto                      # regenerate proto/*.pb.go
+make proto                      # regenerate proto/*.pb.go with repository-pinned Go tools
 make build                      # builds bin/groundplane, bin/controller, bin/agent
-make console                    # npm install && npm run build in console/, embedded via go:embed
-make ci                         # the full local gate: tidy, gofmt, vet, race tests — mirrors CI exactly
+make console                    # npm ci && npm run build in console/, embedded via go:embed
+make ci                         # full local gate: tidy, gofmt, golines, vet, race tests; mirrors CI exactly
 ```
 
 This has been built, `go vet`'d, `gofmt`'d, and exercised end-to-end
