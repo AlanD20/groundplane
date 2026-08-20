@@ -7,6 +7,8 @@ import (
 )
 
 func TestServiceRuntimeIntentValidate(t *testing.T) {
+	// Rationale: only the three accepted Controller-owned runtime intents may
+	// cross into persistence or API projection.
 	tests := []struct {
 		name    string
 		intent  ServiceRuntimeIntent
@@ -30,6 +32,8 @@ func TestServiceRuntimeIntentValidate(t *testing.T) {
 }
 
 func TestServiceRuntimeValidate(t *testing.T) {
+	// Rationale: a durable runtime record without a service identity or valid
+	// intent cannot be reconciled deterministically.
 	if err := (ServiceRuntime{
 		ServiceID:     "svc_x",
 		RuntimeIntent: ServiceRuntimeIntentRunning,
@@ -49,6 +53,8 @@ func TestServiceRuntimeValidate(t *testing.T) {
 }
 
 func TestDesiredServiceDoesNotContainRuntimeIntent(t *testing.T) {
+	// Rationale: runtime intent is Controller-owned operational state and must
+	// never become authorable through the desired Service/Blueprint model.
 	encoded, err := json.Marshal(Service{ID: "svc_x", Name: "api", Image: "app:latest"})
 	if err != nil {
 		t.Fatalf("Marshal() error: %v", err)

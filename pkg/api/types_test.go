@@ -6,6 +6,8 @@ import (
 )
 
 func TestServiceRuntimeIntentJSON(t *testing.T) {
+	// Rationale: Service responses must expose runtime_intent with exact
+	// snake_case JSON while keeping it out of Blueprint input.
 	encoded, err := json.Marshal(Service{
 		ID:            "svc_x",
 		Name:          "api",
