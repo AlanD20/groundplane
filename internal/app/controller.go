@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,10 @@ import (
 	controllercomponent "github.com/AlanD20/groundplane/internal/components/controller"
 	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/localagent"
+	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
+	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
+	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -53,10 +58,12 @@ type Controller struct {
 	Config config.ControllerConfig
 	Logger *slog.Logger
 
-	server    controllerServer
-	agent     controllerAgentChannel
-	scheduler controllerScheduler
-	store     ownedStore
+	server     controllerServer
+	agent      controllerAgentChannel
+	scheduler  controllerScheduler
+	localAgent controllerScheduler
+	container  ownedStore
+	store      ownedStore
 }
 
 type controllerServer interface {
@@ -147,16 +154,83 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
 	}
+	repositoryAdapter, err := newLocalAgentRepositoryAdapter(agents)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent repository adapter: %w", err)
+	}
+	sessionsAdapter, err := newLocalAgentSessionsAdapter(agentRuntime.registry)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent session adapter: %w", err)
+	}
+	tasksAdapter, err := newLocalAgentTasksAdapter(tasks, agentRuntime.registry)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent Task adapter: %w", err)
+	}
+	controllerKey := &ageinfra.ControllerKey{Path: cfg.AgeKeyPath}
+	if err := controllerKey.Load(ctx); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: load Controller age key: %w", err)
+	}
+	credentialCipher, err := newCredentialCipher(controllerKey)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent credential cipher: %w", err)
+	}
+	credentialManager, err := agentcredential.New(rand.Reader, credentialCipher, credentialCipher)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent credential runtime: %w", err)
+	}
+	runtimeAdapter, err := newLocalAgentRuntimeAdapter(credentialManager, cfg.Log)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent runtime adapter: %w", err)
+	}
+	containerManager, err := agentcontainer.New(ctx)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent Docker lifecycle: %w", err)
+	}
+	containerAdapter, err := newLocalAgentContainerAdapter(containerManager)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent container adapter: %w", err)
+	}
+	localAgentManager, err := localagent.New(localagent.Dependencies{
+		Repository: repositoryAdapter,
+		Runtime:    runtimeAdapter,
+		Container:  containerAdapter,
+		Sessions:   sessionsAdapter,
+		Tasks:      tasksAdapter,
+		Clock:      localagent.SystemClock{},
+	})
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent lifecycle: %w", err)
+	}
+	localAgentReconciliation, err := newLocalAgentReconciliation(localAgentManager, tick, logger)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
+	}
 
 	srv := controller.New(store, logger, controller.Options{Console: consoleAssets, Tasks: tasks})
 
 	return &Controller{
-		Config:    cfg,
-		Logger:    logger,
-		server:    srv,
-		agent:     agentRuntime,
-		scheduler: controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks),
-		store:     store,
+		Config:     cfg,
+		Logger:     logger,
+		server:     srv,
+		agent:      agentRuntime,
+		scheduler:  controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks),
+		localAgent: localAgentReconciliation,
+		container:  containerManager,
+		store:      store,
 	}, nil
 }
 
@@ -193,6 +267,11 @@ func (c *Controller) Run(ctx context.Context) error {
 		defer close(schedulerDone)
 		c.scheduler.Run(runCtx)
 	}()
+	localAgentDone := make(chan struct{})
+	go func() {
+		defer close(localAgentDone)
+		c.localAgent.Run(runCtx)
+	}()
 
 	type runtimeResult struct {
 		name string
@@ -223,11 +302,14 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 	}
 	<-schedulerDone
+	<-localAgentDone
 
+	containerCloseErr := c.container.Close()
 	closeErr := c.store.Close()
 	joined := errors.Join(
 		wrapControllerRunError("serve HTTP", runtimeErrors["serve HTTP"]),
 		wrapControllerRunError("serve Agent channel", runtimeErrors["serve Agent channel"]),
+		wrapControllerRunError("close local Agent Docker lifecycle", containerCloseErr),
 		wrapControllerRunError("close etcd", closeErr),
 	)
 	if joined != nil {

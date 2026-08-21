@@ -42,20 +42,24 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 	serveFailure := errors.New("listen failed")
 	agentFailure := errors.New("agent channel failed")
 	closeFailure := errors.New("close failed")
+	containerFailure := errors.New("container close failed")
 	tests := []struct {
-		name        string
-		serveErr    error
-		agentErr    error
-		closeErr    error
-		wantServe   bool
-		wantAgent   bool
-		wantClose   bool
-		wantFailure bool
+		name          string
+		serveErr      error
+		agentErr      error
+		closeErr      error
+		containerErr  error
+		wantServe     bool
+		wantAgent     bool
+		wantClose     bool
+		wantContainer bool
+		wantFailure   bool
 	}{
 		{name: "normal cancellation"},
 		{name: "serve failure", serveErr: serveFailure, wantServe: true, wantFailure: true},
 		{name: "Agent channel failure", agentErr: agentFailure, wantAgent: true, wantFailure: true},
 		{name: "close failure", closeErr: closeFailure, wantClose: true, wantFailure: true},
+		{name: "Docker close failure", containerErr: containerFailure, wantContainer: true, wantFailure: true},
 		{
 			name:        "joined serve and close failures",
 			serveErr:    serveFailure,
@@ -81,18 +85,25 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			server := &fakeControllerServer{err: test.serveErr}
 			agent := &fakeControllerAgentChannel{err: test.agentErr, stopped: make(chan struct{})}
 			scheduler := &fakeControllerScheduler{stopped: make(chan struct{})}
+			localAgent := &fakeControllerScheduler{stopped: make(chan struct{})}
+			container := &fakeOwnedContainer{
+				err: test.containerErr, localAgentStopped: localAgent.stopped,
+			}
 			store := &fakeOwnedStore{
 				err:              test.closeErr,
 				serverReturned:   &server.returned,
 				schedulerStopped: scheduler.stopped,
 				agentStopped:     agent.stopped,
+				containerClosed:  &container.closed,
 			}
 			controller := &Controller{
-				Config:    config.DefaultControllerConfig(),
-				server:    server,
-				agent:     agent,
-				scheduler: scheduler,
-				store:     store,
+				Config:     config.DefaultControllerConfig(),
+				server:     server,
+				agent:      agent,
+				scheduler:  scheduler,
+				localAgent: localAgent,
+				container:  container,
+				store:      store,
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -108,6 +119,15 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 
 			if store.closeCalls != 1 {
 				t.Fatalf("Store.Close calls = %d, want 1", store.closeCalls)
+			}
+			if container.closeCalls != 1 {
+				t.Fatalf("Agent container Close calls = %d, want 1", container.closeCalls)
+			}
+			if container.closedBeforeLocalAgentStopped {
+				t.Fatal("Agent container Close ran before local Agent reconciliation stopped")
+			}
+			if store.closedBeforeContainer {
+				t.Fatal("Store.Close ran before the Agent container client closed")
 			}
 			if store.closedBeforeServerReturned {
 				t.Fatal("Store.Close ran before Server.Serve returned")
@@ -144,6 +164,9 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 					errors.Is(err, closeFailure),
 					test.wantClose,
 				)
+			}
+			if errors.Is(err, containerFailure) != test.wantContainer {
+				t.Fatalf("Controller.Run error = %v, want Docker close failure", err)
 			}
 		})
 	}
@@ -188,9 +211,11 @@ type fakeOwnedStore struct {
 	serverReturned               *bool
 	schedulerStopped             <-chan struct{}
 	agentStopped                 <-chan struct{}
+	containerClosed              *bool
 	closedBeforeServerReturned   bool
 	closedBeforeSchedulerStopped bool
 	closedBeforeAgentStopped     bool
+	closedBeforeContainer        bool
 }
 
 func (s *fakeOwnedStore) Close() error {
@@ -206,5 +231,25 @@ func (s *fakeOwnedStore) Close() error {
 	default:
 		s.closedBeforeAgentStopped = true
 	}
+	s.closedBeforeContainer = !*s.containerClosed
 	return s.err
+}
+
+type fakeOwnedContainer struct {
+	err                           error
+	closeCalls                    int
+	closed                        bool
+	localAgentStopped             <-chan struct{}
+	closedBeforeLocalAgentStopped bool
+}
+
+func (container *fakeOwnedContainer) Close() error {
+	container.closeCalls++
+	select {
+	case <-container.localAgentStopped:
+	default:
+		container.closedBeforeLocalAgentStopped = true
+	}
+	container.closed = true
+	return container.err
 }
