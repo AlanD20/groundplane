@@ -161,8 +161,20 @@ func (c *Client) Run(ctx context.Context) error {
 				return nil
 			}
 			receiveNext(streamCtx, stream, received)
-		case result := <-c.pool.Results():
-			if err := c.sendTaskAck(stream, result); err != nil {
+		case output := <-c.pool.Outputs():
+			if output.Progress != nil {
+				if output.Result != nil {
+					return errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+				}
+				if err := c.sendTaskEvent(stream, *output.Progress); err != nil {
+					return transportError(ctx, "agent: send task event")
+				}
+				continue
+			}
+			if output.Result == nil {
+				return errs.New(errs.KindInternal, "agent: worker returned an empty output")
+			}
+			if err := c.sendTaskAck(stream, *output.Result); err != nil {
 				return transportError(ctx, "agent: send task acknowledgement")
 			}
 			if err := c.sendReady(stream); err != nil {
@@ -170,6 +182,31 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (c *Client) sendTaskEvent(stream agentStream, progress TaskProgress) error {
+	state := agentpb.TaskState_TASK_STATE_UNSPECIFIED
+	switch progress.State {
+	case TaskProgressRunning:
+		state = agentpb.TaskState_TASK_STATE_RUNNING
+	case TaskProgressCompleted:
+		state = agentpb.TaskState_TASK_STATE_COMPLETED
+	case TaskProgressFailed:
+		state = agentpb.TaskState_TASK_STATE_FAILED
+	case TaskProgressTimedOut:
+		state = agentpb.TaskState_TASK_STATE_TIMED_OUT
+	case TaskProgressAborted:
+		state = agentpb.TaskState_TASK_STATE_ABORTED
+	default:
+		return errs.New(errs.KindInternal, "agent: worker returned an invalid progress state")
+	}
+	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskEvent{
+		TaskEvent: &agentpb.TaskEvent{
+			TaskId: progress.TaskID, PlanHash: append([]byte(nil), progress.PlanHash[:]...),
+			StepId: progress.StepID, Attempt: progress.Attempt, Ordinal: progress.Ordinal,
+			State: state, Chunk: append([]byte(nil), progress.Chunk...),
+		},
+	}})
 }
 
 func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {

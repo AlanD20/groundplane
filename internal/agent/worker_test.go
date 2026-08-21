@@ -62,7 +62,7 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 	if err := pool.Abort(ctx, workerTestTaskID); err != nil {
 		t.Fatalf("Abort() error = %v", err)
 	}
-	result := <-pool.Results()
+	result := nextWorkerResult(t, pool)
 	if result.TaskID != workerTestTaskID || result.PlanHash != assignment.PlanHash || result.Terminal != TaskTerminalAborted {
 		t.Fatalf("result = %#v", result)
 	}
@@ -101,7 +101,7 @@ func TestWorkerPoolRetainsQueuedAbortAndReservationCapacity(t *testing.T) {
 		pool.Run(ctx)
 		close(done)
 	}()
-	result := <-pool.Results()
+	result := nextWorkerResult(t, pool)
 	if result.Terminal != TaskTerminalAborted {
 		t.Fatalf("terminal = %v, want aborted", result.Terminal)
 	}
@@ -180,5 +180,19 @@ func workerAssignment(taskID, plan string) Assignment {
 			Step:   adapters.Step{Op: adapters.StepAck},
 		}},
 		Timeout: time.Minute,
+	}
+}
+
+func nextWorkerResult(t *testing.T, pool *WorkerPool) TaskResult {
+	t.Helper()
+	for {
+		select {
+		case output := <-pool.Outputs():
+			if output.Result != nil {
+				return *output.Result
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for worker result")
+		}
 	}
 }

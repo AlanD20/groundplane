@@ -45,6 +45,33 @@ type TaskResult struct {
 	Result   []byte
 }
 
+type TaskProgressState uint8
+
+const (
+	TaskProgressRunning TaskProgressState = iota + 1
+	TaskProgressCompleted
+	TaskProgressFailed
+	TaskProgressTimedOut
+	TaskProgressAborted
+)
+
+type TaskProgress struct {
+	TaskID   string
+	PlanHash PlanHash
+	StepID   string
+	Attempt  uint32
+	Ordinal  uint64
+	State    TaskProgressState
+	Chunk    []byte
+}
+
+// WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
+// each Task's terminal step progress is emitted before its final result.
+type WorkerOutput struct {
+	Progress *TaskProgress
+	Result   *TaskResult
+}
+
 type taskReservation struct {
 	assignment Assignment
 	ctx        context.Context
@@ -57,7 +84,7 @@ type WorkerPool struct {
 	runner      runner.Runner
 	logger      *slog.Logger
 	work        chan *taskReservation
-	results     chan TaskResult
+	outputs     chan WorkerOutput
 	executeStep func(context.Context, adapters.Step) error
 
 	mu           sync.Mutex
@@ -72,7 +99,7 @@ func NewWorkerPool(size int, taskRunner runner.Runner, logger *slog.Logger) *Wor
 		runner:       taskRunner,
 		logger:       logger,
 		work:         make(chan *taskReservation, size),
-		results:      make(chan TaskResult, size),
+		outputs:      make(chan WorkerOutput, size),
 		reservations: make(map[string]*taskReservation, size),
 	}
 	pool.executeStep = pool.runStep
@@ -85,8 +112,8 @@ func (p *WorkerPool) Capacity() int {
 	return p.size - len(p.reservations)
 }
 
-func (p *WorkerPool) Results() <-chan TaskResult {
-	return p.results
+func (p *WorkerPool) Outputs() <-chan WorkerOutput {
+	return p.outputs
 }
 
 // Run owns and joins every worker before returning.
@@ -130,7 +157,16 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		if err != nil {
 			break
 		}
+		p.emitProgress(runCtx, TaskProgress{
+			TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash,
+			StepID: step.StepID, Attempt: 1, Ordinal: 1, State: TaskProgressRunning,
+		})
 		err = p.executeStep(reservation.ctx, step.Step)
+		p.emitProgress(runCtx, TaskProgress{
+			TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash,
+			StepID: step.StepID, Attempt: 1, Ordinal: 2,
+			State: progressStateFor(reservation.ctx, err),
+		})
 	}
 	terminal := terminalFor(reservation.ctx, err)
 	if err != nil && terminal == TaskTerminalFailed && p.logger != nil {
@@ -154,9 +190,35 @@ func terminalFor(taskCtx context.Context, err error) TaskTerminal {
 	return TaskTerminalCompleted
 }
 
-func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
+func progressStateFor(taskCtx context.Context, err error) TaskProgressState {
+	switch terminalFor(taskCtx, err) {
+	case TaskTerminalCompleted:
+		return TaskProgressCompleted
+	case TaskTerminalFailed:
+		return TaskProgressFailed
+	case TaskTerminalTimedOut:
+		return TaskProgressTimedOut
+	case TaskTerminalAborted:
+		return TaskProgressAborted
+	default:
+		return 0
+	}
+}
+
+func (p *WorkerPool) emitProgress(runCtx context.Context, progress TaskProgress) {
+	owned := progress
+	owned.Chunk = append([]byte(nil), progress.Chunk...)
 	select {
-	case p.results <- result:
+	case p.outputs <- WorkerOutput{Progress: &owned}:
+	case <-runCtx.Done():
+	}
+}
+
+func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
+	owned := result
+	owned.Result = append([]byte(nil), result.Result...)
+	select {
+	case p.outputs <- WorkerOutput{Result: &owned}:
 	case <-runCtx.Done():
 	}
 	p.mu.Lock()

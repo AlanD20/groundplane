@@ -437,9 +437,10 @@ type TaskEvent struct {
 	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	PlanHash      []byte                 `protobuf:"bytes,2,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"` // exactly 32 immutable SHA-256 bytes
 	StepId        string                 `protobuf:"bytes,3,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	Sequence      uint64                 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"` // positive and monotonic within this task attempt
-	State         TaskState              `protobuf:"varint,5,opt,name=state,proto3,enum=groundplane.agent.v1.TaskState" json:"state,omitempty"`
-	Chunk         []byte                 `protobuf:"bytes,6,opt,name=chunk,proto3" json:"chunk,omitempty"` // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
+	Attempt       uint32                 `protobuf:"varint,4,opt,name=attempt,proto3" json:"attempt,omitempty"` // one-based execution attempt for this step
+	Ordinal       uint64                 `protobuf:"varint,5,opt,name=ordinal,proto3" json:"ordinal,omitempty"` // one-based stable delivery identity within the step attempt
+	State         TaskState              `protobuf:"varint,6,opt,name=state,proto3,enum=groundplane.agent.v1.TaskState" json:"state,omitempty"`
+	Chunk         []byte                 `protobuf:"bytes,7,opt,name=chunk,proto3" json:"chunk,omitempty"` // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -495,9 +496,16 @@ func (x *TaskEvent) GetStepId() string {
 	return ""
 }
 
-func (x *TaskEvent) GetSequence() uint64 {
+func (x *TaskEvent) GetAttempt() uint32 {
 	if x != nil {
-		return x.Sequence
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *TaskEvent) GetOrdinal() uint64 {
+	if x != nil {
+		return x.Ordinal
 	}
 	return 0
 }
@@ -1158,14 +1166,15 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\btask_ack\x18\x05 \x01(\v2\x1d.groundplane.agent.v1.TaskAckH\x00R\ataskAckB\t\n" +
 	"\apayload\"#\n" +
 	"\x05Ready\x12\x1a\n" +
-	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\"\xc3\x01\n" +
+	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\"\xdb\x01\n" +
 	"\tTaskEvent\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12\x17\n" +
-	"\astep_id\x18\x03 \x01(\tR\x06stepId\x12\x1a\n" +
-	"\bsequence\x18\x04 \x01(\x04R\bsequence\x125\n" +
-	"\x05state\x18\x05 \x01(\x0e2\x1f.groundplane.agent.v1.TaskStateR\x05state\x12\x14\n" +
-	"\x05chunk\x18\x06 \x01(\fR\x05chunk\"U\n" +
+	"\astep_id\x18\x03 \x01(\tR\x06stepId\x12\x18\n" +
+	"\aattempt\x18\x04 \x01(\rR\aattempt\x12\x18\n" +
+	"\aordinal\x18\x05 \x01(\x04R\aordinal\x125\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x1f.groundplane.agent.v1.TaskStateR\x05state\x12\x14\n" +
+	"\x05chunk\x18\a \x01(\fR\x05chunk\"U\n" +
 	"\rObservedState\x12D\n" +
 	"\n" +
 	"containers\x18\x01 \x03(\v2$.groundplane.agent.v1.ContainerStateR\n" +

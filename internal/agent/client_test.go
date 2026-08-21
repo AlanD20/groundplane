@@ -71,7 +71,11 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 		t.Fatal("client did not send TaskAck")
 	}
 	var acknowledgement *agentpb.TaskAck
+	var events []*agentpb.TaskEvent
 	for _, message := range stream.sentMessages() {
+		if message.GetTaskEvent() != nil {
+			events = append(events, message.GetTaskEvent())
+		}
 		if message.GetTaskAck() != nil {
 			acknowledgement = message.GetTaskAck()
 		}
@@ -80,6 +84,12 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 		!bytes.Equal(acknowledgement.PlanHash, planHash[:]) ||
 		acknowledgement.Terminal != agentpb.TaskTerminal_TASK_TERMINAL_FAILED {
 		t.Fatalf("TaskAck = %#v", acknowledgement)
+	}
+	if len(events) != 2 || events[0].Attempt != 1 || events[0].Ordinal != 1 ||
+		events[0].State != agentpb.TaskState_TASK_STATE_RUNNING ||
+		events[1].Attempt != 1 || events[1].Ordinal != 2 ||
+		events[1].State != agentpb.TaskState_TASK_STATE_FAILED {
+		t.Fatalf("TaskEvents = %#v", events)
 	}
 	cancel()
 	if err := <-result; err != nil {
@@ -249,6 +259,13 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 			Result: append([]byte(nil), acknowledgement.Result...),
 		}}
 		s.taskAckOnce.Do(func() { close(s.taskAckSent) })
+	}
+	if event := message.GetTaskEvent(); event != nil {
+		copyMessage.Payload = &agentpb.AgentMessage_TaskEvent{TaskEvent: &agentpb.TaskEvent{
+			TaskId: event.TaskId, PlanHash: append([]byte(nil), event.PlanHash...),
+			StepId: event.StepId, Attempt: event.Attempt, Ordinal: event.Ordinal,
+			State: event.State, Chunk: append([]byte(nil), event.Chunk...),
+		}}
 	}
 	s.sent = append(s.sent, copyMessage)
 	return nil

@@ -50,9 +50,10 @@ message TaskEvent {
   string task_id = 1;
   bytes plan_hash = 2; // exactly 32 immutable SHA-256 bytes
   string step_id = 3;
-  uint64 sequence = 4; // positive and monotonic within this task attempt
-  TaskState state = 5;
-  bytes chunk = 6; // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
+  uint32 attempt = 4; // one-based execution attempt for this step
+  uint64 ordinal = 5; // one-based stable delivery identity within the step attempt
+  TaskState state = 6;
+  bytes chunk = 7; // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
 }
 
 enum TaskState {

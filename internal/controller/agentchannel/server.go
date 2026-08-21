@@ -43,6 +43,7 @@ type TaskStore interface {
 	ListAgentAssignments(context.Context, string, uint64, int32) ([]etcd.TaskAssignment, error)
 	ClaimNextTask(context.Context, string, uint64, time.Time) (etcd.TaskAssignment, bool, error)
 	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	AppendTaskEvent(context.Context, etcd.TaskEventInput, time.Time) (etcd.TaskEventAppend, error)
 	AcknowledgeTask(
 		context.Context,
 		string,
@@ -197,12 +198,67 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				delete(delivered, acknowledgement.TaskId)
 				continue
 			}
-			if result.message.GetTaskEvent() != nil || result.message.GetObservedState() != nil {
+			if event := result.message.GetTaskEvent(); event != nil {
+				if s.tasks == nil {
+					return status.Error(codes.Internal, "agent task store is not configured")
+				}
+				if err := s.recordTaskEvent(stream.Context(), event); err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if result.message.GetObservedState() != nil {
 				return status.Error(codes.Unimplemented, "authenticated agent message is not implemented")
 			}
 			return status.Error(codes.InvalidArgument, "authenticated agent message is empty")
 		}
 	}
+}
+
+func (s *Server) recordTaskEvent(ctx context.Context, event *agentpb.TaskEvent) error {
+	if event == nil || len(event.PlanHash) != 32 || event.Attempt == 0 || event.Ordinal == 0 {
+		return errs.New(errs.KindValidationFailed, "Agent Task event is invalid")
+	}
+	if len(event.Chunk) != 0 {
+		return status.Error(codes.Unimplemented, "ephemeral Task output streaming is not implemented")
+	}
+	task, err := s.tasks.GetTask(ctx, event.TaskId)
+	if err != nil {
+		return err
+	}
+	planHash, err := hex.DecodeString(task.Record.PlanHash)
+	if err != nil || !bytes.Equal(planHash, event.PlanHash) {
+		return errs.New(errs.KindStateConflict, "Agent Task event plan hash does not match")
+	}
+	if task.Record.Status != etcd.TaskStatusRunning {
+		return errs.New(errs.KindStateConflict, "Agent Task event does not belong to a running Task")
+	}
+	var state etcd.TaskEventState
+	switch event.State {
+	case agentpb.TaskState_TASK_STATE_PENDING:
+		state = etcd.TaskEventStatePending
+	case agentpb.TaskState_TASK_STATE_RUNNING:
+		state = etcd.TaskEventStateRunning
+	case agentpb.TaskState_TASK_STATE_COMPLETED:
+		state = etcd.TaskEventStateCompleted
+	case agentpb.TaskState_TASK_STATE_FAILED:
+		state = etcd.TaskEventStateFailed
+	case agentpb.TaskState_TASK_STATE_ABORTED:
+		state = etcd.TaskEventStateAborted
+	case agentpb.TaskState_TASK_STATE_TIMED_OUT:
+		state = etcd.TaskEventStateTimedOut
+	default:
+		return errs.New(errs.KindValidationFailed, "Agent Task event state is invalid")
+	}
+	_, err = s.tasks.AppendTaskEvent(ctx, etcd.TaskEventInput{
+		Identity: etcd.TaskEventIdentity{
+			TaskID: event.TaskId, StepID: event.StepId,
+			Attempt: event.Attempt, Ordinal: event.Ordinal,
+		},
+		State:   state,
+		Payload: json.RawMessage(`{}`),
+	}, s.now().UTC())
+	return err
 }
 
 func (s *Server) dispatchReady(

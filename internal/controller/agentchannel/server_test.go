@@ -41,6 +41,7 @@ type fakeTaskStore struct {
 	ackGeneration uint64
 	ackTaskID     string
 	ackTerminal   etcd.TaskStatus
+	events        []etcd.TaskEventInput
 }
 
 func (store *fakeTaskStore) ListAgentAssignments(
@@ -75,6 +76,15 @@ func (store *fakeTaskStore) GetTask(
 		return etcd.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "missing")
 	}
 	return task, nil
+}
+
+func (store *fakeTaskStore) AppendTaskEvent(
+	_ context.Context,
+	input etcd.TaskEventInput,
+	_ time.Time,
+) (etcd.TaskEventAppend, error) {
+	store.events = append(store.events, input)
+	return etcd.TaskEventAppend{Sequence: uint64(len(store.events)), Revision: 6}, nil
 }
 
 func (store *fakeTaskStore) AcknowledgeTask(
@@ -363,6 +373,10 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
 		authenticateMessage(testAgentID, testToken(8)),
 		readyMessage(1),
+		{Payload: &agentpb.AgentMessage_TaskEvent{TaskEvent: &agentpb.TaskEvent{
+			TaskId: taskID, PlanHash: planHash, StepId: task.Steps[0].ID,
+			Attempt: 1, Ordinal: 2, State: agentpb.TaskState_TASK_STATE_COMPLETED,
+		}}},
 		{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
 			TaskId: taskID, PlanHash: planHash,
 			Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
@@ -393,6 +407,15 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 			tasks.ackTaskID,
 			tasks.ackTerminal,
 		)
+	}
+	if len(tasks.events) != 1 ||
+		tasks.events[0].Identity.TaskID != task.ID ||
+		tasks.events[0].Identity.StepID != task.Steps[0].ID ||
+		tasks.events[0].Identity.Attempt != 1 ||
+		tasks.events[0].Identity.Ordinal != 2 ||
+		tasks.events[0].State != etcd.TaskEventStateCompleted ||
+		!bytes.Equal(tasks.events[0].Payload, []byte(`{}`)) {
+		t.Fatalf("persisted Task events = %#v", tasks.events)
 	}
 }
 
