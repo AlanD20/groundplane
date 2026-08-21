@@ -1,0 +1,175 @@
+package app
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/internal/controller/localagent"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type localAgentRecords interface {
+	CreateSingleton(context.Context, etcd.LocalAgentRecord) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	MarkReady(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	BeginDelete(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	Delete(context.Context, string, uint64, int64) error
+}
+
+// localAgentRepositoryAdapter owns all translation between the lifecycle
+// aggregate and its etcd representation. Secret-bearing byte slices and label
+// maps are copied at both boundaries so neither package shares mutable storage.
+type localAgentRepositoryAdapter struct {
+	repository localAgentRecords
+}
+
+func newLocalAgentRepositoryAdapter(repository localAgentRecords) (*localAgentRepositoryAdapter, error) {
+	if repository == nil {
+		return nil, errs.New(errs.KindInternal, "local agent durable repository is required")
+	}
+	return &localAgentRepositoryAdapter{repository: repository}, nil
+}
+
+func (adapter *localAgentRepositoryAdapter) CreateSingleton(
+	ctx context.Context,
+	record localagent.Record,
+) (localagent.StoredRecord, error) {
+	durable, err := localAgentRecordToDurable(record)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	stored, err := adapter.repository.CreateSingleton(ctx, durable)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) GetSingleton(
+	ctx context.Context,
+) (localagent.StoredRecord, error) {
+	stored, err := adapter.repository.GetSingleton(ctx)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) MarkReady(
+	ctx context.Context,
+	id string,
+	generation uint64,
+	revision int64,
+) (localagent.StoredRecord, error) {
+	stored, err := adapter.repository.MarkReady(ctx, id, generation, revision)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) BeginDelete(
+	ctx context.Context,
+	id string,
+	generation uint64,
+	revision int64,
+) (localagent.StoredRecord, error) {
+	stored, err := adapter.repository.BeginDelete(ctx, id, generation, revision)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) Delete(
+	ctx context.Context,
+	id string,
+	generation uint64,
+	revision int64,
+) error {
+	return adapter.repository.Delete(ctx, id, generation, revision)
+}
+
+func localAgentRecordToDurable(record localagent.Record) (etcd.LocalAgentRecord, error) {
+	phase, err := localAgentPhaseToDurable(record.Phase)
+	if err != nil {
+		return etcd.LocalAgentRecord{}, err
+	}
+	return etcd.LocalAgentRecord{
+		ID: record.ID, Image: record.Image, Generation: record.Generation, Phase: phase,
+		Config: etcd.LocalAgentConfig{
+			PullIntervalSeconds: record.Config.PullIntervalSeconds,
+			MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
+			Labels:              cloneLocalAgentLabels(record.Config.Labels),
+		},
+		EncryptedToken: append([]byte(nil), record.Credential.EncryptedToken...),
+		TokenDigest:    record.Credential.Digest,
+		CreatedAt:      record.CreatedAt,
+		TokenUpdatedAt: record.CreatedAt,
+	}, nil
+}
+
+func localAgentRecordFromDurable(
+	stored etcd.Versioned[etcd.LocalAgentRecord],
+) (localagent.StoredRecord, error) {
+	phase, err := localAgentPhaseFromDurable(stored.Record.Phase)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localagent.StoredRecord{
+		Record: localagent.Record{
+			ID: stored.Record.ID, Image: stored.Record.Image,
+			Generation: stored.Record.Generation, Phase: phase,
+			Config: localagent.Config{
+				PullIntervalSeconds: stored.Record.Config.PullIntervalSeconds,
+				MaxConcurrentTasks:  stored.Record.Config.MaxConcurrentTasks,
+				Labels:              cloneLocalAgentLabels(stored.Record.Config.Labels),
+			},
+			Credential: localagent.Credential{
+				EncryptedToken: append([]byte(nil), stored.Record.EncryptedToken...),
+				Digest:         stored.Record.TokenDigest,
+			},
+			CreatedAt: stored.Record.CreatedAt,
+		},
+		Revision: stored.Revision,
+	}, nil
+}
+
+func localAgentPhaseToDurable(phase localagent.Phase) (etcd.LocalAgentPhase, error) {
+	switch phase {
+	case localagent.PhaseProvisioning:
+		return etcd.LocalAgentPhaseProvisioning, nil
+	case localagent.PhaseReady:
+		return etcd.LocalAgentPhaseReady, nil
+	case localagent.PhaseDeleting:
+		return etcd.LocalAgentPhaseDeleting, nil
+	default:
+		return "", errs.New(errs.KindInternal, "local agent lifecycle phase is invalid")
+	}
+}
+
+func localAgentPhaseFromDurable(phase etcd.LocalAgentPhase) (localagent.Phase, error) {
+	switch phase {
+	case etcd.LocalAgentPhaseProvisioning:
+		return localagent.PhaseProvisioning, nil
+	case etcd.LocalAgentPhaseReady:
+		return localagent.PhaseReady, nil
+	case etcd.LocalAgentPhaseDeleting:
+		return localagent.PhaseDeleting, nil
+	default:
+		return "", errs.New(errs.KindInternal, "durable local agent phase is invalid")
+	}
+}
+
+func cloneLocalAgentLabels(labels map[string]string) map[string]string {
+	if labels == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(labels))
+	for key, value := range labels {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+var _ localagent.Repository = (*localAgentRepositoryAdapter)(nil)
