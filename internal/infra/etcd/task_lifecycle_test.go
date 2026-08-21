@@ -97,6 +97,88 @@ func TestTaskRepositoryCreatesAndReplaysAtomicTask(t *testing.T) {
 	}
 }
 
+func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	source := validTaskRecord(taskJournalTime())
+	createLifecycleTask(t, repository, source)
+	terminalAt := source.CreatedAt.Add(time.Second)
+	if _, err := repository.AbortPendingTask(ctx, source.ID, terminalAt); err != nil {
+		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+
+	retryID := ids.NewAt(ids.KindTask, terminalAt.Add(time.Second), 601)
+	marker := pendingRetryMarker(source, retryID, terminalAt.Add(time.Second), "retry-request-key-0001")
+	result, err := repository.RetryTask(ctx, source.ID, retryID, marker)
+	if err != nil {
+		t.Fatalf("RetryTask() error = %v", err)
+	}
+	outcome, _, conflict, classifyErr := result.Classify()
+	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+		t.Fatalf("RetryTask() outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+	}
+	persisted, err := repository.GetTask(ctx, retryID)
+	if err != nil {
+		t.Fatalf("GetTask(retry) error = %v", err)
+	}
+	if persisted.Record.RetryOf != source.ID || persisted.Record.OperationID != source.OperationID ||
+		persisted.Record.IdempotencyKey != source.IdempotencyKey ||
+		persisted.Record.PlanID != source.PlanID || persisted.Record.PlanHash != source.PlanHash ||
+		persisted.Record.Status != TaskStatusPending || persisted.Record.idempotencyMarker == nil ||
+		*persisted.Record.idempotencyMarker != marker.Locator {
+		t.Fatalf("persisted retry = %#v", persisted.Record)
+	}
+	assertTaskLifecycleValue(t, store, taskOperationIndexKey(source.OperationID, retryID), true)
+	assertTaskLifecycleValue(t, store, taskActiveOperationKey(source.OperationID), true)
+	assertTaskLifecycleValue(t, store, taskQueueKey(retryID), true)
+
+	replayID := ids.NewAt(ids.KindTask, terminalAt.Add(2*time.Second), 602)
+	replayMarker := pendingRetryMarker(source, replayID, terminalAt.Add(2*time.Second), marker.Locator.Key)
+	replay, err := repository.RetryTask(ctx, source.ID, replayID, replayMarker)
+	if err != nil {
+		t.Fatalf("RetryTask(replay) error = %v", err)
+	}
+	replayOutcome, existing, replayConflict, replayErr := replay.Classify()
+	if replayErr != nil || replayConflict != nil || replayOutcome != IdempotencyKnownExisting ||
+		existing.TaskID != retryID || existing.State != IdempotencyMarkerPending {
+		t.Fatalf(
+			"RetryTask(replay) outcome/marker/conflict/error = %v/%#v/%v/%v",
+			replayOutcome,
+			existing,
+			replayConflict,
+			replayErr,
+		)
+	}
+	assertTaskLifecycleValue(t, store, taskKey(replayID), false)
+
+	conflictID := ids.NewAt(ids.KindTask, terminalAt.Add(3*time.Second), 603)
+	conflictMarker := pendingRetryMarker(
+		source,
+		conflictID,
+		terminalAt.Add(3*time.Second),
+		"second-retry-key-0001",
+	)
+	conflicted, err := repository.RetryTask(ctx, source.ID, conflictID, conflictMarker)
+	if err != nil {
+		t.Fatalf("RetryTask(active retry) error = %v", err)
+	}
+	conflictOutcome, _, domainConflict, conflictErr := conflicted.Classify()
+	if conflictErr != nil || conflictOutcome != IdempotencyKnownConflict ||
+		!errors.Is(domainConflict, errs.New(errs.KindTaskRetryInFlight, "")) {
+		t.Fatalf(
+			"RetryTask(active retry) outcome/conflict/error = %v/%v/%v",
+			conflictOutcome,
+			domainConflict,
+			conflictErr,
+		)
+	}
+	assertTaskLifecycleValue(t, store, taskKey(conflictID), false)
+}
+
 func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
@@ -306,6 +388,20 @@ func pendingTaskMarker(task TaskRecord) IdempotencyMarker {
 		},
 		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}
+}
+
+func pendingRetryMarker(source TaskRecord, retryID string, createdAt time.Time, key string) IdempotencyMarker {
+	marker := pendingTaskMarker(source)
+	marker.Locator.Method = http.MethodPost
+	marker.Locator.Route = "/tasks/{task}/retry"
+	marker.Locator.Key = key
+	marker.TaskID = retryID
+	marker.CreatedAt = createdAt
+	marker.UpdatedAt = createdAt
+	marker.Response.Body, _ = json.Marshal(struct {
+		TaskID string `json:"task_id"`
+	}{TaskID: retryID})
+	return marker
 }
 
 func assertTaskLifecycleValue(t *testing.T, store *memoryTaskStore, key string, want bool) {

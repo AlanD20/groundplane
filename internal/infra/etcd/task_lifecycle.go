@@ -185,6 +185,112 @@ func classifyTaskCreateConflict(operationID string) idempotencyPlanClassifier {
 	}
 }
 
+// RetryTask atomically clones one retryable terminal attempt and publishes the
+// new Task, immutable history index, active-operation index, FIFO queue
+// membership, and the retry request's protected idempotency marker. The Task's
+// operation idempotency key remains the original operation key; its private
+// marker locator identifies this retry request for exact HTTP replay.
+func (repository *TaskRepository) RetryTask(
+	ctx context.Context,
+	sourceTaskID string,
+	retryTaskID string,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if validateStableID(ids.KindTask, sourceTaskID) != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "source Task id is invalid")
+	}
+	source, err := repository.GetTask(ctx, sourceTaskID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	retry, err := cloneRetryTask(source.Record, retryTaskID, marker.CreatedAt)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Task retry marker does not match its Task",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	if err := validateTaskRecord(retry); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+
+	taskValue, err := encodeTaskRecord(retry)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskValue)
+	reference, err := encodeTaskReference(retry.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(reference)
+	conditions := []Condition{
+		{Key: taskKey(sourceTaskID), ModRevision: source.Revision},
+		{Key: taskKey(retry.ID)},
+		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
+		{Key: taskActiveOperationKey(retry.OperationID)},
+		{Key: taskQueueKey(retry.ID)},
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
+		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: MutationPut, Key: taskQueueKey(retry.ID), Value: reference},
+	}
+	plan, err := newTaskIdempotencyMutationPlan(
+		conditions,
+		mutations,
+		classifyTaskRetryConflict(sourceTaskID, retry.OperationID),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func classifyTaskRetryConflict(sourceTaskID string, operationID string) idempotencyPlanClassifier {
+	return func(_ int64, values []*KeyValue) error {
+		if len(values) != 5 {
+			return errs.New(errs.KindInternal, "Task retry compare evidence is incomplete")
+		}
+		if values[0] == nil {
+			return errs.Newf(errs.KindTaskNotFound, "task not found: %s", sourceTaskID)
+		}
+		if values[3] != nil {
+			activeTaskID, err := decodeTaskReference(values[3].Value)
+			if err != nil {
+				return err
+			}
+			return errs.Newf(
+				errs.KindTaskRetryInFlight,
+				"operation %s already has active retry %s",
+				operationID,
+				activeTaskID,
+			)
+		}
+		if values[1] != nil || values[2] != nil || values[4] != nil {
+			return errs.New(errs.KindInternal, "Task retry collided with durable Task state")
+		}
+		return errs.New(errs.KindStateConflict, "source Task changed while creating its retry")
+	}
+}
+
 // ClaimNextTask claims the oldest queued Task by ascending ULID. Queue
 // membership, pending Task state, active-operation membership, and the absent
 // assignment are compared in the same transaction.
