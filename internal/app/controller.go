@@ -137,7 +137,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Agent channel authenticator: %w", err)
 	}
 
-	srv := controller.New(store, logger, controller.Options{Console: consoleAssets})
+	srv := controller.New(store, logger, controller.Options{Console: consoleAssets, Tasks: tasks})
 
 	return &Controller{
 		Config:    cfg,

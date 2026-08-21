@@ -7,6 +7,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -33,12 +34,19 @@ type Server struct {
 	host          HostReader
 	console       fs.FS
 	dispatcher    *Dispatcher
+	tasks         taskQueries
 	routePolicies map[string]routePolicy
 }
 
 type Options struct {
 	Host    HostReader
 	Console fs.FS
+	Tasks   *etcd.TaskRepository
+}
+
+type taskQueries interface {
+	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 }
 
 func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
@@ -58,6 +66,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		host:          options.Host,
 		console:       options.Console,
 		dispatcher:    NewDispatcher(),
+		tasks:         options.Tasks,
 		routePolicies: make(map[string]routePolicy),
 	}
 	s.routes()
@@ -197,7 +206,7 @@ func (s *Server) routes() {
 
 	// task / activity
 	mux.HandleFunc("GET /api/v1/tasks", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/tasks/{id}", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/tasks/{id}", s.taskShow)
 	s.streamRoute("GET /api/v1/tasks/{id}/events", s.notImplemented)
 	s.jsonRoute("POST /api/v1/tasks/{id}/retry", s.retryTask)
 	s.jsonRoute("POST /api/v1/tasks/{id}/abort", s.acceptTask)
@@ -230,6 +239,109 @@ func (s *Server) retryTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	if err := json.NewEncoder(w).Encode(apiTypes.TaskAccepted{TaskID: task.ID}); err != nil {
 		s.Logger.Error("controller: write retry response", slog.Any("error", err))
+	}
+}
+
+func (s *Server) taskShow(w http.ResponseWriter, r *http.Request) {
+	if s.tasks == nil {
+		s.writeProblem(w, errs.New(errs.KindInternal, "Task repository is not configured"))
+		return
+	}
+	task, err := s.tasks.GetTask(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.writeTaskProblem(w, err)
+		return
+	}
+	events, err := s.tasks.ListTaskEvents(r.Context(), task.Record.ID, task.ReadRevision)
+	if err != nil {
+		s.writeTaskProblem(w, err)
+		return
+	}
+	response, err := taskResponse(task.Record, events)
+	if err != nil {
+		s.writeTaskProblem(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.Logger.Error("controller: write Task response", slog.Any("error", err))
+	}
+}
+
+func (s *Server) writeTaskProblem(w http.ResponseWriter, err error) {
+	var domainError *errs.Error
+	if errors.As(err, &domainError) {
+		s.writeProblem(w, domainError)
+		return
+	}
+	s.writeProblem(w, errs.Wrap(errs.KindInternal, err))
+}
+
+func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiTypes.Task, error) {
+	status, err := taskAPIStatus(record.Status)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
+	stepStatus := make(map[string]apiTypes.TaskStatus, len(record.Steps))
+	for _, step := range record.Steps {
+		stepStatus[step.ID] = apiTypes.TaskPending
+	}
+	for _, event := range snapshot.Events {
+		mapped, err := taskEventAPIStatus(event.State)
+		if err != nil {
+			return apiTypes.Task{}, err
+		}
+		if _, exists := stepStatus[event.Identity.StepID]; !exists {
+			return apiTypes.Task{}, errs.New(errs.KindInternal, "Task event references an unknown step")
+		}
+		stepStatus[event.Identity.StepID] = mapped
+	}
+	response := apiTypes.Task{
+		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
+		PlanHash: record.PlanHash, Type: string(record.Type), Target: record.Target, Status: status,
+		Steps: make([]apiTypes.TaskStep, len(record.Steps)),
+	}
+	for index, step := range record.Steps {
+		response.Steps[index] = apiTypes.TaskStep{Name: step.ID, Status: stepStatus[step.ID]}
+	}
+	return response, nil
+}
+
+func taskAPIStatus(status etcd.TaskStatus) (apiTypes.TaskStatus, error) {
+	switch status {
+	case etcd.TaskStatusPending:
+		return apiTypes.TaskPending, nil
+	case etcd.TaskStatusRunning:
+		return apiTypes.TaskRunning, nil
+	case etcd.TaskStatusCompleted:
+		return apiTypes.TaskCompleted, nil
+	case etcd.TaskStatusFailed:
+		return apiTypes.TaskFailed, nil
+	case etcd.TaskStatusAborted:
+		return apiTypes.TaskAborted, nil
+	case etcd.TaskStatusTimedOut:
+		return apiTypes.TaskTimedOut, nil
+	default:
+		return "", errs.New(errs.KindInternal, "Task has an invalid durable status")
+	}
+}
+
+func taskEventAPIStatus(status etcd.TaskEventState) (apiTypes.TaskStatus, error) {
+	switch status {
+	case etcd.TaskEventStatePending:
+		return apiTypes.TaskPending, nil
+	case etcd.TaskEventStateRunning:
+		return apiTypes.TaskRunning, nil
+	case etcd.TaskEventStateCompleted:
+		return apiTypes.TaskCompleted, nil
+	case etcd.TaskEventStateFailed:
+		return apiTypes.TaskFailed, nil
+	case etcd.TaskEventStateAborted:
+		return apiTypes.TaskAborted, nil
+	case etcd.TaskEventStateTimedOut:
+		return apiTypes.TaskTimedOut, nil
+	default:
+		return "", errs.New(errs.KindInternal, "Task event has an invalid durable status")
 	}
 }
 
