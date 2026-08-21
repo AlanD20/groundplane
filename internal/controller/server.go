@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -46,6 +47,7 @@ type Options struct {
 
 type taskQueries interface {
 	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	ListTasks(context.Context, etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error)
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 }
 
@@ -205,12 +207,12 @@ func (s *Server) routes() {
 	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.acceptTask)
 
 	// task / activity
-	mux.HandleFunc("GET /api/v1/tasks", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/tasks", s.taskList)
 	mux.HandleFunc("GET /api/v1/tasks/{id}", s.taskShow)
 	s.streamRoute("GET /api/v1/tasks/{id}/events", s.notImplemented)
 	s.jsonRoute("POST /api/v1/tasks/{id}/retry", s.retryTask)
 	s.jsonRoute("POST /api/v1/tasks/{id}/abort", s.acceptTask)
-	s.streamRoute("GET /api/v1/activity", s.notImplemented) // JSON task-list alias or SSE through Accept negotiation
+	mux.HandleFunc("GET /api/v1/activity", s.taskList) // exact JSON alias of Task list
 
 	// host / agents
 	s.jsonRoute("POST /api/v1/agents", s.acceptTask)
@@ -266,6 +268,62 @@ func (s *Server) taskShow(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.Logger.Error("controller: write Task response", slog.Any("error", err))
 	}
+}
+
+func (s *Server) taskList(w http.ResponseWriter, r *http.Request) {
+	if s.tasks == nil {
+		s.writeProblem(w, errs.New(errs.KindInternal, "Task repository is not configured"))
+		return
+	}
+	if r.URL.Query().Get("environment") != "" || r.URL.Query().Get("workspace") != "" {
+		s.writeProblem(w, errs.New(errs.KindNotImplemented, "scoped Task listing is not implemented"))
+		return
+	}
+	request, err := taskPageRequest(r)
+	if err != nil {
+		s.writeTaskProblem(w, err)
+		return
+	}
+	page, err := s.tasks.ListTasks(r.Context(), request)
+	if err != nil {
+		s.writeTaskProblem(w, err)
+		return
+	}
+	response := apiTypes.Page[apiTypes.Task]{
+		Items: make([]apiTypes.Task, len(page.Items)), NextCursor: page.NextCursor,
+	}
+	for index, versioned := range page.Items {
+		record := versioned.Record
+		status, err := taskAPIStatus(record.Status)
+		if err != nil {
+			s.writeTaskProblem(w, err)
+			return
+		}
+		response.Items[index] = apiTypes.Task{
+			ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
+			PlanHash: record.PlanHash, Type: string(record.Type), Target: record.Target, Status: status,
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.Logger.Error("controller: write Task list response", slog.Any("error", err))
+	}
+}
+
+func taskPageRequest(r *http.Request) (etcd.PageRequest, error) {
+	query := r.URL.Query()
+	if len(query["limit"]) > 1 || len(query["cursor"]) > 1 {
+		return etcd.PageRequest{}, errs.New(errs.KindMalformedRequest, "Task pagination query is duplicated")
+	}
+	request := etcd.PageRequest{Cursor: query.Get("cursor")}
+	if raw := query.Get("limit"); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil {
+			return etcd.PageRequest{}, errs.New(errs.KindMalformedRequest, "Task pagination limit is invalid")
+		}
+		request.Limit = limit
+	}
+	return request, nil
 }
 
 func (s *Server) writeTaskProblem(w http.ResponseWriter, err error) {

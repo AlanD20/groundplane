@@ -17,8 +17,10 @@ import (
 )
 
 type fakeTaskQueries struct {
-	task   etcd.Versioned[etcd.TaskRecord]
-	events etcd.TaskEventSnapshot
+	task    etcd.Versioned[etcd.TaskRecord]
+	page    etcd.Page[etcd.TaskRecord]
+	request etcd.PageRequest
+	events  etcd.TaskEventSnapshot
 }
 
 func (queries *fakeTaskQueries) GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error) {
@@ -30,6 +32,11 @@ func (queries *fakeTaskQueries) GetTask(context.Context, string) (etcd.Versioned
 
 func (queries *fakeTaskQueries) ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error) {
 	return queries.events, nil
+}
+
+func (queries *fakeTaskQueries) ListTasks(_ context.Context, request etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error) {
+	queries.request = request
+	return queries.page, nil
 }
 
 func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
@@ -77,5 +84,36 @@ func TestTaskShowReturnsTaskNotFoundProblem(t *testing.T) {
 	server.Mux.ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestTaskListAndActivityShareDurablePage(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	queries := &fakeTaskQueries{page: etcd.Page[etcd.TaskRecord]{
+		Items: []etcd.Versioned[etcd.TaskRecord]{{Record: etcd.TaskRecord{
+			ID: ids.NewAt(ids.KindTask, now, 10), OperationID: ids.NewAt(ids.KindOperation, now, 11),
+			Type: etcd.TaskStop, Target: ids.NewAt(ids.KindService, now, 12), Status: etcd.TaskStatusPending,
+		}}},
+		NextCursor: "next-page",
+	}}
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	server.tasks = queries
+	for _, path := range []string{"/api/v1/tasks?limit=7&cursor=current", "/api/v1/activity?limit=7&cursor=current"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+		server.Mux.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, body = %s", path, response.Code, response.Body.String())
+		}
+		var body apiTypes.Page[apiTypes.Task]
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+			t.Fatalf("decode %s response: %v", path, err)
+		}
+		if len(body.Items) != 1 || body.Items[0].Status != apiTypes.TaskPending || body.NextCursor != "next-page" {
+			t.Fatalf("%s response = %#v", path, body)
+		}
+		if queries.request != (etcd.PageRequest{Limit: 7, Cursor: "current"}) {
+			t.Fatalf("%s request = %#v", path, queries.request)
+		}
 	}
 }
