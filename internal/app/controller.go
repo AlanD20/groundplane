@@ -144,7 +144,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Logger:    logger,
 		server:    srv,
 		agent:     newAgentChannelRuntime(authenticator, tasks),
-		scheduler: controller.NewScheduler(srv, tick),
+		scheduler: controller.NewScheduler(srv, tick, tasks),
 		store:     store,
 	}, nil
 }

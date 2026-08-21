@@ -5,8 +5,13 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+type taskExpiration interface {
+	ExpireTimedOutTasks(context.Context, time.Time) (int, error)
+}
 
 // Scheduler runs ONE tick that evaluates every backup schedule from
 // desired state and dispatches due actions to the Agent — N policies
@@ -15,10 +20,12 @@ import (
 type Scheduler struct {
 	Server   *Server
 	Interval time.Duration
+	tasks    taskExpiration
+	now      func() time.Time
 }
 
-func NewScheduler(s *Server, interval time.Duration) *Scheduler {
-	return &Scheduler{Server: s, Interval: interval}
+func NewScheduler(s *Server, interval time.Duration, tasks *etcd.TaskRepository) *Scheduler {
+	return &Scheduler{Server: s, Interval: interval, tasks: tasks, now: time.Now}
 }
 
 // Run blocks, ticking at Interval until ctx is cancelled.
@@ -37,14 +44,16 @@ func (sch *Scheduler) Run(ctx context.Context) {
 	}
 }
 
-// tick evaluates every environment's BackupPolicy.Frequency (a systemd
-// calendar expression) and dispatches a backup-run task for anything
-// due. TODO: read environments from etcd, compute next-run per policy,
-// dispatch via the same task pipeline every other action uses (see
-// server.go's acceptTask) — one well-tested path, not N ad-hoc timers.
+// tick first owns bounded runtime maintenance. BackupPolicy evaluation will
+// join this same pass once desired-state storage is wired; it must not prevent
+// overdue Task recovery from running today.
 func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return errs.New(errs.KindNotImplemented, "backup scheduler is not implemented")
+	if sch == nil || sch.tasks == nil || sch.now == nil {
+		return errs.New(errs.KindInternal, "scheduler task maintenance is not configured")
+	}
+	_, err := sch.tasks.ExpireTimedOutTasks(ctx, sch.now().UTC())
+	return err
 }
