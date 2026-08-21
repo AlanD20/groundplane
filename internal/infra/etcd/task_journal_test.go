@@ -257,7 +257,8 @@ func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 		t.Fatalf("cloneRetryTask() error = %v", err)
 	}
 	if retry.ID == failed.ID || retry.RetryOf != failed.ID || retry.OperationID != failed.OperationID ||
-		retry.IdempotencyKey != failed.IdempotencyKey || retry.PlanHash != failed.PlanHash ||
+		retry.IdempotencyKey != failed.IdempotencyKey || retry.PlanID != failed.PlanID ||
+		retry.PlanHash != failed.PlanHash || retry.RenderGeneration != failed.RenderGeneration ||
 		retry.Type != failed.Type || retry.Target != failed.Target || retry.TimeoutSeconds != failed.TimeoutSeconds ||
 		!reflect.DeepEqual(retry.Params, failed.Params) || !reflect.DeepEqual(retry.Steps, failed.Steps) {
 		t.Fatalf("retry did not preserve operation metadata: source=%#v retry=%#v", failed, retry)
@@ -342,7 +343,9 @@ func validTaskRecord(now time.Time) TaskRecord {
 		now,
 	)
 	task.IdempotencyKey = "0123456789abcdef"
+	task.PlanID = ids.NewAt(ids.KindPlan, now, 3)
 	task.PlanHash = strings.Repeat("a", 64)
+	task.RenderGeneration = 1
 	task.Params = map[string]string{"name": "migrate"}
 	task.Steps = []TaskStepRecord{{
 		ID: taskJournalStepID(), Op: "run_script", Params: map[string]string{"script": "migrate"},

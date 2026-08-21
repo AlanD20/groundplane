@@ -101,7 +101,9 @@ func (repository *TaskRepository) CreateTask(
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Task creation marker does not match its Task")
 	}
 	record = cloneTaskRecord(record)
-	record.IdempotencyKey = marker.Locator.Key
+	if record.IdempotencyKey == "" {
+		record.IdempotencyKey = marker.Locator.Key
+	}
 	record.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
 	if err := validateTaskRecord(record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -291,6 +293,97 @@ func (repository *TaskRepository) ClaimNextTask(
 			},
 		}, true, nil
 	}
+}
+
+// ListAgentAssignments restores the complete bounded assignment set for one
+// exact Agent generation at one MVCC revision. The caller supplies the
+// authorized max-concurrency bound from the Agent config.
+func (repository *TaskRepository) ListAgentAssignments(
+	ctx context.Context,
+	agentID string,
+	agentGeneration uint64,
+	maximum int32,
+) ([]TaskAssignment, error) {
+	if err := validateContext(ctx); err != nil {
+		return nil, err
+	}
+	if validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || maximum <= 0 {
+		return nil, errs.New(errs.KindValidationFailed, "Agent assignment query is invalid")
+	}
+	assignments, err := repository.store.Range(ctx, RangeRequest{
+		Prefix: taskAssignmentScopePrefix(agentID),
+		Limit:  int64(maximum) + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if assignments.More || len(assignments.Values) > int(maximum) {
+		return nil, errs.New(errs.KindInternal, "Agent assignments exceed configured concurrency")
+	}
+	if len(assignments.Values) == 0 {
+		return []TaskAssignment{}, nil
+	}
+
+	records := make([]TaskAssignmentRecord, len(assignments.Values))
+	taskKeys := make([]string, len(assignments.Values))
+	for index, value := range assignments.Values {
+		taskID, err := taskIDFromAssignmentKey(agentID, value.Key)
+		if err != nil {
+			return nil, err
+		}
+		record, err := decodeTaskAssignment(value.Value)
+		if err != nil {
+			return nil, err
+		}
+		if record.TaskID != taskID || record.AgentID != agentID {
+			return nil, errs.New(errs.KindInternal, "task assignment record does not match its key")
+		}
+		if record.AgentGeneration != agentGeneration {
+			return nil, errs.New(errs.KindStateConflict, "durable Task assignment belongs to another Agent generation")
+		}
+		if record.ClaimedTaskRevision >= value.ModRevision {
+			return nil, corruptTaskAssignment()
+		}
+		records[index] = record
+		taskKeys[index] = taskKey(taskID)
+	}
+	tasks, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: taskKeys, Revision: assignments.ReadRevision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(tasks.Values) != len(records) {
+		return nil, errs.New(errs.KindInternal, "Agent assignment Task read is incomplete")
+	}
+	result := make([]TaskAssignment, len(records))
+	for index, record := range records {
+		taskValue := tasks.Values[index]
+		if taskValue == nil {
+			return nil, errs.New(errs.KindInternal, "assigned Task primary is missing")
+		}
+		task, err := decodeTaskRecord(taskValue.Value)
+		if err != nil {
+			return nil, err
+		}
+		assignmentValue := assignments.Values[index]
+		if task.ID != record.TaskID || task.Status != TaskStatusRunning ||
+			task.StartedAt == nil || !task.StartedAt.Equal(record.AssignedAt) ||
+			taskValue.ModRevision < assignmentValue.ModRevision || task.idempotencyMarker == nil {
+			return nil, errs.New(errs.KindInternal, "durable Task assignment and Task are inconsistent")
+		}
+		result[index] = TaskAssignment{
+			Assignment: Versioned[TaskAssignmentRecord]{
+				Record: record, Revision: assignmentValue.ModRevision,
+				ReadRevision: assignments.ReadRevision,
+			},
+			Task: Versioned[TaskRecord]{
+				Record: task, Revision: taskValue.ModRevision,
+				ReadRevision: assignments.ReadRevision,
+			},
+		}
+	}
+	return result, nil
 }
 
 // AcknowledgeTask atomically records the Agent's terminal acknowledgement,

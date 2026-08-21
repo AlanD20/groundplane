@@ -121,6 +121,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
+	tasks, err := etcd.NewTaskRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Task repository: %w", err)
+	}
 
 	srv := controller.New(store, logger, controller.Options{Console: consoleAssets})
 
@@ -128,7 +133,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Config:    cfg,
 		Logger:    logger,
 		server:    srv,
-		agent:     newAgentChannelRuntime(),
+		agent:     newAgentChannelRuntime(tasks),
 		scheduler: controller.NewScheduler(srv, tick),
 		store:     store,
 	}, nil

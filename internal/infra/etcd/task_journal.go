@@ -87,7 +87,9 @@ type TaskRecord struct {
 	OperationID       string            `json:"operation_id"`
 	RetryOf           string            `json:"retry_of,omitempty"`
 	IdempotencyKey    string            `json:"idempotency_key,omitempty"`
+	PlanID            string            `json:"plan_id"`
 	PlanHash          string            `json:"plan_hash,omitempty"`
+	RenderGeneration  int32             `json:"render_generation"`
 	Type              TaskType          `json:"type"`
 	Target            string            `json:"target"`
 	Params            map[string]string `json:"params,omitempty"`
@@ -153,7 +155,9 @@ type taskRecordData struct {
 	OperationID       string              `json:"operation_id"`
 	RetryOf           string              `json:"retry_of,omitempty"`
 	IdempotencyKey    string              `json:"idempotency_key,omitempty"`
+	PlanID            string              `json:"plan_id"`
 	PlanHash          string              `json:"plan_hash,omitempty"`
+	RenderGeneration  int32               `json:"render_generation"`
 	Type              TaskType            `json:"type"`
 	Target            string              `json:"target"`
 	Params            map[string]string   `json:"params,omitempty"`
@@ -219,7 +223,8 @@ func cloneRetryTask(source TaskRecord, id string, createdAt time.Time) (TaskReco
 
 	retry := TaskRecord{
 		ID: id, OperationID: source.OperationID, RetryOf: source.ID,
-		IdempotencyKey: source.IdempotencyKey, PlanHash: source.PlanHash,
+		IdempotencyKey: source.IdempotencyKey, PlanID: source.PlanID,
+		PlanHash: source.PlanHash, RenderGeneration: source.RenderGeneration,
 		Type: source.Type, Target: source.Target, Params: cloneStringMap(source.Params),
 		Steps: cloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
 		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt,
@@ -397,15 +402,18 @@ func validateTaskRecord(record TaskRecord) error {
 	if record.Target == "" || !utf8.ValidString(record.Target) {
 		return errs.New(errs.KindValidationFailed, "task target is required and must be valid UTF-8")
 	}
-	if record.PlanHash != "" && !validSHA256(record.PlanHash) {
+	if err := validateStableID(ids.KindPlan, record.PlanID); err != nil {
+		return err
+	}
+	if !validSHA256(record.PlanHash) {
 		return errs.New(errs.KindValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
+	}
+	if record.RenderGeneration <= 0 {
+		return errs.New(errs.KindValidationFailed, "task render_generation must be positive")
 	}
 	if record.idempotencyMarker != nil {
 		if err := validateIdempotencyLocator(*record.idempotencyMarker); err != nil {
 			return errs.New(errs.KindInternal, "task idempotency marker locator is invalid")
-		}
-		if record.IdempotencyKey != record.idempotencyMarker.Key {
-			return errs.New(errs.KindInternal, "task idempotency marker locator does not match its task")
 		}
 	}
 	if record.TimeoutSeconds <= 0 {
@@ -700,7 +708,8 @@ func decodeTaskEventDedupRecord(value []byte) (TaskEventDedupRecord, error) {
 func taskRecordToData(record TaskRecord) taskRecordData {
 	return taskRecordData{
 		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
-		IdempotencyKey: record.IdempotencyKey, PlanHash: record.PlanHash,
+		IdempotencyKey: record.IdempotencyKey, PlanID: record.PlanID,
+		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
 		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
 		Status: record.Status, NextEventSequence: record.NextEventSequence,
@@ -731,7 +740,8 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 	}
 	return TaskRecord{
 		ID: data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
-		IdempotencyKey: data.IdempotencyKey, PlanHash: data.PlanHash,
+		IdempotencyKey: data.IdempotencyKey, PlanID: data.PlanID,
+		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
 		TimeoutSeconds: data.TimeoutSeconds, Status: data.Status,
 		NextEventSequence: data.NextEventSequence, EventCount: data.EventCount,

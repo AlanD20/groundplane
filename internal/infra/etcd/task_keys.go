@@ -73,6 +73,18 @@ func taskAssignmentScopePrefix(agentID string) string {
 	return taskAssignmentRootPrefix + agentID + "/"
 }
 
+func taskIDFromAssignmentKey(agentID string, key string) (string, error) {
+	prefix := taskAssignmentScopePrefix(agentID)
+	if !strings.HasPrefix(key, prefix) {
+		return "", errs.New(errs.KindInternal, "task assignment key is outside its Agent")
+	}
+	taskID := strings.TrimPrefix(key, prefix)
+	if strings.Contains(taskID, "/") || validateStableID(ids.KindTask, taskID) != nil {
+		return "", errs.New(errs.KindInternal, "task assignment key has an invalid task id")
+	}
+	return taskID, nil
+}
+
 func deletionTombstoneKey(targetKind string, targetID string) string {
 	return deletionTombstoneRootPrefix + targetKind + "/" + targetID
 }

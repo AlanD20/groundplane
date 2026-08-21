@@ -1,12 +1,17 @@
 package agentchannel
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
@@ -31,21 +36,39 @@ type Authenticator interface {
 	Authenticate(context.Context, string, Token) (Authorization, error)
 }
 
+// TaskStore is the durable execution seam used by one authenticated stream.
+// Its etcd DTOs remain inside the Controller daemon and never cross the human
+// API boundary.
+type TaskStore interface {
+	ListAgentAssignments(context.Context, string, uint64, int32) ([]etcd.TaskAssignment, error)
+	ClaimNextTask(context.Context, string, uint64, time.Time) (etcd.TaskAssignment, bool, error)
+	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	AcknowledgeTask(
+		context.Context,
+		string,
+		uint64,
+		string,
+		etcd.TaskStatus,
+		time.Time,
+	) (etcd.Versioned[etcd.TaskRecord], error)
+}
+
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
 	auth     Authenticator
 	sessions *Registry
+	tasks    TaskStore
 	now      func() time.Time
 }
 
 // New returns an AgentChannel server backed by the supplied authenticator and
 // session registry. A nil registry creates an isolated registry.
-func New(auth Authenticator, sessions *Registry) *Server {
+func New(auth Authenticator, sessions *Registry, tasks TaskStore) *Server {
 	if sessions == nil {
 		sessions = NewRegistry()
 	}
-	return &Server{auth: auth, sessions: sessions, now: time.Now}
+	return &Server{auth: auth, sessions: sessions, tasks: tasks, now: time.Now}
 }
 
 // Connect authenticates the first message, publishes the authorized config,
@@ -76,12 +99,17 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	if authorization.Generation == 0 {
 		return status.Error(codes.Internal, "agent authorization generation is not available")
 	}
+	if authorization.Config.PullIntervalSeconds <= 0 ||
+		authorization.Config.MaxConcurrentTasks <= 0 {
+		return status.Error(codes.Internal, "agent configuration is invalid")
+	}
 
 	session, err := s.sessions.Open(stream.Context(), authenticate.AgentId, authorization.Generation)
 	if err != nil {
 		return status.Error(codes.FailedPrecondition, "agent session is not current")
 	}
 	defer session.Close()
+	delivered := make(map[string]struct{}, authorization.Config.MaxConcurrentTasks)
 
 	config := proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 	if err := stream.Send(&agentpb.ControllerMessage{
@@ -129,17 +157,232 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				return unauthenticated()
 			}
 
-			ready := result.message.GetReady()
-			if ready == nil {
+			if ready := result.message.GetReady(); ready != nil {
+				if ready.Capacity > authorization.Config.MaxConcurrentTasks {
+					return status.Error(codes.InvalidArgument, "agent Ready capacity exceeds configuration")
+				}
+				if err := session.RecordReady(s.now(), ready.Capacity); err != nil {
+					if ready.Capacity < 0 {
+						return status.Error(codes.InvalidArgument, "agent Ready capacity must be non-negative")
+					}
+					return status.Error(codes.FailedPrecondition, "agent session is not current")
+				}
+				if s.tasks == nil {
+					return status.Error(codes.Internal, "agent task store is not configured")
+				}
+				if err := s.dispatchReady(
+					stream,
+					session,
+					authenticate.AgentId,
+					authorization,
+					ready.Capacity,
+					delivered,
+				); err != nil {
+					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if acknowledgement := result.message.GetTaskAck(); acknowledgement != nil {
+				if s.tasks == nil {
+					return status.Error(codes.Internal, "agent task store is not configured")
+				}
+				if err := s.acknowledge(
+					stream.Context(),
+					authenticate.AgentId,
+					authorization.Generation,
+					acknowledgement,
+				); err != nil {
+					return taskStoreStatus(err)
+				}
+				delete(delivered, acknowledgement.TaskId)
+				continue
+			}
+			if result.message.GetTaskEvent() != nil || result.message.GetObservedState() != nil {
 				return status.Error(codes.Unimplemented, "authenticated agent message is not implemented")
 			}
-			if err := session.RecordReady(s.now(), ready.Capacity); err != nil {
-				if ready.Capacity < 0 {
-					return status.Error(codes.InvalidArgument, "agent Ready capacity must be non-negative")
-				}
-				return status.Error(codes.FailedPrecondition, "agent session is not current")
-			}
+			return status.Error(codes.InvalidArgument, "authenticated agent message is empty")
 		}
+	}
+}
+
+func (s *Server) dispatchReady(
+	stream agentpb.AgentChannel_ConnectServer,
+	session *Session,
+	agentID string,
+	authorization Authorization,
+	capacity int32,
+	delivered map[string]struct{},
+) error {
+	if capacity == 0 || !session.AssignmentsAllowed() {
+		return nil
+	}
+	recovered, err := s.tasks.ListAgentAssignments(
+		stream.Context(),
+		agentID,
+		authorization.Generation,
+		authorization.Config.MaxConcurrentTasks,
+	)
+	if err != nil {
+		return err
+	}
+	remaining := capacity
+	for _, assignment := range recovered {
+		if _, alreadyDelivered := delivered[assignment.Task.Record.ID]; alreadyDelivered {
+			continue
+		}
+		if remaining == 0 {
+			return nil
+		}
+		if err := sendTaskAssignment(stream, assignment.Task.Record); err != nil {
+			return err
+		}
+		delivered[assignment.Task.Record.ID] = struct{}{}
+		remaining--
+	}
+	for remaining > 0 {
+		assignment, found, err := s.tasks.ClaimNextTask(
+			stream.Context(),
+			agentID,
+			authorization.Generation,
+			s.now().UTC(),
+		)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		if err := sendTaskAssignment(stream, assignment.Task.Record); err != nil {
+			return err
+		}
+		delivered[assignment.Task.Record.ID] = struct{}{}
+		remaining--
+	}
+	return nil
+}
+
+func sendTaskAssignment(
+	stream agentpb.AgentChannel_ConnectServer,
+	task etcd.TaskRecord,
+) error {
+	assignment, err := taskAssignmentMessage(task)
+	if err != nil {
+		return err
+	}
+	return stream.Send(&agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: assignment},
+	})
+}
+
+func taskAssignmentMessage(task etcd.TaskRecord) (*agentpb.TaskAssignment, error) {
+	planHash, err := hex.DecodeString(task.PlanHash)
+	if err != nil || len(planHash) != 32 {
+		return nil, errs.New(errs.KindInternal, "durable Task has an invalid plan hash")
+	}
+	if task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxInt32 {
+		return nil, errs.New(errs.KindInternal, "durable Task has an invalid Agent timeout")
+	}
+	params := task.Params
+	if params == nil {
+		params = map[string]string{}
+	}
+	encodedParams, err := json.Marshal(params)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	steps := make([]*agentpb.Step, len(task.Steps))
+	for index, step := range task.Steps {
+		steps[index] = &agentpb.Step{
+			StepId: step.ID,
+			Op:     step.Op,
+			Params: cloneTaskParams(step.Params),
+		}
+	}
+	return &agentpb.TaskAssignment{
+		TaskId: task.ID, OperationId: task.OperationID, RetryOf: task.RetryOf,
+		PlanId: task.PlanID, PlanHash: planHash, RenderGeneration: task.RenderGeneration,
+		Type: string(task.Type), Target: task.Target, Params: encodedParams,
+		Steps: steps, TimeoutSeconds: int32(task.TimeoutSeconds),
+	}, nil
+}
+
+func cloneTaskParams(params map[string]string) map[string]string {
+	if params == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(params))
+	for key, value := range params {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func (s *Server) acknowledge(
+	ctx context.Context,
+	agentID string,
+	agentGeneration uint64,
+	acknowledgement *agentpb.TaskAck,
+) error {
+	if acknowledgement == nil || len(acknowledgement.PlanHash) != 32 {
+		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
+	}
+	if acknowledgement.ExitCode != 0 || len(acknowledgement.Result) != 0 {
+		return status.Error(codes.Unimplemented, "typed Task result is not implemented")
+	}
+	task, err := s.tasks.GetTask(ctx, acknowledgement.TaskId)
+	if err != nil {
+		return err
+	}
+	planHash, err := hex.DecodeString(task.Record.PlanHash)
+	if err != nil || !bytes.Equal(planHash, acknowledgement.PlanHash) {
+		return errs.New(errs.KindStateConflict, "Agent Task acknowledgement plan hash does not match")
+	}
+	var terminal etcd.TaskStatus
+	switch acknowledgement.Terminal {
+	case agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED:
+		terminal = etcd.TaskStatusCompleted
+	case agentpb.TaskTerminal_TASK_TERMINAL_FAILED:
+		terminal = etcd.TaskStatusFailed
+	case agentpb.TaskTerminal_TASK_TERMINAL_TIMED_OUT:
+		terminal = etcd.TaskStatusTimedOut
+	case agentpb.TaskTerminal_TASK_TERMINAL_ABORTED:
+		terminal = etcd.TaskStatusAborted
+	default:
+		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement terminal state is invalid")
+	}
+	_, err = s.tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		agentGeneration,
+		acknowledgement.TaskId,
+		terminal,
+		s.now().UTC(),
+	)
+	return err
+}
+
+func taskStoreStatus(err error) error {
+	if err == nil {
+		return nil
+	}
+	if status.Code(err) != codes.Unknown {
+		return err
+	}
+	kind, ok := errs.KindOf(err)
+	if !ok {
+		return status.Error(codes.Internal, "agent task operation failed")
+	}
+	switch kind {
+	case errs.KindValidationFailed:
+		return status.Error(codes.InvalidArgument, "agent task message is invalid")
+	case errs.KindTaskNotFound:
+		return status.Error(codes.NotFound, "agent task was not found")
+	case errs.KindStateConflict:
+		return status.Error(codes.FailedPrecondition, "agent task state does not match")
+	case errs.KindStorageUnavailable:
+		return status.Error(codes.Unavailable, "agent task storage is unavailable")
+	default:
+		return status.Error(codes.Internal, "agent task operation failed")
 	}
 }
 

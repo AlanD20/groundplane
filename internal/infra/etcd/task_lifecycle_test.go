@@ -128,6 +128,12 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 	assertTaskLifecycleValue(t, store, taskQueueKey(first.ID), false)
 	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, first.ID), true)
 	assertTaskLifecycleValue(t, store, taskQueueKey(second.ID), true)
+	recovered, err := repository.ListAgentAssignments(ctx, agentID, 3, 4)
+	if err != nil || len(recovered) != 1 ||
+		recovered[0].Task.Record.ID != first.ID ||
+		recovered[0].Assignment.Record != claim.Assignment.Record {
+		t.Fatalf("ListAgentAssignments() = %#v, %v", recovered, err)
+	}
 
 	terminalAt := second.CreatedAt.Add(2 * time.Second)
 	terminal, err := repository.AcknowledgeTask(

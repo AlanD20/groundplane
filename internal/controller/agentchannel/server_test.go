@@ -3,12 +3,15 @@ package agentchannel
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"io"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
@@ -28,6 +31,68 @@ type pausedAuthenticator struct {
 	authorization Authorization
 	entered       chan struct{}
 	release       chan struct{}
+}
+
+type fakeTaskStore struct {
+	assignments   []etcd.TaskAssignment
+	claims        []etcd.TaskAssignment
+	tasks         map[string]etcd.Versioned[etcd.TaskRecord]
+	ackAgentID    string
+	ackGeneration uint64
+	ackTaskID     string
+	ackTerminal   etcd.TaskStatus
+}
+
+func (store *fakeTaskStore) ListAgentAssignments(
+	context.Context,
+	string,
+	uint64,
+	int32,
+) ([]etcd.TaskAssignment, error) {
+	return append([]etcd.TaskAssignment(nil), store.assignments...), nil
+}
+
+func (store *fakeTaskStore) ClaimNextTask(
+	context.Context,
+	string,
+	uint64,
+	time.Time,
+) (etcd.TaskAssignment, bool, error) {
+	if len(store.claims) == 0 {
+		return etcd.TaskAssignment{}, false, nil
+	}
+	claim := store.claims[0]
+	store.claims = store.claims[1:]
+	return claim, true, nil
+}
+
+func (store *fakeTaskStore) GetTask(
+	_ context.Context,
+	taskID string,
+) (etcd.Versioned[etcd.TaskRecord], error) {
+	task, ok := store.tasks[taskID]
+	if !ok {
+		return etcd.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "missing")
+	}
+	return task, nil
+}
+
+func (store *fakeTaskStore) AcknowledgeTask(
+	_ context.Context,
+	agentID string,
+	generation uint64,
+	taskID string,
+	terminal etcd.TaskStatus,
+	_ time.Time,
+) (etcd.Versioned[etcd.TaskRecord], error) {
+	store.ackAgentID = agentID
+	store.ackGeneration = generation
+	store.ackTaskID = taskID
+	store.ackTerminal = terminal
+	task := store.tasks[taskID]
+	task.Record.Status = terminal
+	store.tasks[taskID] = task
+	return task, nil
 }
 
 func (a *pausedAuthenticator) Authenticate(ctx context.Context, _ string, _ Token) (Authorization, error) {
@@ -90,7 +155,7 @@ func TestConnectRequiresAuthenticateFirst(t *testing.T) {
 	authenticator := &fakeAuthenticator{}
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{readyMessage(1)}}
 
-	err := New(authenticator, NewRegistry()).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil).Connect(stream)
 	if status.Code(err).String() != "Unauthenticated" {
 		t.Fatalf("status = %v, want Unauthenticated", status.Code(err))
 	}
@@ -107,7 +172,7 @@ func TestConnectRejectsMissingAuthorizedConfig(t *testing.T) {
 		authenticateMessage("agt_01J00000000000000000000000", testToken('m')),
 	}}
 
-	err := New(authenticator, NewRegistry()).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil).Connect(stream)
 	if status.Code(err) != codes.Internal {
 		t.Fatalf("status = %v, want Internal", status.Code(err))
 	}
@@ -125,7 +190,7 @@ func TestConnectTreatsImpossibleAuthorizationAsInternal(t *testing.T) {
 		authenticateMessage(testAgentID, testToken('z')),
 	}}
 
-	err := New(authenticator, NewRegistry()).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil).Connect(stream)
 	if status.Code(err) != codes.Internal {
 		t.Fatalf("status = %v, want Internal", status.Code(err))
 	}
@@ -148,7 +213,7 @@ func TestConnectCannotOpenGenerationRevokedDuringAuthentication(t *testing.T) {
 	}}
 	result := make(chan error, 1)
 	go func() {
-		result <- New(authenticator, registry).Connect(stream)
+		result <- New(authenticator, registry, nil).Connect(stream)
 	}()
 	<-authenticator.entered
 	if err := registry.Revoke(context.Background(), testAgentID, 1); err != nil {
@@ -187,7 +252,7 @@ func TestConnectRejectsMalformedAndMismatchedAuthentication(t *testing.T) {
 			authenticator := &fakeAuthenticator{err: tt.authErr}
 			stream := &scriptedStream{messages: []*agentpb.AgentMessage{authenticateMessage(tt.id, tt.token)}}
 
-			err := New(authenticator, NewRegistry()).Connect(stream)
+			err := New(authenticator, NewRegistry(), nil).Connect(stream)
 			if status.Code(err).String() != "Unauthenticated" {
 				t.Fatalf("status = %v, want Unauthenticated", status.Code(err))
 			}
@@ -207,7 +272,7 @@ func TestConnectRejectsDuplicateAuthenticate(t *testing.T) {
 		authenticateMessage(testAgentID, testToken(3)),
 	}}
 
-	err := New(authenticator, NewRegistry()).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil).Connect(stream)
 	if status.Code(err).String() != "Unauthenticated" {
 		t.Fatalf("status = %v, want Unauthenticated", status.Code(err))
 	}
@@ -224,7 +289,7 @@ func TestConnectGatesInitialConfigOnAuthentication(t *testing.T) {
 	}}
 	failedAuth := authorizedAuthenticator()
 	failedAuth.err = errs.New(errs.KindAgentNotFound, "mismatch")
-	_ = New(failedAuth, NewRegistry()).Connect(failed)
+	_ = New(failedAuth, NewRegistry(), nil).Connect(failed)
 	if len(failed.sent) != 0 {
 		t.Fatalf("failed authentication sent %d messages", len(failed.sent))
 	}
@@ -232,7 +297,7 @@ func TestConnectGatesInitialConfigOnAuthentication(t *testing.T) {
 	success := &scriptedStream{messages: []*agentpb.AgentMessage{
 		authenticateMessage(testAgentID, testToken(4)),
 	}}
-	if err := New(authorizedAuthenticator(), NewRegistry()).Connect(success); err != nil {
+	if err := New(authorizedAuthenticator(), NewRegistry(), nil).Connect(success); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	if len(success.sent) != 1 || success.sent[0].GetConfigUpdate() == nil {
@@ -247,20 +312,87 @@ func TestConnectGatesInitialConfigOnAuthentication(t *testing.T) {
 // and receipt time from the latest Ready message even after disconnect.
 func TestConnectTracksReadyFreshnessAndCapacity(t *testing.T) {
 	registry := NewRegistry()
-	server := New(authorizedAuthenticator(), registry)
+	server := New(authorizedAuthenticator(), registry, &fakeTaskStore{})
 	wantTime := testTime()
 	server.now = func() time.Time { return wantTime }
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
 		authenticateMessage(testAgentID, testToken(5)),
-		readyMessage(9),
+		readyMessage(3),
 	}}
 
 	if err := server.Connect(stream); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	snapshot, ok := registry.Snapshot(testAgentID)
-	if !ok || snapshot.Online || snapshot.Capacity != 9 || !snapshot.LastReady.Equal(wantTime) {
+	if !ok || snapshot.Online || snapshot.Capacity != 3 || !snapshot.LastReady.Equal(wantTime) {
 		t.Fatalf("snapshot = %+v, found = %v", snapshot, ok)
+	}
+}
+
+// Rationale: Ready is both the pull and the capacity fence. The Controller
+// must claim durable work, preserve every execution-identity field in the
+// protobuf assignment, and terminalize only an acknowledgement with the same
+// plan hash and authenticated Agent generation.
+func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
+	now := testTime()
+	startedAt := now
+	taskID := ids.NewAt(ids.KindTask, now, 20)
+	planHashHex := strings.Repeat("a", 64)
+	planHash, err := hex.DecodeString(planHashHex)
+	if err != nil {
+		t.Fatalf("decode test plan hash: %v", err)
+	}
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 21),
+		PlanID: ids.NewAt(ids.KindPlan, now, 22), PlanHash: planHashHex,
+		RenderGeneration: 7, Type: etcd.TaskDeploy,
+		Target: ids.NewAt(ids.KindService, now, 23),
+		Params: map[string]string{"strategy": "blue-green"},
+		Steps: []etcd.TaskStepRecord{{
+			ID: ids.NewAt(ids.KindStep, now, 24), Op: "compose_up",
+			Params: map[string]string{"project": "api"},
+		}},
+		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
+	}
+	versioned := etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5}
+	tasks := &fakeTaskStore{
+		claims: []etcd.TaskAssignment{{Task: versioned}},
+		tasks:  map[string]etcd.Versioned[etcd.TaskRecord]{taskID: versioned},
+	}
+	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
+		authenticateMessage(testAgentID, testToken(8)),
+		readyMessage(1),
+		{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
+			TaskId: taskID, PlanHash: planHash,
+			Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
+		}}},
+	}}
+	server := New(authorizedAuthenticator(), NewRegistry(), tasks)
+	server.now = func() time.Time { return now }
+	if err := server.Connect(stream); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	if len(stream.sent) != 2 {
+		t.Fatalf("Controller messages = %d, want config plus assignment", len(stream.sent))
+	}
+	assignment := stream.sent[1].GetTaskAssignment()
+	if assignment == nil || assignment.TaskId != task.ID ||
+		assignment.OperationId != task.OperationID || assignment.PlanId != task.PlanID ||
+		assignment.RenderGeneration != task.RenderGeneration ||
+		!bytes.Equal(assignment.PlanHash, planHash) ||
+		len(assignment.Steps) != 1 || assignment.Steps[0].StepId != task.Steps[0].ID {
+		t.Fatalf("TaskAssignment = %#v", assignment)
+	}
+	if tasks.ackAgentID != testAgentID || tasks.ackGeneration != 1 ||
+		tasks.ackTaskID != task.ID || tasks.ackTerminal != etcd.TaskStatusCompleted {
+		t.Fatalf(
+			"ack = agent %q generation %d task %q terminal %q",
+			tasks.ackAgentID,
+			tasks.ackGeneration,
+			tasks.ackTaskID,
+			tasks.ackTerminal,
+		)
 	}
 }
 
@@ -273,7 +405,7 @@ func TestConnectCancellationMarksSessionOffline(t *testing.T) {
 		recvErr:  context.Canceled,
 	}
 
-	if err := New(authorizedAuthenticator(), registry).Connect(stream); err != nil {
+	if err := New(authorizedAuthenticator(), registry, nil).Connect(stream); err != nil {
 		t.Fatalf("connect cancellation: %v", err)
 	}
 	snapshot, ok := registry.Snapshot(testAgentID)
@@ -291,7 +423,7 @@ func TestAuthenticationFailureDoesNotLeakToken(t *testing.T) {
 		authenticateMessage(testAgentID, append([]byte(nil), secret...)),
 	}}
 
-	err := New(authenticator, NewRegistry()).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil).Connect(stream)
 	if strings.Contains(err.Error(), string(secret)) {
 		t.Fatalf("credential leaked in error: %v", err)
 	}
