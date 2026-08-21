@@ -73,9 +73,7 @@ const (
 // TaskStepRecord is the immutable execution procedure stored with a Task.
 // ID is stable within the task and participates in Agent event identity.
 type TaskStepRecord struct {
-	ID     string            `json:"id"`
-	Op     string            `json:"op"`
-	Params map[string]string `json:"params,omitempty"`
+	ID string `json:"id"`
 }
 
 // TaskRecord is the versioned persistence DTO for one execution attempt.
@@ -484,9 +482,6 @@ func validateTaskSteps(steps []TaskStepRecord) error {
 			return errs.New(errs.KindValidationFailed, "task step ids must be unique")
 		}
 		seen[step.ID] = struct{}{}
-		if step.Op == "" || !utf8.ValidString(step.Op) {
-			return errs.New(errs.KindValidationFailed, "task step operation is required and must be valid UTF-8")
-		}
 	}
 	return nil
 }
@@ -810,7 +805,7 @@ func cloneTaskSteps(steps []TaskStepRecord) []TaskStepRecord {
 	}
 	cloned := make([]TaskStepRecord, len(steps))
 	for index, step := range steps {
-		cloned[index] = TaskStepRecord{ID: step.ID, Op: step.Op, Params: cloneStringMap(step.Params)}
+		cloned[index] = TaskStepRecord{ID: step.ID}
 	}
 	return cloned
 }

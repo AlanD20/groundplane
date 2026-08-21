@@ -74,7 +74,7 @@ message ContainerState {
   string name = 1;
   string image = 2;
   bool healthy = 3;
-  map<string, string> labels = 4; // groundplane.managed, .tenant, .project, .environment, .service, .release, .slot
+  map<string, string> labels = 4; // transitional observation payload; typed observation replaces this map before execution is enabled
 }
 
 message TaskAck {
@@ -106,22 +106,109 @@ message ControllerMessage {
 
 message TaskAssignment {
   string task_id = 1;
-  string operation_id = 2;    // stable across retries — see internal/controller/task.go
-  string retry_of = 3;        // set iff this is a retry of a prior task_id
-  string plan_id = 4;         // the ExecutionPlan this task dispatches — see internal/controller/plan.go
-  bytes plan_hash = 5;        // exactly 32 SHA-256 bytes; immutable for this task_id
-  int32 render_generation = 6;
-  string type = 7;            // deploy | rollback | backup | restore | attach | detach | run | script | provision | create | update | remove | start | stop | destroy | rotate
-  string target = 8;
-  bytes params = 9;           // JSON-encoded, typed per task type
-  repeated Step steps = 10;
-  int32 timeout_seconds = 11;
+  string operation_id = 2; // stable across retries
+  string retry_of = 3;     // set iff this is a retry of a prior task_id
+  ExecutionPlan plan = 4;  // complete authoritative procedure
+  int32 timeout_seconds = 5;
 }
 
-message Step {
-  string step_id = 1; // immutable canonical step_<ulid> from the execution plan
-  string op = 2; // exec | sql | dump | restore | encrypt | upload | verify | prune | ack — the known step catalog (see internal/adapters)
-  map<string, string> params = 3; // opaque until a typed procedure contract is accepted
+message ExecutionPlan {
+  uint32 schema = 1; // exactly 1
+  string plan_id = 2;
+  bytes plan_hash = 3; // SHA-256 of deterministic serialization with this field cleared
+  uint64 render_generation = 4;
+  PlanOperation operation = 5;
+  string target_id = 6;
+  repeated ComposeArtifact artifacts = 7;
+  repeated ExecutionStep steps = 8;
+}
+
+enum PlanOperation {
+  PLAN_OPERATION_UNSPECIFIED = 0;
+  PLAN_OPERATION_RECONCILE = 1;
+  PLAN_OPERATION_DEPLOY = 2;
+  PLAN_OPERATION_ROLLBACK = 3;
+  PLAN_OPERATION_START = 4;
+  PLAN_OPERATION_STOP = 5;
+  PLAN_OPERATION_DESTROY = 6;
+  PLAN_OPERATION_REMOVE = 7;
+  PLAN_OPERATION_COMPONENT_APPLY = 8;
+}
+
+message ComposeArtifact {
+  string artifact_id = 1;
+  ComposeOwnerKind owner_kind = 2;
+  string owner_id = 3; // environment id, or empty for platform
+  string project_name = 4;
+  bytes canonical_yaml = 5;
+  bytes yaml_sha256 = 6;
+  string authorized_volume_dir = 7; // empty for platform
+  repeated ComposeService services = 8;
+  repeated ComposeNetwork networks = 9;
+  repeated ComposeVolume volumes = 10;
+}
+
+enum ComposeOwnerKind {
+  COMPOSE_OWNER_KIND_UNSPECIFIED = 0;
+  COMPOSE_OWNER_KIND_ENVIRONMENT = 1;
+  COMPOSE_OWNER_KIND_PLATFORM = 2;
+}
+
+message ComposeService {
+  string service_id = 1;
+  string compose_name = 2;
+  repeated LabelPair expected_labels = 3;
+}
+
+message ComposeNetwork {
+  string network_id = 1;
+  string compose_name = 2;
+  repeated LabelPair expected_labels = 3;
+}
+
+message ComposeVolume {
+  string volume_id = 1;
+  string compose_name = 2;
+  repeated LabelPair expected_labels = 3;
+}
+
+message LabelPair {
+  string key = 1;
+  string value = 2;
+}
+
+message ExecutionStep {
+  string step_id = 1;
+  uint32 timeout_seconds = 2;
+  oneof payload {
+    ComposeApply compose_apply = 3;
+    ComposeStop compose_stop = 4;
+    ComposeRemove compose_remove = 5;
+    WaitHealthy wait_healthy = 6;
+  }
+}
+
+message ComposeApply {
+  string artifact_id = 1;
+  repeated string service_ids = 2;
+  bool full_reconcile = 3;
+}
+
+message ComposeStop {
+  string artifact_id = 1;
+  repeated string service_ids = 2;
+  uint32 grace_seconds = 3;
+}
+
+message ComposeRemove {
+  string artifact_id = 1;
+  repeated string service_ids = 2;
+  bool whole_project = 3;
+}
+
+message WaitHealthy {
+  string artifact_id = 1;
+  repeated string service_ids = 2;
 }
 
 message TaskAbort {

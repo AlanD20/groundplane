@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -42,6 +44,18 @@ type fakeTaskStore struct {
 	ackTaskID     string
 	ackTerminal   etcd.TaskStatus
 	events        []etcd.TaskEventInput
+}
+
+type fakePlanResolver struct {
+	plan *agentpb.ExecutionPlan
+	err  error
+}
+
+func (resolver *fakePlanResolver) ResolveExecutionPlan(
+	context.Context,
+	etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
+	return resolver.plan, resolver.err
 }
 
 func (store *fakeTaskStore) ListAgentAssignments(
@@ -165,7 +179,7 @@ func TestConnectRequiresAuthenticateFirst(t *testing.T) {
 	authenticator := &fakeAuthenticator{}
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{readyMessage(1)}}
 
-	err := New(authenticator, NewRegistry(), nil).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil, nil).Connect(stream)
 	if status.Code(err).String() != "Unauthenticated" {
 		t.Fatalf("status = %v, want Unauthenticated", status.Code(err))
 	}
@@ -182,7 +196,7 @@ func TestConnectRejectsMissingAuthorizedConfig(t *testing.T) {
 		authenticateMessage("agt_01J00000000000000000000000", testToken('m')),
 	}}
 
-	err := New(authenticator, NewRegistry(), nil).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil, nil).Connect(stream)
 	if status.Code(err) != codes.Internal {
 		t.Fatalf("status = %v, want Internal", status.Code(err))
 	}
@@ -200,7 +214,7 @@ func TestConnectTreatsImpossibleAuthorizationAsInternal(t *testing.T) {
 		authenticateMessage(testAgentID, testToken('z')),
 	}}
 
-	err := New(authenticator, NewRegistry(), nil).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil, nil).Connect(stream)
 	if status.Code(err) != codes.Internal {
 		t.Fatalf("status = %v, want Internal", status.Code(err))
 	}
@@ -223,7 +237,7 @@ func TestConnectCannotOpenGenerationRevokedDuringAuthentication(t *testing.T) {
 	}}
 	result := make(chan error, 1)
 	go func() {
-		result <- New(authenticator, registry, nil).Connect(stream)
+		result <- New(authenticator, registry, nil, nil).Connect(stream)
 	}()
 	<-authenticator.entered
 	if err := registry.Revoke(context.Background(), testAgentID, 1); err != nil {
@@ -262,7 +276,7 @@ func TestConnectRejectsMalformedAndMismatchedAuthentication(t *testing.T) {
 			authenticator := &fakeAuthenticator{err: tt.authErr}
 			stream := &scriptedStream{messages: []*agentpb.AgentMessage{authenticateMessage(tt.id, tt.token)}}
 
-			err := New(authenticator, NewRegistry(), nil).Connect(stream)
+			err := New(authenticator, NewRegistry(), nil, nil).Connect(stream)
 			if status.Code(err).String() != "Unauthenticated" {
 				t.Fatalf("status = %v, want Unauthenticated", status.Code(err))
 			}
@@ -282,7 +296,7 @@ func TestConnectRejectsDuplicateAuthenticate(t *testing.T) {
 		authenticateMessage(testAgentID, testToken(3)),
 	}}
 
-	err := New(authenticator, NewRegistry(), nil).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil, nil).Connect(stream)
 	if status.Code(err).String() != "Unauthenticated" {
 		t.Fatalf("status = %v, want Unauthenticated", status.Code(err))
 	}
@@ -299,7 +313,7 @@ func TestConnectGatesInitialConfigOnAuthentication(t *testing.T) {
 	}}
 	failedAuth := authorizedAuthenticator()
 	failedAuth.err = errs.New(errs.KindAgentNotFound, "mismatch")
-	_ = New(failedAuth, NewRegistry(), nil).Connect(failed)
+	_ = New(failedAuth, NewRegistry(), nil, nil).Connect(failed)
 	if len(failed.sent) != 0 {
 		t.Fatalf("failed authentication sent %d messages", len(failed.sent))
 	}
@@ -307,7 +321,7 @@ func TestConnectGatesInitialConfigOnAuthentication(t *testing.T) {
 	success := &scriptedStream{messages: []*agentpb.AgentMessage{
 		authenticateMessage(testAgentID, testToken(4)),
 	}}
-	if err := New(authorizedAuthenticator(), NewRegistry(), nil).Connect(success); err != nil {
+	if err := New(authorizedAuthenticator(), NewRegistry(), nil, nil).Connect(success); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	if len(success.sent) != 1 || success.sent[0].GetConfigUpdate() == nil {
@@ -322,7 +336,7 @@ func TestConnectGatesInitialConfigOnAuthentication(t *testing.T) {
 // and receipt time from the latest Ready message even after disconnect.
 func TestConnectTracksReadyFreshnessAndCapacity(t *testing.T) {
 	registry := NewRegistry()
-	server := New(authorizedAuthenticator(), registry, &fakeTaskStore{})
+	server := New(authorizedAuthenticator(), registry, &fakeTaskStore{}, nil)
 	wantTime := testTime()
 	server.now = func() time.Time { return wantTime }
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
@@ -347,24 +361,19 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	now := testTime()
 	startedAt := now
 	taskID := ids.NewAt(ids.KindTask, now, 20)
-	planHashHex := strings.Repeat("a", 64)
-	planHash, err := hex.DecodeString(planHashHex)
-	if err != nil {
-		t.Fatalf("decode test plan hash: %v", err)
-	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 21),
-		PlanID: ids.NewAt(ids.KindPlan, now, 22), PlanHash: planHashHex,
+		PlanID:           ids.NewAt(ids.KindPlan, now, 22),
 		RenderGeneration: 7, Type: etcd.TaskDeploy,
-		Target: ids.NewAt(ids.KindService, now, 23),
-		Params: map[string]string{"strategy": "blue-green"},
-		Steps: []etcd.TaskStepRecord{{
-			ID: ids.NewAt(ids.KindStep, now, 24), Op: "compose_up",
-			Params: map[string]string{"project": "api"},
-		}},
+		Target:         ids.NewAt(ids.KindService, now, 23),
+		Params:         map[string]string{"strategy": "blue-green"},
+		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 24)}},
 		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
+	plan := testExecutionPlan(t, task)
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	planHash := append([]byte(nil), plan.PlanHash...)
 	versioned := etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5}
 	tasks := &fakeTaskStore{
 		claims: []etcd.TaskAssignment{{Task: versioned}},
@@ -382,7 +391,7 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 			Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
 		}}},
 	}}
-	server := New(authorizedAuthenticator(), NewRegistry(), tasks)
+	server := New(authorizedAuthenticator(), NewRegistry(), tasks, &fakePlanResolver{plan: plan})
 	server.now = func() time.Time { return now }
 	if err := server.Connect(stream); err != nil {
 		t.Fatalf("Connect() error = %v", err)
@@ -392,10 +401,11 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	}
 	assignment := stream.sent[1].GetTaskAssignment()
 	if assignment == nil || assignment.TaskId != task.ID ||
-		assignment.OperationId != task.OperationID || assignment.PlanId != task.PlanID ||
-		assignment.RenderGeneration != task.RenderGeneration ||
-		!bytes.Equal(assignment.PlanHash, planHash) ||
-		len(assignment.Steps) != 1 || assignment.Steps[0].StepId != task.Steps[0].ID {
+		assignment.OperationId != task.OperationID || assignment.Plan == nil ||
+		assignment.Plan.PlanId != task.PlanID ||
+		assignment.Plan.RenderGeneration != uint64(task.RenderGeneration) ||
+		!bytes.Equal(assignment.Plan.PlanHash, planHash) ||
+		len(assignment.Plan.Steps) != 1 || assignment.Plan.Steps[0].StepId != task.Steps[0].ID {
 		t.Fatalf("TaskAssignment = %#v", assignment)
 	}
 	if tasks.ackAgentID != testAgentID || tasks.ackGeneration != 1 ||
@@ -428,7 +438,7 @@ func TestConnectCancellationMarksSessionOffline(t *testing.T) {
 		recvErr:  context.Canceled,
 	}
 
-	if err := New(authorizedAuthenticator(), registry, nil).Connect(stream); err != nil {
+	if err := New(authorizedAuthenticator(), registry, nil, nil).Connect(stream); err != nil {
 		t.Fatalf("connect cancellation: %v", err)
 	}
 	snapshot, ok := registry.Snapshot(testAgentID)
@@ -446,7 +456,7 @@ func TestAuthenticationFailureDoesNotLeakToken(t *testing.T) {
 		authenticateMessage(testAgentID, append([]byte(nil), secret...)),
 	}}
 
-	err := New(authenticator, NewRegistry(), nil).Connect(stream)
+	err := New(authenticator, NewRegistry(), nil, nil).Connect(stream)
 	if strings.Contains(err.Error(), string(secret)) {
 		t.Fatalf("credential leaked in error: %v", err)
 	}
@@ -489,4 +499,41 @@ func testToken(seed byte) []byte {
 
 func testTime() time.Time {
 	return time.Date(2026, time.August, 20, 10, 30, 0, 0, time.UTC)
+}
+
+func testExecutionPlan(t *testing.T, task etcd.TaskRecord) *agentpb.ExecutionPlan {
+	t.Helper()
+	yaml := []byte("services:\n  api:\n    image: registry.example/api@sha256:" + strings.Repeat("a", 64) + "\n")
+	yamlHash := sha256.Sum256(yaml)
+	artifactID := ids.NewAt(ids.KindConfig, task.CreatedAt, 25)
+	unsealed := &agentpb.ExecutionPlan{
+		Schema: executionplan.SchemaVersion, PlanId: task.PlanID,
+		RenderGeneration: uint64(task.RenderGeneration),
+		Operation:        agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, TargetId: task.Target,
+		Artifacts: []*agentpb.ComposeArtifact{{
+			ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
+			ProjectName: "groundplane-infra", CanonicalYaml: yaml, YamlSha256: yamlHash[:],
+			Services: []*agentpb.ComposeService{{
+				ServiceId: task.Target, ComposeName: "api",
+				ExpectedLabels: []*agentpb.LabelPair{
+					{Key: "com.groundplane.kind", Value: "service"},
+					{Key: "com.groundplane.managed", Value: "true"},
+					{Key: "com.groundplane.plan-id", Value: task.PlanID},
+					{Key: "com.groundplane.render-generation", Value: "7"},
+					{Key: "com.groundplane.service-id", Value: task.Target},
+				},
+			}},
+		}},
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: task.Steps[0].ID, TimeoutSeconds: 30,
+			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+				ArtifactId: artifactID, ServiceIds: []string{task.Target},
+			}},
+		}},
+	}
+	sealed, err := executionplan.Seal(unsealed)
+	if err != nil {
+		t.Fatalf("seal test execution plan: %v", err)
+	}
+	return sealed
 }

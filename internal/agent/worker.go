@@ -8,24 +8,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type PlanHash [sha256.Size]byte
 
-type TaskStep struct {
-	StepID string
-	Step   adapters.Step
-}
-
 type Assignment struct {
-	TaskID   string
-	PlanHash PlanHash
-	Steps    []TaskStep
-	Timeout  time.Duration
+	TaskID      string
+	OperationID string
+	RetryOf     string
+	Plan        *agentpb.ExecutionPlan
+	Timeout     time.Duration
 }
 
 type TaskTerminal uint8
@@ -85,7 +82,7 @@ type WorkerPool struct {
 	logger      *slog.Logger
 	work        chan *taskReservation
 	outputs     chan WorkerOutput
-	executeStep func(context.Context, adapters.Step) error
+	executeStep func(context.Context, *agentpb.ExecutionStep) error
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -153,18 +150,24 @@ func (p *WorkerPool) runWorker(runCtx context.Context) {
 
 func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservation) {
 	err := reservation.ctx.Err()
-	for _, step := range reservation.assignment.Steps {
+	planHash := hashForPlan(reservation.assignment.Plan)
+	for _, step := range reservation.assignment.Plan.Steps {
 		if err != nil {
 			break
 		}
 		p.emitProgress(runCtx, TaskProgress{
-			TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash,
-			StepID: step.StepID, Attempt: 1, Ordinal: 1, State: TaskProgressRunning,
+			TaskID: reservation.assignment.TaskID, PlanHash: planHash,
+			StepID: step.StepId, Attempt: 1, Ordinal: 1, State: TaskProgressRunning,
 		})
-		err = p.executeStep(reservation.ctx, step.Step)
+		stepCtx, cancel := context.WithTimeout(
+			reservation.ctx,
+			time.Duration(step.TimeoutSeconds)*time.Second,
+		)
+		err = p.executeStep(stepCtx, step)
+		cancel()
 		p.emitProgress(runCtx, TaskProgress{
-			TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash,
-			StepID: step.StepID, Attempt: 1, Ordinal: 2,
+			TaskID: reservation.assignment.TaskID, PlanHash: planHash,
+			StepID: step.StepId, Attempt: 1, Ordinal: 2,
 			State: progressStateFor(reservation.ctx, err),
 		})
 	}
@@ -173,7 +176,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		p.logger.Error("agent: step failed", "task_id", reservation.assignment.TaskID, "error", err)
 	}
 	p.complete(runCtx, reservation, TaskResult{
-		TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash, Terminal: terminal,
+		TaskID: reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
 	})
 }
 
@@ -243,7 +246,7 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 		select {
 		case reservation := <-p.work:
 			p.complete(runCtx, reservation, TaskResult{
-				TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash,
+				TaskID: reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
 				Terminal: TaskTerminalAborted,
 			})
 		default:
@@ -289,7 +292,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 		return errs.New(errs.KindStateConflict, "agent: worker pool is stopped")
 	}
 	if existing := p.reservations[owned.TaskID]; existing != nil {
-		if existing.assignment.PlanHash != owned.PlanHash {
+		if hashForPlan(existing.assignment.Plan) != hashForPlan(owned.Plan) {
 			return errs.New(errs.KindInternal, "agent: task id was reused with a different plan hash")
 		}
 		return nil
@@ -317,37 +320,44 @@ func validateAndCopyAssignment(assignment Assignment) (Assignment, error) {
 	if assignment.Timeout <= 0 {
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task timeout")
 	}
-	owned := Assignment{TaskID: assignment.TaskID, PlanHash: assignment.PlanHash, Timeout: assignment.Timeout}
-	owned.Steps = make([]TaskStep, len(assignment.Steps))
-	seen := make(map[string]struct{}, len(assignment.Steps))
-	for index, step := range assignment.Steps {
-		if err := ids.Validate(ids.KindStep, step.StepID); err != nil {
-			return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid step id")
-		}
-		if _, duplicate := seen[step.StepID]; duplicate {
-			return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent duplicate step ids")
-		}
-		seen[step.StepID] = struct{}{}
-		params := make(map[string]string, len(step.Step.Params))
-		for key, value := range step.Step.Params {
-			params[key] = value
-		}
-		owned.Steps[index] = TaskStep{StepID: step.StepID, Step: adapters.Step{Op: step.Step.Op, Params: params}}
+	if err := ids.Validate(ids.KindOperation, assignment.OperationID); err != nil {
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid operation id")
 	}
-	return owned, nil
+	if assignment.RetryOf != "" {
+		if err := ids.Validate(ids.KindTask, assignment.RetryOf); err != nil || assignment.RetryOf == assignment.TaskID {
+			return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid retry identity")
+		}
+	}
+	plan, err := executionplan.Validate(assignment.Plan)
+	if err != nil {
+		return Assignment{}, errs.Wrap(errs.KindInternal, err)
+	}
+	for _, step := range plan.Steps {
+		if time.Duration(step.TimeoutSeconds)*time.Second > assignment.Timeout {
+			return Assignment{}, errs.New(errs.KindInternal, "agent: step timeout exceeds its task timeout")
+		}
+	}
+	return Assignment{
+		TaskID: assignment.TaskID, OperationID: assignment.OperationID,
+		RetryOf: assignment.RetryOf, Plan: plan, Timeout: assignment.Timeout,
+	}, nil
 }
 
 // runStep fails closed until the corresponding typed procedure is accepted.
-func (p *WorkerPool) runStep(_ context.Context, step adapters.Step) error {
-	switch step.Op {
-	case adapters.StepComposeUp, adapters.StepComposeDown, adapters.StepWaitHealthy,
-		adapters.StepSwitchAlias, adapters.StepSwitchRoute, adapters.StepWriteFile,
-		adapters.StepReload, adapters.StepJoinNetwork, adapters.StepProvisionNetwork,
-		adapters.StepRunScript, adapters.StepExec, adapters.StepSQL, adapters.StepDump,
-		adapters.StepRestore, adapters.StepEncrypt, adapters.StepUpload, adapters.StepVerify,
-		adapters.StepPrune, adapters.StepAck:
+func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) error {
+	switch step.Payload.(type) {
+	case *agentpb.ExecutionStep_ComposeApply, *agentpb.ExecutionStep_ComposeStop,
+		*agentpb.ExecutionStep_ComposeRemove, *agentpb.ExecutionStep_WaitHealthy:
 		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
 	default:
-		return errs.New(errs.KindInternal, "agent: Controller sent an unknown step operation")
+		return errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
+}
+
+func hashForPlan(plan *agentpb.ExecutionPlan) PlanHash {
+	var hash PlanHash
+	if plan != nil {
+		copy(hash[:], plan.PlanHash)
+	}
+	return hash
 }

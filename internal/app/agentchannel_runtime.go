@@ -34,7 +34,7 @@ func newAgentChannelRuntime(
 		listen:   agentlistener.Listen,
 		newServer: func(registry *agentchannel.Registry) agentChannelGRPCServer {
 			server := grpc.NewServer()
-			agentpb.RegisterAgentChannelServer(server, agentchannel.New(authenticator, registry, tasks))
+			agentpb.RegisterAgentChannelServer(server, agentchannel.New(authenticator, registry, tasks, nil))
 			return server
 		},
 	}

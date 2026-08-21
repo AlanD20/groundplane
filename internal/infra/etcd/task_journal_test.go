@@ -240,7 +240,7 @@ func TestTaskStatusTransitionRejectsStaleAndInvalidState(t *testing.T) {
 
 func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 	// Rationale: retries survive restart as new attempts of the same operation;
-	// mutable maps and steps must not alias the terminal source record.
+	// mutable maps and step slices must not alias the terminal source record.
 	now := taskJournalTime()
 	source := validTaskRecord(now)
 	running, err := transitionTaskStatus(source, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
@@ -268,8 +268,8 @@ func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 		t.Fatalf("retry lifecycle was not reset: %#v", retry)
 	}
 	retry.Params["name"] = "changed"
-	retry.Steps[0].Params["script"] = "changed"
-	if failed.Params["name"] == "changed" || failed.Steps[0].Params["script"] == "changed" {
+	retry.Steps[0].ID = ids.NewAt(ids.KindStep, now, 99)
+	if failed.Params["name"] == "changed" || failed.Steps[0].ID == retry.Steps[0].ID {
 		t.Fatal("retry metadata aliases its source")
 	}
 }
@@ -347,9 +347,7 @@ func validTaskRecord(now time.Time) TaskRecord {
 	task.PlanHash = strings.Repeat("a", 64)
 	task.RenderGeneration = 1
 	task.Params = map[string]string{"name": "migrate"}
-	task.Steps = []TaskStepRecord{{
-		ID: taskJournalStepID(), Op: "run_script", Params: map[string]string{"script": "migrate"},
-	}}
+	task.Steps = []TaskStepRecord{{ID: taskJournalStepID()}}
 	return task
 }
 

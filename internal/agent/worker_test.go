@@ -7,14 +7,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
-	workerTestTaskID  = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	workerOtherTaskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	workerTestStepID  = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerTestTaskID     = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerOtherTaskID    = "task_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	workerTestStepID     = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerTestServiceID  = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerTestArtifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
 // Rationale: replaying one live assignment must neither execute twice nor
@@ -23,7 +26,7 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 	t.Parallel()
 	pool := NewWorkerPool(2, nil, testLogger())
 	started := make(chan struct{}, 2)
-	pool.executeStep = func(ctx context.Context, _ adapters.Step) error {
+	pool.executeStep = func(ctx context.Context, _ *agentpb.ExecutionStep) error {
 		started <- struct{}{}
 		<-ctx.Done()
 		return ctx.Err()
@@ -63,7 +66,8 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 		t.Fatalf("Abort() error = %v", err)
 	}
 	result := nextWorkerResult(t, pool)
-	if result.TaskID != workerTestTaskID || result.PlanHash != assignment.PlanHash || result.Terminal != TaskTerminalAborted {
+	if result.TaskID != workerTestTaskID || result.PlanHash != hashForPlan(assignment.Plan) ||
+		result.Terminal != TaskTerminalAborted {
 		t.Fatalf("result = %#v", result)
 	}
 	cancel()
@@ -80,7 +84,7 @@ func TestWorkerPoolRetainsQueuedAbortAndReservationCapacity(t *testing.T) {
 	t.Parallel()
 	pool := NewWorkerPool(1, nil, testLogger())
 	executed := make(chan struct{}, 1)
-	pool.executeStep = func(context.Context, adapters.Step) error {
+	pool.executeStep = func(context.Context, *agentpb.ExecutionStep) error {
 		executed <- struct{}{}
 		return nil
 	}
@@ -142,7 +146,7 @@ func TestWorkerPoolCancellationJoinsActiveWorkers(t *testing.T) {
 	pool := NewWorkerPool(1, nil, testLogger())
 	started := make(chan struct{})
 	exited := make(chan struct{})
-	pool.executeStep = func(ctx context.Context, _ adapters.Step) error {
+	pool.executeStep = func(ctx context.Context, _ *agentpb.ExecutionStep) error {
 		close(started)
 		<-ctx.Done()
 		close(exited)
@@ -172,14 +176,46 @@ func TestWorkerPoolCancellationJoinsActiveWorkers(t *testing.T) {
 }
 
 func workerAssignment(taskID, plan string) Assignment {
-	return Assignment{
-		TaskID:   taskID,
-		PlanHash: sha256.Sum256([]byte(plan)),
-		Steps: []TaskStep{{
-			StepID: workerTestStepID,
-			Step:   adapters.Step{Op: adapters.StepAck},
+	planID := "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	if plan == "plan-b" {
+		planID = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	}
+	yaml := []byte("services:\n  api:\n    image: registry.example/api@sha256:" +
+		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")
+	yamlHash := sha256.Sum256(yaml)
+	unsealed := &agentpb.ExecutionPlan{
+		Schema: executionplan.SchemaVersion, PlanId: planID, RenderGeneration: 1,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		TargetId:  workerTestServiceID,
+		Artifacts: []*agentpb.ComposeArtifact{{
+			ArtifactId:  workerTestArtifactID,
+			OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
+			ProjectName: "groundplane-infra", CanonicalYaml: yaml, YamlSha256: yamlHash[:],
+			Services: []*agentpb.ComposeService{{
+				ServiceId: workerTestServiceID, ComposeName: "api",
+				ExpectedLabels: []*agentpb.LabelPair{
+					{Key: "com.groundplane.kind", Value: "service"},
+					{Key: "com.groundplane.managed", Value: "true"},
+					{Key: "com.groundplane.plan-id", Value: planID},
+					{Key: "com.groundplane.render-generation", Value: "1"},
+					{Key: "com.groundplane.service-id", Value: workerTestServiceID},
+				},
+			}},
 		}},
-		Timeout: time.Minute,
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: workerTestStepID, TimeoutSeconds: 30,
+			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+				ArtifactId: workerTestArtifactID, ServiceIds: []string{workerTestServiceID},
+			}},
+		}},
+	}
+	sealed, err := executionplan.Seal(unsealed)
+	if err != nil {
+		panic(err)
+	}
+	return Assignment{
+		TaskID: taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Plan: sealed, Timeout: time.Minute,
 	}
 }
 

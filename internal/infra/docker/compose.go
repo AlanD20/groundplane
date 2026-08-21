@@ -47,7 +47,7 @@ type ContainerState struct {
 	Name    string
 	Image   string
 	Healthy bool
-	Labels  map[string]string // groundplane.managed=true, .tenant/.project/.environment/.service/.release/.slot
+	Labels  map[string]string // transitional observation shape; typed ownership evidence replaces it before execution
 }
 
 // New returns a docker-API-backed Applier.

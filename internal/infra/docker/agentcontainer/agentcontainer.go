@@ -35,10 +35,10 @@ const (
 	channelPath      = "/run/groundplane/controller"
 	agentRuntimeRoot = "/run/groundplane/agents"
 
-	labelManaged    = "groundplane.managed"
-	labelKind       = "groundplane.kind"
-	labelAgentID    = "groundplane.agent_id"
-	labelGeneration = "groundplane.generation"
+	labelManaged    = "com.groundplane.managed"
+	labelKind       = "com.groundplane.kind"
+	labelAgentID    = "com.groundplane.agent-id"
+	labelGeneration = "com.groundplane.agent-generation"
 )
 
 // Desired is the complete caller-controlled identity and runtime material for

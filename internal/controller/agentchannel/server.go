@@ -10,6 +10,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -54,22 +55,29 @@ type TaskStore interface {
 	) (etcd.Versioned[etcd.TaskRecord], error)
 }
 
+// PlanResolver deterministically rebuilds one Task's ephemeral execution plan
+// from retained etcd inputs. Rendered artifacts are never persisted.
+type PlanResolver interface {
+	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
+}
+
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
 	auth     Authenticator
 	sessions *Registry
 	tasks    TaskStore
+	plans    PlanResolver
 	now      func() time.Time
 }
 
 // New returns an AgentChannel server backed by the supplied authenticator and
 // session registry. A nil registry creates an isolated registry.
-func New(auth Authenticator, sessions *Registry, tasks TaskStore) *Server {
+func New(auth Authenticator, sessions *Registry, tasks TaskStore, plans PlanResolver) *Server {
 	if sessions == nil {
 		sessions = NewRegistry()
 	}
-	return &Server{auth: auth, sessions: sessions, tasks: tasks, now: time.Now}
+	return &Server{auth: auth, sessions: sessions, tasks: tasks, plans: plans, now: time.Now}
 }
 
 // Connect authenticates the first message, publishes the authorized config,
@@ -289,7 +297,7 @@ func (s *Server) dispatchReady(
 		if remaining == 0 {
 			return nil
 		}
-		if err := sendTaskAssignment(stream, assignment.Task.Record); err != nil {
+		if err := s.sendTaskAssignment(stream, assignment.Task.Record); err != nil {
 			return err
 		}
 		delivered[assignment.Task.Record.ID] = struct{}{}
@@ -308,7 +316,7 @@ func (s *Server) dispatchReady(
 		if !found {
 			return nil
 		}
-		if err := sendTaskAssignment(stream, assignment.Task.Record); err != nil {
+		if err := s.sendTaskAssignment(stream, assignment.Task.Record); err != nil {
 			return err
 		}
 		delivered[assignment.Task.Record.ID] = struct{}{}
@@ -317,11 +325,11 @@ func (s *Server) dispatchReady(
 	return nil
 }
 
-func sendTaskAssignment(
+func (s *Server) sendTaskAssignment(
 	stream agentpb.AgentChannel_ConnectServer,
 	task etcd.TaskRecord,
 ) error {
-	assignment, err := taskAssignmentMessage(task)
+	assignment, err := s.taskAssignmentMessage(stream.Context(), task)
 	if err != nil {
 		return err
 	}
@@ -330,7 +338,10 @@ func sendTaskAssignment(
 	})
 }
 
-func taskAssignmentMessage(task etcd.TaskRecord) (*agentpb.TaskAssignment, error) {
+func (s *Server) taskAssignmentMessage(ctx context.Context, task etcd.TaskRecord) (*agentpb.TaskAssignment, error) {
+	if s.plans == nil {
+		return nil, errs.New(errs.KindInternal, "execution plan resolver is not configured")
+	}
 	planHash, err := hex.DecodeString(task.PlanHash)
 	if err != nil || len(planHash) != 32 {
 		return nil, errs.New(errs.KindInternal, "durable Task has an invalid plan hash")
@@ -338,39 +349,54 @@ func taskAssignmentMessage(task etcd.TaskRecord) (*agentpb.TaskAssignment, error
 	if task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxInt32 {
 		return nil, errs.New(errs.KindInternal, "durable Task has an invalid Agent timeout")
 	}
-	params := task.Params
-	if params == nil {
-		params = map[string]string{}
+	resolved, err := s.plans.ResolveExecutionPlan(ctx, task)
+	if err != nil {
+		return nil, err
 	}
-	encodedParams, err := json.Marshal(params)
+	plan, err := executionplan.Validate(resolved)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	steps := make([]*agentpb.Step, len(task.Steps))
-	for index, step := range task.Steps {
-		steps[index] = &agentpb.Step{
-			StepId: step.ID,
-			Op:     step.Op,
-			Params: cloneTaskParams(step.Params),
-		}
+	if plan.PlanId != task.PlanID || !bytes.Equal(plan.PlanHash, planHash) ||
+		plan.RenderGeneration != uint64(task.RenderGeneration) || plan.TargetId != task.Target ||
+		!operationMatchesTask(plan.Operation, task.Type) || !stepSummariesMatch(plan.Steps, task.Steps) {
+		return nil, errs.New(errs.KindInternal, "resolved execution plan does not match its durable Task")
 	}
 	return &agentpb.TaskAssignment{
 		TaskId: task.ID, OperationId: task.OperationID, RetryOf: task.RetryOf,
-		PlanId: task.PlanID, PlanHash: planHash, RenderGeneration: task.RenderGeneration,
-		Type: string(task.Type), Target: task.Target, Params: encodedParams,
-		Steps: steps, TimeoutSeconds: int32(task.TimeoutSeconds),
+		Plan: plan, TimeoutSeconds: int32(task.TimeoutSeconds),
 	}, nil
 }
 
-func cloneTaskParams(params map[string]string) map[string]string {
-	if params == nil {
-		return nil
+func stepSummariesMatch(steps []*agentpb.ExecutionStep, summaries []etcd.TaskStepRecord) bool {
+	if len(steps) != len(summaries) {
+		return false
 	}
-	cloned := make(map[string]string, len(params))
-	for key, value := range params {
-		cloned[key] = value
+	for index, step := range steps {
+		if step == nil || step.StepId != summaries[index].ID {
+			return false
+		}
 	}
-	return cloned
+	return true
+}
+
+func operationMatchesTask(operation agentpb.PlanOperation, taskType etcd.TaskType) bool {
+	switch taskType {
+	case etcd.TaskDeploy:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
+	case etcd.TaskRollback:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
+	case etcd.TaskStart:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_START
+	case etcd.TaskStop:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_STOP
+	case etcd.TaskDestroy:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_DESTROY
+	case etcd.TaskRemove:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE
+	default:
+		return false
+	}
 }
 
 func (s *Server) acknowledge(

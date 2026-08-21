@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -53,12 +52,13 @@ func TestClientSendsAuthenticationFirstAndCopiesToken(t *testing.T) {
 // exactly, while an unresolved procedure fails closed instead of being executed.
 func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 	t.Parallel()
-	planHash := sha256.Sum256([]byte("immutable-plan"))
+	assignment := workerAssignment(workerTestTaskID, "plan-a")
+	planHash := hashForPlan(assignment.Plan)
 	stream := newFakeStream(
 		configMessage(60, 1),
 		&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
-			TaskId: workerTestTaskID, PlanHash: planHash[:], TimeoutSeconds: 60,
-			Steps: []*agentpb.Step{{StepId: workerTestStepID, Op: "ack"}},
+			TaskId: workerTestTaskID, OperationId: assignment.OperationID,
+			Plan: assignment.Plan, TimeoutSeconds: 60,
 		}}},
 	)
 	client := newTestClient(t, bytes.Repeat([]byte{0x30}, agentprotocol.RawTokenBytes), stream)

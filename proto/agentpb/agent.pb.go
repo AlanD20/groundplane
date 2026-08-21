@@ -146,6 +146,122 @@ func (TaskTerminal) EnumDescriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{1}
 }
 
+type PlanOperation int32
+
+const (
+	PlanOperation_PLAN_OPERATION_UNSPECIFIED     PlanOperation = 0
+	PlanOperation_PLAN_OPERATION_RECONCILE       PlanOperation = 1
+	PlanOperation_PLAN_OPERATION_DEPLOY          PlanOperation = 2
+	PlanOperation_PLAN_OPERATION_ROLLBACK        PlanOperation = 3
+	PlanOperation_PLAN_OPERATION_START           PlanOperation = 4
+	PlanOperation_PLAN_OPERATION_STOP            PlanOperation = 5
+	PlanOperation_PLAN_OPERATION_DESTROY         PlanOperation = 6
+	PlanOperation_PLAN_OPERATION_REMOVE          PlanOperation = 7
+	PlanOperation_PLAN_OPERATION_COMPONENT_APPLY PlanOperation = 8
+)
+
+// Enum value maps for PlanOperation.
+var (
+	PlanOperation_name = map[int32]string{
+		0: "PLAN_OPERATION_UNSPECIFIED",
+		1: "PLAN_OPERATION_RECONCILE",
+		2: "PLAN_OPERATION_DEPLOY",
+		3: "PLAN_OPERATION_ROLLBACK",
+		4: "PLAN_OPERATION_START",
+		5: "PLAN_OPERATION_STOP",
+		6: "PLAN_OPERATION_DESTROY",
+		7: "PLAN_OPERATION_REMOVE",
+		8: "PLAN_OPERATION_COMPONENT_APPLY",
+	}
+	PlanOperation_value = map[string]int32{
+		"PLAN_OPERATION_UNSPECIFIED":     0,
+		"PLAN_OPERATION_RECONCILE":       1,
+		"PLAN_OPERATION_DEPLOY":          2,
+		"PLAN_OPERATION_ROLLBACK":        3,
+		"PLAN_OPERATION_START":           4,
+		"PLAN_OPERATION_STOP":            5,
+		"PLAN_OPERATION_DESTROY":         6,
+		"PLAN_OPERATION_REMOVE":          7,
+		"PLAN_OPERATION_COMPONENT_APPLY": 8,
+	}
+)
+
+func (x PlanOperation) Enum() *PlanOperation {
+	p := new(PlanOperation)
+	*p = x
+	return p
+}
+
+func (x PlanOperation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PlanOperation) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[2].Descriptor()
+}
+
+func (PlanOperation) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[2]
+}
+
+func (x PlanOperation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PlanOperation.Descriptor instead.
+func (PlanOperation) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{2}
+}
+
+type ComposeOwnerKind int32
+
+const (
+	ComposeOwnerKind_COMPOSE_OWNER_KIND_UNSPECIFIED ComposeOwnerKind = 0
+	ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ComposeOwnerKind = 1
+	ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM    ComposeOwnerKind = 2
+)
+
+// Enum value maps for ComposeOwnerKind.
+var (
+	ComposeOwnerKind_name = map[int32]string{
+		0: "COMPOSE_OWNER_KIND_UNSPECIFIED",
+		1: "COMPOSE_OWNER_KIND_ENVIRONMENT",
+		2: "COMPOSE_OWNER_KIND_PLATFORM",
+	}
+	ComposeOwnerKind_value = map[string]int32{
+		"COMPOSE_OWNER_KIND_UNSPECIFIED": 0,
+		"COMPOSE_OWNER_KIND_ENVIRONMENT": 1,
+		"COMPOSE_OWNER_KIND_PLATFORM":    2,
+	}
+)
+
+func (x ComposeOwnerKind) Enum() *ComposeOwnerKind {
+	p := new(ComposeOwnerKind)
+	*p = x
+	return p
+}
+
+func (x ComposeOwnerKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ComposeOwnerKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[3].Descriptor()
+}
+
+func (ComposeOwnerKind) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[3]
+}
+
+func (x ComposeOwnerKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ComposeOwnerKind.Descriptor instead.
+func (ComposeOwnerKind) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{3}
+}
+
 type Authenticate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
@@ -573,7 +689,7 @@ type ContainerState struct {
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Image         string                 `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
 	Healthy       bool                   `protobuf:"varint,3,opt,name=healthy,proto3" json:"healthy,omitempty"`
-	Labels        map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // groundplane.managed, .tenant, .project, .environment, .service, .release, .slot
+	Labels        map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // transitional observation payload; typed observation replaces this map before execution is enabled
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -827,20 +943,14 @@ func (*ControllerMessage_ConfigUpdate) isControllerMessage_Payload() {}
 func (*ControllerMessage_Shutdown) isControllerMessage_Payload() {}
 
 type TaskAssignment struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	TaskId           string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"` // stable across retries — see internal/controller/task.go
-	RetryOf          string                 `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
-	PlanId           string                 `protobuf:"bytes,4,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`                // the ExecutionPlan this task dispatches — see internal/controller/plan.go
-	PlanHash         []byte                 `protobuf:"bytes,5,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`          // exactly 32 SHA-256 bytes; immutable for this task_id
-	RenderGeneration int32                  `protobuf:"varint,6,opt,name=render_generation,json=renderGeneration,proto3" json:"render_generation,omitempty"`
-	Type             string                 `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"` // deploy | rollback | backup | restore | attach | detach | run | script | provision | create | update | remove | start | stop | destroy | rotate
-	Target           string                 `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
-	Params           []byte                 `protobuf:"bytes,9,opt,name=params,proto3" json:"params,omitempty"` // JSON-encoded, typed per task type
-	Steps            []*Step                `protobuf:"bytes,10,rep,name=steps,proto3" json:"steps,omitempty"`
-	TimeoutSeconds   int32                  `protobuf:"varint,11,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TaskId         string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	OperationId    string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"` // stable across retries
+	RetryOf        string                 `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
+	Plan           *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`                                  // complete authoritative procedure
+	TimeoutSeconds int32                  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TaskAssignment) Reset() {
@@ -894,51 +1004,9 @@ func (x *TaskAssignment) GetRetryOf() string {
 	return ""
 }
 
-func (x *TaskAssignment) GetPlanId() string {
+func (x *TaskAssignment) GetPlan() *ExecutionPlan {
 	if x != nil {
-		return x.PlanId
-	}
-	return ""
-}
-
-func (x *TaskAssignment) GetPlanHash() []byte {
-	if x != nil {
-		return x.PlanHash
-	}
-	return nil
-}
-
-func (x *TaskAssignment) GetRenderGeneration() int32 {
-	if x != nil {
-		return x.RenderGeneration
-	}
-	return 0
-}
-
-func (x *TaskAssignment) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *TaskAssignment) GetTarget() string {
-	if x != nil {
-		return x.Target
-	}
-	return ""
-}
-
-func (x *TaskAssignment) GetParams() []byte {
-	if x != nil {
-		return x.Params
-	}
-	return nil
-}
-
-func (x *TaskAssignment) GetSteps() []*Step {
-	if x != nil {
-		return x.Steps
+		return x.Plan
 	}
 	return nil
 }
@@ -950,29 +1018,34 @@ func (x *TaskAssignment) GetTimeoutSeconds() int32 {
 	return 0
 }
 
-type Step struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	StepId        string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`                                                             // immutable canonical step_<ulid> from the execution plan
-	Op            string                 `protobuf:"bytes,2,opt,name=op,proto3" json:"op,omitempty"`                                                                                   // exec | sql | dump | restore | encrypt | upload | verify | prune | ack — the known step catalog (see internal/adapters)
-	Params        map[string]string      `protobuf:"bytes,3,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // opaque until a typed procedure contract is accepted
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type ExecutionPlan struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Schema           uint32                 `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
+	PlanId           string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	PlanHash         []byte                 `protobuf:"bytes,3,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"` // SHA-256 of deterministic serialization with this field cleared
+	RenderGeneration uint64                 `protobuf:"varint,4,opt,name=render_generation,json=renderGeneration,proto3" json:"render_generation,omitempty"`
+	Operation        PlanOperation          `protobuf:"varint,5,opt,name=operation,proto3,enum=groundplane.agent.v1.PlanOperation" json:"operation,omitempty"`
+	TargetId         string                 `protobuf:"bytes,6,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Artifacts        []*ComposeArtifact     `protobuf:"bytes,7,rep,name=artifacts,proto3" json:"artifacts,omitempty"`
+	Steps            []*ExecutionStep       `protobuf:"bytes,8,rep,name=steps,proto3" json:"steps,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
-func (x *Step) Reset() {
-	*x = Step{}
+func (x *ExecutionPlan) Reset() {
+	*x = ExecutionPlan{}
 	mi := &file_proto_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Step) String() string {
+func (x *ExecutionPlan) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Step) ProtoMessage() {}
+func (*ExecutionPlan) ProtoMessage() {}
 
-func (x *Step) ProtoReflect() protoreflect.Message {
+func (x *ExecutionPlan) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -984,28 +1057,773 @@ func (x *Step) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Step.ProtoReflect.Descriptor instead.
-func (*Step) Descriptor() ([]byte, []int) {
+// Deprecated: Use ExecutionPlan.ProtoReflect.Descriptor instead.
+func (*ExecutionPlan) Descriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *Step) GetStepId() string {
+func (x *ExecutionPlan) GetSchema() uint32 {
+	if x != nil {
+		return x.Schema
+	}
+	return 0
+}
+
+func (x *ExecutionPlan) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+func (x *ExecutionPlan) GetPlanHash() []byte {
+	if x != nil {
+		return x.PlanHash
+	}
+	return nil
+}
+
+func (x *ExecutionPlan) GetRenderGeneration() uint64 {
+	if x != nil {
+		return x.RenderGeneration
+	}
+	return 0
+}
+
+func (x *ExecutionPlan) GetOperation() PlanOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return PlanOperation_PLAN_OPERATION_UNSPECIFIED
+}
+
+func (x *ExecutionPlan) GetTargetId() string {
+	if x != nil {
+		return x.TargetId
+	}
+	return ""
+}
+
+func (x *ExecutionPlan) GetArtifacts() []*ComposeArtifact {
+	if x != nil {
+		return x.Artifacts
+	}
+	return nil
+}
+
+func (x *ExecutionPlan) GetSteps() []*ExecutionStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+type ComposeArtifact struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId          string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	OwnerKind           ComposeOwnerKind       `protobuf:"varint,2,opt,name=owner_kind,json=ownerKind,proto3,enum=groundplane.agent.v1.ComposeOwnerKind" json:"owner_kind,omitempty"`
+	OwnerId             string                 `protobuf:"bytes,3,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"` // environment id, or empty for platform
+	ProjectName         string                 `protobuf:"bytes,4,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
+	CanonicalYaml       []byte                 `protobuf:"bytes,5,opt,name=canonical_yaml,json=canonicalYaml,proto3" json:"canonical_yaml,omitempty"`
+	YamlSha256          []byte                 `protobuf:"bytes,6,opt,name=yaml_sha256,json=yamlSha256,proto3" json:"yaml_sha256,omitempty"`
+	AuthorizedVolumeDir string                 `protobuf:"bytes,7,opt,name=authorized_volume_dir,json=authorizedVolumeDir,proto3" json:"authorized_volume_dir,omitempty"` // empty for platform
+	Services            []*ComposeService      `protobuf:"bytes,8,rep,name=services,proto3" json:"services,omitempty"`
+	Networks            []*ComposeNetwork      `protobuf:"bytes,9,rep,name=networks,proto3" json:"networks,omitempty"`
+	Volumes             []*ComposeVolume       `protobuf:"bytes,10,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ComposeArtifact) Reset() {
+	*x = ComposeArtifact{}
+	mi := &file_proto_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeArtifact) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeArtifact) ProtoMessage() {}
+
+func (x *ComposeArtifact) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeArtifact.ProtoReflect.Descriptor instead.
+func (*ComposeArtifact) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ComposeArtifact) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *ComposeArtifact) GetOwnerKind() ComposeOwnerKind {
+	if x != nil {
+		return x.OwnerKind
+	}
+	return ComposeOwnerKind_COMPOSE_OWNER_KIND_UNSPECIFIED
+}
+
+func (x *ComposeArtifact) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *ComposeArtifact) GetProjectName() string {
+	if x != nil {
+		return x.ProjectName
+	}
+	return ""
+}
+
+func (x *ComposeArtifact) GetCanonicalYaml() []byte {
+	if x != nil {
+		return x.CanonicalYaml
+	}
+	return nil
+}
+
+func (x *ComposeArtifact) GetYamlSha256() []byte {
+	if x != nil {
+		return x.YamlSha256
+	}
+	return nil
+}
+
+func (x *ComposeArtifact) GetAuthorizedVolumeDir() string {
+	if x != nil {
+		return x.AuthorizedVolumeDir
+	}
+	return ""
+}
+
+func (x *ComposeArtifact) GetServices() []*ComposeService {
+	if x != nil {
+		return x.Services
+	}
+	return nil
+}
+
+func (x *ComposeArtifact) GetNetworks() []*ComposeNetwork {
+	if x != nil {
+		return x.Networks
+	}
+	return nil
+}
+
+func (x *ComposeArtifact) GetVolumes() []*ComposeVolume {
+	if x != nil {
+		return x.Volumes
+	}
+	return nil
+}
+
+type ComposeService struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ServiceId      string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ComposeName    string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
+	ExpectedLabels []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ComposeService) Reset() {
+	*x = ComposeService{}
+	mi := &file_proto_agent_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeService) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeService) ProtoMessage() {}
+
+func (x *ComposeService) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeService.ProtoReflect.Descriptor instead.
+func (*ComposeService) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ComposeService) GetServiceId() string {
+	if x != nil {
+		return x.ServiceId
+	}
+	return ""
+}
+
+func (x *ComposeService) GetComposeName() string {
+	if x != nil {
+		return x.ComposeName
+	}
+	return ""
+}
+
+func (x *ComposeService) GetExpectedLabels() []*LabelPair {
+	if x != nil {
+		return x.ExpectedLabels
+	}
+	return nil
+}
+
+type ComposeNetwork struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NetworkId      string                 `protobuf:"bytes,1,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	ComposeName    string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
+	ExpectedLabels []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ComposeNetwork) Reset() {
+	*x = ComposeNetwork{}
+	mi := &file_proto_agent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeNetwork) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeNetwork) ProtoMessage() {}
+
+func (x *ComposeNetwork) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeNetwork.ProtoReflect.Descriptor instead.
+func (*ComposeNetwork) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ComposeNetwork) GetNetworkId() string {
+	if x != nil {
+		return x.NetworkId
+	}
+	return ""
+}
+
+func (x *ComposeNetwork) GetComposeName() string {
+	if x != nil {
+		return x.ComposeName
+	}
+	return ""
+}
+
+func (x *ComposeNetwork) GetExpectedLabels() []*LabelPair {
+	if x != nil {
+		return x.ExpectedLabels
+	}
+	return nil
+}
+
+type ComposeVolume struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	VolumeId       string                 `protobuf:"bytes,1,opt,name=volume_id,json=volumeId,proto3" json:"volume_id,omitempty"`
+	ComposeName    string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
+	ExpectedLabels []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ComposeVolume) Reset() {
+	*x = ComposeVolume{}
+	mi := &file_proto_agent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeVolume) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeVolume) ProtoMessage() {}
+
+func (x *ComposeVolume) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeVolume.ProtoReflect.Descriptor instead.
+func (*ComposeVolume) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ComposeVolume) GetVolumeId() string {
+	if x != nil {
+		return x.VolumeId
+	}
+	return ""
+}
+
+func (x *ComposeVolume) GetComposeName() string {
+	if x != nil {
+		return x.ComposeName
+	}
+	return ""
+}
+
+func (x *ComposeVolume) GetExpectedLabels() []*LabelPair {
+	if x != nil {
+		return x.ExpectedLabels
+	}
+	return nil
+}
+
+type LabelPair struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LabelPair) Reset() {
+	*x = LabelPair{}
+	mi := &file_proto_agent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LabelPair) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LabelPair) ProtoMessage() {}
+
+func (x *LabelPair) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LabelPair.ProtoReflect.Descriptor instead.
+func (*LabelPair) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *LabelPair) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *LabelPair) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+type ExecutionStep struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	StepId         string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	TimeoutSeconds uint32                 `protobuf:"varint,2,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*ExecutionStep_ComposeApply
+	//	*ExecutionStep_ComposeStop
+	//	*ExecutionStep_ComposeRemove
+	//	*ExecutionStep_WaitHealthy
+	Payload       isExecutionStep_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecutionStep) Reset() {
+	*x = ExecutionStep{}
+	mi := &file_proto_agent_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecutionStep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecutionStep) ProtoMessage() {}
+
+func (x *ExecutionStep) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecutionStep.ProtoReflect.Descriptor instead.
+func (*ExecutionStep) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ExecutionStep) GetStepId() string {
 	if x != nil {
 		return x.StepId
 	}
 	return ""
 }
 
-func (x *Step) GetOp() string {
+func (x *ExecutionStep) GetTimeoutSeconds() uint32 {
 	if x != nil {
-		return x.Op
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+func (x *ExecutionStep) GetPayload() isExecutionStep_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *ExecutionStep) GetComposeApply() *ComposeApply {
+	if x != nil {
+		if x, ok := x.Payload.(*ExecutionStep_ComposeApply); ok {
+			return x.ComposeApply
+		}
+	}
+	return nil
+}
+
+func (x *ExecutionStep) GetComposeStop() *ComposeStop {
+	if x != nil {
+		if x, ok := x.Payload.(*ExecutionStep_ComposeStop); ok {
+			return x.ComposeStop
+		}
+	}
+	return nil
+}
+
+func (x *ExecutionStep) GetComposeRemove() *ComposeRemove {
+	if x != nil {
+		if x, ok := x.Payload.(*ExecutionStep_ComposeRemove); ok {
+			return x.ComposeRemove
+		}
+	}
+	return nil
+}
+
+func (x *ExecutionStep) GetWaitHealthy() *WaitHealthy {
+	if x != nil {
+		if x, ok := x.Payload.(*ExecutionStep_WaitHealthy); ok {
+			return x.WaitHealthy
+		}
+	}
+	return nil
+}
+
+type isExecutionStep_Payload interface {
+	isExecutionStep_Payload()
+}
+
+type ExecutionStep_ComposeApply struct {
+	ComposeApply *ComposeApply `protobuf:"bytes,3,opt,name=compose_apply,json=composeApply,proto3,oneof"`
+}
+
+type ExecutionStep_ComposeStop struct {
+	ComposeStop *ComposeStop `protobuf:"bytes,4,opt,name=compose_stop,json=composeStop,proto3,oneof"`
+}
+
+type ExecutionStep_ComposeRemove struct {
+	ComposeRemove *ComposeRemove `protobuf:"bytes,5,opt,name=compose_remove,json=composeRemove,proto3,oneof"`
+}
+
+type ExecutionStep_WaitHealthy struct {
+	WaitHealthy *WaitHealthy `protobuf:"bytes,6,opt,name=wait_healthy,json=waitHealthy,proto3,oneof"`
+}
+
+func (*ExecutionStep_ComposeApply) isExecutionStep_Payload() {}
+
+func (*ExecutionStep_ComposeStop) isExecutionStep_Payload() {}
+
+func (*ExecutionStep_ComposeRemove) isExecutionStep_Payload() {}
+
+func (*ExecutionStep_WaitHealthy) isExecutionStep_Payload() {}
+
+type ComposeApply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	ServiceIds    []string               `protobuf:"bytes,2,rep,name=service_ids,json=serviceIds,proto3" json:"service_ids,omitempty"`
+	FullReconcile bool                   `protobuf:"varint,3,opt,name=full_reconcile,json=fullReconcile,proto3" json:"full_reconcile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComposeApply) Reset() {
+	*x = ComposeApply{}
+	mi := &file_proto_agent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeApply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeApply) ProtoMessage() {}
+
+func (x *ComposeApply) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeApply.ProtoReflect.Descriptor instead.
+func (*ComposeApply) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ComposeApply) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
 	}
 	return ""
 }
 
-func (x *Step) GetParams() map[string]string {
+func (x *ComposeApply) GetServiceIds() []string {
 	if x != nil {
-		return x.Params
+		return x.ServiceIds
+	}
+	return nil
+}
+
+func (x *ComposeApply) GetFullReconcile() bool {
+	if x != nil {
+		return x.FullReconcile
+	}
+	return false
+}
+
+type ComposeStop struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	ServiceIds    []string               `protobuf:"bytes,2,rep,name=service_ids,json=serviceIds,proto3" json:"service_ids,omitempty"`
+	GraceSeconds  uint32                 `protobuf:"varint,3,opt,name=grace_seconds,json=graceSeconds,proto3" json:"grace_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComposeStop) Reset() {
+	*x = ComposeStop{}
+	mi := &file_proto_agent_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeStop) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeStop) ProtoMessage() {}
+
+func (x *ComposeStop) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeStop.ProtoReflect.Descriptor instead.
+func (*ComposeStop) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ComposeStop) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *ComposeStop) GetServiceIds() []string {
+	if x != nil {
+		return x.ServiceIds
+	}
+	return nil
+}
+
+func (x *ComposeStop) GetGraceSeconds() uint32 {
+	if x != nil {
+		return x.GraceSeconds
+	}
+	return 0
+}
+
+type ComposeRemove struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	ServiceIds    []string               `protobuf:"bytes,2,rep,name=service_ids,json=serviceIds,proto3" json:"service_ids,omitempty"`
+	WholeProject  bool                   `protobuf:"varint,3,opt,name=whole_project,json=wholeProject,proto3" json:"whole_project,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComposeRemove) Reset() {
+	*x = ComposeRemove{}
+	mi := &file_proto_agent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeRemove) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeRemove) ProtoMessage() {}
+
+func (x *ComposeRemove) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeRemove.ProtoReflect.Descriptor instead.
+func (*ComposeRemove) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ComposeRemove) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *ComposeRemove) GetServiceIds() []string {
+	if x != nil {
+		return x.ServiceIds
+	}
+	return nil
+}
+
+func (x *ComposeRemove) GetWholeProject() bool {
+	if x != nil {
+		return x.WholeProject
+	}
+	return false
+}
+
+type WaitHealthy struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	ServiceIds    []string               `protobuf:"bytes,2,rep,name=service_ids,json=serviceIds,proto3" json:"service_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WaitHealthy) Reset() {
+	*x = WaitHealthy{}
+	mi := &file_proto_agent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WaitHealthy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WaitHealthy) ProtoMessage() {}
+
+func (x *WaitHealthy) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WaitHealthy.ProtoReflect.Descriptor instead.
+func (*WaitHealthy) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *WaitHealthy) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *WaitHealthy) GetServiceIds() []string {
+	if x != nil {
+		return x.ServiceIds
 	}
 	return nil
 }
@@ -1020,7 +1838,7 @@ type TaskAbort struct {
 
 func (x *TaskAbort) Reset() {
 	*x = TaskAbort{}
-	mi := &file_proto_agent_proto_msgTypes[11]
+	mi := &file_proto_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1032,7 +1850,7 @@ func (x *TaskAbort) String() string {
 func (*TaskAbort) ProtoMessage() {}
 
 func (x *TaskAbort) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[11]
+	mi := &file_proto_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1045,7 +1863,7 @@ func (x *TaskAbort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskAbort.ProtoReflect.Descriptor instead.
 func (*TaskAbort) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{11}
+	return file_proto_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *TaskAbort) GetTaskId() string {
@@ -1071,7 +1889,7 @@ type ConfigUpdate struct {
 
 func (x *ConfigUpdate) Reset() {
 	*x = ConfigUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[12]
+	mi := &file_proto_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1083,7 +1901,7 @@ func (x *ConfigUpdate) String() string {
 func (*ConfigUpdate) ProtoMessage() {}
 
 func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[12]
+	mi := &file_proto_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1096,7 +1914,7 @@ func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigUpdate.ProtoReflect.Descriptor instead.
 func (*ConfigUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{12}
+	return file_proto_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ConfigUpdate) GetAgentConfig() *AgentConfig {
@@ -1114,7 +1932,7 @@ type Shutdown struct {
 
 func (x *Shutdown) Reset() {
 	*x = Shutdown{}
-	mi := &file_proto_agent_proto_msgTypes[13]
+	mi := &file_proto_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1126,7 +1944,7 @@ func (x *Shutdown) String() string {
 func (*Shutdown) ProtoMessage() {}
 
 func (x *Shutdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[13]
+	mi := &file_proto_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1139,7 +1957,7 @@ func (x *Shutdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shutdown.ProtoReflect.Descriptor instead.
 func (*Shutdown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{13}
+	return file_proto_agent_proto_rawDescGZIP(), []int{23}
 }
 
 var File_proto_agent_proto protoreflect.FileDescriptor
@@ -1199,27 +2017,85 @@ const file_proto_agent_proto_rawDesc = "" +
 	"task_abort\x18\x02 \x01(\v2\x1f.groundplane.agent.v1.TaskAbortH\x00R\ttaskAbort\x12I\n" +
 	"\rconfig_update\x18\x03 \x01(\v2\".groundplane.agent.v1.ConfigUpdateH\x00R\fconfigUpdate\x12<\n" +
 	"\bshutdown\x18\x04 \x01(\v2\x1e.groundplane.agent.v1.ShutdownH\x00R\bshutdownB\t\n" +
-	"\apayload\"\xe9\x02\n" +
+	"\apayload\"\xc9\x01\n" +
 	"\x0eTaskAssignment\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
-	"\bretry_of\x18\x03 \x01(\tR\aretryOf\x12\x17\n" +
-	"\aplan_id\x18\x04 \x01(\tR\x06planId\x12\x1b\n" +
-	"\tplan_hash\x18\x05 \x01(\fR\bplanHash\x12+\n" +
-	"\x11render_generation\x18\x06 \x01(\x05R\x10renderGeneration\x12\x12\n" +
-	"\x04type\x18\a \x01(\tR\x04type\x12\x16\n" +
-	"\x06target\x18\b \x01(\tR\x06target\x12\x16\n" +
-	"\x06params\x18\t \x01(\fR\x06params\x120\n" +
-	"\x05steps\x18\n" +
-	" \x03(\v2\x1a.groundplane.agent.v1.StepR\x05steps\x12'\n" +
-	"\x0ftimeout_seconds\x18\v \x01(\x05R\x0etimeoutSeconds\"\xaa\x01\n" +
-	"\x04Step\x12\x17\n" +
-	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12\x0e\n" +
-	"\x02op\x18\x02 \x01(\tR\x02op\x12>\n" +
-	"\x06params\x18\x03 \x03(\v2&.groundplane.agent.v1.Step.ParamsEntryR\x06params\x1a9\n" +
-	"\vParamsEntry\x12\x10\n" +
+	"\bretry_of\x18\x03 \x01(\tR\aretryOf\x127\n" +
+	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12'\n" +
+	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\"\xea\x02\n" +
+	"\rExecutionPlan\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
+	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12\x1b\n" +
+	"\tplan_hash\x18\x03 \x01(\fR\bplanHash\x12+\n" +
+	"\x11render_generation\x18\x04 \x01(\x04R\x10renderGeneration\x12A\n" +
+	"\toperation\x18\x05 \x01(\x0e2#.groundplane.agent.v1.PlanOperationR\toperation\x12\x1b\n" +
+	"\ttarget_id\x18\x06 \x01(\tR\btargetId\x12C\n" +
+	"\tartifacts\x18\a \x03(\v2%.groundplane.agent.v1.ComposeArtifactR\tartifacts\x129\n" +
+	"\x05steps\x18\b \x03(\v2#.groundplane.agent.v1.ExecutionStepR\x05steps\"\xf6\x03\n" +
+	"\x0fComposeArtifact\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\x12E\n" +
+	"\n" +
+	"owner_kind\x18\x02 \x01(\x0e2&.groundplane.agent.v1.ComposeOwnerKindR\townerKind\x12\x19\n" +
+	"\bowner_id\x18\x03 \x01(\tR\aownerId\x12!\n" +
+	"\fproject_name\x18\x04 \x01(\tR\vprojectName\x12%\n" +
+	"\x0ecanonical_yaml\x18\x05 \x01(\fR\rcanonicalYaml\x12\x1f\n" +
+	"\vyaml_sha256\x18\x06 \x01(\fR\n" +
+	"yamlSha256\x122\n" +
+	"\x15authorized_volume_dir\x18\a \x01(\tR\x13authorizedVolumeDir\x12@\n" +
+	"\bservices\x18\b \x03(\v2$.groundplane.agent.v1.ComposeServiceR\bservices\x12@\n" +
+	"\bnetworks\x18\t \x03(\v2$.groundplane.agent.v1.ComposeNetworkR\bnetworks\x12=\n" +
+	"\avolumes\x18\n" +
+	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\x9c\x01\n" +
+	"\x0eComposeService\x12\x1d\n" +
+	"\n" +
+	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
+	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12H\n" +
+	"\x0fexpected_labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"\x9c\x01\n" +
+	"\x0eComposeNetwork\x12\x1d\n" +
+	"\n" +
+	"network_id\x18\x01 \x01(\tR\tnetworkId\x12!\n" +
+	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12H\n" +
+	"\x0fexpected_labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"\x99\x01\n" +
+	"\rComposeVolume\x12\x1b\n" +
+	"\tvolume_id\x18\x01 \x01(\tR\bvolumeId\x12!\n" +
+	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12H\n" +
+	"\x0fexpected_labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"3\n" +
+	"\tLabelPair\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"<\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\x85\x03\n" +
+	"\rExecutionStep\x12\x17\n" +
+	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12'\n" +
+	"\x0ftimeout_seconds\x18\x02 \x01(\rR\x0etimeoutSeconds\x12I\n" +
+	"\rcompose_apply\x18\x03 \x01(\v2\".groundplane.agent.v1.ComposeApplyH\x00R\fcomposeApply\x12F\n" +
+	"\fcompose_stop\x18\x04 \x01(\v2!.groundplane.agent.v1.ComposeStopH\x00R\vcomposeStop\x12L\n" +
+	"\x0ecompose_remove\x18\x05 \x01(\v2#.groundplane.agent.v1.ComposeRemoveH\x00R\rcomposeRemove\x12F\n" +
+	"\fwait_healthy\x18\x06 \x01(\v2!.groundplane.agent.v1.WaitHealthyH\x00R\vwaitHealthyB\t\n" +
+	"\apayload\"w\n" +
+	"\fComposeApply\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\x12\x1f\n" +
+	"\vservice_ids\x18\x02 \x03(\tR\n" +
+	"serviceIds\x12%\n" +
+	"\x0efull_reconcile\x18\x03 \x01(\bR\rfullReconcile\"t\n" +
+	"\vComposeStop\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\x12\x1f\n" +
+	"\vservice_ids\x18\x02 \x03(\tR\n" +
+	"serviceIds\x12#\n" +
+	"\rgrace_seconds\x18\x03 \x01(\rR\fgraceSeconds\"v\n" +
+	"\rComposeRemove\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\x12\x1f\n" +
+	"\vservice_ids\x18\x02 \x03(\tR\n" +
+	"serviceIds\x12#\n" +
+	"\rwhole_project\x18\x03 \x01(\bR\fwholeProject\"O\n" +
+	"\vWaitHealthy\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\x12\x1f\n" +
+	"\vservice_ids\x18\x02 \x03(\tR\n" +
+	"serviceIds\"<\n" +
 	"\tTaskAbort\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"T\n" +
@@ -1240,7 +2116,21 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x17TASK_TERMINAL_COMPLETED\x10\x01\x12\x18\n" +
 	"\x14TASK_TERMINAL_FAILED\x10\x02\x12\x1b\n" +
 	"\x17TASK_TERMINAL_TIMED_OUT\x10\x03\x12\x19\n" +
-	"\x15TASK_TERMINAL_ABORTED\x10\x042j\n" +
+	"\x15TASK_TERMINAL_ABORTED\x10\x04*\x93\x02\n" +
+	"\rPlanOperation\x12\x1e\n" +
+	"\x1aPLAN_OPERATION_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18PLAN_OPERATION_RECONCILE\x10\x01\x12\x19\n" +
+	"\x15PLAN_OPERATION_DEPLOY\x10\x02\x12\x1b\n" +
+	"\x17PLAN_OPERATION_ROLLBACK\x10\x03\x12\x18\n" +
+	"\x14PLAN_OPERATION_START\x10\x04\x12\x17\n" +
+	"\x13PLAN_OPERATION_STOP\x10\x05\x12\x1a\n" +
+	"\x16PLAN_OPERATION_DESTROY\x10\x06\x12\x19\n" +
+	"\x15PLAN_OPERATION_REMOVE\x10\a\x12\"\n" +
+	"\x1ePLAN_OPERATION_COMPONENT_APPLY\x10\b*{\n" +
+	"\x10ComposeOwnerKind\x12\"\n" +
+	"\x1eCOMPOSE_OWNER_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eCOMPOSE_OWNER_KIND_ENVIRONMENT\x10\x01\x12\x1f\n" +
+	"\x1bCOMPOSE_OWNER_KIND_PLATFORM\x10\x022j\n" +
 	"\fAgentChannel\x12Z\n" +
 	"\aConnect\x12\".groundplane.agent.v1.AgentMessage\x1a'.groundplane.agent.v1.ControllerMessage(\x010\x01B.Z,github.com/AlanD20/groundplane/proto/agentpbb\x06proto3"
 
@@ -1256,54 +2146,78 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 	return file_proto_agent_proto_rawDescData
 }
 
-var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_proto_agent_proto_goTypes = []any{
 	(TaskState)(0),            // 0: groundplane.agent.v1.TaskState
 	(TaskTerminal)(0),         // 1: groundplane.agent.v1.TaskTerminal
-	(*Authenticate)(nil),      // 2: groundplane.agent.v1.Authenticate
-	(*AgentConfig)(nil),       // 3: groundplane.agent.v1.AgentConfig
-	(*AgentMessage)(nil),      // 4: groundplane.agent.v1.AgentMessage
-	(*Ready)(nil),             // 5: groundplane.agent.v1.Ready
-	(*TaskEvent)(nil),         // 6: groundplane.agent.v1.TaskEvent
-	(*ObservedState)(nil),     // 7: groundplane.agent.v1.ObservedState
-	(*ContainerState)(nil),    // 8: groundplane.agent.v1.ContainerState
-	(*TaskAck)(nil),           // 9: groundplane.agent.v1.TaskAck
-	(*ControllerMessage)(nil), // 10: groundplane.agent.v1.ControllerMessage
-	(*TaskAssignment)(nil),    // 11: groundplane.agent.v1.TaskAssignment
-	(*Step)(nil),              // 12: groundplane.agent.v1.Step
-	(*TaskAbort)(nil),         // 13: groundplane.agent.v1.TaskAbort
-	(*ConfigUpdate)(nil),      // 14: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),          // 15: groundplane.agent.v1.Shutdown
-	nil,                       // 16: groundplane.agent.v1.AgentConfig.LabelsEntry
-	nil,                       // 17: groundplane.agent.v1.ContainerState.LabelsEntry
-	nil,                       // 18: groundplane.agent.v1.Step.ParamsEntry
+	(PlanOperation)(0),        // 2: groundplane.agent.v1.PlanOperation
+	(ComposeOwnerKind)(0),     // 3: groundplane.agent.v1.ComposeOwnerKind
+	(*Authenticate)(nil),      // 4: groundplane.agent.v1.Authenticate
+	(*AgentConfig)(nil),       // 5: groundplane.agent.v1.AgentConfig
+	(*AgentMessage)(nil),      // 6: groundplane.agent.v1.AgentMessage
+	(*Ready)(nil),             // 7: groundplane.agent.v1.Ready
+	(*TaskEvent)(nil),         // 8: groundplane.agent.v1.TaskEvent
+	(*ObservedState)(nil),     // 9: groundplane.agent.v1.ObservedState
+	(*ContainerState)(nil),    // 10: groundplane.agent.v1.ContainerState
+	(*TaskAck)(nil),           // 11: groundplane.agent.v1.TaskAck
+	(*ControllerMessage)(nil), // 12: groundplane.agent.v1.ControllerMessage
+	(*TaskAssignment)(nil),    // 13: groundplane.agent.v1.TaskAssignment
+	(*ExecutionPlan)(nil),     // 14: groundplane.agent.v1.ExecutionPlan
+	(*ComposeArtifact)(nil),   // 15: groundplane.agent.v1.ComposeArtifact
+	(*ComposeService)(nil),    // 16: groundplane.agent.v1.ComposeService
+	(*ComposeNetwork)(nil),    // 17: groundplane.agent.v1.ComposeNetwork
+	(*ComposeVolume)(nil),     // 18: groundplane.agent.v1.ComposeVolume
+	(*LabelPair)(nil),         // 19: groundplane.agent.v1.LabelPair
+	(*ExecutionStep)(nil),     // 20: groundplane.agent.v1.ExecutionStep
+	(*ComposeApply)(nil),      // 21: groundplane.agent.v1.ComposeApply
+	(*ComposeStop)(nil),       // 22: groundplane.agent.v1.ComposeStop
+	(*ComposeRemove)(nil),     // 23: groundplane.agent.v1.ComposeRemove
+	(*WaitHealthy)(nil),       // 24: groundplane.agent.v1.WaitHealthy
+	(*TaskAbort)(nil),         // 25: groundplane.agent.v1.TaskAbort
+	(*ConfigUpdate)(nil),      // 26: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),          // 27: groundplane.agent.v1.Shutdown
+	nil,                       // 28: groundplane.agent.v1.AgentConfig.LabelsEntry
+	nil,                       // 29: groundplane.agent.v1.ContainerState.LabelsEntry
 }
 var file_proto_agent_proto_depIdxs = []int32{
-	16, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
-	2,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
-	5,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
-	6,  // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
-	7,  // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
-	9,  // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
+	28, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
+	4,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
+	7,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
+	8,  // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
+	9,  // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
+	11, // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
 	0,  // 6: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
-	8,  // 7: groundplane.agent.v1.ObservedState.containers:type_name -> groundplane.agent.v1.ContainerState
-	17, // 8: groundplane.agent.v1.ContainerState.labels:type_name -> groundplane.agent.v1.ContainerState.LabelsEntry
+	10, // 7: groundplane.agent.v1.ObservedState.containers:type_name -> groundplane.agent.v1.ContainerState
+	29, // 8: groundplane.agent.v1.ContainerState.labels:type_name -> groundplane.agent.v1.ContainerState.LabelsEntry
 	1,  // 9: groundplane.agent.v1.TaskAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	11, // 10: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
-	13, // 11: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
-	14, // 12: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	15, // 13: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
-	12, // 14: groundplane.agent.v1.TaskAssignment.steps:type_name -> groundplane.agent.v1.Step
-	18, // 15: groundplane.agent.v1.Step.params:type_name -> groundplane.agent.v1.Step.ParamsEntry
-	3,  // 16: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	4,  // 17: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	10, // 18: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	18, // [18:19] is the sub-list for method output_type
-	17, // [17:18] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	13, // 10: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
+	25, // 11: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
+	26, // 12: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	27, // 13: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	14, // 14: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	2,  // 15: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
+	15, // 16: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	20, // 17: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
+	3,  // 18: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
+	16, // 19: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
+	17, // 20: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
+	18, // 21: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
+	19, // 22: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	19, // 23: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	19, // 24: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	21, // 25: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
+	22, // 26: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
+	23, // 27: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
+	24, // 28: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
+	5,  // 29: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	6,  // 30: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	12, // 31: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	31, // [31:32] is the sub-list for method output_type
+	30, // [30:31] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -1324,13 +2238,19 @@ func file_proto_agent_proto_init() {
 		(*ControllerMessage_ConfigUpdate)(nil),
 		(*ControllerMessage_Shutdown)(nil),
 	}
+	file_proto_agent_proto_msgTypes[16].OneofWrappers = []any{
+		(*ExecutionStep_ComposeApply)(nil),
+		(*ExecutionStep_ComposeStop)(nil),
+		(*ExecutionStep_ComposeRemove)(nil),
+		(*ExecutionStep_WaitHealthy)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   17,
+			NumEnums:      4,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

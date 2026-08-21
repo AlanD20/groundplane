@@ -4,14 +4,12 @@ package agent
 
 import (
 	"context"
-	"crypto/sha256"
 	"io"
 	"log/slog"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
@@ -229,20 +227,9 @@ func (c *Client) sendReady(stream agentStream) error {
 
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
 	if assignment := message.GetTaskAssignment(); assignment != nil {
-		if len(assignment.PlanHash) != sha256.Size {
-			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid plan hash")
-		}
-		var planHash PlanHash
-		copy(planHash[:], assignment.PlanHash)
-		steps := make([]TaskStep, 0, len(assignment.Steps))
-		for _, step := range assignment.Steps {
-			steps = append(steps, TaskStep{
-				StepID: step.StepId,
-				Step:   adapters.Step{Op: adapters.StepOp(step.Op), Params: step.Params},
-			})
-		}
 		return false, c.pool.Submit(ctx, Assignment{
-			TaskID: assignment.TaskId, PlanHash: planHash, Steps: steps,
+			TaskID: assignment.TaskId, OperationID: assignment.OperationId,
+			RetryOf: assignment.RetryOf, Plan: assignment.Plan,
 			Timeout: time.Duration(assignment.TimeoutSeconds) * time.Second,
 		})
 	}

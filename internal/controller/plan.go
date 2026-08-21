@@ -10,8 +10,8 @@
 package controller
 
 import (
-	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // ExecutionPlan is what internal/controller/renderer.go ultimately
@@ -19,27 +19,7 @@ import (
 // dispatchable. Both sides of the Agent channel carry plan_id and
 // plan_hash; the Agent rejects a bundle whose two projections don't
 // match (blueprint.md, "x-gp-execution").
-type ExecutionPlan struct {
-	PlanID           string          `json:"plan_id"`
-	PlanHash         string          `json:"plan_hash"` // sha256 of the plan's canonical serialization
-	RenderGeneration int             `json:"render_generation"`
-	Operation        string          `json:"operation"` // e.g. "reconcile", "deploy", "backup"
-	ProjectID        string          `json:"project_id"`
-	Steps            []ExecutionStep `json:"steps"`
-}
-
-// ExecutionStep is one member of the plan — a compose-level action
-// (compose_up, wait_healthy, …) or an adapters.Step (sql, dump, …).
-// Kept as two separate optional fields rather than a single
-// interface{}/any payload, per standards.md's banned-patterns list (no
-// `any` for model fields).
-type ExecutionStep struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"` // "compose_up" | "wait_healthy" | "adapter_step" | …
-	Services    []string       `json:"services,omitempty"`
-	Service     string         `json:"service,omitempty"`
-	AdapterStep *adapters.Step `json:"adapter_step,omitempty"`
-}
+type ExecutionPlan = agentpb.ExecutionPlan
 
 // BuildPlan is the pure step that turns a render plan into an
 // ExecutionPlan — TODO: this is where RenderCompose's output, the
@@ -47,6 +27,6 @@ type ExecutionStep struct {
 // (from an attach's ProvisionSteps, a backup's BackupStrategy, …) get
 // sequenced and hashed. Pure w.r.t. its inputs, like the rest of the
 // renderer (architecture.md, "State translation and materialization").
-func BuildPlan(operation, projectID string, renderGeneration int) (ExecutionPlan, error) {
-	return ExecutionPlan{}, errs.New(errs.KindNotImplemented, "execution plan builder is not implemented")
+func BuildPlan(operation, projectID string, renderGeneration int) (*ExecutionPlan, error) {
+	return nil, errs.New(errs.KindNotImplemented, "execution plan builder is not implemented")
 }
