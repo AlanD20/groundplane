@@ -11,10 +11,18 @@ import (
 // secretValueCipher adapts the synchronous root Controller age key to the
 // context-aware cryptographic ports owned by the secret-value Protector.
 type secretValueCipher struct {
-	key controllerKey
+	key secretValueKey
 }
 
-func newSecretValueProtector(key controllerKey) (*secretvalue.Protector, error) {
+// secretValueKey is deliberately local to this adapter. It does not inherit
+// repository, Agent credential, or materialization semantics from another app
+// wiring seam.
+type secretValueKey interface {
+	Wrap(plaintext []byte) ([]byte, error)
+	Unwrap(ciphertext []byte) ([]byte, error)
+}
+
+func newSecretValueProtector(key *ageinfra.ControllerKey) (*secretvalue.Protector, error) {
 	if key == nil {
 		return nil, errs.New(errs.KindInternal, "secret value controller key is required")
 	}
@@ -30,14 +38,21 @@ func (cipher *secretValueCipher) Seal(ctx context.Context, plaintext []byte) ([]
 		return nil, err
 	}
 
-	ciphertext, err := cipher.key.Wrap(plaintext)
+	privatePlaintext := append([]byte(nil), plaintext...)
+	defer clear(privatePlaintext)
+	providerCiphertext, err := cipher.key.Wrap(privatePlaintext)
+	defer clear(providerCiphertext)
 	if contextErr := ctx.Err(); contextErr != nil {
-		clear(ciphertext)
 		return nil, contextErr
 	}
 	if err != nil {
-		clear(ciphertext)
 		return nil, errs.New(errs.KindInternal, "secret value controller key wrap failed")
+	}
+
+	ciphertext := append([]byte(nil), providerCiphertext...)
+	if contextErr := ctx.Err(); contextErr != nil {
+		clear(ciphertext)
+		return nil, contextErr
 	}
 	return ciphertext, nil
 }
@@ -50,18 +65,25 @@ func (cipher *secretValueCipher) Open(ctx context.Context, ciphertext []byte) ([
 		return nil, err
 	}
 
-	plaintext, err := cipher.key.Unwrap(ciphertext)
+	privateCiphertext := append([]byte(nil), ciphertext...)
+	defer clear(privateCiphertext)
+	providerPlaintext, err := cipher.key.Unwrap(privateCiphertext)
+	defer clear(providerPlaintext)
 	if contextErr := ctx.Err(); contextErr != nil {
-		clear(plaintext)
 		return nil, contextErr
 	}
 	if err != nil {
-		clear(plaintext)
 		return nil, errs.New(errs.KindInternal, "secret value controller key unwrap failed")
+	}
+
+	plaintext := append([]byte(nil), providerPlaintext...)
+	if contextErr := ctx.Err(); contextErr != nil {
+		clear(plaintext)
+		return nil, contextErr
 	}
 	return plaintext, nil
 }
 
 var _ secretvalue.Sealer = (*secretValueCipher)(nil)
 var _ secretvalue.Opener = (*secretValueCipher)(nil)
-var _ controllerKey = (*ageinfra.ControllerKey)(nil)
+var _ secretValueKey = (*ageinfra.ControllerKey)(nil)
