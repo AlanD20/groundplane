@@ -17,6 +17,10 @@ type idempotencyPruning interface {
 	PruneExpired(context.Context, time.Time) (int, error)
 }
 
+type staleAgentExpiration interface {
+	ExpireStaleAgentTasks(context.Context, time.Time) (int, error)
+}
+
 const dailyMaintenanceInterval = 24 * time.Hour
 
 // Scheduler runs ONE tick that evaluates every backup schedule from
@@ -28,6 +32,7 @@ type Scheduler struct {
 	Interval    time.Duration
 	tasks       taskExpiration
 	idempotency idempotencyPruning
+	agents      staleAgentExpiration
 	now         func() time.Time
 	nextPrune   time.Time
 }
@@ -37,9 +42,10 @@ func NewScheduler(
 	interval time.Duration,
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
+	agents staleAgentExpiration,
 ) *Scheduler {
 	return &Scheduler{
-		Server: s, Interval: interval, tasks: tasks, idempotency: idempotency, now: time.Now,
+		Server: s, Interval: interval, tasks: tasks, idempotency: idempotency, agents: agents, now: time.Now,
 	}
 }
 
@@ -66,11 +72,14 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.now == nil {
+	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.agents == nil || sch.now == nil {
 		return errs.New(errs.KindInternal, "scheduler task maintenance is not configured")
 	}
 	now := sch.now().UTC()
 	if _, err := sch.tasks.ExpireTimedOutTasks(ctx, now); err != nil {
+		return err
+	}
+	if _, err := sch.agents.ExpireStaleAgentTasks(ctx, now); err != nil {
 		return err
 	}
 	if !sch.nextPrune.IsZero() && now.Before(sch.nextPrune) {

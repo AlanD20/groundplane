@@ -141,6 +141,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Agent channel authenticator: %w", err)
 	}
+	agentRuntime := newAgentChannelRuntime(authenticator, tasks)
+	staleTasks, err := newStaleAgentTaskMaintenance(agents, agentRuntime.registry, tasks)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
+	}
 
 	srv := controller.New(store, logger, controller.Options{Console: consoleAssets, Tasks: tasks})
 
@@ -148,8 +154,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Config:    cfg,
 		Logger:    logger,
 		server:    srv,
-		agent:     newAgentChannelRuntime(authenticator, tasks),
-		scheduler: controller.NewScheduler(srv, tick, tasks, idempotency),
+		agent:     agentRuntime,
+		scheduler: controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks),
 		store:     store,
 	}, nil
 }

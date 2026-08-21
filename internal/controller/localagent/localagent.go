@@ -208,7 +208,7 @@ func (manager *Manager) Health(ctx context.Context, agentID string) (Health, err
 	health.LastReady = snapshot.LastReady
 	health.Capacity = snapshot.Capacity
 	if !snapshot.LastReady.IsZero() {
-		health.StaleAfter = snapshot.LastReady.Add(staleWindow(stored.Record.Config))
+		health.StaleAfter = snapshot.LastReady.Add(StaleWindow(stored.Record.Config.PullIntervalSeconds))
 	}
 	health.Online = stored.Record.Phase != PhaseDeleting && snapshot.Online && !snapshot.Revoked &&
 		!snapshot.LastReady.IsZero() && !manager.clock.Now().After(health.StaleAfter)
@@ -482,8 +482,10 @@ func validateCredential(credential Credential, revoked bool) error {
 	return nil
 }
 
-func staleWindow(config Config) time.Duration {
-	window := 3 * time.Duration(config.PullIntervalSeconds) * time.Second
+// StaleWindow is the locked Ready-heartbeat deadline shared by health
+// projection and stale-assignment recovery.
+func StaleWindow(pullIntervalSeconds int32) time.Duration {
+	window := 3 * time.Duration(pullIntervalSeconds) * time.Second
 	if window < 30*time.Second {
 		return 30 * time.Second
 	}
