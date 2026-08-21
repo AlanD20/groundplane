@@ -288,6 +288,47 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 	}
 }
 
+func TestTaskRepositoryTimesOutExactAgentGenerationAssignments(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	first := validTaskRecord(taskJournalTime())
+	second := validTaskRecord(taskJournalTime().Add(time.Second))
+	createLifecycleTask(t, repository, first)
+	createLifecycleTask(t, repository, second)
+	agentID := ids.NewAt(ids.KindAgent, first.CreatedAt, 701)
+	if _, found, err := repository.ClaimNextTask(ctx, agentID, 9, second.CreatedAt.Add(time.Second)); err != nil || !found {
+		t.Fatalf("ClaimNextTask(first) found/error = %v/%v", found, err)
+	}
+	if _, found, err := repository.ClaimNextTask(ctx, agentID, 9, second.CreatedAt.Add(2*time.Second)); err != nil || !found {
+		t.Fatalf("ClaimNextTask(second) found/error = %v/%v", found, err)
+	}
+
+	terminalAt := second.CreatedAt.Add(3 * time.Second)
+	timedOut, err := repository.TimeoutAgentAssignments(ctx, agentID, 9, 2, terminalAt)
+	if err != nil || timedOut != 2 {
+		t.Fatalf("TimeoutAgentAssignments() count/error = %d/%v", timedOut, err)
+	}
+	for _, taskID := range []string{first.ID, second.ID} {
+		task, getErr := repository.GetTask(ctx, taskID)
+		if getErr != nil {
+			t.Fatalf("GetTask(%s) error = %v", taskID, getErr)
+		}
+		if task.Record.Status != TaskStatusTimedOut || task.Record.TerminalAt == nil ||
+			!task.Record.TerminalAt.Equal(terminalAt) || task.Record.Result == nil ||
+			!task.Record.Result.ReconciliationRequired {
+			t.Fatalf("timed-out Task %s = %#v", taskID, task.Record)
+		}
+	}
+	remaining, err := repository.ListAgentAssignments(ctx, agentID, 9, 2)
+	if err != nil || len(remaining) != 0 {
+		t.Fatalf("ListAgentAssignments(after timeout) = %#v, %v", remaining, err)
+	}
+}
+
 func TestTaskRepositoryRejectsStaleGenerationAndAbortsPendingTask(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()

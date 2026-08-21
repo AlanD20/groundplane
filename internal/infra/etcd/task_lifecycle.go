@@ -512,6 +512,52 @@ func (repository *TaskRepository) ListAgentAssignments(
 	return result, nil
 }
 
+// TimeoutAgentAssignments terminalizes the complete configured assignment set
+// for one exact Agent generation. Stale-Agent detection owns when this method
+// is called; the repository owns the normal terminal transaction and treats a
+// concurrent terminal acknowledgement as an already-resolved assignment.
+func (repository *TaskRepository) TimeoutAgentAssignments(
+	ctx context.Context,
+	agentID string,
+	agentGeneration uint64,
+	maximum int32,
+	terminalAt time.Time,
+) (int, error) {
+	if err := validateContext(ctx); err != nil {
+		return 0, err
+	}
+	if err := validateTimestamp("stale Agent task terminal_at", terminalAt); err != nil {
+		return 0, err
+	}
+	assignments, err := repository.ListAgentAssignments(ctx, agentID, agentGeneration, maximum)
+	if err != nil {
+		return 0, err
+	}
+	timedOut := 0
+	for _, assignment := range assignments {
+		_, err := repository.AcknowledgeTask(
+			ctx,
+			agentID,
+			agentGeneration,
+			assignment.Task.Record.ID,
+			TaskStatusTimedOut,
+			TaskResultRecord{
+				Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+				ReconciliationRequired: true,
+			},
+			terminalAt,
+		)
+		if err != nil {
+			if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+				continue
+			}
+			return timedOut, err
+		}
+		timedOut++
+	}
+	return timedOut, nil
+}
+
 // AcknowledgeTask atomically records the Agent's terminal acknowledgement,
 // removes assignment and active-operation state, and terminalizes replay
 // evidence. Replaying the same terminal acknowledgement is idempotent.
