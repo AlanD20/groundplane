@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type PlanHash [sha256.Size]byte
@@ -39,7 +41,7 @@ type TaskResult struct {
 	PlanHash PlanHash
 	Terminal TaskTerminal
 	ExitCode int32
-	Result   []byte
+	Compose  *agentpb.ComposeTaskResult
 }
 
 type TaskProgressState uint8
@@ -164,6 +166,11 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	err := reservation.ctx.Err()
 	planHash := hashForPlan(reservation.assignment.Plan)
 	exitCode := int32(0)
+	failedStepID := ""
+	diagnostic := agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE
+	reconciliationRequired := false
+	mutationAttempted := false
+	projects := make(map[string]*agentpb.ObservedProject)
 	for _, step := range reservation.assignment.Plan.Steps {
 		if err != nil {
 			break
@@ -179,13 +186,24 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		if p.compose == nil {
 			err = p.executeStep(stepCtx, step)
 		} else {
-			var stepExitCode int32
-			stepExitCode, err = p.compose.executeStep(stepCtx, reservation.assignment, step)
-			if stepExitCode != 0 {
-				exitCode = stepExitCode
+			var stepResult composeStepResult
+			stepResult, err = p.compose.executeStep(stepCtx, reservation.assignment, step)
+			if stepResult.ExitCode != 0 {
+				exitCode = stepResult.ExitCode
 			}
+			if stepResult.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED {
+				diagnostic = stepResult.Diagnostic
+			}
+			if stepResult.Observed != nil {
+				projects[stepResult.Observed.GetProjectName()] = proto.Clone(stepResult.Observed).(*agentpb.ObservedProject)
+			}
+			reconciliationRequired = reconciliationRequired || stepResult.ReconciliationRequired
+			mutationAttempted = mutationAttempted || stepResult.MutationAttempted
 		}
 		cancel()
+		if err != nil {
+			failedStepID = step.GetStepId()
+		}
 		p.emitProgress(runCtx, TaskProgress{
 			TaskID: reservation.assignment.TaskID, PlanHash: planHash,
 			StepID: step.StepId, Attempt: 1, Ordinal: 2,
@@ -193,13 +211,38 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		})
 	}
 	terminal := terminalFor(reservation.ctx, err)
+	if terminal != TaskTerminalCompleted && mutationAttempted {
+		reconciliationRequired = true
+	}
 	if err != nil && terminal == TaskTerminalFailed && p.logger != nil {
 		p.logger.Error("agent: step failed", "task_id", reservation.assignment.TaskID, "error", err)
 	}
 	p.complete(runCtx, reservation, TaskResult{
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
 		ExitCode: exitCode,
+		Compose:  composeTaskResult(projects, failedStepID, diagnostic, reconciliationRequired),
 	})
+}
+
+func composeTaskResult(
+	projects map[string]*agentpb.ObservedProject,
+	failedStepID string,
+	diagnostic agentpb.ComposeHelperDiagnostic,
+	reconciliationRequired bool,
+) *agentpb.ComposeTaskResult {
+	names := make([]string, 0, len(projects))
+	for name := range projects {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := &agentpb.ComposeTaskResult{
+		FailedStepId: failedStepID, Diagnostic: diagnostic,
+		ReconciliationRequired: reconciliationRequired,
+	}
+	for _, name := range names {
+		result.Projects = append(result.Projects, projects[name])
+	}
+	return result
 }
 
 func terminalFor(taskCtx context.Context, err error) TaskTerminal {
@@ -241,7 +284,9 @@ func (p *WorkerPool) emitProgress(runCtx context.Context, progress TaskProgress)
 
 func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
 	owned := result
-	owned.Result = append([]byte(nil), result.Result...)
+	if result.Compose != nil {
+		owned.Compose = proto.Clone(result.Compose).(*agentpb.ComposeTaskResult)
+	}
 	select {
 	case p.outputs <- WorkerOutput{Result: &owned}:
 	case <-runCtx.Done():
@@ -270,6 +315,9 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 			p.complete(runCtx, reservation, TaskResult{
 				TaskID: reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
 				Terminal: TaskTerminalAborted,
+				Compose: &agentpb.ComposeTaskResult{
+					Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+				},
 			})
 		default:
 			return

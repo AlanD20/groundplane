@@ -57,12 +57,12 @@ func TestComposeRuntimeMutatesThenObserves(t *testing.T) {
 	}
 	assignment, step := composeRuntimeAssignment()
 
-	exitCode, err := runtime.executeStep(context.Background(), assignment, step)
+	result, err := runtime.executeStep(context.Background(), assignment, step)
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}
-	if exitCode != 0 || observer.calls != 1 {
-		t.Fatalf("executeStep() exit = %d, observations = %d", exitCode, observer.calls)
+	if result.ExitCode != 0 || result.Observed == nil || observer.calls != 1 {
+		t.Fatalf("executeStep() result = %#v, observations = %d", result, observer.calls)
 	}
 	if helper.request.GetTaskId() != assignment.TaskID || helper.request.GetPlan() != assignment.Plan ||
 		helper.request.GetStepId() != step.GetStepId() {
@@ -81,12 +81,15 @@ func TestComposeRuntimeObservesAfterCancelledMutation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = runtime.mutate(ctx, assignment, step, "artifact_platform", nil)
+	result, err := runtime.mutate(ctx, assignment, step, "artifact_platform", nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("mutate() error = %v, want cancellation", err)
 	}
 	if observer.calls != 1 || !observer.liveContext {
 		t.Fatalf("cancel reconciliation observations = %d, live = %t", observer.calls, observer.liveContext)
+	}
+	if !result.ReconciliationRequired || !result.MutationAttempted {
+		t.Fatalf("mutate() result = %#v, want reconciliation evidence", result)
 	}
 }
 
@@ -106,7 +109,7 @@ func TestComposeRuntimeWaitHealthyTranslatesStableServiceIDs(t *testing.T) {
 	}
 	assignment, _ := composeRuntimeAssignment()
 
-	err = runtime.waitHealthy(context.Background(), assignment.Plan, &agentpb.WaitHealthy{
+	result, err := runtime.waitHealthy(context.Background(), assignment.Plan, &agentpb.WaitHealthy{
 		ArtifactId: "artifact_platform", ServiceIds: []string{"svc_api"},
 	})
 	if err != nil {
@@ -114,6 +117,9 @@ func TestComposeRuntimeWaitHealthyTranslatesStableServiceIDs(t *testing.T) {
 	}
 	if observer.calls != 1 {
 		t.Fatalf("waitHealthy() observations = %d, want 1", observer.calls)
+	}
+	if result.Observed == nil {
+		t.Fatal("waitHealthy() omitted terminal observation")
 	}
 }
 
@@ -129,9 +135,10 @@ func TestComposeRuntimeReturnsBoundedHelperFailure(t *testing.T) {
 	}
 	assignment, step := composeRuntimeAssignment()
 
-	exitCode, err := runtime.executeStep(context.Background(), assignment, step)
-	if exitCode != 17 || !errors.Is(err, errs.New(errs.KindRequestFailed, "")) {
-		t.Fatalf("executeStep() exit = %d, error = %v", exitCode, err)
+	result, err := runtime.executeStep(context.Background(), assignment, step)
+	if result.ExitCode != 17 || !result.ReconciliationRequired ||
+		!errors.Is(err, errs.New(errs.KindRequestFailed, "")) {
+		t.Fatalf("executeStep() result = %#v, error = %v", result, err)
 	}
 }
 

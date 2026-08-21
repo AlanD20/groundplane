@@ -17,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 )
 
 type agentStream interface {
@@ -274,6 +275,9 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 }
 
 func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
+	if result.Compose == nil {
+		return errs.New(errs.KindInternal, "agent: worker returned an empty Compose result")
+	}
 	terminal := agentpb.TaskTerminal_TASK_TERMINAL_UNSPECIFIED
 	switch result.Terminal {
 	case TaskTerminalCompleted:
@@ -289,7 +293,8 @@ func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
 	}
 	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
 		TaskId: result.TaskID, PlanHash: append([]byte(nil), result.PlanHash[:]...), Terminal: terminal,
-		ExitCode: result.ExitCode, Result: append([]byte(nil), result.Result...),
+		ExitCode: result.ExitCode,
+		Result:   &agentpb.TaskAck_ComposeResult{ComposeResult: proto.Clone(result.Compose).(*agentpb.ComposeTaskResult)},
 	}}})
 }
 

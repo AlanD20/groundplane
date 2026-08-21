@@ -28,6 +28,14 @@ type ComposeRuntime struct {
 	observer ComposeObserver
 }
 
+type composeStepResult struct {
+	Observed               *agentpb.ObservedProject
+	ExitCode               int32
+	Diagnostic             agentpb.ComposeHelperDiagnostic
+	MutationAttempted      bool
+	ReconciliationRequired bool
+}
+
 func NewComposeRuntime(helper ComposeHelper, observer ComposeObserver) (*ComposeRuntime, error) {
 	if helper == nil || observer == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: Compose helper and observer are required")
@@ -39,12 +47,12 @@ func (runtime *ComposeRuntime) executeStep(
 	ctx context.Context,
 	assignment Assignment,
 	step *agentpb.ExecutionStep,
-) (int32, error) {
+) (composeStepResult, error) {
 	if runtime == nil || runtime.helper == nil || runtime.observer == nil {
-		return 0, errs.New(errs.KindInternal, "agent: Compose runtime is not configured")
+		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Compose runtime is not configured")
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return composeStepResult{}, err
 	}
 
 	switch payload := step.GetPayload().(type) {
@@ -71,9 +79,9 @@ func (runtime *ComposeRuntime) executeStep(
 			},
 		)
 	case *agentpb.ExecutionStep_WaitHealthy:
-		return 0, runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy)
+		return runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy)
 	default:
-		return 0, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
+		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
 }
 
@@ -83,39 +91,48 @@ func (runtime *ComposeRuntime) mutate(
 	step *agentpb.ExecutionStep,
 	artifactID string,
 	postcondition func(*agentpb.ObservedProject) error,
-) (int32, error) {
+) (composeStepResult, error) {
+	result := composeStepResult{MutationAttempted: true}
 	response, helperErr := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, TaskId: assignment.TaskID, OperationId: assignment.OperationID,
 		Plan: assignment.Plan, StepId: step.GetStepId(), TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
 
 	observed, observeErr := runtime.observeAfterMutation(ctx, assignment.Plan, artifactID)
+	result.Observed = observed
 	if observeErr == nil && postcondition != nil {
 		observeErr = postcondition(observed)
 	}
 	if helperErr != nil {
+		result.ReconciliationRequired = true
 		if observeErr != nil {
-			return 0, errs.Wrap(errs.KindInternal, errors.Join(helperErr, observeErr))
+			return result, errs.Wrap(errs.KindInternal, errors.Join(helperErr, observeErr))
 		}
-		return 0, helperErr
+		return result, helperErr
 	}
 	if response == nil || response.GetSchema() != composeHelperSchema {
-		return 0, errs.New(errs.KindInternal, "agent: Compose helper returned an invalid response")
+		result.ReconciliationRequired = true
+		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an invalid response")
 	}
+	result.ExitCode = response.GetExitCode()
+	result.Diagnostic = response.GetDiagnostic()
 	if observeErr != nil {
-		return response.GetExitCode(), observeErr
+		result.ReconciliationRequired = true
+		return result, observeErr
 	}
 	if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
-		return response.GetExitCode(), errs.Newf(
+		result.ReconciliationRequired = true
+		return result, errs.Newf(
 			errs.KindRequestFailed,
 			"agent: Compose helper failed with diagnostic %s",
 			response.GetDiagnostic().String(),
 		)
 	}
 	if response.GetExitCode() != 0 || response.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
-		return response.GetExitCode(), errs.New(errs.KindInternal, "agent: Compose helper returned an inconsistent success response")
+		result.ReconciliationRequired = true
+		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an inconsistent success response")
 	}
-	return 0, nil
+	return result, nil
 }
 
 func (runtime *ComposeRuntime) observeAfterMutation(
@@ -136,14 +153,15 @@ func (runtime *ComposeRuntime) waitHealthy(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 	wait *agentpb.WaitHealthy,
-) error {
+) (composeStepResult, error) {
+	result := composeStepResult{}
 	artifact := composeArtifact(plan, wait.GetArtifactId())
 	if artifact == nil {
-		return errs.New(errs.KindInternal, "agent: WaitHealthy artifact is missing from the plan")
+		return result, errs.New(errs.KindInternal, "agent: WaitHealthy artifact is missing from the plan")
 	}
 	selected, err := composeNamesForServiceIDs(artifact, wait.GetServiceIds())
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	ticker := time.NewTicker(composeHealthPollInterval)
@@ -151,18 +169,22 @@ func (runtime *ComposeRuntime) waitHealthy(
 	for {
 		observed, observeErr := runtime.observer.Observe(ctx, plan, wait.GetArtifactId())
 		if observeErr != nil {
-			return observeErr
+			result.ReconciliationRequired = true
+			return result, observeErr
 		}
+		result.Observed = observed
 		convergence, convergeErr := evaluateComposeConvergence(artifact, observed, selected)
 		if convergeErr != nil {
-			return convergeErr
+			result.ReconciliationRequired = true
+			return result, convergeErr
 		}
 		if convergence.Ready {
-			return nil
+			return result, nil
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			result.ReconciliationRequired = true
+			return result, ctx.Err()
 		case <-ticker.C:
 		}
 	}

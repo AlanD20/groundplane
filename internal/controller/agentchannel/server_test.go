@@ -389,6 +389,9 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
 			TaskId: taskID, PlanHash: planHash,
 			Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
+			Result: &agentpb.TaskAck_ComposeResult{ComposeResult: &agentpb.ComposeTaskResult{
+				Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+			}},
 		}}},
 	}}
 	server := New(authorizedAuthenticator(), NewRegistry(), tasks, &fakePlanResolver{plan: plan})

@@ -408,8 +408,8 @@ func (s *Server) acknowledge(
 	if acknowledgement == nil || len(acknowledgement.PlanHash) != 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
 	}
-	if acknowledgement.ExitCode != 0 || len(acknowledgement.Result) != 0 {
-		return status.Error(codes.Unimplemented, "typed Task result is not implemented")
+	if err := validateComposeTaskResult(acknowledgement); err != nil {
+		return err
 	}
 	task, err := s.tasks.GetTask(ctx, acknowledgement.TaskId)
 	if err != nil {
@@ -441,6 +441,41 @@ func (s *Server) acknowledge(
 		s.now().UTC(),
 	)
 	return err
+}
+
+func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
+	result := acknowledgement.GetComposeResult()
+	if result == nil || len(result.GetProjects()) > 64 {
+		return errs.New(errs.KindValidationFailed, "Agent Compose Task result is invalid")
+	}
+	switch result.GetDiagnostic() {
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED:
+	default:
+		return errs.New(errs.KindValidationFailed, "Agent Compose Task diagnostic is invalid")
+	}
+	if acknowledgement.GetTerminal() == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED &&
+		(acknowledgement.GetExitCode() != 0 || result.GetFailedStepId() != "" ||
+			result.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE ||
+			result.GetReconciliationRequired()) {
+		return errs.New(errs.KindValidationFailed, "completed Agent Compose Task result is inconsistent")
+	}
+	for _, project := range result.GetProjects() {
+		if project == nil || project.GetProjectName() == "" || project.GetObservedAt() == nil ||
+			project.GetObservedAt().CheckValid() != nil || len(project.GetContainers()) > 4096 ||
+			len(project.GetNetworks()) > 4096 || len(project.GetVolumes()) > 4096 ||
+			len(project.GetCollisions()) > 4096 {
+			return errs.New(errs.KindValidationFailed, "Agent Compose Task observation is invalid")
+		}
+		for _, collision := range project.GetCollisions() {
+			if collision == nil || collision.GetKind() == agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_UNSPECIFIED ||
+				collision.GetName() == "" {
+				return errs.New(errs.KindValidationFailed, "Agent Compose Task collision is invalid")
+			}
+		}
+	}
+	return nil
 }
 
 func taskStoreStatus(err error) error {

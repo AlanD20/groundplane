@@ -82,7 +82,8 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 	}
 	if acknowledgement == nil || acknowledgement.TaskId != workerTestTaskID ||
 		!bytes.Equal(acknowledgement.PlanHash, planHash[:]) ||
-		acknowledgement.Terminal != agentpb.TaskTerminal_TASK_TERMINAL_FAILED {
+		acknowledgement.Terminal != agentpb.TaskTerminal_TASK_TERMINAL_FAILED ||
+		acknowledgement.GetComposeResult() == nil {
 		t.Fatalf("TaskAck = %#v", acknowledgement)
 	}
 	if len(events) != 2 || events[0].Attempt != 1 || events[0].Ordinal != 1 ||
@@ -256,7 +257,7 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 		copyMessage.Payload = &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
 			TaskId: acknowledgement.TaskId, PlanHash: append([]byte(nil), acknowledgement.PlanHash...),
 			Terminal: acknowledgement.Terminal, ExitCode: acknowledgement.ExitCode,
-			Result: append([]byte(nil), acknowledgement.Result...),
+			Result: &agentpb.TaskAck_ComposeResult{ComposeResult: acknowledgement.GetComposeResult()},
 		}}
 		s.taskAckOnce.Do(func() { close(s.taskAckSent) })
 	}

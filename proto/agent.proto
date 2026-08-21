@@ -138,7 +138,16 @@ message TaskAck {
   bytes plan_hash = 2; // exactly 32 immutable SHA-256 bytes
   TaskTerminal terminal = 3;
   int32 exit_code = 4;
-  bytes result = 5; // opaque task-type-specific result
+  oneof result {
+    ComposeTaskResult compose_result = 5;
+  }
+}
+
+message ComposeTaskResult {
+  repeated ObservedProject projects = 1;
+  string failed_step_id = 2;
+  ComposeHelperDiagnostic diagnostic = 3;
+  bool reconciliation_required = 4;
 }
 
 enum TaskTerminal {
