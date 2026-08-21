@@ -25,13 +25,16 @@ type agentChannelGRPCServer interface {
 	Stop()
 }
 
-func newAgentChannelRuntime(tasks agentchannel.TaskStore) *agentChannelRuntime {
+func newAgentChannelRuntime(
+	authenticator agentchannel.Authenticator,
+	tasks agentchannel.TaskStore,
+) *agentChannelRuntime {
 	return &agentChannelRuntime{
 		registry: agentchannel.NewRegistry(),
 		listen:   agentlistener.Listen,
 		newServer: func(registry *agentchannel.Registry) agentChannelGRPCServer {
 			server := grpc.NewServer()
-			agentpb.RegisterAgentChannelServer(server, agentchannel.New(nil, registry, tasks))
+			agentpb.RegisterAgentChannelServer(server, agentchannel.New(authenticator, registry, tasks))
 			return server
 		},
 	}
