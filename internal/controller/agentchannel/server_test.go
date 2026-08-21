@@ -43,6 +43,7 @@ type fakeTaskStore struct {
 	ackGeneration uint64
 	ackTaskID     string
 	ackTerminal   etcd.TaskStatus
+	ackResult     etcd.TaskResultRecord
 	events        []etcd.TaskEventInput
 }
 
@@ -107,12 +108,14 @@ func (store *fakeTaskStore) AcknowledgeTask(
 	generation uint64,
 	taskID string,
 	terminal etcd.TaskStatus,
+	result etcd.TaskResultRecord,
 	_ time.Time,
 ) (etcd.Versioned[etcd.TaskRecord], error) {
 	store.ackAgentID = agentID
 	store.ackGeneration = generation
 	store.ackTaskID = taskID
 	store.ackTerminal = terminal
+	store.ackResult = result
 	task := store.tasks[taskID]
 	task.Record.Status = terminal
 	store.tasks[taskID] = task

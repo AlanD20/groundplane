@@ -76,6 +76,36 @@ type TaskStepRecord struct {
 	ID string `json:"id"`
 }
 
+type TaskResultKind string
+
+const TaskResultCompose TaskResultKind = "compose"
+
+type TaskResultDiagnostic string
+
+const (
+	TaskResultDiagnosticNone           TaskResultDiagnostic = "none"
+	TaskResultDiagnosticConfigRejected TaskResultDiagnostic = "config_rejected"
+	TaskResultDiagnosticComposeFailed  TaskResultDiagnostic = "compose_failed"
+)
+
+type TaskObservedProjectSummary struct {
+	ProjectName    string    `json:"project_name"`
+	ObservedAt     time.Time `json:"observed_at"`
+	ContainerCount uint32    `json:"container_count"`
+	NetworkCount   uint32    `json:"network_count"`
+	VolumeCount    uint32    `json:"volume_count"`
+	CollisionCount uint32    `json:"collision_count"`
+}
+
+type TaskResultRecord struct {
+	Kind                   TaskResultKind               `json:"kind"`
+	ExitCode               int32                        `json:"exit_code"`
+	FailedStepID           string                       `json:"failed_step_id,omitempty"`
+	Diagnostic             TaskResultDiagnostic         `json:"diagnostic"`
+	ReconciliationRequired bool                         `json:"reconciliation_required"`
+	Projects               []TaskObservedProjectSummary `json:"projects,omitempty"`
+}
+
 // TaskRecord is the versioned persistence DTO for one execution attempt.
 // NextEventSequence starts at one. TerminalAt is the retention epoch; the
 // pruning scheduler can delete the task, events, and dedupe records together
@@ -94,6 +124,7 @@ type TaskRecord struct {
 	Steps             []TaskStepRecord  `json:"steps,omitempty"`
 	TimeoutSeconds    int64             `json:"timeout_seconds"`
 	Status            TaskStatus        `json:"status"`
+	Result            *TaskResultRecord `json:"result,omitempty"`
 	NextEventSequence uint64            `json:"next_event_sequence"`
 	EventCount        uint32            `json:"event_count"`
 	CreatedAt         time.Time         `json:"created_at"`
@@ -162,6 +193,7 @@ type taskRecordData struct {
 	Steps             []TaskStepRecord    `json:"steps,omitempty"`
 	TimeoutSeconds    int64               `json:"timeout_seconds"`
 	Status            TaskStatus          `json:"status"`
+	Result            *taskResultData     `json:"result,omitempty"`
 	NextEventSequence uint64              `json:"next_event_sequence"`
 	EventCount        uint32              `json:"event_count"`
 	CreatedAt         string              `json:"created_at"`
@@ -169,6 +201,24 @@ type taskRecordData struct {
 	TerminalAt        string              `json:"terminal_at,omitempty"`
 	RetainUntil       string              `json:"retain_until,omitempty"`
 	IdempotencyMarker *IdempotencyLocator `json:"idempotency_marker,omitempty"`
+}
+
+type taskResultData struct {
+	Kind                   TaskResultKind                   `json:"kind"`
+	ExitCode               int32                            `json:"exit_code"`
+	FailedStepID           string                           `json:"failed_step_id,omitempty"`
+	Diagnostic             TaskResultDiagnostic             `json:"diagnostic"`
+	ReconciliationRequired bool                             `json:"reconciliation_required"`
+	Projects               []taskObservedProjectSummaryData `json:"projects,omitempty"`
+}
+
+type taskObservedProjectSummaryData struct {
+	ProjectName    string `json:"project_name"`
+	ObservedAt     string `json:"observed_at"`
+	ContainerCount uint32 `json:"container_count"`
+	NetworkCount   uint32 `json:"network_count"`
+	VolumeCount    uint32 `json:"volume_count"`
+	CollisionCount uint32 `json:"collision_count"`
 }
 
 type taskEventRecordData struct {
@@ -429,7 +479,62 @@ func validateTaskRecord(record TaskRecord) error {
 	if err := validateTaskSteps(record.Steps); err != nil {
 		return err
 	}
+	if record.Result != nil {
+		if !isTerminalTaskStatus(record.Status) {
+			return errs.New(errs.KindInternal, "nonterminal task has a completion result")
+		}
+		if err := validateTaskResult(*record.Result, record.Steps, record.Status); err != nil {
+			return err
+		}
+	}
 	return validateTaskTimeline(record)
+}
+
+func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
+	if result.Kind != TaskResultCompose {
+		return errs.New(errs.KindValidationFailed, "task result kind is invalid")
+	}
+	switch result.Diagnostic {
+	case TaskResultDiagnosticNone, TaskResultDiagnosticConfigRejected, TaskResultDiagnosticComposeFailed:
+	default:
+		return errs.New(errs.KindValidationFailed, "task result diagnostic is invalid")
+	}
+	if result.FailedStepID != "" {
+		if err := validateStableID(ids.KindStep, result.FailedStepID); err != nil {
+			return err
+		}
+		found := false
+		for _, step := range steps {
+			found = found || step.ID == result.FailedStepID
+		}
+		if !found {
+			return errs.New(errs.KindValidationFailed, "task result failed step does not belong to the task")
+		}
+	}
+	if status == TaskStatusCompleted && (result.ExitCode != 0 || result.FailedStepID != "" ||
+		result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
+		return errs.New(errs.KindValidationFailed, "completed task result is inconsistent")
+	}
+	if len(result.Projects) > 64 {
+		return errs.New(errs.KindValidationFailed, "task result has too many project summaries")
+	}
+	for index, project := range result.Projects {
+		if project.ProjectName == "" || !utf8.ValidString(project.ProjectName) ||
+			strings.IndexByte(project.ProjectName, 0) >= 0 {
+			return errs.New(errs.KindValidationFailed, "task result project name is invalid")
+		}
+		if index > 0 && result.Projects[index-1].ProjectName >= project.ProjectName {
+			return errs.New(errs.KindValidationFailed, "task result projects are not strictly sorted")
+		}
+		if err := validateTimestamp("task result observed_at", project.ObservedAt); err != nil {
+			return err
+		}
+		if project.ContainerCount > 4096 || project.NetworkCount > 4096 ||
+			project.VolumeCount > 4096 || project.CollisionCount > 4096 {
+			return errs.New(errs.KindValidationFailed, "task result project count exceeds its limit")
+		}
+	}
+	return nil
 }
 
 func validateTaskTimeline(record TaskRecord) error {
@@ -708,6 +813,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
 		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
 		Status: record.Status, NextEventSequence: record.NextEventSequence,
+		Result:     taskResultToData(record.Result),
 		EventCount: record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
 		StartedAt:         formatOptionalTimestamp(record.StartedAt),
 		TerminalAt:        formatOptionalTimestamp(record.TerminalAt),
@@ -733,16 +839,63 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 	if err != nil {
 		return TaskRecord{}, err
 	}
+	result, err := taskResultFromData(data.Result)
+	if err != nil {
+		return TaskRecord{}, err
+	}
 	return TaskRecord{
 		ID: data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
 		IdempotencyKey: data.IdempotencyKey, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
 		TimeoutSeconds: data.TimeoutSeconds, Status: data.Status,
+		Result:            result,
 		NextEventSequence: data.NextEventSequence, EventCount: data.EventCount,
 		CreatedAt: createdAt, StartedAt: startedAt, TerminalAt: terminalAt,
 		RetainUntil: retainUntil, idempotencyMarker: cloneIdempotencyLocator(data.IdempotencyMarker),
 	}, nil
+}
+
+func taskResultToData(result *TaskResultRecord) *taskResultData {
+	if result == nil {
+		return nil
+	}
+	data := &taskResultData{
+		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
+		Diagnostic: result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
+		Projects: make([]taskObservedProjectSummaryData, len(result.Projects)),
+	}
+	for index, project := range result.Projects {
+		data.Projects[index] = taskObservedProjectSummaryData{
+			ProjectName: project.ProjectName, ObservedAt: project.ObservedAt.UTC().Format(time.RFC3339Nano),
+			ContainerCount: project.ContainerCount, NetworkCount: project.NetworkCount,
+			VolumeCount: project.VolumeCount, CollisionCount: project.CollisionCount,
+		}
+	}
+	return data
+}
+
+func taskResultFromData(data *taskResultData) (*TaskResultRecord, error) {
+	if data == nil {
+		return nil, nil
+	}
+	result := &TaskResultRecord{
+		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
+		Diagnostic: data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
+		Projects: make([]TaskObservedProjectSummary, len(data.Projects)),
+	}
+	for index, project := range data.Projects {
+		observedAt, err := parseCanonicalTimestamp(project.ObservedAt)
+		if err != nil {
+			return nil, err
+		}
+		result.Projects[index] = TaskObservedProjectSummary{
+			ProjectName: project.ProjectName, ObservedAt: observedAt,
+			ContainerCount: project.ContainerCount, NetworkCount: project.NetworkCount,
+			VolumeCount: project.VolumeCount, CollisionCount: project.CollisionCount,
+		}
+	}
+	return result, nil
 }
 
 func parseCanonicalTimestamp(value string) (time.Time, error) {
@@ -787,8 +940,18 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
 	cloned.TerminalAt = cloneTimePointer(record.TerminalAt)
 	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
+	cloned.Result = cloneTaskResult(record.Result)
 	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)
 	return cloned
+}
+
+func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
+	if result == nil {
+		return nil
+	}
+	cloned := *result
+	cloned.Projects = append([]TaskObservedProjectSummary(nil), result.Projects...)
+	return &cloned
 }
 
 func cloneIdempotencyLocator(locator *IdempotencyLocator) *IdempotencyLocator {

@@ -51,6 +51,7 @@ type TaskStore interface {
 		uint64,
 		string,
 		etcd.TaskStatus,
+		etcd.TaskResultRecord,
 		time.Time,
 	) (etcd.Versioned[etcd.TaskRecord], error)
 }
@@ -438,9 +439,35 @@ func (s *Server) acknowledge(
 		agentGeneration,
 		acknowledgement.TaskId,
 		terminal,
+		durableComposeTaskResult(acknowledgement),
 		s.now().UTC(),
 	)
 	return err
+}
+
+func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {
+	result := acknowledgement.GetComposeResult()
+	diagnostic := etcd.TaskResultDiagnosticNone
+	switch result.GetDiagnostic() {
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED:
+		diagnostic = etcd.TaskResultDiagnosticConfigRejected
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED:
+		diagnostic = etcd.TaskResultDiagnosticComposeFailed
+	}
+	durable := etcd.TaskResultRecord{
+		Kind: etcd.TaskResultCompose, ExitCode: acknowledgement.GetExitCode(),
+		FailedStepID: result.GetFailedStepId(), Diagnostic: diagnostic,
+		ReconciliationRequired: result.GetReconciliationRequired(),
+		Projects:               make([]etcd.TaskObservedProjectSummary, len(result.GetProjects())),
+	}
+	for index, project := range result.GetProjects() {
+		durable.Projects[index] = etcd.TaskObservedProjectSummary{
+			ProjectName: project.GetProjectName(), ObservedAt: project.GetObservedAt().AsTime().UTC(),
+			ContainerCount: uint32(len(project.GetContainers())), NetworkCount: uint32(len(project.GetNetworks())),
+			VolumeCount: uint32(len(project.GetVolumes())), CollisionCount: uint32(len(project.GetCollisions())),
+		}
+	}
+	return durable
 }
 
 func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {

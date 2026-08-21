@@ -142,13 +142,14 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		3,
 		first.ID,
 		TaskStatusCompleted,
+		completedComposeTaskResult(),
 		terminalAt,
 	)
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
 	if terminal.Record.Status != TaskStatusCompleted || terminal.Record.TerminalAt == nil ||
-		!terminal.Record.TerminalAt.Equal(terminalAt) {
+		!terminal.Record.TerminalAt.Equal(terminalAt) || terminal.Record.Result == nil {
 		t.Fatalf("AcknowledgeTask() = %#v", terminal)
 	}
 	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, first.ID), false)
@@ -183,11 +184,21 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		3,
 		first.ID,
 		TaskStatusCompleted,
+		completedComposeTaskResult(),
 		terminalAt.Add(time.Second),
 	)
 	if err != nil || replay.Record.Status != TaskStatusCompleted ||
 		replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(replay) = %#v, %v", replay, err)
+	}
+	mismatched := completedComposeTaskResult()
+	mismatched.Projects = []TaskObservedProjectSummary{{
+		ProjectName: "gp-platform", ObservedAt: terminalAt,
+	}}
+	if _, err := repository.AcknowledgeTask(
+		ctx, agentID, 3, first.ID, TaskStatusCompleted, mismatched, terminalAt.Add(2*time.Second),
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("AcknowledgeTask(mismatched replay) error = %v, want state conflict", err)
 	}
 }
 
@@ -215,6 +226,7 @@ func TestTaskRepositoryRejectsStaleGenerationAndAbortsPendingTask(t *testing.T) 
 		9,
 		runningTask.ID,
 		TaskStatusCompleted,
+		completedComposeTaskResult(),
 		runningTask.CreatedAt.Add(2*time.Second),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(stale generation) error = %v, want state.conflict", err)

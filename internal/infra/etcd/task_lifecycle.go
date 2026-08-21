@@ -395,6 +395,7 @@ func (repository *TaskRepository) AcknowledgeTask(
 	agentGeneration uint64,
 	taskID string,
 	terminalStatus TaskStatus,
+	result TaskResultRecord,
 	terminalAt time.Time,
 ) (Versioned[TaskRecord], error) {
 	if err := validateContext(ctx); err != nil {
@@ -425,8 +426,11 @@ func (repository *TaskRepository) AcknowledgeTask(
 			return Versioned[TaskRecord]{}, err
 		}
 		assignmentValue := primaryAndAssignment.Values[1]
+		if err := validateTaskResult(result, task.Steps, terminalStatus); err != nil {
+			return Versioned[TaskRecord]{}, err
+		}
 		if assignmentValue == nil {
-			if task.Status == terminalStatus {
+			if task.Status == terminalStatus && task.Result != nil && taskResultsEqual(*task.Result, result) {
 				return Versioned[TaskRecord]{
 					Record: task, Revision: taskValue.ModRevision,
 					ReadRevision: primaryAndAssignment.ReadRevision,
@@ -446,6 +450,10 @@ func (repository *TaskRepository) AcknowledgeTask(
 		}
 		terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
 		if err != nil {
+			return Versioned[TaskRecord]{}, err
+		}
+		terminal.Result = cloneTaskResult(&result)
+		if err := validateTaskRecord(terminal); err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
 		transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
@@ -525,6 +533,20 @@ func (repository *TaskRepository) AcknowledgeTask(
 			Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		}, nil
 	}
+}
+
+func taskResultsEqual(left, right TaskResultRecord) bool {
+	if left.Kind != right.Kind || left.ExitCode != right.ExitCode ||
+		left.FailedStepID != right.FailedStepID || left.Diagnostic != right.Diagnostic ||
+		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) {
+		return false
+	}
+	for index := range left.Projects {
+		if left.Projects[index] != right.Projects[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // AbortPendingTask wins only while the Task is still queued. If assignment
