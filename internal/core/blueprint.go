@@ -12,6 +12,9 @@ package core
 
 import (
 	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Document is implemented by every top-level Blueprint document.
@@ -40,7 +43,12 @@ func (p Project) Validate() error {
 			return fmt.Errorf("project %s: backing projects must not have a tenant_id", p.Slug)
 		}
 	default:
-		return fmt.Errorf("project %s: kind must be %q or %q", p.Slug, ProjectKindTenant, ProjectKindBacking)
+		return fmt.Errorf(
+			"project %s: kind must be %q or %q",
+			p.Slug,
+			ProjectKindTenant,
+			ProjectKindBacking,
+		)
 	}
 	return nil
 }
@@ -50,7 +58,10 @@ func (e Environment) Validate() error {
 		return fmt.Errorf("environment: id, project_id, and slug are required")
 	}
 	if e.VolumeDir == "" {
-		return fmt.Errorf("environment %s: volume_dir is required (must derive from id, never the label)", e.Slug)
+		return fmt.Errorf(
+			"environment %s: volume_dir is required (must derive from id, never the label)",
+			e.Slug,
+		)
 	}
 
 	// A service on a zone must reference a zone that exists — see
@@ -74,12 +85,20 @@ func (e Environment) Validate() error {
 		for _, target := range entry.Exposure {
 			if target == "all" {
 				if len(entry.Exposure) != 1 {
-					return fmt.Errorf("entry %s: exposure %q must be the only target", entry.ID, target)
+					return fmt.Errorf(
+						"entry %s: exposure %q must be the only target",
+						entry.ID,
+						target,
+					)
 				}
 				continue
 			}
 			if _, ok := e.Services[target]; !ok {
-				return fmt.Errorf("entry %s: exposure target %q is not a declared service", entry.ID, target)
+				return fmt.Errorf(
+					"entry %s: exposure target %q is not a declared service",
+					entry.ID,
+					target,
+				)
 			}
 		}
 	}
@@ -89,7 +108,10 @@ func (e Environment) Validate() error {
 			return fmt.Errorf("route: %w", err)
 		}
 		if _, ok := e.Services[route.ServiceName]; !ok {
-			return fmt.Errorf("route: target service %q is not declared on this environment", route.ServiceName)
+			return fmt.Errorf(
+				"route: target service %q is not declared on this environment",
+				route.ServiceName,
+			)
 		}
 	}
 
@@ -110,7 +132,10 @@ func (s Service) Validate() error {
 	case StrategyRolling:
 		// blueprint.md's required-validation case: "a requested release
 		// strategy is deferred (rolling in the MVP)".
-		return fmt.Errorf("strategy %q is declared-deferred (see errs.CodeStrategyNotImplemented)", s.Strategy)
+		return fmt.Errorf(
+			"strategy %q is declared-deferred (see errs.CodeStrategyNotImplemented)",
+			s.Strategy,
+		)
 	default:
 		return fmt.Errorf("unknown strategy %q", s.Strategy)
 	}
@@ -199,7 +224,11 @@ func (e EnvEntry) Validate() error {
 		set++
 	}
 	if set != 1 {
-		return fmt.Errorf("entry %s: source must set exactly one of literal, secret_ref, or fact (got %d)", e.ID, set)
+		return fmt.Errorf(
+			"entry %s: source must set exactly one of literal, secret_ref, or fact (got %d)",
+			e.ID,
+			set,
+		)
 	}
 	switch e.Source.Kind {
 	case SourceLiteral:
@@ -228,7 +257,11 @@ func (e EnvEntry) Validate() error {
 	}
 
 	if len(e.Exposure) == 0 {
-		return fmt.Errorf("entry %s: exposure must list at least one service, or the single sentinel %q", e.ID, "all")
+		return fmt.Errorf(
+			"entry %s: exposure must list at least one service, or the single sentinel %q",
+			e.ID,
+			"all",
+		)
 	}
 	if e.Secret && e.Source.Kind == SourceLiteral && e.Source.Literal != "" {
 		return fmt.Errorf("entry %s: secret entries must not carry a plaintext literal value", e.ID)
@@ -252,7 +285,12 @@ func (r Route) Validate() error {
 	case "public", "internal":
 		// ok
 	default:
-		return fmt.Errorf("route: exposure must be %q or %q, got %q", "public", "internal", r.Exposure)
+		return fmt.Errorf(
+			"route: exposure must be %q or %q, got %q",
+			"public",
+			"internal",
+			r.Exposure,
+		)
 	}
 	return nil
 }
@@ -265,7 +303,12 @@ func (a Attach) Validate() error {
 		return fmt.Errorf("attach %s: at least one service is required", a.Name)
 	}
 	switch a.Status {
-	case AttachPending, AttachProvisioning, AttachReady, AttachFailed, AttachDetaching, AttachDetached:
+	case AttachPending,
+		AttachProvisioning,
+		AttachReady,
+		AttachFailed,
+		AttachDetaching,
+		AttachDetached:
 		// ok
 	default:
 		return fmt.Errorf("attach %s: unknown status %q", a.Name, a.Status)
@@ -292,21 +335,81 @@ func (c Component) Validate() error {
 	return nil
 }
 
+func (g ReleaseGroupSpec) Validate(name string) error {
+	if g.orderPresent && len(g.Order) == 0 {
+		return fmt.Errorf("release group %s: explicit order must not be empty or null", name)
+	}
+	return validateReleaseGroupShape(name, g.Services, g.Order, g.OnFailure)
+}
+
 func (g ReleaseGroup) Validate() error {
-	if g.ID == "" || g.Name == "" {
-		return fmt.Errorf("release group: id and name are required")
+	if g.ID == "" {
+		return fmt.Errorf("release group: id is required")
 	}
-	if len(g.Services) < 2 {
-		// A "group" of one service is just a Deploy — coordination is
-		// explicit, never inferred (blueprint.md, "x-gp-release-group"),
-		// but a single-service group is a modeling error, not a feature.
-		return fmt.Errorf("release group %s: at least two services are required", g.Name)
+	return validateReleaseGroupShape(g.Name, g.Services, g.Order, g.OnFailure)
+}
+
+func validateReleaseGroupShape(
+	name string,
+	services []string,
+	order []string,
+	onFailure OnFailure,
+) error {
+	if !utf8.ValidString(name) {
+		return fmt.Errorf("release group: map key must be valid UTF-8")
 	}
-	switch g.OnFailure {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("release group: map key is required")
+	}
+	if strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return fmt.Errorf("release group %q: map key must not contain control characters", name)
+	}
+	if len(services) < 2 {
+		return fmt.Errorf("release group %s: at least two services are required", name)
+	}
+
+	members := make(map[string]struct{}, len(services))
+	for _, service := range services {
+		if strings.TrimSpace(service) == "" {
+			return fmt.Errorf("release group %s: services must not contain blank entries", name)
+		}
+		if _, exists := members[service]; exists {
+			return fmt.Errorf("release group %s: service %q is duplicated", name, service)
+		}
+		members[service] = struct{}{}
+	}
+
+	if len(order) > 0 {
+		if len(order) != len(services) {
+			return fmt.Errorf(
+				"release group %s: order must contain every service exactly once",
+				name,
+			)
+		}
+		ordered := make(map[string]struct{}, len(order))
+		for _, service := range order {
+			if strings.TrimSpace(service) == "" {
+				return fmt.Errorf("release group %s: order must not contain blank entries", name)
+			}
+			if _, exists := ordered[service]; exists {
+				return fmt.Errorf("release group %s: order service %q is duplicated", name, service)
+			}
+			if _, exists := members[service]; !exists {
+				return fmt.Errorf(
+					"release group %s: order service %q is not a member",
+					name,
+					service,
+				)
+			}
+			ordered[service] = struct{}{}
+		}
+	}
+
+	switch onFailure {
 	case "", OnFailureSwitchBack, OnFailureLeaveActive:
 		// Empty resolves to switch_back through OnFailure.WithDefault.
 	default:
-		return fmt.Errorf("release group %s: unknown on_failure %q", g.Name, g.OnFailure)
+		return fmt.Errorf("release group %s: unknown on_failure %q", name, onFailure)
 	}
 	return nil
 }

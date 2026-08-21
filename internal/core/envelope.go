@@ -178,14 +178,49 @@ type BackupSourceSpec struct {
 	Ref  string           `yaml:"ref,omitempty"`
 }
 
-// ReleaseGroupSpec is x-gp-release-group's authored shape. See
-// blueprint.md, "x-gp-release-group".
+// ReleaseGroupSpec is one x-gp-release-groups entry. The enclosing map key is
+// the canonical group name, so the entry does not duplicate it. See
+// blueprint.md, "x-gp-release-groups".
 type ReleaseGroupSpec struct {
-	Name      string    `yaml:"name"`
 	Services  []string  `yaml:"services"`
 	Order     []string  `yaml:"order,omitempty"`
 	Tag       string    `yaml:"tag,omitempty"`
 	OnFailure OnFailure `yaml:"on_failure,omitempty"`
+
+	orderPresent bool
+}
+
+// UnmarshalYAML retains whether order was authored. A nil slice alone cannot
+// distinguish omission, which selects the services-order default, from an
+// explicit null or empty sequence, both of which are invalid decisions.
+func (spec *ReleaseGroupSpec) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("release group must be a mapping")
+	}
+
+	orderPresent := false
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		key := node.Content[index]
+		if key.Kind != yaml.ScalarNode {
+			return fmt.Errorf("release group field must be a scalar")
+		}
+		switch key.Value {
+		case "services", "tag", "on_failure":
+		case "order":
+			orderPresent = true
+		default:
+			return fmt.Errorf("release group contains an unknown field")
+		}
+	}
+
+	type plainReleaseGroupSpec ReleaseGroupSpec
+	var decoded plainReleaseGroupSpec
+	if err := node.Decode(&decoded); err != nil {
+		return err
+	}
+	*spec = ReleaseGroupSpec(decoded)
+	spec.orderPresent = orderPresent
+	return nil
 }
 
 // ParseEnvelope reads just the envelope fields (kind/schema/metadata)
@@ -217,7 +252,11 @@ func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
 		)
 	}
 	if doc.Schema != EnvelopeSchema {
-		return ConnectorDocument{}, fmt.Errorf("connector document: schema is %d, want %d", doc.Schema, EnvelopeSchema)
+		return ConnectorDocument{}, fmt.Errorf(
+			"connector document: schema is %d, want %d",
+			doc.Schema,
+			EnvelopeSchema,
+		)
 	}
 	if doc.Metadata.Name == "" || doc.Metadata.Tenant == "" || doc.Metadata.Project == "" ||
 		doc.Metadata.Environment == "" {
@@ -235,10 +274,16 @@ func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
 	sort.Strings(credentialNames)
 	for _, name := range credentialNames {
 		if name == "" {
-			return ConnectorDocument{}, fmt.Errorf("connector document: credential name is required")
+			return ConnectorDocument{}, fmt.Errorf(
+				"connector document: credential name is required",
+			)
 		}
 		if err := doc.Connector.Credentials[name].Validate(); err != nil {
-			return ConnectorDocument{}, fmt.Errorf("connector document: credential %q: %w", name, err)
+			return ConnectorDocument{}, fmt.Errorf(
+				"connector document: credential %q: %w",
+				name,
+				err,
+			)
 		}
 	}
 	return doc, nil

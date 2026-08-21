@@ -174,22 +174,34 @@ type BackupPolicy struct {
 	KeyEra       int            `json:"key_era,omitempty"`
 }
 
+type BackupSourceKind string
+
+const (
+	BackupSourceAttach BackupSourceKind = "attach"
+	BackupSourceVolume BackupSourceKind = "volume"
+	BackupSourceConfig BackupSourceKind = "config"
+)
+
 type BackupSource struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"` // "attach" | "volume" | "config"
-	Ref  string `json:"ref,omitempty"`
+	ID   string           `json:"id"`
+	Kind BackupSourceKind `json:"kind"`
+	Ref  string           `json:"ref,omitempty"`
 }
 
+type RecoveryPointStatus string
+
+const RecoveryPointVerified RecoveryPointStatus = "verified"
+
 type RecoveryPoint struct {
-	ID         string `json:"id"`
-	SourceID   string `json:"source_id"`
-	SourceKind string `json:"source_kind"`
-	CreatedAt  string `json:"created_at"` // RFC3339
-	Locator    string `json:"locator"`
-	Size       int64  `json:"size,omitempty"`
-	Encrypted  bool   `json:"encrypted"`
-	KeyEra     int    `json:"key_era,omitempty"`
-	Status     string `json:"status"` // "verified" | "failed"
+	ID         string              `json:"id"`
+	SourceID   string              `json:"source_id"`
+	SourceKind BackupSourceKind    `json:"source_kind"`
+	CreatedAt  string              `json:"created_at"` // RFC3339
+	Locator    string              `json:"locator"`
+	Size       int64               `json:"size,omitempty"`
+	Encrypted  bool                `json:"encrypted"`
+	KeyEra     int                 `json:"key_era,omitempty"`
+	Status     RecoveryPointStatus `json:"status"` // verified points only; failures remain task state
 }
 
 type Runner struct {
@@ -207,12 +219,49 @@ type Secret struct {
 	Ref       string `json:"ref"`
 }
 
-// Connector is owned by exactly one environment.
+type ConnectorCredentialKind string
+
+const (
+	ConnectorCredentialSecretRef ConnectorCredentialKind = "secret_ref"
+	ConnectorCredentialDirect    ConnectorCredentialKind = "direct"
+)
+
+// ConnectorCredential is the redacted response projection. Direct values
+// are represented only by their source kind and are never returned.
+type ConnectorCredential struct {
+	Kind      ConnectorCredentialKind `json:"kind"`
+	SecretRef string                  `json:"secret_ref,omitempty"`
+}
+
+// ConnectorCredentialInput is accepted only on connector creation. Exactly
+// one of SecretRef or Value is supplied and direct Value is write-only.
+type ConnectorCredentialInput struct {
+	SecretRef string `json:"secret_ref,omitempty"`
+	Value     string `json:"value,omitempty"`
+}
+
+// Connector is owned by exactly one environment and never falls back to a
+// project or platform connector.
 type Connector struct {
-	ID            string            `json:"id"`
-	EnvironmentID string            `json:"environment_id"`
-	Kind          string            `json:"kind"`
-	Credentials   map[string]string `json:"credentials,omitempty"`
+	ID            string                         `json:"id"`
+	EnvironmentID string                         `json:"environment_id"`
+	Name          string                         `json:"name"`
+	Kind          string                         `json:"kind"`
+	Endpoint      string                         `json:"endpoint,omitempty"`
+	Bucket        string                         `json:"bucket,omitempty"`
+	Prefix        string                         `json:"prefix,omitempty"`
+	Region        string                         `json:"region,omitempty"`
+	Credentials   map[string]ConnectorCredential `json:"credentials,omitempty"`
+}
+
+type ConnectorCreateRequest struct {
+	Name        string                              `json:"name"`
+	Kind        string                              `json:"kind"`
+	Endpoint    string                              `json:"endpoint,omitempty"`
+	Bucket      string                              `json:"bucket,omitempty"`
+	Prefix      string                              `json:"prefix,omitempty"`
+	Region      string                              `json:"region,omitempty"`
+	Credentials map[string]ConnectorCredentialInput `json:"credentials,omitempty"`
 }
 
 // ReleaseRecord is one per-service deploy/rollback ledger entry — see

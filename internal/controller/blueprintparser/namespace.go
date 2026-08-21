@@ -53,23 +53,32 @@ type scanKey struct {
 }
 
 var knownGroundplaneExtensions = map[string]struct{}{
-	"x-gp-resource": {}, "x-gp-release": {}, "x-gp-release-group": {}, "x-gp-adapter": {},
+	"x-gp-resource": {}, "x-gp-release": {}, "x-gp-release-groups": {}, "x-gp-adapter": {},
 	"x-gp-network": {}, "x-gp-attach": {}, "x-gp-attachments": {}, "x-gp-fact": {},
 	"x-gp-entry": {}, "x-gp-exposure": {}, "x-gp-depends_on": {}, "x-gp-requires": {},
 	"x-gp-route": {}, "x-gp-routes": {}, "x-gp-components": {}, "x-gp-backup": {},
 	"x-gp-task": {}, "x-gp-execution": {}, "x-gp-managed": {},
 }
 
-func newParsePlan(bundle core.BlueprintBundle, rootCompose []byte, projectName, emptyEnv string) *parsePlan {
+func newParsePlan(
+	bundle core.BlueprintBundle,
+	rootCompose []byte,
+	projectName, emptyEnv string,
+) *parsePlan {
 	files := make(map[string][]byte, len(bundle.Files))
 	for _, file := range bundle.Files {
 		files[file.Path] = file.Content
 	}
 	return &parsePlan{
-		files: files, compose: map[string][]byte{bundle.RootPath: rootCompose}, prepared: make(map[string]bool),
-		referenced: make(map[string]struct{}), directories: make(map[string]struct{}),
-		visiting: make(map[scanKey]bool), visitedAt: make(map[scanKey]int),
-		projectName: projectName, emptyEnv: emptyEnv,
+		files:       files,
+		compose:     map[string][]byte{bundle.RootPath: rootCompose},
+		prepared:    make(map[string]bool),
+		referenced:  make(map[string]struct{}),
+		directories: make(map[string]struct{}),
+		visiting:    make(map[scanKey]bool),
+		visitedAt:   make(map[scanKey]int),
+		projectName: projectName,
+		emptyEnv:    emptyEnv,
 	}
 }
 
@@ -103,6 +112,9 @@ func (p *parsePlan) scan(ctx context.Context, request scanRequest) error {
 	model, err := p.loadModel(ctx, request.filename, content, request.env, true)
 	if err != nil {
 		return err
+	}
+	if hasGroundplaneExtension(model, "x-gp-release-groups") {
+		return validationError("blueprint release groups are allowed only at the root")
 	}
 	if !request.root && hasDocumentGroundplaneField(model) {
 		return validationError("blueprint Groundplane envelope is allowed only in the root")
@@ -261,27 +273,36 @@ func validateAuthoredProjectName(content []byte, environment types.Mapping, expe
 			continue
 		}
 		var authored string
-		if root.Content[index+1].Kind != yaml.ScalarNode || root.Content[index+1].Decode(&authored) != nil {
+		if root.Content[index+1].Kind != yaml.ScalarNode ||
+			root.Content[index+1].Decode(&authored) != nil {
 			return validationError("blueprint Compose project name is invalid")
 		}
-		resolved, err := interpolation.Interpolate(map[string]any{"name": authored}, interpolation.Options{
-			LookupValue: func(key string) (string, bool) {
-				value, exists := environment[key]
-				return value, exists
+		resolved, err := interpolation.Interpolate(
+			map[string]any{"name": authored},
+			interpolation.Options{
+				LookupValue: func(key string) (string, bool) {
+					value, exists := environment[key]
+					return value, exists
+				},
 			},
-		})
+		)
 		if err != nil {
 			return validationError("blueprint Compose project name is invalid")
 		}
 		name, ok := resolved["name"].(string)
 		if !ok || loader.NormalizeProjectName(name) != expected {
-			return validationError("blueprint Compose project name conflicts with environment metadata")
+			return validationError(
+				"blueprint Compose project name conflicts with environment metadata",
+			)
 		}
 	}
 	return nil
 }
 
-func (p *parsePlan) inspectProject(request scanRequest, model map[string]any) ([]scanRequest, error) {
+func (p *parsePlan) inspectProject(
+	request scanRequest,
+	model map[string]any,
+) ([]scanRequest, error) {
 	children, err := p.inspectIncludes(request, model["include"])
 	if err != nil {
 		return nil, err
@@ -358,13 +379,16 @@ func (p *parsePlan) inspectIncludes(request scanRequest, raw any) ([]scanRequest
 			if !exists {
 				return nil, validationError("blueprint include env_file is undeclared")
 			}
-			parsed, err := dotenv.ParseWithLookup(bytes.NewReader(p.files[resolved]), func(key string) (string, bool) {
-				if value, ok := childEnv[key]; ok {
-					return value, true
-				}
-				value, ok := envFromFiles[key]
-				return value, ok
-			})
+			parsed, err := dotenv.ParseWithLookup(
+				bytes.NewReader(p.files[resolved]),
+				func(key string) (string, bool) {
+					if value, ok := childEnv[key]; ok {
+						return value, true
+					}
+					value, ok := envFromFiles[key]
+					return value, ok
+				},
+			)
 			if err != nil {
 				return nil, validationError("blueprint include env_file is invalid")
 			}
@@ -412,7 +436,13 @@ func (p *parsePlan) inspectService(request scanRequest, raw any) ([]scanRequest,
 			if !ok {
 				return nil, validationError("blueprint credential_spec file is invalid")
 			}
-			if _, exists, err := p.requireReference(request.baseDir, value, false, false); err != nil || !exists {
+			if _, exists, err := p.requireReference(
+				request.baseDir,
+				value,
+				false,
+				false,
+			); err != nil ||
+				!exists {
 				if err != nil {
 					return nil, err
 				}
@@ -742,7 +772,10 @@ func (p *parsePlan) materialize(workspace string) error {
 	}
 	sort.Strings(directories)
 	for _, directory := range directories {
-		if err := os.MkdirAll(filepath.Join(workspace, filepath.FromSlash(directory)), 0o700); err != nil {
+		if err := os.MkdirAll(
+			filepath.Join(workspace, filepath.FromSlash(directory)),
+			0o700,
+		); err != nil {
 			return err
 		}
 	}
@@ -788,6 +821,24 @@ func validateGroundplaneExtensionNames(value any) error {
 		}
 	}
 	return nil
+}
+
+func hasGroundplaneExtension(value any, expected string) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if key == expected || hasGroundplaneExtension(child, expected) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if hasGroundplaneExtension(child, expected) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasDocumentGroundplaneField(model map[string]any) bool {

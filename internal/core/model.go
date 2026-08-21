@@ -61,7 +61,9 @@ type Environment struct {
 	Volumes    map[string]Volume  `yaml:"volumes,omitempty"    json:"volumes,omitempty"`
 	Entries    []EnvEntry         `yaml:"entries,omitempty"    json:"entries,omitempty"`
 	Scripts    map[string]Script  `yaml:"scripts,omitempty"    json:"scripts,omitempty"`
-	Backup     BackupPolicy       `yaml:"backup,omitempty"     json:"backup,omitempty"`
+	// Backup is present only for tenant environments. Backing environments
+	// never own a consumer backup policy or age key.
+	Backup *BackupPolicy `yaml:"backup,omitempty" json:"backup,omitempty"`
 
 	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
 }
@@ -396,9 +398,10 @@ type Script struct {
 	When        ScriptHook `yaml:"when"    json:"when"`
 }
 
-// BackupSource selects what a backup run backs up. Kind selects the
-// adapter (postgres:16 / valkey:9 / volume / config). See mvp.md,
-// "Backup", and blueprint.md, "x-gp-backup".
+// BackupSource selects what a backup run backs up. The canonical source
+// kinds are attach, volume, and config; an attach resolves its adapter from
+// the referenced backing service. See mvp.md, "Backup", and blueprint.md,
+// "x-gp-backup".
 type BackupSourceKind string
 
 const (
@@ -442,7 +445,6 @@ type RecoveryPointStatus string
 
 const (
 	RecoveryPointVerified RecoveryPointStatus = "verified"
-	RecoveryPointFailed   RecoveryPointStatus = "failed"
 )
 
 // RecoveryPoint is one backup run's immutable output for one source.
@@ -471,9 +473,9 @@ type Runner struct {
 
 // Secret is project-scoped (with platform fallback) — see mvp.md,
 // "Secrets are project-scoped resources with platform fallback."
-// Connectors, by contrast, are environment-scoped or platform-scoped —
-// see Connector below and blueprint.md: "There is no project-scoped
-// connector."
+// Connectors, by contrast, are environment-scoped only — see Connector
+// below and blueprint.md: "There is no project or platform connector and
+// no fallback."
 type SecretKind string
 
 const (
@@ -494,7 +496,7 @@ type Connector struct {
 	ID            string            `yaml:"id"                    json:"id"` // con_<ulid>
 	EnvironmentID string            `yaml:"environment_id"        json:"environment_id"`
 	Kind          string            `yaml:"kind"                  json:"kind"`                  // "s3-compatible", later s3/minio/b2
-	Credentials   map[string]string `yaml:"credentials,omitempty" json:"credentials,omitempty"` // value is either a secret-store ref or a stored-encrypted direct value
+	Credentials   map[string]string `yaml:"credentials,omitempty" json:"credentials,omitempty"` // secret-store ref or opaque encrypted-value record reference
 }
 
 // DeployStatus is the release ledger's task-driven state machine. See
@@ -547,7 +549,7 @@ type ReleaseRecord struct {
 // inferred from shared image names or service names. One task lock and
 // one group-level failure policy; each member still keeps its own
 // release records and observed state. See blueprint.md,
-// "x-gp-release-group".
+// "x-gp-release-groups".
 type ReleaseGroup struct {
 	ID        string    `yaml:"id"                   json:"id"` // rg_<ulid>
 	Name      string    `yaml:"name"                 json:"name"`

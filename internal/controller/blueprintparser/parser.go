@@ -46,13 +46,13 @@ type rootDocument struct {
 	Routes        []core.RouteSpec                 `yaml:"x-gp-routes,omitempty"`
 	Components    map[string]core.ComponentSpec    `yaml:"x-gp-components,omitempty"`
 	Backup        *core.BackupSpec                 `yaml:"x-gp-backup,omitempty"`
-	ReleaseGroups map[string]core.ReleaseGroupSpec `yaml:"x-gp-release-group,omitempty"`
+	ReleaseGroups map[string]core.ReleaseGroupSpec `yaml:"x-gp-release-groups,omitempty"`
 }
 
 var rootGroundplaneFields = map[string]struct{}{
 	"kind": {}, "schema": {}, "metadata": {},
 	"x-gp-requires": {}, "x-gp-attachments": {}, "x-gp-entry": {}, "x-gp-routes": {},
-	"x-gp-components": {}, "x-gp-backup": {}, "x-gp-release-group": {},
+	"x-gp-components": {}, "x-gp-backup": {}, "x-gp-release-groups": {},
 }
 
 // Parse validates and loads a closed Blueprint bundle without ambient input.
@@ -142,6 +142,9 @@ func Parse(ctx context.Context, bundle core.BlueprintBundle) (Result, error) {
 	if resolvedResourceCount(project) > maxResolvedResources {
 		return Result{}, validationError("blueprint resolved Compose resource limit exceeded")
 	}
+	if err := validateReleaseGroupReferences(extensions.ReleaseGroups, project); err != nil {
+		return Result{}, err
+	}
 	normalizeProjectPaths(project, workspace)
 
 	return Result{Envelope: envelope, Extensions: extensions, Project: project}, nil
@@ -186,16 +189,9 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	if authored.Metadata.Tenant == "" || authored.Metadata.Project == "" || authored.Metadata.Environment == "" {
 		return core.Envelope{}, Extensions{}, nil, validationError("blueprint root metadata is incomplete")
 	}
-	for name, group := range authored.ReleaseGroups {
-		group.OnFailure = group.OnFailure.WithDefault()
-		switch group.OnFailure {
-		case core.OnFailureSwitchBack, core.OnFailureLeaveActive:
-		default:
-			return core.Envelope{}, Extensions{}, nil, validationError(
-				"blueprint release group failure policy is invalid",
-			)
-		}
-		authored.ReleaseGroups[name] = group
+	authored.ReleaseGroups, err = normalizeReleaseGroups(authored.ReleaseGroups)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
 	}
 
 	root.Content = composeNodes
@@ -209,6 +205,52 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 		ReleaseGroups: authored.ReleaseGroups,
 	}
 	return authored.Envelope, extensions, compose, nil
+}
+
+func normalizeReleaseGroups(
+	groups map[string]core.ReleaseGroupSpec,
+) (map[string]core.ReleaseGroupSpec, error) {
+	if len(groups) == 0 {
+		return groups, nil
+	}
+	names := make([]string, 0, len(groups))
+	for name := range groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	normalized := make(map[string]core.ReleaseGroupSpec, len(groups))
+	for _, name := range names {
+		group := groups[name]
+		if err := group.Validate(name); err != nil {
+			return nil, validationError("blueprint release group is invalid")
+		}
+		if len(group.Order) == 0 {
+			group.Order = append([]string(nil), group.Services...)
+		}
+		group.OnFailure = group.OnFailure.WithDefault()
+		normalized[name] = group
+	}
+	return normalized, nil
+}
+
+func validateReleaseGroupReferences(
+	groups map[string]core.ReleaseGroupSpec,
+	project *types.Project,
+) error {
+	names := make([]string, 0, len(groups))
+	for name := range groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		for _, service := range groups[name].Services {
+			if _, exists := project.Services[service]; !exists {
+				return validationError("blueprint release group references a service that is not enabled")
+			}
+		}
+	}
+	return nil
 }
 
 func decodeKnownFields(node *yaml.Node, destination any) error {
