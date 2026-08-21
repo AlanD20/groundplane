@@ -46,7 +46,8 @@ type taskCASRetryPolicy struct {
 
 // TaskRepository owns the accepted Task primary and event-journal mechanics.
 // Task creation and terminal active-operation release remain deliberately
-// absent until ADR 0013 fixes the two Task-index value schemas. Retention
+// absent until Task creation can compose both canonical Task index writes and
+// its idempotency marker through one opaque transaction plan. Retention
 // metadata is persisted by the journal codec; pruning is not implemented by
 // this append/read subset.
 type TaskRepository struct {

@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const protectedPlaintextBytes = 1 + sha256.Size
+const (
+	protectedPlaintextBytes         = 1 + sha256.Size
+	maximumProtectedCiphertextBytes = 4 << 10
+)
 
 // Protect consumes digest and seals only its versioned binary representation.
 func Protect(ctx context.Context, protector *secretvalue.Protector, version Version, digest *Digest) (
@@ -37,23 +40,26 @@ func Protect(ctx context.Context, protector *secretvalue.Protector, version Vers
 	defer clear(plaintext)
 	plaintext[0] = byte(version)
 	copy(plaintext[1:], value[:])
-	return protector.Seal(ctx, plaintext)
+	envelope, err := protector.Seal(ctx, plaintext)
+	if err != nil {
+		return secretvalue.Envelope{}, err
+	}
+	ciphertext := envelope.Ciphertext()
+	defer clear(ciphertext)
+	if len(ciphertext) > maximumProtectedCiphertextBytes {
+		return secretvalue.Envelope{}, internalError("protected intent exceeds ciphertext limit")
+	}
+	return envelope, nil
 }
 
-// Compare consumes candidate and compares it with one protected durable value
-// in constant time inside the Protector plaintext callback.
-func Compare(
+// CompareProtected compares two protected durable values in constant time
+// inside nested Protector plaintext callbacks.
+func CompareProtected(
 	ctx context.Context,
 	protector *secretvalue.Protector,
-	envelope secretvalue.Envelope,
-	version Version,
-	candidate *Digest,
+	existing secretvalue.Envelope,
+	candidate secretvalue.Envelope,
 ) (bool, error) {
-	value, err := candidate.consume()
-	if err != nil {
-		return false, err
-	}
-	defer clear(value[:])
 	if ctx == nil {
 		return false, internalError("context is required")
 	}
@@ -63,16 +69,18 @@ func Compare(
 	if protector == nil {
 		return false, internalError("protector is required")
 	}
-	if version != Version1 {
-		return false, internalError("canonicalization version is invalid")
-	}
 	matched := false
-	err = protector.Open(ctx, envelope, func(plaintext []byte) error {
-		if len(plaintext) != protectedPlaintextBytes || Version(plaintext[0]) != Version1 {
+	err := protector.Open(ctx, candidate, func(candidatePlaintext []byte) error {
+		if len(candidatePlaintext) != protectedPlaintextBytes || Version(candidatePlaintext[0]) != Version1 {
 			return errs.New(errs.KindInternal, "idempotent intent: protected digest is malformed")
 		}
-		matched = subtle.ConstantTimeCompare(plaintext[1:], value[:]) == 1
-		return nil
+		return protector.Open(ctx, existing, func(existingPlaintext []byte) error {
+			if len(existingPlaintext) != protectedPlaintextBytes || Version(existingPlaintext[0]) != Version1 {
+				return errs.New(errs.KindInternal, "idempotent intent: protected digest is malformed")
+			}
+			matched = subtle.ConstantTimeCompare(existingPlaintext, candidatePlaintext) == 1
+			return nil
+		})
 	})
 	if err != nil {
 		return false, err

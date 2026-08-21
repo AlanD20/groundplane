@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -107,9 +108,15 @@ type Mutation struct {
 // revision at which the transaction was evaluated. Failed conditions perform
 // no mutations and are not errors.
 type TransactionResult struct {
-	Succeeded bool
-	Revision  int64
+	Succeeded    bool
+	Revision     int64
+	FailureReads []*KeyValue
 }
+
+const (
+	maximumTransactionOperations = 96
+	maximumTransactionBytes      = 1 << 20
+)
 
 // WatchStream separates ordinary key events from terminal watch failures.
 // Consumers must observe Errors and restart from a durable revision once that
@@ -413,8 +420,16 @@ func (s *store) Transact(
 	if len(mutations) == 0 {
 		return TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
 	}
+	if len(conditions)+len(mutations) > maximumTransactionOperations {
+		return TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"etcd transaction exceeds the 96 compare-and-mutation limit",
+		)
+	}
 
 	comparisons := make([]clientv3.Cmp, 0, len(conditions))
+	failureReads := make([]clientv3.Op, 0, len(conditions))
+	physicalConditions := make([]string, 0, len(conditions))
 	for _, condition := range conditions {
 		if condition.ModRevision < 0 {
 			return TransactionResult{}, errs.New(
@@ -430,9 +445,12 @@ func (s *store) Transact(
 			comparisons,
 			clientv3.Compare(clientv3.ModRevision(key), "=", condition.ModRevision),
 		)
+		failureReads = append(failureReads, clientv3.OpGet(key))
+		physicalConditions = append(physicalConditions, key)
 	}
 
 	operations := make([]clientv3.Op, 0, len(mutations))
+	physicalMutations := make([]string, 0, len(mutations))
 	for _, mutation := range mutations {
 		key, err := s.physicalKey(mutation.Key)
 		if err != nil {
@@ -446,20 +464,111 @@ func (s *store) Transact(
 		default:
 			return TransactionResult{}, errs.New(errs.KindValidationFailed, "invalid etcd transaction mutation")
 		}
+		physicalMutations = append(physicalMutations, key)
+	}
+	request := transactionRequest(conditions, mutations, physicalConditions, physicalMutations)
+	if request.Size() > maximumTransactionBytes {
+		return TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"etcd transaction exceeds the 1 MiB serialized request limit",
+		)
 	}
 
 	transaction := s.client.Txn(ctx)
 	if len(comparisons) > 0 {
 		transaction = transaction.If(comparisons...)
 	}
-	response, err := transaction.Then(operations...).Commit()
+	transaction = transaction.Then(operations...)
+	if len(failureReads) > 0 {
+		transaction = transaction.Else(failureReads...)
+	}
+	response, err := transaction.Commit()
 	if err != nil {
 		return TransactionResult{}, wrap(ctx, err)
 	}
 	if response.Header == nil {
 		return TransactionResult{}, errs.New(errs.KindInternal, "etcd transaction response is missing its revision")
 	}
-	return TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}, nil
+	result := TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}
+	if !response.Succeeded {
+		reads, err := transactionFailureReads(response, physicalConditions, s.root)
+		if err != nil {
+			return TransactionResult{}, err
+		}
+		result.FailureReads = reads
+	}
+	return result, nil
+}
+
+func transactionRequest(
+	conditions []Condition,
+	mutations []Mutation,
+	physicalConditions []string,
+	physicalMutations []string,
+) *etcdserverpb.TxnRequest {
+	request := &etcdserverpb.TxnRequest{
+		Compare: make([]*etcdserverpb.Compare, 0, len(conditions)),
+		Success: make([]*etcdserverpb.RequestOp, 0, len(mutations)),
+		Failure: make([]*etcdserverpb.RequestOp, 0, len(conditions)),
+	}
+	for index, condition := range conditions {
+		request.Compare = append(request.Compare, &etcdserverpb.Compare{
+			Result:      etcdserverpb.Compare_EQUAL,
+			Target:      etcdserverpb.Compare_MOD,
+			Key:         []byte(physicalConditions[index]),
+			TargetUnion: &etcdserverpb.Compare_ModRevision{ModRevision: condition.ModRevision},
+		})
+		request.Failure = append(request.Failure, &etcdserverpb.RequestOp{
+			Request: &etcdserverpb.RequestOp_RequestRange{RequestRange: &etcdserverpb.RangeRequest{
+				Key: []byte(physicalConditions[index]),
+			}},
+		})
+	}
+	for index, mutation := range mutations {
+		operation := &etcdserverpb.RequestOp{}
+		switch mutation.Type {
+		case MutationPut:
+			operation.Request = &etcdserverpb.RequestOp_RequestPut{RequestPut: &etcdserverpb.PutRequest{
+				Key: []byte(physicalMutations[index]), Value: mutation.Value,
+			}}
+		case MutationDelete:
+			operation.Request = &etcdserverpb.RequestOp_RequestDeleteRange{
+				RequestDeleteRange: &etcdserverpb.DeleteRangeRequest{Key: []byte(physicalMutations[index])},
+			}
+		}
+		request.Success = append(request.Success, operation)
+	}
+	return request
+}
+
+func transactionFailureReads(
+	response *clientv3.TxnResponse,
+	physicalKeys []string,
+	root string,
+) ([]*KeyValue, error) {
+	if len(response.Responses) != len(physicalKeys) {
+		return nil, errs.New(errs.KindInternal, "etcd transaction failure reads are incomplete")
+	}
+	values := make([]*KeyValue, len(physicalKeys))
+	for index, operation := range response.Responses {
+		rangeResponse := operation.GetResponseRange()
+		if rangeResponse == nil || rangeResponse.More || len(rangeResponse.Kvs) > 1 {
+			return nil, errs.New(errs.KindInternal, "etcd transaction failure read is invalid")
+		}
+		if len(rangeResponse.Kvs) == 0 {
+			continue
+		}
+		entry := rangeResponse.Kvs[0]
+		if string(entry.Key) != physicalKeys[index] || entry.ModRevision <= 0 {
+			return nil, errs.New(errs.KindInternal, "etcd transaction failure read is inconsistent")
+		}
+		values[index] = &KeyValue{
+			Key:         strings.TrimPrefix(string(entry.Key), root),
+			Value:       append([]byte(nil), entry.Value...),
+			ModRevision: entry.ModRevision,
+		}
+	}
+	return values, nil
 }
 
 func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (*WatchStream, error) {

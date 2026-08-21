@@ -3,13 +3,154 @@ package idempotentintent
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	infraetcd "github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// Rationale: exact replay bodies must not leak through Resolution formatting,
+// including detailed and Go-syntax verbs.
+func TestResolutionFormattingRedactsResponseBody(t *testing.T) {
+	t.Parallel()
+
+	resolution := Resolution{
+		Kind: ResolutionReplay,
+		Response: infraetcd.IdempotencyResponse{
+			Status: 200, ContentKind: "application/json", Body: []byte(`{"token":"resolution-secret"}`),
+		},
+	}
+	formatted := fmt.Sprintf("%v|%+v|%#v", resolution, &resolution, resolution)
+	if strings.Contains(formatted, "resolution-secret") || !strings.Contains(formatted, "response:redacted") {
+		t.Fatalf("formatted resolution leaked response: %s", formatted)
+	}
+}
+
+// Rationale: unknown-outcome reconciliation is limited to retryable/deadline
+// transaction results, and a real caller cancellation after the bounded read
+// wins over both stored evidence and the original backend result.
+func TestResolveUnknownEligibilityAndCallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	protector := testProtector(t, &retainingCipher{})
+	coordinator, err := NewCoordinator(protector)
+	if err != nil {
+		t.Fatalf("NewCoordinator() error = %v", err)
+	}
+	locator := infraetcd.IdempotencyLocator{
+		ScopeKind: infraetcd.IdempotencyScopeTenant,
+		ScopeID:   ids.NewAt(ids.KindTenant, testTime(1), 1),
+		Method:    http.MethodPatch, Route: "/projects/{id}", Key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+	}
+	storageOutcome := errs.New(errs.KindStorageUnavailable, "transaction outcome is unknown")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	store := &unknownReadStore{beforeReturn: cancel}
+	repository, err := infraetcd.NewIdempotencyRepository(store)
+	if err != nil {
+		t.Fatalf("NewIdempotencyRepository(cancel) error = %v", err)
+	}
+	_, err = coordinator.ResolveUnknown(ctx, repository, locator, ProtectedEvidence{}, storageOutcome)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ResolveUnknown(canceled) error = %v, want context canceled", err)
+	}
+
+	ineligibleStore := &unknownReadStore{}
+	repository, err = infraetcd.NewIdempotencyRepository(ineligibleStore)
+	if err != nil {
+		t.Fatalf("NewIdempotencyRepository(ineligible) error = %v", err)
+	}
+	_, err = coordinator.ResolveUnknown(
+		context.Background(), repository, locator, ProtectedEvidence{},
+		errs.New(errs.KindValidationFailed, "not submitted"),
+	)
+	if !hasKind(err, errs.KindInternal) || ineligibleStore.getCalls != 0 {
+		t.Fatalf("ResolveUnknown(ineligible) error/calls = %v/%d", err, ineligibleStore.getCalls)
+	}
+
+	missingStore := &unknownReadStore{}
+	repository, err = infraetcd.NewIdempotencyRepository(missingStore)
+	if err != nil {
+		t.Fatalf("NewIdempotencyRepository(missing) error = %v", err)
+	}
+	_, err = coordinator.ResolveUnknown(
+		context.Background(), repository, locator, ProtectedEvidence{}, storageOutcome,
+	)
+	if !errors.Is(err, storageOutcome) || missingStore.getCalls != 1 {
+		t.Fatalf("ResolveUnknown(missing) error/calls = %v/%d", err, missingStore.getCalls)
+	}
+}
+
+// Rationale: replay classification must use protected-to-protected comparison
+// and distinguish terminal replay, active Task, and valid intent mismatch.
+func TestCoordinatorClassifiesKnownTransactionEvidence(t *testing.T) {
+	t.Parallel()
+
+	protector := testProtector(t, &retainingCipher{})
+	coordinator, err := NewCoordinator(protector)
+	if err != nil {
+		t.Fatalf("NewCoordinator() error = %v", err)
+	}
+	version, digest, err := Canonicalize(context.Background(), canonicalTestIntent())
+	if err != nil {
+		t.Fatalf("Canonicalize() error = %v", err)
+	}
+	protected, err := coordinator.ProtectIntent(context.Background(), version, digest)
+	if err != nil {
+		t.Fatalf("ProtectIntent() error = %v", err)
+	}
+	durable, err := protected.DurableRecord()
+	if err != nil {
+		t.Fatalf("DurableRecord() error = %v", err)
+	}
+	marker := infraetcd.IdempotencyMarker{
+		Kind: infraetcd.IdempotencyMarkerDirect, State: infraetcd.IdempotencyMarkerCompleted,
+		Intent: durable,
+		Response: infraetcd.IdempotencyResponse{
+			Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"id":"svc"}`),
+		},
+	}
+	resolution, err := coordinator.classifyMarker(context.Background(), protected, marker)
+	if err != nil || resolution.Kind != ResolutionReplay || string(resolution.Response.Body) != `{"id":"svc"}` {
+		t.Fatalf("ResolveKnown(replay) = %#v, %v", resolution, err)
+	}
+
+	marker.Kind = infraetcd.IdempotencyMarkerTask
+	marker.State = infraetcd.IdempotencyMarkerPending
+	_, err = coordinator.classifyMarker(context.Background(), protected, marker)
+	if !hasKind(err, errs.KindIdempotencyInProgress) {
+		t.Fatalf("ResolveKnown(pending) error = %v, want in-progress", err)
+	}
+
+	changed := canonicalTestIntent()
+	changed.Path[0].Value = ids.NewAt(ids.KindService, testTime(4), 4)
+	changedVersion, changedDigest, err := Canonicalize(context.Background(), changed)
+	if err != nil {
+		t.Fatalf("Canonicalize(changed) error = %v", err)
+	}
+	changedProtected, err := coordinator.ProtectIntent(context.Background(), changedVersion, changedDigest)
+	if err != nil {
+		t.Fatalf("ProtectIntent(changed) error = %v", err)
+	}
+	_, err = coordinator.classifyMarker(context.Background(), changedProtected, marker)
+	if !hasKind(err, errs.KindIdempotencyMismatch) {
+		t.Fatalf("ResolveKnown(mismatch) error = %v, want mismatch", err)
+	}
+	if _, err := coordinator.ResolveKnown(
+		context.Background(),
+		protected,
+		infraetcd.IdempotencyTransactionResult{},
+	); !hasKind(err, errs.KindInternal) {
+		t.Fatalf("ResolveKnown(zero evidence) error = %v, want internal", err)
+	}
+}
 
 // Rationale: a durable marker may contain only a sealed version and digest,
 // while the caller-owned digest and every transient plaintext are cleared.
@@ -45,9 +186,9 @@ func TestProtectConsumesAndClearsDigest(t *testing.T) {
 	}
 }
 
-// Rationale: valid duplicates match, changed valid intents mismatch, and both
-// candidates are consumed without exposing either digest.
-func TestCompareConsumesCandidateAndDistinguishesMismatch(t *testing.T) {
+// Rationale: valid protected duplicates match and changed valid protected
+// intents mismatch without retaining either plaintext digest.
+func TestCompareProtectedDistinguishesMismatch(t *testing.T) {
 	t.Parallel()
 
 	cipher := &retainingCipher{}
@@ -61,21 +202,26 @@ func TestCompareConsumesCandidateAndDistinguishesMismatch(t *testing.T) {
 		t.Fatalf("Protect() error = %v", err)
 	}
 
-	equal := canonicalTestDigest(t, canonicalTestIntent())
-	matched, err := Compare(context.Background(), protector, envelope, Version1, equal)
-	if err != nil || !matched {
-		t.Fatalf("Compare(equal) = %v, %v; want true, nil", matched, err)
+	equalDigest := canonicalTestDigest(t, canonicalTestIntent())
+	equal, err := Protect(context.Background(), protector, Version1, equalDigest)
+	if err != nil {
+		t.Fatalf("Protect(equal) error = %v", err)
 	}
-	if !equal.state.consumed || equal.state.value != [sha256.Size]byte{} {
-		t.Fatal("Compare(equal) did not consume candidate")
+	matched, err := CompareProtected(context.Background(), protector, envelope, equal)
+	if err != nil || !matched {
+		t.Fatalf("CompareProtected(equal) = %v, %v; want true, nil", matched, err)
 	}
 
 	changedIntent := canonicalTestIntent()
 	changedIntent.Path[0].Value = ids.NewAt(ids.KindService, testTime(4), 4)
-	changed := canonicalTestDigest(t, changedIntent)
-	matched, err = Compare(context.Background(), protector, envelope, Version1, changed)
+	changedDigest := canonicalTestDigest(t, changedIntent)
+	changed, err := Protect(context.Background(), protector, Version1, changedDigest)
+	if err != nil {
+		t.Fatalf("Protect(changed) error = %v", err)
+	}
+	matched, err = CompareProtected(context.Background(), protector, envelope, changed)
 	if err != nil || matched {
-		t.Fatalf("Compare(changed) = %v, %v; want false, nil", matched, err)
+		t.Fatalf("CompareProtected(changed) = %v, %v; want false, nil", matched, err)
 	}
 }
 
@@ -94,20 +240,23 @@ func TestCompareRejectsMalformedProtectedPlaintext(t *testing.T) {
 		if err != nil {
 			t.Fatalf("protector.Seal() error = %v", err)
 		}
-		candidate := canonicalTestDigest(t, canonicalTestIntent())
-		matched, err := Compare(context.Background(), protector, envelope, Version1, candidate)
-		if matched || !hasKind(err, errs.KindInternal) {
-			t.Fatalf("Compare() = %v, %v; want false, internal", matched, err)
+		candidateCipher := &retainingCipher{}
+		candidateProtector := testProtector(t, candidateCipher)
+		candidateDigest := canonicalTestDigest(t, canonicalTestIntent())
+		candidate, err := Protect(context.Background(), candidateProtector, Version1, candidateDigest)
+		if err != nil {
+			t.Fatalf("Protect(candidate) error = %v", err)
 		}
-		if !candidate.state.consumed || candidate.state.value != [sha256.Size]byte{} {
-			t.Fatal("Compare() did not clear candidate on corrupt durable state")
+		matched, err := CompareProtected(context.Background(), protector, envelope, candidate)
+		if matched || !hasKind(err, errs.KindInternal) {
+			t.Fatalf("CompareProtected() = %v, %v; want false, internal", matched, err)
 		}
 	}
 }
 
 // Rationale: invalid dependencies, versions, and contexts must still consume
-// the one-use digest so no failure path leaves sensitive bytes resident.
-func TestProtectAndCompareClearDigestOnEarlyFailure(t *testing.T) {
+// the one-use digest, while protected comparison fails closed.
+func TestProtectAndCompareProtectedFailClosed(t *testing.T) {
 	t.Parallel()
 
 	protectDigest := canonicalTestDigest(t, canonicalTestIntent())
@@ -118,12 +267,8 @@ func TestProtectAndCompareClearDigestOnEarlyFailure(t *testing.T) {
 		t.Fatal("Protect() early failure retained digest")
 	}
 
-	compareDigest := canonicalTestDigest(t, canonicalTestIntent())
-	if _, err := Compare(nil, nil, secretvalue.Envelope{}, 0, compareDigest); !hasKind(err, errs.KindInternal) {
-		t.Fatalf("Compare() error = %v, want internal", err)
-	}
-	if !compareDigest.state.consumed || compareDigest.state.value != [sha256.Size]byte{} {
-		t.Fatal("Compare() early failure retained digest")
+	if _, err := CompareProtected(nil, nil, secretvalue.Envelope{}, secretvalue.Envelope{}); !hasKind(err, errs.KindInternal) {
+		t.Fatalf("CompareProtected() error = %v, want internal", err)
 	}
 }
 
@@ -174,6 +319,26 @@ func TestDigestCopiedHandlesHaveOneConcurrentConsumer(t *testing.T) {
 type retainingCipher struct {
 	sealInput  []byte
 	openResult []byte
+}
+
+type unknownReadStore struct {
+	infraetcd.Store
+	beforeReturn func()
+	getCalls     int
+}
+
+func (store *unknownReadStore) Get(
+	ctx context.Context,
+	_ string,
+) (*infraetcd.GetResult, error) {
+	store.getCalls++
+	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) <= 0 {
+		return nil, errs.New(errs.KindInternal, "unknown evidence read is not bounded")
+	}
+	if store.beforeReturn != nil {
+		store.beforeReturn()
+	}
+	return &infraetcd.GetResult{ReadRevision: 1}, nil
 }
 
 func (cipher *retainingCipher) Seal(_ context.Context, plaintext []byte) ([]byte, error) {

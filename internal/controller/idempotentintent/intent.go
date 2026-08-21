@@ -1,6 +1,6 @@
 // Package idempotentintent canonicalizes validated human-API mutations into
-// opaque, sensitive digests. It never reads HTTP transport state and does not
-// own durable idempotency markers or replay behavior.
+// opaque, sensitive digests and classifies durable protected evidence. It
+// never reads HTTP transport state or owns persistence keys.
 package idempotentintent
 
 import (
