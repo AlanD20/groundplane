@@ -123,9 +123,11 @@ type Sessions interface {
 	WaitOffline(ctx context.Context, agentID string, generation uint64) error
 }
 
-// Tasks aborts all active work assigned to one Agent.
+// Tasks aborts all active work assigned to one exact Agent generation. The
+// maximum is the durable configured concurrency bound; success means every
+// observed assignment has committed a terminal acknowledgement.
 type Tasks interface {
-	AbortActive(ctx context.Context, agentID string, reason string) error
+	AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, reason string) error
 }
 
 // Timer is the cancellable timer surface used by readiness deadlines.

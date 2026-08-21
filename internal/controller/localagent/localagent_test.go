@@ -837,7 +837,13 @@ type fakeTasks struct {
 	abortError error
 }
 
-func (tasks *fakeTasks) AbortActive(ctx context.Context, _ string, reason string) error {
+func (tasks *fakeTasks) AbortActive(
+	ctx context.Context,
+	_ string,
+	_ uint64,
+	_ int32,
+	reason string,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
