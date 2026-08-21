@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
+	"github.com/AlanD20/groundplane/internal/infra/docker/composehelpercontainer"
+	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,9 +24,25 @@ const DefaultAgentConfigPath = agentprotocol.RuntimeConfigPath
 // Agent is the wired Agent binary: config, logging, and the gRPC
 // client. cmd/agent/main.go is nothing but NewAgent + Run.
 type Agent struct {
-	Config config.AgentConfig
-	Logger *slog.Logger
-	Client *agent.Client
+	Config  config.AgentConfig
+	Logger  *slog.Logger
+	Client  *agent.Client
+	compose *agentComposeResources
+}
+
+type ownedComposeHelper interface {
+	agent.ComposeHelper
+	io.Closer
+}
+
+type ownedComposeObserver interface {
+	agent.ComposeObserver
+	io.Closer
+}
+
+type agentComposeResources struct {
+	helper   ownedComposeHelper
+	observer ownedComposeObserver
 }
 
 func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
@@ -53,16 +72,92 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 		return nil, err
 	}
 	defer clear(token)
-	client, err := agent.NewClient(agentprotocol.SocketPath, cfg.AgentID, token, logger)
+	compose, resources, err := newAgentComposeRuntime(
+		os.Getenv(agentprotocol.AgentImageEnv),
+		func(image string) (ownedComposeHelper, error) {
+			return composehelpercontainer.New(image)
+		},
+		func() (ownedComposeObserver, error) {
+			return composeobserver.New()
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
+	client, err := agent.NewClientWithComposeRuntime(
+		agentprotocol.SocketPath,
+		cfg.AgentID,
+		token,
+		logger,
+		compose,
+	)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, resources.Close())
+	}
 
-	return &Agent{Config: cfg, Logger: logger, Client: client}, nil
+	return &Agent{Config: cfg, Logger: logger, Client: client, compose: resources}, nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
-	return a.Client.Run(ctx)
+	runErr := a.Client.Run(ctx)
+	if a.compose == nil {
+		return runErr
+	}
+	return preferAgentComposeCleanup(runErr, a.compose.Close())
+}
+
+func newAgentComposeRuntime(
+	image string,
+	newHelper func(string) (ownedComposeHelper, error),
+	newObserver func() (ownedComposeObserver, error),
+) (*agent.ComposeRuntime, *agentComposeResources, error) {
+	if image == "" {
+		return nil, nil, errs.New(errs.KindValidationFailed, "agent: managed Agent image is required")
+	}
+	if newHelper == nil || newObserver == nil {
+		return nil, nil, errs.New(errs.KindInternal, "agent: Compose runtime factories are required")
+	}
+	helper, err := newHelper(image)
+	if err != nil {
+		return nil, nil, err
+	}
+	observer, err := newObserver()
+	if err != nil {
+		return nil, nil, preferAgentComposeCleanup(err, helper.Close())
+	}
+	resources := &agentComposeResources{helper: helper, observer: observer}
+	runtime, err := agent.NewComposeRuntime(helper, observer)
+	if err != nil {
+		return nil, nil, preferAgentComposeCleanup(err, resources.Close())
+	}
+	return runtime, resources, nil
+}
+
+func (resources *agentComposeResources) Close() error {
+	if resources == nil {
+		return nil
+	}
+	var observerErr, helperErr error
+	if resources.observer != nil {
+		observerErr = resources.observer.Close()
+	}
+	if resources.helper != nil {
+		helperErr = resources.helper.Close()
+	}
+	if joined := errors.Join(observerErr, helperErr); joined != nil {
+		return errs.Wrap(errs.KindInternal, joined)
+	}
+	return nil
+}
+
+func preferAgentComposeCleanup(operationErr, cleanupErr error) error {
+	if cleanupErr == nil {
+		return operationErr
+	}
+	if operationErr == nil || errors.Is(operationErr, context.Canceled) || errors.Is(operationErr, context.DeadlineExceeded) {
+		return cleanupErr
+	}
+	return errs.Wrap(errs.KindInternal, errors.Join(operationErr, cleanupErr))
 }
 
 func readAgentToken(ctx context.Context, tokenPath string) ([]byte, error) {

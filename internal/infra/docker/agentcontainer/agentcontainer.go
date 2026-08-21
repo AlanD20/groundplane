@@ -264,6 +264,7 @@ func createOptions(desired Desired) client.ContainerCreateOptions {
 		Config: &container.Config{
 			Image: desired.Image,
 			User:  "0",
+			Env:   []string{agentprotocol.AgentImageEnv + "=" + desired.Image},
 			Labels: map[string]string{
 				labelManaged:    "true",
 				labelKind:       "agent",
