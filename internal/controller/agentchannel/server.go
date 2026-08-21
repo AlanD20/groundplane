@@ -153,6 +153,18 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		select {
 		case <-session.Done():
 			return nil
+		case abort := <-session.taskAborts():
+			sendErr := stream.Send(&agentpb.ControllerMessage{
+				Payload: &agentpb.ControllerMessage_TaskAbort{TaskAbort: &agentpb.TaskAbort{
+					TaskId: abort.taskID,
+					Reason: abort.reason,
+				}},
+			})
+			if sendErr != nil {
+				abort.result <- errs.New(errs.KindStorageUnavailable, "Agent Task abort delivery failed")
+				return sendErr
+			}
+			abort.result <- nil
 		case result := <-received:
 			if result.err != nil {
 				if errors.Is(result.err, io.EOF) || errors.Is(result.err, context.Canceled) {

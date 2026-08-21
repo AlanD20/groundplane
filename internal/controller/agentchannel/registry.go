@@ -4,9 +4,13 @@ import (
 	"context"
 	"sync"
 	"time"
+	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+const maximumTaskAbortReasonBytes = 128
 
 // Snapshot is the non-secret, point-in-time state of an Agent session.
 type Snapshot struct {
@@ -43,8 +47,16 @@ type sessionState struct {
 	readyReported      bool
 	capacity           int32
 	cancel             context.CancelFunc
+	done               <-chan struct{}
+	aborts             chan taskAbortCommand
 	offline            chan struct{}
 	offlineOnce        sync.Once
+}
+
+type taskAbortCommand struct {
+	taskID string
+	reason string
+	result chan error
 }
 
 type readyKey struct {
@@ -122,6 +134,8 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 		online:             true,
 		assignmentsStopped: lifecycle != nil && generation <= lifecycle.quiescedThrough,
 		cancel:             cancel,
+		done:               ctx.Done(),
+		aborts:             make(chan taskAbortCommand),
 		offline:            make(chan struct{}),
 	}
 	r.agents[agentID] = state
@@ -167,6 +181,59 @@ func (s *Session) AssignmentsAllowed() bool {
 	current := s.registry.agents[s.agentID]
 	return current == s.state && current.fence == s.state.fence && current.online &&
 		!current.assignmentsStopped && !current.revoked
+}
+
+func (s *Session) taskAborts() <-chan taskAbortCommand {
+	return s.state.aborts
+}
+
+// AbortTask synchronously hands one demand-cancellation command to the sole
+// send loop for the exact authenticated Agent generation. The unbuffered
+// rendezvous prevents a disconnected or stalled Agent from accumulating an
+// in-memory command queue.
+func (r *Registry) AbortTask(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	taskID string,
+	reason string,
+) error {
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return err
+	}
+	if ids.Validate(ids.KindTask, taskID) != nil {
+		return errs.New(errs.KindValidationFailed, "Task abort id is invalid")
+	}
+	if reason == "" || len(reason) > maximumTaskAbortReasonBytes || !utf8.ValidString(reason) {
+		return errs.New(errs.KindValidationFailed, "Task abort reason is invalid")
+	}
+
+	r.mu.Lock()
+	state := r.agents[agentID]
+	if state == nil || state.generation != generation || !state.online || state.revoked {
+		r.mu.Unlock()
+		return errs.New(errs.KindStateConflict, "Agent session is not online at the requested generation")
+	}
+	command := taskAbortCommand{taskID: taskID, reason: reason, result: make(chan error, 1)}
+	aborts := state.aborts
+	done := state.done
+	r.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return errs.New(errs.KindStateConflict, "Agent session ended before Task abort delivery")
+	case aborts <- command:
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return errs.New(errs.KindStateConflict, "Agent session ended during Task abort delivery")
+	case err := <-command.result:
+		return err
+	}
 }
 
 // Ready atomically subscribes to the first authenticated Ready report for an

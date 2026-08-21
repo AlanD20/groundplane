@@ -177,6 +177,43 @@ func (s *scriptedStream) Context() context.Context {
 func (s *scriptedStream) SendMsg(any) error { return errors.New("unexpected SendMsg") }
 func (s *scriptedStream) RecvMsg(any) error { return errors.New("unexpected RecvMsg") }
 
+type liveStream struct {
+	ctx      context.Context
+	received chan *agentpb.AgentMessage
+	sent     chan *agentpb.ControllerMessage
+}
+
+func newLiveStream(ctx context.Context) *liveStream {
+	return &liveStream{
+		ctx: ctx, received: make(chan *agentpb.AgentMessage, 1), sent: make(chan *agentpb.ControllerMessage, 2),
+	}
+}
+
+func (s *liveStream) Send(message *agentpb.ControllerMessage) error {
+	select {
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case s.sent <- message:
+		return nil
+	}
+}
+
+func (s *liveStream) Recv() (*agentpb.AgentMessage, error) {
+	select {
+	case <-s.ctx.Done():
+		return nil, s.ctx.Err()
+	case message := <-s.received:
+		return message, nil
+	}
+}
+
+func (s *liveStream) SetHeader(metadata.MD) error  { return nil }
+func (s *liveStream) SendHeader(metadata.MD) error { return nil }
+func (s *liveStream) SetTrailer(metadata.MD)       {}
+func (s *liveStream) Context() context.Context     { return s.ctx }
+func (s *liveStream) SendMsg(any) error            { return errors.New("unexpected SendMsg") }
+func (s *liveStream) RecvMsg(any) error            { return errors.New("unexpected RecvMsg") }
+
 // Rationale: no unauthenticated payload may reach Agent session handling.
 func TestConnectRequiresAuthenticateFirst(t *testing.T) {
 	authenticator := &fakeAuthenticator{}
@@ -353,6 +390,45 @@ func TestConnectTracksReadyFreshnessAndCapacity(t *testing.T) {
 	snapshot, ok := registry.Snapshot(testAgentID)
 	if !ok || snapshot.Online || snapshot.Capacity != 3 || !snapshot.LastReady.Equal(wantTime) {
 		t.Fatalf("snapshot = %+v, found = %v", snapshot, ok)
+	}
+}
+
+// Rationale: TaskAbort must share the sole Controller send loop with config
+// and assignments so a lifecycle caller never invokes gRPC Send concurrently.
+func TestConnectDeliversFencedTaskAbort(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	registry := NewRegistry()
+	stream := newLiveStream(ctx)
+	stream.received <- authenticateMessage(testAgentID, testToken(7))
+	result := make(chan error, 1)
+	go func() {
+		result <- New(authorizedAuthenticator(), registry, nil, nil).Connect(stream)
+	}()
+
+	select {
+	case message := <-stream.sent:
+		if message.GetConfigUpdate() == nil {
+			t.Fatalf("first Controller message = %#v, want ConfigUpdate", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Controller did not send initial config")
+	}
+	taskID := ids.NewAt(ids.KindTask, testTime(), 19)
+	if err := registry.AbortTask(ctx, testAgentID, 1, taskID, "agent_removed"); err != nil {
+		t.Fatalf("AbortTask() error = %v", err)
+	}
+	select {
+	case message := <-stream.sent:
+		abort := message.GetTaskAbort()
+		if abort == nil || abort.TaskId != taskID || abort.Reason != "agent_removed" {
+			t.Fatalf("TaskAbort = %#v", abort)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Controller did not deliver TaskAbort")
+	}
+	cancel()
+	if err := <-result; err != nil {
+		t.Fatalf("Connect() cancellation error = %v", err)
 	}
 }
 
