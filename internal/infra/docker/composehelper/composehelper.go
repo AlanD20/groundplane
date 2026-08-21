@@ -48,6 +48,16 @@ func MarshalRequest(request *agentpb.ComposeHelperRequest) ([]byte, error) {
 	return frame(encoded)
 }
 
+// ArtifactForRequest returns the one owned artifact authorized for the
+// selected helper step. It applies the same validation as frame encoding.
+func ArtifactForRequest(request *agentpb.ComposeHelperRequest) (*agentpb.ComposeArtifact, error) {
+	_, _, artifact, err := validateRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Clone(artifact).(*agentpb.ComposeArtifact), nil
+}
+
 // ReadRequest decodes exactly one request and rejects trailing stdin bytes.
 func ReadRequest(ctx context.Context, input io.Reader) (*agentpb.ComposeHelperRequest, error) {
 	encoded, err := readFrame(ctx, input)
