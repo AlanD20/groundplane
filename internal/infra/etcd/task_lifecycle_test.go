@@ -21,7 +21,7 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 	now := taskJournalTime()
 	record := TaskAssignmentRecord{
 		TaskID: ids.NewAt(ids.KindTask, now, 1), AgentID: ids.NewAt(ids.KindAgent, now, 2),
-		AgentGeneration: 7, ClaimedTaskRevision: 41, AssignedAt: now,
+		AgentGeneration: 7, ClaimedTaskRevision: 41, AssignedAt: now, Deadline: now.Add(time.Minute),
 	}
 	value, err := encodeTaskAssignment(record)
 	if err != nil {
@@ -127,6 +127,8 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 	}
 	assertTaskLifecycleValue(t, store, taskQueueKey(first.ID), false)
 	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, first.ID), true)
+	assertTaskLifecycleValue(t, store, taskAssignmentIndexKey(first.ID), true)
+	assertTaskLifecycleValue(t, store, taskTimeoutIndexKey(first.ID, claim.Assignment.Record.Deadline), true)
 	assertTaskLifecycleValue(t, store, taskQueueKey(second.ID), true)
 	recovered, err := repository.ListAgentAssignments(ctx, agentID, 3, 4)
 	if err != nil || len(recovered) != 1 ||
@@ -153,6 +155,8 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		t.Fatalf("AcknowledgeTask() = %#v", terminal)
 	}
 	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, first.ID), false)
+	assertTaskLifecycleValue(t, store, taskAssignmentIndexKey(first.ID), false)
+	assertTaskLifecycleValue(t, store, taskTimeoutIndexKey(first.ID, claim.Assignment.Record.Deadline), false)
 	assertTaskLifecycleValue(t, store, taskActiveOperationKey(first.OperationID), false)
 	marker := pendingTaskMarker(first)
 	markerKey, keyErr := idempotencyMarkerKey(marker.Locator)

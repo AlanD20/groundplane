@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,6 +18,8 @@ const (
 	taskEventDedupRootPrefix    = "/v1/runtime/task-event-dedup/"
 	taskQueuePrefix             = "/v1/runtime/task-queue/"
 	taskAssignmentRootPrefix    = "/v1/runtime/assignments/"
+	taskAssignmentIndexPrefix   = "/v1/indexes/tasks/assignment/"
+	taskTimeoutIndexPrefix      = "/v1/indexes/tasks/timeout/"
 	deletionTombstoneRootPrefix = "/v1/runtime/deletions/"
 	taskEventSequenceWidth      = 20
 )
@@ -71,6 +74,30 @@ func taskAssignmentKey(agentID string, taskID string) string {
 
 func taskAssignmentScopePrefix(agentID string) string {
 	return taskAssignmentRootPrefix + agentID + "/"
+}
+
+func taskAssignmentIndexKey(taskID string) string {
+	return taskAssignmentIndexPrefix + taskID
+}
+
+func taskTimeoutIndexKey(taskID string, deadline time.Time) string {
+	return taskTimeoutIndexPrefix + fmt.Sprintf("%020d", deadline.UnixNano()) + "/" + taskID
+}
+
+func parseTaskTimeoutIndexKey(key string) (string, time.Time, error) {
+	if !strings.HasPrefix(key, taskTimeoutIndexPrefix) {
+		return "", time.Time{}, errs.New(errs.KindInternal, "task timeout key is outside its index")
+	}
+	segments := strings.Split(strings.TrimPrefix(key, taskTimeoutIndexPrefix), "/")
+	if len(segments) != 2 || len(segments[0]) != taskEventSequenceWidth ||
+		validateStableID(ids.KindTask, segments[1]) != nil {
+		return "", time.Time{}, errs.New(errs.KindInternal, "task timeout key is invalid")
+	}
+	nanoseconds, err := strconv.ParseInt(segments[0], 10, 64)
+	if err != nil || nanoseconds <= 0 || fmt.Sprintf("%020d", nanoseconds) != segments[0] {
+		return "", time.Time{}, errs.New(errs.KindInternal, "task timeout deadline is invalid")
+	}
+	return segments[1], time.Unix(0, nanoseconds).UTC(), nil
 }
 
 func taskIDFromAssignmentKey(agentID string, key string) (string, error) {
