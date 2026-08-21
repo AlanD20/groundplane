@@ -46,13 +46,15 @@ func ControllerConfigPath() string {
 }
 
 // Controller is the wired Controller binary: config, logging, the
-// adapter registry, the etcd store, the HTTP server, and the scheduler.
+// adapter registry, the etcd store, the HTTP server, the local Agent channel,
+// and the scheduler.
 // cmd/controller/main.go is nothing but NewController + Run.
 type Controller struct {
 	Config config.ControllerConfig
 	Logger *slog.Logger
 
 	server    controllerServer
+	agent     controllerAgentChannel
 	scheduler controllerScheduler
 	store     ownedStore
 }
@@ -63,6 +65,10 @@ type controllerServer interface {
 
 type controllerScheduler interface {
 	Run(ctx context.Context)
+}
+
+type controllerAgentChannel interface {
+	Run(ctx context.Context) error
 }
 
 type ownedStore interface {
@@ -118,6 +124,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Config:    cfg,
 		Logger:    logger,
 		server:    srv,
+		agent:     newAgentChannelRuntime(),
 		scheduler: controller.NewScheduler(srv, tick),
 		store:     store,
 	}, nil
@@ -142,24 +149,55 @@ func registerComponents() {
 	agentcomponent.Register()
 }
 
-// Run starts the scheduler and blocks serving HTTP until ctx is cancelled.
-// Once serving stops, Run joins the scheduler before closing the etcd Store
+// Run supervises HTTP, the local Agent channel, and the scheduler as one
+// Controller lifetime. It joins every runtime before closing the etcd Store
 // that NewController created.
 func (c *Controller) Run(ctx context.Context) error {
+	if ctx == nil {
+		return errs.New(errs.KindInternal, "controller run context is required")
+	}
 	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	schedulerDone := make(chan struct{})
 	go func() {
 		defer close(schedulerDone)
 		c.scheduler.Run(runCtx)
 	}()
 
-	serveErr := c.server.Serve(runCtx, c.Config.Listen.HTTP)
-	cancel()
+	type runtimeResult struct {
+		name string
+		err  error
+	}
+	runtimeDone := make(chan runtimeResult, 2)
+	go func() {
+		err := c.server.Serve(runCtx, c.Config.Listen.HTTP)
+		if err == nil && runCtx.Err() == nil {
+			err = errors.New("http server stopped unexpectedly")
+		}
+		runtimeDone <- runtimeResult{name: "serve HTTP", err: err}
+	}()
+	go func() {
+		err := c.agent.Run(runCtx)
+		if err == nil && runCtx.Err() == nil {
+			err = errors.New("agent channel stopped unexpectedly")
+		}
+		runtimeDone <- runtimeResult{name: "serve Agent channel", err: err}
+	}()
+
+	runtimeErrors := make(map[string]error, 2)
+	for index := 0; index < 2; index++ {
+		result := <-runtimeDone
+		runtimeErrors[result.name] = result.err
+		if index == 0 {
+			cancel()
+		}
+	}
 	<-schedulerDone
 
 	closeErr := c.store.Close()
 	joined := errors.Join(
-		wrapControllerRunError("serve", serveErr),
+		wrapControllerRunError("serve HTTP", runtimeErrors["serve HTTP"]),
+		wrapControllerRunError("serve Agent channel", runtimeErrors["serve Agent channel"]),
 		wrapControllerRunError("close etcd", closeErr),
 	)
 	if joined != nil {
