@@ -10,16 +10,18 @@ import (
 const idempotencyKeyHeader = "Idempotency-Key"
 
 func (s *Server) requestHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if requiresIdempotencyKey(r) && !hasValidIdempotencyKey(r.Header.Values(idempotencyKeyHeader)) {
-			s.writeProblem(w, errs.New(
-				errs.KindValidationFailed,
-				"Idempotency-Key must occur exactly once and contain 16 to 128 characters matching [A-Za-z0-9._:-]+",
-			))
-			return
-		}
-		s.Mux.ServeHTTP(w, r)
-	})
+	return s.dispatchRequests(http.HandlerFunc(s.serveAPIRequest))
+}
+
+func (s *Server) serveAPIRequest(w http.ResponseWriter, r *http.Request) {
+	if requiresIdempotencyKey(r) && !hasValidIdempotencyKey(r.Header.Values(idempotencyKeyHeader)) {
+		s.writeProblem(w, errs.New(
+			errs.KindValidationFailed,
+			"Idempotency-Key must occur exactly once and contain 16 to 128 characters matching [A-Za-z0-9._:-]+",
+		))
+		return
+	}
+	s.Mux.ServeHTTP(w, r)
 }
 
 func requiresIdempotencyKey(r *http.Request) bool {

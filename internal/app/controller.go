@@ -112,13 +112,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		return nil, err
 	}
+	consoleAssets, err := controllerConsoleAssets()
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("controller: load embedded Console: %w", err))
+	}
 
 	store, err := etcd.New(ctx, cfg.Etcd.Endpoints, cfg.Etcd.KeyPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
 
-	srv := controller.New(store, logger, controller.Options{})
+	srv := controller.New(store, logger, controller.Options{Console: consoleAssets})
 
 	return &Controller{
 		Config:    cfg,
