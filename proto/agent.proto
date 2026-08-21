@@ -211,6 +211,37 @@ message WaitHealthy {
   repeated string service_ids = 2;
 }
 
+// ComposeHelperRequest is the single length-framed stdin message accepted by
+// the static compose-helper Agent-binary mode.
+message ComposeHelperRequest {
+  uint32 schema = 1; // exactly 1
+  string task_id = 2;
+  string operation_id = 3;
+  ExecutionPlan plan = 4;
+  string step_id = 5;
+  uint32 timeout_seconds = 6; // remaining bounded execution time
+}
+
+message ComposeHelperResponse {
+  uint32 schema = 1; // exactly 1
+  ComposeHelperOutcome outcome = 2;
+  int32 exit_code = 3;
+  ComposeHelperDiagnostic diagnostic = 4;
+}
+
+enum ComposeHelperOutcome {
+  COMPOSE_HELPER_OUTCOME_UNSPECIFIED = 0;
+  COMPOSE_HELPER_OUTCOME_COMPLETED = 1;
+  COMPOSE_HELPER_OUTCOME_FAILED = 2;
+}
+
+enum ComposeHelperDiagnostic {
+  COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED = 0;
+  COMPOSE_HELPER_DIAGNOSTIC_NONE = 1;
+  COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED = 2;
+  COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED = 3;
+}
+
 message TaskAbort {
   string task_id = 1;
   string reason = 2;

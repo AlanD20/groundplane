@@ -24,12 +24,13 @@ import (
 // RunCmdOpts is every Run/Stream call's input — one shape, no
 // interface{} anywhere in the signature.
 type RunCmdOpts struct {
-	Name    string
-	Args    []string
-	Dir     string
-	Env     []string // additional vars, appended to the process environment
-	Timeout time.Duration
-	Stdin   []byte
+	Name       string
+	Args       []string
+	Dir        string
+	Env        []string // additional vars, or the complete environment when ReplaceEnv is true
+	ReplaceEnv bool
+	Timeout    time.Duration
+	Stdin      []byte
 }
 
 // Result is every Run/Stream call's output.
@@ -67,7 +68,7 @@ func (r *OSRunner) Run(ctx context.Context, opts RunCmdOpts) (Result, error) {
 
 	cmd := exec.CommandContext(ctx, opts.Name, opts.Args...)
 	cmd.Dir = opts.Dir
-	cmd.Env = append(cmd.Environ(), opts.Env...)
+	cmd.Env = commandEnvironment(cmd, opts)
 	if opts.Stdin != nil {
 		cmd.Stdin = bytes.NewReader(opts.Stdin)
 	}
@@ -98,7 +99,7 @@ func (r *OSRunner) Stream(ctx context.Context, opts RunCmdOpts, onLine func(stde
 
 	cmd := exec.CommandContext(ctx, opts.Name, opts.Args...)
 	cmd.Dir = opts.Dir
-	cmd.Env = append(cmd.Environ(), opts.Env...)
+	cmd.Env = commandEnvironment(cmd, opts)
 	if opts.Stdin != nil {
 		cmd.Stdin = bytes.NewReader(opts.Stdin)
 	}
@@ -202,6 +203,13 @@ func withTimeout(ctx context.Context, d time.Duration) (context.Context, context
 		return context.WithCancel(ctx)
 	}
 	return context.WithTimeout(ctx, d)
+}
+
+func commandEnvironment(cmd *exec.Cmd, opts RunCmdOpts) []string {
+	if opts.ReplaceEnv {
+		return append([]string(nil), opts.Env...)
+	}
+	return append(cmd.Environ(), opts.Env...)
 }
 
 func splitLines(b []byte) []string {

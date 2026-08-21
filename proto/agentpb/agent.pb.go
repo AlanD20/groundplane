@@ -262,6 +262,107 @@ func (ComposeOwnerKind) EnumDescriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{3}
 }
 
+type ComposeHelperOutcome int32
+
+const (
+	ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_UNSPECIFIED ComposeHelperOutcome = 0
+	ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED   ComposeHelperOutcome = 1
+	ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED      ComposeHelperOutcome = 2
+)
+
+// Enum value maps for ComposeHelperOutcome.
+var (
+	ComposeHelperOutcome_name = map[int32]string{
+		0: "COMPOSE_HELPER_OUTCOME_UNSPECIFIED",
+		1: "COMPOSE_HELPER_OUTCOME_COMPLETED",
+		2: "COMPOSE_HELPER_OUTCOME_FAILED",
+	}
+	ComposeHelperOutcome_value = map[string]int32{
+		"COMPOSE_HELPER_OUTCOME_UNSPECIFIED": 0,
+		"COMPOSE_HELPER_OUTCOME_COMPLETED":   1,
+		"COMPOSE_HELPER_OUTCOME_FAILED":      2,
+	}
+)
+
+func (x ComposeHelperOutcome) Enum() *ComposeHelperOutcome {
+	p := new(ComposeHelperOutcome)
+	*p = x
+	return p
+}
+
+func (x ComposeHelperOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ComposeHelperOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[4].Descriptor()
+}
+
+func (ComposeHelperOutcome) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[4]
+}
+
+func (x ComposeHelperOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ComposeHelperOutcome.Descriptor instead.
+func (ComposeHelperOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{4}
+}
+
+type ComposeHelperDiagnostic int32
+
+const (
+	ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED     ComposeHelperDiagnostic = 0
+	ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE            ComposeHelperDiagnostic = 1
+	ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED ComposeHelperDiagnostic = 2
+	ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED  ComposeHelperDiagnostic = 3
+)
+
+// Enum value maps for ComposeHelperDiagnostic.
+var (
+	ComposeHelperDiagnostic_name = map[int32]string{
+		0: "COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED",
+		1: "COMPOSE_HELPER_DIAGNOSTIC_NONE",
+		2: "COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED",
+		3: "COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED",
+	}
+	ComposeHelperDiagnostic_value = map[string]int32{
+		"COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED":     0,
+		"COMPOSE_HELPER_DIAGNOSTIC_NONE":            1,
+		"COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED": 2,
+		"COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED":  3,
+	}
+)
+
+func (x ComposeHelperDiagnostic) Enum() *ComposeHelperDiagnostic {
+	p := new(ComposeHelperDiagnostic)
+	*p = x
+	return p
+}
+
+func (x ComposeHelperDiagnostic) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ComposeHelperDiagnostic) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[5].Descriptor()
+}
+
+func (ComposeHelperDiagnostic) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[5]
+}
+
+func (x ComposeHelperDiagnostic) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ComposeHelperDiagnostic.Descriptor instead.
+func (ComposeHelperDiagnostic) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{5}
+}
+
 type Authenticate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
@@ -1828,6 +1929,160 @@ func (x *WaitHealthy) GetServiceIds() []string {
 	return nil
 }
 
+// ComposeHelperRequest is the single length-framed stdin message accepted by
+// the static compose-helper Agent-binary mode.
+type ComposeHelperRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Schema         uint32                 `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
+	TaskId         string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	OperationId    string                 `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	Plan           *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
+	StepId         string                 `protobuf:"bytes,5,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	TimeoutSeconds uint32                 `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // remaining bounded execution time
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ComposeHelperRequest) Reset() {
+	*x = ComposeHelperRequest{}
+	mi := &file_proto_agent_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeHelperRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeHelperRequest) ProtoMessage() {}
+
+func (x *ComposeHelperRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeHelperRequest.ProtoReflect.Descriptor instead.
+func (*ComposeHelperRequest) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ComposeHelperRequest) GetSchema() uint32 {
+	if x != nil {
+		return x.Schema
+	}
+	return 0
+}
+
+func (x *ComposeHelperRequest) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *ComposeHelperRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *ComposeHelperRequest) GetPlan() *ExecutionPlan {
+	if x != nil {
+		return x.Plan
+	}
+	return nil
+}
+
+func (x *ComposeHelperRequest) GetStepId() string {
+	if x != nil {
+		return x.StepId
+	}
+	return ""
+}
+
+func (x *ComposeHelperRequest) GetTimeoutSeconds() uint32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+type ComposeHelperResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Schema        uint32                  `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
+	Outcome       ComposeHelperOutcome    `protobuf:"varint,2,opt,name=outcome,proto3,enum=groundplane.agent.v1.ComposeHelperOutcome" json:"outcome,omitempty"`
+	ExitCode      int32                   `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Diagnostic    ComposeHelperDiagnostic `protobuf:"varint,4,opt,name=diagnostic,proto3,enum=groundplane.agent.v1.ComposeHelperDiagnostic" json:"diagnostic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComposeHelperResponse) Reset() {
+	*x = ComposeHelperResponse{}
+	mi := &file_proto_agent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComposeHelperResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComposeHelperResponse) ProtoMessage() {}
+
+func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComposeHelperResponse.ProtoReflect.Descriptor instead.
+func (*ComposeHelperResponse) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ComposeHelperResponse) GetSchema() uint32 {
+	if x != nil {
+		return x.Schema
+	}
+	return 0
+}
+
+func (x *ComposeHelperResponse) GetOutcome() ComposeHelperOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_UNSPECIFIED
+}
+
+func (x *ComposeHelperResponse) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *ComposeHelperResponse) GetDiagnostic() ComposeHelperDiagnostic {
+	if x != nil {
+		return x.Diagnostic
+	}
+	return ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED
+}
+
 type TaskAbort struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
@@ -1838,7 +2093,7 @@ type TaskAbort struct {
 
 func (x *TaskAbort) Reset() {
 	*x = TaskAbort{}
-	mi := &file_proto_agent_proto_msgTypes[21]
+	mi := &file_proto_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1850,7 +2105,7 @@ func (x *TaskAbort) String() string {
 func (*TaskAbort) ProtoMessage() {}
 
 func (x *TaskAbort) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[21]
+	mi := &file_proto_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1863,7 +2118,7 @@ func (x *TaskAbort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskAbort.ProtoReflect.Descriptor instead.
 func (*TaskAbort) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{21}
+	return file_proto_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *TaskAbort) GetTaskId() string {
@@ -1889,7 +2144,7 @@ type ConfigUpdate struct {
 
 func (x *ConfigUpdate) Reset() {
 	*x = ConfigUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[22]
+	mi := &file_proto_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1901,7 +2156,7 @@ func (x *ConfigUpdate) String() string {
 func (*ConfigUpdate) ProtoMessage() {}
 
 func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[22]
+	mi := &file_proto_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1914,7 +2169,7 @@ func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigUpdate.ProtoReflect.Descriptor instead.
 func (*ConfigUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{22}
+	return file_proto_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ConfigUpdate) GetAgentConfig() *AgentConfig {
@@ -1932,7 +2187,7 @@ type Shutdown struct {
 
 func (x *Shutdown) Reset() {
 	*x = Shutdown{}
-	mi := &file_proto_agent_proto_msgTypes[23]
+	mi := &file_proto_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1944,7 +2199,7 @@ func (x *Shutdown) String() string {
 func (*Shutdown) ProtoMessage() {}
 
 func (x *Shutdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[23]
+	mi := &file_proto_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1957,7 +2212,7 @@ func (x *Shutdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shutdown.ProtoReflect.Descriptor instead.
 func (*Shutdown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{23}
+	return file_proto_agent_proto_rawDescGZIP(), []int{25}
 }
 
 var File_proto_agent_proto protoreflect.FileDescriptor
@@ -2095,7 +2350,21 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12\x1f\n" +
 	"\vservice_ids\x18\x02 \x03(\tR\n" +
-	"serviceIds\"<\n" +
+	"serviceIds\"\xe5\x01\n" +
+	"\x14ComposeHelperRequest\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
+	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12!\n" +
+	"\foperation_id\x18\x03 \x01(\tR\voperationId\x127\n" +
+	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12\x17\n" +
+	"\astep_id\x18\x05 \x01(\tR\x06stepId\x12'\n" +
+	"\x0ftimeout_seconds\x18\x06 \x01(\rR\x0etimeoutSeconds\"\xe1\x01\n" +
+	"\x15ComposeHelperResponse\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\rR\x06schema\x12D\n" +
+	"\aoutcome\x18\x02 \x01(\x0e2*.groundplane.agent.v1.ComposeHelperOutcomeR\aoutcome\x12\x1b\n" +
+	"\texit_code\x18\x03 \x01(\x05R\bexitCode\x12M\n" +
+	"\n" +
+	"diagnostic\x18\x04 \x01(\x0e2-.groundplane.agent.v1.ComposeHelperDiagnosticR\n" +
+	"diagnostic\"<\n" +
 	"\tTaskAbort\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"T\n" +
@@ -2130,7 +2399,16 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x10ComposeOwnerKind\x12\"\n" +
 	"\x1eCOMPOSE_OWNER_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCOMPOSE_OWNER_KIND_ENVIRONMENT\x10\x01\x12\x1f\n" +
-	"\x1bCOMPOSE_OWNER_KIND_PLATFORM\x10\x022j\n" +
+	"\x1bCOMPOSE_OWNER_KIND_PLATFORM\x10\x02*\x87\x01\n" +
+	"\x14ComposeHelperOutcome\x12&\n" +
+	"\"COMPOSE_HELPER_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
+	" COMPOSE_HELPER_OUTCOME_COMPLETED\x10\x01\x12!\n" +
+	"\x1dCOMPOSE_HELPER_OUTCOME_FAILED\x10\x02*\xc5\x01\n" +
+	"\x17ComposeHelperDiagnostic\x12)\n" +
+	"%COMPOSE_HELPER_DIAGNOSTIC_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eCOMPOSE_HELPER_DIAGNOSTIC_NONE\x10\x01\x12-\n" +
+	")COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED\x10\x02\x12,\n" +
+	"(COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED\x10\x032j\n" +
 	"\fAgentChannel\x12Z\n" +
 	"\aConnect\x12\".groundplane.agent.v1.AgentMessage\x1a'.groundplane.agent.v1.ControllerMessage(\x010\x01B.Z,github.com/AlanD20/groundplane/proto/agentpbb\x06proto3"
 
@@ -2146,78 +2424,85 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 	return file_proto_agent_proto_rawDescData
 }
 
-var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_proto_agent_proto_goTypes = []any{
-	(TaskState)(0),            // 0: groundplane.agent.v1.TaskState
-	(TaskTerminal)(0),         // 1: groundplane.agent.v1.TaskTerminal
-	(PlanOperation)(0),        // 2: groundplane.agent.v1.PlanOperation
-	(ComposeOwnerKind)(0),     // 3: groundplane.agent.v1.ComposeOwnerKind
-	(*Authenticate)(nil),      // 4: groundplane.agent.v1.Authenticate
-	(*AgentConfig)(nil),       // 5: groundplane.agent.v1.AgentConfig
-	(*AgentMessage)(nil),      // 6: groundplane.agent.v1.AgentMessage
-	(*Ready)(nil),             // 7: groundplane.agent.v1.Ready
-	(*TaskEvent)(nil),         // 8: groundplane.agent.v1.TaskEvent
-	(*ObservedState)(nil),     // 9: groundplane.agent.v1.ObservedState
-	(*ContainerState)(nil),    // 10: groundplane.agent.v1.ContainerState
-	(*TaskAck)(nil),           // 11: groundplane.agent.v1.TaskAck
-	(*ControllerMessage)(nil), // 12: groundplane.agent.v1.ControllerMessage
-	(*TaskAssignment)(nil),    // 13: groundplane.agent.v1.TaskAssignment
-	(*ExecutionPlan)(nil),     // 14: groundplane.agent.v1.ExecutionPlan
-	(*ComposeArtifact)(nil),   // 15: groundplane.agent.v1.ComposeArtifact
-	(*ComposeService)(nil),    // 16: groundplane.agent.v1.ComposeService
-	(*ComposeNetwork)(nil),    // 17: groundplane.agent.v1.ComposeNetwork
-	(*ComposeVolume)(nil),     // 18: groundplane.agent.v1.ComposeVolume
-	(*LabelPair)(nil),         // 19: groundplane.agent.v1.LabelPair
-	(*ExecutionStep)(nil),     // 20: groundplane.agent.v1.ExecutionStep
-	(*ComposeApply)(nil),      // 21: groundplane.agent.v1.ComposeApply
-	(*ComposeStop)(nil),       // 22: groundplane.agent.v1.ComposeStop
-	(*ComposeRemove)(nil),     // 23: groundplane.agent.v1.ComposeRemove
-	(*WaitHealthy)(nil),       // 24: groundplane.agent.v1.WaitHealthy
-	(*TaskAbort)(nil),         // 25: groundplane.agent.v1.TaskAbort
-	(*ConfigUpdate)(nil),      // 26: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),          // 27: groundplane.agent.v1.Shutdown
-	nil,                       // 28: groundplane.agent.v1.AgentConfig.LabelsEntry
-	nil,                       // 29: groundplane.agent.v1.ContainerState.LabelsEntry
+	(TaskState)(0),                // 0: groundplane.agent.v1.TaskState
+	(TaskTerminal)(0),             // 1: groundplane.agent.v1.TaskTerminal
+	(PlanOperation)(0),            // 2: groundplane.agent.v1.PlanOperation
+	(ComposeOwnerKind)(0),         // 3: groundplane.agent.v1.ComposeOwnerKind
+	(ComposeHelperOutcome)(0),     // 4: groundplane.agent.v1.ComposeHelperOutcome
+	(ComposeHelperDiagnostic)(0),  // 5: groundplane.agent.v1.ComposeHelperDiagnostic
+	(*Authenticate)(nil),          // 6: groundplane.agent.v1.Authenticate
+	(*AgentConfig)(nil),           // 7: groundplane.agent.v1.AgentConfig
+	(*AgentMessage)(nil),          // 8: groundplane.agent.v1.AgentMessage
+	(*Ready)(nil),                 // 9: groundplane.agent.v1.Ready
+	(*TaskEvent)(nil),             // 10: groundplane.agent.v1.TaskEvent
+	(*ObservedState)(nil),         // 11: groundplane.agent.v1.ObservedState
+	(*ContainerState)(nil),        // 12: groundplane.agent.v1.ContainerState
+	(*TaskAck)(nil),               // 13: groundplane.agent.v1.TaskAck
+	(*ControllerMessage)(nil),     // 14: groundplane.agent.v1.ControllerMessage
+	(*TaskAssignment)(nil),        // 15: groundplane.agent.v1.TaskAssignment
+	(*ExecutionPlan)(nil),         // 16: groundplane.agent.v1.ExecutionPlan
+	(*ComposeArtifact)(nil),       // 17: groundplane.agent.v1.ComposeArtifact
+	(*ComposeService)(nil),        // 18: groundplane.agent.v1.ComposeService
+	(*ComposeNetwork)(nil),        // 19: groundplane.agent.v1.ComposeNetwork
+	(*ComposeVolume)(nil),         // 20: groundplane.agent.v1.ComposeVolume
+	(*LabelPair)(nil),             // 21: groundplane.agent.v1.LabelPair
+	(*ExecutionStep)(nil),         // 22: groundplane.agent.v1.ExecutionStep
+	(*ComposeApply)(nil),          // 23: groundplane.agent.v1.ComposeApply
+	(*ComposeStop)(nil),           // 24: groundplane.agent.v1.ComposeStop
+	(*ComposeRemove)(nil),         // 25: groundplane.agent.v1.ComposeRemove
+	(*WaitHealthy)(nil),           // 26: groundplane.agent.v1.WaitHealthy
+	(*ComposeHelperRequest)(nil),  // 27: groundplane.agent.v1.ComposeHelperRequest
+	(*ComposeHelperResponse)(nil), // 28: groundplane.agent.v1.ComposeHelperResponse
+	(*TaskAbort)(nil),             // 29: groundplane.agent.v1.TaskAbort
+	(*ConfigUpdate)(nil),          // 30: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),              // 31: groundplane.agent.v1.Shutdown
+	nil,                           // 32: groundplane.agent.v1.AgentConfig.LabelsEntry
+	nil,                           // 33: groundplane.agent.v1.ContainerState.LabelsEntry
 }
 var file_proto_agent_proto_depIdxs = []int32{
-	28, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
-	4,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
-	7,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
-	8,  // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
-	9,  // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
-	11, // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
+	32, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
+	6,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
+	9,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
+	10, // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
+	11, // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
+	13, // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
 	0,  // 6: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
-	10, // 7: groundplane.agent.v1.ObservedState.containers:type_name -> groundplane.agent.v1.ContainerState
-	29, // 8: groundplane.agent.v1.ContainerState.labels:type_name -> groundplane.agent.v1.ContainerState.LabelsEntry
+	12, // 7: groundplane.agent.v1.ObservedState.containers:type_name -> groundplane.agent.v1.ContainerState
+	33, // 8: groundplane.agent.v1.ContainerState.labels:type_name -> groundplane.agent.v1.ContainerState.LabelsEntry
 	1,  // 9: groundplane.agent.v1.TaskAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	13, // 10: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
-	25, // 11: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
-	26, // 12: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	27, // 13: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
-	14, // 14: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	15, // 10: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
+	29, // 11: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
+	30, // 12: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	31, // 13: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	16, // 14: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
 	2,  // 15: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
-	15, // 16: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	20, // 17: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
+	17, // 16: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	22, // 17: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
 	3,  // 18: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
-	16, // 19: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
-	17, // 20: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
-	18, // 21: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
-	19, // 22: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	19, // 23: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	19, // 24: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	21, // 25: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
-	22, // 26: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
-	23, // 27: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
-	24, // 28: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
-	5,  // 29: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	6,  // 30: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	12, // 31: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	31, // [31:32] is the sub-list for method output_type
-	30, // [30:31] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	18, // 19: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
+	19, // 20: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
+	20, // 21: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
+	21, // 22: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	21, // 23: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	21, // 24: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	23, // 25: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
+	24, // 26: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
+	25, // 27: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
+	26, // 28: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
+	16, // 29: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	4,  // 30: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	5,  // 31: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	7,  // 32: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	8,  // 33: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	14, // 34: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	34, // [34:35] is the sub-list for method output_type
+	33, // [33:34] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -2249,8 +2534,8 @@ func file_proto_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   26,
+			NumEnums:      6,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

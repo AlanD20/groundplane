@@ -79,6 +79,15 @@ func Validate(plan *agentpb.ExecutionPlan) (*agentpb.ExecutionPlan, error) {
 	return owned, nil
 }
 
+// RejectUnknown rejects unknown fields and map values recursively in a
+// versioned execution message before its semantic decoder uses it.
+func RejectUnknown(message proto.Message) error {
+	if message == nil {
+		return errs.New(errs.KindValidationFailed, "execution message is required")
+	}
+	return rejectUnknown(message.ProtoReflect())
+}
+
 func marshalHashInput(plan *agentpb.ExecutionPlan) ([]byte, error) {
 	hashInput := proto.Clone(plan).(*agentpb.ExecutionPlan)
 	hashInput.PlanHash = nil

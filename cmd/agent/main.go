@@ -15,6 +15,17 @@ import (
 func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == app.ComposeHelperArgument {
+		if err := app.RunComposeHelper(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "agent compose helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) != 1 {
+		fmt.Fprintln(os.Stderr, "agent: unsupported execution mode")
+		os.Exit(1)
+	}
 
 	configPath := app.DefaultAgentConfigPath
 	if v := os.Getenv("GROUNDPLANE_AGENT_CONFIG"); v != "" {
