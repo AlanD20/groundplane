@@ -57,6 +57,16 @@ func (repository *EtcdRepository) ListTenants(
 	return tenantPageFromEtcd(page), err
 }
 
+func (repository *EtcdRepository) RenameTenant(
+	ctx context.Context,
+	id string,
+	expectedRevision int64,
+	slug string,
+) (Versioned[core.Tenant], error) {
+	stored, err := repository.repository.RenameTenant(ctx, id, expectedRevision, slug)
+	return tenantFromEtcd(stored), err
+}
+
 func (repository *EtcdRepository) CreateProject(
 	ctx context.Context,
 	record core.Project,
@@ -101,6 +111,16 @@ func (repository *EtcdRepository) ListTenantProjects(
 ) (Page[core.Project], error) {
 	page, err := repository.repository.ListTenantProjects(ctx, tenantID, pageRequestToEtcd(request))
 	return projectPageFromEtcd(page), err
+}
+
+func (repository *EtcdRepository) RenameProject(
+	ctx context.Context,
+	id string,
+	expectedRevision int64,
+	slug string,
+) (Versioned[core.Project], error) {
+	stored, err := repository.repository.RenameTenantProject(ctx, id, expectedRevision, slug)
+	return projectFromEtcd(stored), err
 }
 
 func tenantToEtcd(record core.Tenant) etcdinfra.TenantRecord {

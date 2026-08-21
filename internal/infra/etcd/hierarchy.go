@@ -368,7 +368,6 @@ func (repository *HierarchyRepository) RenameTenant(
 	id string,
 	expectedRevision int64,
 	slug string,
-	name string,
 ) (Versioned[TenantRecord], error) {
 	current, err := repository.GetTenant(ctx, id)
 	if err != nil {
@@ -379,7 +378,6 @@ func (repository *HierarchyRepository) RenameTenant(
 	}
 	replacement := current.Record
 	replacement.Slug = slug
-	replacement.Name = name
 	if err := validateTenant(replacement); err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
@@ -392,18 +390,21 @@ func (repository *HierarchyRepository) RenameTenant(
 		tenantSlugKey(current.Record.Slug),
 		tenantSlugKey(slug),
 		nil,
+		deletionTombstoneKey("tenant", id),
 		"tenant",
 		id,
+		errs.KindTenantNotFound,
 		encodeTenant,
 	)
 }
 
-func (repository *HierarchyRepository) RenameProject(
+// RenameTenantProject renames only ordinary tenant-owned Projects. Backing
+// Project lifecycle is owned by its facade and is not exposed through this seam.
+func (repository *HierarchyRepository) RenameTenantProject(
 	ctx context.Context,
 	id string,
 	expectedRevision int64,
 	slug string,
-	name string,
 ) (Versioned[ProjectRecord], error) {
 	current, err := repository.GetProject(ctx, id)
 	if err != nil {
@@ -412,9 +413,11 @@ func (repository *HierarchyRepository) RenameProject(
 	if current.Revision != expectedRevision {
 		return Versioned[ProjectRecord]{}, stateConflict("project", id)
 	}
+	if current.Record.Kind != ProjectKindTenant {
+		return Versioned[ProjectRecord]{}, errs.New(errs.KindProjectNotFound, "project was not found")
+	}
 	replacement := current.Record
 	replacement.Slug = slug
-	replacement.Name = name
 	if err := validateProject(replacement); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
@@ -427,44 +430,11 @@ func (repository *HierarchyRepository) RenameProject(
 		projectSlugKey(current.Record),
 		projectSlugKey(replacement),
 		[]string{projectOwnerKey(current.Record)},
+		deletionTombstoneKey("project", id),
 		"project",
 		id,
+		errs.KindProjectNotFound,
 		encodeProject,
-	)
-}
-
-func (repository *HierarchyRepository) RenameEnvironment(
-	ctx context.Context,
-	id string,
-	expectedRevision int64,
-	slug string,
-	name string,
-) (Versioned[EnvironmentRecord], error) {
-	current, err := repository.GetEnvironment(ctx, id)
-	if err != nil {
-		return Versioned[EnvironmentRecord]{}, err
-	}
-	if current.Revision != expectedRevision {
-		return Versioned[EnvironmentRecord]{}, stateConflict("environment", id)
-	}
-	replacement := current.Record
-	replacement.Slug = slug
-	replacement.Name = name
-	if err := validateEnvironment(replacement); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
-	}
-	return renameRecord(
-		ctx,
-		repository.store,
-		current,
-		replacement,
-		environmentKey(id),
-		environmentSlugKey(current.Record.ProjectID, current.Record.Slug),
-		environmentSlugKey(replacement.ProjectID, replacement.Slug),
-		[]string{environmentOwnerKey(current.Record.ProjectID, id)},
-		"environment",
-		id,
-		encodeEnvironment,
 	)
 }
 

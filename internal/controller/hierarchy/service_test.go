@@ -415,6 +415,211 @@ func TestServiceRejectsInvalidWriteMetadataAndOversizedPages(t *testing.T) {
 	}
 }
 
+func TestServiceRenameRetriesCASAndPreservesConcurrentFields(t *testing.T) {
+	// Rationale: the use case must merge a concurrent display-name Edit by
+	// rereading after CAS failure and changing only the current record's slug.
+	current := Versioned[core.Tenant]{
+		Record: core.Tenant{ID: testTenantID, Slug: "acme", Name: "Acme"}, Revision: 10, ReadRevision: 10,
+	}
+	var renameCalls int
+	repository := &repositoryStub{}
+	repository.getTenant = func(context.Context, string) (Versioned[core.Tenant], error) {
+		return current, nil
+	}
+	repository.renameTenant = func(
+		_ context.Context, _ string, expectedRevision int64, slug string,
+	) (Versioned[core.Tenant], error) {
+		renameCalls++
+		if renameCalls == 1 {
+			current.Record.Name = "Edited concurrently"
+			current.Revision++
+			current.ReadRevision = current.Revision
+			return Versioned[core.Tenant]{}, errs.New(errs.KindStateConflict, "tenant changed")
+		}
+		if expectedRevision != current.Revision {
+			t.Fatalf("expected revision = %d, want %d", expectedRevision, current.Revision)
+		}
+		current.Record.Slug = slug
+		current.Revision++
+		current.ReadRevision = current.Revision
+		return current, nil
+	}
+	service := mustService(t, repository)
+
+	renamed, err := service.RenameTenant(context.Background(), testTenantID, "acme-group")
+	if err != nil {
+		t.Fatalf("RenameTenant(): %v", err)
+	}
+	if renameCalls != 2 || renamed.Record.Name != "Edited concurrently" || renamed.Record.Slug != "acme-group" {
+		t.Fatalf("RenameTenant() = %+v after %d calls", renamed, renameCalls)
+	}
+}
+
+func TestServiceRenameProjectIsClosedToNormalProjectAndPreservesOwner(t *testing.T) {
+	// Rationale: the hierarchy facade may rename an ordinary Project label but
+	// must neither expose backing Projects nor accept repository owner rewrites.
+	t.Run("normal project", func(t *testing.T) {
+		current := core.Project{
+			ID: testProjectID, TenantID: testTenantID, Slug: "console", Name: "Console",
+			Kind: core.ProjectKindTenant,
+		}
+		repository := &repositoryStub{
+			getProject: func(context.Context, string) (Versioned[core.Project], error) {
+				return Versioned[core.Project]{Record: current, Revision: 20, ReadRevision: 20}, nil
+			},
+			renameProject: func(
+				_ context.Context, _ string, revision int64, slug string,
+			) (Versioned[core.Project], error) {
+				if revision != 20 || slug != "console-next" {
+					t.Fatalf("rename input revision/slug = %d/%q", revision, slug)
+				}
+				renamed := current
+				renamed.Slug = slug
+				return Versioned[core.Project]{Record: renamed, Revision: 21, ReadRevision: 21}, nil
+			},
+		}
+		renamed, err := mustService(t, repository).RenameProject(
+			context.Background(), testProjectID, "console-next",
+		)
+		if err != nil || renamed.Record.TenantID != testTenantID || renamed.Record.Name != "Console" {
+			t.Fatalf("RenameProject() = %+v, %v", renamed, err)
+		}
+	})
+
+	t.Run("backing project", func(t *testing.T) {
+		var renameCalls int
+		repository := &repositoryStub{
+			getProject: func(context.Context, string) (Versioned[core.Project], error) {
+				return Versioned[core.Project]{Record: core.Project{
+					ID: testProjectID, Slug: "postgres", Name: "Postgres", Kind: core.ProjectKindBacking,
+				}, Revision: 22, ReadRevision: 22}, nil
+			},
+			renameProject: func(
+				context.Context, string, int64, string,
+			) (Versioned[core.Project], error) {
+				renameCalls++
+				return Versioned[core.Project]{}, nil
+			},
+		}
+		_, err := mustService(t, repository).RenameProject(context.Background(), testProjectID, "postgres-next")
+		if !hasKind(err, errs.KindProjectNotFound) || renameCalls != 0 {
+			t.Fatalf("RenameProject(backing) error/calls = %v/%d", err, renameCalls)
+		}
+	})
+}
+
+func TestServiceRenameBoundsRetriesAndHonorsCancellation(t *testing.T) {
+	// Rationale: CAS contention is retried exactly three times, while caller
+	// cancellation wins before another repository attempt can begin.
+	t.Run("three attempts", func(t *testing.T) {
+		var calls int
+		repository := &repositoryStub{
+			getTenant: func(context.Context, string) (Versioned[core.Tenant], error) {
+				return Versioned[core.Tenant]{
+					Record:   core.Tenant{ID: testTenantID, Slug: "acme", Name: "Acme"},
+					Revision: 1, ReadRevision: 1,
+				}, nil
+			},
+			renameTenant: func(
+				context.Context, string, int64, string,
+			) (Versioned[core.Tenant], error) {
+				calls++
+				return Versioned[core.Tenant]{}, errs.New(errs.KindStateConflict, "tenant changed")
+			},
+		}
+		_, err := mustService(t, repository).RenameTenant(context.Background(), testTenantID, "next")
+		if !hasKind(err, errs.KindStateConflict) || calls != maximumRenameAttempts {
+			t.Fatalf("RenameTenant(contention) error/calls = %v/%d", err, calls)
+		}
+	})
+
+	t.Run("canceled before retry", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		var calls int
+		repository := &repositoryStub{
+			getTenant: func(context.Context, string) (Versioned[core.Tenant], error) {
+				return Versioned[core.Tenant]{
+					Record:   core.Tenant{ID: testTenantID, Slug: "acme", Name: "Acme"},
+					Revision: 1, ReadRevision: 1,
+				}, nil
+			},
+			renameTenant: func(
+				context.Context, string, int64, string,
+			) (Versioned[core.Tenant], error) {
+				calls++
+				cancel()
+				return Versioned[core.Tenant]{}, errs.New(errs.KindStateConflict, "tenant changed")
+			},
+		}
+		_, err := mustService(t, repository).RenameTenant(ctx, testTenantID, "next")
+		if !errors.Is(err, context.Canceled) || calls != 1 {
+			t.Fatalf("RenameTenant(canceled) error/calls = %v/%d", err, calls)
+		}
+	})
+}
+
+func TestServiceConcurrentRenameIsRaceFreeAndConvergesByCAS(t *testing.T) {
+	// Rationale: concurrent callers may race on one label, but the repository
+	// revision and bounded retry loop must serialize writes without data races.
+	current := Versioned[core.Tenant]{
+		Record: core.Tenant{ID: testTenantID, Slug: "acme", Name: "Acme"}, Revision: 1, ReadRevision: 1,
+	}
+	var mutex sync.Mutex
+	var initialReads atomic.Int64
+	release := make(chan struct{})
+	repository := &repositoryStub{}
+	repository.getTenant = func(context.Context, string) (Versioned[core.Tenant], error) {
+		mutex.Lock()
+		value := current
+		mutex.Unlock()
+		if value.Revision == 1 {
+			if initialReads.Add(1) == 2 {
+				close(release)
+			}
+			<-release
+		}
+		return value, nil
+	}
+	repository.renameTenant = func(
+		_ context.Context, _ string, expectedRevision int64, slug string,
+	) (Versioned[core.Tenant], error) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		if current.Revision != expectedRevision {
+			return Versioned[core.Tenant]{}, errs.New(errs.KindStateConflict, "tenant changed")
+		}
+		current.Record.Slug = slug
+		current.Revision++
+		current.ReadRevision = current.Revision
+		return current, nil
+	}
+	service := mustService(t, repository)
+
+	errorsByRename := make(chan error, 2)
+	var workers sync.WaitGroup
+	for _, slug := range []string{"acme-east", "acme-west"} {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := service.RenameTenant(context.Background(), testTenantID, slug)
+			errorsByRename <- err
+		}()
+	}
+	workers.Wait()
+	close(errorsByRename)
+	for err := range errorsByRename {
+		if err != nil {
+			t.Fatalf("concurrent RenameTenant() error = %v", err)
+		}
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	if current.Record.ID != testTenantID || current.Record.Name != "Acme" ||
+		current.Record.Slug != "acme-east" && current.Record.Slug != "acme-west" {
+		t.Fatalf("concurrent final tenant = %+v", current.Record)
+	}
+}
+
 const (
 	testTenantID  = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	otherTenantID = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAW"
@@ -426,10 +631,12 @@ type repositoryStub struct {
 	getTenant            func(context.Context, string) (Versioned[core.Tenant], error)
 	resolveTenant        func(context.Context, string) (Versioned[core.Tenant], error)
 	listTenants          func(context.Context, PageRequest) (Page[core.Tenant], error)
+	renameTenant         func(context.Context, string, int64, string) (Versioned[core.Tenant], error)
 	createProject        func(context.Context, core.Project) (Versioned[core.Project], error)
 	getProject           func(context.Context, string) (Versioned[core.Project], error)
 	resolveTenantProject func(context.Context, string, string) (Versioned[core.Project], error)
 	listTenantProjects   func(context.Context, string, PageRequest) (Page[core.Project], error)
+	renameProject        func(context.Context, string, int64, string) (Versioned[core.Project], error)
 }
 
 func (repository *repositoryStub) ready() bool {
@@ -464,6 +671,15 @@ func (repository *repositoryStub) ListTenants(
 	return repository.listTenants(ctx, request)
 }
 
+func (repository *repositoryStub) RenameTenant(
+	ctx context.Context,
+	id string,
+	expectedRevision int64,
+	slug string,
+) (Versioned[core.Tenant], error) {
+	return repository.renameTenant(ctx, id, expectedRevision, slug)
+}
+
 func (repository *repositoryStub) CreateProject(
 	ctx context.Context,
 	record core.Project,
@@ -492,6 +708,15 @@ func (repository *repositoryStub) ListTenantProjects(
 	request PageRequest,
 ) (Page[core.Project], error) {
 	return repository.listTenantProjects(ctx, tenantID, request)
+}
+
+func (repository *repositoryStub) RenameProject(
+	ctx context.Context,
+	id string,
+	expectedRevision int64,
+	slug string,
+) (Versioned[core.Project], error) {
+	return repository.renameProject(ctx, id, expectedRevision, slug)
 }
 
 func mustService(t *testing.T, repository Repository) *Service {

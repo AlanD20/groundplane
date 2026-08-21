@@ -35,7 +35,7 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProject(): %v", err)
 	}
-	_, err = repository.CreateEnvironment(ctx, EnvironmentRecord{
+	environment, err := repository.CreateEnvironment(ctx, EnvironmentRecord{
 		ID: environmentID, ProjectID: projectID, Slug: "production", Name: "Production",
 		VolumeDir: "/infra/vol/" + tenantID + "/" + projectID + "/" + environmentID,
 		CreatedAt: time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC),
@@ -44,11 +44,11 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 		t.Fatalf("CreateEnvironment(): %v", err)
 	}
 
-	renamed, err := repository.RenameTenant(ctx, tenantID, tenant.Revision, "acme-group", "Acme Group")
+	renamed, err := repository.RenameTenant(ctx, tenantID, tenant.Revision, "acme-group")
 	if err != nil {
 		t.Fatalf("RenameTenant(): %v", err)
 	}
-	if renamed.Record.ID != tenantID || renamed.Record.Slug != "acme-group" {
+	if renamed.Record.ID != tenantID || renamed.Record.Slug != "acme-group" || renamed.Record.Name != "Acme" {
 		t.Fatalf("renamed tenant = %+v", renamed.Record)
 	}
 	if _, err := repository.ResolveTenant(ctx, "acme"); !errors.Is(err, errs.New(errs.KindTenantNotFound, "")) {
@@ -58,10 +58,38 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	if err != nil || resolved.Record.ID != tenantID {
 		t.Fatalf("ResolveTenant(new slug) = %+v, %v", resolved, err)
 	}
-	if _, err := repository.RenameProject(
-		ctx, projectID, project.Revision-1, "console-next", "Console Next",
+	afterTenantProject, err := repository.GetProject(ctx, projectID)
+	if err != nil || afterTenantProject.Record != project.Record {
+		t.Fatalf("project changed with tenant rename: %+v, %v", afterTenantProject.Record, err)
+	}
+	afterTenantEnvironment, err := repository.GetEnvironment(ctx, environmentID)
+	if err != nil || afterTenantEnvironment.Record != environment.Record {
+		t.Fatalf("environment changed with tenant rename: %+v, %v", afterTenantEnvironment.Record, err)
+	}
+	if _, err := repository.RenameTenantProject(
+		ctx, projectID, project.Revision-1, "console-next",
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-		t.Fatalf("RenameProject(stale revision) error = %v, want state.conflict", err)
+		t.Fatalf("RenameTenantProject(stale revision) error = %v, want state.conflict", err)
+	}
+	renamedProject, err := repository.RenameTenantProject(ctx, projectID, project.Revision, "console-next")
+	if err != nil {
+		t.Fatalf("RenameTenantProject(): %v", err)
+	}
+	if renamedProject.Record.ID != projectID || renamedProject.Record.TenantID != tenantID ||
+		renamedProject.Record.Name != "Console" || renamedProject.Record.Kind != ProjectKindTenant {
+		t.Fatalf("renamed project changed identity: %+v", renamedProject.Record)
+	}
+	if _, err := repository.ResolveTenantProject(ctx, tenantID, "console"); !errors.Is(err, errs.New(errs.KindProjectNotFound, "")) {
+		t.Fatalf("ResolveTenantProject(old slug) error = %v, want project.not_found", err)
+	}
+	afterProjectEnvironment, err := repository.GetEnvironment(ctx, environmentID)
+	if err != nil || afterProjectEnvironment.Record != environment.Record {
+		t.Fatalf("environment changed with project rename: %+v, %v", afterProjectEnvironment.Record, err)
+	}
+	revision := renamed.Revision
+	noOp, err := repository.RenameTenant(ctx, tenantID, revision, "acme-group")
+	if err != nil || noOp.Revision != revision || noOp.Record != renamed.Record {
+		t.Fatalf("RenameTenant(current slug) = %+v, %v", noOp, err)
 	}
 }
 
@@ -83,6 +111,16 @@ func TestHierarchyScopedSlugUniquenessIsAtomic(t *testing.T) {
 		if _, err := repository.CreateTenant(ctx, tenant); err != nil {
 			t.Fatalf("CreateTenant(%s): %v", tenant.ID, err)
 		}
+	}
+	tenantBCurrent, err := repository.GetTenant(ctx, tenantB)
+	if err != nil {
+		t.Fatalf("GetTenant(B): %v", err)
+	}
+	if _, err := repository.RenameTenant(ctx, tenantB, tenantBCurrent.Revision, "a"); !errors.Is(err, errs.New(errs.KindSlugConflict, "")) {
+		t.Fatalf("RenameTenant(collision) error = %v, want slug.conflict", err)
+	}
+	if current, err := repository.ResolveTenant(ctx, "b"); err != nil || current.Record.ID != tenantB {
+		t.Fatalf("ResolveTenant(original after collision) = %+v, %v", current, err)
 	}
 	if _, err := repository.CreateTenant(ctx, TenantRecord{
 		ID: hierarchyTestID(ids.KindTenant, 12), Slug: "a", Name: "Duplicate",
@@ -214,10 +252,10 @@ func TestHierarchyIndexedPaginationReadsPrimariesAtPinnedRevision(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetProject(second): %v", err)
 	}
-	if _, err := repository.RenameProject(
-		ctx, secondProjectID, second.Revision, "second-renamed", "Second Renamed",
+	if _, err := repository.RenameTenantProject(
+		ctx, secondProjectID, second.Revision, "second-renamed",
 	); err != nil {
-		t.Fatalf("RenameProject(second): %v", err)
+		t.Fatalf("RenameTenantProject(second): %v", err)
 	}
 	pageTwo, err := repository.ListTenantProjects(ctx, tenantID, PageRequest{
 		Limit: 1, Cursor: pageOne.NextCursor,
@@ -234,6 +272,54 @@ func TestHierarchyIndexedPaginationReadsPrimariesAtPinnedRevision(t *testing.T) 
 	}
 	if len(fresh.Items) != 2 || fresh.Items[1].Record.Slug != "second-renamed" {
 		t.Fatalf("fresh page = %+v, want renamed primary", fresh.Items)
+	}
+}
+
+func TestHierarchyRenameCannotCommitAfterDeletionBegins(t *testing.T) {
+	// Rationale: deletion owns the target as soon as its tombstone exists, including
+	// when it starts after rename preparation but before the record/index transaction.
+	for _, test := range []struct {
+		name   string
+		inject bool
+	}{
+		{name: "already deleting"},
+		{name: "deletion starts before commit", inject: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			base := newMemoryHierarchyStore()
+			id := hierarchyTestID(ids.KindTenant, 90)
+			tombstone := deletionTombstoneKey("tenant", id)
+			store := hierarchyStore(base)
+			if test.inject {
+				store = &deletionRaceHierarchyStore{memoryHierarchyStore: base, tombstoneKey: tombstone}
+			}
+			repository, err := newHierarchyRepository(store)
+			if err != nil {
+				t.Fatalf("newHierarchyRepository(): %v", err)
+			}
+			created, err := repository.CreateTenant(context.Background(), TenantRecord{
+				ID: id, Slug: "before", Name: "Display Name",
+			})
+			if err != nil {
+				t.Fatalf("CreateTenant(): %v", err)
+			}
+			if !test.inject {
+				seedHierarchyTest(t, base, []Mutation{{
+					Type: MutationPut, Key: tombstone, Value: []byte(`{"phase":"requested"}`),
+				}})
+			}
+			_, err = repository.RenameTenant(context.Background(), id, created.Revision, "after")
+			if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+				t.Fatalf("RenameTenant() error = %v, want resource.in_use", err)
+			}
+			current, getErr := repository.GetTenant(context.Background(), id)
+			if getErr != nil || current.Record.Slug != "before" || current.Record.Name != "Display Name" {
+				t.Fatalf("tenant after blocked rename = %+v, %v", current.Record, getErr)
+			}
+			if _, resolveErr := repository.ResolveTenant(context.Background(), "after"); !errors.Is(resolveErr, errs.New(errs.KindTenantNotFound, "")) {
+				t.Fatalf("ResolveTenant(after) error = %v, want tenant.not_found", resolveErr)
+			}
+		})
 	}
 }
 
@@ -403,6 +489,36 @@ type memoryVersion struct {
 type memoryHierarchyStore struct {
 	revision int64
 	history  map[string][]memoryVersion
+}
+
+type deletionRaceHierarchyStore struct {
+	*memoryHierarchyStore
+	tombstoneKey string
+	injected     bool
+}
+
+func (store *deletionRaceHierarchyStore) GetMany(
+	ctx context.Context,
+	request GetManyRequest,
+) (*GetManyResult, error) {
+	result, err := store.memoryHierarchyStore.GetMany(ctx, request)
+	if err != nil || store.injected || !containsHierarchyKey(request.Keys, store.tombstoneKey) {
+		return result, err
+	}
+	store.injected = true
+	_, err = store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: store.tombstoneKey, Value: []byte(`{"phase":"requested"}`),
+	}})
+	return result, err
+}
+
+func containsHierarchyKey(keys []string, target string) bool {
+	for _, key := range keys {
+		if key == target {
+			return true
+		}
+	}
+	return false
 }
 
 func newMemoryHierarchyStore() *memoryHierarchyStore {

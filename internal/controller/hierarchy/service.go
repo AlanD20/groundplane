@@ -45,12 +45,16 @@ type Repository interface {
 	GetTenant(context.Context, string) (Versioned[core.Tenant], error)
 	ResolveTenant(context.Context, string) (Versioned[core.Tenant], error)
 	ListTenants(context.Context, PageRequest) (Page[core.Tenant], error)
+	RenameTenant(context.Context, string, int64, string) (Versioned[core.Tenant], error)
 
 	CreateProject(context.Context, core.Project) (Versioned[core.Project], error)
 	GetProject(context.Context, string) (Versioned[core.Project], error)
 	ResolveTenantProject(context.Context, string, string) (Versioned[core.Project], error)
 	ListTenantProjects(context.Context, string, PageRequest) (Page[core.Project], error)
+	RenameProject(context.Context, string, int64, string) (Versioned[core.Project], error)
 }
+
+const maximumRenameAttempts = 3
 
 type CreateTenantInput struct {
 	Slug string
@@ -177,6 +181,57 @@ func (service *Service) ListTenants(
 	return page, nil
 }
 
+// RenameTenant changes only the tenant's URL label. The repository owns the
+// atomic record/index transaction; this use case owns bounded CAS retries.
+func (service *Service) RenameTenant(
+	ctx context.Context,
+	id string,
+	slug string,
+) (Versioned[core.Tenant], error) {
+	if err := requireContext(ctx); err != nil {
+		return Versioned[core.Tenant]{}, err
+	}
+	if err := validateStableID(ids.KindTenant, id); err != nil {
+		return Versioned[core.Tenant]{}, err
+	}
+	if err := validateSlug("tenant slug", slug); err != nil {
+		return Versioned[core.Tenant]{}, err
+	}
+	for attempt := range maximumRenameAttempts {
+		current, err := service.GetTenant(ctx, id)
+		if err != nil {
+			return Versioned[core.Tenant]{}, err
+		}
+		if err := requireContext(ctx); err != nil {
+			return Versioned[core.Tenant]{}, err
+		}
+		renamed, err := service.repository.RenameTenant(ctx, id, current.Revision, slug)
+		if err != nil {
+			err = repositoryError(ctx, err)
+			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || attempt == maximumRenameAttempts-1 {
+				return Versioned[core.Tenant]{}, err
+			}
+			continue
+		}
+		if err := validateTenantVersion(renamed); err != nil {
+			return Versioned[core.Tenant]{}, err
+		}
+		if renamed.Record.ID != current.Record.ID || renamed.Record.Name != current.Record.Name ||
+			renamed.Record.Slug != slug {
+			return Versioned[core.Tenant]{}, internalInvariant("repository changed tenant identity during rename")
+		}
+		if current.Record.Slug == slug {
+			if renamed.Record != current.Record || renamed.Revision != current.Revision {
+				return Versioned[core.Tenant]{}, internalInvariant("repository wrote a tenant rename-to-current")
+			}
+		} else if err := validateWriteRevision(current.Revision, renamed); err != nil {
+			return Versioned[core.Tenant]{}, err
+		}
+		return renamed, nil
+	}
+	return Versioned[core.Tenant]{}, internalInvariant("tenant rename attempt bound was not enforced")
+}
+
 func (service *Service) CreateProject(
 	ctx context.Context,
 	input CreateProjectInput,
@@ -296,6 +351,57 @@ func (service *Service) ListProjects(
 		return Page[core.Project]{}, err
 	}
 	return page, nil
+}
+
+// RenameProject changes only an ordinary tenant-owned Project's URL label.
+func (service *Service) RenameProject(
+	ctx context.Context,
+	id string,
+	slug string,
+) (Versioned[core.Project], error) {
+	if err := requireContext(ctx); err != nil {
+		return Versioned[core.Project]{}, err
+	}
+	if err := validateStableID(ids.KindProject, id); err != nil {
+		return Versioned[core.Project]{}, err
+	}
+	if err := validateSlug("project slug", slug); err != nil {
+		return Versioned[core.Project]{}, err
+	}
+	for attempt := range maximumRenameAttempts {
+		current, err := service.GetProject(ctx, id)
+		if err != nil {
+			return Versioned[core.Project]{}, err
+		}
+		if err := requireContext(ctx); err != nil {
+			return Versioned[core.Project]{}, err
+		}
+		renamed, err := service.repository.RenameProject(ctx, id, current.Revision, slug)
+		if err != nil {
+			err = repositoryError(ctx, err)
+			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || attempt == maximumRenameAttempts-1 {
+				return Versioned[core.Project]{}, err
+			}
+			continue
+		}
+		if err := validateProjectVersion(renamed); err != nil {
+			return Versioned[core.Project]{}, err
+		}
+		if renamed.Record.ID != current.Record.ID || renamed.Record.TenantID != current.Record.TenantID ||
+			renamed.Record.Name != current.Record.Name || renamed.Record.Kind != current.Record.Kind ||
+			renamed.Record.Slug != slug {
+			return Versioned[core.Project]{}, internalInvariant("repository changed project identity during rename")
+		}
+		if current.Record.Slug == slug {
+			if renamed.Record != current.Record || renamed.Revision != current.Revision {
+				return Versioned[core.Project]{}, internalInvariant("repository wrote a project rename-to-current")
+			}
+		} else if err := validateWriteRevision(current.Revision, renamed); err != nil {
+			return Versioned[core.Project]{}, err
+		}
+		return renamed, nil
+	}
+	return Versioned[core.Project]{}, internalInvariant("project rename attempt bound was not enforced")
 }
 
 func requireContext(ctx context.Context) error {

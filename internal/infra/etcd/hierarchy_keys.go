@@ -422,11 +422,15 @@ func renameRecord[T any](
 	oldSlugKey string,
 	newSlugKey string,
 	membershipKeys []string,
+	tombstoneKey string,
 	kind string,
 	id string,
+	notFound errs.Kind,
 	encode func(T) ([]byte, error),
 ) (Versioned[T], error) {
 	secondaryKeys := append([]string{oldSlugKey}, membershipKeys...)
+	tombstoneOffset := len(secondaryKeys)
+	secondaryKeys = append(secondaryKeys, tombstoneKey)
 	newSlugOffset := -1
 	if newSlugKey != oldSlugKey {
 		newSlugOffset = len(secondaryKeys)
@@ -446,8 +450,17 @@ func renameRecord[T any](
 			return Versioned[T]{}, errs.New(errs.KindInternal, "owner index is missing or mismatched")
 		}
 	}
+	if secondary.Values[tombstoneOffset] != nil {
+		return Versioned[T]{}, errs.New(errs.KindResourceInUse, "resource deletion is in progress")
+	}
 	if newSlugOffset >= 0 && secondary.Values[newSlugOffset] != nil {
 		return Versioned[T]{}, errs.New(errs.KindSlugConflict, "slug is already in use")
+	}
+	if newSlugOffset < 0 {
+		if err := validateContext(ctx); err != nil {
+			return Versioned[T]{}, err
+		}
+		return current, nil
 	}
 	value, err := encode(replacement)
 	if err != nil {
@@ -460,31 +473,78 @@ func renameRecord[T any](
 	for index, key := range membershipKeys {
 		conditions = append(conditions, Condition{Key: key, ModRevision: secondary.Values[index+1].ModRevision})
 	}
+	conditions = append(conditions, Condition{Key: tombstoneKey})
 	mutations := []Mutation{{Type: MutationPut, Key: primaryKey, Value: value}}
-	if newSlugOffset >= 0 {
-		conditions = append(conditions, Condition{Key: newSlugKey})
-		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: oldSlugKey},
-			Mutation{Type: MutationPut, Key: newSlugKey, Value: []byte(id)},
-		)
+	conditions = append(conditions, Condition{Key: newSlugKey})
+	mutations = append(mutations,
+		Mutation{Type: MutationDelete, Key: oldSlugKey},
+		Mutation{Type: MutationPut, Key: newSlugKey, Value: []byte(id)},
+	)
+	if err := validateContext(ctx); err != nil {
+		return Versioned[T]{}, err
 	}
 	result, err := store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return Versioned[T]{}, err
 	}
 	if !result.Succeeded {
-		if newSlugOffset >= 0 {
-			occupied, readErr := store.Get(ctx, newSlugKey)
-			if readErr != nil {
-				return Versioned[T]{}, readErr
-			}
-			if occupied.Entry != nil {
-				return Versioned[T]{}, errs.New(errs.KindSlugConflict, "slug is already in use")
-			}
-		}
-		return Versioned[T]{}, stateConflict(kind, id)
+		return Versioned[T]{}, diagnoseRename(
+			ctx, store, primaryKey, current.Revision, oldSlugKey, newSlugKey,
+			membershipKeys, tombstoneKey, kind, id, notFound,
+		)
 	}
 	return Versioned[T]{Record: replacement, Revision: result.Revision, ReadRevision: result.Revision}, nil
+}
+
+func diagnoseRename(
+	ctx context.Context,
+	store hierarchyStore,
+	primaryKey string,
+	expectedRevision int64,
+	oldSlugKey string,
+	newSlugKey string,
+	membershipKeys []string,
+	tombstoneKey string,
+	kind string,
+	id string,
+	notFound errs.Kind,
+) error {
+	keys := []string{primaryKey, oldSlugKey}
+	membershipOffset := len(keys)
+	keys = append(keys, membershipKeys...)
+	tombstoneOffset := len(keys)
+	keys = append(keys, tombstoneKey)
+	newSlugOffset := len(keys)
+	keys = append(keys, newSlugKey)
+	current, err := store.GetMany(ctx, GetManyRequest{Keys: keys})
+	if err != nil {
+		return err
+	}
+	if len(current.Values) != len(keys) {
+		return errs.New(errs.KindInternal, "rename diagnosis returned an invalid key count")
+	}
+	if current.Values[0] == nil {
+		return errs.Newf(notFound, "%s was not found", id)
+	}
+	if current.Values[tombstoneOffset] != nil {
+		return errs.New(errs.KindResourceInUse, "resource deletion is in progress")
+	}
+	if current.Values[newSlugOffset] != nil && string(current.Values[newSlugOffset].Value) != id {
+		return errs.New(errs.KindSlugConflict, "slug is already in use")
+	}
+	if current.Values[0].ModRevision != expectedRevision {
+		return stateConflict(kind, id)
+	}
+	if current.Values[1] == nil || string(current.Values[1].Value) != id {
+		return errs.New(errs.KindInternal, "slug index is missing or mismatched")
+	}
+	for index := range membershipKeys {
+		value := current.Values[membershipOffset+index]
+		if value == nil || string(value.Value) != id {
+			return errs.New(errs.KindInternal, "owner index is missing or mismatched")
+		}
+	}
+	return stateConflict(kind, id)
 }
 
 func stateConflict(kind string, id string) error {
