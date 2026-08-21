@@ -10,7 +10,7 @@
 package controller
 
 import (
-	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -21,12 +21,24 @@ import (
 // match (blueprint.md, "x-gp-execution").
 type ExecutionPlan = agentpb.ExecutionPlan
 
-// BuildPlan is the pure step that turns a render plan into an
-// ExecutionPlan — TODO: this is where RenderCompose's output, the
-// dependency DAG (from x-gp-requires/x-gp-depends_on), and adapter Steps
-// (from an attach's ProvisionSteps, a backup's BackupStrategy, …) get
-// sequenced and hashed. Pure w.r.t. its inputs, like the rest of the
-// renderer (architecture.md, "State translation and materialization").
-func BuildPlan(operation, projectID string, renderGeneration int) (*ExecutionPlan, error) {
-	return nil, errs.New(errs.KindNotImplemented, "execution plan builder is not implemented")
+// PlanBuildInput is the complete typed output of rendering and procedure
+// sequencing. It deliberately contains no persisted rendered-artifact handle:
+// a resolver rebuilds these values from retained desired-state inputs.
+type PlanBuildInput struct {
+	PlanID           string
+	RenderGeneration uint64
+	Operation        agentpb.PlanOperation
+	TargetID         string
+	Artifacts        []*agentpb.ComposeArtifact
+	Steps            []*agentpb.ExecutionStep
+}
+
+// BuildPlan owns schema selection, defensive copying, deterministic hashing,
+// and closed-shape validation for every Controller-produced execution plan.
+func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
+	return executionplan.Seal(&agentpb.ExecutionPlan{
+		Schema: 1, PlanId: input.PlanID, RenderGeneration: input.RenderGeneration,
+		Operation: input.Operation, TargetId: input.TargetID,
+		Artifacts: input.Artifacts, Steps: input.Steps,
+	})
 }
