@@ -15,6 +15,8 @@ const (
 	taskActiveOperationPrefix   = "/v1/indexes/tasks/active-operation/"
 	taskEventRootPrefix         = "/v1/runtime/task-events/"
 	taskEventDedupRootPrefix    = "/v1/runtime/task-event-dedup/"
+	taskQueuePrefix             = "/v1/runtime/task-queue/"
+	taskAssignmentRootPrefix    = "/v1/runtime/assignments/"
 	deletionTombstoneRootPrefix = "/v1/runtime/deletions/"
 	taskEventSequenceWidth      = 20
 )
@@ -46,6 +48,29 @@ func taskEventKey(taskID string, sequence uint64) string {
 func taskEventDedupKey(identity TaskEventIdentity) string {
 	return taskEventDedupRootPrefix + identity.TaskID + "/" + identity.StepID + "/" +
 		strconv.FormatUint(uint64(identity.Attempt), 10) + "/" + strconv.FormatUint(identity.Ordinal, 10)
+}
+
+func taskQueueKey(taskID string) string {
+	return taskQueuePrefix + taskID
+}
+
+func taskIDFromQueueKey(key string) (string, error) {
+	if !strings.HasPrefix(key, taskQueuePrefix) {
+		return "", errs.New(errs.KindInternal, "task queue key is outside the queue")
+	}
+	taskID := strings.TrimPrefix(key, taskQueuePrefix)
+	if strings.Contains(taskID, "/") || validateStableID(ids.KindTask, taskID) != nil {
+		return "", errs.New(errs.KindInternal, "task queue key has an invalid task id")
+	}
+	return taskID, nil
+}
+
+func taskAssignmentKey(agentID string, taskID string) string {
+	return taskAssignmentScopePrefix(agentID) + taskID
+}
+
+func taskAssignmentScopePrefix(agentID string) string {
+	return taskAssignmentRootPrefix + agentID + "/"
 }
 
 func deletionTombstoneKey(targetKind string, targetID string) string {

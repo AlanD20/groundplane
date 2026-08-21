@@ -45,11 +45,11 @@ const (
 )
 
 type IdempotencyLocator struct {
-	ScopeKind IdempotencyScopeKind
-	ScopeID   string
-	Method    string
-	Route     string
-	Key       string
+	ScopeKind IdempotencyScopeKind `json:"scope_kind"`
+	ScopeID   string               `json:"scope_id"`
+	Method    string               `json:"method"`
+	Route     string               `json:"route"`
+	Key       string               `json:"key"`
 }
 
 type ProtectedIntentRecord struct {
@@ -563,6 +563,7 @@ type idempotencyPlanClassifier func(int64, []*KeyValue) error
 type idempotencyMutationPlan struct {
 	mu         sync.Mutex
 	consumed   bool
+	markerKind IdempotencyMarkerKind
 	conditions []Condition
 	mutations  []Mutation
 	classify   idempotencyPlanClassifier
@@ -573,6 +574,36 @@ func newIdempotencyMutationPlan(
 	mutations []Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
+	return newIdempotencyMutationPlanForMarker(
+		IdempotencyMarkerDirect,
+		conditions,
+		mutations,
+		classify,
+	)
+}
+
+func newTaskIdempotencyMutationPlan(
+	conditions []Condition,
+	mutations []Mutation,
+	classify idempotencyPlanClassifier,
+) (*idempotencyMutationPlan, error) {
+	return newIdempotencyMutationPlanForMarker(
+		IdempotencyMarkerTask,
+		conditions,
+		mutations,
+		classify,
+	)
+}
+
+func newIdempotencyMutationPlanForMarker(
+	markerKind IdempotencyMarkerKind,
+	conditions []Condition,
+	mutations []Mutation,
+	classify idempotencyPlanClassifier,
+) (*idempotencyMutationPlan, error) {
+	if markerKind != IdempotencyMarkerDirect && markerKind != IdempotencyMarkerTask {
+		return nil, errs.New(errs.KindInternal, "idempotency mutation plan marker kind is invalid")
+	}
 	if len(mutations) == 0 || classify == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency mutation plan is incomplete")
 	}
@@ -580,6 +611,7 @@ func newIdempotencyMutationPlan(
 		return nil, err
 	}
 	return &idempotencyMutationPlan{
+		markerKind: markerKind,
 		conditions: append([]Condition(nil), conditions...),
 		mutations:  cloneMutations(mutations),
 		classify:   classify,
@@ -713,7 +745,14 @@ func cloneIdempotencyMarker(marker IdempotencyMarker) IdempotencyMarker {
 	return marker
 }
 
-type IdempotencyRepository struct{ store Store }
+type idempotencyRepositoryStore interface {
+	Get(context.Context, string) (*GetResult, error)
+	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+	Range(context.Context, RangeRequest) (*RangeResult, error)
+	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+}
+
+type IdempotencyRepository struct{ store idempotencyRepositoryStore }
 
 type idempotencyPruneCandidate struct {
 	Marker               idempotencyEvidence
@@ -723,6 +762,10 @@ type idempotencyPruneCandidate struct {
 }
 
 func NewIdempotencyRepository(store Store) (*IdempotencyRepository, error) {
+	return newIdempotencyRepository(store)
+}
+
+func newIdempotencyRepository(store idempotencyRepositoryStore) (*IdempotencyRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency store is required")
 	}
@@ -737,10 +780,11 @@ func (repository *IdempotencyRepository) Apply(
 	if ctx == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "idempotency context is required")
 	}
-	if marker.Kind != IdempotencyMarkerDirect {
+	if plan == nil || plan.markerKind != marker.Kind ||
+		(marker.Kind == IdempotencyMarkerTask && marker.State != IdempotencyMarkerPending) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
-			"Task idempotency transaction composition is not implemented",
+			"idempotency marker does not match its mutation plan",
 		)
 	}
 	markerKey, err := idempotencyMarkerKey(marker.Locator)

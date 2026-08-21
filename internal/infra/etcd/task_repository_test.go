@@ -586,7 +586,11 @@ func (store *memoryTaskStore) Transact(
 			actual = value.ModRevision
 		}
 		if actual != condition.ModRevision {
-			return TransactionResult{Revision: store.revision}, nil
+			failureReads := make([]*KeyValue, len(conditions))
+			for index, failedCondition := range conditions {
+				failureReads[index] = store.valueAtLocked(failedCondition.Key, store.revision)
+			}
+			return TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
 		}
 	}
 	store.revision++

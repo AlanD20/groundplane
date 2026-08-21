@@ -100,6 +100,7 @@ type TaskRecord struct {
 	StartedAt         *time.Time        `json:"started_at,omitempty"`
 	TerminalAt        *time.Time        `json:"terminal_at,omitempty"`
 	RetainUntil       *time.Time        `json:"retain_until,omitempty"`
+	idempotencyMarker *IdempotencyLocator
 }
 
 // TaskEventIdentity is stable across Agent reconnects and Controller restarts.
@@ -130,8 +131,7 @@ type TaskEventRecord struct {
 }
 
 // TaskEventDedupRecord makes Agent delivery idempotent across process restarts.
-// The repository eventually stores it atomically with the event and task
-// summary; its key shape is intentionally absent until ADR 0013 fixes it.
+// The repository stores it atomically with the event and Task summary.
 type TaskEventDedupRecord struct {
 	Identity      TaskEventIdentity `json:"identity"`
 	Sequence      uint64            `json:"sequence"`
@@ -149,23 +149,24 @@ type PreparedTaskEvent struct {
 }
 
 type taskRecordData struct {
-	ID                string            `json:"id"`
-	OperationID       string            `json:"operation_id"`
-	RetryOf           string            `json:"retry_of,omitempty"`
-	IdempotencyKey    string            `json:"idempotency_key,omitempty"`
-	PlanHash          string            `json:"plan_hash,omitempty"`
-	Type              TaskType          `json:"type"`
-	Target            string            `json:"target"`
-	Params            map[string]string `json:"params,omitempty"`
-	Steps             []TaskStepRecord  `json:"steps,omitempty"`
-	TimeoutSeconds    int64             `json:"timeout_seconds"`
-	Status            TaskStatus        `json:"status"`
-	NextEventSequence uint64            `json:"next_event_sequence"`
-	EventCount        uint32            `json:"event_count"`
-	CreatedAt         string            `json:"created_at"`
-	StartedAt         string            `json:"started_at,omitempty"`
-	TerminalAt        string            `json:"terminal_at,omitempty"`
-	RetainUntil       string            `json:"retain_until,omitempty"`
+	ID                string              `json:"id"`
+	OperationID       string              `json:"operation_id"`
+	RetryOf           string              `json:"retry_of,omitempty"`
+	IdempotencyKey    string              `json:"idempotency_key,omitempty"`
+	PlanHash          string              `json:"plan_hash,omitempty"`
+	Type              TaskType            `json:"type"`
+	Target            string              `json:"target"`
+	Params            map[string]string   `json:"params,omitempty"`
+	Steps             []TaskStepRecord    `json:"steps,omitempty"`
+	TimeoutSeconds    int64               `json:"timeout_seconds"`
+	Status            TaskStatus          `json:"status"`
+	NextEventSequence uint64              `json:"next_event_sequence"`
+	EventCount        uint32              `json:"event_count"`
+	CreatedAt         string              `json:"created_at"`
+	StartedAt         string              `json:"started_at,omitempty"`
+	TerminalAt        string              `json:"terminal_at,omitempty"`
+	RetainUntil       string              `json:"retain_until,omitempty"`
+	IdempotencyMarker *IdempotencyLocator `json:"idempotency_marker,omitempty"`
 }
 
 type taskEventRecordData struct {
@@ -398,6 +399,14 @@ func validateTaskRecord(record TaskRecord) error {
 	}
 	if record.PlanHash != "" && !validSHA256(record.PlanHash) {
 		return errs.New(errs.KindValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
+	}
+	if record.idempotencyMarker != nil {
+		if err := validateIdempotencyLocator(*record.idempotencyMarker); err != nil {
+			return errs.New(errs.KindInternal, "task idempotency marker locator is invalid")
+		}
+		if record.IdempotencyKey != record.idempotencyMarker.Key {
+			return errs.New(errs.KindInternal, "task idempotency marker locator does not match its task")
+		}
 	}
 	if record.TimeoutSeconds <= 0 {
 		return errs.New(errs.KindValidationFailed, "task timeout_seconds must be positive")
@@ -696,9 +705,10 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
 		Status: record.Status, NextEventSequence: record.NextEventSequence,
 		EventCount: record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
-		StartedAt:   formatOptionalTimestamp(record.StartedAt),
-		TerminalAt:  formatOptionalTimestamp(record.TerminalAt),
-		RetainUntil: formatOptionalTimestamp(record.RetainUntil),
+		StartedAt:         formatOptionalTimestamp(record.StartedAt),
+		TerminalAt:        formatOptionalTimestamp(record.TerminalAt),
+		RetainUntil:       formatOptionalTimestamp(record.RetainUntil),
+		IdempotencyMarker: cloneIdempotencyLocator(record.idempotencyMarker),
 	}
 }
 
@@ -726,7 +736,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		TimeoutSeconds: data.TimeoutSeconds, Status: data.Status,
 		NextEventSequence: data.NextEventSequence, EventCount: data.EventCount,
 		CreatedAt: createdAt, StartedAt: startedAt, TerminalAt: terminalAt,
-		RetainUntil: retainUntil,
+		RetainUntil: retainUntil, idempotencyMarker: cloneIdempotencyLocator(data.IdempotencyMarker),
 	}, nil
 }
 
@@ -772,7 +782,16 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
 	cloned.TerminalAt = cloneTimePointer(record.TerminalAt)
 	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
+	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)
 	return cloned
+}
+
+func cloneIdempotencyLocator(locator *IdempotencyLocator) *IdempotencyLocator {
+	if locator == nil {
+		return nil
+	}
+	cloned := *locator
+	return &cloned
 }
 
 func cloneTaskSteps(steps []TaskStepRecord) []TaskStepRecord {

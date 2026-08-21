@@ -44,12 +44,9 @@ type taskCASRetryPolicy struct {
 	wait         func(context.Context, time.Duration) error
 }
 
-// TaskRepository owns the accepted Task primary and event-journal mechanics.
-// Task creation and terminal active-operation release remain deliberately
-// absent until Task creation can compose both canonical Task index writes and
-// its idempotency marker through one opaque transaction plan. Retention
-// metadata is persisted by the journal codec; pruning is not implemented by
-// this append/read subset.
+// TaskRepository owns the accepted Task primary, durable queue/assignment
+// lifecycle, and event-journal mechanics. Retention metadata is persisted by
+// the journal codec; the daily Task pruning collector remains separate.
 type TaskRepository struct {
 	store       taskRepositoryStore
 	retryPolicy taskCASRetryPolicy
