@@ -91,6 +91,61 @@ func (TaskState) EnumDescriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{0}
 }
 
+type TaskTerminal int32
+
+const (
+	TaskTerminal_TASK_TERMINAL_UNSPECIFIED TaskTerminal = 0
+	TaskTerminal_TASK_TERMINAL_COMPLETED   TaskTerminal = 1
+	TaskTerminal_TASK_TERMINAL_FAILED      TaskTerminal = 2
+	TaskTerminal_TASK_TERMINAL_TIMED_OUT   TaskTerminal = 3
+	TaskTerminal_TASK_TERMINAL_ABORTED     TaskTerminal = 4
+)
+
+// Enum value maps for TaskTerminal.
+var (
+	TaskTerminal_name = map[int32]string{
+		0: "TASK_TERMINAL_UNSPECIFIED",
+		1: "TASK_TERMINAL_COMPLETED",
+		2: "TASK_TERMINAL_FAILED",
+		3: "TASK_TERMINAL_TIMED_OUT",
+		4: "TASK_TERMINAL_ABORTED",
+	}
+	TaskTerminal_value = map[string]int32{
+		"TASK_TERMINAL_UNSPECIFIED": 0,
+		"TASK_TERMINAL_COMPLETED":   1,
+		"TASK_TERMINAL_FAILED":      2,
+		"TASK_TERMINAL_TIMED_OUT":   3,
+		"TASK_TERMINAL_ABORTED":     4,
+	}
+)
+
+func (x TaskTerminal) Enum() *TaskTerminal {
+	p := new(TaskTerminal)
+	*p = x
+	return p
+}
+
+func (x TaskTerminal) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TaskTerminal) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[1].Descriptor()
+}
+
+func (TaskTerminal) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[1]
+}
+
+func (x TaskTerminal) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TaskTerminal.Descriptor instead.
+func (TaskTerminal) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{1}
+}
+
 type Authenticate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
@@ -380,9 +435,11 @@ func (x *Ready) GetCapacity() int32 {
 type TaskEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Step          string                 `protobuf:"bytes,2,opt,name=step,proto3" json:"step,omitempty"`
-	State         TaskState              `protobuf:"varint,3,opt,name=state,proto3,enum=groundplane.agent.v1.TaskState" json:"state,omitempty"`
-	Chunk         []byte                 `protobuf:"bytes,4,opt,name=chunk,proto3" json:"chunk,omitempty"` // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
+	PlanHash      []byte                 `protobuf:"bytes,2,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"` // exactly 32 immutable SHA-256 bytes
+	StepId        string                 `protobuf:"bytes,3,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	Sequence      uint64                 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"` // positive and monotonic within this task attempt
+	State         TaskState              `protobuf:"varint,5,opt,name=state,proto3,enum=groundplane.agent.v1.TaskState" json:"state,omitempty"`
+	Chunk         []byte                 `protobuf:"bytes,6,opt,name=chunk,proto3" json:"chunk,omitempty"` // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -424,11 +481,25 @@ func (x *TaskEvent) GetTaskId() string {
 	return ""
 }
 
-func (x *TaskEvent) GetStep() string {
+func (x *TaskEvent) GetPlanHash() []byte {
 	if x != nil {
-		return x.Step
+		return x.PlanHash
+	}
+	return nil
+}
+
+func (x *TaskEvent) GetStepId() string {
+	if x != nil {
+		return x.StepId
 	}
 	return ""
+}
+
+func (x *TaskEvent) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
 }
 
 func (x *TaskEvent) GetState() TaskState {
@@ -560,9 +631,10 @@ func (x *ContainerState) GetLabels() map[string]string {
 type TaskAck struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
-	ExitCode      int32                  `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	Result        string                 `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"` // JSON-encoded, task-type-specific
+	PlanHash      []byte                 `protobuf:"bytes,2,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"` // exactly 32 immutable SHA-256 bytes
+	Terminal      TaskTerminal           `protobuf:"varint,3,opt,name=terminal,proto3,enum=groundplane.agent.v1.TaskTerminal" json:"terminal,omitempty"`
+	ExitCode      int32                  `protobuf:"varint,4,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Result        []byte                 `protobuf:"bytes,5,opt,name=result,proto3" json:"result,omitempty"` // opaque task-type-specific result
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -604,11 +676,18 @@ func (x *TaskAck) GetTaskId() string {
 	return ""
 }
 
-func (x *TaskAck) GetSuccess() bool {
+func (x *TaskAck) GetPlanHash() []byte {
 	if x != nil {
-		return x.Success
+		return x.PlanHash
 	}
-	return false
+	return nil
+}
+
+func (x *TaskAck) GetTerminal() TaskTerminal {
+	if x != nil {
+		return x.Terminal
+	}
+	return TaskTerminal_TASK_TERMINAL_UNSPECIFIED
 }
 
 func (x *TaskAck) GetExitCode() int32 {
@@ -618,11 +697,11 @@ func (x *TaskAck) GetExitCode() int32 {
 	return 0
 }
 
-func (x *TaskAck) GetResult() string {
+func (x *TaskAck) GetResult() []byte {
 	if x != nil {
 		return x.Result
 	}
-	return ""
+	return nil
 }
 
 type ControllerMessage struct {
@@ -745,7 +824,7 @@ type TaskAssignment struct {
 	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"` // stable across retries — see internal/controller/task.go
 	RetryOf          string                 `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
 	PlanId           string                 `protobuf:"bytes,4,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`                // the ExecutionPlan this task dispatches — see internal/controller/plan.go
-	PlanHash         string                 `protobuf:"bytes,5,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`          // sha256 of the plan's canonical serialization; the Agent rejects a mismatch against its own projection
+	PlanHash         []byte                 `protobuf:"bytes,5,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`          // exactly 32 SHA-256 bytes; immutable for this task_id
 	RenderGeneration int32                  `protobuf:"varint,6,opt,name=render_generation,json=renderGeneration,proto3" json:"render_generation,omitempty"`
 	Type             string                 `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"` // deploy | rollback | backup | restore | attach | detach | run | script | provision | create | update | remove | start | stop | destroy | rotate
 	Target           string                 `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
@@ -814,11 +893,11 @@ func (x *TaskAssignment) GetPlanId() string {
 	return ""
 }
 
-func (x *TaskAssignment) GetPlanHash() string {
+func (x *TaskAssignment) GetPlanHash() []byte {
 	if x != nil {
 		return x.PlanHash
 	}
-	return ""
+	return nil
 }
 
 func (x *TaskAssignment) GetRenderGeneration() int32 {
@@ -865,8 +944,9 @@ func (x *TaskAssignment) GetTimeoutSeconds() int32 {
 
 type Step struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Op            string                 `protobuf:"bytes,1,opt,name=op,proto3" json:"op,omitempty"` // exec | sql | dump | restore | encrypt | upload | verify | prune | ack — the known step catalog (see internal/adapters)
-	Params        map[string]string      `protobuf:"bytes,2,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	StepId        string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`                                                             // immutable canonical step_<ulid> from the execution plan
+	Op            string                 `protobuf:"bytes,2,opt,name=op,proto3" json:"op,omitempty"`                                                                                   // exec | sql | dump | restore | encrypt | upload | verify | prune | ack — the known step catalog (see internal/adapters)
+	Params        map[string]string      `protobuf:"bytes,3,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // opaque until a typed procedure contract is accepted
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -899,6 +979,13 @@ func (x *Step) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Step.ProtoReflect.Descriptor instead.
 func (*Step) Descriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Step) GetStepId() string {
+	if x != nil {
+		return x.StepId
+	}
+	return ""
 }
 
 func (x *Step) GetOp() string {
@@ -1071,12 +1158,14 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\btask_ack\x18\x05 \x01(\v2\x1d.groundplane.agent.v1.TaskAckH\x00R\ataskAckB\t\n" +
 	"\apayload\"#\n" +
 	"\x05Ready\x12\x1a\n" +
-	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\"\x85\x01\n" +
+	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\"\xc3\x01\n" +
 	"\tTaskEvent\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x12\n" +
-	"\x04step\x18\x02 \x01(\tR\x04step\x125\n" +
-	"\x05state\x18\x03 \x01(\x0e2\x1f.groundplane.agent.v1.TaskStateR\x05state\x12\x14\n" +
-	"\x05chunk\x18\x04 \x01(\fR\x05chunk\"U\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
+	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12\x17\n" +
+	"\astep_id\x18\x03 \x01(\tR\x06stepId\x12\x1a\n" +
+	"\bsequence\x18\x04 \x01(\x04R\bsequence\x125\n" +
+	"\x05state\x18\x05 \x01(\x0e2\x1f.groundplane.agent.v1.TaskStateR\x05state\x12\x14\n" +
+	"\x05chunk\x18\x06 \x01(\fR\x05chunk\"U\n" +
 	"\rObservedState\x12D\n" +
 	"\n" +
 	"containers\x18\x01 \x03(\v2$.groundplane.agent.v1.ContainerStateR\n" +
@@ -1088,12 +1177,13 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x06labels\x18\x04 \x03(\v20.groundplane.agent.v1.ContainerState.LabelsEntryR\x06labels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"q\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb4\x01\n" +
 	"\aTaskAck\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x1b\n" +
-	"\texit_code\x18\x03 \x01(\x05R\bexitCode\x12\x16\n" +
-	"\x06result\x18\x04 \x01(\tR\x06result\"\xba\x02\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
+	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12>\n" +
+	"\bterminal\x18\x03 \x01(\x0e2\".groundplane.agent.v1.TaskTerminalR\bterminal\x12\x1b\n" +
+	"\texit_code\x18\x04 \x01(\x05R\bexitCode\x12\x16\n" +
+	"\x06result\x18\x05 \x01(\fR\x06result\"\xba\x02\n" +
 	"\x11ControllerMessage\x12O\n" +
 	"\x0ftask_assignment\x18\x01 \x01(\v2$.groundplane.agent.v1.TaskAssignmentH\x00R\x0etaskAssignment\x12@\n" +
 	"\n" +
@@ -1106,17 +1196,18 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
 	"\bretry_of\x18\x03 \x01(\tR\aretryOf\x12\x17\n" +
 	"\aplan_id\x18\x04 \x01(\tR\x06planId\x12\x1b\n" +
-	"\tplan_hash\x18\x05 \x01(\tR\bplanHash\x12+\n" +
+	"\tplan_hash\x18\x05 \x01(\fR\bplanHash\x12+\n" +
 	"\x11render_generation\x18\x06 \x01(\x05R\x10renderGeneration\x12\x12\n" +
 	"\x04type\x18\a \x01(\tR\x04type\x12\x16\n" +
 	"\x06target\x18\b \x01(\tR\x06target\x12\x16\n" +
 	"\x06params\x18\t \x01(\fR\x06params\x120\n" +
 	"\x05steps\x18\n" +
 	" \x03(\v2\x1a.groundplane.agent.v1.StepR\x05steps\x12'\n" +
-	"\x0ftimeout_seconds\x18\v \x01(\x05R\x0etimeoutSeconds\"\x91\x01\n" +
-	"\x04Step\x12\x0e\n" +
-	"\x02op\x18\x01 \x01(\tR\x02op\x12>\n" +
-	"\x06params\x18\x02 \x03(\v2&.groundplane.agent.v1.Step.ParamsEntryR\x06params\x1a9\n" +
+	"\x0ftimeout_seconds\x18\v \x01(\x05R\x0etimeoutSeconds\"\xaa\x01\n" +
+	"\x04Step\x12\x17\n" +
+	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12\x0e\n" +
+	"\x02op\x18\x02 \x01(\tR\x02op\x12>\n" +
+	"\x06params\x18\x03 \x03(\v2&.groundplane.agent.v1.Step.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"<\n" +
@@ -1134,7 +1225,13 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x14TASK_STATE_COMPLETED\x10\x03\x12\x15\n" +
 	"\x11TASK_STATE_FAILED\x10\x04\x12\x16\n" +
 	"\x12TASK_STATE_ABORTED\x10\x05\x12\x18\n" +
-	"\x14TASK_STATE_TIMED_OUT\x10\x062j\n" +
+	"\x14TASK_STATE_TIMED_OUT\x10\x06*\x9c\x01\n" +
+	"\fTaskTerminal\x12\x1d\n" +
+	"\x19TASK_TERMINAL_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17TASK_TERMINAL_COMPLETED\x10\x01\x12\x18\n" +
+	"\x14TASK_TERMINAL_FAILED\x10\x02\x12\x1b\n" +
+	"\x17TASK_TERMINAL_TIMED_OUT\x10\x03\x12\x19\n" +
+	"\x15TASK_TERMINAL_ABORTED\x10\x042j\n" +
 	"\fAgentChannel\x12Z\n" +
 	"\aConnect\x12\".groundplane.agent.v1.AgentMessage\x1a'.groundplane.agent.v1.ControllerMessage(\x010\x01B.Z,github.com/AlanD20/groundplane/proto/agentpbb\x06proto3"
 
@@ -1150,52 +1247,54 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 	return file_proto_agent_proto_rawDescData
 }
 
-var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_proto_agent_proto_goTypes = []any{
 	(TaskState)(0),            // 0: groundplane.agent.v1.TaskState
-	(*Authenticate)(nil),      // 1: groundplane.agent.v1.Authenticate
-	(*AgentConfig)(nil),       // 2: groundplane.agent.v1.AgentConfig
-	(*AgentMessage)(nil),      // 3: groundplane.agent.v1.AgentMessage
-	(*Ready)(nil),             // 4: groundplane.agent.v1.Ready
-	(*TaskEvent)(nil),         // 5: groundplane.agent.v1.TaskEvent
-	(*ObservedState)(nil),     // 6: groundplane.agent.v1.ObservedState
-	(*ContainerState)(nil),    // 7: groundplane.agent.v1.ContainerState
-	(*TaskAck)(nil),           // 8: groundplane.agent.v1.TaskAck
-	(*ControllerMessage)(nil), // 9: groundplane.agent.v1.ControllerMessage
-	(*TaskAssignment)(nil),    // 10: groundplane.agent.v1.TaskAssignment
-	(*Step)(nil),              // 11: groundplane.agent.v1.Step
-	(*TaskAbort)(nil),         // 12: groundplane.agent.v1.TaskAbort
-	(*ConfigUpdate)(nil),      // 13: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),          // 14: groundplane.agent.v1.Shutdown
-	nil,                       // 15: groundplane.agent.v1.AgentConfig.LabelsEntry
-	nil,                       // 16: groundplane.agent.v1.ContainerState.LabelsEntry
-	nil,                       // 17: groundplane.agent.v1.Step.ParamsEntry
+	(TaskTerminal)(0),         // 1: groundplane.agent.v1.TaskTerminal
+	(*Authenticate)(nil),      // 2: groundplane.agent.v1.Authenticate
+	(*AgentConfig)(nil),       // 3: groundplane.agent.v1.AgentConfig
+	(*AgentMessage)(nil),      // 4: groundplane.agent.v1.AgentMessage
+	(*Ready)(nil),             // 5: groundplane.agent.v1.Ready
+	(*TaskEvent)(nil),         // 6: groundplane.agent.v1.TaskEvent
+	(*ObservedState)(nil),     // 7: groundplane.agent.v1.ObservedState
+	(*ContainerState)(nil),    // 8: groundplane.agent.v1.ContainerState
+	(*TaskAck)(nil),           // 9: groundplane.agent.v1.TaskAck
+	(*ControllerMessage)(nil), // 10: groundplane.agent.v1.ControllerMessage
+	(*TaskAssignment)(nil),    // 11: groundplane.agent.v1.TaskAssignment
+	(*Step)(nil),              // 12: groundplane.agent.v1.Step
+	(*TaskAbort)(nil),         // 13: groundplane.agent.v1.TaskAbort
+	(*ConfigUpdate)(nil),      // 14: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),          // 15: groundplane.agent.v1.Shutdown
+	nil,                       // 16: groundplane.agent.v1.AgentConfig.LabelsEntry
+	nil,                       // 17: groundplane.agent.v1.ContainerState.LabelsEntry
+	nil,                       // 18: groundplane.agent.v1.Step.ParamsEntry
 }
 var file_proto_agent_proto_depIdxs = []int32{
-	15, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
-	1,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
-	4,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
-	5,  // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
-	6,  // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
-	8,  // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
+	16, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
+	2,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
+	5,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
+	6,  // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
+	7,  // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
+	9,  // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
 	0,  // 6: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
-	7,  // 7: groundplane.agent.v1.ObservedState.containers:type_name -> groundplane.agent.v1.ContainerState
-	16, // 8: groundplane.agent.v1.ContainerState.labels:type_name -> groundplane.agent.v1.ContainerState.LabelsEntry
-	10, // 9: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
-	12, // 10: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
-	13, // 11: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	14, // 12: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
-	11, // 13: groundplane.agent.v1.TaskAssignment.steps:type_name -> groundplane.agent.v1.Step
-	17, // 14: groundplane.agent.v1.Step.params:type_name -> groundplane.agent.v1.Step.ParamsEntry
-	2,  // 15: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	3,  // 16: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	9,  // 17: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	17, // [17:18] is the sub-list for method output_type
-	16, // [16:17] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	8,  // 7: groundplane.agent.v1.ObservedState.containers:type_name -> groundplane.agent.v1.ContainerState
+	17, // 8: groundplane.agent.v1.ContainerState.labels:type_name -> groundplane.agent.v1.ContainerState.LabelsEntry
+	1,  // 9: groundplane.agent.v1.TaskAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	11, // 10: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
+	13, // 11: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
+	14, // 12: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	15, // 13: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	12, // 14: groundplane.agent.v1.TaskAssignment.steps:type_name -> groundplane.agent.v1.Step
+	18, // 15: groundplane.agent.v1.Step.params:type_name -> groundplane.agent.v1.Step.ParamsEntry
+	3,  // 16: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	4,  // 17: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	10, // 18: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	18, // [18:19] is the sub-list for method output_type
+	17, // [17:18] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -1221,7 +1320,7 @@ func file_proto_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,

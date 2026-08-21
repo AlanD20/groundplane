@@ -2,159 +2,290 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Assignment is a Controller-issued task the worker pool executes.
+type PlanHash [sha256.Size]byte
+
+type TaskStep struct {
+	StepID string
+	Step   adapters.Step
+}
+
 type Assignment struct {
-	TaskID string
-	Steps  []adapters.Step
+	TaskID   string
+	PlanHash PlanHash
+	Steps    []TaskStep
+	Timeout  time.Duration
 }
 
-// WorkerPool executes up to N tasks concurrently — Concurrency is
-// Controller-managed via MaxConcurrentTasks (from AgentConfig);
-// TaskAbort cancels the owning worker's context, and cancellation
-// propagates to the underlying Docker operation (container stop). Every
-// step runs through Runner (docs/standards.md, section 5) — the
-// worker pool never shells out itself. See mvp.md, "Agent channel
-// (locked)".
+type TaskTerminal uint8
+
+const (
+	TaskTerminalCompleted TaskTerminal = iota + 1
+	TaskTerminalFailed
+	TaskTerminalTimedOut
+	TaskTerminalAborted
+)
+
+type TaskResult struct {
+	TaskID   string
+	PlanHash PlanHash
+	Terminal TaskTerminal
+	ExitCode int32
+	Result   []byte
+}
+
+type taskReservation struct {
+	assignment Assignment
+	ctx        context.Context
+	cancel     context.CancelFunc
+}
+
+// WorkerPool reserves at most size queued or active assignments.
 type WorkerPool struct {
-	size    int
-	runner  runner.Runner
-	logger  *slog.Logger
-	work    chan Assignment
-	mu      sync.Mutex
-	cancels map[string]context.CancelFunc // taskID -> cancel, for TaskAbort
+	size        int
+	runner      runner.Runner
+	logger      *slog.Logger
+	work        chan *taskReservation
+	results     chan TaskResult
+	executeStep func(context.Context, adapters.Step) error
+
+	mu           sync.Mutex
+	reservations map[string]*taskReservation
+	running      bool
+	stopped      bool
 }
 
-func NewWorkerPool(size int, r runner.Runner, logger *slog.Logger) *WorkerPool {
-	return &WorkerPool{
-		size:    size,
-		runner:  r,
-		logger:  logger,
-		work:    make(chan Assignment, size),
-		cancels: map[string]context.CancelFunc{},
+func NewWorkerPool(size int, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
+	pool := &WorkerPool{
+		size:         size,
+		runner:       taskRunner,
+		logger:       logger,
+		work:         make(chan *taskReservation, size),
+		results:      make(chan TaskResult, size),
+		reservations: make(map[string]*taskReservation, size),
 	}
+	pool.executeStep = pool.runStep
+	return pool
 }
 
-// Capacity reports free slots — sent as Ready{capacity} on every pull tick.
 func (p *WorkerPool) Capacity() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.size - len(p.cancels)
+	return p.size - len(p.reservations)
 }
 
-// Run starts size worker goroutines, each pulling from work until ctx is
-// cancelled.
+func (p *WorkerPool) Results() <-chan TaskResult {
+	return p.results
+}
+
+// Run owns and joins every worker before returning.
 func (p *WorkerPool) Run(ctx context.Context) {
-	var wg sync.WaitGroup
-	for i := 0; i < p.size; i++ {
-		wg.Add(1)
+	p.mu.Lock()
+	if p.running || p.stopped {
+		p.mu.Unlock()
+		return
+	}
+	p.running = true
+	p.mu.Unlock()
+
+	var workers sync.WaitGroup
+	for range p.size {
+		workers.Add(1)
 		go func() {
-			defer wg.Done()
+			defer workers.Done()
 			p.runWorker(ctx)
 		}()
 	}
-	wg.Wait()
+	<-ctx.Done()
+	p.stop()
+	workers.Wait()
+	p.releaseQueued(ctx)
 }
 
-func (p *WorkerPool) runWorker(ctx context.Context) {
+func (p *WorkerPool) runWorker(runCtx context.Context) {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-runCtx.Done():
 			return
-		case a := <-p.work:
-			p.execute(ctx, a)
+		case reservation := <-p.work:
+			p.execute(runCtx, reservation)
 		}
 	}
 }
 
-func (p *WorkerPool) execute(parent context.Context, a Assignment) {
-	taskCtx, cancel := context.WithCancel(parent)
+func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservation) {
+	err := reservation.ctx.Err()
+	for _, step := range reservation.assignment.Steps {
+		if err != nil {
+			break
+		}
+		err = p.executeStep(reservation.ctx, step.Step)
+	}
+	terminal := terminalFor(reservation.ctx, err)
+	if err != nil && terminal == TaskTerminalFailed && p.logger != nil {
+		p.logger.Error("agent: step failed", "task_id", reservation.assignment.TaskID, "error", err)
+	}
+	p.complete(runCtx, reservation, TaskResult{
+		TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash, Terminal: terminal,
+	})
+}
+
+func terminalFor(taskCtx context.Context, err error) TaskTerminal {
+	if errors.Is(taskCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		return TaskTerminalTimedOut
+	}
+	if taskCtx.Err() != nil || errors.Is(err, context.Canceled) {
+		return TaskTerminalAborted
+	}
+	if err != nil {
+		return TaskTerminalFailed
+	}
+	return TaskTerminalCompleted
+}
+
+func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
+	select {
+	case p.results <- result:
+	case <-runCtx.Done():
+	}
 	p.mu.Lock()
-	p.cancels[a.TaskID] = cancel
+	if p.reservations[result.TaskID] == reservation {
+		delete(p.reservations, result.TaskID)
+	}
 	p.mu.Unlock()
-	defer func() {
-		p.mu.Lock()
-		delete(p.cancels, a.TaskID)
-		p.mu.Unlock()
-		cancel()
-	}()
+	reservation.cancel()
+}
 
-	for _, step := range a.Steps {
+func (p *WorkerPool) stop() {
+	p.mu.Lock()
+	p.stopped = true
+	for _, reservation := range p.reservations {
+		reservation.cancel()
+	}
+	p.mu.Unlock()
+}
+
+func (p *WorkerPool) releaseQueued(runCtx context.Context) {
+	for {
 		select {
-		case <-taskCtx.Done():
-			p.logger.Info("agent: task aborted", "task_id", a.TaskID)
-			return
+		case reservation := <-p.work:
+			p.complete(runCtx, reservation, TaskResult{
+				TaskID: reservation.assignment.TaskID, PlanHash: reservation.assignment.PlanHash,
+				Terminal: TaskTerminalAborted,
+			})
 		default:
-		}
-		if err := p.runStep(taskCtx, step); err != nil {
-			p.logger.Error("agent: step failed", "task_id", a.TaskID, "op", step.Op, "error", err)
-			// TODO: send TaskAck{success:false} over the channel.
 			return
 		}
 	}
-	// TODO: send TaskAck{success:true} over the channel.
 }
 
-// runStep executes exactly ONE member of the known step catalog through
-// Runner — this is the enforced boundary: the renderer's ExecutionPlan
-// and adapters compose steps, the pipeline executes them via the ONE
-// subprocess abstraction, nothing else runs arbitrary commands. See
-// architecture.md, "The guardrail", for the full catalog this switch
-// mirrors.
-func (p *WorkerPool) runStep(ctx context.Context, step adapters.Step) error {
+// Abort cancels queued or active work because ownership starts at Submit.
+func (p *WorkerPool) Abort(ctx context.Context, taskID string) error {
+	if ctx == nil {
+		return errs.New(errs.KindInternal, "agent: abort context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := ids.Validate(ids.KindTask, taskID); err != nil {
+		return errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if reservation := p.reservations[taskID]; reservation != nil {
+		reservation.cancel()
+	}
+	return nil
+}
+
+// Submit reserves capacity without blocking the sole receive/control loop.
+func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
+	if ctx == nil {
+		return errs.New(errs.KindInternal, "agent: submit context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	owned, err := validateAndCopyAssignment(assignment)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.stopped {
+		return errs.New(errs.KindStateConflict, "agent: worker pool is stopped")
+	}
+	if existing := p.reservations[owned.TaskID]; existing != nil {
+		if existing.assignment.PlanHash != owned.PlanHash {
+			return errs.New(errs.KindInternal, "agent: task id was reused with a different plan hash")
+		}
+		return nil
+	}
+	if len(p.reservations) >= p.size {
+		return errs.New(errs.KindStateConflict, "agent: worker pool has no capacity")
+	}
+	taskCtx, cancel := context.WithTimeout(ctx, owned.Timeout)
+	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel}
+	p.reservations[owned.TaskID] = reservation
+	select {
+	case p.work <- reservation:
+		return nil
+	default:
+		delete(p.reservations, owned.TaskID)
+		cancel()
+		return errs.New(errs.KindInternal, "agent: worker queue reservation is inconsistent")
+	}
+}
+
+func validateAndCopyAssignment(assignment Assignment) (Assignment, error) {
+	if err := ids.Validate(ids.KindTask, assignment.TaskID); err != nil {
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
+	}
+	if assignment.Timeout <= 0 {
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task timeout")
+	}
+	owned := Assignment{TaskID: assignment.TaskID, PlanHash: assignment.PlanHash, Timeout: assignment.Timeout}
+	owned.Steps = make([]TaskStep, len(assignment.Steps))
+	seen := make(map[string]struct{}, len(assignment.Steps))
+	for index, step := range assignment.Steps {
+		if err := ids.Validate(ids.KindStep, step.StepID); err != nil {
+			return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid step id")
+		}
+		if _, duplicate := seen[step.StepID]; duplicate {
+			return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent duplicate step ids")
+		}
+		seen[step.StepID] = struct{}{}
+		params := make(map[string]string, len(step.Step.Params))
+		for key, value := range step.Step.Params {
+			params[key] = value
+		}
+		owned.Steps[index] = TaskStep{StepID: step.StepID, Step: adapters.Step{Op: step.Step.Op, Params: params}}
+	}
+	return owned, nil
+}
+
+// runStep fails closed until the corresponding typed procedure is accepted.
+func (p *WorkerPool) runStep(_ context.Context, step adapters.Step) error {
 	switch step.Op {
 	case adapters.StepComposeUp, adapters.StepComposeDown, adapters.StepWaitHealthy,
 		adapters.StepSwitchAlias, adapters.StepSwitchRoute, adapters.StepWriteFile,
-		adapters.StepReload, adapters.StepJoinNetwork, adapters.StepProvisionNetwork:
-		// TODO: dispatch to internal/infra/docker (Applier.Up/Down, alias/
-		// route switching against the rendered Compose project) or
-		// internal/agent's own materializers (StepWriteFile), per step.Op.
-		return errs.Newf(errs.KindNotImplemented, "agent: runStep %s not implemented", step.Op)
-
-	case adapters.StepRunScript:
-		// The explicit, operator-authored automation exception — its own
-		// task boundary, never a generic exec escape hatch
-		// (architecture.md, "The guardrail"). TODO: run the script body
-		// through p.runner against the target service's container.
-		return errs.New(errs.KindNotImplemented, "agent: runStep run_script not implemented")
-
-	case adapters.StepExec, adapters.StepSQL, adapters.StepDump, adapters.StepRestore,
-		adapters.StepEncrypt, adapters.StepUpload, adapters.StepVerify, adapters.StepPrune, adapters.StepAck:
-		// TODO: translate step.Params into a runner.RunCmdOpts (e.g. `docker
-		// exec <container> psql -c "<stmt>"` for StepSQL against a postgres
-		// adapter) and call p.runner.Run(ctx, opts); for encrypt/decrypt use
-		// internal/infra/age instead, and for upload/verify the connector's
-		// client. p.runner is already wired (see client.go's Run) so this is
-		// purely the per-Op translation, not new plumbing.
-		return errs.Newf(errs.KindNotImplemented, "agent: runStep %s not implemented", step.Op)
-
+		adapters.StepReload, adapters.StepJoinNetwork, adapters.StepProvisionNetwork,
+		adapters.StepRunScript, adapters.StepExec, adapters.StepSQL, adapters.StepDump,
+		adapters.StepRestore, adapters.StepEncrypt, adapters.StepUpload, adapters.StepVerify,
+		adapters.StepPrune, adapters.StepAck:
+		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
 	default:
-		return errs.Newf(
-			errs.KindValidationFailed,
-			"agent: unknown step op %q — not in the known step catalog",
-			step.Op,
-		)
+		return errs.New(errs.KindInternal, "agent: Controller sent an unknown step operation")
 	}
-}
-
-// Abort cancels a running task's context — the TaskAbort handler.
-func (p *WorkerPool) Abort(taskID string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if cancel, ok := p.cancels[taskID]; ok {
-		cancel()
-	}
-}
-
-// Submit enqueues a new assignment (called from the gRPC receive loop
-// on TaskAssignment).
-func (p *WorkerPool) Submit(a Assignment) {
-	p.work <- a
 }

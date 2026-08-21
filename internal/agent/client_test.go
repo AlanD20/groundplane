@@ -3,12 +3,14 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"io"
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -44,6 +46,44 @@ func TestClientSendsAuthenticationFirstAndCopiesToken(t *testing.T) {
 	}
 	if ready := sent[1].GetReady(); ready == nil || ready.Capacity != 3 {
 		t.Fatalf("second message Ready = %#v, want capacity 3", ready)
+	}
+}
+
+// Rationale: terminal acknowledgement identity must survive the worker boundary
+// exactly, while an unresolved procedure fails closed instead of being executed.
+func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
+	t.Parallel()
+	planHash := sha256.Sum256([]byte("immutable-plan"))
+	stream := newFakeStream(
+		configMessage(60, 1),
+		&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
+			TaskId: workerTestTaskID, PlanHash: planHash[:], TimeoutSeconds: 60,
+			Steps: []*agentpb.Step{{StepId: workerTestStepID, Op: "ack"}},
+		}}},
+	)
+	client := newTestClient(t, bytes.Repeat([]byte{0x30}, agentprotocol.RawTokenBytes), stream)
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- client.Run(ctx) }()
+	select {
+	case <-stream.taskAckSent:
+	case <-time.After(time.Second):
+		t.Fatal("client did not send TaskAck")
+	}
+	var acknowledgement *agentpb.TaskAck
+	for _, message := range stream.sentMessages() {
+		if message.GetTaskAck() != nil {
+			acknowledgement = message.GetTaskAck()
+		}
+	}
+	if acknowledgement == nil || acknowledgement.TaskId != workerTestTaskID ||
+		!bytes.Equal(acknowledgement.PlanHash, planHash[:]) ||
+		acknowledgement.Terminal != agentpb.TaskTerminal_TASK_TERMINAL_FAILED {
+		t.Fatalf("TaskAck = %#v", acknowledgement)
+	}
+	cancel()
+	if err := <-result; err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
 }
 
@@ -166,19 +206,23 @@ func configMessage(pullInterval, capacity int32) *agentpb.ControllerMessage {
 }
 
 type fakeStream struct {
-	mu         sync.Mutex
-	ctx        context.Context
-	receive    []*agentpb.ControllerMessage
-	sent       []*agentpb.AgentMessage
-	sendErr    error
-	closed     bool
-	readySent  chan struct{}
-	readyOnce  sync.Once
-	connection *fakeCloser
+	mu          sync.Mutex
+	ctx         context.Context
+	receive     []*agentpb.ControllerMessage
+	sent        []*agentpb.AgentMessage
+	sendErr     error
+	closed      bool
+	readySent   chan struct{}
+	readyOnce   sync.Once
+	taskAckSent chan struct{}
+	taskAckOnce sync.Once
+	connection  *fakeCloser
 }
 
 func newFakeStream(messages ...*agentpb.ControllerMessage) *fakeStream {
-	return &fakeStream{receive: messages, readySent: make(chan struct{}), connection: &fakeCloser{}}
+	return &fakeStream{
+		receive: messages, readySent: make(chan struct{}), taskAckSent: make(chan struct{}), connection: &fakeCloser{},
+	}
 }
 
 func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
@@ -197,6 +241,14 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 	if ready := message.GetReady(); ready != nil {
 		copyMessage.Payload = &agentpb.AgentMessage_Ready{Ready: &agentpb.Ready{Capacity: ready.Capacity}}
 		s.readyOnce.Do(func() { close(s.readySent) })
+	}
+	if acknowledgement := message.GetTaskAck(); acknowledgement != nil {
+		copyMessage.Payload = &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
+			TaskId: acknowledgement.TaskId, PlanHash: append([]byte(nil), acknowledgement.PlanHash...),
+			Terminal: acknowledgement.Terminal, ExitCode: acknowledgement.ExitCode,
+			Result: append([]byte(nil), acknowledgement.Result...),
+		}}
+		s.taskAckOnce.Do(func() { close(s.taskAckSent) })
 	}
 	s.sent = append(s.sent, copyMessage)
 	return nil

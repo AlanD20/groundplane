@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"io"
 	"log/slog"
 	"net"
@@ -152,7 +153,7 @@ func (c *Client) Run(ctx context.Context) error {
 			if result.err != nil {
 				return transportError(ctx, "agent: receive Controller message")
 			}
-			shutdown, err := c.handleControllerMessage(result.message)
+			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
 				return err
 			}
@@ -160,6 +161,13 @@ func (c *Client) Run(ctx context.Context) error {
 				return nil
 			}
 			receiveNext(streamCtx, stream, received)
+		case result := <-c.pool.Results():
+			if err := c.sendTaskAck(stream, result); err != nil {
+				return transportError(ctx, "agent: send task acknowledgement")
+			}
+			if err := c.sendReady(stream); err != nil {
+				return transportError(ctx, "agent: send readiness")
+			}
 		}
 	}
 }
@@ -182,18 +190,27 @@ func (c *Client) sendReady(stream agentStream) error {
 	}})
 }
 
-func (c *Client) handleControllerMessage(message *agentpb.ControllerMessage) (bool, error) {
+func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
 	if assignment := message.GetTaskAssignment(); assignment != nil {
-		steps := make([]adapters.Step, 0, len(assignment.Steps))
-		for _, step := range assignment.Steps {
-			steps = append(steps, adapters.Step{Op: adapters.StepOp(step.Op), Params: step.Params})
+		if len(assignment.PlanHash) != sha256.Size {
+			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid plan hash")
 		}
-		c.pool.Submit(Assignment{TaskID: assignment.TaskId, Steps: steps})
-		return false, nil
+		var planHash PlanHash
+		copy(planHash[:], assignment.PlanHash)
+		steps := make([]TaskStep, 0, len(assignment.Steps))
+		for _, step := range assignment.Steps {
+			steps = append(steps, TaskStep{
+				StepID: step.StepId,
+				Step:   adapters.Step{Op: adapters.StepOp(step.Op), Params: step.Params},
+			})
+		}
+		return false, c.pool.Submit(ctx, Assignment{
+			TaskID: assignment.TaskId, PlanHash: planHash, Steps: steps,
+			Timeout: time.Duration(assignment.TimeoutSeconds) * time.Second,
+		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {
-		c.pool.Abort(abort.TaskId)
-		return false, nil
+		return false, c.pool.Abort(ctx, abort.TaskId)
 	}
 	if message.GetShutdown() != nil {
 		return true, nil
@@ -202,6 +219,26 @@ func (c *Client) handleControllerMessage(message *agentpb.ControllerMessage) (bo
 		return false, errs.New(errs.KindNotImplemented, "agent: live configuration update is not implemented")
 	}
 	return false, errs.New(errs.KindInternal, "agent: Controller sent an empty message")
+}
+
+func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
+	terminal := agentpb.TaskTerminal_TASK_TERMINAL_UNSPECIFIED
+	switch result.Terminal {
+	case TaskTerminalCompleted:
+		terminal = agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED
+	case TaskTerminalFailed:
+		terminal = agentpb.TaskTerminal_TASK_TERMINAL_FAILED
+	case TaskTerminalTimedOut:
+		terminal = agentpb.TaskTerminal_TASK_TERMINAL_TIMED_OUT
+	case TaskTerminalAborted:
+		terminal = agentpb.TaskTerminal_TASK_TERMINAL_ABORTED
+	default:
+		return errs.New(errs.KindInternal, "agent: worker returned an invalid terminal state")
+	}
+	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
+		TaskId: result.TaskID, PlanHash: append([]byte(nil), result.PlanHash[:]...), Terminal: terminal,
+		ExitCode: result.ExitCode, Result: append([]byte(nil), result.Result...),
+	}}})
 }
 
 type receiveResult struct {
