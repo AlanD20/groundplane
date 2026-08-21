@@ -83,6 +83,7 @@ type WorkerPool struct {
 	work        chan *taskReservation
 	outputs     chan WorkerOutput
 	executeStep func(context.Context, *agentpb.ExecutionStep) error
+	compose     *ComposeRuntime
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -100,6 +101,17 @@ func NewWorkerPool(size int, taskRunner runner.Runner, logger *slog.Logger) *Wor
 		reservations: make(map[string]*taskReservation, size),
 	}
 	pool.executeStep = pool.runStep
+	return pool
+}
+
+func NewWorkerPoolWithCompose(
+	size int,
+	taskRunner runner.Runner,
+	logger *slog.Logger,
+	compose *ComposeRuntime,
+) *WorkerPool {
+	pool := NewWorkerPool(size, taskRunner, logger)
+	pool.compose = compose
 	return pool
 }
 
@@ -151,6 +163,7 @@ func (p *WorkerPool) runWorker(runCtx context.Context) {
 func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservation) {
 	err := reservation.ctx.Err()
 	planHash := hashForPlan(reservation.assignment.Plan)
+	exitCode := int32(0)
 	for _, step := range reservation.assignment.Plan.Steps {
 		if err != nil {
 			break
@@ -163,7 +176,15 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			reservation.ctx,
 			time.Duration(step.TimeoutSeconds)*time.Second,
 		)
-		err = p.executeStep(stepCtx, step)
+		if p.compose == nil {
+			err = p.executeStep(stepCtx, step)
+		} else {
+			var stepExitCode int32
+			stepExitCode, err = p.compose.executeStep(stepCtx, reservation.assignment, step)
+			if stepExitCode != 0 {
+				exitCode = stepExitCode
+			}
+		}
 		cancel()
 		p.emitProgress(runCtx, TaskProgress{
 			TaskID: reservation.assignment.TaskID, PlanHash: planHash,
@@ -177,6 +198,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	}
 	p.complete(runCtx, reservation, TaskResult{
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
+		ExitCode: exitCode,
 	})
 }
 

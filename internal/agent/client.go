@@ -40,6 +40,7 @@ type Client struct {
 	started     bool
 	pool        *WorkerPool
 	workersDone <-chan struct{}
+	compose     *ComposeRuntime
 }
 
 func NewClient(socketPath, agentID string, token []byte, logger *slog.Logger) (*Client, error) {
@@ -67,6 +68,24 @@ func NewClient(socketPath, agentID string, token []byte, logger *slog.Logger) (*
 		connect:    connectGRPC,
 	}
 	copy(client.token[:], token)
+	return client, nil
+}
+
+func NewClientWithComposeRuntime(
+	socketPath string,
+	agentID string,
+	token []byte,
+	logger *slog.Logger,
+	compose *ComposeRuntime,
+) (*Client, error) {
+	if compose == nil {
+		return nil, errs.New(errs.KindValidationFailed, "agent: Compose runtime is required")
+	}
+	client, err := NewClient(socketPath, agentID, token, logger)
+	if err != nil {
+		return nil, err
+	}
+	client.compose = compose
 	return client, nil
 }
 
@@ -120,7 +139,16 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 
 	pullInterval := time.Duration(config.PullIntervalSeconds) * time.Second
-	c.pool = NewWorkerPool(int(config.MaxConcurrentTasks), runner.New(c.logger), c.logger)
+	if c.compose == nil {
+		c.pool = NewWorkerPool(int(config.MaxConcurrentTasks), runner.New(c.logger), c.logger)
+	} else {
+		c.pool = NewWorkerPoolWithCompose(
+			int(config.MaxConcurrentTasks),
+			runner.New(c.logger),
+			c.logger,
+			c.compose,
+		)
+	}
 	workersDone := make(chan struct{})
 	c.workersDone = workersDone
 	go func() {
