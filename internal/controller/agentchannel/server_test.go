@@ -514,7 +514,7 @@ func testExecutionPlan(t *testing.T, task etcd.TaskRecord) *agentpb.ExecutionPla
 			ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
 			ProjectName: "groundplane-infra", CanonicalYaml: yaml, YamlSha256: yamlHash[:],
 			Services: []*agentpb.ComposeService{{
-				ServiceId: task.Target, ComposeName: "api",
+				ServiceId: task.Target, ComposeName: "api", ExpectedReplicas: 1, HasHealthcheck: true,
 				ExpectedLabels: []*agentpb.LabelPair{
 					{Key: "com.groundplane.kind", Value: "service"},
 					{Key: "com.groundplane.managed", Value: "true"},

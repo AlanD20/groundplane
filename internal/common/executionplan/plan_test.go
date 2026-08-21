@@ -81,7 +81,7 @@ func validPlan() *agentpb.ExecutionPlan {
 			ArtifactId: testArtifact, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
 			ProjectName: "groundplane-infra", CanonicalYaml: yaml, YamlSha256: yamlDigest[:],
 			Services: []*agentpb.ComposeService{{
-				ServiceId: testServiceID, ComposeName: "api",
+				ServiceId: testServiceID, ComposeName: "api", ExpectedReplicas: 1, HasHealthcheck: true,
 				ExpectedLabels: []*agentpb.LabelPair{
 					{Key: labelKind, Value: "service"},
 					{Key: labelManaged, Value: "true"},

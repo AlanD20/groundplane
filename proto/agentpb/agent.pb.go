@@ -18,6 +18,7 @@ package agentpb
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -91,6 +92,168 @@ func (TaskState) EnumDescriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{0}
 }
 
+type ObservedContainerState int32
+
+const (
+	ObservedContainerState_OBSERVED_CONTAINER_STATE_UNSPECIFIED ObservedContainerState = 0
+	ObservedContainerState_OBSERVED_CONTAINER_STATE_CREATED     ObservedContainerState = 1
+	ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING     ObservedContainerState = 2
+	ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED      ObservedContainerState = 3
+	ObservedContainerState_OBSERVED_CONTAINER_STATE_DEAD        ObservedContainerState = 4
+)
+
+// Enum value maps for ObservedContainerState.
+var (
+	ObservedContainerState_name = map[int32]string{
+		0: "OBSERVED_CONTAINER_STATE_UNSPECIFIED",
+		1: "OBSERVED_CONTAINER_STATE_CREATED",
+		2: "OBSERVED_CONTAINER_STATE_RUNNING",
+		3: "OBSERVED_CONTAINER_STATE_EXITED",
+		4: "OBSERVED_CONTAINER_STATE_DEAD",
+	}
+	ObservedContainerState_value = map[string]int32{
+		"OBSERVED_CONTAINER_STATE_UNSPECIFIED": 0,
+		"OBSERVED_CONTAINER_STATE_CREATED":     1,
+		"OBSERVED_CONTAINER_STATE_RUNNING":     2,
+		"OBSERVED_CONTAINER_STATE_EXITED":      3,
+		"OBSERVED_CONTAINER_STATE_DEAD":        4,
+	}
+)
+
+func (x ObservedContainerState) Enum() *ObservedContainerState {
+	p := new(ObservedContainerState)
+	*p = x
+	return p
+}
+
+func (x ObservedContainerState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObservedContainerState) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[1].Descriptor()
+}
+
+func (ObservedContainerState) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[1]
+}
+
+func (x ObservedContainerState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObservedContainerState.Descriptor instead.
+func (ObservedContainerState) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{1}
+}
+
+type ObservedContainerHealth int32
+
+const (
+	ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNSPECIFIED ObservedContainerHealth = 0
+	ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE        ObservedContainerHealth = 1
+	ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_STARTING    ObservedContainerHealth = 2
+	ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY     ObservedContainerHealth = 3
+	ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY   ObservedContainerHealth = 4
+)
+
+// Enum value maps for ObservedContainerHealth.
+var (
+	ObservedContainerHealth_name = map[int32]string{
+		0: "OBSERVED_CONTAINER_HEALTH_UNSPECIFIED",
+		1: "OBSERVED_CONTAINER_HEALTH_NONE",
+		2: "OBSERVED_CONTAINER_HEALTH_STARTING",
+		3: "OBSERVED_CONTAINER_HEALTH_HEALTHY",
+		4: "OBSERVED_CONTAINER_HEALTH_UNHEALTHY",
+	}
+	ObservedContainerHealth_value = map[string]int32{
+		"OBSERVED_CONTAINER_HEALTH_UNSPECIFIED": 0,
+		"OBSERVED_CONTAINER_HEALTH_NONE":        1,
+		"OBSERVED_CONTAINER_HEALTH_STARTING":    2,
+		"OBSERVED_CONTAINER_HEALTH_HEALTHY":     3,
+		"OBSERVED_CONTAINER_HEALTH_UNHEALTHY":   4,
+	}
+)
+
+func (x ObservedContainerHealth) Enum() *ObservedContainerHealth {
+	p := new(ObservedContainerHealth)
+	*p = x
+	return p
+}
+
+func (x ObservedContainerHealth) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObservedContainerHealth) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[2].Descriptor()
+}
+
+func (ObservedContainerHealth) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[2]
+}
+
+func (x ObservedContainerHealth) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObservedContainerHealth.Descriptor instead.
+func (ObservedContainerHealth) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{2}
+}
+
+type ObservedCollisionKind int32
+
+const (
+	ObservedCollisionKind_OBSERVED_COLLISION_KIND_UNSPECIFIED ObservedCollisionKind = 0
+	ObservedCollisionKind_OBSERVED_COLLISION_KIND_CONTAINER   ObservedCollisionKind = 1
+	ObservedCollisionKind_OBSERVED_COLLISION_KIND_NETWORK     ObservedCollisionKind = 2
+	ObservedCollisionKind_OBSERVED_COLLISION_KIND_VOLUME      ObservedCollisionKind = 3
+)
+
+// Enum value maps for ObservedCollisionKind.
+var (
+	ObservedCollisionKind_name = map[int32]string{
+		0: "OBSERVED_COLLISION_KIND_UNSPECIFIED",
+		1: "OBSERVED_COLLISION_KIND_CONTAINER",
+		2: "OBSERVED_COLLISION_KIND_NETWORK",
+		3: "OBSERVED_COLLISION_KIND_VOLUME",
+	}
+	ObservedCollisionKind_value = map[string]int32{
+		"OBSERVED_COLLISION_KIND_UNSPECIFIED": 0,
+		"OBSERVED_COLLISION_KIND_CONTAINER":   1,
+		"OBSERVED_COLLISION_KIND_NETWORK":     2,
+		"OBSERVED_COLLISION_KIND_VOLUME":      3,
+	}
+)
+
+func (x ObservedCollisionKind) Enum() *ObservedCollisionKind {
+	p := new(ObservedCollisionKind)
+	*p = x
+	return p
+}
+
+func (x ObservedCollisionKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObservedCollisionKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_agent_proto_enumTypes[3].Descriptor()
+}
+
+func (ObservedCollisionKind) Type() protoreflect.EnumType {
+	return &file_proto_agent_proto_enumTypes[3]
+}
+
+func (x ObservedCollisionKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObservedCollisionKind.Descriptor instead.
+func (ObservedCollisionKind) EnumDescriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{3}
+}
+
 type TaskTerminal int32
 
 const (
@@ -130,11 +293,11 @@ func (x TaskTerminal) String() string {
 }
 
 func (TaskTerminal) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[1].Descriptor()
+	return file_proto_agent_proto_enumTypes[4].Descriptor()
 }
 
 func (TaskTerminal) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[1]
+	return &file_proto_agent_proto_enumTypes[4]
 }
 
 func (x TaskTerminal) Number() protoreflect.EnumNumber {
@@ -143,7 +306,7 @@ func (x TaskTerminal) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TaskTerminal.Descriptor instead.
 func (TaskTerminal) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{1}
+	return file_proto_agent_proto_rawDescGZIP(), []int{4}
 }
 
 type PlanOperation int32
@@ -197,11 +360,11 @@ func (x PlanOperation) String() string {
 }
 
 func (PlanOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[2].Descriptor()
+	return file_proto_agent_proto_enumTypes[5].Descriptor()
 }
 
 func (PlanOperation) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[2]
+	return &file_proto_agent_proto_enumTypes[5]
 }
 
 func (x PlanOperation) Number() protoreflect.EnumNumber {
@@ -210,7 +373,7 @@ func (x PlanOperation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PlanOperation.Descriptor instead.
 func (PlanOperation) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{2}
+	return file_proto_agent_proto_rawDescGZIP(), []int{5}
 }
 
 type ComposeOwnerKind int32
@@ -246,11 +409,11 @@ func (x ComposeOwnerKind) String() string {
 }
 
 func (ComposeOwnerKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[3].Descriptor()
+	return file_proto_agent_proto_enumTypes[6].Descriptor()
 }
 
 func (ComposeOwnerKind) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[3]
+	return &file_proto_agent_proto_enumTypes[6]
 }
 
 func (x ComposeOwnerKind) Number() protoreflect.EnumNumber {
@@ -259,7 +422,7 @@ func (x ComposeOwnerKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComposeOwnerKind.Descriptor instead.
 func (ComposeOwnerKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{3}
+	return file_proto_agent_proto_rawDescGZIP(), []int{6}
 }
 
 type ComposeHelperOutcome int32
@@ -295,11 +458,11 @@ func (x ComposeHelperOutcome) String() string {
 }
 
 func (ComposeHelperOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[4].Descriptor()
+	return file_proto_agent_proto_enumTypes[7].Descriptor()
 }
 
 func (ComposeHelperOutcome) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[4]
+	return &file_proto_agent_proto_enumTypes[7]
 }
 
 func (x ComposeHelperOutcome) Number() protoreflect.EnumNumber {
@@ -308,7 +471,7 @@ func (x ComposeHelperOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComposeHelperOutcome.Descriptor instead.
 func (ComposeHelperOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{4}
+	return file_proto_agent_proto_rawDescGZIP(), []int{7}
 }
 
 type ComposeHelperDiagnostic int32
@@ -347,11 +510,11 @@ func (x ComposeHelperDiagnostic) String() string {
 }
 
 func (ComposeHelperDiagnostic) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_agent_proto_enumTypes[5].Descriptor()
+	return file_proto_agent_proto_enumTypes[8].Descriptor()
 }
 
 func (ComposeHelperDiagnostic) Type() protoreflect.EnumType {
-	return &file_proto_agent_proto_enumTypes[5]
+	return &file_proto_agent_proto_enumTypes[8]
 }
 
 func (x ComposeHelperDiagnostic) Number() protoreflect.EnumNumber {
@@ -360,7 +523,7 @@ func (x ComposeHelperDiagnostic) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComposeHelperDiagnostic.Descriptor instead.
 func (ComposeHelperDiagnostic) EnumDescriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{5}
+	return file_proto_agent_proto_rawDescGZIP(), []int{8}
 }
 
 type Authenticate struct {
@@ -743,7 +906,7 @@ func (x *TaskEvent) GetChunk() []byte {
 
 type ObservedState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Containers    []*ContainerState      `protobuf:"bytes,1,rep,name=containers,proto3" json:"containers,omitempty"`
+	Projects      []*ObservedProject     `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -778,37 +941,39 @@ func (*ObservedState) Descriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *ObservedState) GetContainers() []*ContainerState {
+func (x *ObservedState) GetProjects() []*ObservedProject {
 	if x != nil {
-		return x.Containers
+		return x.Projects
 	}
 	return nil
 }
 
-type ContainerState struct {
+type ObservedProject struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Image         string                 `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
-	Healthy       bool                   `protobuf:"varint,3,opt,name=healthy,proto3" json:"healthy,omitempty"`
-	Labels        map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // transitional observation payload; typed observation replaces this map before execution is enabled
+	ProjectName   string                 `protobuf:"bytes,1,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
+	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	Containers    []*ObservedContainer   `protobuf:"bytes,3,rep,name=containers,proto3" json:"containers,omitempty"`
+	Networks      []*ObservedNetwork     `protobuf:"bytes,4,rep,name=networks,proto3" json:"networks,omitempty"`
+	Volumes       []*ObservedVolume      `protobuf:"bytes,5,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	Collisions    []*ObservedCollision   `protobuf:"bytes,6,rep,name=collisions,proto3" json:"collisions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ContainerState) Reset() {
-	*x = ContainerState{}
+func (x *ObservedProject) Reset() {
+	*x = ObservedProject{}
 	mi := &file_proto_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ContainerState) String() string {
+func (x *ObservedProject) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ContainerState) ProtoMessage() {}
+func (*ObservedProject) ProtoMessage() {}
 
-func (x *ContainerState) ProtoReflect() protoreflect.Message {
+func (x *ObservedProject) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -820,37 +985,331 @@ func (x *ContainerState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ContainerState.ProtoReflect.Descriptor instead.
-func (*ContainerState) Descriptor() ([]byte, []int) {
+// Deprecated: Use ObservedProject.ProtoReflect.Descriptor instead.
+func (*ObservedProject) Descriptor() ([]byte, []int) {
 	return file_proto_agent_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ContainerState) GetName() string {
+func (x *ObservedProject) GetProjectName() string {
+	if x != nil {
+		return x.ProjectName
+	}
+	return ""
+}
+
+func (x *ObservedProject) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
+func (x *ObservedProject) GetContainers() []*ObservedContainer {
+	if x != nil {
+		return x.Containers
+	}
+	return nil
+}
+
+func (x *ObservedProject) GetNetworks() []*ObservedNetwork {
+	if x != nil {
+		return x.Networks
+	}
+	return nil
+}
+
+func (x *ObservedProject) GetVolumes() []*ObservedVolume {
+	if x != nil {
+		return x.Volumes
+	}
+	return nil
+}
+
+func (x *ObservedProject) GetCollisions() []*ObservedCollision {
+	if x != nil {
+		return x.Collisions
+	}
+	return nil
+}
+
+type ObservedContainer struct {
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	ContainerId    string                  `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	Name           string                  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	ServiceId      string                  `protobuf:"bytes,3,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ImageReference string                  `protobuf:"bytes,4,opt,name=image_reference,json=imageReference,proto3" json:"image_reference,omitempty"`
+	ImageId        string                  `protobuf:"bytes,5,opt,name=image_id,json=imageId,proto3" json:"image_id,omitempty"`
+	State          ObservedContainerState  `protobuf:"varint,6,opt,name=state,proto3,enum=groundplane.agent.v1.ObservedContainerState" json:"state,omitempty"`
+	Health         ObservedContainerHealth `protobuf:"varint,7,opt,name=health,proto3,enum=groundplane.agent.v1.ObservedContainerHealth" json:"health,omitempty"`
+	ExitCode       *int32                  `protobuf:"varint,8,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	Labels         []*LabelPair            `protobuf:"bytes,9,rep,name=labels,proto3" json:"labels,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ObservedContainer) Reset() {
+	*x = ObservedContainer{}
+	mi := &file_proto_agent_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObservedContainer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObservedContainer) ProtoMessage() {}
+
+func (x *ObservedContainer) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObservedContainer.ProtoReflect.Descriptor instead.
+func (*ObservedContainer) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ObservedContainer) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *ObservedContainer) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *ContainerState) GetImage() string {
+func (x *ObservedContainer) GetServiceId() string {
 	if x != nil {
-		return x.Image
+		return x.ServiceId
 	}
 	return ""
 }
 
-func (x *ContainerState) GetHealthy() bool {
+func (x *ObservedContainer) GetImageReference() string {
 	if x != nil {
-		return x.Healthy
+		return x.ImageReference
 	}
-	return false
+	return ""
 }
 
-func (x *ContainerState) GetLabels() map[string]string {
+func (x *ObservedContainer) GetImageId() string {
+	if x != nil {
+		return x.ImageId
+	}
+	return ""
+}
+
+func (x *ObservedContainer) GetState() ObservedContainerState {
+	if x != nil {
+		return x.State
+	}
+	return ObservedContainerState_OBSERVED_CONTAINER_STATE_UNSPECIFIED
+}
+
+func (x *ObservedContainer) GetHealth() ObservedContainerHealth {
+	if x != nil {
+		return x.Health
+	}
+	return ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNSPECIFIED
+}
+
+func (x *ObservedContainer) GetExitCode() int32 {
+	if x != nil && x.ExitCode != nil {
+		return *x.ExitCode
+	}
+	return 0
+}
+
+func (x *ObservedContainer) GetLabels() []*LabelPair {
 	if x != nil {
 		return x.Labels
 	}
 	return nil
+}
+
+type ObservedNetwork struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NetworkId     string                 `protobuf:"bytes,1,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Labels        []*LabelPair           `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObservedNetwork) Reset() {
+	*x = ObservedNetwork{}
+	mi := &file_proto_agent_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObservedNetwork) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObservedNetwork) ProtoMessage() {}
+
+func (x *ObservedNetwork) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObservedNetwork.ProtoReflect.Descriptor instead.
+func (*ObservedNetwork) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ObservedNetwork) GetNetworkId() string {
+	if x != nil {
+		return x.NetworkId
+	}
+	return ""
+}
+
+func (x *ObservedNetwork) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ObservedNetwork) GetLabels() []*LabelPair {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+type ObservedVolume struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	MountpointSha256 []byte                 `protobuf:"bytes,2,opt,name=mountpoint_sha256,json=mountpointSha256,proto3" json:"mountpoint_sha256,omitempty"`
+	Labels           []*LabelPair           `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ObservedVolume) Reset() {
+	*x = ObservedVolume{}
+	mi := &file_proto_agent_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObservedVolume) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObservedVolume) ProtoMessage() {}
+
+func (x *ObservedVolume) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObservedVolume.ProtoReflect.Descriptor instead.
+func (*ObservedVolume) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ObservedVolume) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ObservedVolume) GetMountpointSha256() []byte {
+	if x != nil {
+		return x.MountpointSha256
+	}
+	return nil
+}
+
+func (x *ObservedVolume) GetLabels() []*LabelPair {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+type ObservedCollision struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          ObservedCollisionKind  `protobuf:"varint,1,opt,name=kind,proto3,enum=groundplane.agent.v1.ObservedCollisionKind" json:"kind,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObservedCollision) Reset() {
+	*x = ObservedCollision{}
+	mi := &file_proto_agent_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObservedCollision) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObservedCollision) ProtoMessage() {}
+
+func (x *ObservedCollision) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObservedCollision.ProtoReflect.Descriptor instead.
+func (*ObservedCollision) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ObservedCollision) GetKind() ObservedCollisionKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ObservedCollisionKind_OBSERVED_COLLISION_KIND_UNSPECIFIED
+}
+
+func (x *ObservedCollision) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
 }
 
 type TaskAck struct {
@@ -866,7 +1325,7 @@ type TaskAck struct {
 
 func (x *TaskAck) Reset() {
 	*x = TaskAck{}
-	mi := &file_proto_agent_proto_msgTypes[7]
+	mi := &file_proto_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -878,7 +1337,7 @@ func (x *TaskAck) String() string {
 func (*TaskAck) ProtoMessage() {}
 
 func (x *TaskAck) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[7]
+	mi := &file_proto_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,7 +1350,7 @@ func (x *TaskAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskAck.ProtoReflect.Descriptor instead.
 func (*TaskAck) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{7}
+	return file_proto_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TaskAck) GetTaskId() string {
@@ -944,7 +1403,7 @@ type ControllerMessage struct {
 
 func (x *ControllerMessage) Reset() {
 	*x = ControllerMessage{}
-	mi := &file_proto_agent_proto_msgTypes[8]
+	mi := &file_proto_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -956,7 +1415,7 @@ func (x *ControllerMessage) String() string {
 func (*ControllerMessage) ProtoMessage() {}
 
 func (x *ControllerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[8]
+	mi := &file_proto_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -969,7 +1428,7 @@ func (x *ControllerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControllerMessage.ProtoReflect.Descriptor instead.
 func (*ControllerMessage) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{8}
+	return file_proto_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ControllerMessage) GetPayload() isControllerMessage_Payload {
@@ -1056,7 +1515,7 @@ type TaskAssignment struct {
 
 func (x *TaskAssignment) Reset() {
 	*x = TaskAssignment{}
-	mi := &file_proto_agent_proto_msgTypes[9]
+	mi := &file_proto_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1068,7 +1527,7 @@ func (x *TaskAssignment) String() string {
 func (*TaskAssignment) ProtoMessage() {}
 
 func (x *TaskAssignment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[9]
+	mi := &file_proto_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1081,7 +1540,7 @@ func (x *TaskAssignment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskAssignment.ProtoReflect.Descriptor instead.
 func (*TaskAssignment) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{9}
+	return file_proto_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *TaskAssignment) GetTaskId() string {
@@ -1135,7 +1594,7 @@ type ExecutionPlan struct {
 
 func (x *ExecutionPlan) Reset() {
 	*x = ExecutionPlan{}
-	mi := &file_proto_agent_proto_msgTypes[10]
+	mi := &file_proto_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1147,7 +1606,7 @@ func (x *ExecutionPlan) String() string {
 func (*ExecutionPlan) ProtoMessage() {}
 
 func (x *ExecutionPlan) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[10]
+	mi := &file_proto_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1160,7 +1619,7 @@ func (x *ExecutionPlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionPlan.ProtoReflect.Descriptor instead.
 func (*ExecutionPlan) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{10}
+	return file_proto_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ExecutionPlan) GetSchema() uint32 {
@@ -1237,7 +1696,7 @@ type ComposeArtifact struct {
 
 func (x *ComposeArtifact) Reset() {
 	*x = ComposeArtifact{}
-	mi := &file_proto_agent_proto_msgTypes[11]
+	mi := &file_proto_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1249,7 +1708,7 @@ func (x *ComposeArtifact) String() string {
 func (*ComposeArtifact) ProtoMessage() {}
 
 func (x *ComposeArtifact) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[11]
+	mi := &file_proto_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1262,7 +1721,7 @@ func (x *ComposeArtifact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeArtifact.ProtoReflect.Descriptor instead.
 func (*ComposeArtifact) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{11}
+	return file_proto_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ComposeArtifact) GetArtifactId() string {
@@ -1336,17 +1795,19 @@ func (x *ComposeArtifact) GetVolumes() []*ComposeVolume {
 }
 
 type ComposeService struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId      string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	ComposeName    string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
-	ExpectedLabels []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ServiceId        string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ComposeName      string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
+	ExpectedLabels   []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
+	ExpectedReplicas uint32                 `protobuf:"varint,4,opt,name=expected_replicas,json=expectedReplicas,proto3" json:"expected_replicas,omitempty"`
+	HasHealthcheck   bool                   `protobuf:"varint,5,opt,name=has_healthcheck,json=hasHealthcheck,proto3" json:"has_healthcheck,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ComposeService) Reset() {
 	*x = ComposeService{}
-	mi := &file_proto_agent_proto_msgTypes[12]
+	mi := &file_proto_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1358,7 +1819,7 @@ func (x *ComposeService) String() string {
 func (*ComposeService) ProtoMessage() {}
 
 func (x *ComposeService) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[12]
+	mi := &file_proto_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1371,7 +1832,7 @@ func (x *ComposeService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeService.ProtoReflect.Descriptor instead.
 func (*ComposeService) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{12}
+	return file_proto_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ComposeService) GetServiceId() string {
@@ -1395,18 +1856,33 @@ func (x *ComposeService) GetExpectedLabels() []*LabelPair {
 	return nil
 }
 
+func (x *ComposeService) GetExpectedReplicas() uint32 {
+	if x != nil {
+		return x.ExpectedReplicas
+	}
+	return 0
+}
+
+func (x *ComposeService) GetHasHealthcheck() bool {
+	if x != nil {
+		return x.HasHealthcheck
+	}
+	return false
+}
+
 type ComposeNetwork struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	NetworkId      string                 `protobuf:"bytes,1,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
 	ComposeName    string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
-	ExpectedLabels []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
+	DockerName     string                 `protobuf:"bytes,3,opt,name=docker_name,json=dockerName,proto3" json:"docker_name,omitempty"`
+	ExpectedLabels []*LabelPair           `protobuf:"bytes,4,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ComposeNetwork) Reset() {
 	*x = ComposeNetwork{}
-	mi := &file_proto_agent_proto_msgTypes[13]
+	mi := &file_proto_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1418,7 +1894,7 @@ func (x *ComposeNetwork) String() string {
 func (*ComposeNetwork) ProtoMessage() {}
 
 func (x *ComposeNetwork) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[13]
+	mi := &file_proto_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1431,7 +1907,7 @@ func (x *ComposeNetwork) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeNetwork.ProtoReflect.Descriptor instead.
 func (*ComposeNetwork) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{13}
+	return file_proto_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ComposeNetwork) GetNetworkId() string {
@@ -1448,6 +1924,13 @@ func (x *ComposeNetwork) GetComposeName() string {
 	return ""
 }
 
+func (x *ComposeNetwork) GetDockerName() string {
+	if x != nil {
+		return x.DockerName
+	}
+	return ""
+}
+
 func (x *ComposeNetwork) GetExpectedLabels() []*LabelPair {
 	if x != nil {
 		return x.ExpectedLabels
@@ -1459,14 +1942,15 @@ type ComposeVolume struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	VolumeId       string                 `protobuf:"bytes,1,opt,name=volume_id,json=volumeId,proto3" json:"volume_id,omitempty"`
 	ComposeName    string                 `protobuf:"bytes,2,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
-	ExpectedLabels []*LabelPair           `protobuf:"bytes,3,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
+	DockerName     string                 `protobuf:"bytes,3,opt,name=docker_name,json=dockerName,proto3" json:"docker_name,omitempty"`
+	ExpectedLabels []*LabelPair           `protobuf:"bytes,4,rep,name=expected_labels,json=expectedLabels,proto3" json:"expected_labels,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ComposeVolume) Reset() {
 	*x = ComposeVolume{}
-	mi := &file_proto_agent_proto_msgTypes[14]
+	mi := &file_proto_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1478,7 +1962,7 @@ func (x *ComposeVolume) String() string {
 func (*ComposeVolume) ProtoMessage() {}
 
 func (x *ComposeVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[14]
+	mi := &file_proto_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1491,7 +1975,7 @@ func (x *ComposeVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeVolume.ProtoReflect.Descriptor instead.
 func (*ComposeVolume) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{14}
+	return file_proto_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ComposeVolume) GetVolumeId() string {
@@ -1504,6 +1988,13 @@ func (x *ComposeVolume) GetVolumeId() string {
 func (x *ComposeVolume) GetComposeName() string {
 	if x != nil {
 		return x.ComposeName
+	}
+	return ""
+}
+
+func (x *ComposeVolume) GetDockerName() string {
+	if x != nil {
+		return x.DockerName
 	}
 	return ""
 }
@@ -1525,7 +2016,7 @@ type LabelPair struct {
 
 func (x *LabelPair) Reset() {
 	*x = LabelPair{}
-	mi := &file_proto_agent_proto_msgTypes[15]
+	mi := &file_proto_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1537,7 +2028,7 @@ func (x *LabelPair) String() string {
 func (*LabelPair) ProtoMessage() {}
 
 func (x *LabelPair) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[15]
+	mi := &file_proto_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1550,7 +2041,7 @@ func (x *LabelPair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LabelPair.ProtoReflect.Descriptor instead.
 func (*LabelPair) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{15}
+	return file_proto_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *LabelPair) GetKey() string {
@@ -1584,7 +2075,7 @@ type ExecutionStep struct {
 
 func (x *ExecutionStep) Reset() {
 	*x = ExecutionStep{}
-	mi := &file_proto_agent_proto_msgTypes[16]
+	mi := &file_proto_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1596,7 +2087,7 @@ func (x *ExecutionStep) String() string {
 func (*ExecutionStep) ProtoMessage() {}
 
 func (x *ExecutionStep) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[16]
+	mi := &file_proto_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1609,7 +2100,7 @@ func (x *ExecutionStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionStep.ProtoReflect.Descriptor instead.
 func (*ExecutionStep) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{16}
+	return file_proto_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ExecutionStep) GetStepId() string {
@@ -1708,7 +2199,7 @@ type ComposeApply struct {
 
 func (x *ComposeApply) Reset() {
 	*x = ComposeApply{}
-	mi := &file_proto_agent_proto_msgTypes[17]
+	mi := &file_proto_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1720,7 +2211,7 @@ func (x *ComposeApply) String() string {
 func (*ComposeApply) ProtoMessage() {}
 
 func (x *ComposeApply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[17]
+	mi := &file_proto_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1733,7 +2224,7 @@ func (x *ComposeApply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeApply.ProtoReflect.Descriptor instead.
 func (*ComposeApply) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{17}
+	return file_proto_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ComposeApply) GetArtifactId() string {
@@ -1768,7 +2259,7 @@ type ComposeStop struct {
 
 func (x *ComposeStop) Reset() {
 	*x = ComposeStop{}
-	mi := &file_proto_agent_proto_msgTypes[18]
+	mi := &file_proto_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1780,7 +2271,7 @@ func (x *ComposeStop) String() string {
 func (*ComposeStop) ProtoMessage() {}
 
 func (x *ComposeStop) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[18]
+	mi := &file_proto_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1793,7 +2284,7 @@ func (x *ComposeStop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeStop.ProtoReflect.Descriptor instead.
 func (*ComposeStop) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{18}
+	return file_proto_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ComposeStop) GetArtifactId() string {
@@ -1828,7 +2319,7 @@ type ComposeRemove struct {
 
 func (x *ComposeRemove) Reset() {
 	*x = ComposeRemove{}
-	mi := &file_proto_agent_proto_msgTypes[19]
+	mi := &file_proto_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1840,7 +2331,7 @@ func (x *ComposeRemove) String() string {
 func (*ComposeRemove) ProtoMessage() {}
 
 func (x *ComposeRemove) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[19]
+	mi := &file_proto_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1853,7 +2344,7 @@ func (x *ComposeRemove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeRemove.ProtoReflect.Descriptor instead.
 func (*ComposeRemove) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{19}
+	return file_proto_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ComposeRemove) GetArtifactId() string {
@@ -1887,7 +2378,7 @@ type WaitHealthy struct {
 
 func (x *WaitHealthy) Reset() {
 	*x = WaitHealthy{}
-	mi := &file_proto_agent_proto_msgTypes[20]
+	mi := &file_proto_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1899,7 +2390,7 @@ func (x *WaitHealthy) String() string {
 func (*WaitHealthy) ProtoMessage() {}
 
 func (x *WaitHealthy) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[20]
+	mi := &file_proto_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1912,7 +2403,7 @@ func (x *WaitHealthy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitHealthy.ProtoReflect.Descriptor instead.
 func (*WaitHealthy) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{20}
+	return file_proto_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *WaitHealthy) GetArtifactId() string {
@@ -1945,7 +2436,7 @@ type ComposeHelperRequest struct {
 
 func (x *ComposeHelperRequest) Reset() {
 	*x = ComposeHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[21]
+	mi := &file_proto_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1957,7 +2448,7 @@ func (x *ComposeHelperRequest) String() string {
 func (*ComposeHelperRequest) ProtoMessage() {}
 
 func (x *ComposeHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[21]
+	mi := &file_proto_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1970,7 +2461,7 @@ func (x *ComposeHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeHelperRequest.ProtoReflect.Descriptor instead.
 func (*ComposeHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{21}
+	return file_proto_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ComposeHelperRequest) GetSchema() uint32 {
@@ -2027,7 +2518,7 @@ type ComposeHelperResponse struct {
 
 func (x *ComposeHelperResponse) Reset() {
 	*x = ComposeHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[22]
+	mi := &file_proto_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2039,7 +2530,7 @@ func (x *ComposeHelperResponse) String() string {
 func (*ComposeHelperResponse) ProtoMessage() {}
 
 func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[22]
+	mi := &file_proto_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2052,7 +2543,7 @@ func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeHelperResponse.ProtoReflect.Descriptor instead.
 func (*ComposeHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{22}
+	return file_proto_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ComposeHelperResponse) GetSchema() uint32 {
@@ -2093,7 +2584,7 @@ type TaskAbort struct {
 
 func (x *TaskAbort) Reset() {
 	*x = TaskAbort{}
-	mi := &file_proto_agent_proto_msgTypes[23]
+	mi := &file_proto_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2105,7 +2596,7 @@ func (x *TaskAbort) String() string {
 func (*TaskAbort) ProtoMessage() {}
 
 func (x *TaskAbort) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[23]
+	mi := &file_proto_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2118,7 +2609,7 @@ func (x *TaskAbort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskAbort.ProtoReflect.Descriptor instead.
 func (*TaskAbort) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{23}
+	return file_proto_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *TaskAbort) GetTaskId() string {
@@ -2144,7 +2635,7 @@ type ConfigUpdate struct {
 
 func (x *ConfigUpdate) Reset() {
 	*x = ConfigUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[24]
+	mi := &file_proto_agent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2156,7 +2647,7 @@ func (x *ConfigUpdate) String() string {
 func (*ConfigUpdate) ProtoMessage() {}
 
 func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[24]
+	mi := &file_proto_agent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2169,7 +2660,7 @@ func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigUpdate.ProtoReflect.Descriptor instead.
 func (*ConfigUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{24}
+	return file_proto_agent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ConfigUpdate) GetAgentConfig() *AgentConfig {
@@ -2187,7 +2678,7 @@ type Shutdown struct {
 
 func (x *Shutdown) Reset() {
 	*x = Shutdown{}
-	mi := &file_proto_agent_proto_msgTypes[25]
+	mi := &file_proto_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2199,7 +2690,7 @@ func (x *Shutdown) String() string {
 func (*Shutdown) ProtoMessage() {}
 
 func (x *Shutdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[25]
+	mi := &file_proto_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2212,14 +2703,14 @@ func (x *Shutdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shutdown.ProtoReflect.Descriptor instead.
 func (*Shutdown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{25}
+	return file_proto_agent_proto_rawDescGZIP(), []int{29}
 }
 
 var File_proto_agent_proto protoreflect.FileDescriptor
 
 const file_proto_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x11proto/agent.proto\x12\x14groundplane.agent.v1\"?\n" +
+	"\x11proto/agent.proto\x12\x14groundplane.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"?\n" +
 	"\fAuthenticate\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\fR\x05token\"\xf5\x01\n" +
@@ -2247,19 +2738,46 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\aattempt\x18\x04 \x01(\rR\aattempt\x12\x18\n" +
 	"\aordinal\x18\x05 \x01(\x04R\aordinal\x125\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x1f.groundplane.agent.v1.TaskStateR\x05state\x12\x14\n" +
-	"\x05chunk\x18\a \x01(\fR\x05chunk\"U\n" +
-	"\rObservedState\x12D\n" +
+	"\x05chunk\x18\a \x01(\fR\x05chunk\"R\n" +
+	"\rObservedState\x12A\n" +
+	"\bprojects\x18\x01 \x03(\v2%.groundplane.agent.v1.ObservedProjectR\bprojects\"\x86\x03\n" +
+	"\x0fObservedProject\x12!\n" +
+	"\fproject_name\x18\x01 \x01(\tR\vprojectName\x12;\n" +
+	"\vobserved_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAt\x12G\n" +
 	"\n" +
-	"containers\x18\x01 \x03(\v2$.groundplane.agent.v1.ContainerStateR\n" +
-	"containers\"\xd9\x01\n" +
-	"\x0eContainerState\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05image\x18\x02 \x01(\tR\x05image\x12\x18\n" +
-	"\ahealthy\x18\x03 \x01(\bR\ahealthy\x12H\n" +
-	"\x06labels\x18\x04 \x03(\v20.groundplane.agent.v1.ContainerState.LabelsEntryR\x06labels\x1a9\n" +
-	"\vLabelsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb4\x01\n" +
+	"containers\x18\x03 \x03(\v2'.groundplane.agent.v1.ObservedContainerR\n" +
+	"containers\x12A\n" +
+	"\bnetworks\x18\x04 \x03(\v2%.groundplane.agent.v1.ObservedNetworkR\bnetworks\x12>\n" +
+	"\avolumes\x18\x05 \x03(\v2$.groundplane.agent.v1.ObservedVolumeR\avolumes\x12G\n" +
+	"\n" +
+	"collisions\x18\x06 \x03(\v2'.groundplane.agent.v1.ObservedCollisionR\n" +
+	"collisions\"\xa1\x03\n" +
+	"\x11ObservedContainer\x12!\n" +
+	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
+	"\n" +
+	"service_id\x18\x03 \x01(\tR\tserviceId\x12'\n" +
+	"\x0fimage_reference\x18\x04 \x01(\tR\x0eimageReference\x12\x19\n" +
+	"\bimage_id\x18\x05 \x01(\tR\aimageId\x12B\n" +
+	"\x05state\x18\x06 \x01(\x0e2,.groundplane.agent.v1.ObservedContainerStateR\x05state\x12E\n" +
+	"\x06health\x18\a \x01(\x0e2-.groundplane.agent.v1.ObservedContainerHealthR\x06health\x12 \n" +
+	"\texit_code\x18\b \x01(\x05H\x00R\bexitCode\x88\x01\x01\x127\n" +
+	"\x06labels\x18\t \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x06labelsB\f\n" +
+	"\n" +
+	"_exit_code\"}\n" +
+	"\x0fObservedNetwork\x12\x1d\n" +
+	"\n" +
+	"network_id\x18\x01 \x01(\tR\tnetworkId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x127\n" +
+	"\x06labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x06labels\"\x8a\x01\n" +
+	"\x0eObservedVolume\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
+	"\x11mountpoint_sha256\x18\x02 \x01(\fR\x10mountpointSha256\x127\n" +
+	"\x06labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x06labels\"h\n" +
+	"\x11ObservedCollision\x12?\n" +
+	"\x04kind\x18\x01 \x01(\x0e2+.groundplane.agent.v1.ObservedCollisionKindR\x04kind\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\xb4\x01\n" +
 	"\aTaskAck\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12>\n" +
@@ -2302,21 +2820,27 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\bservices\x18\b \x03(\v2$.groundplane.agent.v1.ComposeServiceR\bservices\x12@\n" +
 	"\bnetworks\x18\t \x03(\v2$.groundplane.agent.v1.ComposeNetworkR\bnetworks\x12=\n" +
 	"\avolumes\x18\n" +
-	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\x9c\x01\n" +
+	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\xf2\x01\n" +
 	"\x0eComposeService\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
 	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12H\n" +
-	"\x0fexpected_labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"\x9c\x01\n" +
+	"\x0fexpected_labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\x12+\n" +
+	"\x11expected_replicas\x18\x04 \x01(\rR\x10expectedReplicas\x12'\n" +
+	"\x0fhas_healthcheck\x18\x05 \x01(\bR\x0ehasHealthcheck\"\xbd\x01\n" +
 	"\x0eComposeNetwork\x12\x1d\n" +
 	"\n" +
 	"network_id\x18\x01 \x01(\tR\tnetworkId\x12!\n" +
-	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12H\n" +
-	"\x0fexpected_labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"\x99\x01\n" +
+	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12\x1f\n" +
+	"\vdocker_name\x18\x03 \x01(\tR\n" +
+	"dockerName\x12H\n" +
+	"\x0fexpected_labels\x18\x04 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"\xba\x01\n" +
 	"\rComposeVolume\x12\x1b\n" +
 	"\tvolume_id\x18\x01 \x01(\tR\bvolumeId\x12!\n" +
-	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12H\n" +
-	"\x0fexpected_labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"3\n" +
+	"\fcompose_name\x18\x02 \x01(\tR\vcomposeName\x12\x1f\n" +
+	"\vdocker_name\x18\x03 \x01(\tR\n" +
+	"dockerName\x12H\n" +
+	"\x0fexpected_labels\x18\x04 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"3\n" +
 	"\tLabelPair\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"\x85\x03\n" +
@@ -2379,7 +2903,24 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x14TASK_STATE_COMPLETED\x10\x03\x12\x15\n" +
 	"\x11TASK_STATE_FAILED\x10\x04\x12\x16\n" +
 	"\x12TASK_STATE_ABORTED\x10\x05\x12\x18\n" +
-	"\x14TASK_STATE_TIMED_OUT\x10\x06*\x9c\x01\n" +
+	"\x14TASK_STATE_TIMED_OUT\x10\x06*\xd6\x01\n" +
+	"\x16ObservedContainerState\x12(\n" +
+	"$OBSERVED_CONTAINER_STATE_UNSPECIFIED\x10\x00\x12$\n" +
+	" OBSERVED_CONTAINER_STATE_CREATED\x10\x01\x12$\n" +
+	" OBSERVED_CONTAINER_STATE_RUNNING\x10\x02\x12#\n" +
+	"\x1fOBSERVED_CONTAINER_STATE_EXITED\x10\x03\x12!\n" +
+	"\x1dOBSERVED_CONTAINER_STATE_DEAD\x10\x04*\xe0\x01\n" +
+	"\x17ObservedContainerHealth\x12)\n" +
+	"%OBSERVED_CONTAINER_HEALTH_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eOBSERVED_CONTAINER_HEALTH_NONE\x10\x01\x12&\n" +
+	"\"OBSERVED_CONTAINER_HEALTH_STARTING\x10\x02\x12%\n" +
+	"!OBSERVED_CONTAINER_HEALTH_HEALTHY\x10\x03\x12'\n" +
+	"#OBSERVED_CONTAINER_HEALTH_UNHEALTHY\x10\x04*\xb0\x01\n" +
+	"\x15ObservedCollisionKind\x12'\n" +
+	"#OBSERVED_COLLISION_KIND_UNSPECIFIED\x10\x00\x12%\n" +
+	"!OBSERVED_COLLISION_KIND_CONTAINER\x10\x01\x12#\n" +
+	"\x1fOBSERVED_COLLISION_KIND_NETWORK\x10\x02\x12\"\n" +
+	"\x1eOBSERVED_COLLISION_KIND_VOLUME\x10\x03*\x9c\x01\n" +
 	"\fTaskTerminal\x12\x1d\n" +
 	"\x19TASK_TERMINAL_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17TASK_TERMINAL_COMPLETED\x10\x01\x12\x18\n" +
@@ -2424,85 +2965,102 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 	return file_proto_agent_proto_rawDescData
 }
 
-var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_proto_agent_proto_goTypes = []any{
 	(TaskState)(0),                // 0: groundplane.agent.v1.TaskState
-	(TaskTerminal)(0),             // 1: groundplane.agent.v1.TaskTerminal
-	(PlanOperation)(0),            // 2: groundplane.agent.v1.PlanOperation
-	(ComposeOwnerKind)(0),         // 3: groundplane.agent.v1.ComposeOwnerKind
-	(ComposeHelperOutcome)(0),     // 4: groundplane.agent.v1.ComposeHelperOutcome
-	(ComposeHelperDiagnostic)(0),  // 5: groundplane.agent.v1.ComposeHelperDiagnostic
-	(*Authenticate)(nil),          // 6: groundplane.agent.v1.Authenticate
-	(*AgentConfig)(nil),           // 7: groundplane.agent.v1.AgentConfig
-	(*AgentMessage)(nil),          // 8: groundplane.agent.v1.AgentMessage
-	(*Ready)(nil),                 // 9: groundplane.agent.v1.Ready
-	(*TaskEvent)(nil),             // 10: groundplane.agent.v1.TaskEvent
-	(*ObservedState)(nil),         // 11: groundplane.agent.v1.ObservedState
-	(*ContainerState)(nil),        // 12: groundplane.agent.v1.ContainerState
-	(*TaskAck)(nil),               // 13: groundplane.agent.v1.TaskAck
-	(*ControllerMessage)(nil),     // 14: groundplane.agent.v1.ControllerMessage
-	(*TaskAssignment)(nil),        // 15: groundplane.agent.v1.TaskAssignment
-	(*ExecutionPlan)(nil),         // 16: groundplane.agent.v1.ExecutionPlan
-	(*ComposeArtifact)(nil),       // 17: groundplane.agent.v1.ComposeArtifact
-	(*ComposeService)(nil),        // 18: groundplane.agent.v1.ComposeService
-	(*ComposeNetwork)(nil),        // 19: groundplane.agent.v1.ComposeNetwork
-	(*ComposeVolume)(nil),         // 20: groundplane.agent.v1.ComposeVolume
-	(*LabelPair)(nil),             // 21: groundplane.agent.v1.LabelPair
-	(*ExecutionStep)(nil),         // 22: groundplane.agent.v1.ExecutionStep
-	(*ComposeApply)(nil),          // 23: groundplane.agent.v1.ComposeApply
-	(*ComposeStop)(nil),           // 24: groundplane.agent.v1.ComposeStop
-	(*ComposeRemove)(nil),         // 25: groundplane.agent.v1.ComposeRemove
-	(*WaitHealthy)(nil),           // 26: groundplane.agent.v1.WaitHealthy
-	(*ComposeHelperRequest)(nil),  // 27: groundplane.agent.v1.ComposeHelperRequest
-	(*ComposeHelperResponse)(nil), // 28: groundplane.agent.v1.ComposeHelperResponse
-	(*TaskAbort)(nil),             // 29: groundplane.agent.v1.TaskAbort
-	(*ConfigUpdate)(nil),          // 30: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),              // 31: groundplane.agent.v1.Shutdown
-	nil,                           // 32: groundplane.agent.v1.AgentConfig.LabelsEntry
-	nil,                           // 33: groundplane.agent.v1.ContainerState.LabelsEntry
+	(ObservedContainerState)(0),   // 1: groundplane.agent.v1.ObservedContainerState
+	(ObservedContainerHealth)(0),  // 2: groundplane.agent.v1.ObservedContainerHealth
+	(ObservedCollisionKind)(0),    // 3: groundplane.agent.v1.ObservedCollisionKind
+	(TaskTerminal)(0),             // 4: groundplane.agent.v1.TaskTerminal
+	(PlanOperation)(0),            // 5: groundplane.agent.v1.PlanOperation
+	(ComposeOwnerKind)(0),         // 6: groundplane.agent.v1.ComposeOwnerKind
+	(ComposeHelperOutcome)(0),     // 7: groundplane.agent.v1.ComposeHelperOutcome
+	(ComposeHelperDiagnostic)(0),  // 8: groundplane.agent.v1.ComposeHelperDiagnostic
+	(*Authenticate)(nil),          // 9: groundplane.agent.v1.Authenticate
+	(*AgentConfig)(nil),           // 10: groundplane.agent.v1.AgentConfig
+	(*AgentMessage)(nil),          // 11: groundplane.agent.v1.AgentMessage
+	(*Ready)(nil),                 // 12: groundplane.agent.v1.Ready
+	(*TaskEvent)(nil),             // 13: groundplane.agent.v1.TaskEvent
+	(*ObservedState)(nil),         // 14: groundplane.agent.v1.ObservedState
+	(*ObservedProject)(nil),       // 15: groundplane.agent.v1.ObservedProject
+	(*ObservedContainer)(nil),     // 16: groundplane.agent.v1.ObservedContainer
+	(*ObservedNetwork)(nil),       // 17: groundplane.agent.v1.ObservedNetwork
+	(*ObservedVolume)(nil),        // 18: groundplane.agent.v1.ObservedVolume
+	(*ObservedCollision)(nil),     // 19: groundplane.agent.v1.ObservedCollision
+	(*TaskAck)(nil),               // 20: groundplane.agent.v1.TaskAck
+	(*ControllerMessage)(nil),     // 21: groundplane.agent.v1.ControllerMessage
+	(*TaskAssignment)(nil),        // 22: groundplane.agent.v1.TaskAssignment
+	(*ExecutionPlan)(nil),         // 23: groundplane.agent.v1.ExecutionPlan
+	(*ComposeArtifact)(nil),       // 24: groundplane.agent.v1.ComposeArtifact
+	(*ComposeService)(nil),        // 25: groundplane.agent.v1.ComposeService
+	(*ComposeNetwork)(nil),        // 26: groundplane.agent.v1.ComposeNetwork
+	(*ComposeVolume)(nil),         // 27: groundplane.agent.v1.ComposeVolume
+	(*LabelPair)(nil),             // 28: groundplane.agent.v1.LabelPair
+	(*ExecutionStep)(nil),         // 29: groundplane.agent.v1.ExecutionStep
+	(*ComposeApply)(nil),          // 30: groundplane.agent.v1.ComposeApply
+	(*ComposeStop)(nil),           // 31: groundplane.agent.v1.ComposeStop
+	(*ComposeRemove)(nil),         // 32: groundplane.agent.v1.ComposeRemove
+	(*WaitHealthy)(nil),           // 33: groundplane.agent.v1.WaitHealthy
+	(*ComposeHelperRequest)(nil),  // 34: groundplane.agent.v1.ComposeHelperRequest
+	(*ComposeHelperResponse)(nil), // 35: groundplane.agent.v1.ComposeHelperResponse
+	(*TaskAbort)(nil),             // 36: groundplane.agent.v1.TaskAbort
+	(*ConfigUpdate)(nil),          // 37: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),              // 38: groundplane.agent.v1.Shutdown
+	nil,                           // 39: groundplane.agent.v1.AgentConfig.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 40: google.protobuf.Timestamp
 }
 var file_proto_agent_proto_depIdxs = []int32{
-	32, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
-	6,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
-	9,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
-	10, // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
-	11, // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
-	13, // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
+	39, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
+	9,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
+	12, // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
+	13, // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
+	14, // 4: groundplane.agent.v1.AgentMessage.observed_state:type_name -> groundplane.agent.v1.ObservedState
+	20, // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
 	0,  // 6: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
-	12, // 7: groundplane.agent.v1.ObservedState.containers:type_name -> groundplane.agent.v1.ContainerState
-	33, // 8: groundplane.agent.v1.ContainerState.labels:type_name -> groundplane.agent.v1.ContainerState.LabelsEntry
-	1,  // 9: groundplane.agent.v1.TaskAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
-	15, // 10: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
-	29, // 11: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
-	30, // 12: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	31, // 13: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
-	16, // 14: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	2,  // 15: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
-	17, // 16: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	22, // 17: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
-	3,  // 18: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
-	18, // 19: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
-	19, // 20: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
-	20, // 21: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
-	21, // 22: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	21, // 23: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	21, // 24: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	23, // 25: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
-	24, // 26: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
-	25, // 27: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
-	26, // 28: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
-	16, // 29: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	4,  // 30: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
-	5,  // 31: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	7,  // 32: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	8,  // 33: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	14, // 34: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	34, // [34:35] is the sub-list for method output_type
-	33, // [33:34] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	15, // 7: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
+	40, // 8: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
+	16, // 9: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
+	17, // 10: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
+	18, // 11: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
+	19, // 12: groundplane.agent.v1.ObservedProject.collisions:type_name -> groundplane.agent.v1.ObservedCollision
+	1,  // 13: groundplane.agent.v1.ObservedContainer.state:type_name -> groundplane.agent.v1.ObservedContainerState
+	2,  // 14: groundplane.agent.v1.ObservedContainer.health:type_name -> groundplane.agent.v1.ObservedContainerHealth
+	28, // 15: groundplane.agent.v1.ObservedContainer.labels:type_name -> groundplane.agent.v1.LabelPair
+	28, // 16: groundplane.agent.v1.ObservedNetwork.labels:type_name -> groundplane.agent.v1.LabelPair
+	28, // 17: groundplane.agent.v1.ObservedVolume.labels:type_name -> groundplane.agent.v1.LabelPair
+	3,  // 18: groundplane.agent.v1.ObservedCollision.kind:type_name -> groundplane.agent.v1.ObservedCollisionKind
+	4,  // 19: groundplane.agent.v1.TaskAck.terminal:type_name -> groundplane.agent.v1.TaskTerminal
+	22, // 20: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
+	36, // 21: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
+	37, // 22: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	38, // 23: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	23, // 24: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	5,  // 25: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
+	24, // 26: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	29, // 27: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
+	6,  // 28: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
+	25, // 29: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
+	26, // 30: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
+	27, // 31: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
+	28, // 32: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	28, // 33: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	28, // 34: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	30, // 35: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
+	31, // 36: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
+	32, // 37: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
+	33, // 38: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
+	23, // 39: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	7,  // 40: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	8,  // 41: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	10, // 42: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	11, // 43: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	21, // 44: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	44, // [44:45] is the sub-list for method output_type
+	43, // [43:44] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -2517,13 +3075,14 @@ func file_proto_agent_proto_init() {
 		(*AgentMessage_ObservedState)(nil),
 		(*AgentMessage_TaskAck)(nil),
 	}
-	file_proto_agent_proto_msgTypes[8].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[7].OneofWrappers = []any{}
+	file_proto_agent_proto_msgTypes[12].OneofWrappers = []any{
 		(*ControllerMessage_TaskAssignment)(nil),
 		(*ControllerMessage_TaskAbort)(nil),
 		(*ControllerMessage_ConfigUpdate)(nil),
 		(*ControllerMessage_Shutdown)(nil),
 	}
-	file_proto_agent_proto_msgTypes[16].OneofWrappers = []any{
+	file_proto_agent_proto_msgTypes[20].OneofWrappers = []any{
 		(*ExecutionStep_ComposeApply)(nil),
 		(*ExecutionStep_ComposeStop)(nil),
 		(*ExecutionStep_ComposeRemove)(nil),
@@ -2534,8 +3093,8 @@ func file_proto_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   28,
+			NumEnums:      9,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

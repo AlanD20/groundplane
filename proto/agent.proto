@@ -12,6 +12,8 @@ package groundplane.agent.v1;
 
 option go_package = "github.com/AlanD20/groundplane/proto/agentpb";
 
+import "google/protobuf/timestamp.proto";
+
 // AgentChannel is the one authenticated bidirectional stream. The Agent
 // sends Authenticate as the first message and keeps the stream open for the
 // life of the process, reconnecting with exponential backoff on drop.
@@ -67,14 +69,68 @@ enum TaskState {
 }
 
 message ObservedState {
-  repeated ContainerState containers = 1;
+  repeated ObservedProject projects = 1;
 }
 
-message ContainerState {
+message ObservedProject {
+  string project_name = 1;
+  google.protobuf.Timestamp observed_at = 2;
+  repeated ObservedContainer containers = 3;
+  repeated ObservedNetwork networks = 4;
+  repeated ObservedVolume volumes = 5;
+  repeated ObservedCollision collisions = 6;
+}
+
+message ObservedContainer {
+  string container_id = 1;
+  string name = 2;
+  string service_id = 3;
+  string image_reference = 4;
+  string image_id = 5;
+  ObservedContainerState state = 6;
+  ObservedContainerHealth health = 7;
+  optional int32 exit_code = 8;
+  repeated LabelPair labels = 9;
+}
+
+enum ObservedContainerState {
+  OBSERVED_CONTAINER_STATE_UNSPECIFIED = 0;
+  OBSERVED_CONTAINER_STATE_CREATED = 1;
+  OBSERVED_CONTAINER_STATE_RUNNING = 2;
+  OBSERVED_CONTAINER_STATE_EXITED = 3;
+  OBSERVED_CONTAINER_STATE_DEAD = 4;
+}
+
+enum ObservedContainerHealth {
+  OBSERVED_CONTAINER_HEALTH_UNSPECIFIED = 0;
+  OBSERVED_CONTAINER_HEALTH_NONE = 1;
+  OBSERVED_CONTAINER_HEALTH_STARTING = 2;
+  OBSERVED_CONTAINER_HEALTH_HEALTHY = 3;
+  OBSERVED_CONTAINER_HEALTH_UNHEALTHY = 4;
+}
+
+message ObservedNetwork {
+  string network_id = 1;
+  string name = 2;
+  repeated LabelPair labels = 3;
+}
+
+message ObservedVolume {
   string name = 1;
-  string image = 2;
-  bool healthy = 3;
-  map<string, string> labels = 4; // transitional observation payload; typed observation replaces this map before execution is enabled
+  bytes mountpoint_sha256 = 2;
+  repeated LabelPair labels = 3;
+}
+
+message ObservedCollision {
+  ObservedCollisionKind kind = 1;
+  string name = 2;
+}
+
+enum ObservedCollisionKind {
+  OBSERVED_COLLISION_KIND_UNSPECIFIED = 0;
+  OBSERVED_COLLISION_KIND_CONTAINER = 1;
+  OBSERVED_COLLISION_KIND_NETWORK = 2;
+  OBSERVED_COLLISION_KIND_VOLUME = 3;
 }
 
 message TaskAck {
@@ -158,18 +214,22 @@ message ComposeService {
   string service_id = 1;
   string compose_name = 2;
   repeated LabelPair expected_labels = 3;
+  uint32 expected_replicas = 4;
+  bool has_healthcheck = 5;
 }
 
 message ComposeNetwork {
   string network_id = 1;
   string compose_name = 2;
-  repeated LabelPair expected_labels = 3;
+  string docker_name = 3;
+  repeated LabelPair expected_labels = 4;
 }
 
 message ComposeVolume {
   string volume_id = 1;
   string compose_name = 2;
-  repeated LabelPair expected_labels = 3;
+  string docker_name = 3;
+  repeated LabelPair expected_labels = 4;
 }
 
 message LabelPair {

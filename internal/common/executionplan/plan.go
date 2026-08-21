@@ -219,6 +219,9 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		if err := validateComposeName(service.ComposeName); err != nil {
 			return err
 		}
+		if service.ExpectedReplicas == 0 {
+			return errs.New(errs.KindValidationFailed, "Compose service expected replicas must be positive")
+		}
 		if err := validateLabels(plan, artifact, "service", service.ServiceId, service.ExpectedLabels); err != nil {
 			return err
 		}
@@ -239,6 +242,9 @@ func validateNetworks(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		if err := validateComposeName(network.ComposeName); err != nil {
 			return err
 		}
+		if err := validateComposeName(network.DockerName); err != nil {
+			return err
+		}
 		if err := validateLabels(plan, artifact, "network", network.NetworkId, network.ExpectedLabels); err != nil {
 			return err
 		}
@@ -257,6 +263,9 @@ func validateVolumes(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtif
 		}
 		previous = volume.VolumeId
 		if err := validateComposeName(volume.ComposeName); err != nil {
+			return err
+		}
+		if err := validateComposeName(volume.DockerName); err != nil {
 			return err
 		}
 		if err := validateLabels(plan, artifact, "volume", volume.VolumeId, volume.ExpectedLabels); err != nil {
