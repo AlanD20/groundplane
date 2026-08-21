@@ -13,19 +13,34 @@ type taskExpiration interface {
 	ExpireTimedOutTasks(context.Context, time.Time) (int, error)
 }
 
+type idempotencyPruning interface {
+	PruneExpired(context.Context, time.Time) (int, error)
+}
+
+const dailyMaintenanceInterval = 24 * time.Hour
+
 // Scheduler runs ONE tick that evaluates every backup schedule from
 // desired state and dispatches due actions to the Agent — N policies
 // cost nothing extra, no per-policy timer/unit churn. See mvp.md,
 // "systemd timers (backup, cleanup) -> the Controller scheduler".
 type Scheduler struct {
-	Server   *Server
-	Interval time.Duration
-	tasks    taskExpiration
-	now      func() time.Time
+	Server      *Server
+	Interval    time.Duration
+	tasks       taskExpiration
+	idempotency idempotencyPruning
+	now         func() time.Time
+	nextPrune   time.Time
 }
 
-func NewScheduler(s *Server, interval time.Duration, tasks *etcd.TaskRepository) *Scheduler {
-	return &Scheduler{Server: s, Interval: interval, tasks: tasks, now: time.Now}
+func NewScheduler(
+	s *Server,
+	interval time.Duration,
+	tasks *etcd.TaskRepository,
+	idempotency *etcd.IdempotencyRepository,
+) *Scheduler {
+	return &Scheduler{
+		Server: s, Interval: interval, tasks: tasks, idempotency: idempotency, now: time.Now,
+	}
 }
 
 // Run blocks, ticking at Interval until ctx is cancelled.
@@ -51,9 +66,19 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if sch == nil || sch.tasks == nil || sch.now == nil {
+	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.now == nil {
 		return errs.New(errs.KindInternal, "scheduler task maintenance is not configured")
 	}
-	_, err := sch.tasks.ExpireTimedOutTasks(ctx, sch.now().UTC())
-	return err
+	now := sch.now().UTC()
+	if _, err := sch.tasks.ExpireTimedOutTasks(ctx, now); err != nil {
+		return err
+	}
+	if !sch.nextPrune.IsZero() && now.Before(sch.nextPrune) {
+		return nil
+	}
+	if _, err := sch.idempotency.PruneExpired(ctx, now); err != nil {
+		return err
+	}
+	sch.nextPrune = now.Add(dailyMaintenanceInterval)
+	return nil
 }

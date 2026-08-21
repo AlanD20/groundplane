@@ -126,6 +126,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task repository: %w", err)
 	}
+	idempotency, err := etcd.NewIdempotencyRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize idempotency repository: %w", err)
+	}
 	agents, err := etcd.NewLocalAgentRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -144,7 +149,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Logger:    logger,
 		server:    srv,
 		agent:     newAgentChannelRuntime(authenticator, tasks),
-		scheduler: controller.NewScheduler(srv, tick, tasks),
+		scheduler: controller.NewScheduler(srv, tick, tasks, idempotency),
 		store:     store,
 	}, nil
 }
