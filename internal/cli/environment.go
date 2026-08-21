@@ -55,7 +55,7 @@ func newEnvironmentCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "/api/v1/environments/" + target(fromContext(cmd), args[0]) + "/rename"
-			return runAction(cmd, path, map[string]string{"name": newName})
+			return runPostUpdate(cmd, path, map[string]string{"name": newName})
 		},
 	}
 	rename.Flags().StringVar(&newName, "name", "", "new display name")

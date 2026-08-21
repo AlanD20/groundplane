@@ -58,7 +58,7 @@ func newServiceCmd() *cobra.Command {
 		Short: "Edit a service (applies on the next deploy)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runEdit(cmd, "/api/v1/services/"+target(fromContext(cmd), args[0]), nil)
+			return runPatch(cmd, "/api/v1/services/"+target(fromContext(cmd), args[0]), nil)
 		},
 	})
 
@@ -154,16 +154,15 @@ func newServiceCmd() *cobra.Command {
 	var attachName string
 	var grants []string
 	attach := &cobra.Command{
-		Use:   "attach <backing>",
+		Use:   "attach <name> <backing>",
 		Short: "Attach a backing service to this service (provisions its own database + role)",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app := fromContext(cmd)
-			return runCreate(cmd, "/api/v1/attaches", map[string]interface{}{
-				"backing_service_id": args[0],
+			return runAction(cmd, "/api/v1/attaches", map[string]interface{}{
+				"service_id":         args[0],
+				"backing_service_id": args[1],
 				"name":               attachName, // omitted => Controller-suggested from tenant-project-environment-service, made unique
 				"grants":             grants,
-				"environment":        app.Scope.Environment,
 			})
 		},
 	}

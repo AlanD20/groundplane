@@ -15,7 +15,7 @@ type hostOutput struct {
 
 func (s *Server) registerHost() {
 	huma.Register(s.API, huma.Operation{
-		OperationID: "host-show",
+		OperationID: "host.show",
 		Method:      http.MethodGet,
 		Path:        "/host",
 		Summary:     "Show host health",

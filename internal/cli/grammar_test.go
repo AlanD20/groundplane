@@ -31,27 +31,38 @@ func TestRunnableZeroArgumentLeavesRejectOperands(t *testing.T) {
 	})
 }
 
-func TestRepresentativeExactOneArgumentLeavesRemainExact(t *testing.T) {
+func TestParityOperandLeavesEnforceExactArity(t *testing.T) {
 	t.Parallel()
 
 	root := NewRootCmd(Dependencies{})
-	for _, path := range [][]string{
-		{"tenant", "show"},
-		{"agent", "remove"},
-		{"task", "retry"},
+	for _, test := range []struct {
+		path []string
+		want int
+	}{
+		{path: []string{"tenant", "show"}, want: 1},
+		{path: []string{"agent", "config", "show"}, want: 1},
+		{path: []string{"agent", "remove"}, want: 1},
+		{path: []string{"component", "show"}, want: 1},
+		{path: []string{"task", "events"}, want: 1},
+		{path: []string{"task", "retry"}, want: 1},
+		{path: []string{"service", "attach"}, want: 2},
 	} {
-		command, _, err := root.Find(path)
+		command, _, err := root.Find(test.path)
 		if err != nil {
-			t.Fatalf("find %v: %v", path, err)
+			t.Fatalf("find %v: %v", test.path, err)
 		}
-		if err := command.Args(command, []string{"target"}); err != nil {
-			t.Errorf("exact-one leaf %q rejected one operand: %v", command.CommandPath(), err)
+		operands := make([]string, test.want)
+		for index := range operands {
+			operands[index] = "target"
 		}
-		if err := command.Args(command, nil); err == nil {
-			t.Errorf("exact-one leaf %q accepted zero operands", command.CommandPath())
+		if err := command.Args(command, operands); err != nil {
+			t.Errorf("leaf %q rejected %d operands: %v", command.CommandPath(), test.want, err)
 		}
-		if err := command.Args(command, []string{"one", "two"}); err == nil {
-			t.Errorf("exact-one leaf %q accepted two operands", command.CommandPath())
+		if err := command.Args(command, operands[:test.want-1]); err == nil {
+			t.Errorf("leaf %q accepted %d operands", command.CommandPath(), test.want-1)
+		}
+		if err := command.Args(command, append(operands, "extra")); err == nil {
+			t.Errorf("leaf %q accepted %d operands", command.CommandPath(), test.want+1)
 		}
 	}
 }

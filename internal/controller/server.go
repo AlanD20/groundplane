@@ -9,6 +9,7 @@ package controller
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 
@@ -30,12 +31,14 @@ type Server struct {
 	API    huma.API
 
 	host          HostReader
+	console       fs.FS
 	dispatcher    *Dispatcher
 	routePolicies map[string]routePolicy
 }
 
 type Options struct {
-	Host HostReader
+	Host    HostReader
+	Console fs.FS
 }
 
 func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
@@ -53,6 +56,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		Mux:           mux,
 		API:           humago.NewWithPrefix(mux, "/api/v1", config),
 		host:          options.Host,
+		console:       options.Console,
 		dispatcher:    NewDispatcher(),
 		routePolicies: make(map[string]routePolicy),
 	}
@@ -76,23 +80,22 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/tenants", s.notImplemented)
 	s.jsonRoute("POST /api/v1/tenants", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/tenants/{id}", s.notImplemented)
-	s.jsonRoute("PUT /api/v1/tenants/{id}", s.notImplemented)
 	s.jsonRoute("PATCH /api/v1/tenants/{id}", s.notImplemented)
+	s.jsonRoute("POST /api/v1/tenants/{id}/rename", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/tenants/{id}", s.acceptTask)
 
 	// project (?kind=tenant|backing)
 	mux.HandleFunc("GET /api/v1/projects", s.notImplemented)
 	s.jsonRoute("POST /api/v1/projects", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/projects/{id}", s.notImplemented)
-	s.jsonRoute("PUT /api/v1/projects/{id}", s.notImplemented)
 	s.jsonRoute("PATCH /api/v1/projects/{id}", s.notImplemented)
+	s.jsonRoute("POST /api/v1/projects/{id}/rename", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.acceptTask)
 
 	// environment (?project=)
 	mux.HandleFunc("GET /api/v1/environments", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/environments/{id}", s.notImplemented)
-	s.jsonRoute("PUT /api/v1/environments/{id}", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments/{id}/rename", s.notImplemented)
 	s.streamRoute("GET /api/v1/environments/{id}/logs", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.acceptTask)
@@ -100,6 +103,7 @@ func (s *Server) routes() {
 	// environment singleton sub-resources
 	mux.HandleFunc("GET /api/v1/environments/{id}/backup-policy", s.notImplemented)
 	s.jsonRoute("PUT /api/v1/environments/{id}/backup-policy", s.notImplemented)
+	s.blueprintRoute("PUT /api/v1/environments/{id}/blueprint", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
@@ -113,7 +117,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/services", s.notImplemented)
 	s.jsonRoute("POST /api/v1/services", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/services/{id}", s.notImplemented) // includes the release ledger
-	s.jsonRoute("PUT /api/v1/services/{id}", s.notImplemented)
+	s.jsonRoute("PATCH /api/v1/services/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/services/{id}/deploy", s.acceptTask) // {tag?, strategy?, on_failure?}
 	s.jsonRoute("POST /api/v1/services/{id}/rollback", s.acceptTask)
@@ -126,7 +130,6 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/release-groups", s.notImplemented)
 	s.jsonRoute("POST /api/v1/release-groups", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}", s.notImplemented)
-	s.jsonRoute("PUT /api/v1/release-groups/{id}", s.notImplemented)
 	s.jsonRoute("PATCH /api/v1/release-groups/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/release-groups/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
@@ -143,18 +146,15 @@ func (s *Server) routes() {
 		mux.HandleFunc("GET /api/v1/"+res, s.notImplemented)
 		s.jsonRoute("POST /api/v1/"+res, s.notImplemented)
 		mux.HandleFunc("GET /api/v1/"+res+"/{id}", s.notImplemented)
-		s.jsonRoute("PUT /api/v1/"+res+"/{id}", s.notImplemented)
 		s.jsonRoute("PATCH /api/v1/"+res+"/{id}", s.notImplemented)
 		mux.HandleFunc("DELETE /api/v1/"+res+"/{id}", s.acceptTask)
 	}
+	mux.HandleFunc("GET /api/v1/entries/{id}/value", s.notImplemented)
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
 	// component (?environment= or ?platform=true) — one resource across both owners
 	mux.HandleFunc("GET /api/v1/components", s.notImplemented)
-	s.jsonRoute("POST /api/v1/components", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/components/{id}", s.notImplemented)
-	s.jsonRoute("PUT /api/v1/components/{id}", s.notImplemented)
-	mux.HandleFunc("DELETE /api/v1/components/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/components/{id}/enable", s.acceptTask)
 	s.jsonRoute("POST /api/v1/components/{id}/disable", s.acceptTask)
 	s.jsonRoute("POST /api/v1/components/{id}/update", s.acceptTask)
@@ -165,7 +165,6 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/backing-services", s.notImplemented)
 	s.jsonRoute("POST /api/v1/backing-services", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/backing-services/{project_id}", s.notImplemented)
-	s.jsonRoute("PUT /api/v1/backing-services/{project_id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/backing-services/{project_id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/start", s.acceptTask)
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/stop", s.acceptTask)
@@ -193,7 +192,8 @@ func (s *Server) routes() {
 		"POST /api/v1/runners",
 		s.notImplemented,
 	) // {tenant_id|project_id, registration_token} — token discarded after registration
-	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/runners/{id}", s.notImplemented)
+	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.acceptTask)
 
 	// task / activity
 	mux.HandleFunc("GET /api/v1/tasks", s.notImplemented)

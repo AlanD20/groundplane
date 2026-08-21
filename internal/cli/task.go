@@ -1,9 +1,13 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
 
 // task: list [--env NAME | --workspace platform|<tenant>] | show <id> |
-// retry <id> | abort <id>. The activity journal IS this record set. See mvp.md,
+// events <id> | retry <id> | abort <id>. The activity journal IS this record set. See mvp.md,
 // "Baked-in actions become Tasks" and "Activity IS tasks (locked)".
 func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "task", Short: "Tasks — the one record set behind every action and the activity journal"}
@@ -31,6 +35,20 @@ func newTaskCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShow(cmd, "/api/v1/tasks/"+target(fromContext(cmd), args[0]))
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "events <id>",
+		Short: "Stream a task's events",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app := fromContext(cmd)
+			path := "/api/v1/tasks/" + target(app, args[0]) + "/events"
+			return app.Client.Stream(cmd.Context(), path, nil, func(event string) error {
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), event)
+				return err
+			})
 		},
 	})
 

@@ -44,6 +44,7 @@ type Request struct {
 	Query          map[string]string
 	Body           any
 	IdempotencyKey string
+	ExpectedStatus int
 }
 
 type Client struct {
@@ -62,12 +63,13 @@ func New(baseURL string) *Client {
 
 // NewRequest creates one reusable request. Human mutation methods receive one
 // raw ULID at intent construction; safe methods never receive a key.
-func (c *Client) NewRequest(method, path string, query map[string]string, body any) Request {
+func (c *Client) NewRequest(method, path string, query map[string]string, body any, expectedStatus int) Request {
 	request := Request{
-		Method: strings.ToUpper(method),
-		Path:   path,
-		Query:  query,
-		Body:   body,
+		Method:         strings.ToUpper(method),
+		Path:           path,
+		Query:          query,
+		Body:           body,
+		ExpectedStatus: expectedStatus,
 	}
 	if requiresIdempotencyKey(request.Method) {
 		request.IdempotencyKey = ids.NewULID()
@@ -81,13 +83,22 @@ func (c *Client) NewRequest(method, path string, query map[string]string, body a
 // same reason json.Marshal/json.Decoder.Decode are — this is a generic
 // transport helper, not a model field.
 //
-// A non-2xx response is decoded as RFC 7807 problem+json and returned as
+// A non-success response is decoded as RFC 7807 problem+json and returned as
 // an *errs.Error carrying the same Code the Controller sent — see
 // api-cli.md, "Errors".
 func (c *Client) Do(ctx context.Context, request Request, out any) error {
 	request.Method = strings.ToUpper(request.Method)
 	if err := validateIdempotencyKey(request); err != nil {
 		return err
+	}
+	if !validExpectedStatus(request.Method, request.ExpectedStatus) {
+		return errs.Newf(
+			errs.KindInternal,
+			"apiclient: %s %s has invalid expected status %d",
+			request.Method,
+			request.Path,
+			request.ExpectedStatus,
+		)
 	}
 
 	u, err := url.Parse(c.BaseURL + request.Path)
@@ -145,6 +156,16 @@ func (c *Client) Do(ctx context.Context, request Request, out any) error {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return responseProblem(request.Method, request.Path, resp)
 	}
+	if resp.StatusCode != request.ExpectedStatus {
+		return errs.Newf(
+			errs.KindInternal,
+			"apiclient: %s %s returned unexpected success status %d (want %d)",
+			request.Method,
+			request.Path,
+			resp.StatusCode,
+			request.ExpectedStatus,
+		)
+	}
 
 	if out == nil {
 		return nil
@@ -164,6 +185,23 @@ func requiresIdempotencyKey(method string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 		return true
+	default:
+		return false
+	}
+}
+
+func validExpectedStatus(method string, status int) bool {
+	switch method {
+	case http.MethodGet:
+		return status == http.StatusOK
+	case http.MethodPost:
+		return status == http.StatusOK || status == http.StatusCreated || status == http.StatusAccepted
+	case http.MethodPut:
+		return status == http.StatusOK || status == http.StatusAccepted
+	case http.MethodPatch:
+		return status == http.StatusOK
+	case http.MethodDelete:
+		return status == http.StatusAccepted || status == http.StatusNoContent
 	default:
 		return false
 	}
@@ -245,6 +283,14 @@ func (c *Client) Stream(
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return responseProblem(http.MethodGet, path, resp)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errs.Newf(
+			errs.KindInternal,
+			"apiclient: stream %s returned unexpected success status %d (want 200)",
+			path,
+			resp.StatusCode,
+		)
 	}
 	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil || mediaType != "text/event-stream" {

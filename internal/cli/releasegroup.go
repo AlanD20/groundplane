@@ -8,7 +8,7 @@ import (
 // release-group: list | show | add | edit | remove | deploy |
 // rollback. Coordinates multiple services under one task lock and one
 // failure policy — membership is always explicit, never inferred from
-// shared image or service names. See blueprint.md, "x-gp-release-group".
+// shared image or service names. See blueprint.md, "x-gp-release-groups".
 func newReleaseGroupCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "release-group", Short: "Release groups — explicit multi-service deploy coordination"}
 

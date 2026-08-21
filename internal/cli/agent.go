@@ -2,7 +2,7 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// agent: list | show | join | config set | update | remove.
+// agent: list | show | join | config show | config set | update | remove.
 // The operational surface for pairing and per-instance config (distinct
 // from `core component agent`, which is the read-only view). See
 // api-cli.md, "Agent vs `core component agent` (locked split)".
@@ -36,7 +36,19 @@ func newAgentCmd() *cobra.Command {
 		},
 	})
 
-	config := &cobra.Command{Use: "config", Short: "Per-agent runtime config (Controller-owned, in etcd)"}
+	config := &cobra.Command{
+		Use:   "config",
+		Short: "Per-agent runtime config (Controller-owned, in etcd)",
+	}
+	config.AddCommand(&cobra.Command{
+		Use:   "show <id>",
+		Short: "Show an agent's runtime config",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := "/api/v1/agents/" + target(fromContext(cmd), args[0]) + "/config"
+			return runShow(cmd, path)
+		},
+	})
 	var pullInterval, maxConcurrent int
 	var labels []string
 	set := &cobra.Command{
@@ -45,14 +57,17 @@ func newAgentCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "/api/v1/agents/" + target(fromContext(cmd), args[0]) + "/config"
-			return runEdit(cmd, path, map[string]interface{}{
-				"pull_interval_seconds": pullInterval, "max_concurrent_tasks": maxConcurrent, "labels": labels,
+			return runReplaceSingleton(cmd, path, map[string]interface{}{
+				"pull_interval_seconds": pullInterval,
+				"max_concurrent_tasks":  maxConcurrent,
+				"labels":                labels,
 			})
 		},
 	}
 	set.Flags().IntVar(&pullInterval, "pull-interval", 0, "seconds between idle Ready heartbeats")
 	set.Flags().IntVar(&maxConcurrent, "max-concurrent", 0, "worker pool size")
-	set.Flags().StringSliceVar(&labels, "label", nil, "repeatable: key=value, for targeted dispatch")
+	set.Flags().
+		StringSliceVar(&labels, "label", nil, "repeatable: key=value, for targeted dispatch")
 	config.AddCommand(set)
 	cmd.AddCommand(config)
 
@@ -61,7 +76,11 @@ func newAgentCmd() *cobra.Command {
 		Short: "Update an agent through the Controller-owned container lifecycle",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0])+"/update", nil)
+			return runAction(
+				cmd,
+				"/api/v1/agents/"+target(fromContext(cmd), args[0])+"/update",
+				nil,
+			)
 		},
 	})
 
@@ -70,7 +89,7 @@ func newAgentCmd() *cobra.Command {
 		Short: "Remove an agent container and revoke its channel token",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDeleteAction(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0]))
+			return runDestroy(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0]))
 		},
 	})
 

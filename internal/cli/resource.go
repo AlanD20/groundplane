@@ -20,7 +20,7 @@ func runList(cmd *cobra.Command, path string, query map[string]string) error {
 		Items      []map[string]any `json:"items" yaml:"items"`
 		NextCursor string           `json:"next_cursor,omitempty" yaml:"next_cursor,omitempty"`
 	}
-	request := app.Client.NewRequest("GET", path, query, nil)
+	request := app.Client.NewRequest("GET", path, query, nil, 200)
 	if err := app.Client.Do(cmd.Context(), request, &page); err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func runList(cmd *cobra.Command, path string, query map[string]string) error {
 func runShow(cmd *cobra.Command, path string) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	request := app.Client.NewRequest("GET", path, nil, nil)
+	request := app.Client.NewRequest("GET", path, nil, nil, 200)
 	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func runShow(cmd *cobra.Command, path string) error {
 func runCreate(cmd *cobra.Command, path string, body any) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	request := app.Client.NewRequest("POST", path, nil, body)
+	request := app.Client.NewRequest("POST", path, nil, body, 201)
 	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
@@ -53,10 +53,25 @@ func runCreate(cmd *cobra.Command, path string, body any) error {
 	return app.Out.RenderOne(fields, values, item)
 }
 
-func runEdit(cmd *cobra.Command, path string, body any) error {
+// runReplaceSingleton performs a complete replacement of one of the closed
+// singleton resources. Entity edits must use runPatch instead.
+func runReplaceSingleton(cmd *cobra.Command, path string, body any) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	request := app.Client.NewRequest("PUT", path, nil, body)
+	request := app.Client.NewRequest("PUT", path, nil, body, 200)
+	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
+		return err
+	}
+	fields, values := fieldsOfVia(item)
+	return app.Out.RenderOne(fields, values, item)
+}
+
+// runPostUpdate is a synchronous POST sub-resource update such as rename. It
+// returns the updated representation rather than dispatching a Task.
+func runPostUpdate(cmd *cobra.Command, path string, body any) error {
+	app := fromContext(cmd)
+	var item map[string]any
+	request := app.Client.NewRequest("POST", path, nil, body, 200)
 	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
@@ -65,13 +80,12 @@ func runEdit(cmd *cobra.Command, path string, body any) error {
 }
 
 // runPatch is a partial update — used where api-cli.md's resource map
-// lists PATCH alongside PUT (tenant, project, release-group, zone,
-// route, volume, entry, script). PUT stays the "replace the whole
-// document" verb; PATCH is for single-field changes like `tenant edit`.
+// lists PATCH (tenant, project, service, release-group, zone, route, volume,
+// entry, script). PUT is reserved for explicit singleton replacement.
 func runPatch(cmd *cobra.Command, path string, body any) error {
 	app := fromContext(cmd)
 	var item map[string]any
-	request := app.Client.NewRequest("PATCH", path, nil, body)
+	request := app.Client.NewRequest("PATCH", path, nil, body, 200)
 	if err := app.Client.Do(cmd.Context(), request, &item); err != nil {
 		return err
 	}
@@ -93,7 +107,7 @@ func changedStringFields(cmd *cobra.Command, values map[string]string) map[strin
 
 func runRemove(cmd *cobra.Command, path string) error {
 	app := fromContext(cmd)
-	request := app.Client.NewRequest("DELETE", path, nil, nil)
+	request := app.Client.NewRequest("DELETE", path, nil, nil, 204)
 	if err := app.Client.Do(cmd.Context(), request, nil); err != nil {
 		return err
 	}
@@ -126,28 +140,7 @@ func runActionMethod(cmd *cobra.Command, method, path string, body any) error {
 	var res struct {
 		TaskID string `json:"task_id"`
 	}
-	request := app.Client.NewRequest(method, path, nil, body)
-	if err := app.Client.Do(cmd.Context(), request, &res); err != nil {
-		return err
-	}
-	if res.TaskID == "" {
-		return fmt.Errorf("cli: action response is missing task_id")
-	}
-	_, err := fmt.Fprintf(
-		cmd.OutOrStdout(),
-		"task %s dispatched — `groundplane task show %s` to follow\n",
-		res.TaskID,
-		res.TaskID,
-	)
-	return err
-}
-
-func runDeleteAction(cmd *cobra.Command, path string) error {
-	app := fromContext(cmd)
-	var res struct {
-		TaskID string `json:"task_id"`
-	}
-	request := app.Client.NewRequest("DELETE", path, nil, nil)
+	request := app.Client.NewRequest(method, path, nil, body, 202)
 	if err := app.Client.Do(cmd.Context(), request, &res); err != nil {
 		return err
 	}
@@ -168,7 +161,7 @@ func runExportKey(cmd *cobra.Command, path string) error {
 	var res struct {
 		Value string `json:"value"`
 	}
-	request := app.Client.NewRequest("POST", path, nil, nil)
+	request := app.Client.NewRequest("POST", path, nil, nil, 200)
 	if err := app.Client.Do(cmd.Context(), request, &res); err != nil {
 		return err
 	}

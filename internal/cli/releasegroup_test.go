@@ -14,7 +14,7 @@ func TestReleaseGroupAddDefaultsOnFailure(t *testing.T) {
 	t.Parallel()
 
 	body := `{"environment":"production","name":"realtime","on_failure":"switch_back","order":null,"services":["api","worker"]}`
-	server := exactRequestServer(t, http.MethodPost, "/api/v1/release-groups", body, http.StatusOK, `{}`)
+	server := exactRequestServer(t, http.MethodPost, "/api/v1/release-groups", body, http.StatusCreated, `{}`)
 	defer server.Close()
 
 	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{Environment: "production"},

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,21 +19,23 @@ import (
 func TestDoNormalizesBaseURLAndRequestsJSON(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/api/v1/tasks" {
-			t.Errorf("path = %q, want %q", request.URL.Path, "/api/v1/tasks")
-		}
-		if accept := request.Header.Get("Accept"); accept != "application/json" {
-			t.Errorf("Accept = %q, want application/json", accept)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"id": "task-1"})
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			if request.URL.Path != "/api/v1/tasks" {
+				t.Errorf("path = %q, want %q", request.URL.Path, "/api/v1/tasks")
+			}
+			if accept := request.Header.Get("Accept"); accept != "application/json" {
+				t.Errorf("Accept = %q, want application/json", accept)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": "task-1"})
+		}),
+	)
 	defer server.Close()
 
 	var response map[string]string
 	client := New(server.URL + "/")
-	request := client.NewRequest(http.MethodGet, "/api/v1/tasks", nil, nil)
+	request := client.NewRequest(http.MethodGet, "/api/v1/tasks", nil, nil, http.StatusOK)
 	err := client.Do(context.Background(), request, &response)
 	if err != nil {
 		t.Fatalf("Do() error = %v", err)
@@ -47,25 +50,43 @@ func TestDoNormalizesBaseURLAndRequestsJSON(t *testing.T) {
 func TestMutationRequestsCarryOneReusableRawULID(t *testing.T) {
 	t.Parallel()
 
-	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+	for _, test := range []struct {
+		method string
+		status int
+	}{
+		{method: http.MethodPost, status: http.StatusCreated},
+		{method: http.MethodPut, status: http.StatusOK},
+		{method: http.MethodPatch, status: http.StatusOK},
+		{method: http.MethodDelete, status: http.StatusNoContent},
+	} {
+		method := test.method
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
 			var keys [][]string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-				keys = append(keys, request.Header.Values(idempotencyKeyHeader))
-				w.WriteHeader(http.StatusNoContent)
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+					keys = append(keys, request.Header.Values(idempotencyKeyHeader))
+					w.WriteHeader(test.status)
+				}),
+			)
 			defer server.Close()
 
 			client := New(server.URL)
-			request := client.NewRequest(method, "/resource", nil, map[string]string{"action": "run"})
+			request := client.NewRequest(
+				method,
+				"/resource",
+				nil,
+				map[string]string{"action": "run"},
+				test.status,
+			)
 			for range 2 {
 				if err := client.Do(context.Background(), request, nil); err != nil {
 					t.Fatalf("Do() error = %v", err)
 				}
 			}
 
-			if len(keys) != 2 || len(keys[0]) != 1 || len(keys[1]) != 1 || keys[0][0] != keys[1][0] {
+			if len(keys) != 2 || len(keys[0]) != 1 || len(keys[1]) != 1 ||
+				keys[0][0] != keys[1][0] {
 				t.Fatalf("Idempotency-Key values = %q, want one identical key per request", keys)
 			}
 			if len(keys[0][0]) != 26 {
@@ -83,11 +104,21 @@ func TestMutationRequestsCarryOneReusableRawULID(t *testing.T) {
 func TestRequestIdempotencyKeyContract(t *testing.T) {
 	t.Parallel()
 
-	methods := []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
-	for _, method := range methods {
-		request := New("http://invalid").NewRequest(strings.ToLower(method), "/resource", nil, nil)
+	methods := map[string]int{
+		http.MethodPost: http.StatusCreated, http.MethodPut: http.StatusOK,
+		http.MethodPatch: http.StatusOK, http.MethodDelete: http.StatusNoContent,
+	}
+	for method, status := range methods {
+		request := New(
+			"http://invalid",
+		).NewRequest(strings.ToLower(method), "/resource", nil, nil, status)
 		if request.Method != method {
-			t.Errorf("NewRequest(%q) method = %q, want %q", strings.ToLower(method), request.Method, method)
+			t.Errorf(
+				"NewRequest(%q) method = %q, want %q",
+				strings.ToLower(method),
+				request.Method,
+				method,
+			)
 		}
 		if !idempotencyKeyPattern.MatchString(request.IdempotencyKey) {
 			t.Errorf("%s key = %q, want 16..128 allowed characters", method, request.IdempotencyKey)
@@ -95,7 +126,7 @@ func TestRequestIdempotencyKeyContract(t *testing.T) {
 	}
 
 	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
-		request := New("http://invalid").NewRequest(method, "/resource", nil, nil)
+		request := New("http://invalid").NewRequest(method, "/resource", nil, nil, http.StatusOK)
 		if request.IdempotencyKey != "" {
 			t.Errorf("%s key = %q, want empty", method, request.IdempotencyKey)
 		}
@@ -113,7 +144,12 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 		"A0._:-A0._:-A0._:-",
 	}
 	client := New("http://127.0.0.1:1")
-	mutationMethods := []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
+	mutationMethods := []string{
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete,
+	}
 	for _, method := range mutationMethods {
 		for _, key := range validKeys {
 			if err := validateIdempotencyKey(
@@ -137,12 +173,30 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 		}
 	}
 	request := Request{Method: "post", Path: "/resource"}
-	if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if err := client.Do(
+		context.Background(),
+		request,
+		nil,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
 		t.Errorf("Do(lowercase POST without key) error = %v, want %q", err, errs.CodeInternal)
 	}
 	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
-		request := Request{Method: method, Path: "/resource", IdempotencyKey: strings.Repeat("a", 16)}
-		if err := client.Do(context.Background(), request, nil); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		request := Request{
+			Method:         method,
+			Path:           "/resource",
+			IdempotencyKey: strings.Repeat("a", 16),
+		}
+		if err := client.Do(
+			context.Background(),
+			request,
+			nil,
+		); !errors.Is(
+			err,
+			errs.New(errs.KindInternal, ""),
+		) {
 			t.Errorf("Do(%s with key) error = %v, want %q", method, err, errs.CodeInternal)
 		}
 	}
@@ -160,7 +214,12 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 		valid  bool
 	}{
 		{name: "one document", status: http.StatusOK, body: `{"ok":true}`, valid: true},
-		{name: "one document and trailing whitespace", status: http.StatusOK, body: "{\"ok\":true}\n\t  ", valid: true},
+		{
+			name:   "one document and trailing whitespace",
+			status: http.StatusOK,
+			body:   "{\"ok\":true}\n\t  ",
+			valid:  true,
+		},
 		{name: "empty", status: http.StatusOK},
 		{name: "no content", status: http.StatusNoContent},
 		{name: "malformed", status: http.StatusOK, body: `{`},
@@ -170,14 +229,16 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-				w.WriteHeader(test.status)
-				_, _ = w.Write([]byte(test.body))
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+					w.WriteHeader(test.status)
+					_, _ = w.Write([]byte(test.body))
+				}),
+			)
 			defer server.Close()
 
 			client := New(server.URL)
-			request := client.NewRequest(http.MethodGet, "/resource", nil, nil)
+			request := client.NewRequest(http.MethodGet, "/resource", nil, nil, http.StatusOK)
 			var output map[string]any
 			err := client.Do(context.Background(), request, &output)
 			if test.valid {
@@ -198,15 +259,67 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 func TestDoAcceptsNoContentOnlyWithoutOutput(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+	)
 	defer server.Close()
 
 	client := New(server.URL)
-	request := client.NewRequest(http.MethodDelete, "/resource", nil, nil)
+	request := client.NewRequest(http.MethodDelete, "/resource", nil, nil, http.StatusNoContent)
 	if err := client.Do(context.Background(), request, nil); err != nil {
 		t.Fatalf("Do() error = %v", err)
+	}
+}
+
+func TestDoRejectsUnexpectedSuccessfulStatus(t *testing.T) {
+	// Rationale: accepting any 2xx would collapse create, update, Task, and
+	// bodyless-delete contracts into transport success and hide API drift.
+	t.Parallel()
+
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"task_id":"task_1"}`))
+		}),
+	)
+	defer server.Close()
+
+	client := New(server.URL)
+	request := client.NewRequest(http.MethodGet, "/resource", nil, nil, http.StatusOK)
+	var output map[string]any
+	if err := client.Do(
+		context.Background(),
+		request,
+		&output,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
+		t.Fatalf("Do() error = %v, want %q", err, errs.CodeInternal)
+	}
+}
+
+// Rationale: callers must opt into exactly the semantic status allowed by
+// their method; broad "any 2xx" handling would hide surface drift.
+func TestValidExpectedStatusUsesHumanContractMatrix(t *testing.T) {
+	t.Parallel()
+
+	accepted := map[string][]int{
+		http.MethodGet:    {http.StatusOK},
+		http.MethodPost:   {http.StatusOK, http.StatusCreated, http.StatusAccepted},
+		http.MethodPut:    {http.StatusOK, http.StatusAccepted},
+		http.MethodPatch:  {http.StatusOK},
+		http.MethodDelete: {http.StatusAccepted, http.StatusNoContent},
+	}
+	for method, statuses := range accepted {
+		for _, status := range []int{http.StatusOK, http.StatusCreated, http.StatusAccepted, http.StatusNoContent} {
+			want := slices.Contains(statuses, status)
+			if got := validExpectedStatus(method, status); got != want {
+				t.Errorf("validExpectedStatus(%s, %d) = %t, want %t", method, status, got, want)
+			}
+		}
 	}
 }
 
@@ -215,17 +328,21 @@ func TestDoAcceptsNoContentOnlyWithoutOutput(t *testing.T) {
 func TestStreamRequestsEventStream(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if accept := request.Header.Get("Accept"); accept != "text/event-stream" {
-			t.Errorf("Accept = %q, want text/event-stream", accept)
-		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("data: ready\n\n"))
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			if accept := request.Header.Get("Accept"); accept != "text/event-stream" {
+				t.Errorf("Accept = %q, want text/event-stream", accept)
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("data: ready\n\n"))
+		}),
+	)
 	defer server.Close()
 
 	var events []string
-	err := New(server.URL+"/").Stream(context.Background(), "/events", nil, func(event string) error {
+	err := New(
+		server.URL+"/",
+	).Stream(context.Background(), "/events", nil, func(event string) error {
 		events = append(events, event)
 		return nil
 	})
@@ -242,10 +359,12 @@ func TestStreamRequestsEventStream(t *testing.T) {
 func TestStreamRejectsNonEventStreamResponse(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ready"}`))
+		}),
+	)
 	defer server.Close()
 
 	err := New(server.URL).Stream(context.Background(), "/events", nil, func(string) error {

@@ -142,7 +142,7 @@ func newValidator(capture Capture) *validator {
 	}
 	for _, action := range capture.Console {
 		value.capturedConsole[action.ID]++
-		value.validateIdentifier("captured console action id", action.ID)
+		value.validateOperationIdentity("captured console action id", action.ID)
 	}
 	for _, leaf := range capture.CLI {
 		value.capturedCLI[cliKey(leaf)]++
@@ -205,9 +205,17 @@ func (v *validator) validateManifest(manifest Manifest) {
 }
 
 func (v *validator) validateOperation(entryID string, operation Operation) {
-	v.validateIdentifier("entry "+quoted(entryID)+" console action id", operation.Console.ID)
+	v.validateOperationIdentity("entry "+quoted(entryID)+" console action id", operation.Console.ID)
 	v.validateCLI("entry "+quoted(entryID)+" cli leaf", operation.CLI)
 	v.validateAPI("entry "+quoted(entryID)+" api endpoint", operation.API)
+	if operation.Console.ID != operation.API.OperationID {
+		v.add(
+			"entry %s console action id %s must equal api operation id %s",
+			quoted(entryID),
+			quoted(operation.Console.ID),
+			quoted(operation.API.OperationID),
+		)
+	}
 
 	v.expectedConsole[operation.Console.ID]++
 	v.expectedCLI[cliKey(operation.CLI)]++
@@ -329,7 +337,7 @@ func (v *validator) compareAPI(key string, expected, captured APIContract) {
 }
 
 func (v *validator) validateAPI(label string, operation APIContract) {
-	v.validateIdentifier(label+" operation id", operation.OperationID)
+	v.validateOperationIdentity(label+" operation id", operation.OperationID)
 	if !validMethod(operation.Method) {
 		v.add("%s method %s is not in the human API method set", label, quoted(operation.Method))
 	}
@@ -340,8 +348,13 @@ func (v *validator) validateAPI(label string, operation APIContract) {
 			quoted(operation.Path),
 		)
 	}
-	if operation.SuccessStatus < 200 || operation.SuccessStatus > 299 {
-		v.add("%s success status %d is not in the 2xx range", label, operation.SuccessStatus)
+	if !validSuccessStatus(operation.Method, operation.SuccessStatus) {
+		v.add(
+			"%s success status %d is not valid for method %s",
+			label,
+			operation.SuccessStatus,
+			quoted(operation.Method),
+		)
 	}
 	v.validatePayload(label+" request", operation.Request)
 	v.validatePayload(label+" response", operation.Response)
@@ -351,15 +364,38 @@ func (v *validator) validateAPI(label string, operation APIContract) {
 	if operation.Response.Kind == PayloadMultipart {
 		v.add("%s response payload kind multipart is request-only", label)
 	}
-	if (operation.SuccessStatus == 204 || operation.SuccessStatus == 205) &&
-		operation.Response.Kind != PayloadNone {
-		v.add(
-			"%s success status %d requires response payload kind none",
-			label,
-			operation.SuccessStatus,
-		)
-	}
+	v.validateSuccessResponse(label, operation)
 	v.validateErrors(label, operation.Errors)
+}
+
+func (v *validator) validateSuccessResponse(label string, operation APIContract) {
+	switch operation.SuccessStatus {
+	case 200:
+		if operation.Response.Kind == PayloadNone {
+			v.add("%s success status 200 requires a response representation", label)
+		}
+	case 201:
+		if operation.Response.Kind != PayloadJSON {
+			v.add("%s success status 201 requires a json resource response", label)
+		}
+	case 202:
+		want := Payload{Kind: PayloadJSON, Schema: "TaskAccepted"}
+		if operation.Response != want {
+			v.add(
+				"%s success status 202 requires response payload %s",
+				label,
+				quoted(payloadKey(want)),
+			)
+		}
+	case 204, 205:
+		if operation.Response.Kind != PayloadNone {
+			v.add(
+				"%s success status %d requires response payload kind none",
+				label,
+				operation.SuccessStatus,
+			)
+		}
+	}
 }
 
 func (v *validator) validatePayload(label string, payload Payload) {
@@ -421,6 +457,12 @@ func (v *validator) validateIdentifier(label, value string) {
 	}
 }
 
+func (v *validator) validateOperationIdentity(label, value string) {
+	if !validOperationIdentity(value) {
+		v.add("%s %s must be canonical noun.verb", label, quoted(value))
+	}
+}
+
 func (v *validator) add(format string, args ...any) {
 	v.issues = append(v.issues, fmt.Sprintf(format, args...))
 }
@@ -432,6 +474,29 @@ func validMethod(method string) bool {
 	default:
 		return false
 	}
+}
+
+func validSuccessStatus(method string, status int) bool {
+	switch method {
+	case "GET":
+		return status == 200
+	case "POST":
+		return status == 200 || status == 201 || status == 202
+	case "PUT":
+		return status == 200 || status == 202
+	case "PATCH":
+		return status == 200
+	case "DELETE":
+		return status == 202 || status == 204
+	default:
+		return false
+	}
+}
+
+func validOperationIdentity(value string) bool {
+	noun, verb, found := strings.Cut(value, ".")
+	return found && !strings.Contains(verb, ".") && validLiteralSegment(noun) &&
+		validLiteralSegment(verb)
 }
 
 func acceptedExemptionClass(leaf CLILeaf) (ExemptionClass, bool) {

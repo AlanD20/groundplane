@@ -2,7 +2,8 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// component: list | show | enable | disable | config | update. One noun spans
+// component: list | show | enable | disable | config show | config set |
+// update. One noun spans
 // environment and platform owners; each kind's registration declares which
 // owner is valid.
 func newComponentCmd() *cobra.Command {
@@ -37,24 +38,15 @@ func newComponentCmd() *cobra.Command {
 		},
 	})
 
-	var kind string
 	enable := &cobra.Command{
-		Use:   "enable",
-		Short: "Enable (creating if needed) a component by kind",
-		Args:  cobra.NoArgs,
+		Use:   "enable <id>",
+		Short: "Enable a component",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app := fromContext(cmd)
-			body := map[string]interface{}{"kind": kind, "enabled": true}
-			if platform {
-				body["platform"] = true
-			} else {
-				body["environment"] = app.Scope.Environment
-			}
-			return runCreate(cmd, "/api/v1/components", body)
+			path := "/api/v1/components/" + target(fromContext(cmd), args[0]) + "/enable"
+			return runAction(cmd, path, nil)
 		},
 	}
-	enable.Flags().StringVar(&kind, "kind", "", "caddy | cloudflare-tunnel | coredns | controller | agent")
-	_ = enable.MarkFlagRequired("kind")
 	cmd.AddCommand(enable)
 
 	cmd.AddCommand(&cobra.Command{
@@ -62,20 +54,35 @@ func newComponentCmd() *cobra.Command {
 		Short: "Disable a component",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/disable", nil)
+			return runAction(
+				cmd,
+				"/api/v1/components/"+target(fromContext(cmd), args[0])+"/disable",
+				nil,
+			)
 		},
 	})
 
-	config := &cobra.Command{
-		Use:   "config <id>",
-		Short: "Set a component's kind-specific config (e.g. the Caddyfile template, tunnel hostnames)",
+	config := &cobra.Command{Use: "config", Short: "A component's kind-specific config"}
+	config.AddCommand(&cobra.Command{
+		Use:   "show <id>",
+		Short: "Show a component's config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: kind-specific flags once the component registry (mirroring
-			// internal/adapters' pattern) defines each kind's config shape.
-			return runEdit(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/config", nil)
+			path := "/api/v1/components/" + target(fromContext(cmd), args[0]) + "/config"
+			return runShow(cmd, path)
 		},
-	}
+	})
+	config.AddCommand(&cobra.Command{
+		Use:   "set <id>",
+		Short: "Set a component's config",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Kind-specific flags remain closed until the component registry
+			// defines each kind's exact config schema.
+			path := "/api/v1/components/" + target(fromContext(cmd), args[0]) + "/config"
+			return runReplaceSingleton(cmd, path, nil)
+		},
+	})
 	cmd.AddCommand(config)
 
 	cmd.AddCommand(&cobra.Command{
@@ -83,7 +90,11 @@ func newComponentCmd() *cobra.Command {
 		Short: "Update a component",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/update", nil)
+			return runAction(
+				cmd,
+				"/api/v1/components/"+target(fromContext(cmd), args[0])+"/update",
+				nil,
+			)
 		},
 	})
 

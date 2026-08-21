@@ -45,7 +45,7 @@ func TestValidateRejectsDuplicateManifestIdentities(t *testing.T) {
 					Operation: &Operation{
 						Console: manifest.Entries[0].Operation.Console,
 						CLI:     CLILeaf{Path: []string{"example", "second"}},
-						API:     validAPI("example-second", "/examples/{id}/second"),
+						API:     validAPI("example.second", "/examples/{id}/second"),
 					},
 				})
 			},
@@ -59,7 +59,7 @@ func TestValidateRejectsDuplicateManifestIdentities(t *testing.T) {
 					Operation: &Operation{
 						Console: ConsoleAction{ID: "example.second"},
 						CLI:     manifest.Entries[0].Operation.CLI,
-						API:     validAPI("example-second", "/examples/{id}/second"),
+						API:     validAPI("example.second", "/examples/{id}/second"),
 					},
 				})
 			},
@@ -110,18 +110,18 @@ func TestValidateRejectsDuplicateAPIOperationIDs(t *testing.T) {
 					Operation: &Operation{
 						Console: ConsoleAction{ID: "example.second"},
 						CLI:     CLILeaf{Path: []string{"example", "second"}},
-						API:     validAPI("example-show", "/examples/{id}/second"),
+						API:     validAPI("example.show", "/examples/{id}/second"),
 					},
 				})
 			},
-			want: `api operation id "example-show" is mapped by 2 entries`,
+			want: `api operation id "example.show" is mapped by 2 entries`,
 		},
 		{
 			name: "capture",
 			mutate: func(_ *Manifest, capture *Capture) {
-				capture.RecordAPI(validAPI("example-show", "/examples/{id}/second"))
+				capture.RecordAPI(validAPI("example.show", "/examples/{id}/second"))
 			},
-			want: `captured api operation id "example-show" occurs 2 times`,
+			want: `captured api operation id "example.show" occurs 2 times`,
 		},
 	}
 
@@ -163,7 +163,7 @@ func TestValidateRejectsOrphanedCapturedSurfaces(t *testing.T) {
 		{
 			name: "api",
 			mutate: func(capture *Capture) {
-				capture.RecordAPI(validAPI("orphan-show", "/orphans/{id}"))
+				capture.RecordAPI(validAPI("orphan.show", "/orphans/{id}"))
 			},
 			want: `captured api endpoint "GET /orphans/{id}" is not in the manifest`,
 		},
@@ -237,7 +237,7 @@ func TestValidateRejectsDeepAPIContractDrift(t *testing.T) {
 		{
 			name: "operation id",
 			mutate: func(api *APIContract) {
-				api.OperationID = "different-show"
+				api.OperationID = "different.show"
 			},
 			want: "operation id",
 		},
@@ -473,14 +473,34 @@ func TestValidateAcceptsClosedExemptionCatalog(t *testing.T) {
 		path  []string
 		class ExemptionClass
 	}{
-		{name: "controller serve", path: []string{"controller", "serve"}, class: ExemptionLocalProcess},
+		{
+			name:  "controller serve",
+			path:  []string{"controller", "serve"},
+			class: ExemptionLocalProcess,
+		},
 		{name: "agent run", path: []string{"agent-run", "run"}, class: ExemptionLocalProcess},
-		{name: "controller key", path: []string{"controller", "key", "show"}, class: ExemptionLocalDiagnostic},
-		{name: "controller etcd", path: []string{"controller", "etcd", "show"}, class: ExemptionLocalDiagnostic},
+		{
+			name:  "controller key",
+			path:  []string{"controller", "key", "show"},
+			class: ExemptionLocalDiagnostic,
+		},
+		{
+			name:  "controller etcd",
+			path:  []string{"controller", "etcd", "show"},
+			class: ExemptionLocalDiagnostic,
+		},
 		{name: "version", path: []string{"version"}, class: ExemptionLocalTooling},
-		{name: "completion bash", path: []string{"completion", "bash"}, class: ExemptionLocalTooling},
+		{
+			name:  "completion bash",
+			path:  []string{"completion", "bash"},
+			class: ExemptionLocalTooling,
+		},
 		{name: "completion zsh", path: []string{"completion", "zsh"}, class: ExemptionLocalTooling},
-		{name: "completion fish", path: []string{"completion", "fish"}, class: ExemptionLocalTooling},
+		{
+			name:  "completion fish",
+			path:  []string{"completion", "fish"},
+			class: ExemptionLocalTooling,
+		},
 	}
 
 	for _, test := range tests {
@@ -670,6 +690,142 @@ func TestValidateRejectsInvalidPayloadDirectionsAndNoContentBodies(t *testing.T)
 	}
 }
 
+// Rationale: 200/201/202/204 have distinct product meanings. In particular,
+// accepting an arbitrary JSON response for 202 would let an asynchronous
+// operation escape the one Task response contract.
+func TestValidateEnforcesSemanticSuccessResponses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		method   string
+		status   int
+		response Payload
+		want     string
+	}{
+		{
+			name: "ok without representation", method: "POST", status: 200,
+			response: Payload{Kind: PayloadNone},
+			want:     "success status 200 requires a response representation",
+		},
+		{
+			name: "created without resource", method: "POST", status: 201,
+			response: Payload{Kind: PayloadNone},
+			want:     "success status 201 requires a json resource response",
+		},
+		{
+			name: "accepted without task", method: "POST", status: 202,
+			response: Payload{Kind: PayloadJSON, Schema: "Example"},
+			want:     `success status 202 requires response payload "json:TaskAccepted"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest, capture := validFixture()
+			for _, api := range []*APIContract{&manifest.Entries[0].Operation.API, &capture.API[0]} {
+				api.Method = test.method
+				api.SuccessStatus = test.status
+				api.Response = test.response
+			}
+			assertViolation(t, Validate(manifest, capture), test.want)
+		})
+	}
+}
+
+// Rationale: the validator must retain every accepted semantic outcome while
+// keeping Task dispatch distinct from resource creation and synchronous
+// updates.
+func TestValidateAcceptsSemanticSuccessResponses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		method   string
+		status   int
+		response Payload
+	}{
+		{
+			name:     "read",
+			method:   "GET",
+			status:   200,
+			response: Payload{Kind: PayloadJSON, Schema: "Example"},
+		},
+		{
+			name:     "stream",
+			method:   "GET",
+			status:   200,
+			response: Payload{Kind: PayloadEventStream, Schema: "ExampleEvent"},
+		},
+		{
+			name:     "post update",
+			method:   "POST",
+			status:   200,
+			response: Payload{Kind: PayloadJSON, Schema: "Example"},
+		},
+		{
+			name:     "create",
+			method:   "POST",
+			status:   201,
+			response: Payload{Kind: PayloadJSON, Schema: "Example"},
+		},
+		{
+			name:     "post task",
+			method:   "POST",
+			status:   202,
+			response: Payload{Kind: PayloadJSON, Schema: "TaskAccepted"},
+		},
+		{
+			name:     "singleton update",
+			method:   "PUT",
+			status:   200,
+			response: Payload{Kind: PayloadJSON, Schema: "Example"},
+		},
+		{
+			name:     "put task",
+			method:   "PUT",
+			status:   202,
+			response: Payload{Kind: PayloadJSON, Schema: "TaskAccepted"},
+		},
+		{
+			name:     "partial update",
+			method:   "PATCH",
+			status:   200,
+			response: Payload{Kind: PayloadJSON, Schema: "Example"},
+		},
+		{
+			name:     "delete task",
+			method:   "DELETE",
+			status:   202,
+			response: Payload{Kind: PayloadJSON, Schema: "TaskAccepted"},
+		},
+		{
+			name:     "synchronous delete",
+			method:   "DELETE",
+			status:   204,
+			response: Payload{Kind: PayloadNone},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest, capture := validFixture()
+			for _, api := range []*APIContract{&manifest.Entries[0].Operation.API, &capture.API[0]} {
+				api.Method = test.method
+				api.SuccessStatus = test.status
+				api.Response = test.response
+			}
+			if err := Validate(manifest, capture); err != nil {
+				t.Fatalf("Validate() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
 // Rationale: the directional rules must retain multipart requests and event
 // stream responses, the two payload forms used by the accepted human API.
 func TestValidateAcceptsDirectionalPayloadKinds(t *testing.T) {
@@ -711,7 +867,7 @@ func validFixture() (Manifest, Capture) {
 	operation := Operation{
 		Console: ConsoleAction{ID: "example.show"},
 		CLI:     CLILeaf{Path: []string{"example", "show"}},
-		API:     validAPI("example-show", "/examples/{id}"),
+		API:     validAPI("example.show", "/examples/{id}"),
 	}
 	exemption := Exemption{
 		CLI:    CLILeaf{Path: []string{"controller", "key", "show"}},

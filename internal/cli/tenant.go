@@ -59,9 +59,9 @@ func newTenantCmd() *cobra.Command {
 		Short: "Rename a tenant's slug (id unchanged; a stale slug simply fails to resolve afterward)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(
+			return runPostUpdate(
 				cmd,
-				"/api/v1/tenants/"+target(fromContext(cmd), args[0]),
+				"/api/v1/tenants/"+target(fromContext(cmd), args[0])+"/rename",
 				map[string]string{"slug": newSlug},
 			)
 		},

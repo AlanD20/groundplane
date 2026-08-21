@@ -14,7 +14,10 @@ import (
 // fully selectable sources. See mvp.md, "Backup", and blueprint.md,
 // "x-gp-backup".
 func newBackupCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "backup", Short: "Backup policy, runs, recovery points, and restores"}
+	cmd := &cobra.Command{
+		Use:   "backup",
+		Short: "Backup policy, runs, recovery points, and restores",
+	}
 
 	policy := &cobra.Command{Use: "policy", Short: "The environment's one backup policy"}
 	policy.AddCommand(&cobra.Command{
@@ -23,7 +26,10 @@ func newBackupCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runShow(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/backup-policy")
+			return runShow(
+				cmd,
+				"/api/v1/environments/"+target(app, app.Scope.Environment)+"/backup-policy",
+			)
 		},
 	})
 
@@ -39,16 +45,18 @@ func newBackupCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/backup-policy"
-			return runEdit(cmd, path, map[string]interface{}{
+			return runReplaceSingleton(cmd, path, map[string]interface{}{
 				"frequency": frequency, "keep": keep, "encryption": encryption,
 				"sources": sources, "enabled": !off,
 			})
 		},
 	}
-	set.Flags().StringVar(&frequency, "frequency", "", "systemd calendar expression, e.g. '*-*-* 03:15:00'")
+	set.Flags().
+		StringVar(&frequency, "frequency", "", "systemd calendar expression, e.g. '*-*-* 03:15:00'")
 	set.Flags().IntVar(&keep, "keep", 0, "how many previous recovery points to retain")
 	set.Flags().StringVar(&encryption, "encryption", "age", "age | none")
-	set.Flags().StringSliceVar(&sources, "source", nil, "repeatable: <attach-id> | volume:<name> | config")
+	set.Flags().
+		StringSliceVar(&sources, "source", nil, "repeatable: <attach-id> | volume:<name> | config")
 	set.Flags().
 		BoolVar(&off, "off", false, "disable backups for this environment (policy and sources are kept, just don't run)")
 	policy.AddCommand(set)
@@ -75,7 +83,11 @@ func newBackupCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runList(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/recovery-points", nil)
+			return runList(
+				cmd,
+				"/api/v1/environments/"+target(app, app.Scope.Environment)+"/recovery-points",
+				nil,
+			)
 		},
 	}
 	cmd.AddCommand(points)
@@ -112,7 +124,11 @@ func newBackupCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runAction(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/rotate-key", nil)
+			return runAction(
+				cmd,
+				"/api/v1/environments/"+target(app, app.Scope.Environment)+"/rotate-key",
+				nil,
+			)
 		},
 	})
 
@@ -122,7 +138,10 @@ func newBackupCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			return runExportKey(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/export-key")
+			return runExportKey(
+				cmd,
+				"/api/v1/environments/"+target(app, app.Scope.Environment)+"/export-key",
+			)
 		},
 	})
 
