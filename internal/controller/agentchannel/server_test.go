@@ -400,9 +400,14 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	registry := NewRegistry()
 	stream := newLiveStream(ctx)
 	stream.received <- authenticateMessage(testAgentID, testToken(7))
+	taskID := ids.NewAt(ids.KindTask, testTime(), 19)
+	planHash := bytes.Repeat([]byte{0x19}, 32)
+	tasks := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: {Record: etcd.TaskRecord{
+		ID: taskID, PlanHash: hex.EncodeToString(planHash), Status: etcd.TaskStatusRunning,
+	}}}}
 	result := make(chan error, 1)
 	go func() {
-		result <- New(authorizedAuthenticator(), registry, nil, nil).Connect(stream)
+		result <- New(authorizedAuthenticator(), registry, tasks, nil).Connect(stream)
 	}()
 
 	select {
@@ -413,7 +418,10 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Controller did not send initial config")
 	}
-	taskID := ids.NewAt(ids.KindTask, testTime(), 19)
+	terminal, err := registry.TaskTerminal(ctx, testAgentID, 1, taskID)
+	if err != nil {
+		t.Fatalf("TaskTerminal() error = %v", err)
+	}
 	if err := registry.AbortTask(ctx, testAgentID, 1, taskID, "agent_removed"); err != nil {
 		t.Fatalf("AbortTask() error = %v", err)
 	}
@@ -425,6 +433,20 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Controller did not deliver TaskAbort")
+	}
+	stream.received <- &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
+		TaskId: taskID, PlanHash: planHash, Terminal: agentpb.TaskTerminal_TASK_TERMINAL_ABORTED,
+		Result: &agentpb.TaskAck_ComposeResult{ComposeResult: &agentpb.ComposeTaskResult{
+			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+		}},
+	}}}
+	select {
+	case terminalErr := <-terminal:
+		if terminalErr != nil {
+			t.Fatalf("Task terminal result = %v", terminalErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("durable Task acknowledgement did not notify terminal subscriber")
 	}
 	cancel()
 	if err := <-result; err != nil {

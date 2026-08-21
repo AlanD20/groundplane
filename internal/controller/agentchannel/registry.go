@@ -30,6 +30,7 @@ type Registry struct {
 	agents           map[string]*sessionState
 	lifecycle        map[string]*lifecycleFence
 	ready            map[readyKey]map[uint64]*readySubscription
+	terminals        map[taskTerminalKey]map[uint64]*taskTerminalSubscription
 }
 
 type lifecycleFence struct {
@@ -69,6 +70,17 @@ type readySubscription struct {
 	stop   func() bool
 }
 
+type taskTerminalKey struct {
+	agentID    string
+	generation uint64
+	taskID     string
+}
+
+type taskTerminalSubscription struct {
+	result chan error
+	stop   func() bool
+}
+
 // Session is a fenced capability for mutating one active Agent session.
 type Session struct {
 	registry *Registry
@@ -84,6 +96,7 @@ func NewRegistry() *Registry {
 		agents:    make(map[string]*sessionState),
 		lifecycle: make(map[string]*lifecycleFence),
 		ready:     make(map[readyKey]map[uint64]*readySubscription),
+		terminals: make(map[taskTerminalKey]map[uint64]*taskTerminalSubscription),
 	}
 }
 
@@ -170,6 +183,25 @@ func (s *Session) RecordReady(at time.Time, capacity int32) error {
 	current.readyReported = true
 	current.capacity = capacity
 	s.registry.notifyReadyLocked(readyKey{agentID: s.agentID, generation: current.generation})
+	return nil
+}
+
+// RecordTaskTerminal publishes completion only after the caller has committed
+// the durable Task acknowledgement. A fenced session cannot satisfy a waiter
+// belonging to its replacement.
+func (s *Session) RecordTaskTerminal(taskID string) error {
+	if ids.Validate(ids.KindTask, taskID) != nil {
+		return errs.New(errs.KindValidationFailed, "terminal Task id is invalid")
+	}
+	s.registry.mu.Lock()
+	defer s.registry.mu.Unlock()
+	current := s.registry.agents[s.agentID]
+	if current != s.state || current.fence != s.state.fence || !current.online || current.revoked {
+		return errs.New(errs.KindStateConflict, "agent session is fenced")
+	}
+	s.registry.notifyTaskTerminalLocked(taskTerminalKey{
+		agentID: s.agentID, generation: current.generation, taskID: taskID,
+	})
 	return nil
 }
 
@@ -265,6 +297,41 @@ func (r *Registry) Ready(ctx context.Context, agentID string, generation uint64)
 	return subscription.signal, nil
 }
 
+// TaskTerminal subscribes before an abort is sent, closing the gap between
+// demand cancellation and the Agent's durable acknowledgement. The result is
+// nil only when the exact live generation reports terminal after persistence.
+func (r *Registry) TaskTerminal(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	taskID string,
+) (<-chan error, error) {
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return nil, err
+	}
+	if ids.Validate(ids.KindTask, taskID) != nil {
+		return nil, errs.New(errs.KindValidationFailed, "terminal Task id is invalid")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	state := r.agents[agentID]
+	if state == nil || state.generation != generation || !state.online || state.revoked {
+		return nil, errs.New(errs.KindStateConflict, "Agent session is not online at the requested generation")
+	}
+	key := taskTerminalKey{agentID: agentID, generation: generation, taskID: taskID}
+	r.nextSubscription++
+	id := r.nextSubscription
+	subscription := &taskTerminalSubscription{result: make(chan error, 1)}
+	if r.terminals[key] == nil {
+		r.terminals[key] = make(map[uint64]*taskTerminalSubscription)
+	}
+	r.terminals[key][id] = subscription
+	subscription.stop = context.AfterFunc(ctx, func() {
+		r.cancelTaskTerminalSubscription(key, id, subscription, ctx.Err())
+	})
+	return subscription.result, nil
+}
+
 // Close marks this session offline if it still owns the active fence.
 func (s *Session) Close() {
 	s.close.Do(func() {
@@ -274,6 +341,11 @@ func (s *Session) Close() {
 		if s.registry.agents[s.agentID] == s.state {
 			s.state.online = false
 		}
+		s.registry.failTaskTerminalsLocked(
+			s.agentID,
+			s.state.generation,
+			errs.New(errs.KindStateConflict, "Agent session ended before Task terminal acknowledgement"),
+		)
 		s.registry.mu.Unlock()
 
 		s.state.offlineOnce.Do(func() { close(s.state.offline) })
@@ -405,6 +477,34 @@ func (r *Registry) notifyReadyLocked(key readyKey) {
 	}
 }
 
+func (r *Registry) notifyTaskTerminalLocked(key taskTerminalKey) {
+	subscriptions := r.terminals[key]
+	delete(r.terminals, key)
+	for _, subscription := range subscriptions {
+		if subscription.stop != nil {
+			subscription.stop()
+		}
+		subscription.result <- nil
+		close(subscription.result)
+	}
+}
+
+func (r *Registry) failTaskTerminalsLocked(agentID string, generation uint64, err error) {
+	for key, subscriptions := range r.terminals {
+		if key.agentID != agentID || key.generation != generation {
+			continue
+		}
+		delete(r.terminals, key)
+		for _, subscription := range subscriptions {
+			if subscription.stop != nil {
+				subscription.stop()
+			}
+			subscription.result <- err
+			close(subscription.result)
+		}
+	}
+}
+
 func (r *Registry) cancelReadySubscription(key readyKey, id uint64, subscription *readySubscription) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -418,6 +518,29 @@ func (r *Registry) cancelReadySubscription(key readyKey, id uint64, subscription
 		delete(r.ready, key)
 	}
 	close(subscription.signal)
+}
+
+func (r *Registry) cancelTaskTerminalSubscription(
+	key taskTerminalKey,
+	id uint64,
+	subscription *taskTerminalSubscription,
+	err error,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	subscriptions := r.terminals[key]
+	if subscriptions[id] != subscription {
+		return
+	}
+	delete(subscriptions, id)
+	if len(subscriptions) == 0 {
+		delete(r.terminals, key)
+	}
+	if err == nil {
+		err = errs.New(errs.KindStateConflict, "Task terminal subscription ended")
+	}
+	subscription.result <- err
+	close(subscription.result)
 }
 
 func validateLifecycleTarget(ctx context.Context, agentID string, generation uint64) error {

@@ -216,6 +216,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				); err != nil {
 					return taskStoreStatus(err)
 				}
+				if err := session.RecordTaskTerminal(acknowledgement.TaskId); err != nil {
+					return status.Error(codes.FailedPrecondition, "agent session is not current")
+				}
 				delete(delivered, acknowledgement.TaskId)
 				continue
 			}
