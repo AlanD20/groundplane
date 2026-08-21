@@ -93,6 +93,9 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := parent.Err(); err != nil {
+		return nil, err
+	}
 
 	lifecycle := r.lifecycle[agentID]
 	if lifecycle != nil && generation <= lifecycle.revokedThrough {

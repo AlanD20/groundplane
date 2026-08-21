@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -393,6 +394,39 @@ func TestRegistryOpenRejectsInvalidInputsWithoutFencingCurrentSession(t *testing
 	}
 }
 
+// Rationale: a parent canceled while Open waits for the registry lock is
+// already canceled at the mutation boundary and must not fence the live session.
+func TestRegistryOpenRejectsParentCanceledWhileWaitingForMutation(t *testing.T) {
+	registry := NewRegistry()
+	current, err := registry.Open(context.Background(), testAgentID, 7)
+	if err != nil {
+		t.Fatalf("open current session: %v", err)
+	}
+	defer current.Close()
+
+	parent, cancel := context.WithCancel(context.Background())
+	checked := make(chan struct{})
+	observed := &observedErrorContext{Context: parent, checked: checked}
+	registry.mu.Lock()
+	result := make(chan error, 1)
+	go func() {
+		_, openErr := registry.Open(observed, testAgentID, 8)
+		result <- openErr
+	}()
+	<-checked
+	cancel()
+	registry.mu.Unlock()
+
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Open() error = %v, want context.Canceled", err)
+	}
+	select {
+	case <-current.Done():
+		t.Fatal("canceled Open fenced the current session")
+	default:
+	}
+}
+
 // Rationale: revoking one generation must fence its stream idempotently while
 // still allowing a separately authenticated newer generation to replace it.
 func TestRegistryRevokeFencesOnlyMatchingGeneration(t *testing.T) {
@@ -436,4 +470,16 @@ func assertStateConflict(t *testing.T, err error) {
 	if got := domainError.HTTPStatus(); got != 409 {
 		t.Fatalf("expected status 409, got %d", got)
 	}
+}
+
+type observedErrorContext struct {
+	context.Context
+	checked chan struct{}
+	once    sync.Once
+}
+
+func (ctx *observedErrorContext) Err() error {
+	err := ctx.Context.Err()
+	ctx.once.Do(func() { close(ctx.checked) })
+	return err
 }
