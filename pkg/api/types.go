@@ -146,15 +146,11 @@ type Service struct {
 // EntrySource is the discriminated union api-cli.md section 4 shows:
 // literal, secret_ref, and fact are mutually exclusive.
 type EntrySource struct {
-	Kind      string   `json:"kind"` // "literal" | "secret_ref" | "fact"
-	Literal   string   `json:"literal,omitempty"`
-	SecretRef string   `json:"secret_ref,omitempty"`
-	Fact      *FactRef `json:"fact,omitempty"`
-}
-
-type FactRef struct {
-	AttachID string `json:"attach_id"`
-	Fact     string `json:"fact"` // e.g. "pg16_URL"
+	Kind      string `json:"kind"` // "literal" | "secret_ref" | "fact"
+	Literal   string `json:"literal,omitempty"`
+	SecretRef string `json:"secret_ref,omitempty"`
+	AttachID  string `json:"attach_id,omitempty"`
+	Fact      string `json:"fact,omitempty"` // e.g. "pg16_URL"
 }
 
 type Entry struct {
@@ -162,6 +158,8 @@ type Entry struct {
 	Type     string      `json:"type"`           // "env" | "file"
 	Key      string      `json:"key,omitempty"`  // Type=env
 	Path     string      `json:"path,omitempty"` // Type=file
+	UID      *uint32     `json:"uid,omitempty"`  // Type=file; required even when zero
+	GID      *uint32     `json:"gid,omitempty"`  // Type=file; required even when zero
 	Source   EntrySource `json:"source"`
 	Exposure []string    `json:"exposure"` // service names, or ["all"]
 	Secret   bool        `json:"secret"`

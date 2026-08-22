@@ -127,6 +127,8 @@ type AttachmentSpec struct {
 type EntrySpec struct {
 	Kind     EntryKind       `yaml:"kind"`
 	Path     string          `yaml:"path,omitempty"` // Kind=file only
+	UID      *uint32         `yaml:"uid,omitempty"`  // Kind=file only; explicit, never inferred
+	GID      *uint32         `yaml:"gid,omitempty"`  // Kind=file only; explicit, never inferred
 	Source   EntrySourceSpec `yaml:"source"`
 	Exposure []string        `yaml:"exposure"`
 	Secret   bool            `yaml:"secret,omitempty"`

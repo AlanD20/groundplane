@@ -202,6 +202,9 @@ func (e EnvEntry) Validate() error {
 		if e.Path != "" {
 			return fmt.Errorf("entry %s: kind=env must not set path", e.ID)
 		}
+		if e.UID != nil || e.GID != nil {
+			return fmt.Errorf("entry %s: kind=env must not set uid or gid", e.ID)
+		}
 	case EntryKindFile:
 		if e.Path == "" {
 			return fmt.Errorf("entry %s: kind=file requires path", e.ID)
@@ -209,38 +212,24 @@ func (e EnvEntry) Validate() error {
 		if e.Key != "" {
 			return fmt.Errorf("entry %s: kind=file must not set key", e.ID)
 		}
+		if e.UID == nil || e.GID == nil {
+			return fmt.Errorf("entry %s: kind=file requires explicit uid and gid", e.ID)
+		}
 	default:
 		return fmt.Errorf("entry %s: kind must be %q or %q", e.ID, EntryKindEnv, EntryKindFile)
 	}
 
-	set := 0
-	if e.Source.Literal != "" {
-		set++
-	}
-	if e.Source.SecretRef != "" {
-		set++
-	}
-	if e.Source.Fact != nil {
-		set++
-	}
-	if set != 1 {
-		return fmt.Errorf(
-			"entry %s: source must set exactly one of literal, secret_ref, or fact (got %d)",
-			e.ID,
-			set,
-		)
-	}
 	switch e.Source.Kind {
 	case SourceLiteral:
-		if e.Source.Literal == "" {
-			return fmt.Errorf("entry %s: source.kind=%q requires literal", e.ID, SourceLiteral)
+		if e.Source.SecretRef != "" || e.Source.Fact != nil {
+			return fmt.Errorf("entry %s: literal source carries another source kind", e.ID)
 		}
 	case SourceSecretRef:
-		if e.Source.SecretRef == "" {
+		if e.Source.SecretRef == "" || e.Source.Literal != "" || e.Source.Fact != nil {
 			return fmt.Errorf("entry %s: source.kind=%q requires secret_ref", e.ID, SourceSecretRef)
 		}
 	case SourceFact:
-		if e.Source.Fact == nil {
+		if e.Source.Fact == nil || e.Source.Literal != "" || e.Source.SecretRef != "" {
 			return fmt.Errorf("entry %s: source.kind=%q requires fact", e.ID, SourceFact)
 		}
 		if e.Source.Fact.Attach == "" || e.Source.Fact.Key == "" {

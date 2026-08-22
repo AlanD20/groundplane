@@ -99,9 +99,10 @@ const (
 
 // Mutation is one atomic write. Value is used only by MutationPut.
 type Mutation struct {
-	Type  MutationType
-	Key   string
-	Value []byte
+	Type   MutationType
+	Key    string
+	Value  []byte
+	Prefix bool
 }
 
 // TransactionResult reports whether all conditions matched and the etcd
@@ -458,9 +459,19 @@ func (s *store) Transact(
 		}
 		switch mutation.Type {
 		case MutationPut:
+			if mutation.Prefix {
+				return TransactionResult{}, errs.New(
+					errs.KindValidationFailed,
+					"etcd put mutation must not use prefix semantics",
+				)
+			}
 			operations = append(operations, clientv3.OpPut(key, string(mutation.Value)))
 		case MutationDelete:
-			operations = append(operations, clientv3.OpDelete(key))
+			if mutation.Prefix {
+				operations = append(operations, clientv3.OpDelete(key, clientv3.WithPrefix()))
+			} else {
+				operations = append(operations, clientv3.OpDelete(key))
+			}
 		default:
 			return TransactionResult{}, errs.New(errs.KindValidationFailed, "invalid etcd transaction mutation")
 		}
@@ -532,8 +543,12 @@ func transactionRequest(
 				Key: []byte(physicalMutations[index]), Value: mutation.Value,
 			}}
 		case MutationDelete:
+			request := &etcdserverpb.DeleteRangeRequest{Key: []byte(physicalMutations[index])}
+			if mutation.Prefix {
+				request.RangeEnd = []byte(clientv3.GetPrefixRangeEnd(physicalMutations[index]))
+			}
 			operation.Request = &etcdserverpb.RequestOp_RequestDeleteRange{
-				RequestDeleteRange: &etcdserverpb.DeleteRangeRequest{Key: []byte(physicalMutations[index])},
+				RequestDeleteRange: request,
 			}
 		}
 		request.Success = append(request.Success, operation)

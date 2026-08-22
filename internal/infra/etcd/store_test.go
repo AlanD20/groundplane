@@ -336,6 +336,37 @@ func TestStoreTransactScopesAtomicCompareAndMutations(t *testing.T) {
 	}
 }
 
+func TestStoreTransactScopesPrefixDelete(t *testing.T) {
+	// Rationale: deleting an Entry must remove every immutable subordinate
+	// value generation in the same transaction without imposing an artificial
+	// limit on the number of edits retained for Task retry.
+	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 23}, Succeeded: true,
+	}}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatalf("newStore() error = %v", err)
+	}
+
+	_, err = store.Transact(
+		context.Background(),
+		nil,
+		[]Mutation{{Type: MutationDelete, Key: "/v1/secret-values/entries/ev_1/", Prefix: true}},
+	)
+	if err != nil {
+		t.Fatalf("Transact() error = %v", err)
+	}
+	if len(backend.transaction.operations) != 1 || !backend.transaction.operations[0].IsDelete() {
+		t.Fatalf("Transact() operations = %#v", backend.transaction.operations)
+	}
+	operation := backend.transaction.operations[0]
+	wantKey := "/groundplane/v1/secret-values/entries/ev_1/"
+	if string(operation.KeyBytes()) != wantKey ||
+		string(operation.RangeBytes()) != clientv3.GetPrefixRangeEnd(wantKey) {
+		t.Fatalf("prefix delete = key %q range %q", operation.KeyBytes(), operation.RangeBytes())
+	}
+}
+
 func TestStoreSeparatesCallerContextFromBackendStatus(t *testing.T) {
 	// Rationale: only the caller context decides caller cancellation; an
 	// independent gRPC outage is retryable storage state, while a plain

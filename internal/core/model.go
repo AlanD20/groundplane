@@ -265,6 +265,8 @@ type EnvEntry struct {
 	Kind   EntryKind   `yaml:"kind"           json:"kind"`
 	Key    string      `yaml:"key,omitempty"  json:"key,omitempty"`  // Kind=env: the env var name
 	Path   string      `yaml:"path,omitempty" json:"path,omitempty"` // Kind=file: relative to the environment's volume folder — never escapes it
+	UID    *uint32     `yaml:"uid,omitempty"  json:"uid,omitempty"`  // Kind=file: explicit numeric workload owner
+	GID    *uint32     `yaml:"gid,omitempty"  json:"gid,omitempty"`  // Kind=file: explicit numeric workload group
 	Source EntrySource `yaml:"source"         json:"source"`
 	// Exposure is a list of service names, OR the single literal
 	// sentinel "all" meaning every service in the environment

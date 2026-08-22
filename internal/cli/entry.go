@@ -48,6 +48,7 @@ func newEntryAddCmd() *cobra.Command {
 		services            []string
 		all                 bool
 		secret              bool
+		uid, gid            uint32
 	)
 
 	cmd := &cobra.Command{
@@ -70,6 +71,16 @@ func newEntryAddCmd() *cobra.Command {
 				return err
 			}
 			exposure := entryExposure(services, all)
+			ownership, err := entryFileOwnership(
+				entryType,
+				uid,
+				gid,
+				cmd.Flags().Changed("uid"),
+				cmd.Flags().Changed("gid"),
+			)
+			if err != nil {
+				return err
+			}
 
 			body := map[string]interface{}{
 				"type": entryType, "source": source, "exposure": exposure, "secret": secret,
@@ -82,6 +93,9 @@ func newEntryAddCmd() *cobra.Command {
 				body["path"] = path
 			default:
 				return fmt.Errorf("--type must be %q or %q", "env", "file")
+			}
+			for field, value := range ownership {
+				body[field] = value
 			}
 			return runCreate(cmd, "/api/v1/entries", body)
 		},
@@ -101,6 +115,8 @@ func newEntryAddCmd() *cobra.Command {
 	cmd.Flags().
 		BoolVar(&all, "all", true, "expose to all services in the environment (default; overridden by --service)")
 	cmd.Flags().BoolVar(&secret, "secret", false, "store in the encrypted secret store instead of desired state")
+	cmd.Flags().Uint32Var(&uid, "uid", 0, "numeric owner for a file Entry (required with --type file)")
+	cmd.Flags().Uint32Var(&gid, "gid", 0, "numeric group for a file Entry (required with --type file)")
 	return cmd
 }
 
@@ -193,9 +209,33 @@ func buildEntrySource(options entrySourceOptions) (map[string]interface{}, error
 			return nil, fmt.Errorf("--fact-attach and --fact-key must both be set")
 		}
 		return map[string]interface{}{
-			"kind": "fact",
-			"fact": map[string]string{"attach_id": options.factAttach, "fact": options.factKey},
+			"kind":      "fact",
+			"attach_id": options.factAttach,
+			"fact":      options.factKey,
 		}, nil
+	}
+}
+
+func entryFileOwnership(
+	entryType string,
+	uid uint32,
+	gid uint32,
+	uidSet bool,
+	gidSet bool,
+) (map[string]interface{}, error) {
+	switch entryType {
+	case "env":
+		if uidSet || gidSet {
+			return nil, fmt.Errorf("--uid and --gid apply only to --type file")
+		}
+		return nil, nil
+	case "file":
+		if !uidSet || !gidSet {
+			return nil, fmt.Errorf("--type file requires both --uid and --gid")
+		}
+		return map[string]interface{}{"uid": uid, "gid": gid}, nil
+	default:
+		return nil, fmt.Errorf("--type must be %q or %q", "env", "file")
 	}
 }
 

@@ -90,6 +90,35 @@ func TestEnvEntryValidate_SourceIsExactlyOneKind(t *testing.T) {
 	}
 }
 
+func TestEnvEntryValidate_FileRequiresExplicitNumericOwnership(t *testing.T) {
+	// Rationale: ADR 0020 forbids inferring a workload user from an image or
+	// silently defaulting file ownership; both numeric values must be authored.
+	entry := EnvEntry{
+		ID: "ev_x", Kind: EntryKindFile, Path: "config/app.ini",
+		Source: EntrySource{Kind: SourceLiteral, Literal: "enabled=true"}, Exposure: []string{"api"},
+	}
+	if err := entry.Validate(); err == nil {
+		t.Fatal("Validate() accepted a file Entry without uid and gid")
+	}
+	uid, gid := uint32(1000), uint32(1001)
+	entry.UID, entry.GID = &uid, &gid
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("Validate() rejected explicit file ownership: %v", err)
+	}
+}
+
+func TestEnvEntryValidate_AllowsEmptyLiteral(t *testing.T) {
+	// Rationale: an explicitly selected literal may legitimately be empty;
+	// source discrimination is carried by kind rather than string non-emptiness.
+	entry := EnvEntry{
+		ID: "ev_x", Kind: EntryKindEnv, Key: "OPTIONAL_VALUE",
+		Source: EntrySource{Kind: SourceLiteral}, Exposure: []string{"all"},
+	}
+	if err := entry.Validate(); err != nil {
+		t.Fatalf("Validate() rejected an explicitly empty literal: %v", err)
+	}
+}
+
 func TestProjectValidate_BackingProjectMustNotHaveTenant(t *testing.T) {
 	// Rationale: mvp.md's backing-project model is explicit that backing
 	// projects have no owning Tenant — a TenantID slipping onto one

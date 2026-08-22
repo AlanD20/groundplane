@@ -627,6 +627,17 @@ func (store *memoryHierarchyStore) Transact(
 	}
 	store.revision++
 	for _, mutation := range mutations {
+		if mutation.Type == MutationDelete && mutation.Prefix {
+			for key := range store.history {
+				if strings.HasPrefix(key, mutation.Key) {
+					store.history[key] = append(
+						store.history[key],
+						memoryVersion{revision: store.revision},
+					)
+				}
+			}
+			continue
+		}
 		version := memoryVersion{revision: store.revision}
 		switch mutation.Type {
 		case MutationPut:
