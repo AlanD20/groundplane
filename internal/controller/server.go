@@ -45,6 +45,7 @@ type Server struct {
 	backingServices       BackingServiceReader
 	environments          EnvironmentReader
 	services              ServiceReader
+	secrets               SecretReader
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
@@ -69,6 +70,7 @@ type Options struct {
 	BackingServices       BackingServiceReader
 	Environments          EnvironmentReader
 	Services              ServiceReader
+	Secrets               SecretReader
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
@@ -111,6 +113,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		backingServices:       options.BackingServices,
 		environments:          options.Environments,
 		services:              options.Services,
+		secrets:               options.Secrets,
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
@@ -127,6 +130,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerBackingServices()
 	s.registerEnvironments()
 	s.registerServices()
+	s.registerSecrets()
 	s.registerAttaches()
 	s.registerHost()
 	return s
@@ -226,15 +230,10 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/stop", s.acceptTask)
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/destroy", s.acceptTask)
 
-	// secret (?project=) — project-scoped, locked
-	mux.HandleFunc("GET /api/v1/secrets", s.notImplemented)
+	// Secret reads and explicit reveal are typed Huma operations. Protected
+	// create/delete mutations remain Task-backed placeholders.
 	s.jsonRoute("POST /api/v1/secrets", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/secrets/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/secrets/{id}", s.acceptTask)
-	mux.HandleFunc(
-		"GET /api/v1/secrets/{id}/value",
-		s.notImplemented,
-	) // reveal — Console-only preference, not access control
 
 	// connector (?environment= required) — environment-scoped only
 	mux.HandleFunc("GET /api/v1/connectors", s.notImplemented)

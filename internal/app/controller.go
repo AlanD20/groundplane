@@ -217,6 +217,21 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backing-service reads: %w", err)
 	}
+	secretRecords, err := etcd.NewSecretRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Secret repository: %w", err)
+	}
+	secretReadRepository, err := newDurableSecretReadRepository(hierarchyRecords, secretRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Secret read repositories: %w", err)
+	}
+	secretReads, err := newSecretReadService(secretReadRepository, intentProtector)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Secret reads: %w", err)
+	}
 	attachRecords, err := etcd.NewAttachRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -515,6 +530,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackingServices:       backingServiceReads,
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
+		Secrets:               secretReads,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,

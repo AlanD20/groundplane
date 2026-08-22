@@ -197,6 +197,16 @@ type PageBackingService struct {
 	NextCursor *string           `json:"next_cursor,omitempty"`
 }
 
+// PageSecret defines model for PageSecret.
+type PageSecret struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageSecret.json
+	Schema     *string   `json:"$schema,omitempty"`
+	Items      *[]Secret `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
+}
+
 // PageService defines model for PageService.
 type PageService struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -259,6 +269,30 @@ type ProjectRename struct {
 	// Examples: /api/v1/ProjectRename.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// Secret defines model for Secret.
+type Secret struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Secret.json
+	Schema    *string `json:"$schema,omitempty"`
+	Id        string  `json:"id"`
+	Key       string  `json:"key"`
+	Kind      string  `json:"kind"`
+	ProjectId *string `json:"project_id,omitempty"`
+	Ref       string  `json:"ref"`
+	Scope     string  `json:"scope"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+// SecretValue defines model for SecretValue.
+type SecretValue struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SecretValue.json
+	Schema *string `json:"$schema,omitempty"`
+	Value  string  `json:"value"`
 }
 
 // Service defines model for Service.
@@ -403,6 +437,14 @@ type ProjectEditParams struct {
 // ProjectRenameParams defines parameters for ProjectRename.
 type ProjectRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// SecretListParams defines parameters for SecretList.
+type SecretListParams struct {
+	Project  *string `form:"project,omitempty" json:"project,omitempty"`
+	Platform *bool   `form:"platform,omitempty" json:"platform,omitempty"`
+	Limit    *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // ServiceListParams defines parameters for ServiceList.
@@ -679,6 +721,21 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretList List reusable secrets
+	//
+	// Corresponds with GET /secrets (the `SecretList` operationId).
+	SecretList(ctx context.Context, params *SecretListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretShow Show reusable secret metadata
+	//
+	// Corresponds with GET /secrets/{id} (the `SecretShow` operationId).
+	SecretShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretReveal Reveal a reusable secret value
+	//
+	// Corresponds with GET /secrets/{id}/value (the `SecretReveal` operationId).
+	SecretReveal(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceList List services
 	//
@@ -1101,6 +1158,51 @@ func (c *Client) ProjectRenameWithBody(ctx context.Context, id string, params *P
 // Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 func (c *Client) ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewProjectRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretList List reusable secrets
+//
+// Corresponds with GET /secrets (the `SecretList` operationId).
+func (c *Client) SecretList(ctx context.Context, params *SecretListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretShow Show reusable secret metadata
+//
+// Corresponds with GET /secrets/{id} (the `SecretShow` operationId).
+func (c *Client) SecretShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretReveal Reveal a reusable secret value
+//
+// Corresponds with GET /secrets/{id}/value (the `SecretReveal` operationId).
+func (c *Client) SecretReveal(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretRevealRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -2137,6 +2239,164 @@ func NewProjectRenameRequestWithBody(server string, id string, params *ProjectRe
 	return req, nil
 }
 
+// NewSecretListRequest constructs an http.Request for the SecretList method
+func NewSecretListRequest(server string, params *SecretListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/secrets")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Project != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", *params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Platform != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "platform", *params.Platform, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSecretShowRequest constructs an http.Request for the SecretShow method
+func NewSecretShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/secrets/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSecretRevealRequest constructs an http.Request for the SecretReveal method
+func NewSecretRevealRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/secrets/%s/value", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewServiceListRequest constructs an http.Request for the ServiceList method
 func NewServiceListRequest(server string, params *ServiceListParams) (*http.Request, error) {
 	var err error
@@ -2688,6 +2948,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRenameWithResponse(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error)
+
+	// SecretListWithResponse List reusable secrets
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /secrets (the `SecretList` operationId).
+	SecretListWithResponse(ctx context.Context, params *SecretListParams, reqEditors ...RequestEditorFn) (*SecretListResponse, error)
+
+	// SecretShowWithResponse Show reusable secret metadata
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /secrets/{id} (the `SecretShow` operationId).
+	SecretShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*SecretShowResponse, error)
+
+	// SecretRevealWithResponse Reveal a reusable secret value
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /secrets/{id}/value (the `SecretReveal` operationId).
+	SecretRevealWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*SecretRevealResponse, error)
 
 	// ServiceListWithResponse List services
 	//
@@ -3577,6 +3858,150 @@ func (r ProjectRenameResponse) ContentType() string {
 	return ""
 }
 
+type SecretListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageSecret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SecretListResponse) GetJSON200() *PageSecret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SecretListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SecretListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecretListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecretListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecretListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SecretShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SecretShowResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SecretShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SecretShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecretShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecretShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecretShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SecretRevealResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SecretValue
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SecretRevealResponse) GetJSON200() *SecretValue {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SecretRevealResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SecretRevealResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecretRevealResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecretRevealResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecretRevealResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ServiceListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4183,6 +4608,45 @@ func (c *ClientWithResponses) ProjectRenameWithResponse(ctx context.Context, id 
 		return nil, err
 	}
 	return ParseProjectRenameResponse(rsp)
+}
+
+// SecretListWithResponse List reusable secrets
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /secrets (the `SecretList` operationId).
+func (c *ClientWithResponses) SecretListWithResponse(ctx context.Context, params *SecretListParams, reqEditors ...RequestEditorFn) (*SecretListResponse, error) {
+	rsp, err := c.SecretList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretListResponse(rsp)
+}
+
+// SecretShowWithResponse Show reusable secret metadata
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /secrets/{id} (the `SecretShow` operationId).
+func (c *ClientWithResponses) SecretShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*SecretShowResponse, error) {
+	rsp, err := c.SecretShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretShowResponse(rsp)
+}
+
+// SecretRevealWithResponse Reveal a reusable secret value
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /secrets/{id}/value (the `SecretReveal` operationId).
+func (c *ClientWithResponses) SecretRevealWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*SecretRevealResponse, error) {
+	rsp, err := c.SecretReveal(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretRevealResponse(rsp)
 }
 
 // ServiceListWithResponse List services
@@ -4929,6 +5393,105 @@ func ParseProjectRenameResponse(rsp *http.Response) (*ProjectRenameResponse, err
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseSecretListResponse parses an HTTP response from a SecretListWithResponse call
+func ParseSecretListResponse(rsp *http.Response) (*SecretListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecretListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageSecret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSecretShowResponse parses an HTTP response from a SecretShowWithResponse call
+func ParseSecretShowResponse(rsp *http.Response) (*SecretShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecretShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSecretRevealResponse parses an HTTP response from a SecretRevealWithResponse call
+func ParseSecretRevealResponse(rsp *http.Response) (*SecretRevealResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecretRevealResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SecretValue
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
