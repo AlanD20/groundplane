@@ -340,7 +340,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	}
 	serviceRecord, err := NewServiceRecord(environment.Record.ID, core.Service{
 		ID: ids.NewAt(ids.KindService, testAttachTime, 8), Name: "api", Image: "example/api:1",
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("NewServiceRecord() error = %v", err)
 	}
@@ -351,7 +351,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	backingServiceRecord, err := NewServiceRecord(backingEnvironment.Record.ID, core.Service{
 		ID: ids.NewAt(ids.KindService, testAttachTime, 9), Name: "postgres", Image: "postgres:16-alpine",
 		Adapter: "postgres:16",
-	})
+	}, ids.NewAt(ids.KindNetwork, testAttachTime, 200))
 	if err != nil {
 		t.Fatalf("NewServiceRecord(backing) error = %v", err)
 	}
@@ -466,7 +466,7 @@ func testPendingAttach(
 		scope.BackingProject.Record.ID,
 		scope.BackingEnvironment.Record.ID,
 		scope.BackingService.Record.Desired.ID,
-		ids.NewAt(ids.KindNetwork, testAttachTime, 200),
+		scope.BackingService.Record.BackingNetworkID,
 		[]string{scope.Services[0].Record.Desired.ID},
 		grantIDs,
 		factSets,

@@ -160,7 +160,7 @@ func serviceRepositoryTestRecord(
 	record, err := NewServiceRecord(environmentID, core.Service{
 		ID:   ids.NewAt(ids.KindService, serviceRecordTestTime(), offset),
 		Name: name, Image: "app:latest", Strategy: core.StrategyRecreate,
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("NewServiceRecord() error = %v", err)
 	}

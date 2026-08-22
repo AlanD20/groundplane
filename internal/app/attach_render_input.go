@@ -46,7 +46,8 @@ func buildAttachTaskRenderInput(
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||
 		record.BackingEnvironmentID != scope.BackingEnvironment.Record.ID ||
-		record.BackingServiceID != scope.BackingService.Record.Desired.ID {
+		record.BackingServiceID != scope.BackingService.Record.Desired.ID ||
+		record.BackingNetworkID != scope.BackingService.Record.BackingNetworkID {
 		return etcd.AttachTaskRenderInput{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"Attach render hierarchy is invalid",

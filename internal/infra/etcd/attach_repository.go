@@ -722,7 +722,8 @@ func validateAttachCreateScope(
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||
 		record.BackingEnvironmentID != scope.BackingEnvironment.Record.ID ||
-		record.BackingServiceID != scope.BackingService.Record.Desired.ID {
+		record.BackingServiceID != scope.BackingService.Record.Desired.ID ||
+		record.BackingNetworkID != scope.BackingService.Record.BackingNetworkID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach backing hierarchy is invalid")
 	}
 	serviceIDs := make([]string, 0, len(scope.Services))
@@ -827,7 +828,8 @@ func validateAttachDetachScope(
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||
 		record.BackingEnvironmentID != scope.BackingEnvironment.Record.ID ||
-		record.BackingServiceID != scope.BackingService.Record.Desired.ID {
+		record.BackingServiceID != scope.BackingService.Record.Desired.ID ||
+		record.BackingNetworkID != scope.BackingService.Record.BackingNetworkID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach detach backing hierarchy is invalid")
 	}
 	serviceIDs := make([]string, 0, len(scope.Services))

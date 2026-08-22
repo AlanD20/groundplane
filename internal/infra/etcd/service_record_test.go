@@ -15,6 +15,7 @@ func TestNewServiceRecordDefaultsRuntimeIntentToRunning(t *testing.T) {
 	record, err := NewServiceRecord(
 		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1),
 		serviceRecordTestDesired(),
+		"",
 	)
 	if err != nil {
 		t.Fatalf("NewServiceRecord() error = %v", err)
@@ -31,6 +32,7 @@ func TestServiceRecordMutationsPreserveAuthorshipBoundary(t *testing.T) {
 	record, err := NewServiceRecord(
 		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 2),
 		serviceRecordTestDesired(),
+		"",
 	)
 	if err != nil {
 		t.Fatalf("NewServiceRecord() error = %v", err)
@@ -59,6 +61,7 @@ func TestServiceRecordEnvelopeRoundTripsStrictly(t *testing.T) {
 	record, err := NewServiceRecord(
 		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 3),
 		serviceRecordTestDesired(),
+		"",
 	)
 	if err != nil {
 		t.Fatalf("NewServiceRecord() error = %v", err)
@@ -85,6 +88,33 @@ func TestServiceRecordEnvelopeRoundTripsStrictly(t *testing.T) {
 				t.Fatal("decodeServiceRecord() accepted corrupt record")
 			}
 		})
+	}
+}
+
+// Rationale: an adapter-backed Service is the durable authority for the owner network every future Attach copies.
+func TestBackingServiceRecordRequiresStableNetworkBinding(t *testing.T) {
+	t.Parallel()
+	desired := serviceRecordTestDesired()
+	desired.Adapter = "postgres:16"
+	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 6)
+	if _, err := NewServiceRecord(environmentID, desired, ""); err == nil {
+		t.Fatal("NewServiceRecord() accepted an adapter-backed Service without a backing network")
+	}
+	networkID := ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 7)
+	record, err := NewServiceRecord(environmentID, desired, networkID)
+	if err != nil {
+		t.Fatalf("NewServiceRecord() error = %v", err)
+	}
+	if record.BackingNetworkID != networkID {
+		t.Fatalf("BackingNetworkID = %q, want %q", record.BackingNetworkID, networkID)
+	}
+	desired.Image = "postgres:16.1-alpine"
+	replacement, err := ReplaceServiceDesired(record, desired)
+	if err != nil {
+		t.Fatalf("ReplaceServiceDesired() error = %v", err)
+	}
+	if replacement.BackingNetworkID != networkID {
+		t.Fatalf("ReplaceServiceDesired() changed backing network to %q", replacement.BackingNetworkID)
 	}
 }
 

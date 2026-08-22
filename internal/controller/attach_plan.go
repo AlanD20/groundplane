@@ -110,6 +110,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	}
 	if backing.Record.EnvironmentID != current.Record.BackingEnvironmentID ||
 		backing.Record.Desired.ID != current.Record.BackingServiceID ||
+		backing.Record.BackingNetworkID != current.Record.BackingNetworkID ||
 		backing.Record.Runtime.ServiceID != current.Record.BackingServiceID ||
 		backing.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
 		return nil, errs.New(errs.KindStateConflict, "Attach backing Service is not runnable")

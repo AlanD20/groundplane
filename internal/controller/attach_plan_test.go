@@ -126,8 +126,8 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		identity.Grants = []AttachPlanGrantIdentity{{AttachID: grantID, Database: "other_4a1b2c"}}
 	}
 	service := etcd.ServiceRecord{
-		EnvironmentID: backingEnvironmentID,
-		Desired:       core.Service{ID: backingServiceID, Name: "postgres", Adapter: adapterKey},
+		EnvironmentID: backingEnvironmentID, BackingNetworkID: networkID,
+		Desired: core.Service{ID: backingServiceID, Name: "postgres", Adapter: adapterKey},
 		Runtime: core.ServiceRuntime{
 			ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
 		},

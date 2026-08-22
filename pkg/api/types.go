@@ -131,16 +131,17 @@ const (
 )
 
 type Service struct {
-	ID            string               `json:"id"`
-	Name          string               `json:"name"`
-	Image         string               `json:"image"`
-	RuntimeIntent ServiceRuntimeIntent `json:"runtime_intent"`
-	Zones         []string             `json:"zones,omitempty"`
-	Strategy      string               `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
-	OnFailure     OnFailure            `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
-	Replicas      int                  `json:"replicas,omitempty"`
-	Adapter       string               `json:"adapter,omitempty"`
-	FactsPrefix   string               `json:"facts_prefix,omitempty"`
+	ID               string               `json:"id"`
+	Name             string               `json:"name"`
+	Image            string               `json:"image"`
+	RuntimeIntent    ServiceRuntimeIntent `json:"runtime_intent"`
+	Zones            []string             `json:"zones,omitempty"`
+	Strategy         string               `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
+	OnFailure        OnFailure            `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
+	Replicas         int                  `json:"replicas,omitempty"`
+	Adapter          string               `json:"adapter,omitempty"`
+	FactsPrefix      string               `json:"facts_prefix,omitempty"`
+	BackingNetworkID string               `json:"backing_network_id,omitempty"`
 }
 
 // EntrySource is the discriminated union api-cli.md section 4 shows:

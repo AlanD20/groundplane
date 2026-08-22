@@ -190,8 +190,8 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 		},
 		BackingService: etcd.Versioned[etcd.ServiceRecord]{
 			Record: etcd.ServiceRecord{
-				EnvironmentID: fixture.backingEnvID,
-				Desired:       core.Service{ID: fixture.backingServiceID, Name: "postgres", Adapter: "manual"},
+				EnvironmentID: fixture.backingEnvID, BackingNetworkID: fixture.networkA,
+				Desired: core.Service{ID: fixture.backingServiceID, Name: "postgres", Adapter: "manual"},
 			},
 			Revision: 8,
 		},

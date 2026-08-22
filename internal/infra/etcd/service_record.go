@@ -12,17 +12,19 @@ const servicePrefix = "/v1/records/services/"
 // runtime remain distinct typed subrecords so Blueprint input cannot author or
 // overwrite Controller-owned operational intent.
 type ServiceRecord struct {
-	EnvironmentID string              `json:"environment_id"`
-	Desired       core.Service        `json:"desired"`
-	Runtime       core.ServiceRuntime `json:"runtime"`
+	EnvironmentID    string              `json:"environment_id"`
+	BackingNetworkID string              `json:"backing_network_id,omitempty"`
+	Desired          core.Service        `json:"desired"`
+	Runtime          core.ServiceRuntime `json:"runtime"`
 }
 
 // NewServiceRecord constructs the only accepted initial runtime state for a
 // Service first created directly or introduced by Blueprint.
-func NewServiceRecord(environmentID string, desired core.Service) (ServiceRecord, error) {
+func NewServiceRecord(environmentID string, desired core.Service, backingNetworkID string) (ServiceRecord, error) {
 	record := ServiceRecord{
-		EnvironmentID: environmentID,
-		Desired:       desired,
+		EnvironmentID:    environmentID,
+		BackingNetworkID: backingNetworkID,
+		Desired:          desired,
 		Runtime: core.ServiceRuntime{
 			ServiceID:     desired.ID,
 			RuntimeIntent: core.ServiceRuntimeIntentRunning,
@@ -96,6 +98,15 @@ func validateServiceRecord(record ServiceRecord) error {
 	}
 	if record.Runtime.ServiceID != record.Desired.ID {
 		return errs.New(errs.KindValidationFailed, "Service runtime identity does not match desired Service")
+	}
+	if record.Desired.Adapter == "" {
+		if record.BackingNetworkID != "" {
+			return errs.New(errs.KindValidationFailed, "ordinary Service cannot select a backing network")
+		}
+		return nil
+	}
+	if err := validateID(ids.KindNetwork, record.BackingNetworkID); err != nil {
+		return errs.New(errs.KindValidationFailed, "adapter-backed Service requires a stable backing network id")
 	}
 	return nil
 }
