@@ -222,6 +222,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone repository: %w", err)
 	}
+	zoneReadRepository, err := newDurableZoneReadRepository(hierarchyRecords, zoneRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone read repositories: %w", err)
+	}
+	zoneReads, err := newZoneReadService(zoneReadRepository)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone reads: %w", err)
+	}
 	componentRecords, err := etcd.NewComponentRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -632,6 +642,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackingServices:       backingServiceReads,
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
+		Zones:                 zoneReads,
 		Entries:               entryReads,
 		EntryMutations:        entryMutations,
 		Secrets:               secretReads,

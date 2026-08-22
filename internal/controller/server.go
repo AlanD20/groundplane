@@ -45,6 +45,7 @@ type Server struct {
 	backingServices       BackingServiceReader
 	environments          EnvironmentReader
 	services              ServiceReader
+	zones                 ZoneReader
 	entries               EntryReader
 	entryMutations        EntryMutator
 	secrets               SecretReader
@@ -74,6 +75,7 @@ type Options struct {
 	BackingServices       BackingServiceReader
 	Environments          EnvironmentReader
 	Services              ServiceReader
+	Zones                 ZoneReader
 	Entries               EntryReader
 	EntryMutations        EntryMutator
 	Secrets               SecretReader
@@ -121,6 +123,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		backingServices:       options.BackingServices,
 		environments:          options.Environments,
 		services:              options.Services,
+		zones:                 options.Zones,
 		entries:               options.Entries,
 		entryMutations:        options.EntryMutations,
 		secrets:               options.Secrets,
@@ -143,6 +146,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerEnvironments()
 	s.registerEnvironmentBlueprints()
 	s.registerServices()
+	s.registerZones()
 	s.registerEntries()
 	s.registerSecrets()
 	s.registerAttaches()
@@ -217,8 +221,13 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
 	s.jsonRoute("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
 
-	// zone / route / volume / script (?environment=) — destructive delete is a task
-	for _, res := range []string{"zones", "routes", "volumes", "scripts"} {
+	// Zone reads are typed Huma operations. Creation and Task-backed removal
+	// remain explicit placeholders; Zone fields are immutable and have no PATCH.
+	s.jsonRoute("POST /api/v1/zones", s.notImplemented)
+	mux.HandleFunc("DELETE /api/v1/zones/{id}", s.acceptTask)
+
+	// route / volume / script (?environment=) — destructive delete is a task
+	for _, res := range []string{"routes", "volumes", "scripts"} {
 		mux.HandleFunc("GET /api/v1/"+res, s.notImplemented)
 		s.jsonRoute("POST /api/v1/"+res, s.notImplemented)
 		mux.HandleFunc("GET /api/v1/"+res+"/{id}", s.notImplemented)

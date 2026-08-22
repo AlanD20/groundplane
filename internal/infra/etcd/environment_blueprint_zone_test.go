@@ -21,7 +21,8 @@ func environmentBlueprintTestZoneChanges(
 	}
 	desired := core.Zone{
 		ID: projection.Networks[0].ID, Name: projection.Networks[0].Name,
-		Subnet: "10.40.10.0/24", Internal: true, OwnedBy: projection.EnvironmentID,
+		Subnet: "10.40.10.0/24", Internal: true,
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: projection.EnvironmentID,
 	}
 	current, err := zones.GetZone(context.Background(), desired.ID)
 	if err == nil {
@@ -83,7 +84,8 @@ func TestEnvironmentBlueprintZonePreparationRejectsOverlappingSubnets(t *testing
 			subnet = "10.40.10.128/25"
 		}
 		record, recordErr := NewZoneRecord(environment.Record.ID, core.Zone{
-			ID: identity.ID, Name: identity.Name, Subnet: subnet, OwnedBy: environment.Record.ID,
+			ID: identity.ID, Name: identity.Name, Subnet: subnet,
+			OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environment.Record.ID,
 		})
 		if recordErr != nil {
 			t.Fatalf("NewZoneRecord() error = %v", recordErr)

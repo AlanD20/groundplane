@@ -7,6 +7,7 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 func TestProjectZoneProjectionRequiresExplicitCanonicalSubnet(t *testing.T) {
@@ -24,18 +25,19 @@ func TestProjectZoneProjectionRequiresExplicitCanonicalSubnet(t *testing.T) {
 	}}
 	zones, err := ProjectZoneProjection(project, ComposeIdentitySnapshot{
 		Networks: []ComposeResourceIdentity{{ID: networkID, Name: "frontend"}},
-	}, environmentID)
+	}, core.ZoneOwnerEnvironment, environmentID)
 	if err != nil {
 		t.Fatalf("ProjectZoneProjection() error = %v", err)
 	}
 	if len(zones) != 1 || zones[0].ID != networkID || zones[0].Name != "frontend" ||
-		zones[0].Subnet != "10.40.10.0/24" || !zones[0].Internal || zones[0].OwnedBy != environmentID {
+		zones[0].Subnet != "10.40.10.0/24" || !zones[0].Internal ||
+		zones[0].OwnerKind != core.ZoneOwnerEnvironment || zones[0].OwnerID != environmentID {
 		t.Fatalf("zones = %#v", zones)
 	}
 	project.Networks["frontend"] = types.NetworkConfig{}
 	if _, err := ProjectZoneProjection(project, ComposeIdentitySnapshot{
 		Networks: []ComposeResourceIdentity{{ID: networkID, Name: "frontend"}},
-	}, environmentID); err == nil {
+	}, core.ZoneOwnerEnvironment, environmentID); err == nil {
 		t.Fatal("ProjectZoneProjection() accepted Docker-derived IPAM")
 	}
 }

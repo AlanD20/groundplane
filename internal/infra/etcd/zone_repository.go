@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -158,6 +159,14 @@ func validateZoneHierarchy(
 		project.ReadRevision < project.Revision || record.EnvironmentID != environment.Record.ID ||
 		environment.Record.ProjectID != project.Record.ID {
 		return errs.New(errs.KindValidationFailed, "Zone hierarchy ownership or revisions are invalid")
+	}
+	if project.Record.Kind == ProjectKindTenant &&
+		(record.Desired.OwnerKind != core.ZoneOwnerEnvironment || record.Desired.OwnerID != environment.Record.ID) {
+		return errs.New(errs.KindValidationFailed, "Tenant Project Zone ownership is invalid")
+	}
+	if project.Record.Kind == ProjectKindBacking &&
+		(record.Desired.OwnerKind != core.ZoneOwnerBackingProject || record.Desired.OwnerID != project.Record.ID) {
+		return errs.New(errs.KindValidationFailed, "Backing Project Zone ownership is invalid")
 	}
 	return nil
 }

@@ -26,6 +26,7 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 	now := environment.Record.CreatedAt.Add(time.Hour)
 	zone, err := NewZoneRecord(environment.Record.ID, core.Zone{
 		ID: ids.NewAt(ids.KindNetwork, now, 1401), Name: "frontend", Subnet: "10.40.10.0/29",
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environment.Record.ID,
 	})
 	if err != nil {
 		t.Fatalf("NewZoneRecord() error = %v", err)

@@ -116,12 +116,21 @@ const (
 )
 
 type Zone struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Subnet   string `json:"subnet,omitempty"`
-	Internal bool   `json:"internal,omitempty"`
-	OwnedBy  string `json:"owned_by,omitempty"`
+	ID            string        `json:"id"`
+	EnvironmentID string        `json:"environment_id"`
+	Name          string        `json:"name"`
+	Subnet        string        `json:"subnet"`
+	Internal      bool          `json:"internal"`
+	OwnerKind     ZoneOwnerKind `json:"owner_kind"`
+	OwnerID       string        `json:"owner_id"`
 }
+
+type ZoneOwnerKind string
+
+const (
+	ZoneOwnerEnvironment    ZoneOwnerKind = "environment"
+	ZoneOwnerBackingProject ZoneOwnerKind = "backing_project"
+)
 
 type Route struct {
 	ID              string `json:"id"`

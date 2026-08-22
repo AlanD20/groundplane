@@ -32,7 +32,12 @@ func projectPinnedEnvironmentComponents(
 		Networks: composeResourceIdentities(projection.Networks),
 		Volumes:  composeResourceIdentities(projection.Volumes),
 	}
-	zones, err := ProjectZoneProjection(project, identities, identity.EnvironmentID)
+	zones, err := ProjectZoneProjection(
+		project,
+		identities,
+		core.ZoneOwnerEnvironment,
+		identity.EnvironmentID,
+	)
 	if err != nil {
 		return EnvironmentComponentComposeProjection{}, err
 	}

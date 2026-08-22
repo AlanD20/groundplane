@@ -68,7 +68,9 @@ func zoneRecordTestRecord(t *testing.T, name string, offset int64) ZoneRecord {
 		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 900),
 		core.Zone{
 			ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), offset), Name: name,
-			Subnet: "10.200.20.0/24", Internal: true, OwnedBy: "console",
+			Subnet: "10.200.20.0/24", Internal: true,
+			OwnerKind: core.ZoneOwnerEnvironment,
+			OwnerID:   ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 900),
 		},
 	)
 	if err != nil {

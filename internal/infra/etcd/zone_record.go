@@ -55,6 +55,18 @@ func validateZoneRecord(record ZoneRecord) error {
 	if err != nil || subnet.String() != record.Desired.Subnet {
 		return errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
 	}
+	switch record.Desired.OwnerKind {
+	case core.ZoneOwnerEnvironment:
+		if record.Desired.OwnerID != record.EnvironmentID {
+			return errs.New(errs.KindValidationFailed, "Environment-owned Zone owner id is invalid")
+		}
+	case core.ZoneOwnerBackingProject:
+		if err := validateID(ids.KindProject, record.Desired.OwnerID); err != nil {
+			return err
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "Zone owner kind must be environment or backing_project")
+	}
 	return nil
 }
 

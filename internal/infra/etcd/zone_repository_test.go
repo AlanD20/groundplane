@@ -116,7 +116,8 @@ func zoneRepositoryTestRecord(
 	t.Helper()
 	record, err := NewZoneRecord(environmentID, core.Zone{
 		ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), offset), Name: name,
-		Subnet: fmt.Sprintf("10.34.%d.0/24", offset-900), Internal: true, OwnedBy: "console",
+		Subnet: fmt.Sprintf("10.34.%d.0/24", offset-900), Internal: true,
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
 	})
 	if err != nil {
 		t.Fatalf("NewZoneRecord() error = %v", err)

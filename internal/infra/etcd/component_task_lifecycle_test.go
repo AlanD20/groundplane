@@ -312,12 +312,14 @@ func componentTaskLifecycleRecords(
 	serviceID := ids.NewAt(ids.KindService, now, 1302)
 	currentZone, err := NewZoneRecord(environmentID, core.Zone{
 		ID: ids.NewAt(ids.KindNetwork, now, 1303), Name: "current", Subnet: "10.40.10.0/24",
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
 	})
 	if err != nil {
 		t.Fatalf("NewZoneRecord(current) error = %v", err)
 	}
 	candidateZone, err := NewZoneRecord(environmentID, core.Zone{
 		ID: ids.NewAt(ids.KindNetwork, now, 1304), Name: "candidate", Subnet: "10.40.11.0/24",
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
 	})
 	if err != nil {
 		t.Fatalf("NewZoneRecord(candidate) error = %v", err)

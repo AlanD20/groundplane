@@ -333,6 +333,16 @@ type PageService struct {
 	NextCursor *string    `json:"next_cursor,omitempty"`
 }
 
+// PageZone defines model for PageZone.
+type PageZone struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageZone.json
+	Schema     *string `json:"$schema,omitempty"`
+	Items      *[]Zone `json:"items"`
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -523,6 +533,21 @@ type TenantRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// Zone defines model for Zone.
+type Zone struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Zone.json
+	Schema        *string `json:"$schema,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	Id            string  `json:"id"`
+	Internal      bool    `json:"internal"`
+	Name          string  `json:"name"`
+	OwnerId       string  `json:"owner_id"`
+	OwnerKind     string  `json:"owner_kind"`
+	Subnet        string  `json:"subnet"`
+}
+
 // AgentListParams defines parameters for AgentList.
 type AgentListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -676,6 +701,13 @@ type TenantEditParams struct {
 // TenantRenameParams defines parameters for TenantRename.
 type TenantRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ZoneListParams defines parameters for ZoneList.
+type ZoneListParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // AgentConfigSetJSONRequestBody defines body for AgentConfigSet for application/json ContentType.
@@ -1107,6 +1139,16 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneList List network zones
+	//
+	// Corresponds with GET /zones (the `ZoneList` operationId).
+	ZoneList(ctx context.Context, params *ZoneListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneShow Show a network zone
+	//
+	// Corresponds with GET /zones/{id} (the `ZoneShow` operationId).
+	ZoneShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // AgentList List agents
@@ -1933,6 +1975,36 @@ func (c *Client) TenantRenameWithBody(ctx context.Context, id string, params *Te
 // Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTenantRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneList List network zones
+//
+// Corresponds with GET /zones (the `ZoneList` operationId).
+func (c *Client) ZoneList(ctx context.Context, params *ZoneListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneShow Show a network zone
+//
+// Corresponds with GET /zones/{id} (the `ZoneShow` operationId).
+func (c *Client) ZoneShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneShowRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -3986,6 +4058,114 @@ func NewTenantRenameRequestWithBody(server string, id string, params *TenantRena
 	return req, nil
 }
 
+// NewZoneListRequest constructs an http.Request for the ZoneList method
+func NewZoneListRequest(server string, params *ZoneListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/zones")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewZoneShowRequest constructs an http.Request for the ZoneShow method
+func NewZoneShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/zones/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -4393,6 +4573,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
+
+	// ZoneListWithResponse List network zones
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /zones (the `ZoneList` operationId).
+	ZoneListWithResponse(ctx context.Context, params *ZoneListParams, reqEditors ...RequestEditorFn) (*ZoneListResponse, error)
+
+	// ZoneShowWithResponse Show a network zone
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /zones/{id} (the `ZoneShow` operationId).
+	ZoneShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ZoneShowResponse, error)
 }
 
 type AgentListResponse struct {
@@ -6393,6 +6587,102 @@ func (r TenantRenameResponse) ContentType() string {
 	return ""
 }
 
+type ZoneListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageZone
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ZoneListResponse) GetJSON200() *PageZone {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ZoneListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ZoneListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ZoneListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ZoneListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ZoneListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ZoneShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Zone
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ZoneShowResponse) GetJSON200() *Zone {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ZoneShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ZoneShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ZoneShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ZoneShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ZoneShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // AgentListWithResponse List agents
 //
 // Returns a wrapper object for the known response body format(s).
@@ -7067,6 +7357,32 @@ func (c *ClientWithResponses) TenantRenameWithResponse(ctx context.Context, id s
 		return nil, err
 	}
 	return ParseTenantRenameResponse(rsp)
+}
+
+// ZoneListWithResponse List network zones
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /zones (the `ZoneList` operationId).
+func (c *ClientWithResponses) ZoneListWithResponse(ctx context.Context, params *ZoneListParams, reqEditors ...RequestEditorFn) (*ZoneListResponse, error) {
+	rsp, err := c.ZoneList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneListResponse(rsp)
+}
+
+// ZoneShowWithResponse Show a network zone
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /zones/{id} (the `ZoneShow` operationId).
+func (c *ClientWithResponses) ZoneShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ZoneShowResponse, error) {
+	rsp, err := c.ZoneShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneShowResponse(rsp)
 }
 
 // ParseAgentListResponse parses an HTTP response from a AgentListWithResponse call
@@ -8585,6 +8901,72 @@ func ParseTenantRenameResponse(rsp *http.Response) (*TenantRenameResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseZoneListResponse parses an HTTP response from a ZoneListWithResponse call
+func ParseZoneListResponse(rsp *http.Response) (*ZoneListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ZoneListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageZone
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseZoneShowResponse parses an HTTP response from a ZoneShowWithResponse call
+func ParseZoneShowResponse(rsp *http.Response) (*ZoneShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ZoneShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Zone
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

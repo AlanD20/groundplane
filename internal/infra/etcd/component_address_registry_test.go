@@ -13,7 +13,7 @@ func TestComponentAddressRegistryReserveAndRelease(t *testing.T) {
 	at := serviceRecordTestTime()
 	zone, err := NewZoneRecord(ids.NewAt(ids.KindEnvironment, at, 1), core.Zone{
 		ID: ids.NewAt(ids.KindNetwork, at, 2), Name: "frontend", Subnet: "10.40.10.0/29",
-		OwnedBy: ids.NewAt(ids.KindEnvironment, at, 1),
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: ids.NewAt(ids.KindEnvironment, at, 1),
 	})
 	if err != nil {
 		t.Fatalf("NewZoneRecord() error = %v", err)

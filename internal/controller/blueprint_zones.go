@@ -15,9 +15,16 @@ import (
 func ProjectZoneProjection(
 	project *types.Project,
 	identities ComposeIdentitySnapshot,
+	ownerKind core.ZoneOwnerKind,
 	ownerID string,
 ) ([]core.Zone, error) {
-	if project == nil || ids.Validate(ids.KindEnvironment, ownerID) != nil {
+	ownerIDKind := ids.KindEnvironment
+	if ownerKind == core.ZoneOwnerBackingProject {
+		ownerIDKind = ids.KindProject
+	} else if ownerKind != core.ZoneOwnerEnvironment {
+		return nil, errs.New(errs.KindInternal, "Blueprint Zone projection ownership is invalid")
+	}
+	if project == nil || ids.Validate(ownerIDKind, ownerID) != nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Zone projection ownership is invalid")
 	}
 	names, err := ownedNetworkNames(project)
@@ -60,7 +67,8 @@ func ProjectZoneProjection(
 			)
 		}
 		zones = append(zones, core.Zone{
-			ID: networkIDs[name], Name: name, Subnet: subnet.String(), Internal: network.Internal, OwnedBy: ownerID,
+			ID: networkIDs[name], Name: name, Subnet: subnet.String(), Internal: network.Internal,
+			OwnerKind: ownerKind, OwnerID: ownerID,
 		})
 	}
 	return zones, nil

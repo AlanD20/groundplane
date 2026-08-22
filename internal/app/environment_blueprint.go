@@ -382,7 +382,18 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			"Blueprint omits an existing owned resource; remove it explicitly before apply",
 		)
 	}
-	desiredZones, err := controller.ProjectZoneProjection(parsed.Project, changes.Current, environmentID)
+	zoneOwnerKind := core.ZoneOwnerEnvironment
+	zoneOwnerID := environmentID
+	if project.Record.Kind == etcd.ProjectKindBacking {
+		zoneOwnerKind = core.ZoneOwnerBackingProject
+		zoneOwnerID = project.Record.ID
+	}
+	desiredZones, err := controller.ProjectZoneProjection(
+		parsed.Project,
+		changes.Current,
+		zoneOwnerKind,
+		zoneOwnerID,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

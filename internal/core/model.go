@@ -100,11 +100,19 @@ type Zone struct {
 	// Internal marks the zone as having no route to the host's default
 	// gateway (e.g. prod_identity_private_net's "no host egress").
 	Internal bool `yaml:"internal,omitempty" json:"internal,omitempty"`
-	// OwnedBy names the stack that creates this network — a backing
-	// service owns its own zone; a tenant project owns the rest. Exactly
-	// one owner per network; a consumer joins as `external` (blueprint.md).
-	OwnedBy string `yaml:"owned_by,omitempty" json:"owned_by,omitempty"`
+	// OwnerKind and OwnerID are Controller-derived stable ownership. A
+	// tenant Environment owns its ordinary Zones; a backing Project owns
+	// its adapter-created Zone. Consumers only join it as external.
+	OwnerKind ZoneOwnerKind `yaml:"owner_kind" json:"owner_kind"`
+	OwnerID   string        `yaml:"owner_id"   json:"owner_id"`
 }
+
+type ZoneOwnerKind string
+
+const (
+	ZoneOwnerEnvironment    ZoneOwnerKind = "environment"
+	ZoneOwnerBackingProject ZoneOwnerKind = "backing_project"
+)
 
 // Healthcheck matches exactly one of the three declared kinds. The
 // renderer compiles this to native Compose `healthcheck.test` (see

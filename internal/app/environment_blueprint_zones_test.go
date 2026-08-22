@@ -17,7 +17,8 @@ func TestPrepareEnvironmentBlueprintZoneChangesRejectsImmutableMutation(t *testi
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
 	zoneID := ids.NewAt(ids.KindNetwork, at, 2)
 	record, err := etcd.NewZoneRecord(environmentID, core.Zone{
-		ID: zoneID, Name: "frontend", Subnet: "10.40.10.0/24", OwnedBy: environmentID,
+		ID: zoneID, Name: "frontend", Subnet: "10.40.10.0/24",
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
 	})
 	if err != nil {
 		t.Fatalf("NewZoneRecord() error = %v", err)
