@@ -197,6 +197,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service repository: %w", err)
 	}
+	serviceReadRepository, err := newDurableServiceReadRepository(hierarchyRecords, serviceRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service read repositories: %w", err)
+	}
+	serviceReads, err := newServiceReadService(serviceReadRepository)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
+	}
 	attachRecords, err := etcd.NewAttachRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -493,6 +503,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ProjectMutations:      projectMutations,
 		ProjectChanges:        projectChanges,
 		Environments:          hierarchyRecords,
+		Services:              serviceReads,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,

@@ -176,6 +176,16 @@ type PageAttach struct {
 	NextCursor *string   `json:"next_cursor,omitempty"`
 }
 
+// PageService defines model for PageService.
+type PageService struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageService.json
+	Schema     *string    `json:"$schema,omitempty"`
+	Items      *[]Service `json:"items"`
+	NextCursor *string    `json:"next_cursor,omitempty"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -228,6 +238,21 @@ type ProjectRename struct {
 	// Examples: /api/v1/ProjectRename.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// Service defines model for Service.
+type Service struct {
+	Adapter          *string   `json:"adapter,omitempty"`
+	BackingNetworkId *string   `json:"backing_network_id,omitempty"`
+	FactsPrefix      *string   `json:"facts_prefix,omitempty"`
+	Id               string    `json:"id"`
+	Image            string    `json:"image"`
+	Name             string    `json:"name"`
+	OnFailure        *string   `json:"on_failure,omitempty"`
+	Replicas         *int64    `json:"replicas,omitempty"`
+	RuntimeIntent    string    `json:"runtime_intent"`
+	Strategy         *string   `json:"strategy,omitempty"`
+	Zones            *[]string `json:"zones,omitempty"`
 }
 
 // TaskAccepted defines model for TaskAccepted.
@@ -351,6 +376,13 @@ type ProjectEditParams struct {
 // ProjectRenameParams defines parameters for ProjectRename.
 type ProjectRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ServiceListParams defines parameters for ServiceList.
+type ServiceListParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // TenantListParams defines parameters for TenantList.
@@ -610,6 +642,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceList List services
+	//
+	// Corresponds with GET /services (the `ServiceList` operationId).
+	ServiceList(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TenantList List tenants
 	//
@@ -997,6 +1034,21 @@ func (c *Client) ProjectRenameWithBody(ctx context.Context, id string, params *P
 // Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 func (c *Client) ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewProjectRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceList List services
+//
+// Corresponds with GET /services (the `ServiceList` operationId).
+func (c *Client) ServiceList(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceListRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1918,6 +1970,80 @@ func NewProjectRenameRequestWithBody(server string, id string, params *ProjectRe
 	return req, nil
 }
 
+// NewServiceListRequest constructs an http.Request for the ServiceList method
+func NewServiceListRequest(server string, params *ServiceListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewTenantListRequest constructs an http.Request for the TenantList method
 func NewTenantListRequest(server string, params *TenantListParams) (*http.Request, error) {
 	var err error
@@ -2381,6 +2507,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRenameWithResponse(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error)
+
+	// ServiceListWithResponse List services
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /services (the `ServiceList` operationId).
+	ServiceListWithResponse(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*ServiceListResponse, error)
 
 	// TenantListWithResponse List tenants
 	//
@@ -3167,6 +3300,54 @@ func (r ProjectRenameResponse) ContentType() string {
 	return ""
 }
 
+type ServiceListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageService
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ServiceListResponse) GetJSON200() *PageService {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TenantListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3699,6 +3880,19 @@ func (c *ClientWithResponses) ProjectRenameWithResponse(ctx context.Context, id 
 		return nil, err
 	}
 	return ParseProjectRenameResponse(rsp)
+}
+
+// ServiceListWithResponse List services
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /services (the `ServiceList` operationId).
+func (c *ClientWithResponses) ServiceListWithResponse(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*ServiceListResponse, error) {
+	rsp, err := c.ServiceList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceListResponse(rsp)
 }
 
 // TenantListWithResponse List tenants
@@ -4366,6 +4560,39 @@ func ParseProjectRenameResponse(rsp *http.Response) (*ProjectRenameResponse, err
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceListResponse parses an HTTP response from a ServiceListWithResponse call
+func ParseServiceListResponse(rsp *http.Response) (*ServiceListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageService
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

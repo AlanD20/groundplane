@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,20 @@ func newServiceCmd() *cobra.Command {
 		Short: "List services",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/services", scopeQuery(fromContext(cmd), "environment"))
+			environmentID, err := resolveEnvironmentTarget(cmd, fromContext(cmd).Scope.Environment)
+			if err != nil {
+				return err
+			}
+			page, err := fromContext(cmd).Client.ListServices(cmd.Context(), environmentID, 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, service := range page.Items {
+				items[index] = serviceFields(service)
+			}
+			headers, rows := tabulateVia(fromContext(cmd), items)
+			return fromContext(cmd).Out.Render(headers, rows, page)
 		},
 	})
 
@@ -159,10 +173,12 @@ func newServiceCmd() *cobra.Command {
 		Short: "Attach a backing service to this service (provisions its own database + role)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
 			accepted, err := fromContext(cmd).Client.CreateAttach(cmd.Context(), apiTypes.AttachRequest{
-				ServiceIDs: []string{
-					target(fromContext(cmd), args[0]),
-				},
+				ServiceIDs:       []string{serviceID},
 				BackingServiceID: target(fromContext(cmd), args[1]),
 				Name:             attachName,
 				GrantAttachIDs:   append([]string(nil), grants...),
@@ -196,4 +212,41 @@ func newServiceCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func resolveServiceTarget(cmd *cobra.Command, argument string) (string, error) {
+	app := fromContext(cmd)
+	if app.Scope.AsID {
+		return target(app, argument), nil
+	}
+	environmentID, err := resolveEnvironmentTarget(cmd, app.Scope.Environment)
+	if err != nil {
+		return "", err
+	}
+	cursor := ""
+	for {
+		page, err := app.Client.ListServices(cmd.Context(), environmentID, 200, cursor)
+		if err != nil {
+			return "", err
+		}
+		for _, service := range page.Items {
+			if service.Name == argument {
+				return target(app, service.ID), nil
+			}
+		}
+		if page.NextCursor == "" {
+			return "", errs.Newf(errs.KindServiceNotFound, "service name %q was not found", argument)
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func serviceFields(service apiTypes.Service) map[string]any {
+	return map[string]any{
+		"id": service.ID, "name": service.Name, "image": service.Image,
+		"runtime_intent": service.RuntimeIntent, "zones": service.Zones,
+		"strategy": service.Strategy, "on_failure": service.OnFailure, "replicas": service.Replicas,
+		"adapter": service.Adapter, "facts_prefix": service.FactsPrefix,
+		"backing_network_id": service.BackingNetworkID,
+	}
 }

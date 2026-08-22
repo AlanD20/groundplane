@@ -43,6 +43,7 @@ type Server struct {
 	projectMutations      ProjectMutator
 	projectChanges        ProjectChanger
 	environments          EnvironmentReader
+	services              ServiceReader
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
@@ -65,6 +66,7 @@ type Options struct {
 	ProjectMutations      ProjectMutator
 	ProjectChanges        ProjectChanger
 	Environments          EnvironmentReader
+	Services              ServiceReader
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
@@ -105,6 +107,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		projectMutations:      options.ProjectMutations,
 		projectChanges:        options.ProjectChanges,
 		environments:          options.Environments,
+		services:              options.Services,
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
@@ -119,6 +122,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerTenants()
 	s.registerProjects()
 	s.registerEnvironments()
+	s.registerServices()
 	s.registerAttaches()
 	s.registerHost()
 	return s
@@ -171,9 +175,8 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/environments/{id}/router", s.notImplemented)
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
-	mux.HandleFunc("GET /api/v1/services", s.notImplemented)
 	s.jsonRoute("POST /api/v1/services", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/services/{id}", s.notImplemented) // includes the release ledger
+	mux.HandleFunc("GET /api/v1/services/{id}", s.notImplemented) // includes the release ledger once C06 is durable
 	s.jsonRoute("PATCH /api/v1/services/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/services/{id}/deploy", s.acceptTask) // {tag?, strategy?, on_failure?}

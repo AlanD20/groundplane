@@ -306,7 +306,7 @@ func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
 	)
 	defer server.Close()
 
-	output := executeNoun(t, newServiceCmd(), server.URL, Scope{}, "attach", "svc_1", "bks_1")
+	output := executeNoun(t, newServiceCmd(), server.URL, Scope{AsID: true}, "attach", "svc_1", "bks_1")
 	want := "task task_attach dispatched — `groundplane task show task_attach` to follow\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
