@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-dev agent proto console console-toolchain console-verify clean test tidy ci
+.PHONY: build cli controller controller-dev agent proto console console-toolchain console-verify console-release-smoke clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
@@ -52,6 +52,26 @@ console-verify:
 		esac; \
 	done
 
+console-release-smoke: | $(BIN_DIR)
+	@set -eu; \
+		controller="$(CURDIR)/$(BIN_DIR)/controller"; \
+		smoke="$(CURDIR)/$(BIN_DIR)/console-release-smoke.test"; \
+		test -x "$$controller"; \
+		go version -m "$$controller" | grep -F -- '-tags=groundplane_console' >/dev/null; \
+		test -f console/dist/index.html; \
+		asset_file="$$(find console/dist/assets -type f -print | LC_ALL=C sort | head -n 1)"; \
+		test -n "$$asset_file"; \
+		index_hash="$$(sha256sum console/dist/index.html | cut -d' ' -f1)"; \
+		asset_hash="$$(sha256sum "$$asset_file" | cut -d' ' -f1)"; \
+		asset_path="/$${asset_file#console/dist/}"; \
+		trap 'rm -f "$$smoke"' EXIT HUP INT TERM; \
+		go test -c -tags groundplane_console -o "$$smoke" ./internal/app; \
+		rm -rf console/dist; \
+		GROUNDPLANE_CONSOLE_INDEX_SHA256="$$index_hash" \
+		GROUNDPLANE_CONSOLE_ASSET_PATH="$$asset_path" \
+		GROUNDPLANE_CONSOLE_ASSET_SHA256="$$asset_hash" \
+		"$$smoke" -test.run '^TestProductionConsoleReleaseSmoke$$'
+
 test:
 	go test ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
 
@@ -69,6 +89,7 @@ ci: console | $(BIN_DIR)
 	go vet -tags groundplane_console ./...
 	go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
 	go build -tags groundplane_console -o $(BIN_DIR)/controller ./cmd/controller
+	$(MAKE) console-release-smoke
 	# go generate ./...
 
 clean:

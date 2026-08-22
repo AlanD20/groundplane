@@ -117,6 +117,13 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	return s
 }
 
+// HTTPHandler returns the complete Controller HTTP surface without opening a
+// listener. Release validation uses it to exercise the production dispatcher
+// and embedded Console through the same server assembled by application DI.
+func (s *Server) HTTPHandler() http.Handler {
+	return s.requestHandler()
+}
+
 // routes registers every endpoint from api-cli.md's resource map. Method
 // + pattern routing (Go 1.22 net/http). Unimplemented resources remain
 // explicit 501 handlers until their vertical is delivered; typed Huma routes,
