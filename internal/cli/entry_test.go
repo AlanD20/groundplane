@@ -5,15 +5,15 @@ import "testing"
 func TestEntryFileOwnershipRequiresBothExplicitValues(t *testing.T) {
 	// Rationale: zero is a valid numeric owner, so presence must come from the
 	// flags rather than a nonzero-value heuristic and neither half may default.
-	if _, err := entryFileOwnership("file", 0, 0, false, false); err == nil {
+	if _, _, err := entryFileOwnership("file", 0, 0, false, false); err == nil {
 		t.Fatal("entryFileOwnership() accepted omitted ownership")
 	}
-	ownership, err := entryFileOwnership("file", 0, 0, true, true)
+	uid, gid, err := entryFileOwnership("file", 0, 0, true, true)
 	if err != nil {
 		t.Fatalf("entryFileOwnership() rejected explicit root ownership: %v", err)
 	}
-	if ownership["uid"] != uint32(0) || ownership["gid"] != uint32(0) {
-		t.Fatalf("entryFileOwnership() = %#v", ownership)
+	if uid == nil || gid == nil || *uid != 0 || *gid != 0 {
+		t.Fatalf("entryFileOwnership() = %#v/%#v", uid, gid)
 	}
 }
 
@@ -26,10 +26,10 @@ func TestBuildEntrySourceUsesFlatHumanAPIFactShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildEntrySource() error = %v", err)
 	}
-	if source["attach_id"] != "att_01J" || source["fact"] != "pg16_URL" {
+	if source.AttachID != "att_01J" || source.Fact != "pg16_URL" {
 		t.Fatalf("buildEntrySource() = %#v", source)
 	}
-	if _, nested := source["source"]; nested {
+	if source.Kind != "fact" {
 		t.Fatalf("buildEntrySource() retained nested fact source: %#v", source)
 	}
 }

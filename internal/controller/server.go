@@ -46,6 +46,7 @@ type Server struct {
 	environments          EnvironmentReader
 	services              ServiceReader
 	entries               EntryReader
+	entryMutations        EntryMutator
 	secrets               SecretReader
 	secretMutations       SecretMutator
 	secretDeletions       SecretDeleter
@@ -74,6 +75,7 @@ type Options struct {
 	Environments          EnvironmentReader
 	Services              ServiceReader
 	Entries               EntryReader
+	EntryMutations        EntryMutator
 	Secrets               SecretReader
 	SecretMutations       SecretMutator
 	SecretDeletions       SecretDeleter
@@ -120,6 +122,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environments:          options.Environments,
 		services:              options.Services,
 		entries:               options.Entries,
+		entryMutations:        options.EntryMutations,
 		secrets:               options.Secrets,
 		secretMutations:       options.SecretMutations,
 		secretDeletions:       options.SecretDeletions,
@@ -221,9 +224,9 @@ func (s *Server) routes() {
 		s.jsonRoute("PATCH /api/v1/"+res+"/{id}", s.notImplemented)
 		mux.HandleFunc("DELETE /api/v1/"+res+"/{id}", s.acceptTask)
 	}
-	// Entry reads and explicit reveal are typed Huma operations. Mutations remain
-	// explicit placeholders until their atomic generation/Task contracts land.
-	s.jsonRoute("POST /api/v1/entries", s.notImplemented)
+	// Entry reads, protected create, and explicit reveal are typed Huma operations.
+	// Edit and destructive deletion remain placeholders until their replay and
+	// finalizer contracts are closed.
 	s.jsonRoute("PATCH /api/v1/entries/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/entries/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}

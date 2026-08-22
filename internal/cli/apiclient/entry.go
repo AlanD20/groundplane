@@ -6,9 +6,72 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func (c *Client) CreateEntry(
+	ctx context.Context,
+	input apiTypes.EntryCreateRequest,
+) (apiTypes.Entry, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Entry{}, err
+	}
+	exposure := append([]string(nil), input.Exposure...)
+	body := generated.EntryCreateRequest{
+		EnvironmentId: input.EnvironmentID,
+		Type:          input.Type,
+		Source:        entrySourceToGenerated(input.Source),
+		Exposure:      &exposure,
+		Secret:        input.Secret,
+	}
+	if input.Key != "" {
+		body.Key = &input.Key
+	}
+	if input.Path != "" {
+		body.Path = &input.Path
+	}
+	if input.UID != nil {
+		value := *input.UID
+		body.Uid = &value
+	}
+	if input.GID != nil {
+		value := *input.GID
+		body.Gid = &value
+	}
+	response, err := client.EntryCreateWithResponse(
+		ctx,
+		&generated.EntryCreateParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
+	if err != nil {
+		return apiTypes.Entry{}, generatedCallError(ctx, http.MethodPost, "/api/v1/entries", err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost,
+		"/api/v1/entries",
+		response.HTTPResponse,
+		response.Body,
+		http.StatusCreated,
+	); err != nil {
+		return apiTypes.Entry{}, err
+	}
+	parsed := response.JSON201
+	if parsed == nil {
+		parsed = &generated.Entry{}
+		if err := decodeSingleJSON(
+			http.MethodPost,
+			"/api/v1/entries",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.Entry{}, err
+		}
+	}
+	return entryFromGenerated(*parsed)
+}
 
 func (c *Client) ListEntries(
 	ctx context.Context,
@@ -107,17 +170,17 @@ func entryFromGenerated(entry generated.Entry) (apiTypes.Entry, error) {
 		result.Path = *entry.Path
 	}
 	if entry.Uid != nil {
-		if *entry.Uid < 0 {
-			return apiTypes.Entry{}, errs.New(errs.KindInternal, "Entry response uid is negative")
+		if *entry.Uid < 0 || *entry.Uid > 1<<32-2 {
+			return apiTypes.Entry{}, errs.New(errs.KindInternal, "Entry response uid is outside the supported range")
 		}
-		value := uint32(*entry.Uid)
+		value := *entry.Uid
 		result.UID = &value
 	}
 	if entry.Gid != nil {
-		if *entry.Gid < 0 {
-			return apiTypes.Entry{}, errs.New(errs.KindInternal, "Entry response gid is negative")
+		if *entry.Gid < 0 || *entry.Gid > 1<<32-2 {
+			return apiTypes.Entry{}, errs.New(errs.KindInternal, "Entry response gid is outside the supported range")
 		}
-		value := uint32(*entry.Gid)
+		value := *entry.Gid
 		result.GID = &value
 	}
 	if entry.Exposure == nil {
@@ -125,6 +188,26 @@ func entryFromGenerated(entry generated.Entry) (apiTypes.Entry, error) {
 	}
 	result.Exposure = append([]string(nil), (*entry.Exposure)...)
 	return result, nil
+}
+
+func entrySourceToGenerated(source apiTypes.EntrySource) generated.EntrySource {
+	result := generated.EntrySource{Kind: source.Kind}
+	if source.Kind == "literal" {
+		result.Literal = &source.Literal
+	}
+	if source.SecretRef != "" {
+		result.SecretRef = &source.SecretRef
+	}
+	if source.AttachID != "" {
+		result.AttachId = &source.AttachID
+	}
+	if source.GrantAttachID != "" {
+		result.GrantAttachId = &source.GrantAttachID
+	}
+	if source.Fact != "" {
+		result.Fact = &source.Fact
+	}
+	return result
 }
 
 func entrySourceFromGenerated(source generated.EntrySource) apiTypes.EntrySource {

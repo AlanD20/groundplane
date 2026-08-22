@@ -40,6 +40,35 @@ func TestEntryGenerationServiceGeneratesPlainLiteral(t *testing.T) {
 	}
 }
 
+// Rationale: secret literal plaintext is a transient mutation input and must
+// become only an encrypted generation even though durable metadata is redacted.
+func TestEntryGenerationServiceGeneratesSecretLiteral(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 22, 17, 30, 0, 0, time.UTC)
+	service := newEntryGenerationTestService(t, nil, &entryGenerationTestFactResolver{})
+	entry := testEnvEntry(now, 11)
+	entry.Secret = true
+	entry.Source = core.EntrySource{Kind: core.SourceLiteral, Literal: "private-value"}
+	generation, err := service.Generate(
+		context.Background(),
+		ids.NewAt(ids.KindProject, now, 12),
+		ids.NewAt(ids.KindEnvironment, now, 13),
+		entry,
+		ids.NewAt(ids.KindConfig, now, 14),
+		now,
+	)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	defer ClearEntryValueGeneration(&generation)
+	if generation.Plain != nil || generation.Secret == nil {
+		t.Fatalf("Generate() = %#v", generation)
+	}
+	if got := openEntryGenerationTestValue(t, service.protector, *generation.Secret); got != "private-value" {
+		t.Fatalf("generated secret plaintext = %q", got)
+	}
+}
+
 // Rationale: a project-first reusable Secret must be opened only in memory and resealed into an Entry-owned generation.
 func TestEntryGenerationServiceGeneratesReusableSecret(t *testing.T) {
 	t.Parallel()

@@ -162,8 +162,12 @@ func resolveSecretTarget(cmd *cobra.Command, argument string, platform bool) (st
 }
 
 func readSecretValue(path string, stdin io.Reader) (string, error) {
+	return readValueFile(path, stdin, apiTypes.MaximumSecretValueBytes, "secret")
+}
+
+func readValueFile(path string, stdin io.Reader, maximum int, label string) (string, error) {
 	if path == "-" {
-		return readBoundedSecretValue(stdin)
+		return readBoundedValue(stdin, maximum, label)
 	}
 	file, err := os.Open(path)
 	if err != nil {
@@ -178,9 +182,9 @@ func readSecretValue(path string, stdin io.Reader) (string, error) {
 		if closeErr != nil {
 			return "", errs.Wrap(errs.KindInternal, closeErr)
 		}
-		return "", errs.New(errs.KindValidationFailed, "secret value file must be a regular file")
+		return "", errs.Newf(errs.KindValidationFailed, "%s value file must be a regular file", label)
 	}
-	value, readErr := readBoundedSecretValue(file)
+	value, readErr := readBoundedValue(file, maximum, label)
 	closeErr := file.Close()
 	if readErr != nil {
 		if closeErr != nil {
@@ -195,20 +199,24 @@ func readSecretValue(path string, stdin io.Reader) (string, error) {
 }
 
 func readBoundedSecretValue(reader io.Reader) (string, error) {
+	return readBoundedValue(reader, apiTypes.MaximumSecretValueBytes, "secret")
+}
+
+func readBoundedValue(reader io.Reader, maximum int, label string) (string, error) {
 	if reader == nil {
-		return "", errs.New(errs.KindValidationFailed, "secret value input is required")
+		return "", errs.Newf(errs.KindValidationFailed, "%s value input is required", label)
 	}
-	value, err := io.ReadAll(io.LimitReader(reader, apiTypes.MaximumSecretValueBytes+1))
+	value, err := io.ReadAll(io.LimitReader(reader, int64(maximum)+1))
 	if err != nil {
 		clear(value)
 		return "", errs.Wrap(errs.KindValidationFailed, err)
 	}
 	defer clear(value)
-	if len(value) > apiTypes.MaximumSecretValueBytes {
-		return "", errs.New(errs.KindValidationFailed, "secret value exceeds the 255 KiB limit")
+	if len(value) > maximum {
+		return "", errs.Newf(errs.KindValidationFailed, "%s value exceeds its size limit", label)
 	}
 	if !utf8.Valid(value) {
-		return "", errs.New(errs.KindValidationFailed, "secret value must be valid UTF-8")
+		return "", errs.Newf(errs.KindValidationFailed, "%s value must be valid UTF-8", label)
 	}
 	return string(value), nil
 }

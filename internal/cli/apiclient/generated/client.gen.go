@@ -71,14 +71,31 @@ type Entry struct {
 	// Examples: /api/v1/Entry.json
 	Schema   *string     `json:"$schema,omitempty"`
 	Exposure *[]string   `json:"exposure"`
-	Gid      *int32      `json:"gid,omitempty"`
+	Gid      *int64      `json:"gid,omitempty"`
 	Id       string      `json:"id"`
 	Key      *string     `json:"key,omitempty"`
 	Path     *string     `json:"path,omitempty"`
 	Secret   bool        `json:"secret"`
 	Source   EntrySource `json:"source"`
 	Type     string      `json:"type"`
-	Uid      *int32      `json:"uid,omitempty"`
+	Uid      *int64      `json:"uid,omitempty"`
+}
+
+// EntryCreateRequest defines model for EntryCreateRequest.
+type EntryCreateRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EntryCreateRequest.json
+	Schema        *string     `json:"$schema,omitempty"`
+	EnvironmentId string      `json:"environment_id"`
+	Exposure      *[]string   `json:"exposure"`
+	Gid           *int64      `json:"gid,omitempty"`
+	Key           *string     `json:"key,omitempty"`
+	Path          *string     `json:"path,omitempty"`
+	Secret        bool        `json:"secret"`
+	Source        EntrySource `json:"source"`
+	Type          string      `json:"type"`
+	Uid           *int64      `json:"uid,omitempty"`
 }
 
 // EntrySource defines model for EntrySource.
@@ -466,6 +483,11 @@ type EntryListParams struct {
 	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// EntryCreateParams defines parameters for EntryCreate.
+type EntryCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentListParams defines parameters for EnvironmentList.
 type EnvironmentListParams struct {
 	Project string  `form:"project" json:"project"`
@@ -557,6 +579,9 @@ type AttachCreateJSONRequestBody = AttachRequest
 
 // AttachRenameJSONRequestBody defines body for AttachRename for application/json ContentType.
 type AttachRenameJSONRequestBody = AttachRenameRequest
+
+// EntryCreateJSONRequestBody defines body for EntryCreate for application/json ContentType.
+type EntryCreateJSONRequestBody = EntryCreateRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
@@ -711,6 +736,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /entries (the `EntryList` operationId).
 	EntryList(ctx context.Context, params *EntryListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryCreateWithBody Create an environment Entry
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /entries (the `EntryCreate` operationId).
+	EntryCreateWithBody(ctx context.Context, params *EntryCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryCreate Create an environment Entry
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /entries (the `EntryCreate` operationId).
+	EntryCreate(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EntryShow Show environment Entry metadata
 	//
@@ -1042,6 +1081,40 @@ func (c *Client) BackingServiceShow(ctx context.Context, projectId string, reqEd
 // Corresponds with GET /entries (the `EntryList` operationId).
 func (c *Client) EntryList(ctx context.Context, params *EntryListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEntryListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryCreateWithBody Create an environment Entry
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /entries (the `EntryCreate` operationId).
+func (c *Client) EntryCreateWithBody(ctx context.Context, params *EntryCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryCreate Create an environment Entry
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /entries (the `EntryCreate` operationId).
+func (c *Client) EntryCreate(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryCreateRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1971,6 +2044,59 @@ func NewEntryListRequest(server string, params *EntryListParams) (*http.Request,
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEntryCreateRequest calls the generic EntryCreate builder with application/json body
+func NewEntryCreateRequest(server string, params *EntryCreateParams, body EntryCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEntryCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewEntryCreateRequestWithBody constructs an http.Request for the EntryCreate method, with any body, and a specified content type
+func NewEntryCreateRequestWithBody(server string, params *EntryCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/entries")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -3301,6 +3427,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /entries (the `EntryList` operationId).
 	EntryListWithResponse(ctx context.Context, params *EntryListParams, reqEditors ...RequestEditorFn) (*EntryListResponse, error)
 
+	// EntryCreateWithBodyWithResponse Create an environment Entry
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /entries (the `EntryCreate` operationId).
+	EntryCreateWithBodyWithResponse(ctx context.Context, params *EntryCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryCreateResponse, error)
+
+	// EntryCreateWithResponse Create an environment Entry
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /entries (the `EntryCreate` operationId).
+	EntryCreateWithResponse(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryCreateResponse, error)
+
 	// EntryShowWithResponse Show environment Entry metadata
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -3877,6 +4017,61 @@ func (r EntryListResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EntryListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EntryCreateResponse201Headers the declared response headers of an HTTP 201 response for EntryCreate
+type EntryCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type EntryCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Entry
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *EntryCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r EntryCreateResponse) GetJSON201() *Entry {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EntryCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EntryCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EntryCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EntryCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EntryCreateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5174,6 +5369,32 @@ func (c *ClientWithResponses) EntryListWithResponse(ctx context.Context, params 
 	return ParseEntryListResponse(rsp)
 }
 
+// EntryCreateWithBodyWithResponse Create an environment Entry
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /entries (the `EntryCreate` operationId).
+func (c *ClientWithResponses) EntryCreateWithBodyWithResponse(ctx context.Context, params *EntryCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryCreateResponse, error) {
+	rsp, err := c.EntryCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryCreateResponse(rsp)
+}
+
+// EntryCreateWithResponse Create an environment Entry
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /entries (the `EntryCreate` operationId).
+func (c *ClientWithResponses) EntryCreateWithResponse(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryCreateResponse, error) {
+	rsp, err := c.EntryCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryCreateResponse(rsp)
+}
+
 // EntryShowWithResponse Show environment Entry metadata
 //
 // Returns a wrapper object for the known response body format(s).
@@ -5855,6 +6076,52 @@ func ParseEntryListResponse(rsp *http.Response) (*EntryListResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseEntryCreateResponse parses an HTTP response from a EntryCreateWithResponse call
+func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EntryCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Entry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers EntryCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
 	}
 
 	return response, nil

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -23,6 +24,24 @@ type fakeEntryReader struct {
 	wantEnvironment string
 	wantPage        etcd.PageRequest
 	listCalls       int
+}
+
+type fakeEntryMutator struct {
+	input    apiTypes.EntryCreateRequest
+	key      string
+	response etcd.IdempotencyResponse
+	called   bool
+}
+
+func (mutator *fakeEntryMutator) CreateEntry(
+	_ context.Context,
+	input apiTypes.EntryCreateRequest,
+	key string,
+) (etcd.IdempotencyResponse, error) {
+	mutator.called = true
+	mutator.input = input
+	mutator.key = key
+	return mutator.response, nil
 }
 
 func (fake *fakeEntryReader) GetEntry(
@@ -120,6 +139,71 @@ func TestEntryListRejectsInvalidEnvironmentQueries(t *testing.T) {
 		server.Mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/entries"+query, nil))
 		if response.Code != http.StatusBadRequest || reader.listCalls != 0 {
 			t.Fatalf("query %q = %d/%s, list calls %d", query, response.Code, response.Body.String(), reader.listCalls)
+		}
+	}
+}
+
+// Rationale: secret Entry create must pass the exact transient literal to the
+// application boundary while returning only the redacted replay response.
+func TestEntryCreateRoutePreservesProtectedMutationResponse(t *testing.T) {
+	t.Parallel()
+	environmentID := ids.NewAt(ids.KindEnvironment, secretRouteTestTime(), 34)
+	want := etcd.IdempotencyResponse{
+		Status:      http.StatusCreated,
+		ContentKind: "application/json",
+		Body: []byte(
+			`{"id":"ev_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"env","key":"TOKEN","source":{"kind":"literal"},"exposure":["all"],"secret":true}`,
+		),
+	}
+	mutator := &fakeEntryMutator{response: want}
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{EntryMutations: mutator})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/entries",
+		bytes.NewBufferString(
+			`{"environment_id":"`+environmentID+`","type":"env","key":"TOKEN","source":{"kind":"literal","literal":"private"},"exposure":["all"],"secret":true}`,
+		),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(idempotencyKeyHeader, "entry-create-key-0002")
+	response := httptest.NewRecorder()
+	server.Mux.ServeHTTP(response, request)
+	if response.Code != want.Status || response.Header().Get("Content-Type") != want.ContentKind ||
+		!bytes.Equal(response.Body.Bytes(), want.Body) {
+		t.Fatalf(
+			"POST /entries = %d/%q/%q",
+			response.Code,
+			response.Header().Get("Content-Type"),
+			response.Body.Bytes(),
+		)
+	}
+	if !mutator.called || mutator.input.EnvironmentID != environmentID || mutator.input.Source.Literal != "private" ||
+		!mutator.input.Secret || mutator.key != "entry-create-key-0002" {
+		t.Fatalf("CreateEntry() input/key = %#v/%q", mutator.input, mutator.key)
+	}
+}
+
+// Rationale: duplicate, unknown, null, wrong-typed, and trailing members must
+// fail before a plaintext-bearing Entry request reaches the application.
+func TestEntryCreateRouteRejectsNonCanonicalBodies(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"env","type":"file","source":{"kind":"literal"},"exposure":["all"],"secret":false}`,
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"env","source":{"kind":"literal","kind":"fact"},"exposure":["all"],"secret":false}`,
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"env","source":{"kind":"literal","extra":true},"exposure":["all"],"secret":false}`,
+		`{"environment_id":null,"type":"env","source":{"kind":"literal"},"exposure":["all"],"secret":false}`,
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"env","source":{"kind":"literal"},"exposure":"all","secret":false}`,
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","type":"env","source":{"kind":"literal"},"exposure":["all"],"secret":false}{}`,
+	} {
+		mutator := &fakeEntryMutator{}
+		server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{EntryMutations: mutator})
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/entries", bytes.NewBufferString(body))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set(idempotencyKeyHeader, "entry-create-key-0003")
+		response := httptest.NewRecorder()
+		server.Mux.ServeHTTP(response, request)
+		if response.Code < 400 || response.Code >= 500 || mutator.called {
+			t.Fatalf("non-canonical Entry body status/called = %d/%t", response.Code, mutator.called)
 		}
 	}
 }

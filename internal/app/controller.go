@@ -303,6 +303,34 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
 	}
+	entryCreationRepository, err := newDurableEntryCreationRepository(
+		hierarchyRecords,
+		entryRecords,
+		serviceRecords,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry creation repositories: %w", err)
+	}
+	entryGeneration, err := NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry generation: %w", err)
+	}
+	entryCreationIdempotency, err := newDurableEntryCreationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry creation idempotency: %w", err)
+	}
+	entryMutations, err := newEntryCreationService(
+		entryCreationRepository,
+		entryGeneration,
+		entryCreationIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry creation service: %w", err)
+	}
 	secretCreationIdempotency, err := newDurableSecretCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
@@ -570,6 +598,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
 		Entries:               entryReads,
+		EntryMutations:        entryMutations,
 		Secrets:               secretReads,
 		SecretMutations:       secretMutations,
 		SecretDeletions:       secretDeletions,

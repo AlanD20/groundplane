@@ -75,6 +75,62 @@ func (repository *EntryRepository) CreateEntry(
 	}, nil
 }
 
+// CreateEntryIdempotent atomically commits desired metadata, its owner index,
+// one immutable value generation, and the exact completed replay marker.
+func (repository *EntryRepository) CreateEntryIdempotent(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	record EntryRecord,
+	generation EntryValueGeneration,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateEntryHierarchy(ctx, environment, project, record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry creation marker must be a completed direct mutation",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	primaryValue, err := encodeEntryRecord(record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(primaryValue)
+	generationKey, generationValue, err := prepareEntryGeneration(record, generation)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(generationValue)
+	plan, err := newIdempotencyMutationPlan(
+		entryWriteConditions(environment, project, record, generationKey, 0, 0),
+		[]Mutation{
+			{Type: MutationPut, Key: entryRecordKey(record.Entry.ID), Value: primaryValue},
+			{
+				Type: MutationPut, Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+				Value: []byte(record.Entry.ID),
+			},
+			{Type: MutationPut, Key: generationKey, Value: generationValue},
+		},
+		func(_ int64, values []*KeyValue) error {
+			return classifyEntryWriteConflict(values, environment, project, record, 0)
+		},
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
 func (repository *EntryRepository) GetEntry(
 	ctx context.Context,
 	id string,

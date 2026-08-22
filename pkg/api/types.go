@@ -169,11 +169,25 @@ type Entry struct {
 	Type     string      `json:"type"`           // "env" | "file"
 	Key      string      `json:"key,omitempty"`  // Type=env
 	Path     string      `json:"path,omitempty"` // Type=file
-	UID      *uint32     `json:"uid,omitempty"`  // Type=file; required even when zero
-	GID      *uint32     `json:"gid,omitempty"`  // Type=file; required even when zero
+	UID      *int64      `json:"uid,omitempty"`  // Type=file; required even when zero
+	GID      *int64      `json:"gid,omitempty"`  // Type=file; required even when zero
 	Source   EntrySource `json:"source"`
 	Exposure []string    `json:"exposure"` // service names, or ["all"]
 	Secret   bool        `json:"secret"`
+}
+
+const MaximumEntryValueBytes = 256 << 10
+
+type EntryCreateRequest struct {
+	EnvironmentID string      `json:"environment_id"`
+	Type          string      `json:"type"`
+	Key           string      `json:"key,omitempty"`
+	Path          string      `json:"path,omitempty"`
+	UID           *int64      `json:"uid,omitempty"`
+	GID           *int64      `json:"gid,omitempty"`
+	Source        EntrySource `json:"source"`
+	Exposure      []string    `json:"exposure"`
+	Secret        bool        `json:"secret"`
 }
 
 type EntryValue struct {

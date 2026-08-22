@@ -76,7 +76,11 @@ func (service *EntryGenerationService) Generate(
 			)
 		}
 	}
-	if err := entry.Validate(); err != nil {
+	validationEntry := entry
+	if validationEntry.Secret && validationEntry.Source.Kind == core.SourceLiteral {
+		validationEntry.Source.Literal = ""
+	}
+	if err := validationEntry.Validate(); err != nil {
 		return etcd.EntryValueGeneration{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	if createdAt.IsZero() {

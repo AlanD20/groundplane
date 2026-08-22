@@ -113,21 +113,36 @@ func (h Header) validate() error {
 }
 
 func validateDestination(value string) error {
-	if value == "" || !utf8.ValidString(value) ||
-		strings.ContainsRune(value, '\x00') || strings.Contains(value, `\`) ||
-		strings.HasPrefix(value, "/") {
+	if !validDestination(value) {
 		return protocolError("invalid relative destination")
+	}
+	return nil
+}
+
+// ValidateDesiredDestination applies the accepted materialization path policy
+// to an operator-authored Entry before desired state is mutated.
+func ValidateDesiredDestination(value string) error {
+	if !validDestination(value) {
+		return errs.New(errs.KindValidationFailed, "Entry file path is not a canonical relative destination")
+	}
+	return nil
+}
+
+func validDestination(value string) bool {
+	if value == "" || !utf8.ValidString(value) || len(value) > int(MaximumDestinationBytes) ||
+		strings.ContainsRune(value, '\x00') || strings.Contains(value, `\`) || strings.HasPrefix(value, "/") {
+		return false
 	}
 	cleaned := path.Clean(value)
 	if cleaned == "." || cleaned != value || strings.HasPrefix(cleaned, "../") {
-		return protocolError("invalid relative destination")
+		return false
 	}
 	for _, component := range strings.Split(value, "/") {
 		if strings.HasPrefix(component, TemporaryPrefix) {
-			return protocolError("reserved destination")
+			return false
 		}
 	}
-	return nil
+	return true
 }
 
 // GeneratedEnvDestination derives the only generated environment destination
