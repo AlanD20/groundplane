@@ -69,10 +69,24 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 	if err != nil {
 		return attachTaskChange{}, err
 	}
-	return encodeAttachTaskChange(attachTaskChange{
+	change, err := encodeAttachTaskChange(attachTaskChange{
 		applies:    true,
 		conditions: []Condition{{Key: attachKey(source.Target), ModRevision: current.Revision}},
 	}, retrying)
+	if err != nil {
+		return attachTaskChange{}, err
+	}
+	planReferenceKey, planReferenceValue, _, err := prepareAttachTaskPlanReference(retry)
+	if err != nil {
+		clearAttachTaskChange(change)
+		return attachTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, Condition{Key: planReferenceKey})
+	change.mutations = append(change.mutations, Mutation{
+		Type: MutationPut, Key: planReferenceKey, Value: planReferenceValue,
+	})
+	change.values = append(change.values, planReferenceValue)
+	return change, nil
 }
 
 func (repository *TaskRepository) prepareAttachTaskAcknowledgement(

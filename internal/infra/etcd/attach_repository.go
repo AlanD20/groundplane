@@ -101,6 +101,11 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskReference)
+	planReferenceKey, planReferenceValue, _, err := prepareAttachTaskPlanReference(task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(planReferenceValue)
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
@@ -125,6 +130,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Key: deletionTombstoneKey("project", record.BackingProjectID)},
 		{Key: deletionTombstoneKey("service", record.BackingServiceID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
+		{Key: planReferenceKey},
 		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
 			Key:         environmentBlueprintManifestKey(record.EnvironmentID, renderInput.BlueprintRevisionID),
@@ -146,6 +152,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Type: MutationPut, Key: attachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: MutationPut, Key: planReferenceKey, Value: planReferenceValue},
 		{Type: MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}
 	for _, service := range scope.Services {
@@ -288,6 +295,11 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskReference)
+	planReferenceKey, planReferenceValue, _, err := prepareAttachTaskPlanReference(task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(planReferenceValue)
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
@@ -308,6 +320,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 		{Key: deletionTombstoneKey("project", current.Record.BackingProjectID)},
 		{Key: deletionTombstoneKey("service", current.Record.BackingServiceID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
+		{Key: planReferenceKey},
 		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
 			Key:         environmentBlueprintManifestKey(current.Record.EnvironmentID, renderInput.BlueprintRevisionID),
@@ -325,6 +338,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: MutationPut, Key: attachKey(detaching.ID), Value: attachValue},
 		{Type: MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: MutationPut, Key: planReferenceKey, Value: planReferenceValue},
 		{Type: MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}
 	for _, service := range scope.Services {
@@ -953,7 +967,7 @@ func validateAttachDetachTask(
 }
 
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 38 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	operations := 40 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
 	if hasFacts {
 		operations++
 	}
@@ -961,7 +975,7 @@ func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int 
 }
 
 func attachDetachWithTaskOperationCount(record AttachRecord) int {
-	return 32 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
+	return 34 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
 }
 
 func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRecord) bool {

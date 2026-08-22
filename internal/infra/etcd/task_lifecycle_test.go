@@ -264,6 +264,7 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		t.Fatalf("idempotencyRetentionKey() error = %v", keyErr)
 	}
 	assertTaskLifecycleValue(t, store, retentionKey, true)
+	assertTaskLifecycleValue(t, store, taskRetentionIndexKey(first.ID, terminalAt.Add(TaskRetention)), true)
 	idempotency, err := newIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)

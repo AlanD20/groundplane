@@ -293,7 +293,7 @@ func (repository *TaskRepository) RetryTask(
 		classifyTaskRetryConflict(
 			sourceTaskID,
 			retry.OperationID,
-			attachChange.applies,
+			len(attachChange.conditions),
 			len(secretChange.conditions),
 			len(componentChange.conditions),
 		),
@@ -311,15 +311,12 @@ func (repository *TaskRepository) RetryTask(
 func classifyTaskRetryConflict(
 	sourceTaskID string,
 	operationID string,
-	attachLifecycle bool,
+	attachConditions int,
 	secretConditions int,
 	componentConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expectedValues := 5 + secretConditions + componentConditions
-		if attachLifecycle {
-			expectedValues++
-		}
+		expectedValues := 5 + attachConditions + secretConditions + componentConditions
 		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "Task retry compare evidence is incomplete")
 		}
@@ -1001,6 +998,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateTaskRetentionReplay(
+					ctx, task, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				return Versioned[TaskRecord]{
 					Record: task, Revision: taskValue.ModRevision,
 					ReadRevision: primaryAndAssignment.ReadRevision,
@@ -1113,6 +1115,13 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(markerValue)
 			return Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 		}
+		taskRetentionKey, taskRetentionValue, err := prepareTaskRetentionIndex(terminal)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			return Versioned[TaskRecord]{}, err
+		}
 		conditions := []Condition{
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
@@ -1121,6 +1130,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
 			{Key: taskQueueKey(task.Executor, task.ID)},
 			{Key: retentionKey},
+			{Key: taskRetentionKey},
 			{Key: taskTimeoutIndexKey(task.ID, assignment.Deadline), ModRevision: companions.Values[4].ModRevision},
 		}
 		mutations := []Mutation{
@@ -1130,6 +1140,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			{Type: MutationDelete, Key: taskActiveOperationKey(task.OperationID)},
 			{Type: MutationPut, Key: markerKey, Value: markerValue},
 			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
+			{Type: MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
 			{Type: MutationDelete, Key: taskTimeoutIndexKey(task.ID, assignment.Deadline)},
 		}
 		if materializes {
@@ -1221,6 +1232,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
+		clear(taskRetentionValue)
 		clear(environmentValue)
 		clearAttachTaskChange(attachChange)
 		clearSecretTaskChange(secretChange)
@@ -1344,6 +1356,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
+			if err := repository.validateTaskRetentionReplay(
+				ctx, current.Record, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			return current, nil
 		}
 		if current.Record.Status != TaskStatusPending {
@@ -1416,6 +1433,13 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			return Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 		}
+		taskRetentionKey, taskRetentionValue, err := prepareTaskRetentionIndex(terminal)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			return Versioned[TaskRecord]{}, err
+		}
 		secretChange, err := repository.prepareSecretTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 		)
@@ -1441,6 +1465,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
 			{Key: taskQueueKey(current.Record.Executor, taskID), ModRevision: companions.Values[2].ModRevision},
 			{Key: retentionKey},
+			{Key: taskRetentionKey},
 		}
 		mutations := []Mutation{
 			{Type: MutationPut, Key: taskKey(taskID), Value: terminalValue},
@@ -1448,6 +1473,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			{Type: MutationDelete, Key: taskQueueKey(current.Record.Executor, taskID)},
 			{Type: MutationPut, Key: markerKey, Value: markerValue},
 			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
+			{Type: MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
 		}
 		if secretChange.applies {
 			conditions = append(conditions, secretChange.conditions...)
@@ -1461,6 +1487,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
+		clear(taskRetentionValue)
 		clearSecretTaskChange(secretChange)
 		clearComponentTaskChange(componentChange)
 		if err != nil {

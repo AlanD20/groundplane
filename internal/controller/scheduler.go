@@ -11,6 +11,7 @@ import (
 
 type taskExpiration interface {
 	ExpireTimedOutTasks(context.Context, time.Time) (int, error)
+	PruneExpiredTasks(context.Context, time.Time) (int, error)
 }
 
 type idempotencyPruning interface {
@@ -86,6 +87,9 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 		return nil
 	}
 	if _, err := sch.idempotency.PruneExpired(ctx, now); err != nil {
+		return err
+	}
+	if _, err := sch.tasks.PruneExpiredTasks(ctx, now); err != nil {
 		return err
 	}
 	sch.nextPrune = now.Add(dailyMaintenanceInterval)

@@ -8,9 +8,12 @@ import (
 )
 
 type fakeTaskExpiration struct {
-	now   time.Time
-	calls int
-	err   error
+	now        time.Time
+	calls      int
+	err        error
+	pruneNow   time.Time
+	pruneCalls int
+	pruneErr   error
 }
 
 type fakeIdempotencyPruning struct {
@@ -43,6 +46,12 @@ func (expiration *fakeTaskExpiration) ExpireTimedOutTasks(_ context.Context, now
 	return 2, expiration.err
 }
 
+func (expiration *fakeTaskExpiration) PruneExpiredTasks(_ context.Context, now time.Time) (int, error) {
+	expiration.pruneCalls++
+	expiration.pruneNow = now
+	return 1, expiration.pruneErr
+}
+
 func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 	wantNow := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	expiration := &fakeTaskExpiration{}
@@ -57,6 +66,7 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 		t.Fatalf("tick() error = %v", err)
 	}
 	if expiration.calls != 1 || !expiration.now.Equal(wantNow) ||
+		expiration.pruneCalls != 1 || !expiration.pruneNow.Equal(wantNow) ||
 		pruning.calls != 1 || !pruning.now.Equal(wantNow) || agents.calls != 1 || !agents.now.Equal(wantNow) {
 		t.Fatalf("ExpireTimedOutTasks() calls/time = %d/%s", expiration.calls, expiration.now)
 	}
@@ -64,7 +74,7 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatalf("tick(before daily prune) error = %v", err)
 	}
-	if expiration.calls != 2 || agents.calls != 2 || pruning.calls != 1 {
+	if expiration.calls != 2 || agents.calls != 2 || pruning.calls != 1 || expiration.pruneCalls != 1 {
 		t.Fatalf(
 			"before daily deadline expiration/stale/pruning calls = %d/%d/%d",
 			expiration.calls,
@@ -76,7 +86,8 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatalf("tick(at daily prune) error = %v", err)
 	}
-	if expiration.calls != 3 || agents.calls != 3 || pruning.calls != 2 || !pruning.now.Equal(now) {
+	if expiration.calls != 3 || agents.calls != 3 || pruning.calls != 2 || expiration.pruneCalls != 2 ||
+		!pruning.now.Equal(now) || !expiration.pruneNow.Equal(now) {
 		t.Fatalf(
 			"at daily deadline expiration/stale/pruning calls/time = %d/%d/%d/%s",
 			expiration.calls,
@@ -117,5 +128,33 @@ func TestSchedulerRetriesFailedDailyPruningOnNextTick(t *testing.T) {
 	}
 	if pruning.calls != 2 || !scheduler.nextPrune.Equal(now.Add(dailyMaintenanceInterval)) {
 		t.Fatalf("pruning calls/next = %d/%s", pruning.calls, scheduler.nextPrune)
+	}
+}
+
+func TestSchedulerRetriesFailedTaskPruningOnNextTick(t *testing.T) {
+	// Rationale: the daily deadline must advance only after marker and Task
+	// pruning both succeed, preserving the required ordering on retry.
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	failure := errors.New("Task prune failed")
+	tasks := &fakeTaskExpiration{pruneErr: failure}
+	pruning := &fakeIdempotencyPruning{}
+	scheduler := &Scheduler{
+		tasks: tasks, idempotency: pruning, agents: &fakeStaleAgentExpiration{},
+		now: func() time.Time { return now },
+	}
+	if err := scheduler.tick(context.Background()); !errors.Is(err, failure) {
+		t.Fatalf("first tick error = %v, want Task prune failure", err)
+	}
+	if pruning.calls != 1 || tasks.pruneCalls != 1 || !scheduler.nextPrune.IsZero() {
+		t.Fatalf("first marker/Task prune calls/next = %d/%d/%s", pruning.calls, tasks.pruneCalls, scheduler.nextPrune)
+	}
+	tasks.pruneErr = nil
+	now = now.Add(time.Second)
+	if err := scheduler.tick(context.Background()); err != nil {
+		t.Fatalf("retry tick error = %v", err)
+	}
+	if pruning.calls != 2 || tasks.pruneCalls != 2 ||
+		!scheduler.nextPrune.Equal(now.Add(dailyMaintenanceInterval)) {
+		t.Fatalf("retry marker/Task prune calls/next = %d/%d/%s", pruning.calls, tasks.pruneCalls, scheduler.nextPrune)
 	}
 }

@@ -21,6 +21,8 @@ const (
 	controllerTaskClaimPrefix       = "/v1/runtime/controller-task-claims/"
 	taskAssignmentIndexPrefix       = "/v1/indexes/tasks/assignment/"
 	taskTimeoutIndexPrefix          = "/v1/indexes/tasks/timeout/"
+	taskRetentionIndexPrefix        = "/v1/indexes/tasks/by-retain-until/"
+	taskPruneIntentPrefix           = "/v1/runtime/task-pruning/"
 	taskMaterializationWriterPrefix = "/v1/runtime/task-materialization-writers/"
 	deletionTombstoneRootPrefix     = "/v1/runtime/deletions/"
 	taskEventSequenceWidth          = 20
@@ -104,6 +106,34 @@ func taskAssignmentIndexKey(taskID string) string {
 
 func taskTimeoutIndexKey(taskID string, deadline time.Time) string {
 	return taskTimeoutIndexPrefix + fmt.Sprintf("%020d", deadline.UnixNano()) + "/" + taskID
+}
+
+func taskRetentionIndexKey(taskID string, retainUntil time.Time) string {
+	return taskRetentionIndexPrefix + fmt.Sprintf("%020d", retainUntil.UnixNano()) + "/" + taskID
+}
+
+func taskPruneIntentKey(taskID string) string {
+	return taskPruneIntentPrefix + taskID
+}
+
+func taskEventDedupScopePrefix(taskID string) string {
+	return taskEventDedupRootPrefix + taskID + "/"
+}
+
+func parseTaskRetentionIndexKey(key string) (string, time.Time, error) {
+	if !strings.HasPrefix(key, taskRetentionIndexPrefix) {
+		return "", time.Time{}, errs.New(errs.KindInternal, "Task retention key is outside its index")
+	}
+	segments := strings.Split(strings.TrimPrefix(key, taskRetentionIndexPrefix), "/")
+	if len(segments) != 2 || len(segments[0]) != taskEventSequenceWidth ||
+		validateStableID(ids.KindTask, segments[1]) != nil {
+		return "", time.Time{}, errs.New(errs.KindInternal, "Task retention key is invalid")
+	}
+	nanoseconds, err := strconv.ParseInt(segments[0], 10, 64)
+	if err != nil || nanoseconds <= 0 || fmt.Sprintf("%020d", nanoseconds) != segments[0] {
+		return "", time.Time{}, errs.New(errs.KindInternal, "Task retention deadline is invalid")
+	}
+	return segments[1], time.Unix(0, nanoseconds).UTC(), nil
 }
 
 func parseTaskTimeoutIndexKey(key string) (string, time.Time, error) {
