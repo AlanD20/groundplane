@@ -114,6 +114,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	}
 	s.routes()
 	s.registerTenants()
+	s.registerProjects()
 	s.registerHost()
 	return s
 }
@@ -141,12 +142,9 @@ func (s *Server) routes() {
 	// contract has a durable executor.
 	mux.HandleFunc("DELETE /api/v1/tenants/{id}", s.acceptTask)
 
-	// project (?kind=tenant|backing)
-	mux.HandleFunc("GET /api/v1/projects", s.projectList)
-	s.jsonRoute("POST /api/v1/projects", s.projectCreate)
-	mux.HandleFunc("GET /api/v1/projects/{id}", s.projectShow)
-	s.jsonRoute("PATCH /api/v1/projects/{id}", s.projectEdit)
-	s.jsonRoute("POST /api/v1/projects/{id}/rename", s.projectRename)
+	// Project reads and synchronous mutations are typed Huma operations.
+	// Destructive delete remains a Task route until the accepted parent-cascade
+	// contract has a durable executor.
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.acceptTask)
 
 	// environment (?project=)

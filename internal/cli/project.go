@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"net/http"
-
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
@@ -21,18 +19,24 @@ func newProjectCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			q := map[string]string{}
+			tenantID := ""
 			if app.Scope.Tenant != "" {
-				tenantID, err := resolveTenantTarget(cmd, app.Scope.Tenant)
+				resolved, err := resolveTenantTarget(cmd, app.Scope.Tenant)
 				if err != nil {
 					return err
 				}
-				q["tenant"] = tenantID
+				tenantID = resolved
 			}
-			if kind != "" {
-				q["kind"] = kind
+			page, err := app.Client.ListProjects(cmd.Context(), tenantID, kind, 0, "")
+			if err != nil {
+				return err
 			}
-			return runList(cmd, "/api/v1/projects", q)
+			items := make([]map[string]any, len(page.Items))
+			for index, project := range page.Items {
+				items[index] = projectFields(project)
+			}
+			headers, rows := tabulateVia(app, items)
+			return app.Out.Render(headers, rows, page)
 		},
 	}
 	list.Flags().StringVar(&kind, "kind", "", "filter: tenant | backing")
@@ -47,7 +51,11 @@ func newProjectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runShow(cmd, "/api/v1/projects/"+id)
+			project, err := fromContext(cmd).Client.ShowProject(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderProject(cmd, project)
 		},
 	})
 
@@ -62,14 +70,18 @@ func newProjectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := map[string]string{"slug": args[0], "tenant_id": tenantID}
+			body := apiTypes.ProjectCreate{Slug: args[0], TenantID: tenantID}
 			if name != "" {
-				body["name"] = name
+				body.Name = &name
 			}
 			if description != "" {
-				body["description"] = description
+				body.Description = &description
 			}
-			return runCreate(cmd, "/api/v1/projects", body)
+			project, err := app.Client.CreateProject(cmd.Context(), body)
+			if err != nil {
+				return err
+			}
+			return renderProject(cmd, project)
 		},
 	}
 	create.Flags().StringVar(&name, "name", "", "display name (defaults to the slug)")
@@ -86,11 +98,15 @@ func newProjectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runPatch(
-				cmd,
-				"/api/v1/projects/"+id,
-				changedStringFields(cmd, map[string]string{"name": editName}),
-			)
+			body := apiTypes.ProjectEdit{}
+			if cmd.Flags().Changed("name") {
+				body.Name = &editName
+			}
+			project, err := fromContext(cmd).Client.EditProject(cmd.Context(), id, body)
+			if err != nil {
+				return err
+			}
+			return renderProject(cmd, project)
 		},
 	}
 	edit.Flags().StringVar(&editName, "name", "", "new display name")
@@ -106,11 +122,11 @@ func newProjectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runPostUpdate(
-				cmd,
-				"/api/v1/projects/"+id+"/rename",
-				map[string]string{"slug": newSlug},
-			)
+			project, err := fromContext(cmd).Client.RenameProject(cmd.Context(), id, newSlug)
+			if err != nil {
+				return err
+			}
+			return renderProject(cmd, project)
 		},
 	}
 	rename.Flags().StringVar(&newSlug, "slug", "", "new slug (unique within the tenant)")
@@ -145,17 +161,8 @@ func resolveProjectTarget(cmd *cobra.Command, argument string) (string, error) {
 	}
 	cursor := ""
 	for {
-		var page apiTypes.Page[apiTypes.Project]
-		request := app.Client.NewRequest(
-			http.MethodGet,
-			"/api/v1/projects",
-			map[string]string{
-				"tenant": tenantID, "kind": "tenant", "limit": "200", "cursor": cursor,
-			},
-			nil,
-			http.StatusOK,
-		)
-		if err := app.Client.Do(cmd.Context(), request, &page); err != nil {
+		page, err := app.Client.ListProjects(cmd.Context(), tenantID, "tenant", 200, cursor)
+		if err != nil {
 			return "", err
 		}
 		for _, project := range page.Items {
@@ -167,5 +174,18 @@ func resolveProjectTarget(cmd *cobra.Command, argument string) (string, error) {
 			return "", errs.Newf(errs.KindProjectNotFound, "project slug %q was not found", argument)
 		}
 		cursor = page.NextCursor
+	}
+}
+
+func renderProject(cmd *cobra.Command, project apiTypes.Project) error {
+	item := projectFields(project)
+	fields, values := fieldsOfVia(item)
+	return fromContext(cmd).Out.RenderOne(fields, values, project)
+}
+
+func projectFields(project apiTypes.Project) map[string]any {
+	return map[string]any{
+		"id": project.ID, "tenant_id": project.TenantID, "slug": project.Slug,
+		"name": project.Name, "description": project.Description, "kind": project.Kind,
 	}
 }

@@ -7,12 +7,12 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/http"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type ProjectChanger interface {
@@ -20,60 +20,64 @@ type ProjectChanger interface {
 	RenameProject(context.Context, string, hierarchy.RenameProjectInput, string) (etcd.IdempotencyResponse, error)
 }
 
-func (s *Server) projectEdit(w http.ResponseWriter, r *http.Request) {
+func (s *Server) editProject(ctx context.Context, request *projectEditInput) (*projectMutationOutput, error) {
 	if s.projectChanges == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Project changer is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Project changer is not configured")
 	}
-	input, err := decodeProjectEdit(r)
+	defer clear(request.RawBody)
+	input, err := decodeProjectEdit(request.RawBody)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
 	response, err := s.projectChanges.EditProject(
-		r.Context(), r.PathValue("id"), input, r.Header.Get(idempotencyKeyHeader),
+		ctx, request.ID, input, request.IdempotencyKey,
 	)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	s.writeProjectMutationResponse(w, response, "edit")
+	return s.projectMutationResponse(response, "edit"), nil
 }
 
-func (s *Server) projectRename(w http.ResponseWriter, r *http.Request) {
+func (s *Server) renameProject(ctx context.Context, request *projectRenameInput) (*projectMutationOutput, error) {
 	if s.projectChanges == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Project changer is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Project changer is not configured")
 	}
-	input, err := decodeProjectRename(r)
+	defer clear(request.RawBody)
+	input, err := decodeProjectRename(request.RawBody)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
 	response, err := s.projectChanges.RenameProject(
-		r.Context(), r.PathValue("id"), input, r.Header.Get(idempotencyKeyHeader),
+		ctx, request.ID, input, request.IdempotencyKey,
 	)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	s.writeProjectMutationResponse(w, response, "rename")
+	return s.projectMutationResponse(response, "rename"), nil
 }
 
-func (s *Server) writeProjectMutationResponse(
-	w http.ResponseWriter,
+func (s *Server) projectMutationResponse(
 	response etcd.IdempotencyResponse,
 	action string,
-) {
-	w.Header().Set("Content-Type", response.ContentKind)
-	w.WriteHeader(response.Status)
-	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Project mutation response", "action", action, slog.Any("error", err))
+) *projectMutationOutput {
+	return &projectMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, err := ctx.BodyWriter().Write(response.Body); err != nil && s.Logger != nil {
+				s.Logger.Error(
+					"controller: write Project mutation response",
+					"action",
+					action,
+					slog.Any("error", err),
+				)
+			}
+		},
 	}
 }
 
-func decodeProjectEdit(r *http.Request) (hierarchy.EditProjectInput, error) {
-	values, err := decodeProjectChangeBody(r, map[string]struct{}{"name": {}})
+func decodeProjectEdit(body []byte) (hierarchy.EditProjectInput, error) {
+	values, err := decodeProjectChangeBody(body, map[string]struct{}{"name": {}})
 	if err != nil {
 		return hierarchy.EditProjectInput{}, err
 	}
@@ -87,8 +91,8 @@ func decodeProjectEdit(r *http.Request) (hierarchy.EditProjectInput, error) {
 	return input, nil
 }
 
-func decodeProjectRename(r *http.Request) (hierarchy.RenameProjectInput, error) {
-	values, err := decodeProjectChangeBody(r, map[string]struct{}{"slug": {}})
+func decodeProjectRename(body []byte) (hierarchy.RenameProjectInput, error) {
+	values, err := decodeProjectChangeBody(body, map[string]struct{}{"slug": {}})
 	if err != nil {
 		return hierarchy.RenameProjectInput{}, err
 	}
@@ -99,15 +103,7 @@ func decodeProjectRename(r *http.Request) (hierarchy.RenameProjectInput, error) 
 	return input, nil
 }
 
-func decodeProjectChangeBody(r *http.Request, allowed map[string]struct{}) (map[string]string, error) {
-	if len(r.URL.Query()) != 0 {
-		return nil, errs.New(errs.KindMalformedRequest, "Project mutation query is invalid")
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, errs.Wrap(errs.KindMalformedRequest, err)
-	}
-	defer clear(body)
+func decodeProjectChangeBody(body []byte, allowed map[string]struct{}) (map[string]string, error) {
 	if !utf8.Valid(body) {
 		return nil, errs.New(errs.KindMalformedRequest, "Project mutation body is not valid UTF-8")
 	}

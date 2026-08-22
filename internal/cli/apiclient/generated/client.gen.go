@@ -86,6 +86,60 @@ type HostResource struct {
 	UsedPct int64  `json:"used_pct"`
 }
 
+// Project defines model for Project.
+type Project struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Project.json
+	Schema      *string `json:"$schema,omitempty"`
+	Description string  `json:"description"`
+	Id          string  `json:"id"`
+	Kind        string  `json:"kind"`
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+	TenantId    *string `json:"tenant_id,omitempty"`
+}
+
+// ProjectCreate defines model for ProjectCreate.
+type ProjectCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ProjectCreate.json
+	Schema      *string `json:"$schema,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Slug        string  `json:"slug"`
+	TenantId    string  `json:"tenant_id"`
+}
+
+// ProjectEdit defines model for ProjectEdit.
+type ProjectEdit struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ProjectEdit.json
+	Schema *string `json:"$schema,omitempty"`
+	Name   *string `json:"name,omitempty"`
+}
+
+// ProjectPage defines model for ProjectPage.
+type ProjectPage struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ProjectPage.json
+	Schema     *string    `json:"$schema,omitempty"`
+	Items      *[]Project `json:"items"`
+	NextCursor *string    `json:"next_cursor,omitempty"`
+}
+
+// ProjectRename defines model for ProjectRename.
+type ProjectRename struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ProjectRename.json
+	Schema *string `json:"$schema,omitempty"`
+	Slug   string  `json:"slug"`
+}
+
 // Tenant defines model for Tenant.
 type Tenant struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -138,6 +192,29 @@ type TenantRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// ProjectListParams defines parameters for ProjectList.
+type ProjectListParams struct {
+	Kind   *string `form:"kind,omitempty" json:"kind,omitempty"`
+	Tenant *string `form:"tenant,omitempty" json:"tenant,omitempty"`
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ProjectCreateParams defines parameters for ProjectCreate.
+type ProjectCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ProjectEditParams defines parameters for ProjectEdit.
+type ProjectEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ProjectRenameParams defines parameters for ProjectRename.
+type ProjectRenameParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // TenantListParams defines parameters for TenantList.
 type TenantListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -158,6 +235,15 @@ type TenantEditParams struct {
 type TenantRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
+
+// ProjectCreateJSONRequestBody defines body for ProjectCreate for application/json ContentType.
+type ProjectCreateJSONRequestBody = ProjectCreate
+
+// ProjectEditJSONRequestBody defines body for ProjectEdit for application/json ContentType.
+type ProjectEditJSONRequestBody = ProjectEdit
+
+// ProjectRenameJSONRequestBody defines body for ProjectRename for application/json ContentType.
+type ProjectRenameJSONRequestBody = ProjectRename
 
 // TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
 type TenantCreateJSONRequestBody = TenantCreate
@@ -247,6 +333,58 @@ type ClientInterface interface {
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ProjectList List projects
+	//
+	// Corresponds with GET /projects (the `ProjectList` operationId).
+	ProjectList(ctx context.Context, params *ProjectListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectCreateWithBody Create a tenant project
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /projects (the `ProjectCreate` operationId).
+	ProjectCreateWithBody(ctx context.Context, params *ProjectCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectCreate Create a tenant project
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /projects (the `ProjectCreate` operationId).
+	ProjectCreate(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectShow Show a project
+	//
+	// Corresponds with GET /projects/{id} (the `ProjectShow` operationId).
+	ProjectShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectEditWithBody Edit a project
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+	ProjectEditWithBody(ctx context.Context, id string, params *ProjectEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectEdit Edit a project
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+	ProjectEdit(ctx context.Context, id string, params *ProjectEditParams, body ProjectEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectRenameWithBody Rename a project slug
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+	ProjectRenameWithBody(ctx context.Context, id string, params *ProjectRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectRename Rename a project slug
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+	ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// TenantList List tenants
 	//
 	// Corresponds with GET /tenants (the `TenantList` operationId).
@@ -305,6 +443,138 @@ type ClientInterface interface {
 // Corresponds with GET /host (the `HostShow` operationId).
 func (c *Client) HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHostShowRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectList List projects
+//
+// Corresponds with GET /projects (the `ProjectList` operationId).
+func (c *Client) ProjectList(ctx context.Context, params *ProjectListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectCreateWithBody Create a tenant project
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /projects (the `ProjectCreate` operationId).
+func (c *Client) ProjectCreateWithBody(ctx context.Context, params *ProjectCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectCreate Create a tenant project
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /projects (the `ProjectCreate` operationId).
+func (c *Client) ProjectCreate(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectShow Show a project
+//
+// Corresponds with GET /projects/{id} (the `ProjectShow` operationId).
+func (c *Client) ProjectShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectEditWithBody Edit a project
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+func (c *Client) ProjectEditWithBody(ctx context.Context, id string, params *ProjectEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectEdit Edit a project
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+func (c *Client) ProjectEdit(ctx context.Context, id string, params *ProjectEditParams, body ProjectEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectRenameWithBody Rename a project slug
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+func (c *Client) ProjectRenameWithBody(ctx context.Context, id string, params *ProjectRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectRenameRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectRename Rename a project slug
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+func (c *Client) ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectRenameRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -469,6 +739,303 @@ func NewHostShowRequest(server string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewProjectListRequest constructs an http.Request for the ProjectList method
+func NewProjectListRequest(server string, params *ProjectListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/projects")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Kind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "kind", *params.Kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Tenant != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "tenant", *params.Tenant, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewProjectCreateRequest calls the generic ProjectCreate builder with application/json body
+func NewProjectCreateRequest(server string, params *ProjectCreateParams, body ProjectCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewProjectCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewProjectCreateRequestWithBody constructs an http.Request for the ProjectCreate method, with any body, and a specified content type
+func NewProjectCreateRequestWithBody(server string, params *ProjectCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/projects")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewProjectShowRequest constructs an http.Request for the ProjectShow method
+func NewProjectShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/projects/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewProjectEditRequest calls the generic ProjectEdit builder with application/json body
+func NewProjectEditRequest(server string, id string, params *ProjectEditParams, body ProjectEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewProjectEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewProjectEditRequestWithBody constructs an http.Request for the ProjectEdit method, with any body, and a specified content type
+func NewProjectEditRequestWithBody(server string, id string, params *ProjectEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/projects/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewProjectRenameRequest calls the generic ProjectRename builder with application/json body
+func NewProjectRenameRequest(server string, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewProjectRenameRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewProjectRenameRequestWithBody constructs an http.Request for the ProjectRename method, with any body, and a specified content type
+func NewProjectRenameRequestWithBody(server string, id string, params *ProjectRenameParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/projects/%s/rename", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -798,6 +1365,62 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HostShowResponse, error)
 
+	// ProjectListWithResponse List projects
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /projects (the `ProjectList` operationId).
+	ProjectListWithResponse(ctx context.Context, params *ProjectListParams, reqEditors ...RequestEditorFn) (*ProjectListResponse, error)
+
+	// ProjectCreateWithBodyWithResponse Create a tenant project
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /projects (the `ProjectCreate` operationId).
+	ProjectCreateWithBodyWithResponse(ctx context.Context, params *ProjectCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectCreateResponse, error)
+
+	// ProjectCreateWithResponse Create a tenant project
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /projects (the `ProjectCreate` operationId).
+	ProjectCreateWithResponse(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectCreateResponse, error)
+
+	// ProjectShowWithResponse Show a project
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /projects/{id} (the `ProjectShow` operationId).
+	ProjectShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ProjectShowResponse, error)
+
+	// ProjectEditWithBodyWithResponse Edit a project
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+	ProjectEditWithBodyWithResponse(ctx context.Context, id string, params *ProjectEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectEditResponse, error)
+
+	// ProjectEditWithResponse Edit a project
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+	ProjectEditWithResponse(ctx context.Context, id string, params *ProjectEditParams, body ProjectEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectEditResponse, error)
+
+	// ProjectRenameWithBodyWithResponse Rename a project slug
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+	ProjectRenameWithBodyWithResponse(ctx context.Context, id string, params *ProjectRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error)
+
+	// ProjectRenameWithResponse Rename a project slug
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+	ProjectRenameWithResponse(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error)
+
 	// TenantListWithResponse List tenants
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -897,6 +1520,267 @@ func (r HostShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r HostShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ProjectListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProjectPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ProjectListResponse) GetJSON200() *ProjectPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ProjectListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ProjectListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ProjectListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ProjectListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ProjectListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ProjectCreateResponse201Headers the declared response headers of an HTTP 201 response for ProjectCreate
+type ProjectCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type ProjectCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Project
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ProjectCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ProjectCreateResponse) GetJSON201() *Project {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ProjectCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ProjectCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ProjectCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ProjectCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ProjectCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ProjectShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Project
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ProjectShowResponse) GetJSON200() *Project {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ProjectShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ProjectShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ProjectShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ProjectShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ProjectShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ProjectEditResponse200Headers the declared response headers of an HTTP 200 response for ProjectEdit
+type ProjectEditResponse200Headers struct {
+	ContentType *string
+}
+
+type ProjectEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Project
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ProjectEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ProjectEditResponse) GetJSON200() *Project {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ProjectEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ProjectEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ProjectEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ProjectEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ProjectEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ProjectRenameResponse200Headers the declared response headers of an HTTP 200 response for ProjectRename
+type ProjectRenameResponse200Headers struct {
+	ContentType *string
+}
+
+type ProjectRenameResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Project
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ProjectRenameResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ProjectRenameResponse) GetJSON200() *Project {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ProjectRenameResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ProjectRenameResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ProjectRenameResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ProjectRenameResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ProjectRenameResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -1177,6 +2061,110 @@ func (c *ClientWithResponses) HostShowWithResponse(ctx context.Context, reqEdito
 	return ParseHostShowResponse(rsp)
 }
 
+// ProjectListWithResponse List projects
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /projects (the `ProjectList` operationId).
+func (c *ClientWithResponses) ProjectListWithResponse(ctx context.Context, params *ProjectListParams, reqEditors ...RequestEditorFn) (*ProjectListResponse, error) {
+	rsp, err := c.ProjectList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectListResponse(rsp)
+}
+
+// ProjectCreateWithBodyWithResponse Create a tenant project
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /projects (the `ProjectCreate` operationId).
+func (c *ClientWithResponses) ProjectCreateWithBodyWithResponse(ctx context.Context, params *ProjectCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectCreateResponse, error) {
+	rsp, err := c.ProjectCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectCreateResponse(rsp)
+}
+
+// ProjectCreateWithResponse Create a tenant project
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /projects (the `ProjectCreate` operationId).
+func (c *ClientWithResponses) ProjectCreateWithResponse(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectCreateResponse, error) {
+	rsp, err := c.ProjectCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectCreateResponse(rsp)
+}
+
+// ProjectShowWithResponse Show a project
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /projects/{id} (the `ProjectShow` operationId).
+func (c *ClientWithResponses) ProjectShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ProjectShowResponse, error) {
+	rsp, err := c.ProjectShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectShowResponse(rsp)
+}
+
+// ProjectEditWithBodyWithResponse Edit a project
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+func (c *ClientWithResponses) ProjectEditWithBodyWithResponse(ctx context.Context, id string, params *ProjectEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectEditResponse, error) {
+	rsp, err := c.ProjectEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectEditResponse(rsp)
+}
+
+// ProjectEditWithResponse Edit a project
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /projects/{id} (the `ProjectEdit` operationId).
+func (c *ClientWithResponses) ProjectEditWithResponse(ctx context.Context, id string, params *ProjectEditParams, body ProjectEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectEditResponse, error) {
+	rsp, err := c.ProjectEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectEditResponse(rsp)
+}
+
+// ProjectRenameWithBodyWithResponse Rename a project slug
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+func (c *ClientWithResponses) ProjectRenameWithBodyWithResponse(ctx context.Context, id string, params *ProjectRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error) {
+	rsp, err := c.ProjectRenameWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectRenameResponse(rsp)
+}
+
+// ProjectRenameWithResponse Rename a project slug
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
+func (c *ClientWithResponses) ProjectRenameWithResponse(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error) {
+	rsp, err := c.ProjectRename(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectRenameResponse(rsp)
+}
+
 // TenantListWithResponse List tenants
 //
 // Returns a wrapper object for the known response body format(s).
@@ -1309,6 +2297,210 @@ func ParseHostShowResponse(rsp *http.Response) (*HostShowResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseProjectListResponse parses an HTTP response from a ProjectListWithResponse call
+func ParseProjectListResponse(rsp *http.Response) (*ProjectListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ProjectListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProjectPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseProjectCreateResponse parses an HTTP response from a ProjectCreateWithResponse call
+func ParseProjectCreateResponse(rsp *http.Response) (*ProjectCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ProjectCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Project
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ProjectCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseProjectShowResponse parses an HTTP response from a ProjectShowWithResponse call
+func ParseProjectShowResponse(rsp *http.Response) (*ProjectShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ProjectShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Project
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseProjectEditResponse parses an HTTP response from a ProjectEditWithResponse call
+func ParseProjectEditResponse(rsp *http.Response) (*ProjectEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ProjectEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Project
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ProjectEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseProjectRenameResponse parses an HTTP response from a ProjectRenameWithResponse call
+func ParseProjectRenameResponse(rsp *http.Response) (*ProjectRenameResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ProjectRenameResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Project
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ProjectRenameResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

@@ -53,6 +53,26 @@ type Project struct {
 	Kind        string `json:"kind"` // "tenant" | "backing"
 }
 
+type ProjectCreate struct {
+	TenantID    string  `json:"tenant_id"`
+	Slug        string  `json:"slug"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+}
+
+type ProjectEdit struct {
+	Name *string `json:"name,omitempty"`
+}
+
+type ProjectRename struct {
+	Slug string `json:"slug"`
+}
+
+type ProjectPage struct {
+	Items      []Project `json:"items"`
+	NextCursor string    `json:"next_cursor,omitempty"`
+}
+
 type Environment struct {
 	ID                string                       `json:"id"`
 	ProjectID         string                       `json:"project_id"`

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strconv"
 	"unicode/utf8"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type ProjectReader interface {
@@ -31,39 +33,194 @@ type ProjectMutator interface {
 	CreateProject(context.Context, hierarchy.CreateProjectInput, string) (etcd.IdempotencyResponse, error)
 }
 
-func (s *Server) projectCreate(w http.ResponseWriter, r *http.Request) {
-	if s.projectMutations == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Project mutator is not configured"))
-		return
-	}
-	input, err := decodeProjectCreate(r)
-	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
-	}
-	response, err := s.projectMutations.CreateProject(
-		r.Context(), input, r.Header.Get(idempotencyKeyHeader),
+type projectListInput struct {
+	Kind   string `query:"kind" required:"false"`
+	Tenant string `query:"tenant" required:"false"`
+	Limit  int    `query:"limit" required:"false"`
+	Cursor string `query:"cursor" required:"false"`
+}
+
+type projectShowInput struct {
+	ID string `path:"id"`
+}
+
+type projectCreateInput struct {
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type projectEditInput struct {
+	ID             string `path:"id"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type projectRenameInput struct {
+	ID             string `path:"id"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type projectOutput struct {
+	Body apiTypes.Project
+}
+
+type projectPageOutput struct {
+	Body apiTypes.ProjectPage
+}
+
+type projectMutationOutput struct {
+	Status      int
+	ContentType string `header:"Content-Type"`
+	Body        func(huma.Context)
+}
+
+func (s *Server) registerProjects() {
+	projectSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.Project](),
+		true,
+		"Project",
 	)
-	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", response.ContentKind)
-	w.WriteHeader(response.Status)
-	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Project creation response", slog.Any("error", err))
+	registerProjectMutation[apiTypes.ProjectCreate](
+		s,
+		huma.Operation{
+			OperationID: "project.create", Method: http.MethodPost, Path: "/projects",
+			Summary: "Create a tenant project", Tags: []string{"Project"}, DefaultStatus: http.StatusCreated,
+			Middlewares: huma.Middlewares{s.rejectProjectQuery},
+		},
+		projectSchema,
+		s.createProject,
+		"ProjectCreate",
+	)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "project.list", Method: http.MethodGet, Path: "/projects",
+		Summary: "List projects", Tags: []string{"Project"},
+		Middlewares: huma.Middlewares{s.validateProjectListQuery},
+	}, s.listProjects)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "project.show", Method: http.MethodGet, Path: "/projects/{id}",
+		Summary: "Show a project", Tags: []string{"Project"},
+		Middlewares: huma.Middlewares{s.rejectProjectQuery},
+	}, s.showProject)
+	registerProjectMutation[apiTypes.ProjectEdit](
+		s,
+		huma.Operation{
+			OperationID: "project.edit", Method: http.MethodPatch, Path: "/projects/{id}",
+			Summary: "Edit a project", Tags: []string{"Project"}, DefaultStatus: http.StatusOK,
+			Middlewares: huma.Middlewares{s.rejectProjectQuery},
+		},
+		projectSchema,
+		s.editProject,
+		"ProjectEdit",
+	)
+	registerProjectMutation[apiTypes.ProjectRename](
+		s,
+		huma.Operation{
+			OperationID: "project.rename", Method: http.MethodPost, Path: "/projects/{id}/rename",
+			Summary: "Rename a project slug", Tags: []string{"Project"}, DefaultStatus: http.StatusOK,
+			Middlewares: huma.Middlewares{s.rejectProjectQuery},
+		},
+		projectSchema,
+		s.renameProject,
+		"ProjectRename",
+	)
+
+	for _, pattern := range []string{
+		"POST /api/v1/projects",
+		"PATCH /api/v1/projects/{id}",
+		"POST /api/v1/projects/{id}/rename",
+	} {
+		s.setRoutePolicy(pattern, routePolicy{body: jsonBody})
 	}
 }
 
-func decodeProjectCreate(r *http.Request) (hierarchy.CreateProjectInput, error) {
-	if len(r.URL.Query()) != 0 {
-		return hierarchy.CreateProjectInput{}, errs.New(errs.KindMalformedRequest, "Project creation query is invalid")
+func registerProjectMutation[InputBody any, Input any](
+	s *Server,
+	operation huma.Operation,
+	projectSchema *huma.Schema,
+	handler func(context.Context, *Input) (*projectMutationOutput, error),
+	requestName string,
+) {
+	operation.SkipValidateBody = true
+	operation.RequestBody = &huma.RequestBody{
+		Required: true,
+		Content: map[string]*huma.MediaType{
+			"application/json": {
+				Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[InputBody](),
+					true,
+					requestName,
+				),
+			},
+		},
 	}
-	body, err := io.ReadAll(r.Body)
+	operation.Responses = map[string]*huma.Response{
+		strconv.Itoa(operation.DefaultStatus): {
+			Description: http.StatusText(operation.DefaultStatus),
+			Content: map[string]*huma.MediaType{
+				"application/json": {Schema: projectSchema},
+			},
+		},
+	}
+	huma.Register(s.API, operation, handler)
+}
+
+func (s *Server) validateProjectListQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	query := requestURL.Query()
+	for key, values := range query {
+		if key != "kind" && key != "tenant" && key != "limit" && key != "cursor" {
+			s.writeProjectHumaProblem(ctx, "Project list query is invalid")
+			return
+		}
+		if len(values) != 1 {
+			s.writeProjectHumaProblem(ctx, "Project list query is duplicated")
+			return
+		}
+	}
+	if raw := query.Get("limit"); raw != "" {
+		if _, err := strconv.Atoi(raw); err != nil {
+			s.writeProjectHumaProblem(ctx, "Project pagination limit is invalid")
+			return
+		}
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectProjectQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeProjectHumaProblem(ctx, "Project request query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) writeProjectHumaProblem(ctx huma.Context, detail string) {
+	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
+		s.Logger.Error("controller: write Project request problem", slog.Any("error", err))
+	}
+}
+
+func (s *Server) createProject(ctx context.Context, request *projectCreateInput) (*projectMutationOutput, error) {
+	if s.projectMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Project mutator is not configured")
+	}
+	defer clear(request.RawBody)
+	input, err := decodeProjectCreate(request.RawBody)
 	if err != nil {
-		return hierarchy.CreateProjectInput{}, errs.Wrap(errs.KindMalformedRequest, err)
+		return nil, normalizeProjectError(err)
 	}
-	defer clear(body)
+	response, err := s.projectMutations.CreateProject(
+		ctx, input, request.IdempotencyKey,
+	)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return s.projectMutationResponse(response, "create"), nil
+}
+
+func decodeProjectCreate(body []byte) (hierarchy.CreateProjectInput, error) {
 	if !utf8.Valid(body) {
 		return hierarchy.CreateProjectInput{}, errs.New(
 			errs.KindMalformedRequest, "Project creation body is not valid UTF-8",
@@ -146,75 +303,39 @@ func projectCreateJSONError(err error) error {
 	return errs.Wrap(errs.KindMalformedRequest, err)
 }
 
-func (s *Server) projectList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listProjects(
+	ctx context.Context,
+	request *projectListInput,
+) (*projectPageOutput, error) {
 	if s.projects == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Project reader is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Project reader is not configured")
 	}
-	filter, pageRequest, err := projectListRequest(r)
+	page, err := s.projects.ListAllProjects(
+		ctx,
+		hierarchy.ProjectFilter{TenantID: request.Tenant, Kind: core.ProjectKind(request.Kind)},
+		hierarchy.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
+	)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	page, err := s.projects.ListAllProjects(r.Context(), filter, pageRequest)
-	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
-	}
-	response := apiTypes.Page[apiTypes.Project]{
+	response := apiTypes.ProjectPage{
 		Items: make([]apiTypes.Project, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
 		response.Items[index] = projectAPI(item.Record)
 	}
-	s.writeProjectJSON(w, response)
+	return &projectPageOutput{Body: response}, nil
 }
 
-func (s *Server) projectShow(w http.ResponseWriter, r *http.Request) {
+func (s *Server) showProject(ctx context.Context, request *projectShowInput) (*projectOutput, error) {
 	if s.projects == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Project reader is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Project reader is not configured")
 	}
-	if len(r.URL.Query()) != 0 {
-		s.writeProjectProblem(w, errs.New(errs.KindMalformedRequest, "Project detail query is invalid"))
-		return
-	}
-	stored, err := s.projects.GetProject(r.Context(), r.PathValue("id"))
+	stored, err := s.projects.GetProject(ctx, request.ID)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	s.writeProjectJSON(w, projectAPI(stored.Record))
-}
-
-func projectListRequest(r *http.Request) (hierarchy.ProjectFilter, hierarchy.PageRequest, error) {
-	query := r.URL.Query()
-	for key, values := range query {
-		if key != "kind" && key != "tenant" && key != "limit" && key != "cursor" {
-			return hierarchy.ProjectFilter{}, hierarchy.PageRequest{}, errs.New(
-				errs.KindMalformedRequest, "Project list query is invalid",
-			)
-		}
-		if len(values) != 1 {
-			return hierarchy.ProjectFilter{}, hierarchy.PageRequest{}, errs.New(
-				errs.KindMalformedRequest, "Project list query is duplicated",
-			)
-		}
-	}
-	filter := hierarchy.ProjectFilter{
-		TenantID: query.Get("tenant"), Kind: core.ProjectKind(query.Get("kind")),
-	}
-	request := hierarchy.PageRequest{Cursor: query.Get("cursor")}
-	if raw := query.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil {
-			return hierarchy.ProjectFilter{}, hierarchy.PageRequest{}, errs.New(
-				errs.KindMalformedRequest, "Project pagination limit is invalid",
-			)
-		}
-		request.Limit = limit
-	}
-	return filter, request, nil
+	return &projectOutput{Body: projectAPI(stored.Record)}, nil
 }
 
 func projectAPI(record core.Project) apiTypes.Project {
@@ -224,18 +345,19 @@ func projectAPI(record core.Project) apiTypes.Project {
 	}
 }
 
-func (s *Server) writeProjectJSON(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(value); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Project response", slog.Any("error", err))
+func normalizeProjectError(err error) error {
+	var domainError *errs.Error
+	if errors.As(err, &domainError) {
+		return domainError
 	}
+	return errs.Wrap(errs.KindInternal, err)
 }
 
 func (s *Server) writeProjectProblem(w http.ResponseWriter, err error) {
+	normalized := normalizeProjectError(err)
 	var domainError *errs.Error
-	if errors.As(err, &domainError) {
-		s.writeProblem(w, domainError)
-		return
+	if !errors.As(normalized, &domainError) {
+		domainError = errs.New(errs.KindInternal, "Hierarchy request failed")
 	}
-	s.writeProblem(w, errs.Wrap(errs.KindInternal, err))
+	s.writeProblem(w, domainError)
 }
