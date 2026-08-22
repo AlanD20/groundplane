@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	MaximumAttachConsumers           = 16
+	MaximumAttachConsumers           = 15
 	MaximumAttachGrants              = 8
 	MaximumAttachFactsPerSet         = 32
 	MaximumAttachFactCiphertextBytes = 256 << 10

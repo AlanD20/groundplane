@@ -33,28 +33,58 @@ func NewAttachRepository(store Store) (*AttachRepository, error) {
 	return &AttachRepository{store: store}, nil
 }
 
-func (repository *AttachRepository) CreateAttach(
+func (repository *AttachRepository) CreateAttachWithTask(
 	ctx context.Context,
 	scope AttachCreateScope,
 	record AttachRecord,
 	facts *AttachEncryptedFacts,
-) (Versioned[AttachRecord], error) {
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
 	if err := validateAttachCreateScope(ctx, scope, record, facts); err != nil {
-		return Versioned[AttachRecord]{}, err
+		return IdempotencyTransactionResult{}, err
 	}
-	if attachCreateOperationCount(record, facts != nil) > maximumTransactionOperations {
-		return Versioned[AttachRecord]{}, errs.New(
+	if err := validateAttachCreationTask(record, task, marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if attachCreateWithTaskOperationCount(record, facts != nil) > maximumTransactionOperations {
+		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach consumer and grant combination exceeds the atomic transaction limit",
 		)
 	}
+	task = cloneTaskRecord(task)
+	if task.IdempotencyKey == "" {
+		task.IdempotencyKey = marker.Locator.Key
+	}
+	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	if err := validateTaskRecord(task); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	recordValue, err := encodeAttachRecord(record)
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(recordValue)
+	taskValue, err := encodeTaskRecord(task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskValue)
+	taskReference, err := encodeTaskReference(task.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskReference)
 
 	conditions := []Condition{
+		{Key: taskKey(task.ID)},
+		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskActiveOperationKey(task.OperationID)},
+		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: attachKey(record.ID)},
 		{Key: attachNameKey(record.EnvironmentID, record.Name)},
 		{Key: attachOwnerKey(record.EnvironmentID, record.ID)},
@@ -74,6 +104,10 @@ func (repository *AttachRepository) CreateAttach(
 		{Key: deletionTombstoneKey("service", record.BackingServiceID)},
 	}
 	mutations := []Mutation{
+		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: MutationPut, Key: attachKey(record.ID), Value: recordValue},
 		{Type: MutationPut, Key: attachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: attachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
@@ -101,7 +135,7 @@ func (repository *AttachRepository) CreateAttach(
 		grantID := grant.Record.ID
 		grantValue, encodeErr := encodeAttachRecord(grant.Record)
 		if encodeErr != nil {
-			return Versioned[AttachRecord]{}, encodeErr
+			return IdempotencyTransactionResult{}, encodeErr
 		}
 		grantValues = append(grantValues, grantValue)
 		conditions = append(conditions,
@@ -118,21 +152,20 @@ func (repository *AttachRepository) CreateAttach(
 	if facts != nil {
 		factValue, err = encodeAttachEncryptedFacts(*facts)
 		if err != nil {
-			return Versioned[AttachRecord]{}, err
+			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(factValue)
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: attachFactsKey(record.ID), Value: factValue})
 	}
-	result, err := repository.store.Transact(ctx, conditions, mutations)
+	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, classifyAttachTaskCreateConflict)
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return IdempotencyTransactionResult{}, err
 	}
-	if !result.Succeeded {
-		return Versioned[AttachRecord]{}, classifyAttachCreateConflict(result.FailureReads)
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
-	return Versioned[AttachRecord]{
-		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
+	return idempotency.Apply(ctx, marker, plan)
 }
 
 func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (Versioned[AttachRecord], error) {
@@ -522,8 +555,28 @@ func validateAttachCreateScope(
 	return validateAttachEncryptedFacts(*facts)
 }
 
-func attachCreateOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 22 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+func validateAttachCreationTask(record AttachRecord, task TaskRecord, marker IdempotencyMarker) error {
+	pendingAttachOwned := record.Status == core.AttachPending && record.Operation == AttachOperationProvision &&
+		record.TaskID == task.ID && record.CreatedAt.Equal(task.CreatedAt)
+	validTaskShape := task.Type == TaskAttach && task.Target == record.ID && task.Executor == TaskExecutorAgent &&
+		task.Status == TaskStatusPending && len(task.Params) == 0 && len(task.Materializations) == 0
+	if !pendingAttachOwned || !validTaskShape {
+		return errs.New(errs.KindValidationFailed, "Attach creation Task does not own its pending Attach")
+	}
+	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != record.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Attach creation marker does not match its Environment-scoped Task",
+		)
+	}
+	return nil
+}
+
+func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
+	operations := 32 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
 	if hasFacts {
 		operations++
 	}
@@ -587,6 +640,18 @@ func classifyAttachCreateConflict(reads []*KeyValue) error {
 		return errs.New(errs.KindNameConflict, "Attach name already exists")
 	}
 	return errs.New(errs.KindStateConflict, "Attach hierarchy changed concurrently")
+}
+
+func classifyAttachTaskCreateConflict(_ int64, reads []*KeyValue) error {
+	if len(reads) < 4 {
+		return errs.New(errs.KindInternal, "Attach Task conflict evidence is incomplete")
+	}
+	for _, read := range reads[:4] {
+		if read != nil {
+			return errs.New(errs.KindStateConflict, "Attach Task operation is already active")
+		}
+	}
+	return classifyAttachCreateConflict(reads[4:])
 }
 
 func encodeAttachRecord(record AttachRecord) ([]byte, error) {

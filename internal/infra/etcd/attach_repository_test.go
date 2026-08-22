@@ -2,13 +2,18 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,10 +29,7 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	}
 	record, facts := testPendingAttach(t, scope, 31, "api-db", nil)
 
-	created, err := repository.CreateAttach(ctx, scope, record, &facts)
-	if err != nil {
-		t.Fatalf("CreateAttach() error = %v", err)
-	}
+	created := createTestAttach(t, ctx, repository, scope, record, &facts)
 	if created.Revision == 0 || created.Record.ID != record.ID {
 		t.Fatalf("CreateAttach() = %#v", created)
 	}
@@ -79,10 +81,7 @@ func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
 		t.Fatalf("NewAttachRepository() error = %v", err)
 	}
 	record, facts := testPendingAttach(t, scope, 41, "worker-db", nil)
-	current, err := repository.CreateAttach(ctx, scope, record, &facts)
-	if err != nil {
-		t.Fatalf("CreateAttach() error = %v", err)
-	}
+	current := createTestAttach(t, ctx, repository, scope, record, &facts)
 	provisioning, err := MarkAttachProvisioning(current.Record, current.Record.TaskID)
 	if err != nil {
 		t.Fatalf("MarkAttachProvisioning() error = %v", err)
@@ -125,10 +124,7 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 		t.Fatalf("NewAttachRepository() error = %v", err)
 	}
 	targetRecord, targetFacts := testPendingAttach(t, scope, 51, "target-db", nil)
-	target, err := repository.CreateAttach(ctx, scope, targetRecord, &targetFacts)
-	if err != nil {
-		t.Fatalf("CreateAttach(target) error = %v", err)
-	}
+	target := createTestAttach(t, ctx, repository, scope, targetRecord, &targetFacts)
 	target, err = advanceAttachReady(ctx, repository, target)
 	if err != nil {
 		t.Fatalf("advanceAttachReady() error = %v", err)
@@ -137,9 +133,7 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 	grantScope := scope
 	grantScope.Grants = []Versioned[AttachRecord]{target}
 	sourceRecord, sourceFacts := testPendingAttach(t, grantScope, 52, "source-db", []Versioned[AttachRecord]{target})
-	if _, err = repository.CreateAttach(ctx, grantScope, sourceRecord, &sourceFacts); err != nil {
-		t.Fatalf("CreateAttach(source) error = %v", err)
-	}
+	createTestAttach(t, ctx, repository, grantScope, sourceRecord, &sourceFacts)
 	target, err = repository.GetAttach(ctx, target.Record.ID)
 	if err != nil {
 		t.Fatalf("GetAttach(target) error = %v", err)
@@ -172,11 +166,15 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 func TestAttachRepositoryEnforcesTransactionBudget(t *testing.T) {
 	t.Parallel()
 	record := AttachRecord{
-		ServiceIDs:     make([]string, 16),
+		ServiceIDs:     make([]string, MaximumAttachConsumers),
 		GrantAttachIDs: make([]string, 8),
 	}
-	if got := attachCreateOperationCount(record, true); got <= maximumTransactionOperations {
-		t.Fatalf("attachCreateOperationCount() = %d, want greater than %d", got, maximumTransactionOperations)
+	if got := attachCreateWithTaskOperationCount(record, true); got <= maximumTransactionOperations {
+		t.Fatalf(
+			"attachCreateWithTaskOperationCount() = %d, want greater than %d",
+			got,
+			maximumTransactionOperations,
+		)
 	}
 }
 
@@ -396,4 +394,70 @@ func advanceAttachReady(
 		return Versioned[AttachRecord]{}, err
 	}
 	return repository.ReplaceLifecycle(ctx, current, ready)
+}
+
+func createTestAttach(
+	t *testing.T,
+	ctx context.Context,
+	repository *AttachRepository,
+	scope AttachCreateScope,
+	record AttachRecord,
+	facts *AttachEncryptedFacts,
+) Versioned[AttachRecord] {
+	t.Helper()
+	recordDigest := sha256.Sum256([]byte(record.ID))
+	seed := int64(binary.BigEndian.Uint64(recordDigest[:8]))
+	planDigest := sha256.Sum256([]byte("attach-plan-" + record.ID))
+	task := TaskRecord{
+		ID: record.TaskID, OperationID: ids.NewAt(ids.KindOperation, record.CreatedAt, seed),
+		IdempotencyKey: "attach-create-key-" + record.ID,
+		Executor:       TaskExecutorAgent, PlanID: ids.NewAt(ids.KindPlan, record.CreatedAt, seed+1),
+		PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
+		Type: TaskAttach, Target: record.ID,
+		Steps:          []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, record.CreatedAt, seed+2)}},
+		TimeoutSeconds: 120, Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: record.CreatedAt,
+	}
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	if err != nil {
+		t.Fatalf("json.Marshal(TaskAccepted) error = %v", err)
+	}
+	intentCiphertext := []byte("protected-attach-intent-" + record.ID)
+	intentDigest := sha256.Sum256(intentCiphertext)
+	marker := IdempotencyMarker{
+		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerPending,
+		Locator: IdempotencyLocator{
+			ScopeKind: IdempotencyScopeEnvironment, ScopeID: record.EnvironmentID,
+			Method: http.MethodPost, Route: "/attaches", Key: task.IdempotencyKey,
+		},
+		Intent: ProtectedIntentRecord{
+			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
+			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: intentCiphertext,
+		},
+		Response: IdempotencyResponse{
+			Status: http.StatusAccepted, ContentKind: "application/json", Body: responseBody,
+		},
+		TaskID: task.ID, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
+	}
+	result, err := repository.CreateAttachWithTask(ctx, scope, record, facts, task, marker)
+	if err != nil {
+		t.Fatalf("CreateAttachWithTask() error = %v", err)
+	}
+	outcome, _, conflict, classifyErr := result.Classify()
+	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+		t.Fatalf(
+			"CreateAttachWithTask().Classify() = %v, %v, %v",
+			outcome,
+			conflict,
+			classifyErr,
+		)
+	}
+	created, err := repository.GetAttach(ctx, record.ID)
+	if err != nil {
+		t.Fatalf("GetAttach(created) error = %v", err)
+	}
+	queued, err := repository.store.Get(ctx, taskQueueKey(TaskExecutorAgent, task.ID))
+	if err != nil || queued == nil || queued.Entry == nil || queued.Entry.ModRevision != created.Revision {
+		t.Fatalf("Attach Task queue = %#v, error = %v", queued, err)
+	}
+	return created
 }
