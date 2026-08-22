@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
 
 	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
@@ -147,11 +148,15 @@ func runActionMethod(cmd *cobra.Command, method, path string, body any) error {
 	if res.TaskID == "" {
 		return fmt.Errorf("cli: action response is missing task_id")
 	}
+	return renderDispatchedTask(cmd, apiTypes.TaskAccepted{TaskID: res.TaskID})
+}
+
+func renderDispatchedTask(cmd *cobra.Command, accepted apiTypes.TaskAccepted) error {
 	_, err := fmt.Fprintf(
 		cmd.OutOrStdout(),
 		"task %s dispatched — `groundplane task show %s` to follow\n",
-		res.TaskID,
-		res.TaskID,
+		accepted.TaskID,
+		accepted.TaskID,
 	)
 	return err
 }

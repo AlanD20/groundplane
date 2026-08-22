@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
 )
 
@@ -158,12 +159,18 @@ func newServiceCmd() *cobra.Command {
 		Short: "Attach a backing service to this service (provisions its own database + role)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/attaches", map[string]interface{}{
-				"service_id":         args[0],
-				"backing_service_id": args[1],
-				"name":               attachName, // omitted => Controller-suggested from tenant-project-environment-service, made unique
-				"grants":             grants,
+			accepted, err := fromContext(cmd).Client.CreateAttach(cmd.Context(), apiTypes.AttachRequest{
+				ServiceIDs: []string{
+					target(fromContext(cmd), args[0]),
+				},
+				BackingServiceID: target(fromContext(cmd), args[1]),
+				Name:             attachName,
+				GrantAttachIDs:   append([]string(nil), grants...),
 			})
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	}
 	attach.Flags().
@@ -176,7 +183,15 @@ func newServiceCmd() *cobra.Command {
 		Short: "Detach a backing service (revokes grants, drops role, optionally drops database)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDestroy(cmd, "/api/v1/attaches/"+target(fromContext(cmd), args[0]))
+			id, err := resolveAttachTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.DetachAttach(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 

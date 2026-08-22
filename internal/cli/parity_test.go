@@ -295,7 +295,7 @@ func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
 	// backing service, and provisioning is a Task rather than a synchronous create.
 	t.Parallel()
 
-	body := `{"backing_service_id":"bks_1","grants":null,"name":"","service_id":"svc_1"}`
+	body := `{"backing_service_id":"bks_1","service_ids":["svc_1"]}`
 	server := exactRequestServer(
 		t,
 		http.MethodPost,

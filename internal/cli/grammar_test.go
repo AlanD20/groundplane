@@ -46,6 +46,7 @@ func TestParityOperandLeavesEnforceExactArity(t *testing.T) {
 		{path: []string{"task", "events"}, want: 1},
 		{path: []string{"task", "retry"}, want: 1},
 		{path: []string{"service", "attach"}, want: 2},
+		{path: []string{"attach", "rename"}, want: 1},
 	} {
 		command, _, err := root.Find(test.path)
 		if err != nil {

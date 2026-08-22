@@ -14,6 +14,7 @@ func addCommands(root *cobra.Command, deps Dependencies) {
 		newProjectCmd(),
 		newEnvironmentCmd(),
 		newServiceCmd(),
+		newAttachCmd(),
 		newZoneCmd(),
 		newRouteCmd(),
 		newVolumeCmd(),
