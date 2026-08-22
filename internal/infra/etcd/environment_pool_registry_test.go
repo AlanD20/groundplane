@@ -45,4 +45,11 @@ func TestEnvironmentPoolRegistryEnforcesGlobalDisjointReservations(t *testing.T)
 	) {
 		t.Fatalf("Reserve(outside root) error = %v", err)
 	}
+	released, err := registry.Release(firstID, canonical)
+	if err != nil || len(released.Reservations) != 0 {
+		t.Fatalf("Release() = %#v, %v", released, err)
+	}
+	if _, _, err := released.Reserve(root, secondID, canonical); err != nil {
+		t.Fatalf("Reserve(released pool) error = %v", err)
+	}
 }

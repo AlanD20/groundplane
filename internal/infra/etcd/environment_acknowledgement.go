@@ -181,13 +181,14 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
+			environmentPoolRegistryKey,
 		},
 		Revision: readRevision,
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(stored.Values) != 4 || stored.Values[0] == nil || stored.Values[1] == nil {
+	if len(stored.Values) != 5 || stored.Values[0] == nil || stored.Values[1] == nil || stored.Values[4] == nil {
 		return nil, nil, errs.New(errs.KindInternal, "Environment deletion state is inconsistent")
 	}
 	if (stored.Values[2] == nil) != (stored.Values[3] == nil) {
@@ -208,6 +209,14 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		tombstone.TaskID != task.ID ||
 		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Environment deletion tombstone does not match its Task")
+	}
+	poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
+		stored.Values[4].Value,
+		"environment_pool_registry",
+	)
+	if err != nil || validateEnvironmentPoolRegistry(poolRegistry) != nil ||
+		poolRegistry.Reservations[environment.ID] != environment.NetworkPool {
+		return nil, nil, errs.New(errs.KindInternal, "Environment pool reservation is inconsistent")
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
@@ -238,6 +247,24 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
 	}}
 	if terminalStatus == TaskStatusCompleted {
+		nextPoolRegistry, err := poolRegistry.Release(environment.ID, environment.NetworkPool)
+		if err != nil {
+			return nil, nil, err
+		}
+		conditions = append(conditions, Condition{
+			Key: environmentPoolRegistryKey, ModRevision: stored.Values[4].ModRevision,
+		})
+		if len(nextPoolRegistry.Reservations) == 0 {
+			mutations = append(mutations, Mutation{Type: MutationDelete, Key: environmentPoolRegistryKey})
+		} else {
+			poolRegistryValue, err := encodeEnvelope("environment_pool_registry", nextPoolRegistry)
+			if err != nil {
+				return nil, nil, err
+			}
+			mutations = append(mutations, Mutation{
+				Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue,
+			})
+		}
 		remaining, err := repository.store.Range(ctx, RangeRequest{
 			Prefix: environmentBlueprintRevisionsPrefix(environment.ID), Limit: 1, Revision: readRevision,
 		})
@@ -280,18 +307,31 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
+			environmentPoolRegistryKey,
 		},
 		Revision: readRevision,
 	})
 	if err != nil {
 		return err
 	}
-	if len(stored.Values) != 4 || stored.Values[1] != nil || (stored.Values[2] == nil) != (stored.Values[3] == nil) {
+	if len(stored.Values) != 5 || stored.Values[1] != nil || (stored.Values[2] == nil) != (stored.Values[3] == nil) {
 		return errs.New(errs.KindStateConflict, "Environment deletion terminal state does not match its Task")
 	}
 	if terminalStatus == TaskStatusCompleted {
 		if stored.Values[0] != nil || stored.Values[2] != nil || stored.Values[3] != nil {
 			return errs.New(errs.KindStateConflict, "completed Environment deletion retained its target")
+		}
+		if stored.Values[4] != nil {
+			poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
+				stored.Values[4].Value,
+				"environment_pool_registry",
+			)
+			if err != nil || validateEnvironmentPoolRegistry(poolRegistry) != nil {
+				return errs.New(errs.KindInternal, "Environment pool registry is inconsistent")
+			}
+			if _, retained := poolRegistry.Reservations[task.Target]; retained {
+				return errs.New(errs.KindStateConflict, "completed Environment deletion retained its pool")
+			}
 		}
 		return nil
 	}
@@ -304,6 +344,17 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	}
 	if environment.ID != task.Target {
 		return errs.New(errs.KindStateConflict, "failed Environment deletion retained another target")
+	}
+	if stored.Values[4] == nil {
+		return errs.New(errs.KindStateConflict, "failed Environment deletion lost its pool")
+	}
+	poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
+		stored.Values[4].Value,
+		"environment_pool_registry",
+	)
+	if err != nil || validateEnvironmentPoolRegistry(poolRegistry) != nil ||
+		poolRegistry.Reservations[environment.ID] != environment.NetworkPool {
+		return errs.New(errs.KindStateConflict, "failed Environment deletion changed its pool")
 	}
 	return nil
 }

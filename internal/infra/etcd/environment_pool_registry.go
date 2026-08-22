@@ -48,6 +48,25 @@ func (registry EnvironmentPoolRegistry) Reserve(
 	return next, candidate.String(), nil
 }
 
+func (registry EnvironmentPoolRegistry) Release(
+	environmentID string,
+	value string,
+) (EnvironmentPoolRegistry, error) {
+	if registry.Reservations[environmentID] != value {
+		return EnvironmentPoolRegistry{}, errs.New(
+			errs.KindStateConflict,
+			"Environment pool reservation does not match its owner",
+		)
+	}
+	next := EnvironmentPoolRegistry{Reservations: make(map[string]string, len(registry.Reservations)-1)}
+	for id, pool := range registry.Reservations {
+		if id != environmentID {
+			next.Reservations[id] = pool
+		}
+	}
+	return next, nil
+}
+
 func (registry EnvironmentPoolRegistry) prefixes(excludeEnvironmentID string) ([]netip.Prefix, error) {
 	reserved := make([]netip.Prefix, 0, len(registry.Reservations))
 	for environmentID, value := range registry.Reservations {
