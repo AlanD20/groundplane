@@ -28,13 +28,22 @@ type GeneratedMount struct {
 	ReadOnly bool
 }
 
+// GeneratedSecretEnvironment maps one durable secret Entry to the external
+// process's required environment-variable name without placing its value in
+// Compose, component config, or rendered desired state.
+type GeneratedSecretEnvironment struct {
+	Name    string
+	EntryID string
+}
+
 // GeneratedService keeps deployment-only data out of authored Service intent.
 // StaticIPv4 is keyed by Zone name; Mounts reference files/directories owned by
 // the component render pipeline.
 type GeneratedService struct {
-	Service    core.Service
-	StaticIPv4 map[string]string
-	Mounts     []GeneratedMount
+	Service           core.Service
+	StaticIPv4        map[string]string
+	Mounts            []GeneratedMount
+	SecretEnvironment []GeneratedSecretEnvironment
 }
 
 // Renderer produces an environment component's generated Compose services and
