@@ -453,7 +453,13 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
 	}
 	revision := environmentBlueprintRevision(environmentID, taskID, now, bundle)
-	projection := environmentComposeProjection(environmentID, taskID, generation, changes.Current)
+	projection := environmentComposeProjection(
+		environmentID,
+		taskID,
+		generation,
+		changes.Current,
+		reconciledRoutes.Current,
+	)
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -818,6 +824,7 @@ func environmentComposeProjection(
 	revisionID string,
 	generation uint64,
 	snapshot controller.ComposeIdentitySnapshot,
+	routes []core.Route,
 ) etcd.EnvironmentComposeProjection {
 	convert := func(values []controller.ComposeResourceIdentity) []etcd.EnvironmentComposeIdentity {
 		result := make([]etcd.EnvironmentComposeIdentity, len(values))
@@ -826,9 +833,19 @@ func environmentComposeProjection(
 		}
 		return result
 	}
+	routeIdentities := make([]etcd.EnvironmentRouteIdentity, len(routes))
+	for index, route := range routes {
+		routeIdentities[index] = etcd.EnvironmentRouteIdentity{ID: route.ID, Host: route.Host, Path: route.Path}
+	}
+	sort.Slice(routeIdentities, func(left int, right int) bool {
+		leftMatch := routeIdentities[left].Host + "\x00" + routeIdentities[left].Path
+		rightMatch := routeIdentities[right].Host + "\x00" + routeIdentities[right].Path
+		return leftMatch < rightMatch
+	})
 	return etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, BlueprintRevisionID: revisionID, RenderGeneration: generation,
 		Services: convert(snapshot.Services), Networks: convert(snapshot.Networks), Volumes: convert(snapshot.Volumes),
+		Routes: routeIdentities,
 	}
 }
 

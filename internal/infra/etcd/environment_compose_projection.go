@@ -6,12 +6,19 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type EnvironmentComposeIdentity struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type EnvironmentRouteIdentity struct {
+	ID   string `json:"id"`
+	Host string `json:"host,omitempty"`
+	Path string `json:"path"`
 }
 
 // EnvironmentComposeProjection is the durable identity input needed to
@@ -23,6 +30,7 @@ type EnvironmentComposeProjection struct {
 	Services            []EnvironmentComposeIdentity `json:"services,omitempty"`
 	Networks            []EnvironmentComposeIdentity `json:"networks,omitempty"`
 	Volumes             []EnvironmentComposeIdentity `json:"volumes,omitempty"`
+	Routes              []EnvironmentRouteIdentity   `json:"routes,omitempty"`
 }
 
 func environmentComposeProjectionKey(environmentID string) string {
@@ -90,7 +98,31 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentComposeIdentities(ids.KindNetwork, projection.Networks); err != nil {
 		return err
 	}
-	return validateEnvironmentComposeIdentities(ids.KindVolume, projection.Volumes)
+	if err := validateEnvironmentComposeIdentities(ids.KindVolume, projection.Volumes); err != nil {
+		return err
+	}
+	return validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.Routes)
+}
+
+func validateEnvironmentRouteIdentities(environmentID string, values []EnvironmentRouteIdentity) error {
+	previousMatch := ""
+	idsSeen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		match := value.Host + "\x00" + value.Path
+		record := RouteRecord{EnvironmentID: environmentID, Desired: core.Route{
+			ID: value.ID, Host: value.Host, Path: value.Path,
+			TargetServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", TargetPort: 1, Exposure: "internal",
+		}}
+		if match <= previousMatch || validateRouteRecord(record) != nil {
+			return errs.New(errs.KindValidationFailed, "Environment Route identities are invalid or unsorted")
+		}
+		if _, duplicate := idsSeen[value.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment Route identity id is duplicated")
+		}
+		idsSeen[value.ID] = struct{}{}
+		previousMatch = match
+	}
+	return nil
 }
 
 func validateEnvironmentComposeIdentities(kind ids.Kind, values []EnvironmentComposeIdentity) error {
