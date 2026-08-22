@@ -10,8 +10,7 @@ import (
 
 const (
 	testAttachID         = "att_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	testBackingServiceID = "bks_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	testBackingRuntimeID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	testBackingServiceID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 )
 
 // Rationale: Attach execution may select only a registered compiled adapter
@@ -58,7 +57,6 @@ func validAdapterProcedurePlan() *agentpb.ExecutionPlan {
 			AdapterKey: "postgres:16", Phase: agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
 			AttachId: testAttachID, BackingServiceId: testBackingServiceID,
 			Role: "api_5d3f9a", Password: []byte("URL_safe-1"), Database: "api_5d3f9a",
-			RuntimeServiceId: testBackingRuntimeID,
 		}},
 	}}
 	return plan

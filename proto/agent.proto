@@ -329,7 +329,6 @@ message AdapterProcedure {
   bytes password = 6;
   string database = 7;
   string grant_on = 8;
-  string runtime_service_id = 9;
 }
 
 enum MaterializationOutputKind {

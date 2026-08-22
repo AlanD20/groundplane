@@ -183,6 +183,10 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
 		return validateEnvironmentCreatePlan(plan)
 	}
+	if len(plan.Artifacts) == 0 && (plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH) {
+		return validateArtifactFreeAdapterPlan(plan)
+	}
 	if len(plan.Artifacts) == 0 {
 		return validateArtifactFreeEnvironmentRemovePlan(plan)
 	}
@@ -240,6 +244,27 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			}
 			materializationDestinations[destinationKey] = struct{}{}
 		}
+	}
+	return nil
+}
+
+func validateArtifactFreeAdapterPlan(plan *agentpb.ExecutionPlan) error {
+	if validateID(ids.KindAttach, plan.TargetId) != nil || len(plan.Steps) == 0 {
+		return errs.New(errs.KindValidationFailed, "artifact-free adapter plan shape is invalid")
+	}
+	stepIDs := make(map[string]struct{}, len(plan.Steps))
+	for _, step := range plan.Steps {
+		if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil); err != nil {
+			return err
+		}
+		procedure := step.GetAdapterProcedure()
+		if procedure == nil || procedure.AttachId != plan.TargetId {
+			return errs.New(errs.KindValidationFailed, "artifact-free adapter plan target is invalid")
+		}
+		if _, duplicate := stepIDs[step.StepId]; duplicate {
+			return errs.New(errs.KindValidationFailed, "execution plan step ids must be unique")
+		}
+		stepIDs[step.StepId] = struct{}{}
 	}
 	return nil
 }
@@ -542,9 +567,8 @@ func validateStep(
 func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentpb.AdapterProcedure) error {
 	if procedure == nil || !validAdapterKey(procedure.AdapterKey) ||
 		validateID(ids.KindAttach, procedure.AttachId) != nil ||
-		validateID(ids.KindBackingService, procedure.BackingServiceId) != nil ||
-		(validateID(ids.KindService, procedure.RuntimeServiceId) != nil &&
-			validateID(ids.KindComponent, procedure.RuntimeServiceId) != nil) ||
+		(validateID(ids.KindService, procedure.BackingServiceId) != nil &&
+			validateID(ids.KindComponent, procedure.BackingServiceId) != nil) ||
 		!validAdapterIdentity(procedure.Role, true) ||
 		!validAdapterSecret(procedure.Password) {
 		return errs.New(errs.KindValidationFailed, "adapter procedure identity is invalid")
@@ -567,7 +591,7 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 		}
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_DETACH || len(procedure.Password) != 0 ||
-			!validAdapterIdentity(procedure.Database, true) || procedure.GrantOn != "" {
+			!validAdapterIdentity(procedure.Database, false) || procedure.GrantOn != "" {
 			return errs.New(errs.KindValidationFailed, "adapter detach procedure is invalid")
 		}
 	default:

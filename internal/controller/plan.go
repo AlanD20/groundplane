@@ -69,8 +69,11 @@ func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 // TaskPlanResolver rebuilds ephemeral plans exclusively from closed durable
 // Task inputs and daemon-owned path policy. Rendered plans are never stored.
 type TaskPlanResolver struct {
-	volumeRoot string
-	blueprints blueprintPlanStateReader
+	volumeRoot       string
+	blueprints       blueprintPlanStateReader
+	attaches         attachPlanRecordReader
+	services         attachPlanServiceReader
+	attachIdentities attachPlanIdentityResolver
 }
 
 type blueprintPlanStateReader interface {
@@ -122,6 +125,9 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 	}
 	if resolver == nil || resolver.volumeRoot == "" {
 		return nil, errs.New(errs.KindInternal, "execution plan resolver is not configured")
+	}
+	if task.Type == etcd.TaskAttach || task.Type == etcd.TaskDetach {
+		return resolver.resolveAttachPlan(ctx, task)
 	}
 	if task.Type == etcd.TaskUpdate {
 		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)

@@ -8,13 +8,15 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: sealing must bind sorted own and grant fact sets to one opaque envelope without retaining caller passwords.
+// Rationale: sealing must bind sorted public facts and private retry identity
+// to one opaque envelope without retaining caller passwords.
 func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -60,6 +62,35 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	if encrypted == nil || len(metadata) != 2 || metadata[1].GrantAttachID != grantID {
 		t.Fatalf("SealFactSets() = %#v, %#v", metadata, encrypted)
 	}
+	taskID := ids.NewAt(ids.KindTask, now, 9)
+	pending, err := etcd.NewPendingAttachRecord(
+		ownerID, environmentID, "api-db", backingProjectID, backingEnvironmentID, backingServiceID,
+		[]string{serviceID}, []string{grantID}, metadata, taskID, now,
+	)
+	if err != nil {
+		t.Fatalf("NewPendingAttachRecord() error = %v", err)
+	}
+	repository.facts = *encrypted
+	var taskIdentity controllerpkg.AttachPlanIdentity
+	err = service.ResolveTaskIdentity(
+		ctx,
+		etcd.Versioned[etcd.AttachRecord]{Record: pending, Revision: 9, ReadRevision: 9},
+		taskID,
+		func(identity controllerpkg.AttachPlanIdentity) error {
+			taskIdentity = controllerpkg.AttachPlanIdentity{
+				Database: identity.Database, Role: identity.Role,
+				Password: append([]byte(nil), identity.Password...),
+				Grants:   append([]controllerpkg.AttachPlanGrantIdentity(nil), identity.Grants...),
+			}
+			return nil
+		},
+	)
+	if err != nil || taskIdentity.Database != "appdb" || taskIdentity.Role != "app" ||
+		string(taskIdentity.Password) != "correct-horse" || len(taskIdentity.Grants) != 1 ||
+		taskIdentity.Grants[0].Database != "reporting" {
+		t.Fatalf("ResolveTaskIdentity() = %#v, %v", taskIdentity, err)
+	}
+	taskIdentity.Clear()
 	owner := readyAttachRecord(
 		t,
 		ownerID,
@@ -97,8 +128,6 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		ReadRevision: 12,
 	}
 	repository.records[grantID] = repository.records["reporting-db"]
-	repository.facts = *encrypted
-
 	var resolved []byte
 	err = service.ResolveFact(ctx, environmentID, core.FactRef{
 		Attach: "api-db", Grant: "reporting-db", Key: "test_DATABASE",

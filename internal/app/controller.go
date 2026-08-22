@@ -191,7 +191,28 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry value generation repository: %w", err)
 	}
-	planResolver, err := controller.NewTaskPlanResolverWithBlueprints(cfg.Storage.VolumeRoot, hierarchyRecords)
+	serviceRecords, err := etcd.NewServiceRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service repository: %w", err)
+	}
+	attachRecords, err := etcd.NewAttachRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Attach repository: %w", err)
+	}
+	attachFactValues, err := NewAttachFactService(attachRecords, intentProtector)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Attach fact service: %w", err)
+	}
+	planResolver, err := controller.NewTaskPlanResolverWithAttachments(
+		cfg.Storage.VolumeRoot,
+		hierarchyRecords,
+		attachRecords,
+		serviceRecords,
+		attachFactValues,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize execution plan resolver: %w", err)

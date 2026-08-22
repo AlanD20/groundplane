@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -117,7 +118,20 @@ func (service *AttachFactService) SealFactSets(
 			return nil, nil, err
 		}
 	}
-	payload, err := json.Marshal(attachFactBundle{Version: 1, AttachID: attachID, Sets: sets})
+	bundle := attachFactBundle{
+		Version: 2, AttachID: attachID, Sets: sets,
+		Identity: attachTaskIdentity{
+			Database: own.Database, Role: own.Role, Password: append([]byte(nil), own.Password...),
+			Grants: make([]attachTaskGrantIdentity, 0, len(canonicalGrants)),
+		},
+	}
+	for _, grant := range canonicalGrants {
+		bundle.Identity.Grants = append(bundle.Identity.Grants, attachTaskGrantIdentity{
+			AttachID: grant.AttachID, Database: grant.Params.Database,
+		})
+	}
+	defer bundle.clear()
+	payload, err := json.Marshal(bundle)
 	if err != nil {
 		return nil, nil, errs.Wrap(errs.KindInternal, err)
 	}
@@ -140,6 +154,42 @@ func (service *AttachFactService) SealFactSets(
 		return nil, nil, err
 	}
 	return metadata, &facts, nil
+}
+
+// ResolveTaskIdentity exposes only one task-owned encrypted identity during
+// synchronous plan construction. Public fact readiness rules remain unchanged.
+func (service *AttachFactService) ResolveTaskIdentity(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	taskID string,
+	consume controllerpkg.AttachPlanIdentityConsumer,
+) error {
+	if ctx == nil || consume == nil || ids.Validate(ids.KindTask, taskID) != nil ||
+		current.Record.TaskID != taskID {
+		return errs.New(errs.KindValidationFailed, "Attach task identity request is invalid")
+	}
+	allowed := current.Record.Operation == etcd.AttachOperationProvision &&
+		(current.Record.Status == core.AttachPending || current.Record.Status == core.AttachProvisioning)
+	allowed = allowed || current.Record.Operation == etcd.AttachOperationDetach &&
+		current.Record.Status == core.AttachDetaching
+	if !allowed {
+		return errs.New(errs.KindStateConflict, "Attach task identity is unavailable in the current lifecycle")
+	}
+	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
+		identity := controllerpkg.AttachPlanIdentity{
+			Database: bundle.Identity.Database,
+			Role:     bundle.Identity.Role,
+			Password: append([]byte(nil), bundle.Identity.Password...),
+			Grants:   make([]controllerpkg.AttachPlanGrantIdentity, 0, len(bundle.Identity.Grants)),
+		}
+		for _, grant := range bundle.Identity.Grants {
+			identity.Grants = append(identity.Grants, controllerpkg.AttachPlanGrantIdentity{
+				AttachID: grant.AttachID, Database: grant.Database,
+			})
+		}
+		defer identity.Clear()
+		return consume(identity)
+	})
 }
 
 // ResolveFact resolves mutable labels on every call and exposes one verified
@@ -184,6 +234,26 @@ func (service *AttachFactService) ResolveFact(
 	if definition.Secret && !destinationSecret {
 		return errs.New(errs.KindValidationFailed, "Secret Attach fact requires a secret Entry destination")
 	}
+	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
+		for _, set := range bundle.Sets {
+			if set.GrantAttachID != grantAttachID {
+				continue
+			}
+			for _, fact := range set.Facts {
+				if fact.Key == reference.Key {
+					return consume(fact.Value)
+				}
+			}
+		}
+		return errs.New(errs.KindInternal, "Attach fact value is missing")
+	})
+}
+
+func (service *AttachFactService) openBundle(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	consume func(*attachFactBundle) error,
+) error {
 	stored, ok, err := service.repository.GetAttachFacts(ctx, current)
 	if err != nil {
 		return err
@@ -212,24 +282,27 @@ func (service *AttachFactService) ResolveFact(
 		if !validAttachFactBundle(bundle, current.Record) {
 			return errs.New(errs.KindInternal, "Attach fact plaintext does not match durable metadata")
 		}
-		for _, set := range bundle.Sets {
-			if set.GrantAttachID != grantAttachID {
-				continue
-			}
-			for _, fact := range set.Facts {
-				if fact.Key == reference.Key {
-					return consume(fact.Value)
-				}
-			}
-		}
-		return errs.New(errs.KindInternal, "Attach fact value is missing")
+		return consume(&bundle)
 	})
 }
 
 type attachFactBundle struct {
 	Version  uint8                `json:"version"`
 	AttachID string               `json:"attach_id"`
+	Identity attachTaskIdentity   `json:"identity"`
 	Sets     []attachFactValueSet `json:"sets"`
+}
+
+type attachTaskIdentity struct {
+	Database string                    `json:"database,omitempty"`
+	Role     string                    `json:"role"`
+	Password []byte                    `json:"password"`
+	Grants   []attachTaskGrantIdentity `json:"grants,omitempty"`
+}
+
+type attachTaskGrantIdentity struct {
+	AttachID string `json:"attach_id"`
+	Database string `json:"database"`
 }
 
 type attachFactValueSet struct {
@@ -262,8 +335,15 @@ func attachFactMetadataDefinition(
 }
 
 func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bool {
-	if bundle.Version != 1 || bundle.AttachID != record.ID || len(bundle.Sets) != len(record.FactSets) {
+	if bundle.Version != 2 || bundle.AttachID != record.ID || bundle.Identity.Role == "" ||
+		len(bundle.Identity.Password) == 0 || len(bundle.Identity.Grants) != len(record.GrantAttachIDs) ||
+		len(bundle.Sets) != len(record.FactSets) {
 		return false
+	}
+	for index, grant := range bundle.Identity.Grants {
+		if grant.AttachID != record.GrantAttachIDs[index] || grant.Database == "" {
+			return false
+		}
 	}
 	for setIndex, set := range bundle.Sets {
 		metadata := record.FactSets[setIndex]
@@ -280,6 +360,9 @@ func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bo
 }
 
 func (bundle *attachFactBundle) clear() {
+	clearAttachBytes(bundle.Identity.Password)
+	bundle.Identity.Password = nil
+	bundle.Identity.Grants = nil
 	for setIndex := range bundle.Sets {
 		for factIndex := range bundle.Sets[setIndex].Facts {
 			clearAttachBytes(bundle.Sets[setIndex].Facts[factIndex].Value)

@@ -2923,7 +2923,6 @@ type AdapterProcedure struct {
 	Password         []byte                 `protobuf:"bytes,6,opt,name=password,proto3" json:"password,omitempty"`
 	Database         string                 `protobuf:"bytes,7,opt,name=database,proto3" json:"database,omitempty"`
 	GrantOn          string                 `protobuf:"bytes,8,opt,name=grant_on,json=grantOn,proto3" json:"grant_on,omitempty"`
-	RuntimeServiceId string                 `protobuf:"bytes,9,opt,name=runtime_service_id,json=runtimeServiceId,proto3" json:"runtime_service_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -3010,13 +3009,6 @@ func (x *AdapterProcedure) GetDatabase() string {
 func (x *AdapterProcedure) GetGrantOn() string {
 	if x != nil {
 		return x.GrantOn
-	}
-	return ""
-}
-
-func (x *AdapterProcedure) GetRuntimeServiceId() string {
-	if x != nil {
-		return x.RuntimeServiceId
 	}
 	return ""
 }
@@ -4159,7 +4151,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x1cenvironment_directory_remove\x18\n" +
 	" \x01(\v20.groundplane.agent.v1.EnvironmentDirectoryRemoveH\x00R\x1aenvironmentDirectoryRemove\x12U\n" +
 	"\x11adapter_procedure\x18\v \x01(\v2&.groundplane.agent.v1.AdapterProcedureH\x00R\x10adapterProcedureB\t\n" +
-	"\apayload\"\xd6\x02\n" +
+	"\apayload\"\xa8\x02\n" +
 	"\x10AdapterProcedure\x12\x1f\n" +
 	"\vadapter_key\x18\x01 \x01(\tR\n" +
 	"adapterKey\x12A\n" +
@@ -4169,8 +4161,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04role\x18\x05 \x01(\tR\x04role\x12\x1a\n" +
 	"\bpassword\x18\x06 \x01(\fR\bpassword\x12\x1a\n" +
 	"\bdatabase\x18\a \x01(\tR\bdatabase\x12\x19\n" +
-	"\bgrant_on\x18\b \x01(\tR\agrantOn\x12,\n" +
-	"\x12runtime_service_id\x18\t \x01(\tR\x10runtimeServiceId\"\x83\x03\n" +
+	"\bgrant_on\x18\b \x01(\tR\agrantOn\"\x83\x03\n" +
 	"\x0fMaterializeFile\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12-\n" +

@@ -20,9 +20,8 @@ func TestAdapterRuntimeExecutesCompiledPostgresProcedure(t *testing.T) {
 	}}
 	procedure := &agentpb.AdapterProcedure{
 		AdapterKey: "postgres:16", Phase: agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
-		AttachId: "att_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceId: "bks_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		RuntimeServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW",
-		Role:             "api_5d3f9a", Database: "api_5d3f9a", Password: []byte("URL_safe-1"),
+		AttachId: "att_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		Role: "api_5d3f9a", Database: "api_5d3f9a", Password: []byte("URL_safe-1"),
 	}
 	password := procedure.Password
 	runtime := NewAdapterRuntime(fake)
@@ -33,7 +32,7 @@ func TestAdapterRuntimeExecutesCompiledPostgresProcedure(t *testing.T) {
 		t.Fatalf("executeStep() error = %v", err)
 	}
 	if len(fake.calls) != 4 || fake.calls[0].Name != "docker" ||
-		!containsArgument(fake.calls[0].Args, "label=com.groundplane.service-id="+procedure.RuntimeServiceId) {
+		!containsArgument(fake.calls[0].Args, "label=com.groundplane.service-id="+procedure.BackingServiceId) {
 		t.Fatalf("container lookup calls = %#v", fake.calls)
 	}
 	for _, call := range fake.calls[1:] {

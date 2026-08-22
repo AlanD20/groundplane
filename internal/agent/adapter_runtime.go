@@ -59,7 +59,7 @@ func (runtime *AdapterRuntime) executeStep(
 			"agent: adapter procedure is empty or oversized",
 		)
 	}
-	containerID, err := runtime.backingContainer(ctx, procedure.RuntimeServiceId)
+	containerID, err := runtime.backingContainer(ctx, procedure.BackingServiceId)
 	if err != nil {
 		return adapterStepResult{}, err
 	}
