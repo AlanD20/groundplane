@@ -84,3 +84,45 @@ func TestPrepareEnvironmentBlueprintServiceChangesStartsNewServiceRunning(t *tes
 		t.Fatalf("changes = %#v", changes)
 	}
 }
+
+func TestPrepareEnvironmentBlueprintRouteChangesPreservesImmutableTarget(t *testing.T) {
+	// Rationale: Blueprint replacement may change Route exposure but must not
+	// silently retarget an existing immutable host/path identity.
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 5)
+	routeID := ids.NewAt(ids.KindRoute, at, 6)
+	serviceID := ids.NewAt(ids.KindService, at, 7)
+	record, err := etcd.NewRouteRecord(environmentID, core.Route{
+		ID: routeID, Host: "app.example.com", Path: "/app/*",
+		TargetServiceID: serviceID, TargetPort: 8080, Exposure: "public",
+	})
+	if err != nil {
+		t.Fatalf("NewRouteRecord() error = %v", err)
+	}
+	current := etcd.Versioned[etcd.RouteRecord]{Record: record, Revision: 7, ReadRevision: 9}
+	desired := record.Desired
+	desired.Exposure = "internal"
+
+	changes, err := prepareEnvironmentBlueprintRouteChanges(
+		environmentID,
+		[]core.Route{desired},
+		[]etcd.Versioned[etcd.RouteRecord]{current},
+	)
+	if err != nil {
+		t.Fatalf("prepareEnvironmentBlueprintRouteChanges() error = %v", err)
+	}
+	if len(changes) != 1 || changes[0].Current == nil || changes[0].Record.Desired.Exposure != "internal" {
+		t.Fatalf("changes = %#v", changes)
+	}
+
+	retargeted := desired
+	retargeted.TargetServiceID = ids.NewAt(ids.KindService, at, 8)
+	if _, err := prepareEnvironmentBlueprintRouteChanges(
+		environmentID,
+		[]core.Route{retargeted},
+		[]etcd.Versioned[etcd.RouteRecord]{current},
+	); err == nil {
+		t.Fatal("prepareEnvironmentBlueprintRouteChanges() accepted an immutable target change")
+	}
+}

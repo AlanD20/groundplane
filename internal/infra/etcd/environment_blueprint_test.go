@@ -29,9 +29,10 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 
 	desiredProjection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
 	serviceChanges := environmentBlueprintTestServiceChanges(t, repository, desiredProjection)
+	routeChanges := environmentBlueprintTestRouteChanges(t, repository, desiredProjection)
 	result, err := repository.ApplyEnvironmentBlueprintWithTask(
 		ctx, project, environment, 0, revision,
-		desiredProjection, serviceChanges, task, marker,
+		desiredProjection, serviceChanges, routeChanges, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("ApplyEnvironmentBlueprintWithTask() error = %v", err)
@@ -62,6 +63,15 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 		service.Revision != head.Revision {
 		t.Fatalf("GetService() = %#v, %v", service, err)
 	}
+	routeRepository, err := newRouteRepository(store)
+	if err != nil {
+		t.Fatalf("newRouteRepository() error = %v", err)
+	}
+	route, err := routeRepository.GetRoute(ctx, routeChanges[0].Record.Desired.ID)
+	if err != nil || route.Record.Desired.TargetServiceID != desiredProjection.Services[0].ID ||
+		route.Revision != head.Revision {
+		t.Fatalf("GetRoute() = %#v, %v", route, err)
+	}
 	projection, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil || !found || projection.Record.BlueprintRevisionID != task.ID ||
 		projection.Record.RenderGeneration != 1 || projection.Revision != head.Revision {
@@ -84,8 +94,9 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {old: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
 	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
+	firstRouteChanges := environmentBlueprintTestRouteChanges(t, repository, firstProjection)
 	firstResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, 0, first, firstProjection, firstServiceChanges, firstTask,
+		ctx, project, environment, 0, first, firstProjection, firstServiceChanges, firstRouteChanges, firstTask,
 		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -106,8 +117,10 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	secondProjection.BlueprintRevisionID = secondTask.ID
 	secondProjection.RenderGeneration = 2
 	secondServiceChanges := environmentBlueprintTestServiceChanges(t, repository, secondProjection)
+	secondRouteChanges := environmentBlueprintTestRouteChanges(t, repository, secondProjection)
 	secondResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, secondProjection, secondServiceChanges, secondTask,
+		ctx, project, environment, head.Revision, second, secondProjection, secondServiceChanges, secondRouteChanges,
+		secondTask,
 		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -141,9 +154,10 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {api: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
 	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
+	firstRouteChanges := environmentBlueprintTestRouteChanges(t, repository, firstProjection)
 	result, err := repository.ApplyEnvironmentBlueprintWithTask(
 		ctx, project, environment, 0, first,
-		firstProjection, firstServiceChanges, firstTask,
+		firstProjection, firstServiceChanges, firstRouteChanges, firstTask,
 		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -162,7 +176,7 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	omitted := environmentBlueprintTestProjection(environment.Record.ID, secondTask, 2)
 	omitted.Services = nil
 	_, err = repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, omitted, nil, secondTask,
+		ctx, project, environment, head.Revision, second, omitted, nil, nil, secondTask,
 		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
 	)
 	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
@@ -297,6 +311,39 @@ func environmentBlueprintTestServiceChanges(
 		changes[index] = EnvironmentBlueprintServiceChange{Record: record}
 	}
 	return changes
+}
+
+func environmentBlueprintTestRouteChanges(
+	t *testing.T,
+	repository *HierarchyRepository,
+	projection EnvironmentComposeProjection,
+) []EnvironmentBlueprintRouteChange {
+	t.Helper()
+	routes, err := newRouteRepository(repository.store)
+	if err != nil {
+		t.Fatalf("newRouteRepository() error = %v", err)
+	}
+	desired := core.Route{
+		ID: ids.NewAt(ids.KindRoute, serviceRecordTestTime(), 73), Path: "/internal/*",
+		TargetServiceID: projection.Services[0].ID, TargetPort: 8080, Exposure: "internal",
+	}
+	current, err := routes.GetRoute(context.Background(), desired.ID)
+	if err == nil {
+		replacement, replaceErr := ReplaceRouteDesired(current.Record, desired)
+		if replaceErr != nil {
+			t.Fatalf("ReplaceRouteDesired() error = %v", replaceErr)
+		}
+		currentCopy := current
+		return []EnvironmentBlueprintRouteChange{{Current: &currentCopy, Record: replacement}}
+	}
+	if !isKind(err, errs.KindRouteNotFound) {
+		t.Fatalf("GetRoute() error = %v", err)
+	}
+	record, recordErr := NewRouteRecord(projection.EnvironmentID, desired)
+	if recordErr != nil {
+		t.Fatalf("NewRouteRecord() error = %v", recordErr)
+	}
+	return []EnvironmentBlueprintRouteChange{{Record: record}}
 }
 
 func assertEnvironmentBlueprintValue(t *testing.T, store *memoryHierarchyStore, key string) {

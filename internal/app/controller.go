@@ -212,6 +212,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service repository: %w", err)
 	}
+	routeRecords, err := etcd.NewRouteRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route repository: %w", err)
+	}
 	serviceReadRepository, err := newDurableServiceReadRepository(hierarchyRecords, serviceRecords)
 	if err != nil {
 		_ = store.Close()
@@ -404,6 +409,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	environmentBlueprintRepository, err := newDurableEnvironmentBlueprintRepository(
 		hierarchyRecords,
 		serviceRecords,
+		routeRecords,
 	)
 	if err != nil {
 		_ = store.Close()

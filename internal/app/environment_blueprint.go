@@ -38,6 +38,7 @@ type environmentBlueprintRepository interface {
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
 	ApplyEnvironmentBlueprintWithTask(
 		context.Context,
 		etcd.Versioned[etcd.ProjectRecord],
@@ -46,6 +47,7 @@ type environmentBlueprintRepository interface {
 		etcd.EnvironmentBlueprintRevision,
 		etcd.EnvironmentComposeProjection,
 		[]etcd.EnvironmentBlueprintServiceChange,
+		[]etcd.EnvironmentBlueprintRouteChange,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -158,16 +160,22 @@ type environmentBlueprintService struct {
 type durableEnvironmentBlueprintRepository struct {
 	*etcd.HierarchyRepository
 	services *etcd.ServiceRepository
+	routes   *etcd.RouteRepository
 }
 
 func newDurableEnvironmentBlueprintRepository(
 	hierarchy *etcd.HierarchyRepository,
 	services *etcd.ServiceRepository,
+	routes *etcd.RouteRepository,
 ) (*durableEnvironmentBlueprintRepository, error) {
-	if hierarchy == nil || services == nil {
+	if hierarchy == nil || services == nil || routes == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint repositories are not configured")
 	}
-	return &durableEnvironmentBlueprintRepository{HierarchyRepository: hierarchy, services: services}, nil
+	return &durableEnvironmentBlueprintRepository{
+		HierarchyRepository: hierarchy,
+		services:            services,
+		routes:              routes,
+	}, nil
 }
 
 func (repository *durableEnvironmentBlueprintRepository) ListServices(
@@ -176,6 +184,14 @@ func (repository *durableEnvironmentBlueprintRepository) ListServices(
 	request etcd.PageRequest,
 ) (etcd.Page[etcd.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
+}
+
+func (repository *durableEnvironmentBlueprintRepository) ListRoutes(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.RouteRecord], error) {
+	return repository.routes.ListRoutes(ctx, environmentID, request)
 }
 
 func newEnvironmentBlueprintService(
@@ -323,6 +339,39 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	currentRoutes, err := service.listBlueprintRoutes(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	previousRoutes := make([]controller.RouteIdentity, len(currentRoutes))
+	for index, route := range currentRoutes {
+		previousRoutes[index] = controller.RouteIdentity{
+			ID: route.Record.Desired.ID, Host: route.Record.Desired.Host, Path: route.Record.Desired.Path,
+		}
+	}
+	reconciledRoutes, err := controller.ReconcileBlueprintRoutes(
+		parsed.Extensions.Routes,
+		desiredServices,
+		previousRoutes,
+		ids.New,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if len(reconciledRoutes.RemovedRouteIDs) != 0 {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Blueprint omits an existing Route; remove it explicitly before apply",
+		)
+	}
+	routeChanges, err := prepareEnvironmentBlueprintRouteChanges(
+		environmentID,
+		reconciledRoutes.Current,
+		currentRoutes,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 
 	now := service.now().UTC()
 	taskID := ids.New(ids.KindTask)
@@ -393,7 +442,16 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
 	result, applyErr := service.repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, expectedHeadRevision, revision, projection, serviceChanges, task, marker,
+		ctx,
+		project,
+		environment,
+		expectedHeadRevision,
+		revision,
+		projection,
+		serviceChanges,
+		routeChanges,
+		task,
+		marker,
 	)
 	if applyErr != nil {
 		if !isUnknownEnvironmentBlueprintOutcome(applyErr) {
@@ -439,6 +497,29 @@ func (service *environmentBlueprintService) listBlueprintServices(
 	}
 }
 
+func (service *environmentBlueprintService) listBlueprintRoutes(
+	ctx context.Context,
+	environmentID string,
+) ([]etcd.Versioned[etcd.RouteRecord], error) {
+	routes := []etcd.Versioned[etcd.RouteRecord](nil)
+	cursor := ""
+	for {
+		page, err := service.repository.ListRoutes(
+			ctx,
+			environmentID,
+			etcd.PageRequest{Limit: 200, Cursor: cursor},
+		)
+		if err != nil {
+			return nil, err
+		}
+		routes = append(routes, page.Items...)
+		if page.NextCursor == "" {
+			return routes, nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
 func prepareEnvironmentBlueprintServiceChanges(
 	environmentID string,
 	desired []core.Service,
@@ -479,6 +560,51 @@ func prepareEnvironmentBlueprintServiceChanges(
 		return nil, errs.New(
 			errs.KindResourceInUse,
 			"Blueprint omits an existing Service; remove it explicitly before apply",
+		)
+	}
+	return changes, nil
+}
+
+func prepareEnvironmentBlueprintRouteChanges(
+	environmentID string,
+	desired []core.Route,
+	current []etcd.Versioned[etcd.RouteRecord],
+) ([]etcd.EnvironmentBlueprintRouteChange, error) {
+	currentByID := make(map[string]etcd.Versioned[etcd.RouteRecord], len(current))
+	for _, route := range current {
+		if route.Record.EnvironmentID != environmentID || route.Record.Desired.ID == "" {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Route state is inconsistent")
+		}
+		if _, duplicate := currentByID[route.Record.Desired.ID]; duplicate {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Route state repeats an id")
+		}
+		currentByID[route.Record.Desired.ID] = route
+	}
+	changes := make([]etcd.EnvironmentBlueprintRouteChange, 0, len(desired))
+	for _, next := range desired {
+		if existing, found := currentByID[next.ID]; found {
+			replacement, err := etcd.ReplaceRouteDesired(existing.Record, next)
+			if err != nil {
+				return nil, err
+			}
+			currentCopy := existing
+			changes = append(changes, etcd.EnvironmentBlueprintRouteChange{
+				Current: &currentCopy,
+				Record:  replacement,
+			})
+			delete(currentByID, next.ID)
+			continue
+		}
+		record, err := etcd.NewRouteRecord(environmentID, next)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, etcd.EnvironmentBlueprintRouteChange{Record: record})
+	}
+	if len(currentByID) != 0 {
+		return nil, errs.New(
+			errs.KindResourceInUse,
+			"Blueprint omits an existing Route; remove it explicitly before apply",
 		)
 	}
 	return changes, nil
@@ -553,7 +679,7 @@ func environmentBlueprintState(
 func validateBasicEnvironmentBlueprint(parsed blueprintparser.Result) error {
 	extensions := parsed.Extensions
 	if parsed.Project == nil || len(extensions.Requires) != 0 || len(extensions.Attachments) != 0 ||
-		len(extensions.Entries) != 0 || len(extensions.Routes) != 0 || len(extensions.Components) != 0 ||
+		len(extensions.Entries) != 0 || len(extensions.Components) != 0 ||
 		extensions.Backup != nil || len(extensions.ReleaseGroups) != 0 || len(parsed.Project.Configs) != 0 ||
 		len(parsed.Project.Secrets) != 0 {
 		return errs.New(errs.KindValidationFailed, "Blueprint uses a desired-state contract that is not available yet")

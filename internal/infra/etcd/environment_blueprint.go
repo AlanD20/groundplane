@@ -57,6 +57,13 @@ type EnvironmentBlueprintServiceChange struct {
 	Record  ServiceRecord
 }
 
+// EnvironmentBlueprintRouteChange is one exposure-only Route replacement or
+// one new stable Route committed with its target Service desired state.
+type EnvironmentBlueprintRouteChange struct {
+	Current *Versioned[RouteRecord]
+	Record  RouteRecord
+}
+
 type environmentBlueprintManifest struct {
 	EnvironmentID  string                             `json:"environment_id"`
 	RevisionID     string                             `json:"revision_id"`
@@ -209,6 +216,7 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	revision EnvironmentBlueprintRevision,
 	projection EnvironmentComposeProjection,
 	serviceChanges []EnvironmentBlueprintServiceChange,
+	routeChanges []EnvironmentBlueprintRouteChange,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -266,6 +274,17 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	defer clearPreparedEnvironmentBlueprintServices(preparedServices)
+	preparedRoutes, err := repository.prepareEnvironmentBlueprintRouteChanges(
+		ctx,
+		environment,
+		serviceChanges,
+		routeChanges,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearPreparedEnvironmentBlueprintRoutes(preparedRoutes)
 	if revision.EnvironmentID != environment.Record.ID || revision.RevisionID != task.ID ||
 		!revision.CreatedAt.Equal(task.CreatedAt) || task.Type != TaskUpdate ||
 		task.Target != environment.Record.ID || task.Status != TaskStatusPending ||
@@ -399,12 +418,57 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			)
 		}
 	}
-	defer clearPreparedEnvironmentBlueprintServices(preparedServices)
+	for _, route := range preparedRoutes {
+		primaryCondition := Condition{Key: routeKey(route.change.Record.Desired.ID)}
+		ownerCondition := Condition{
+			Key: routeOwnerKey(route.change.Record.EnvironmentID, route.change.Record.Desired.ID),
+		}
+		matchCondition := Condition{Key: routeMatchKey(
+			route.change.Record.EnvironmentID,
+			route.change.Record.Desired.Host,
+			route.change.Record.Desired.Path,
+		)}
+		if route.change.Current != nil {
+			primaryCondition.ModRevision = route.change.Current.Revision
+			ownerCondition.ModRevision = route.ownerRevision
+			matchCondition.ModRevision = route.matchRevision
+		}
+		conditions = append(
+			conditions,
+			primaryCondition,
+			ownerCondition,
+			matchCondition,
+			Condition{Key: deletionTombstoneKey("route", route.change.Record.Desired.ID)},
+		)
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: routeKey(route.change.Record.Desired.ID), Value: route.value,
+		})
+		if route.change.Current == nil {
+			mutations = append(
+				mutations,
+				Mutation{
+					Type:  MutationPut,
+					Key:   routeOwnerKey(route.change.Record.EnvironmentID, route.change.Record.Desired.ID),
+					Value: []byte(route.change.Record.Desired.ID),
+				},
+				Mutation{
+					Type: MutationPut,
+					Key: routeMatchKey(
+						route.change.Record.EnvironmentID,
+						route.change.Record.Desired.Host,
+						route.change.Record.Desired.Path,
+					),
+					Value: []byte(route.change.Record.Desired.ID),
+				},
+			)
+		}
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
 		classifyEnvironmentBlueprintApplyConflict(
 			len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedServices,
+			preparedRoutes,
 		),
 	)
 	if err != nil {
@@ -424,10 +488,11 @@ func classifyEnvironmentBlueprintApplyConflict(
 	environment Versioned[EnvironmentRecord],
 	operationID string,
 	services []preparedEnvironmentBlueprintService,
+	routes []preparedEnvironmentBlueprintRoute,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		baseCount := 12 + fileCount
-		if len(values) != baseCount+4*len(services) {
+		if len(values) != baseCount+4*len(services)+4*len(routes) {
 			return errs.New(errs.KindInternal, "Blueprint apply compare evidence is incomplete")
 		}
 		if err := classifyEnvironmentBlueprintBaseConflict(
@@ -462,6 +527,36 @@ func classifyEnvironmentBlueprintApplyConflict(
 			}
 			if tombstone != nil {
 				return errs.New(errs.KindResourceInUse, "Service deletion is in progress")
+			}
+		}
+		routeOffset := baseCount + 4*len(services)
+		for index, route := range routes {
+			offset := routeOffset + index*4
+			primary := values[offset]
+			owner := values[offset+1]
+			match := values[offset+2]
+			tombstone := values[offset+3]
+			routeID := route.change.Record.Desired.ID
+			if route.change.Current == nil {
+				if primary != nil || owner != nil {
+					return errs.New(errs.KindStateConflict, "Route stable identity is already in use")
+				}
+				if match != nil {
+					return errs.New(errs.KindNameConflict, "Route host and path are already in use")
+				}
+			} else {
+				if primary == nil {
+					return errs.New(errs.KindRouteNotFound, "Route was not found")
+				}
+				if primary.ModRevision != route.change.Current.Revision {
+					return stateConflict("route", routeID)
+				}
+				if owner == nil || match == nil || string(owner.Value) != routeID || string(match.Value) != routeID {
+					return errs.New(errs.KindInternal, "Route indexes changed or are corrupt")
+				}
+			}
+			if tombstone != nil {
+				return errs.New(errs.KindResourceInUse, "Route deletion is in progress")
 			}
 		}
 		return errs.New(errs.KindStateConflict, "Environment Blueprint Service state changed")
@@ -616,6 +711,99 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges
 func clearPreparedEnvironmentBlueprintServices(services []preparedEnvironmentBlueprintService) {
 	for index := range services {
 		clear(services[index].value)
+	}
+}
+
+type preparedEnvironmentBlueprintRoute struct {
+	change        EnvironmentBlueprintRouteChange
+	value         []byte
+	ownerRevision int64
+	matchRevision int64
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	services []EnvironmentBlueprintServiceChange,
+	changes []EnvironmentBlueprintRouteChange,
+) ([]preparedEnvironmentBlueprintRoute, error) {
+	targets := make(map[string]struct{}, len(services))
+	for _, service := range services {
+		targets[service.Record.Desired.ID] = struct{}{}
+	}
+	seenIDs := make(map[string]struct{}, len(changes))
+	seenMatches := make(map[string]struct{}, len(changes))
+	prepared := make([]preparedEnvironmentBlueprintRoute, 0, len(changes))
+	for _, change := range changes {
+		if err := validateRouteRecord(change.Record); err != nil {
+			clearPreparedEnvironmentBlueprintRoutes(prepared)
+			return nil, err
+		}
+		routeID := change.Record.Desired.ID
+		matchKey := routeMatchKey(
+			change.Record.EnvironmentID,
+			change.Record.Desired.Host,
+			change.Record.Desired.Path,
+		)
+		_, targetExists := targets[change.Record.Desired.TargetServiceID]
+		_, duplicateID := seenIDs[routeID]
+		_, duplicateMatch := seenMatches[matchKey]
+		if change.Record.EnvironmentID != environment.Record.ID || !targetExists || duplicateID || duplicateMatch {
+			clearPreparedEnvironmentBlueprintRoutes(prepared)
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Route change does not match its Environment Service projection",
+			)
+		}
+		seenIDs[routeID] = struct{}{}
+		seenMatches[matchKey] = struct{}{}
+		item := preparedEnvironmentBlueprintRoute{change: change}
+		if change.Current != nil {
+			if err := validateRouteVersion(*change.Current); err != nil {
+				clearPreparedEnvironmentBlueprintRoutes(prepared)
+				return nil, err
+			}
+			replacement, err := ReplaceRouteDesired(change.Current.Record, change.Record.Desired)
+			if err != nil || replacement != change.Record {
+				clearPreparedEnvironmentBlueprintRoutes(prepared)
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Route replacement changed immutable identity, match, or target",
+				)
+			}
+			indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+				Keys: []string{
+					routeOwnerKey(environment.Record.ID, routeID),
+					matchKey,
+				},
+				Revision: change.Current.ReadRevision,
+			})
+			if err != nil {
+				clearPreparedEnvironmentBlueprintRoutes(prepared)
+				return nil, err
+			}
+			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+				string(indexes.Values[0].Value) != routeID || string(indexes.Values[1].Value) != routeID {
+				clearPreparedEnvironmentBlueprintRoutes(prepared)
+				return nil, errs.New(errs.KindInternal, "Route indexes are missing or corrupt")
+			}
+			item.ownerRevision = indexes.Values[0].ModRevision
+			item.matchRevision = indexes.Values[1].ModRevision
+		}
+		value, err := encodeRouteRecord(change.Record)
+		if err != nil {
+			clearPreparedEnvironmentBlueprintRoutes(prepared)
+			return nil, err
+		}
+		item.value = value
+		prepared = append(prepared, item)
+	}
+	return prepared, nil
+}
+
+func clearPreparedEnvironmentBlueprintRoutes(routes []preparedEnvironmentBlueprintRoute) {
+	for index := range routes {
+		clear(routes[index].value)
 	}
 }
 
