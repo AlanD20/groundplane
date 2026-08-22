@@ -146,11 +146,12 @@ type Service struct {
 // EntrySource is the discriminated union api-cli.md section 4 shows:
 // literal, secret_ref, and fact are mutually exclusive.
 type EntrySource struct {
-	Kind      string `json:"kind"` // "literal" | "secret_ref" | "fact"
-	Literal   string `json:"literal,omitempty"`
-	SecretRef string `json:"secret_ref,omitempty"`
-	AttachID  string `json:"attach_id,omitempty"`
-	Fact      string `json:"fact,omitempty"` // e.g. "pg16_URL"
+	Kind          string `json:"kind"` // "literal" | "secret_ref" | "fact"
+	Literal       string `json:"literal,omitempty"`
+	SecretRef     string `json:"secret_ref,omitempty"`
+	AttachID      string `json:"attach_id,omitempty"`
+	GrantAttachID string `json:"grant_attach_id,omitempty"`
+	Fact          string `json:"fact,omitempty"` // e.g. "pg16_URL"
 }
 
 type Entry struct {
@@ -171,10 +172,11 @@ type Entry struct {
 type Attach struct {
 	ID                   string   `json:"id"`
 	Name                 string   `json:"name"`
-	ServiceID            string   `json:"service_id"`
+	ServiceIDs           []string `json:"service_ids"`
 	BackingServiceID     string   `json:"backing_service_id"`
 	BackingEnvironmentID string   `json:"backing_environment_id,omitempty"`
-	Grants               []string `json:"grants,omitempty"` // other attach ids
+	BackingNetworkID     string   `json:"backing_network_id"`
+	GrantAttachIDs       []string `json:"grant_attach_ids,omitempty"`
 	Status               string   `json:"status"`
 }
 
@@ -391,10 +393,10 @@ type ReleaseGroupDeployRequest struct {
 }
 
 type AttachRequest struct {
-	ServiceID        string   `json:"service_id"`
+	ServiceIDs       []string `json:"service_ids"`
 	BackingServiceID string   `json:"backing_service_id"`
 	Name             string   `json:"name,omitempty"` // omitted => Controller-suggested, made unique within the environment
-	Grants           []string `json:"grants,omitempty"`
+	GrantAttachIDs   []string `json:"grant_attach_ids,omitempty"`
 }
 
 type BackupRunRequest struct {

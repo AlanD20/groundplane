@@ -18,6 +18,7 @@ func (a *adapter) Label() string        { return "Valkey 9" }
 func (a *adapter) DefaultImage() string { return "valkey/valkey:9-alpine" }
 func (a *adapter) FactsPrefix() string  { return "valkey9_" }
 func (a *adapter) URLScheme() string    { return "redis://" }
+func (a *adapter) Port() string         { return "6379" }
 func (a *adapter) FactSchema() []adapters.FactDefinition {
 	return []adapters.FactDefinition{
 		{Field: adapters.FactURL, Secret: true},

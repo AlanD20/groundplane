@@ -79,6 +79,12 @@ func (adapter factTestAdapter) URLScheme() string {
 	}
 	return "pgsql://"
 }
+func (adapter factTestAdapter) Port() string {
+	if adapter.manual {
+		return ""
+	}
+	return "5432"
+}
 func (adapter factTestAdapter) FactSchema() []FactDefinition { return adapter.schema }
 func (adapter factTestAdapter) Manual() bool                 { return adapter.manual }
 func (adapter factTestAdapter) ProvisionSteps(ProvisionParams) []Step {

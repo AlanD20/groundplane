@@ -20,6 +20,7 @@ func (a *adapter) Label() string                         { return "Manual (netwo
 func (a *adapter) DefaultImage() string                  { return "" }
 func (a *adapter) FactsPrefix() string                   { return "" }
 func (a *adapter) URLScheme() string                     { return "" }
+func (a *adapter) Port() string                          { return "" }
 func (a *adapter) FactSchema() []adapters.FactDefinition { return nil }
 func (a *adapter) Manual() bool                          { return true }
 

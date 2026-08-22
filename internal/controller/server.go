@@ -191,7 +191,7 @@ func (s *Server) routes() {
 	// attach — attach provisions (joins the owned external network,
 	// publishes facts), detach deprovisions; both tasks
 	mux.HandleFunc("GET /api/v1/attaches", s.notImplemented)
-	s.jsonRoute("POST /api/v1/attaches", s.acceptTask) // {service_id, backing_service_id, name?, grants?}
+	s.jsonRoute("POST /api/v1/attaches", s.acceptTask) // {service_ids, backing_service_id, name?, grant_attach_ids?}
 	mux.HandleFunc("DELETE /api/v1/attaches/{id}", s.acceptTask)
 
 	// zone / route / volume / entry / script (?environment=) — destructive delete is a task

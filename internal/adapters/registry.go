@@ -124,6 +124,7 @@ type Adapter interface {
 	DefaultImage() string // e.g. "postgres:16-alpine"
 	FactsPrefix() string  // e.g. "pg16_" — empty for Manual()
 	URLScheme() string    // e.g. "pgsql://" — empty for Manual()
+	Port() string         // e.g. "5432" — empty for Manual()
 	FactSchema() []FactDefinition
 	Manual() bool // true => network-only attach, no facts, no backups (see mvp.md, "The manual adapter")
 
