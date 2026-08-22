@@ -68,6 +68,7 @@ type Controller struct {
 	scheduler       controllerScheduler
 	controllerTasks controllerScheduler
 	localAgent      controllerScheduler
+	attachMutations *attachMutationService
 	container       ownedStore
 	store           ownedStore
 }
@@ -251,6 +252,32 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	attachMutationRecords, err := newDurableAttachMutationRepository(
+		hierarchyRecords, serviceRecords, attachRecords,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Attach mutation repository: %w", err)
+	}
+	attachMutationIdempotency, err := newDurableAttachMutationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Attach mutation idempotency: %w", err)
+	}
+	attachMutationPlans, err := newDraftAttachPlanSealer(
+		cfg.Storage.VolumeRoot, attachMutationRecords, attachFactValues,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Attach draft plan sealer: %w", err)
+	}
+	attachMutations, err := newAttachMutationService(
+		attachMutationRecords, attachFactValues, attachMutationPlans, attachMutationIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Attach mutation service: %w", err)
 	}
 	taskRetryIdempotency, err := newDurableTaskRetryIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -484,6 +511,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		scheduler:       controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks),
 		controllerTasks: controllerTaskRunner,
 		localAgent:      localAgentReconciliation,
+		attachMutations: attachMutations,
 		container:       containerManager,
 		store:           store,
 	}, nil

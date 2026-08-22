@@ -192,6 +192,27 @@ func (service *AttachFactService) ResolveTaskIdentity(
 	})
 }
 
+// ResolveReadyDatabase exposes only the stable database identity needed to
+// construct another ready Attach's grant procedure and fact set.
+func (service *AttachFactService) ResolveReadyDatabase(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	consume func(string) error,
+) error {
+	if ctx == nil || consume == nil {
+		return errs.New(errs.KindValidationFailed, "Attach database identity context and consumer are required")
+	}
+	if current.Record.Status != core.AttachReady {
+		return errs.New(errs.KindStateConflict, "Attach database identity is available only while ready")
+	}
+	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
+		if bundle.Identity.Database == "" {
+			return errs.New(errs.KindInternal, "Ready Attach database identity is missing")
+		}
+		return consume(bundle.Identity.Database)
+	})
+}
+
 // ResolveFact resolves mutable labels on every call and exposes one verified
 // value only for the duration of consume.
 func (service *AttachFactService) ResolveFact(

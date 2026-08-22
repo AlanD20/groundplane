@@ -23,6 +23,7 @@ func (a *adapter) URLScheme() string                     { return "" }
 func (a *adapter) Port() string                          { return "" }
 func (a *adapter) FactSchema() []adapters.FactDefinition { return nil }
 func (a *adapter) Manual() bool                          { return true }
+func (a *adapter) SupportsGrants() bool                  { return false }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step { return nil }
 func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step     { return nil }

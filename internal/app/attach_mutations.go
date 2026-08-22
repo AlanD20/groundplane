@@ -1,0 +1,1077 @@
+package app
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"math"
+	"net/http"
+	"slices"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+)
+
+const (
+	attachCreationRoute        = "/attaches"
+	attachDeletionRoute        = "/attaches/{id}"
+	attachMutationTimeout      = int64(120)
+	maximumAttachMutationTries = 3
+)
+
+type attachMutationRepository interface {
+	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	GetEnvironmentBlueprintHead(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentBlueprintRevision(
+		context.Context,
+		string,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
+	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
+	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
+	CreateAttachWithTask(
+		context.Context,
+		etcd.AttachCreateScope,
+		etcd.AttachRecord,
+		*etcd.AttachEncryptedFacts,
+		etcd.AttachTaskRenderInput,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+	BeginAttachDetachWithTask(
+		context.Context,
+		etcd.AttachCreateScope,
+		etcd.Versioned[etcd.AttachRecord],
+		etcd.AttachTaskRenderInput,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
+type attachMutationFacts interface {
+	SealFactSets(
+		context.Context,
+		string,
+		adapters.Adapter,
+		adapters.FactParams,
+		[]AttachGrantFactParams,
+	) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error)
+	ResolveReadyDatabase(
+		context.Context,
+		etcd.Versioned[etcd.AttachRecord],
+		func(string) error,
+	) error
+	ResolveTaskIdentity(
+		context.Context,
+		etcd.Versioned[etcd.AttachRecord],
+		string,
+		controllerpkg.AttachPlanIdentityConsumer,
+	) error
+}
+
+type attachDraftPlanSealer interface {
+	SealDraft(
+		context.Context,
+		etcd.Versioned[etcd.AttachRecord],
+		etcd.AttachTaskRenderInput,
+		etcd.TaskRecord,
+		*controllerpkg.AttachPlanIdentity,
+	) (string, error)
+}
+
+type attachMutationEvidence struct {
+	candidate idempotentintent.ProtectedEvidence
+	durable   etcd.ProtectedIntentRecord
+}
+
+type attachMutationIdempotency interface {
+	PrepareCreate(context.Context, string, apiTypes.AttachRequest) (attachMutationEvidence, error)
+	PrepareDetach(context.Context, string, string) (attachMutationEvidence, error)
+	ResolveExisting(
+		context.Context,
+		etcd.IdempotencyLocator,
+		attachMutationEvidence,
+	) (idempotentintent.Resolution, bool, error)
+	ResolveKnown(
+		context.Context,
+		attachMutationEvidence,
+		etcd.IdempotencyTransactionResult,
+	) (idempotentintent.Resolution, error)
+	ResolveUnknown(
+		context.Context,
+		etcd.IdempotencyLocator,
+		attachMutationEvidence,
+		error,
+	) (idempotentintent.Resolution, error)
+	ResolveReplayLocator(
+		context.Context,
+		etcd.IdempotencyReplayTarget,
+		string,
+		string,
+		string,
+	) (etcd.IdempotencyLocator, bool, error)
+}
+
+type durableAttachMutationIdempotency struct {
+	coordinator *idempotentintent.Coordinator
+	repository  *etcd.IdempotencyRepository
+}
+
+func newDurableAttachMutationIdempotency(
+	coordinator *idempotentintent.Coordinator,
+	repository *etcd.IdempotencyRepository,
+) (*durableAttachMutationIdempotency, error) {
+	if coordinator == nil || repository == nil {
+		return nil, errs.New(errs.KindInternal, "Attach mutation idempotency is not configured")
+	}
+	return &durableAttachMutationIdempotency{coordinator: coordinator, repository: repository}, nil
+}
+
+func (service *durableAttachMutationIdempotency) PrepareCreate(
+	ctx context.Context,
+	environmentID string,
+	request apiTypes.AttachRequest,
+) (attachMutationEvidence, error) {
+	services := make([]idempotentintent.Value, len(request.ServiceIDs))
+	for index, serviceID := range request.ServiceIDs {
+		services[index] = idempotentintent.String(serviceID)
+	}
+	grants := make([]idempotentintent.Value, len(request.GrantAttachIDs))
+	for index, grantID := range request.GrantAttachIDs {
+		grants[index] = idempotentintent.String(grantID)
+	}
+	return service.protect(ctx, idempotentintent.CanonicalIntentV1{
+		Method: http.MethodPost, Route: attachCreationRoute,
+		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
+		Query: idempotentintent.Object(),
+		Body: idempotentintent.JSONBody(idempotentintent.Object(
+			idempotentintent.Field{
+				Name:  "backing_service_id",
+				Value: idempotentintent.String(request.BackingServiceID),
+			},
+			idempotentintent.Field{Name: "grant_attach_ids", Value: idempotentintent.List(grants...)},
+			idempotentintent.Field{Name: "name", Value: idempotentintent.String(request.Name)},
+			idempotentintent.Field{Name: "service_ids", Value: idempotentintent.List(services...)},
+		)),
+	})
+}
+
+func (service *durableAttachMutationIdempotency) PrepareDetach(
+	ctx context.Context,
+	environmentID string,
+	attachID string,
+) (attachMutationEvidence, error) {
+	return service.protect(ctx, idempotentintent.CanonicalIntentV1{
+		Method: http.MethodDelete, Route: attachDeletionRoute,
+		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
+		Path:  []idempotentintent.PathBinding{{Name: "id", Value: attachID}},
+		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+	})
+}
+
+func (service *durableAttachMutationIdempotency) protect(
+	ctx context.Context,
+	intent idempotentintent.CanonicalIntentV1,
+) (attachMutationEvidence, error) {
+	version, digest, err := idempotentintent.Canonicalize(ctx, intent)
+	if err != nil {
+		return attachMutationEvidence{}, err
+	}
+	defer digest.Destroy()
+	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
+	if err != nil {
+		return attachMutationEvidence{}, err
+	}
+	durable, err := candidate.DurableRecord()
+	if err != nil {
+		return attachMutationEvidence{}, err
+	}
+	return attachMutationEvidence{candidate: candidate, durable: durable}, nil
+}
+
+func (service *durableAttachMutationIdempotency) ResolveExisting(
+	ctx context.Context,
+	locator etcd.IdempotencyLocator,
+	evidence attachMutationEvidence,
+) (idempotentintent.Resolution, bool, error) {
+	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
+}
+
+func (service *durableAttachMutationIdempotency) ResolveKnown(
+	ctx context.Context,
+	evidence attachMutationEvidence,
+	result etcd.IdempotencyTransactionResult,
+) (idempotentintent.Resolution, error) {
+	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
+}
+
+func (service *durableAttachMutationIdempotency) ResolveUnknown(
+	ctx context.Context,
+	locator etcd.IdempotencyLocator,
+	evidence attachMutationEvidence,
+	original error,
+) (idempotentintent.Resolution, error) {
+	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
+}
+
+func (service *durableAttachMutationIdempotency) ResolveReplayLocator(
+	ctx context.Context,
+	target etcd.IdempotencyReplayTarget,
+	method string,
+	route string,
+	key string,
+) (etcd.IdempotencyLocator, bool, error) {
+	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
+}
+
+type attachMutationService struct {
+	repository  attachMutationRepository
+	facts       attachMutationFacts
+	plans       attachDraftPlanSealer
+	idempotency attachMutationIdempotency
+	random      io.Reader
+	now         func() time.Time
+}
+
+func newAttachMutationService(
+	repository attachMutationRepository,
+	facts attachMutationFacts,
+	plans attachDraftPlanSealer,
+	idempotency attachMutationIdempotency,
+) (*attachMutationService, error) {
+	if repository == nil || facts == nil || plans == nil || idempotency == nil {
+		return nil, errs.New(errs.KindInternal, "Attach mutation service is not configured")
+	}
+	return &attachMutationService{
+		repository: repository, facts: facts, plans: plans, idempotency: idempotency,
+		random: rand.Reader, now: time.Now,
+	}, nil
+}
+
+func (service *attachMutationService) CreateAttach(
+	ctx context.Context,
+	request apiTypes.AttachRequest,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	if ctx == nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach creation context is required")
+	}
+	normalized, err := normalizeAttachRequest(request)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	for attempt := 0; attempt < maximumAttachMutationTries; attempt++ {
+		response, createErr := service.createAttachOnce(ctx, normalized, idempotencyKey)
+		if createErr == nil {
+			return response, nil
+		}
+		kind, known := errs.KindOf(createErr)
+		retry := known && kind == errs.KindStateConflict
+		retry = retry || normalized.Name == "" && known && kind == errs.KindNameConflict
+		if !retry || attempt == maximumAttachMutationTries-1 {
+			return etcd.IdempotencyResponse{}, createErr
+		}
+	}
+	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach creation retry bound was not enforced")
+}
+
+func (service *attachMutationService) createAttachOnce(
+	ctx context.Context,
+	request apiTypes.AttachRequest,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	consumer, err := service.repository.GetService(ctx, request.ServiceIDs[0])
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	environmentID := consumer.Record.EnvironmentID
+	evidence, err := service.idempotency.PrepareCreate(ctx, environmentID, request)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(evidence.durable.Ciphertext)
+	locator := etcd.IdempotencyLocator{
+		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+		Method: http.MethodPost, Route: attachCreationRoute, Key: idempotencyKey,
+	}
+	if replay, exists, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence); resolveErr != nil {
+		return etcd.IdempotencyResponse{}, resolveErr
+	} else if exists {
+		if replay.Kind != idempotentintent.ResolutionReplay {
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Attach creation replay resolution is invalid",
+			)
+		}
+		return cloneIdempotencyResponse(replay.Response), nil
+	}
+
+	scope, currentAttaches, adapter, err := service.resolveAttachScope(
+		ctx, consumer, request.BackingServiceID, request.GrantAttachIDs,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	name := request.Name
+	if name == "" {
+		existingNames := make(map[string]struct{}, len(currentAttaches))
+		for _, current := range currentAttaches {
+			existingNames[current.Record.Name] = struct{}{}
+		}
+		name, err = suggestAttachName(attachNameLabels{
+			tenant: scope.Tenant.Record.Slug, project: scope.Project.Record.Slug,
+			environment: scope.Environment.Record.Name, service: consumer.Record.Desired.Name,
+		}, existingNames)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+	}
+
+	now := service.now().UTC()
+	attachID := ids.New(ids.KindAttach)
+	taskID := ids.New(ids.KindTask)
+	identity, metadata, encryptedFacts, err := service.prepareAttachFacts(ctx, attachID, consumer, scope, adapter)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if identity != nil {
+		defer identity.Clear()
+	}
+	if encryptedFacts != nil {
+		defer clear(encryptedFacts.Ciphertext)
+	}
+	grantIDs := attachGrantIDs(scope.Grants)
+	record, err := etcd.NewPendingAttachRecord(
+		attachID, environmentID, name, scope.BackingProject.Record.ID, scope.BackingEnvironment.Record.ID,
+		scope.BackingService.Record.Desired.ID, scope.BackingService.Record.BackingNetworkID,
+		[]string{consumer.Record.Desired.ID}, grantIDs, metadata, taskID, now,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	task, artifactID, err := newAttachMutationTask(
+		taskID, record.ID, record.EnvironmentID, etcd.TaskAttach,
+		scope.ComposeProjection.Record.RenderGeneration, attachTaskStepCount(adapter, len(grantIDs)),
+		idempotencyKey, now,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	renderInput, err := buildAttachTaskRenderInput(scope, record, currentAttaches, task, artifactID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	task.PlanHash, err = service.plans.SealDraft(
+		ctx, etcd.Versioned[etcd.AttachRecord]{Record: record}, renderInput, task, identity,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task, nil)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	result, createErr := service.repository.CreateAttachWithTask(
+		ctx, scope, record, encryptedFacts, renderInput, task, marker,
+	)
+	return service.resolveMutationResult(ctx, locator, evidence, result, createErr, response)
+}
+
+func (service *attachMutationService) DetachAttach(
+	ctx context.Context,
+	attachID string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	if ctx == nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach context is required")
+	}
+	if ids.Validate(ids.KindAttach, attachID) != nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Attach id is invalid")
+	}
+	for attempt := 0; attempt < maximumAttachMutationTries; attempt++ {
+		response, err := service.detachAttachOnce(ctx, attachID, idempotencyKey)
+		if err == nil {
+			return response, nil
+		}
+		kind, known := errs.KindOf(err)
+		if !known || kind != errs.KindStateConflict || attempt == maximumAttachMutationTries-1 {
+			return etcd.IdempotencyResponse{}, err
+		}
+	}
+	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach retry bound was not enforced")
+}
+
+func (service *attachMutationService) detachAttachOnce(
+	ctx context.Context,
+	attachID string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetAttach, ID: attachID}
+	replayLocator, indexed, err := service.idempotency.ResolveReplayLocator(
+		ctx, target, http.MethodDelete, attachDeletionRoute, idempotencyKey,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if indexed {
+		evidence, prepareErr := service.idempotency.PrepareDetach(ctx, replayLocator.ScopeID, attachID)
+		if prepareErr != nil {
+			return etcd.IdempotencyResponse{}, prepareErr
+		}
+		defer clear(evidence.durable.Ciphertext)
+		resolution, exists, resolveErr := service.idempotency.ResolveExisting(ctx, replayLocator, evidence)
+		if resolveErr != nil {
+			return etcd.IdempotencyResponse{}, resolveErr
+		}
+		if !exists || resolution.Kind != idempotentintent.ResolutionReplay {
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay index is inconsistent")
+		}
+		return cloneIdempotencyResponse(resolution.Response), nil
+	}
+
+	current, err := service.repository.GetAttach(ctx, attachID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	evidence, err := service.idempotency.PrepareDetach(ctx, current.Record.EnvironmentID, attachID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(evidence.durable.Ciphertext)
+	locator := etcd.IdempotencyLocator{
+		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
+		Method: http.MethodDelete, Route: attachDeletionRoute, Key: idempotencyKey,
+	}
+	if replay, exists, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence); resolveErr != nil {
+		return etcd.IdempotencyResponse{}, resolveErr
+	} else if exists {
+		if replay.Kind != idempotentintent.ResolutionReplay {
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay resolution is invalid")
+		}
+		return cloneIdempotencyResponse(replay.Response), nil
+	}
+	consumer, err := service.repository.GetService(ctx, current.Record.ServiceIDs[0])
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	scope, currentAttaches, adapter, err := service.resolveAttachScope(
+		ctx, consumer, current.Record.BackingServiceID, current.Record.GrantAttachIDs,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	now := service.now().UTC()
+	taskID := ids.New(ids.KindTask)
+	detaching, err := etcd.BeginAttachDetaching(current.Record, taskID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	task, artifactID, err := newAttachMutationTask(
+		taskID, current.Record.ID, current.Record.EnvironmentID, etcd.TaskDetach,
+		scope.ComposeProjection.Record.RenderGeneration,
+		attachTaskStepCount(adapter, len(current.Record.GrantAttachIDs)), idempotencyKey, now,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	renderInput, err := buildAttachTaskRenderInput(scope, detaching, currentAttaches, task, artifactID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	draft := current
+	draft.Record = detaching
+	task.PlanHash, err = service.plans.SealDraft(ctx, draft, renderInput, task, nil)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task, &target)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	result, detachErr := service.repository.BeginAttachDetachWithTask(
+		ctx, scope, current, renderInput, task, marker,
+	)
+	return service.resolveMutationResult(ctx, locator, evidence, result, detachErr, response)
+}
+
+func (service *attachMutationService) resolveMutationResult(
+	ctx context.Context,
+	locator etcd.IdempotencyLocator,
+	evidence attachMutationEvidence,
+	result etcd.IdempotencyTransactionResult,
+	mutationErr error,
+	response etcd.IdempotencyResponse,
+) (etcd.IdempotencyResponse, error) {
+	var resolution idempotentintent.Resolution
+	var err error
+	if mutationErr != nil {
+		if !isUnknownAttachMutationOutcome(mutationErr) {
+			return etcd.IdempotencyResponse{}, mutationErr
+		}
+		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
+	} else {
+		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
+	}
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if resolution.Kind == idempotentintent.ResolutionReplay {
+		return cloneIdempotencyResponse(resolution.Response), nil
+	}
+	if resolution.Kind != idempotentintent.ResolutionApplied {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach mutation resolution is invalid")
+	}
+	return cloneIdempotencyResponse(response), nil
+}
+
+func (service *attachMutationService) resolveAttachScope(
+	ctx context.Context,
+	consumer etcd.Versioned[etcd.ServiceRecord],
+	backingServiceID string,
+	grantIDs []string,
+) (etcd.AttachCreateScope, []etcd.Versioned[etcd.AttachRecord], adapters.Adapter, error) {
+	environment, err := service.repository.GetEnvironment(ctx, consumer.Record.EnvironmentID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	backingService, err := service.repository.GetService(ctx, backingServiceID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	backingEnvironment, err := service.repository.GetEnvironment(ctx, backingService.Record.EnvironmentID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	backingProject, err := service.repository.GetProject(ctx, backingEnvironment.Record.ProjectID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+		backingEnvironment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+		project.Record.Kind != etcd.ProjectKindTenant || backingProject.Record.Kind != etcd.ProjectKindBacking ||
+		consumer.Record.EnvironmentID != environment.Record.ID ||
+		consumer.Record.Runtime.RuntimeIntent == core.ServiceRuntimeIntentAbsent ||
+		backingService.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach requires ready consumer/backing Environments and a runnable backing Service",
+		)
+	}
+	adapter, registered := adapters.Get(backingService.Record.Desired.Adapter)
+	if !registered || adapter.Key() != backingService.Record.Desired.Adapter {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach backing Service adapter is not registered",
+		)
+	}
+	if len(grantIDs) != 0 && !adapter.SupportsGrants() {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(
+			errs.KindValidationFailed,
+			"Attach backing Service adapter does not support grants",
+		)
+	}
+	head, exists, err := service.repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	if !exists {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach requires an applied Environment Blueprint",
+		)
+	}
+	revision, exists, err := service.repository.GetEnvironmentBlueprintRevision(
+		ctx, environment.Record.ID, head.Record.RevisionID,
+	)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	if !exists {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(errs.KindInternal, "Attach Blueprint head is missing")
+	}
+	projection, exists, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	if !exists || projection.Record.BlueprintRevisionID != revision.Record.RevisionID {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach requires the current Environment Compose projection",
+		)
+	}
+	grants := make([]etcd.Versioned[etcd.AttachRecord], 0, len(grantIDs))
+	for _, grantID := range grantIDs {
+		grant, grantErr := service.repository.GetAttach(ctx, grantID)
+		if grantErr != nil {
+			return etcd.AttachCreateScope{}, nil, nil, grantErr
+		}
+		grants = append(grants, grant)
+	}
+	slices.SortFunc(grants, func(left, right etcd.Versioned[etcd.AttachRecord]) int {
+		if left.Record.ID < right.Record.ID {
+			return -1
+		}
+		if left.Record.ID > right.Record.ID {
+			return 1
+		}
+		return 0
+	})
+	attaches, err := service.listAllAttaches(ctx, environment.Record.ID)
+	if err != nil {
+		return etcd.AttachCreateScope{}, nil, nil, err
+	}
+	scope := etcd.AttachCreateScope{
+		Tenant: tenant, Project: project, Environment: environment,
+		BlueprintRevision: revision, ComposeProjection: projection,
+		Services:       []etcd.Versioned[etcd.ServiceRecord]{consumer},
+		BackingProject: backingProject, BackingEnvironment: backingEnvironment,
+		BackingService: backingService, Grants: grants,
+	}
+	return scope, attaches, adapter, nil
+}
+
+func (service *attachMutationService) listAllAttaches(
+	ctx context.Context,
+	environmentID string,
+) ([]etcd.Versioned[etcd.AttachRecord], error) {
+	var records []etcd.Versioned[etcd.AttachRecord]
+	cursor := ""
+	revision := int64(0)
+	for {
+		page, err := service.repository.ListAttaches(ctx, environmentID, etcd.PageRequest{
+			Limit: etcd.MaximumPageLimit, Cursor: cursor,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if page.Revision <= 0 || revision != 0 && page.Revision != revision {
+			return nil, errs.New(errs.KindInternal, "Attach topology pages changed revision")
+		}
+		revision = page.Revision
+		records = append(records, page.Items...)
+		if page.NextCursor == "" {
+			return records, nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func (service *attachMutationService) prepareAttachFacts(
+	ctx context.Context,
+	attachID string,
+	consumer etcd.Versioned[etcd.ServiceRecord],
+	scope etcd.AttachCreateScope,
+	adapter adapters.Adapter,
+) (*controllerpkg.AttachPlanIdentity, []etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error) {
+	if adapter.Manual() {
+		metadata, encrypted, err := service.facts.SealFactSets(
+			ctx, attachID, adapter, adapters.FactParams{}, nil,
+		)
+		return nil, metadata, encrypted, err
+	}
+	identityName, err := attachProvisionIdentity(attachID, consumer.Record.Desired.Name)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	password, err := generateAttachPassword(service.random)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer clear(password)
+	own := adapters.FactParams{
+		Host: scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
+		Database: identityName, Role: identityName, Password: password,
+	}
+	grantFacts := make([]AttachGrantFactParams, 0, len(scope.Grants))
+	planIdentity := &controllerpkg.AttachPlanIdentity{
+		Database: identityName, Role: identityName, Password: append([]byte(nil), password...),
+		Grants: make([]controllerpkg.AttachPlanGrantIdentity, 0, len(scope.Grants)),
+	}
+	failed := true
+	defer func() {
+		if failed {
+			planIdentity.Clear()
+		}
+	}()
+	for _, grant := range scope.Grants {
+		database := ""
+		if err := service.facts.ResolveReadyDatabase(ctx, grant, func(value string) error {
+			database = value
+			return nil
+		}); err != nil {
+			return nil, nil, nil, err
+		}
+		grantFacts = append(grantFacts, AttachGrantFactParams{
+			AttachID: grant.Record.ID,
+			Params: adapters.FactParams{
+				Host: scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
+				Database: database, Role: identityName, Password: password,
+			},
+		})
+		planIdentity.Grants = append(planIdentity.Grants, controllerpkg.AttachPlanGrantIdentity{
+			AttachID: grant.Record.ID, Database: database,
+		})
+	}
+	metadata, encrypted, err := service.facts.SealFactSets(ctx, attachID, adapter, own, grantFacts)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	failed = false
+	return planIdentity, metadata, encrypted, nil
+}
+
+func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequest, error) {
+	request.ServiceIDs = append([]string(nil), request.ServiceIDs...)
+	request.GrantAttachIDs = append([]string(nil), request.GrantAttachIDs...)
+	if len(request.ServiceIDs) != 1 || ids.Validate(ids.KindService, request.ServiceIDs[0]) != nil ||
+		ids.Validate(ids.KindService, request.BackingServiceID) != nil {
+		return apiTypes.AttachRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach requires exactly one valid consumer Service and one valid backing Service",
+		)
+	}
+	if request.Name != "" {
+		if err := etcd.ValidateAttachName(request.Name); err != nil {
+			return apiTypes.AttachRequest{}, err
+		}
+	}
+	if len(request.GrantAttachIDs) > etcd.MaximumAttachGrants {
+		return apiTypes.AttachRequest{}, errs.Newf(
+			errs.KindValidationFailed,
+			"Attach may have at most %d grants",
+			etcd.MaximumAttachGrants,
+		)
+	}
+	slices.Sort(request.GrantAttachIDs)
+	previous := ""
+	for _, grantID := range request.GrantAttachIDs {
+		if ids.Validate(ids.KindAttach, grantID) != nil || grantID == previous {
+			return apiTypes.AttachRequest{}, errs.New(
+				errs.KindValidationFailed,
+				"Attach grant ids must be valid and unique",
+			)
+		}
+		previous = grantID
+	}
+	return request, nil
+}
+
+func newAttachMutationTask(
+	taskID string,
+	attachID string,
+	environmentID string,
+	taskType etcd.TaskType,
+	renderGeneration uint64,
+	stepCount int,
+	idempotencyKey string,
+	createdAt time.Time,
+) (etcd.TaskRecord, string, error) {
+	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindAttach, attachID) != nil ||
+		ids.Validate(ids.KindEnvironment, environmentID) != nil || renderGeneration == 0 ||
+		renderGeneration > math.MaxInt32 || stepCount <= 0 {
+		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "Attach Task input is invalid")
+	}
+	steps := make([]etcd.TaskStepRecord, stepCount)
+	for index := range steps {
+		steps[index] = etcd.TaskStepRecord{ID: ids.New(ids.KindStep)}
+	}
+	return etcd.TaskRecord{
+		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
+		RenderGeneration: int32(renderGeneration), Type: taskType, Target: attachID,
+		Params: map[string]string{etcd.TaskMutationEnvironmentParam: environmentID}, Steps: steps,
+		TimeoutSeconds: attachMutationTimeout, Status: etcd.TaskStatusPending,
+		NextEventSequence: 1, CreatedAt: createdAt,
+	}, ids.New(ids.KindConfig), nil
+}
+
+func newAttachMutationResponse(
+	locator etcd.IdempotencyLocator,
+	intent etcd.ProtectedIntentRecord,
+	task etcd.TaskRecord,
+	replayTarget *etcd.IdempotencyReplayTarget,
+) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	if err != nil {
+		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+	}
+	response := etcd.IdempotencyResponse{
+		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
+	}
+	marker := etcd.IdempotencyMarker{
+		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+		Locator: locator, ReplayTarget: replayTarget, Intent: intent, Response: response,
+		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
+	}
+	return response, marker, nil
+}
+
+func attachGrantIDs(grants []etcd.Versioned[etcd.AttachRecord]) []string {
+	values := make([]string, len(grants))
+	for index, grant := range grants {
+		values[index] = grant.Record.ID
+	}
+	return values
+}
+
+func attachTaskStepCount(adapter adapters.Adapter, grantCount int) int {
+	if adapter.Manual() {
+		return 1
+	}
+	return grantCount + 2
+}
+
+func isUnknownAttachMutationOutcome(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
+}
+
+type durableAttachMutationRepository struct {
+	hierarchy *etcd.HierarchyRepository
+	services  *etcd.ServiceRepository
+	attaches  *etcd.AttachRepository
+}
+
+func newDurableAttachMutationRepository(
+	hierarchy *etcd.HierarchyRepository,
+	services *etcd.ServiceRepository,
+	attaches *etcd.AttachRepository,
+) (*durableAttachMutationRepository, error) {
+	if hierarchy == nil || services == nil || attaches == nil {
+		return nil, errs.New(errs.KindInternal, "Attach mutation repositories are not configured")
+	}
+	return &durableAttachMutationRepository{hierarchy: hierarchy, services: services, attaches: attaches}, nil
+}
+
+func (repository *durableAttachMutationRepository) GetTenant(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.TenantRecord], error) {
+	return repository.hierarchy.GetTenant(ctx, id)
+}
+
+func (repository *durableAttachMutationRepository) GetProject(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ProjectRecord], error) {
+	return repository.hierarchy.GetProject(ctx, id)
+}
+
+func (repository *durableAttachMutationRepository) GetEnvironment(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	return repository.hierarchy.GetEnvironment(ctx, id)
+}
+
+func (repository *durableAttachMutationRepository) GetService(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ServiceRecord], error) {
+	return repository.services.GetService(ctx, id)
+}
+
+func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintHead(
+	ctx context.Context,
+	environmentID string,
+) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
+}
+
+func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintRevision(
+	ctx context.Context,
+	environmentID string,
+	revisionID string,
+) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error) {
+	return repository.hierarchy.GetEnvironmentBlueprintRevision(ctx, environmentID, revisionID)
+}
+
+func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjection(
+	ctx context.Context,
+	environmentID string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+}
+
+func (repository *durableAttachMutationRepository) GetAttach(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.AttachRecord], error) {
+	return repository.attaches.GetAttach(ctx, id)
+}
+
+func (repository *durableAttachMutationRepository) GetAttachTaskRenderInput(
+	ctx context.Context,
+	planID string,
+) (etcd.Versioned[etcd.AttachTaskRenderInput], error) {
+	return repository.attaches.GetAttachTaskRenderInput(ctx, planID)
+}
+
+func (repository *durableAttachMutationRepository) ListAttaches(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.AttachRecord], error) {
+	return repository.attaches.ListAttaches(ctx, environmentID, request)
+}
+
+func (repository *durableAttachMutationRepository) CreateAttachWithTask(
+	ctx context.Context,
+	scope etcd.AttachCreateScope,
+	record etcd.AttachRecord,
+	facts *etcd.AttachEncryptedFacts,
+	renderInput etcd.AttachTaskRenderInput,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.attaches.CreateAttachWithTask(ctx, scope, record, facts, renderInput, task, marker)
+}
+
+func (repository *durableAttachMutationRepository) BeginAttachDetachWithTask(
+	ctx context.Context,
+	scope etcd.AttachCreateScope,
+	current etcd.Versioned[etcd.AttachRecord],
+	renderInput etcd.AttachTaskRenderInput,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.attaches.BeginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker)
+}
+
+type draftAttachPlanSealer struct {
+	volumeRoot string
+	repository attachMutationRepository
+	facts      attachMutationFacts
+}
+
+func newDraftAttachPlanSealer(
+	volumeRoot string,
+	repository attachMutationRepository,
+	facts attachMutationFacts,
+) (*draftAttachPlanSealer, error) {
+	if repository == nil || facts == nil {
+		return nil, errs.New(errs.KindInternal, "Attach draft plan dependencies are required")
+	}
+	if _, err := controllerpkg.NewTaskPlanResolver(volumeRoot); err != nil {
+		return nil, err
+	}
+	return &draftAttachPlanSealer{volumeRoot: volumeRoot, repository: repository, facts: facts}, nil
+}
+
+func (sealer *draftAttachPlanSealer) SealDraft(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	renderInput etcd.AttachTaskRenderInput,
+	task etcd.TaskRecord,
+	identity *controllerpkg.AttachPlanIdentity,
+) (string, error) {
+	state := &draftAttachPlanState{
+		repository: sealer.repository, facts: sealer.facts, current: current,
+		renderInput: renderInput, identity: identity,
+	}
+	resolver, err := controllerpkg.NewTaskPlanResolverWithAttachments(
+		sealer.volumeRoot, sealer.repository, state, sealer.repository, state,
+	)
+	if err != nil {
+		return "", err
+	}
+	plan, err := resolver.ResolveExecutionPlan(ctx, task)
+	if err != nil {
+		return "", err
+	}
+	defer clearAttachPlanSecrets(plan)
+	return hex.EncodeToString(plan.PlanHash), nil
+}
+
+type draftAttachPlanState struct {
+	repository  attachMutationRepository
+	facts       attachMutationFacts
+	current     etcd.Versioned[etcd.AttachRecord]
+	renderInput etcd.AttachTaskRenderInput
+	identity    *controllerpkg.AttachPlanIdentity
+}
+
+func (state *draftAttachPlanState) GetAttach(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.AttachRecord], error) {
+	if id == state.current.Record.ID {
+		return state.current, nil
+	}
+	return state.repository.GetAttach(ctx, id)
+}
+
+func (state *draftAttachPlanState) GetAttachTaskRenderInput(
+	ctx context.Context,
+	planID string,
+) (etcd.Versioned[etcd.AttachTaskRenderInput], error) {
+	if planID == state.renderInput.PlanID {
+		return etcd.Versioned[etcd.AttachTaskRenderInput]{Record: state.renderInput}, nil
+	}
+	return state.repository.GetAttachTaskRenderInput(ctx, planID)
+}
+
+func (state *draftAttachPlanState) ResolveTaskIdentity(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	taskID string,
+	consume controllerpkg.AttachPlanIdentityConsumer,
+) error {
+	if current.Record.ID != state.current.Record.ID || state.identity == nil {
+		return state.facts.ResolveTaskIdentity(ctx, current, taskID, consume)
+	}
+	identity := controllerpkg.AttachPlanIdentity{
+		Database: state.identity.Database, Role: state.identity.Role,
+		Password: append([]byte(nil), state.identity.Password...),
+		Grants:   append([]controllerpkg.AttachPlanGrantIdentity(nil), state.identity.Grants...),
+	}
+	defer identity.Clear()
+	return consume(identity)
+}
+
+func clearAttachPlanSecrets(plan *agentpb.ExecutionPlan) {
+	if plan == nil {
+		return
+	}
+	for _, step := range plan.Steps {
+		procedure := step.GetAdapterProcedure()
+		if procedure == nil {
+			continue
+		}
+		clear(procedure.Password)
+		procedure.Password = nil
+	}
+}

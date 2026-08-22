@@ -127,6 +127,7 @@ type Adapter interface {
 	Port() string         // e.g. "5432" — empty for Manual()
 	FactSchema() []FactDefinition
 	Manual() bool // true => network-only attach, no facts, no backups (see mvp.md, "The manual adapter")
+	SupportsGrants() bool
 
 	ProvisionSteps(p ProvisionParams) []Step
 	GrantSteps(p ProvisionParams) []Step // p.GrantOn set — access to another attach's database

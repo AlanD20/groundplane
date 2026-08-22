@@ -27,7 +27,8 @@ func (a *adapter) FactSchema() []adapters.FactDefinition {
 		{Field: adapters.FactPassword, Secret: true},
 	}
 }
-func (a *adapter) Manual() bool { return false }
+func (a *adapter) Manual() bool         { return false }
+func (a *adapter) SupportsGrants() bool { return false }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
 	return []adapters.Step{

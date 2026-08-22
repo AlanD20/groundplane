@@ -253,6 +253,7 @@ func (attachFactTestAdapter) FactsPrefix() string  { return "test_" }
 func (attachFactTestAdapter) URLScheme() string    { return "pgsql://" }
 func (attachFactTestAdapter) Port() string         { return "5432" }
 func (attachFactTestAdapter) Manual() bool         { return false }
+func (attachFactTestAdapter) SupportsGrants() bool { return true }
 func (attachFactTestAdapter) FactSchema() []adapters.FactDefinition {
 	return []adapters.FactDefinition{
 		{Field: adapters.FactDatabase},

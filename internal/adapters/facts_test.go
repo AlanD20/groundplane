@@ -87,6 +87,7 @@ func (adapter factTestAdapter) Port() string {
 }
 func (adapter factTestAdapter) FactSchema() []FactDefinition { return adapter.schema }
 func (adapter factTestAdapter) Manual() bool                 { return adapter.manual }
+func (adapter factTestAdapter) SupportsGrants() bool         { return false }
 func (adapter factTestAdapter) ProvisionSteps(ProvisionParams) []Step {
 	return nil
 }
