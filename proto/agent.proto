@@ -244,6 +244,8 @@ enum PlanOperation {
   PLAN_OPERATION_REMOVE = 7;
   PLAN_OPERATION_COMPONENT_APPLY = 8;
   PLAN_OPERATION_ENVIRONMENT_CREATE = 9;
+  PLAN_OPERATION_ATTACH = 10;
+  PLAN_OPERATION_DETACH = 11;
 }
 
 message ComposeArtifact {
@@ -304,7 +306,28 @@ message ExecutionStep {
     MaterializeFile materialize_file = 8;
     ManagedVolumeDirectoriesEnsure managed_volume_directories_ensure = 9;
     EnvironmentDirectoryRemove environment_directory_remove = 10;
+    AdapterProcedure adapter_procedure = 11;
   }
+}
+
+enum AdapterProcedurePhase {
+  ADAPTER_PROCEDURE_PHASE_UNSPECIFIED = 0;
+  ADAPTER_PROCEDURE_PHASE_PROVISION = 1;
+  ADAPTER_PROCEDURE_PHASE_GRANT = 2;
+  ADAPTER_PROCEDURE_PHASE_DETACH = 3;
+}
+
+// AdapterProcedure selects trusted, compiled Agent behavior. It deliberately
+// has no SQL, shell, executable, argument, or template field.
+message AdapterProcedure {
+  string adapter_key = 1;
+  AdapterProcedurePhase phase = 2;
+  string attach_id = 3;
+  string backing_service_id = 4;
+  string role = 5;
+  bytes password = 6;
+  string database = 7;
+  string grant_on = 8;
 }
 
 enum MaterializationOutputKind {

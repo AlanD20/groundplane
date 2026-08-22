@@ -21,11 +21,14 @@ import (
 )
 
 const (
-	SchemaVersion            = 1
-	MaximumArtifacts         = 16
-	MaximumArtifactYAMLBytes = 1024 * 1024
-	MaximumPlanBytes         = 4 * 1024 * 1024
-	maximumComposeNameBytes  = 255
+	SchemaVersion               = 1
+	MaximumArtifacts            = 16
+	MaximumArtifactYAMLBytes    = 1024 * 1024
+	MaximumPlanBytes            = 4 * 1024 * 1024
+	MaximumAdapterKeyBytes      = 64
+	MaximumAdapterSecretBytes   = 256
+	maximumComposeNameBytes     = 255
+	maximumAdapterIdentityBytes = 63
 )
 
 const (
@@ -172,6 +175,11 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if err := validateAnyStableID(plan.TargetId); err != nil {
 		return errs.New(errs.KindValidationFailed, "execution plan target id is invalid")
 	}
+	if (plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH) &&
+		validateID(ids.KindAttach, plan.TargetId) != nil {
+		return errs.New(errs.KindValidationFailed, "adapter execution plan target must be an Attach")
+	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
 		return validateEnvironmentCreatePlan(plan)
 	}
@@ -204,6 +212,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	for _, step := range plan.Steps {
 		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts); err != nil {
 			return err
+		}
+		if procedure := step.GetAdapterProcedure(); procedure != nil && procedure.AttachId != plan.TargetId {
+			return errs.New(errs.KindValidationFailed, "adapter procedure does not identify the plan target")
 		}
 		if remove := step.GetEnvironmentDirectoryRemove(); remove != nil && remove.EnvironmentId != plan.TargetId {
 			return errs.New(
@@ -521,9 +532,71 @@ func validateStep(
 		return nil
 	case *agentpb.ExecutionStep_MaterializeFile:
 		return validateMaterializeFile(renderGeneration, payload.MaterializeFile, artifacts)
+	case *agentpb.ExecutionStep_AdapterProcedure:
+		return validateAdapterProcedure(operation, payload.AdapterProcedure)
 	default:
 		return errs.New(errs.KindValidationFailed, "execution step payload is unsupported")
 	}
+}
+
+func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentpb.AdapterProcedure) error {
+	if procedure == nil || !validAdapterKey(procedure.AdapterKey) ||
+		validateID(ids.KindAttach, procedure.AttachId) != nil ||
+		validateID(ids.KindBackingService, procedure.BackingServiceId) != nil ||
+		!validAdapterIdentity(procedure.Role, true) ||
+		len(procedure.Password) > MaximumAdapterSecretBytes {
+		return errs.New(errs.KindValidationFailed, "adapter procedure identity is invalid")
+	}
+	switch procedure.Phase {
+	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH || len(procedure.Password) == 0 ||
+			!validAdapterIdentity(procedure.Database, false) || procedure.GrantOn != "" {
+			return errs.New(errs.KindValidationFailed, "adapter provision procedure is invalid")
+		}
+	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH || len(procedure.Password) != 0 ||
+			procedure.Database != "" || !validAdapterIdentity(procedure.GrantOn, true) {
+			return errs.New(errs.KindValidationFailed, "adapter grant procedure is invalid")
+		}
+	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_DETACH || len(procedure.Password) != 0 ||
+			procedure.Database != "" || procedure.GrantOn != "" {
+			return errs.New(errs.KindValidationFailed, "adapter detach procedure is invalid")
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "adapter procedure phase is unsupported")
+	}
+	return nil
+}
+
+func validAdapterKey(value string) bool {
+	if len(value) == 0 || len(value) > MaximumAdapterKeyBytes {
+		return false
+	}
+	for index, character := range []byte(value) {
+		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
+			(index > 0 && (character == '-' || character == '_' || character == '.')) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validAdapterIdentity(value string, required bool) bool {
+	if value == "" {
+		return !required
+	}
+	if len(value) > maximumAdapterIdentityBytes || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, character := range []byte(value[1:]) {
+		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func operationCreatesManagedVolumes(operation agentpb.PlanOperation) bool {
@@ -701,7 +774,9 @@ func validOperation(operation agentpb.PlanOperation) bool {
 		agentpb.PlanOperation_PLAN_OPERATION_DESTROY,
 		agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
 		agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY,
-		agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE:
+		agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
+		agentpb.PlanOperation_PLAN_OPERATION_ATTACH,
+		agentpb.PlanOperation_PLAN_OPERATION_DETACH:
 		return true
 	default:
 		return false
