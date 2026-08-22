@@ -985,6 +985,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateComponentTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				return Versioned[TaskRecord]{
 					Record: task, Revision: taskValue.ModRevision,
 					ReadRevision: primaryAndAssignment.ReadRevision,
@@ -1181,6 +1186,26 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, secretChange.conditions...)
 			mutations = append(mutations, secretChange.mutations...)
 		}
+		componentChange, err := repository.prepareComponentTaskAcknowledgement(
+			ctx,
+			task,
+			terminalStatus,
+			terminalAt,
+			primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if componentChange.applies {
+			conditions = append(conditions, componentChange.conditions...)
+			mutations = append(mutations, componentChange.mutations...)
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
@@ -1188,6 +1213,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		clear(environmentValue)
 		clearAttachTaskChange(attachChange)
 		clearSecretTaskChange(secretChange)
+		clearComponentTaskChange(componentChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}

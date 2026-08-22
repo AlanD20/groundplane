@@ -1,0 +1,317 @@
+package etcd
+
+import (
+	"bytes"
+	"context"
+	"reflect"
+	"sort"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type componentTaskChange struct {
+	applies    bool
+	conditions []Condition
+	mutations  []Mutation
+	values     [][]byte
+}
+
+func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
+	ctx context.Context,
+	task TaskRecord,
+	terminalStatus TaskStatus,
+	terminalAt time.Time,
+	revision int64,
+) (componentTaskChange, error) {
+	intentResult, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{componentTaskIntentKey(task.ID)}, Revision: revision,
+	})
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+	if intentResult == nil || len(intentResult.Values) != 1 {
+		return componentTaskChange{}, errs.New(errs.KindInternal, "Component candidate read is incomplete")
+	}
+	intentValue := intentResult.Values[0]
+	if intentValue == nil {
+		return componentTaskChange{}, nil
+	}
+	intent, err := decodeComponentTaskIntent(intentValue.Value)
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+	if err := validateComponentTaskOwner(task, intent); err != nil {
+		return componentTaskChange{}, err
+	}
+	if intent.Status != TaskStatusPending {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate is not pending")
+	}
+
+	zoneSet := make(map[string]struct{})
+	for _, candidate := range intent.Candidates {
+		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
+			binding, present, bindingErr := componentTaskAddress(record)
+			if bindingErr != nil {
+				return componentTaskChange{}, bindingErr
+			}
+			if present {
+				zoneSet[binding.zoneID] = struct{}{}
+			}
+		}
+	}
+	zones := make([]string, 0, len(zoneSet))
+	for zoneID := range zoneSet {
+		zones = append(zones, zoneID)
+	}
+	sort.Strings(zones)
+
+	keys := make([]string, 0, 1+len(intent.Candidates)+(2*len(zones)))
+	keys = append(keys, componentTaskActiveEnvironmentKey(intent.EnvironmentID))
+	for _, candidate := range intent.Candidates {
+		keys = append(keys, componentKey(candidate.Current.Desired.ID))
+	}
+	for _, zoneID := range zones {
+		keys = append(keys, zoneKey(zoneID))
+	}
+	for _, zoneID := range zones {
+		keys = append(keys, componentAddressRegistryKey(zoneID))
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil ||
+		string(state.Values[0].Value) != task.ID {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate ownership changed")
+	}
+
+	change := componentTaskChange{
+		applies: true,
+		conditions: []Condition{
+			{Key: componentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
+			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
+		},
+	}
+	for index, candidate := range intent.Candidates {
+		value := state.Values[index+1]
+		if value == nil || value.ModRevision != candidate.CurrentRevision {
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"active Component changed during reconciliation",
+			)
+		}
+		active, decodeErr := decodeComponentRecord(value.Value)
+		if decodeErr != nil {
+			return componentTaskChange{}, decodeErr
+		}
+		if !reflect.DeepEqual(active, candidate.Current) {
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"active Component no longer matches candidate base",
+			)
+		}
+		change.conditions = append(change.conditions, Condition{
+			Key: componentKey(active.Desired.ID), ModRevision: value.ModRevision,
+		})
+	}
+
+	zoneRecords := make(map[string]ZoneRecord, len(zones))
+	registries := make(map[string]componentAddressRegistry, len(zones))
+	registryValues := make(map[string]*KeyValue, len(zones))
+	zoneOffset := 1 + len(intent.Candidates)
+	registryOffset := zoneOffset + len(zones)
+	for index, zoneID := range zones {
+		zoneValue := state.Values[zoneOffset+index]
+		if zoneValue == nil {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Zone was removed")
+		}
+		zone, decodeErr := decodeZoneRecord(zoneValue.Value)
+		if decodeErr != nil {
+			return componentTaskChange{}, decodeErr
+		}
+		if zone.Desired.ID != zoneID || zone.EnvironmentID != intent.EnvironmentID {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Zone ownership changed")
+		}
+		registryValue := state.Values[registryOffset+index]
+		registry := componentAddressRegistry{Reservations: map[string]string{}}
+		if registryValue != nil {
+			registry, decodeErr = decodeEnvelope[componentAddressRegistry](
+				registryValue.Value,
+				"component_address_registry",
+			)
+			if decodeErr != nil || validateComponentAddressRegistry(zone, registry) != nil {
+				return componentTaskChange{}, corruptComponentAddressRegistry()
+			}
+		}
+		zoneRecords[zoneID] = zone
+		registries[zoneID] = registry
+		registryValues[zoneID] = registryValue
+		change.conditions = append(change.conditions, Condition{
+			Key: zoneKey(zoneID), ModRevision: zoneValue.ModRevision,
+		})
+		registryCondition := Condition{Key: componentAddressRegistryKey(zoneID)}
+		if registryValue != nil {
+			registryCondition.ModRevision = registryValue.ModRevision
+		}
+		change.conditions = append(change.conditions, registryCondition)
+	}
+
+	if err := validateComponentTaskReservations(intent, registries); err != nil {
+		return componentTaskChange{}, err
+	}
+	changedRegistries := make(map[string]struct{})
+	for _, candidate := range intent.Candidates {
+		current, currentPresent, _ := componentTaskAddress(candidate.Current)
+		next, nextPresent, _ := componentTaskAddress(candidate.Candidate)
+		if componentTaskBindingsEqual(current, currentPresent, next, nextPresent) {
+			continue
+		}
+		removed := next
+		removedPresent := nextPresent
+		if terminalStatus == TaskStatusCompleted {
+			removed = current
+			removedPresent = currentPresent
+		}
+		if !removedPresent {
+			continue
+		}
+		registry := registries[removed.zoneID]
+		replacement, address, found, releaseErr := registry.release(
+			zoneRecords[removed.zoneID],
+			candidate.Current.Desired.ID,
+		)
+		if releaseErr != nil || !found || address != removed.address {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component address reservation changed")
+		}
+		registries[removed.zoneID] = replacement
+		changedRegistries[removed.zoneID] = struct{}{}
+	}
+
+	if terminalStatus == TaskStatusCompleted {
+		for _, candidate := range intent.Candidates {
+			value, encodeErr := encodeComponentRecord(candidate.Candidate)
+			if encodeErr != nil {
+				clearComponentTaskChange(change)
+				return componentTaskChange{}, encodeErr
+			}
+			change.values = append(change.values, value)
+			change.mutations = append(change.mutations, Mutation{
+				Type: MutationPut, Key: componentKey(candidate.Candidate.Desired.ID), Value: value,
+			})
+		}
+	}
+	for _, zoneID := range zones {
+		if _, changed := changedRegistries[zoneID]; !changed {
+			continue
+		}
+		value, encodeErr := encodeComponentAddressRegistry(zoneRecords[zoneID], registries[zoneID])
+		if encodeErr != nil {
+			clearComponentTaskChange(change)
+			return componentTaskChange{}, encodeErr
+		}
+		change.values = append(change.values, value)
+		change.mutations = append(change.mutations, Mutation{
+			Type: MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
+		})
+	}
+	terminalIntent, err := terminalComponentTaskIntent(intent, terminalStatus, terminalAt)
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	intentBytes, err := encodeComponentTaskIntent(terminalIntent)
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	change.values = append(change.values, intentBytes)
+	change.mutations = append(change.mutations,
+		Mutation{Type: MutationPut, Key: componentTaskIntentKey(task.ID), Value: intentBytes},
+		Mutation{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+	)
+	return change, nil
+}
+
+func (repository *TaskRepository) validateComponentTaskAcknowledgementReplay(
+	ctx context.Context,
+	task TaskRecord,
+	terminalStatus TaskStatus,
+	revision int64,
+) error {
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{
+			componentTaskIntentKey(task.ID),
+			componentTaskActiveEnvironmentKey(task.Target),
+		},
+		Revision: revision,
+	})
+	if err != nil {
+		return err
+	}
+	if result == nil || len(result.Values) != 2 {
+		return errs.New(errs.KindInternal, "Component candidate replay read is incomplete")
+	}
+	if result.Values[0] == nil {
+		return nil
+	}
+	intent, err := decodeComponentTaskIntent(result.Values[0].Value)
+	if err != nil {
+		return err
+	}
+	if err := validateComponentTaskOwner(task, intent); err != nil {
+		return err
+	}
+	if intent.Status != terminalStatus || intent.TerminalAt == nil || task.TerminalAt == nil ||
+		!intent.TerminalAt.Equal(*task.TerminalAt) {
+		return errs.New(errs.KindStateConflict, "Component candidate does not match terminal Task")
+	}
+	if result.Values[1] != nil {
+		activeTaskID := string(result.Values[1].Value)
+		if activeTaskID == task.ID || ids.Validate(ids.KindTask, activeTaskID) != nil {
+			return errs.New(errs.KindStateConflict, "terminal Component candidate remains active")
+		}
+	}
+	return nil
+}
+
+func validateComponentTaskOwner(task TaskRecord, intent ComponentTaskIntent) error {
+	if task.Executor != TaskExecutorAgent || task.Type != TaskUpdate || task.ID != intent.TaskID ||
+		task.Target != intent.EnvironmentID || !task.CreatedAt.Equal(intent.CreatedAt) {
+		return errs.New(errs.KindStateConflict, "Component candidate does not belong to its Task")
+	}
+	return nil
+}
+
+func validateComponentTaskReservations(
+	intent ComponentTaskIntent,
+	registries map[string]componentAddressRegistry,
+) error {
+	for _, candidate := range intent.Candidates {
+		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
+			binding, present, err := componentTaskAddress(record)
+			if err != nil {
+				return err
+			}
+			if !present {
+				continue
+			}
+			registry, exists := registries[binding.zoneID]
+			if !exists || registry.Reservations[record.Desired.ID] != binding.address {
+				return errs.New(errs.KindStateConflict, "Component address reservation changed")
+			}
+		}
+	}
+	return nil
+}
+
+func clearComponentTaskChange(change componentTaskChange) {
+	for _, value := range change.values {
+		clear(value)
+	}
+}
+
+func componentTaskActiveValueMatches(value *KeyValue, taskID string) bool {
+	return value != nil && bytes.Equal(value.Value, []byte(taskID))
+}

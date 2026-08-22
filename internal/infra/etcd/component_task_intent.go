@@ -1,0 +1,261 @@
+package etcd
+
+import (
+	"encoding/json"
+	"net/netip"
+	"reflect"
+	"sort"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const componentTaskIntentPrefix = "/v1/records/component-task-intents/"
+
+// ComponentTaskCandidate pins the exact active Component revision and the
+// replacement that one Agent Task is allowed to promote.
+type ComponentTaskCandidate struct {
+	CurrentRevision int64           `json:"current_revision"`
+	Current         ComponentRecord `json:"current"`
+	Candidate       ComponentRecord `json:"candidate"`
+}
+
+// ComponentTaskIntent is the private, task-owned staging record for one
+// Environment Component reconciliation. Components remain publicly active at
+// Current until the owning Agent Task completes successfully.
+type ComponentTaskIntent struct {
+	TaskID        string                   `json:"task_id"`
+	EnvironmentID string                   `json:"environment_id"`
+	Status        TaskStatus               `json:"status"`
+	Candidates    []ComponentTaskCandidate `json:"candidates"`
+	CreatedAt     time.Time                `json:"created_at"`
+	TerminalAt    *time.Time               `json:"terminal_at,omitempty"`
+}
+
+func NewComponentTaskIntent(
+	taskID string,
+	environmentID string,
+	candidates []ComponentTaskCandidate,
+	createdAt time.Time,
+) (ComponentTaskIntent, error) {
+	intent := ComponentTaskIntent{
+		TaskID:        taskID,
+		EnvironmentID: environmentID,
+		Status:        TaskStatusPending,
+		Candidates:    cloneComponentTaskCandidates(candidates),
+		CreatedAt:     createdAt,
+	}
+	sort.Slice(intent.Candidates, func(left int, right int) bool {
+		return intent.Candidates[left].Current.Desired.ID < intent.Candidates[right].Current.Desired.ID
+	})
+	if err := validateComponentTaskIntent(intent); err != nil {
+		return ComponentTaskIntent{}, err
+	}
+	return intent, nil
+}
+
+func componentTaskIntentKey(taskID string) string {
+	return componentTaskIntentPrefix + taskID
+}
+
+func componentTaskActiveEnvironmentKey(environmentID string) string {
+	return "/v1/indexes/component-task-intents/by-environment/" + environmentID
+}
+
+func terminalComponentTaskIntent(
+	intent ComponentTaskIntent,
+	status TaskStatus,
+	terminalAt time.Time,
+) (ComponentTaskIntent, error) {
+	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
+		return ComponentTaskIntent{}, errs.New(errs.KindStateConflict, "Component candidate is not pending")
+	}
+	terminal := cloneComponentTaskIntent(intent)
+	terminal.Status = status
+	terminal.TerminalAt = timePointer(terminalAt)
+	if err := validateComponentTaskIntent(terminal); err != nil {
+		return ComponentTaskIntent{}, err
+	}
+	return terminal, nil
+}
+
+func encodeComponentTaskIntent(intent ComponentTaskIntent) ([]byte, error) {
+	if err := validateComponentTaskIntent(intent); err != nil {
+		return nil, err
+	}
+	return encodeEnvelope("component_task_intent", intent)
+}
+
+func decodeComponentTaskIntent(value []byte) (ComponentTaskIntent, error) {
+	intent, err := decodeEnvelope[ComponentTaskIntent](value, "component_task_intent")
+	if err != nil {
+		return ComponentTaskIntent{}, err
+	}
+	if err := validateComponentTaskIntent(intent); err != nil {
+		return ComponentTaskIntent{}, corruptComponentTaskIntent()
+	}
+	return intent, nil
+}
+
+func validateComponentTaskIntent(intent ComponentTaskIntent) error {
+	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
+		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil {
+		return errs.New(errs.KindValidationFailed, "Component candidate identity is invalid")
+	}
+	if err := validateTimestamp("component candidate created_at", intent.CreatedAt); err != nil {
+		return err
+	}
+	if intent.Status == TaskStatusPending {
+		if intent.TerminalAt != nil {
+			return errs.New(errs.KindValidationFailed, "pending Component candidate has a terminal timestamp")
+		}
+	} else {
+		if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil {
+			return errs.New(errs.KindValidationFailed, "Component candidate status is invalid")
+		}
+		if err := validateTimestamp("component candidate terminal_at", *intent.TerminalAt); err != nil {
+			return err
+		}
+		if intent.TerminalAt.Before(intent.CreatedAt) {
+			return errs.New(errs.KindValidationFailed, "Component candidate terminal timestamp is invalid")
+		}
+	}
+	if len(intent.Candidates) == 0 || len(intent.Candidates) > 2 {
+		return errs.New(errs.KindValidationFailed, "Component candidate count is invalid")
+	}
+	seenKinds := make(map[core.ComponentKind]struct{}, len(intent.Candidates))
+	previousID := ""
+	for _, candidate := range intent.Candidates {
+		if candidate.CurrentRevision <= 0 || validateComponentRecord(candidate.Current) != nil ||
+			validateComponentRecord(candidate.Candidate) != nil {
+			return errs.New(errs.KindValidationFailed, "Component candidate record is invalid")
+		}
+		current := candidate.Current.Desired
+		next := candidate.Candidate.Desired
+		if current.ID != next.ID || current.Owner != next.Owner || current.OwnerID != next.OwnerID ||
+			current.Kind != next.Kind || current.Owner != core.ComponentOwnerEnvironment ||
+			current.OwnerID != intent.EnvironmentID {
+			return errs.New(errs.KindValidationFailed, "Component candidate changed stable ownership")
+		}
+		if current.Kind != core.ComponentKindIngressCaddy && current.Kind != core.ComponentKindEdgeCloudflare {
+			return errs.New(errs.KindValidationFailed, "Component candidate kind is not Environment-owned")
+		}
+		if previousID != "" && current.ID <= previousID {
+			return errs.New(errs.KindValidationFailed, "Component candidates are not uniquely sorted")
+		}
+		previousID = current.ID
+		if _, duplicate := seenKinds[current.Kind]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Component candidate kind is duplicated")
+		}
+		seenKinds[current.Kind] = struct{}{}
+		if reflect.DeepEqual(candidate.Current, candidate.Candidate) {
+			return errs.New(errs.KindValidationFailed, "Component candidate does not change active state")
+		}
+		if _, _, err := componentTaskAddress(candidate.Current); err != nil {
+			return err
+		}
+		if _, _, err := componentTaskAddress(candidate.Candidate); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type componentTaskAddressBinding struct {
+	zoneID  string
+	address string
+}
+
+func componentTaskAddress(record ComponentRecord) (componentTaskAddressBinding, bool, error) {
+	if record.Desired.Kind != core.ComponentKindIngressCaddy {
+		if record.Runtime.PinnedIPv4 != "" {
+			return componentTaskAddressBinding{}, false, errs.New(
+				errs.KindValidationFailed,
+				"non-Caddy Component candidate has a pinned address",
+			)
+		}
+		return componentTaskAddressBinding{}, false, nil
+	}
+	if !record.Desired.Enabled {
+		if record.Runtime.PinnedIPv4 != "" {
+			return componentTaskAddressBinding{}, false, errs.New(
+				errs.KindValidationFailed,
+				"disabled Caddy Component candidate has a pinned address",
+			)
+		}
+		return componentTaskAddressBinding{}, false, nil
+	}
+	zoneID, err := componentTaskConfigString(record.Desired.Config, "zone_id")
+	if err != nil || ids.Validate(ids.KindNetwork, zoneID) != nil {
+		return componentTaskAddressBinding{}, false, errs.New(
+			errs.KindValidationFailed,
+			"enabled Caddy Component candidate has an invalid Zone",
+		)
+	}
+	address, err := netip.ParseAddr(record.Runtime.PinnedIPv4)
+	if err != nil || !address.Is4() || address.String() != record.Runtime.PinnedIPv4 {
+		return componentTaskAddressBinding{}, false, errs.New(
+			errs.KindValidationFailed,
+			"enabled Caddy Component candidate has an invalid pinned address",
+		)
+	}
+	return componentTaskAddressBinding{zoneID: zoneID, address: address.String()}, true, nil
+}
+
+func componentTaskConfigString(config map[string]json.RawMessage, key string) (string, error) {
+	raw, found := config[key]
+	if !found {
+		return "", errs.New(errs.KindValidationFailed, "Component candidate config value is missing")
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil || value == "" {
+		return "", errs.New(errs.KindValidationFailed, "Component candidate config value is invalid")
+	}
+	return value, nil
+}
+
+func componentTaskBindingsEqual(
+	left componentTaskAddressBinding,
+	leftPresent bool,
+	right componentTaskAddressBinding,
+	rightPresent bool,
+) bool {
+	return leftPresent == rightPresent && (!leftPresent || left == right)
+}
+
+func cloneComponentTaskIntent(intent ComponentTaskIntent) ComponentTaskIntent {
+	clone := intent
+	clone.Candidates = cloneComponentTaskCandidates(intent.Candidates)
+	clone.TerminalAt = cloneTimePointer(intent.TerminalAt)
+	return clone
+}
+
+func cloneComponentTaskCandidates(source []ComponentTaskCandidate) []ComponentTaskCandidate {
+	clone := make([]ComponentTaskCandidate, len(source))
+	for index, candidate := range source {
+		clone[index] = ComponentTaskCandidate{
+			CurrentRevision: candidate.CurrentRevision,
+			Current:         cloneComponentTaskRecord(candidate.Current),
+			Candidate:       cloneComponentTaskRecord(candidate.Candidate),
+		}
+	}
+	return clone
+}
+
+func cloneComponentTaskRecord(record ComponentRecord) ComponentRecord {
+	clone := record
+	if record.Desired.Config != nil {
+		clone.Desired.Config = make(map[string]json.RawMessage, len(record.Desired.Config))
+		for key, value := range record.Desired.Config {
+			clone.Desired.Config[key] = append([]byte(nil), value...)
+		}
+	}
+	clone.Runtime.GeneratedServices = append([]string(nil), record.Runtime.GeneratedServices...)
+	return clone
+}
+
+func corruptComponentTaskIntent() error {
+	return errs.New(errs.KindInternal, "Component candidate intent is corrupt")
+}
