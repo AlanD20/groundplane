@@ -261,6 +261,7 @@ type Component struct {
 	Enabled           bool           `json:"enabled"`
 	Config            map[string]any `json:"config,omitempty"`
 	GeneratedServices []string       `json:"generated_services,omitempty"`
+	PinnedIPv4        string         `json:"pinned_ipv4,omitempty"`
 	Healthy           bool           `json:"healthy"`
 }
 

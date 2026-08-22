@@ -20,13 +20,30 @@ const (
 	PlatformUpdate    ApplyStrategy = "platform_update"
 )
 
+// GeneratedMount is a Controller-managed host path mounted into a generated
+// component service. Source is relative to the Environment's authorized root.
+type GeneratedMount struct {
+	Source   string
+	Target   string
+	ReadOnly bool
+}
+
+// GeneratedService keeps deployment-only data out of authored Service intent.
+// StaticIPv4 is keyed by Zone name; Mounts reference files/directories owned by
+// the component render pipeline.
+type GeneratedService struct {
+	Service    core.Service
+	StaticIPv4 map[string]string
+	Mounts     []GeneratedMount
+}
+
 // Renderer produces an environment component's generated Compose services and
 // materialized configuration files.
 type Renderer interface {
 	Render(
 		env core.Environment,
 		component core.Component,
-	) (services map[string]core.Service, files map[string][]byte, err error)
+	) (services map[string]GeneratedService, files map[string][]byte, err error)
 }
 
 // HealthChecker reports whether an enabled environment component is healthy.

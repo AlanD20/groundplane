@@ -35,17 +35,6 @@ type DNSForwarder struct {
 	Resolvers []string
 }
 
-// RenderCaddyfile fills the environment's Caddyfile.template with the
-// active {slot}/{host} placeholders. Validated before reload, same as
-// Corefile.
-func RenderCaddyfile(templateBody string, slot string, host string) ([]byte, error) {
-	rendered := strings.NewReplacer(
-		"{slot}", slot,
-		"{host}", host,
-	).Replace(templateBody)
-	return []byte(rendered), nil
-}
-
 // EnvFileName is the canonical, id-based all-services env file name for
 // an environment — renaming the environment's label never changes this
 // (blueprint.md, "Generated environment files"): `secrets/.env.<environment-id>`.

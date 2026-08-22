@@ -29,7 +29,7 @@ type component struct{}
 func (a *component) Render(
 	env core.Environment,
 	ad core.Component,
-) (map[string]core.Service, map[string][]byte, error) {
+) (map[string]components.GeneratedService, map[string][]byte, error) {
 	// TODO: render the cloudflared service wired from the
 	// CLOUDFLARE_TUNNEL_TOKEN secret (secrets/.env.edge, exposed only to
 	// this service) — see mvp.md's "Router" section.

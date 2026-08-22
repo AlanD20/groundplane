@@ -8,16 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestRenderCaddyfileUsesDocumentedPlaceholders(t *testing.T) {
-	got, err := RenderCaddyfile("reverse_proxy {host}__{slot}:8080", "green", "api")
-	if err != nil {
-		t.Fatalf("RenderCaddyfile() error = %v", err)
-	}
-	if want := "reverse_proxy api__green:8080"; string(got) != want {
-		t.Errorf("RenderCaddyfile() = %q, want %q", got, want)
-	}
-}
-
 func TestRenderEnvFileIsDeterministic(t *testing.T) {
 	entries := []core.EnvEntry{
 		{ID: "ev_b", Kind: core.EntryKindEnv, Key: "B", Exposure: []string{"all"}},

@@ -358,8 +358,9 @@ type Component struct {
 	OwnerID           string         `yaml:"owner_id,omitempty"           json:"owner_id,omitempty"`
 	Kind              ComponentKind  `yaml:"kind"                         json:"kind"`
 	Enabled           bool           `yaml:"enabled"                      json:"enabled"`
-	Config            map[string]any `yaml:"config,omitempty"             json:"config,omitempty"` // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
-	GeneratedServices []string       `yaml:"generated_services,omitempty" json:"generated_services,omitempty"`
+	Config            map[string]any `yaml:"config,omitempty"             json:"config,omitempty"`             // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
+	GeneratedServices []string       `yaml:"generated_services,omitempty" json:"generated_services,omitempty"` // stable Service ids allocated for this component
+	PinnedIPv4        string         `yaml:"pinned_ipv4,omitempty"        json:"pinned_ipv4,omitempty"`        // Caddy only; derived durable state, never authored
 	Healthy           bool           `yaml:"healthy"                      json:"healthy"`
 }
 
