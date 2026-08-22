@@ -45,6 +45,7 @@ type Server struct {
 	backingServices       BackingServiceReader
 	environments          EnvironmentReader
 	services              ServiceReader
+	entries               EntryReader
 	secrets               SecretReader
 	secretMutations       SecretMutator
 	secretDeletions       SecretDeleter
@@ -72,6 +73,7 @@ type Options struct {
 	BackingServices       BackingServiceReader
 	Environments          EnvironmentReader
 	Services              ServiceReader
+	Entries               EntryReader
 	Secrets               SecretReader
 	SecretMutations       SecretMutator
 	SecretDeletions       SecretDeleter
@@ -117,6 +119,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		backingServices:       options.BackingServices,
 		environments:          options.Environments,
 		services:              options.Services,
+		entries:               options.Entries,
 		secrets:               options.Secrets,
 		secretMutations:       options.SecretMutations,
 		secretDeletions:       options.SecretDeletions,
@@ -136,6 +139,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerBackingServices()
 	s.registerEnvironments()
 	s.registerServices()
+	s.registerEntries()
 	s.registerSecrets()
 	s.registerAttaches()
 	s.registerHost()
@@ -209,15 +213,19 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
 	s.jsonRoute("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
 
-	// zone / route / volume / entry / script (?environment=) — destructive delete is a task
-	for _, res := range []string{"zones", "routes", "volumes", "entries", "scripts"} {
+	// zone / route / volume / script (?environment=) — destructive delete is a task
+	for _, res := range []string{"zones", "routes", "volumes", "scripts"} {
 		mux.HandleFunc("GET /api/v1/"+res, s.notImplemented)
 		s.jsonRoute("POST /api/v1/"+res, s.notImplemented)
 		mux.HandleFunc("GET /api/v1/"+res+"/{id}", s.notImplemented)
 		s.jsonRoute("PATCH /api/v1/"+res+"/{id}", s.notImplemented)
 		mux.HandleFunc("DELETE /api/v1/"+res+"/{id}", s.acceptTask)
 	}
-	mux.HandleFunc("GET /api/v1/entries/{id}/value", s.notImplemented)
+	// Entry reads and explicit reveal are typed Huma operations. Mutations remain
+	// explicit placeholders until their atomic generation/Task contracts land.
+	s.jsonRoute("POST /api/v1/entries", s.notImplemented)
+	s.jsonRoute("PATCH /api/v1/entries/{id}", s.notImplemented)
+	mux.HandleFunc("DELETE /api/v1/entries/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
 	// component (?environment= or ?platform=true) — one resource across both owners

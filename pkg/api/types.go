@@ -176,6 +176,10 @@ type Entry struct {
 	Secret   bool        `json:"secret"`
 }
 
+type EntryValue struct {
+	Value string `json:"value"`
+}
+
 // AttachStatus values mirror internal/core's lifecycle exactly:
 // pending -> provisioning -> ready, with terminal failed and
 // detaching -> detached paths.

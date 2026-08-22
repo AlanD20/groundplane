@@ -2,7 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +21,33 @@ func newEntryCmd() *cobra.Command {
 		Short: "List entries",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/entries", scopeQuery(fromContext(cmd), "environment"))
+			environmentID, err := resolveEnvironmentTarget(cmd, fromContext(cmd).Scope.Environment)
+			if err != nil {
+				return err
+			}
+			page, err := fromContext(cmd).Client.ListEntries(cmd.Context(), environmentID, 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, entry := range page.Items {
+				items[index] = entryFields(entry)
+			}
+			headers, rows := tabulateVia(fromContext(cmd), items)
+			return fromContext(cmd).Out.Render(headers, rows, page)
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "show <id>",
+		Short: "Show Entry metadata",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			entry, err := fromContext(cmd).Client.ShowEntry(cmd.Context(), target(fromContext(cmd), args[0]))
+			if err != nil {
+				return err
+			}
+			return renderEntry(cmd, entry)
 		},
 	})
 
@@ -250,4 +278,18 @@ func entryExposure(services []string, all bool) []string {
 		return []string{"all"}
 	}
 	return nil
+}
+
+func renderEntry(cmd *cobra.Command, entry apiTypes.Entry) error {
+	fields := entryFields(entry)
+	headers, values := fieldsOfVia(fields)
+	return fromContext(cmd).Out.RenderOne(headers, values, entry)
+}
+
+func entryFields(entry apiTypes.Entry) map[string]any {
+	return map[string]any{
+		"id": entry.ID, "type": entry.Type, "key": entry.Key, "path": entry.Path,
+		"uid": entry.UID, "gid": entry.GID, "source": entry.Source.Kind,
+		"exposure": strings.Join(entry.Exposure, ","), "secret": entry.Secret,
+	}
 }

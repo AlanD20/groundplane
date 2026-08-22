@@ -192,6 +192,21 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry value generation repository: %w", err)
 	}
+	entryRecords, err := etcd.NewEntryRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry repository: %w", err)
+	}
+	entryReadRepository, err := newDurableEntryReadRepository(hierarchyRecords, entryRecords, entryValues)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry read repositories: %w", err)
+	}
+	entryReads, err := newEntryReadService(entryReadRepository, intentProtector)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry reads: %w", err)
+	}
 	serviceRecords, err := etcd.NewServiceRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -554,6 +569,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackingServices:       backingServiceReads,
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
+		Entries:               entryReads,
 		Secrets:               secretReads,
 		SecretMutations:       secretMutations,
 		SecretDeletions:       secretDeletions,

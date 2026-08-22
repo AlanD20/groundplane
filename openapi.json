@@ -159,6 +159,113 @@
         ],
         "type": "object"
       },
+      "Entry": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/Entry.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "exposure": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "gid": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EntrySource"
+          },
+          "type": {
+            "type": "string"
+          },
+          "uid": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "source",
+          "exposure",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "EntrySource": {
+        "additionalProperties": false,
+        "properties": {
+          "attach_id": {
+            "type": "string"
+          },
+          "fact": {
+            "type": "string"
+          },
+          "grant_attach_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "literal": {
+            "type": "string"
+          },
+          "secret_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "EntryValue": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EntryValue.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "additionalProperties": false,
         "properties": {
@@ -545,6 +652,36 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/BackingService"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageEntry.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Entry"
             },
             "type": [
               "array",
@@ -1427,6 +1564,150 @@
         "summary": "Show a backing service",
         "tags": [
           "Backing service"
+        ]
+      }
+    },
+    "/entries": {
+      "get": {
+        "operationId": "entry.list",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageEntry"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List environment entries",
+        "tags": [
+          "Entry"
+        ]
+      }
+    },
+    "/entries/{id}": {
+      "get": {
+        "operationId": "entry.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ev_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entry"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show environment Entry metadata",
+        "tags": [
+          "Entry"
+        ]
+      }
+    },
+    "/entries/{id}/value": {
+      "get": {
+        "operationId": "entry.reveal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^ev_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntryValue"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Reveal an encrypted Entry value",
+        "tags": [
+          "Entry"
         ]
       }
     },

@@ -64,6 +64,42 @@ type BackingService struct {
 	ServiceId     string  `json:"service_id"`
 }
 
+// Entry defines model for Entry.
+type Entry struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Entry.json
+	Schema   *string     `json:"$schema,omitempty"`
+	Exposure *[]string   `json:"exposure"`
+	Gid      *int32      `json:"gid,omitempty"`
+	Id       string      `json:"id"`
+	Key      *string     `json:"key,omitempty"`
+	Path     *string     `json:"path,omitempty"`
+	Secret   bool        `json:"secret"`
+	Source   EntrySource `json:"source"`
+	Type     string      `json:"type"`
+	Uid      *int32      `json:"uid,omitempty"`
+}
+
+// EntrySource defines model for EntrySource.
+type EntrySource struct {
+	AttachId      *string `json:"attach_id,omitempty"`
+	Fact          *string `json:"fact,omitempty"`
+	GrantAttachId *string `json:"grant_attach_id,omitempty"`
+	Kind          string  `json:"kind"`
+	Literal       *string `json:"literal,omitempty"`
+	SecretRef     *string `json:"secret_ref,omitempty"`
+}
+
+// EntryValue defines model for EntryValue.
+type EntryValue struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EntryValue.json
+	Schema *string `json:"$schema,omitempty"`
+	Value  string  `json:"value"`
+}
+
 // Environment defines model for Environment.
 type Environment struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -195,6 +231,16 @@ type PageBackingService struct {
 	Schema     *string           `json:"$schema,omitempty"`
 	Items      *[]BackingService `json:"items"`
 	NextCursor *string           `json:"next_cursor,omitempty"`
+}
+
+// PageEntry defines model for PageEntry.
+type PageEntry struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageEntry.json
+	Schema     *string  `json:"$schema,omitempty"`
+	Items      *[]Entry `json:"items"`
+	NextCursor *string  `json:"next_cursor,omitempty"`
 }
 
 // PageSecret defines model for PageSecret.
@@ -411,6 +457,13 @@ type AttachRenameParams struct {
 type BackingServiceListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// EntryListParams defines parameters for EntryList.
+type EntryListParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // EnvironmentListParams defines parameters for EnvironmentList.
@@ -653,6 +706,21 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryList List environment entries
+	//
+	// Corresponds with GET /entries (the `EntryList` operationId).
+	EntryList(ctx context.Context, params *EntryListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryShow Show environment Entry metadata
+	//
+	// Corresponds with GET /entries/{id} (the `EntryShow` operationId).
+	EntryShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryReveal Reveal an encrypted Entry value
+	//
+	// Corresponds with GET /entries/{id}/value (the `EntryReveal` operationId).
+	EntryReveal(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentList List environments
 	//
@@ -959,6 +1027,51 @@ func (c *Client) BackingServiceList(ctx context.Context, params *BackingServiceL
 // Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 func (c *Client) BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackingServiceShowRequest(c.Server, projectId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryList List environment entries
+//
+// Corresponds with GET /entries (the `EntryList` operationId).
+func (c *Client) EntryList(ctx context.Context, params *EntryListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryShow Show environment Entry metadata
+//
+// Corresponds with GET /entries/{id} (the `EntryShow` operationId).
+func (c *Client) EntryShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryReveal Reveal an encrypted Entry value
+//
+// Corresponds with GET /entries/{id}/value (the `EntryReveal` operationId).
+func (c *Client) EntryReveal(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryRevealRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1772,6 +1885,148 @@ func NewBackingServiceShowRequest(server string, projectId string) (*http.Reques
 	}
 
 	operationPath := fmt.Sprintf("/backing-services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEntryListRequest constructs an http.Request for the EntryList method
+func NewEntryListRequest(server string, params *EntryListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/entries")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEntryShowRequest constructs an http.Request for the EntryShow method
+func NewEntryShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/entries/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEntryRevealRequest constructs an http.Request for the EntryReveal method
+func NewEntryRevealRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/entries/%s/value", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3039,6 +3294,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShowWithResponse(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*BackingServiceShowResponse, error)
 
+	// EntryListWithResponse List environment entries
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /entries (the `EntryList` operationId).
+	EntryListWithResponse(ctx context.Context, params *EntryListParams, reqEditors ...RequestEditorFn) (*EntryListResponse, error)
+
+	// EntryShowWithResponse Show environment Entry metadata
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /entries/{id} (the `EntryShow` operationId).
+	EntryShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EntryShowResponse, error)
+
+	// EntryRevealWithResponse Reveal an encrypted Entry value
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /entries/{id}/value (the `EntryReveal` operationId).
+	EntryRevealWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EntryRevealResponse, error)
+
 	// EnvironmentListWithResponse List environments
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -3553,6 +3829,150 @@ func (r BackingServiceShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackingServiceShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EntryListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageEntry
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EntryListResponse) GetJSON200() *PageEntry {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EntryListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EntryListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EntryListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EntryListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EntryListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EntryShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Entry
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EntryShowResponse) GetJSON200() *Entry {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EntryShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EntryShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EntryShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EntryShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EntryShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EntryRevealResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EntryValue
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EntryRevealResponse) GetJSON200() *EntryValue {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EntryRevealResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EntryRevealResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EntryRevealResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EntryRevealResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EntryRevealResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4741,6 +5161,45 @@ func (c *ClientWithResponses) BackingServiceShowWithResponse(ctx context.Context
 	return ParseBackingServiceShowResponse(rsp)
 }
 
+// EntryListWithResponse List environment entries
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /entries (the `EntryList` operationId).
+func (c *ClientWithResponses) EntryListWithResponse(ctx context.Context, params *EntryListParams, reqEditors ...RequestEditorFn) (*EntryListResponse, error) {
+	rsp, err := c.EntryList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryListResponse(rsp)
+}
+
+// EntryShowWithResponse Show environment Entry metadata
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /entries/{id} (the `EntryShow` operationId).
+func (c *ClientWithResponses) EntryShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EntryShowResponse, error) {
+	rsp, err := c.EntryShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryShowResponse(rsp)
+}
+
+// EntryRevealWithResponse Reveal an encrypted Entry value
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /entries/{id}/value (the `EntryReveal` operationId).
+func (c *ClientWithResponses) EntryRevealWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EntryRevealResponse, error) {
+	rsp, err := c.EntryReveal(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryRevealResponse(rsp)
+}
+
 // EnvironmentListWithResponse List environments
 //
 // Returns a wrapper object for the known response body format(s).
@@ -5351,6 +5810,105 @@ func ParseBackingServiceShowResponse(rsp *http.Response) (*BackingServiceShowRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest BackingService
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEntryListResponse parses an HTTP response from a EntryListWithResponse call
+func ParseEntryListResponse(rsp *http.Response) (*EntryListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EntryListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageEntry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEntryShowResponse parses an HTTP response from a EntryShowWithResponse call
+func ParseEntryShowResponse(rsp *http.Response) (*EntryShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EntryShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Entry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEntryRevealResponse parses an HTTP response from a EntryRevealWithResponse call
+func ParseEntryRevealResponse(rsp *http.Response) (*EntryRevealResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EntryRevealResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EntryValue
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
