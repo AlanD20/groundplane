@@ -8,12 +8,12 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
-	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 const maximumAgentPageSize = 200
@@ -28,6 +28,107 @@ type AgentReader interface {
 type AgentMutator interface {
 	EnrollAgent(context.Context, string) (etcd.IdempotencyResponse, error)
 	RemoveAgent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+}
+
+type agentListInput struct {
+	Limit  int    `query:"limit"  required:"false" minimum:"1" maximum:"200"`
+	Cursor string `query:"cursor" required:"false"`
+}
+
+type agentPageOutput struct {
+	Body apiTypes.Page[apiTypes.Agent]
+}
+
+type agentIDInput struct {
+	ID string `path:"id" pattern:"^agt_[0-9A-HJKMNP-TV-Z]{26}$"`
+}
+
+type agentOutput struct {
+	Body apiTypes.Agent
+}
+
+type agentConfigOutput struct {
+	Body apiTypes.AgentConfig
+}
+
+func (s *Server) registerAgentReads() {
+	huma.Register(s.API, huma.Operation{
+		OperationID: "agent.list", Method: http.MethodGet, Path: "/agents",
+		Summary: "List agents", Tags: []string{"Agent"},
+		Middlewares: huma.Middlewares{s.validateAgentListQuery},
+	}, s.listAgents)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "agent.show", Method: http.MethodGet, Path: "/agents/{id}",
+		Summary: "Show an agent", Tags: []string{"Agent"},
+	}, s.showAgent)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "agent.config.show", Method: http.MethodGet, Path: "/agents/{id}/config",
+		Summary: "Show agent config", Tags: []string{"Agent"},
+	}, s.showAgentConfig)
+}
+
+func (s *Server) listAgents(ctx context.Context, request *agentListInput) (*agentPageOutput, error) {
+	if s.agents == nil {
+		return nil, errs.New(errs.KindInternal, "Agent reader is not configured")
+	}
+	if request.Cursor != "" {
+		return nil, errs.New(errs.KindMalformedRequest, "Agent pagination cursor is invalid")
+	}
+	limit := request.Limit
+	if limit == 0 {
+		limit = maximumAgentPageSize
+	}
+	agents, err := s.agents.ListAgents(ctx)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	if len(agents) > limit {
+		agents = agents[:limit]
+	}
+	return &agentPageOutput{Body: apiTypes.Page[apiTypes.Agent]{Items: agents}}, nil
+}
+
+func (s *Server) showAgent(ctx context.Context, request *agentIDInput) (*agentOutput, error) {
+	if s.agents == nil {
+		return nil, errs.New(errs.KindInternal, "Agent reader is not configured")
+	}
+	agent, err := s.agents.GetAgent(ctx, request.ID)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &agentOutput{Body: agent}, nil
+}
+
+func (s *Server) showAgentConfig(ctx context.Context, request *agentIDInput) (*agentConfigOutput, error) {
+	if s.agents == nil {
+		return nil, errs.New(errs.KindInternal, "Agent reader is not configured")
+	}
+	config, err := s.agents.GetAgentConfig(ctx, request.ID)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &agentConfigOutput{Body: config}, nil
+}
+
+func (s *Server) validateAgentListQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	for key, values := range requestURL.Query() {
+		if key != "limit" && key != "cursor" {
+			s.writeAgentRequestProblem(ctx, "Agent list query is invalid")
+			return
+		}
+		if len(values) != 1 {
+			s.writeAgentRequestProblem(ctx, "Agent list query contains duplicate values")
+			return
+		}
+	}
+	next(ctx)
+}
+
+func (s *Server) writeAgentRequestProblem(ctx huma.Context, detail string) {
+	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
+		s.Logger.Error("controller: write Agent request problem", slog.Any("error", err))
+	}
 }
 
 func (s *Server) agentEnroll(w http.ResponseWriter, r *http.Request) {
@@ -101,63 +202,6 @@ func (s *Server) writeAgentMutationResponse(
 	}
 }
 
-func (s *Server) agentList(w http.ResponseWriter, r *http.Request) {
-	if s.agents == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Agent reader is not configured"))
-		return
-	}
-	limit, err := agentPageLimit(r)
-	if err != nil {
-		s.writeAgentProblem(w, err)
-		return
-	}
-	agents, err := s.agents.ListAgents(r.Context())
-	if err != nil {
-		s.writeAgentProblem(w, err)
-		return
-	}
-	if len(agents) > limit {
-		agents = agents[:limit]
-	}
-	s.writeAgentJSON(w, apiTypes.Page[apiTypes.Agent]{Items: agents})
-}
-
-func (s *Server) agentShow(w http.ResponseWriter, r *http.Request) {
-	if s.agents == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Agent reader is not configured"))
-		return
-	}
-	id := r.PathValue("id")
-	if err := ids.Validate(ids.KindAgent, id); err != nil {
-		s.writeAgentProblem(w, err)
-		return
-	}
-	agent, err := s.agents.GetAgent(r.Context(), id)
-	if err != nil {
-		s.writeAgentProblem(w, err)
-		return
-	}
-	s.writeAgentJSON(w, agent)
-}
-
-func (s *Server) agentConfigShow(w http.ResponseWriter, r *http.Request) {
-	if s.agents == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Agent reader is not configured"))
-		return
-	}
-	id := r.PathValue("id")
-	if err := ids.Validate(ids.KindAgent, id); err != nil {
-		s.writeAgentProblem(w, err)
-		return
-	}
-	config, err := s.agents.GetAgentConfig(r.Context(), id)
-	if err != nil {
-		s.writeAgentProblem(w, err)
-		return
-	}
-	s.writeAgentJSON(w, config)
-}
-
 func (s *Server) agentConfigUpdate(w http.ResponseWriter, r *http.Request) {
 	if s.agents == nil {
 		s.writeProblem(w, errs.New(errs.KindInternal, "Agent reader is not configured"))
@@ -217,26 +261,6 @@ func decodeAgentConfigRequest(r *http.Request) (apiTypes.AgentConfig, error) {
 		MaxConcurrentTasks:  *request.MaxConcurrentTasks,
 		Labels:              labels,
 	}, nil
-}
-
-func agentPageLimit(r *http.Request) (int, error) {
-	query := r.URL.Query()
-	for name := range query {
-		if name != "limit" && name != "cursor" {
-			return 0, errs.New(errs.KindMalformedRequest, "Agent list query is invalid")
-		}
-	}
-	if len(query["limit"]) > 1 || len(query["cursor"]) > 1 || query.Get("cursor") != "" {
-		return 0, errs.New(errs.KindMalformedRequest, "Agent pagination query is invalid")
-	}
-	if raw := query.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit < 1 || limit > maximumAgentPageSize {
-			return 0, errs.New(errs.KindMalformedRequest, "Agent pagination limit is invalid")
-		}
-		return limit, nil
-	}
-	return maximumAgentPageSize, nil
 }
 
 func (s *Server) writeAgentProblem(w http.ResponseWriter, err error) {

@@ -84,10 +84,12 @@ func TestAgentConfigShowUsesConfigSingleton(t *testing.T) {
 		"/api/v1/agents/agt_1/config",
 		"",
 		http.StatusOK,
-		`{}`,
+		`{"pull_interval_seconds":2,"max_concurrent_tasks":3,"labels":{"arch":"arm64"}}`,
 	)
 	defer server.Close()
 
+	want := "{\n  \"pull_interval_seconds\": 2,\n  \"max_concurrent_tasks\": 3,\n  \"labels\": {\n" +
+		"    \"arch\": \"arm64\"\n  }\n}\n"
 	if output := executeNoun(
 		t,
 		newAgentCmd(),
@@ -96,8 +98,8 @@ func TestAgentConfigShowUsesConfigSingleton(t *testing.T) {
 		"config",
 		"show",
 		"agt_1",
-	); output != "{}\n" {
-		t.Fatalf("output = %q, want %q", output, "{}\n")
+	); output != want {
+		t.Fatalf("output = %q, want %q", output, want)
 	}
 }
 

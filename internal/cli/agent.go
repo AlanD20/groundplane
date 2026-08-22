@@ -2,7 +2,9 @@ package cli
 
 import (
 	"strings"
+	"time"
 
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
 )
@@ -19,7 +21,17 @@ func newAgentCmd() *cobra.Command {
 		Short: "List agents",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/agents", nil)
+			app := fromContext(cmd)
+			page, err := app.Client.ListAgents(cmd.Context(), 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, agent := range page.Items {
+				items[index] = agentFields(agent)
+			}
+			headers, rows := tabulateVia(app, items)
+			return app.Out.Render(headers, rows, page)
 		},
 	})
 
@@ -28,7 +40,13 @@ func newAgentCmd() *cobra.Command {
 		Short: "Show an agent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runShow(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0]))
+			app := fromContext(cmd)
+			agent, err := app.Client.ShowAgent(cmd.Context(), target(app, args[0]))
+			if err != nil {
+				return err
+			}
+			headers, rows := tabulateVia(app, []map[string]any{agentFields(agent)})
+			return app.Out.Render(headers, rows, agent)
 		},
 	})
 
@@ -50,8 +68,18 @@ func newAgentCmd() *cobra.Command {
 		Short: "Show an agent's runtime config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := "/api/v1/agents/" + target(fromContext(cmd), args[0]) + "/config"
-			return runShow(cmd, path)
+			app := fromContext(cmd)
+			config, err := app.Client.ShowAgentConfig(cmd.Context(), target(app, args[0]))
+			if err != nil {
+				return err
+			}
+			fields := map[string]any{
+				"pull_interval_seconds": config.PullIntervalSeconds,
+				"max_concurrent_tasks":  config.MaxConcurrentTasks,
+				"labels":                config.Labels,
+			}
+			headers, rows := tabulateVia(app, []map[string]any{fields})
+			return app.Out.Render(headers, rows, config)
 		},
 	})
 	var pullInterval, maxConcurrent int
@@ -103,6 +131,34 @@ func newAgentCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func agentFields(agent apiTypes.Agent) map[string]any {
+	return map[string]any{
+		"id":                 agent.ID,
+		"enrollment_task_id": agent.EnrollmentTaskID,
+		"host":               agent.Host,
+		"status":             agent.Status,
+		"version":            optionalAgentString(agent.Version),
+		"labels":             agent.Labels,
+		"ready_at":           optionalAgentTime(agent.ReadyAt),
+		"last_report_at":     optionalAgentTime(agent.LastReportAt),
+		"in_flight":          agent.InFlight,
+	}
+}
+
+func optionalAgentString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func optionalAgentTime(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return value.Format(time.RFC3339)
 }
 
 func parseAgentLabels(values []string) (map[string]string, error) {

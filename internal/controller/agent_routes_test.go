@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -15,6 +16,23 @@ import (
 )
 
 const testAgentReadID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+// Rationale: Agent reads are operator-facing capabilities, so all three read
+// operations must be generated from the same OpenAPI identities used by the CLI and Console.
+func TestAgentReadRoutesAreInOpenAPI(t *testing.T) {
+	t.Parallel()
+
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	document, err := json.Marshal(server.API.OpenAPI())
+	if err != nil {
+		t.Fatalf("marshal OpenAPI: %v", err)
+	}
+	for _, operationID := range []string{"agent.list", "agent.show", "agent.config.show"} {
+		if !strings.Contains(string(document), `"operationId":"`+operationID+`"`) {
+			t.Fatalf("OpenAPI does not contain %s: %s", operationID, document)
+		}
+	}
+}
 
 func TestAgentReadRoutesExposeTheConfiguredProjection(t *testing.T) {
 	t.Parallel()

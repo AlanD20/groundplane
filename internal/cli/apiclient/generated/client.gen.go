@@ -12,10 +12,39 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Agent defines model for Agent.
+type Agent struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Agent.json
+	Schema           *string           `json:"$schema,omitempty"`
+	EnrollmentTaskId string            `json:"enrollment_task_id"`
+	Host             string            `json:"host"`
+	Id               string            `json:"id"`
+	InFlight         int64             `json:"in_flight"`
+	Labels           map[string]string `json:"labels"`
+	LastReportAt     *time.Time        `json:"last_report_at"`
+	ReadyAt          *time.Time        `json:"ready_at"`
+	Status           string            `json:"status"`
+	Version          *string           `json:"version"`
+}
+
+// AgentConfig defines model for AgentConfig.
+type AgentConfig struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/AgentConfig.json
+	Schema              *string           `json:"$schema,omitempty"`
+	Labels              map[string]string `json:"labels"`
+	MaxConcurrentTasks  int64             `json:"max_concurrent_tasks"`
+	PullIntervalSeconds int64             `json:"pull_interval_seconds"`
+}
 
 // Attach defines model for Attach.
 type Attach struct {
@@ -229,6 +258,16 @@ type HostResource struct {
 	Total   string `json:"total"`
 	Used    string `json:"used"`
 	UsedPct int64  `json:"used_pct"`
+}
+
+// PageAgent defines model for PageAgent.
+type PageAgent struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageAgent.json
+	Schema     *string  `json:"$schema,omitempty"`
+	Items      *[]Agent `json:"items"`
+	NextCursor *string  `json:"next_cursor,omitempty"`
 }
 
 // PageAttach defines model for PageAttach.
@@ -469,6 +508,12 @@ type TenantRename struct {
 	// Examples: /api/v1/TenantRename.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// AgentListParams defines parameters for AgentList.
+type AgentListParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // AttachListParams defines parameters for AttachList.
@@ -717,6 +762,21 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// AgentList List agents
+	//
+	// Corresponds with GET /agents (the `AgentList` operationId).
+	AgentList(ctx context.Context, params *AgentListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AgentShow Show an agent
+	//
+	// Corresponds with GET /agents/{id} (the `AgentShow` operationId).
+	AgentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AgentConfigShow Show agent config
+	//
+	// Corresponds with GET /agents/{id}/config (the `AgentConfigShow` operationId).
+	AgentConfigShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AttachList List attaches
 	//
@@ -992,6 +1052,51 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// AgentList List agents
+//
+// Corresponds with GET /agents (the `AgentList` operationId).
+func (c *Client) AgentList(ctx context.Context, params *AgentListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AgentShow Show an agent
+//
+// Corresponds with GET /agents/{id} (the `AgentShow` operationId).
+func (c *Client) AgentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AgentConfigShow Show agent config
+//
+// Corresponds with GET /agents/{id}/config (the `AgentConfigShow` operationId).
+func (c *Client) AgentConfigShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentConfigShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // AttachList List attaches
@@ -1717,6 +1822,140 @@ func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRena
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewAgentListRequest constructs an http.Request for the AgentList method
+func NewAgentListRequest(server string, params *AgentListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/agents")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAgentShowRequest constructs an http.Request for the AgentShow method
+func NewAgentShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/agents/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAgentConfigShowRequest constructs an http.Request for the AgentConfigShow method
+func NewAgentConfigShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/agents/%s/config", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewAttachListRequest constructs an http.Request for the AttachList method
@@ -3525,6 +3764,27 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// AgentListWithResponse List agents
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /agents (the `AgentList` operationId).
+	AgentListWithResponse(ctx context.Context, params *AgentListParams, reqEditors ...RequestEditorFn) (*AgentListResponse, error)
+
+	// AgentShowWithResponse Show an agent
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /agents/{id} (the `AgentShow` operationId).
+	AgentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*AgentShowResponse, error)
+
+	// AgentConfigShowWithResponse Show agent config
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /agents/{id}/config (the `AgentConfigShow` operationId).
+	AgentConfigShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*AgentConfigShowResponse, error)
+
 	// AttachListWithResponse List attaches
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -3839,6 +4099,150 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
+}
+
+type AgentListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageAgent
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AgentListResponse) GetJSON200() *PageAgent {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AgentListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AgentListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AgentListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AgentListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AgentListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AgentShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Agent
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AgentShowResponse) GetJSON200() *Agent {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AgentShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AgentShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AgentShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AgentShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AgentShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AgentConfigShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AgentConfig
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AgentConfigShowResponse) GetJSON200() *AgentConfig {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AgentConfigShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AgentConfigShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AgentConfigShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AgentConfigShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AgentConfigShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type AttachListResponse struct {
@@ -5530,6 +5934,45 @@ func (r TenantRenameResponse) ContentType() string {
 	return ""
 }
 
+// AgentListWithResponse List agents
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /agents (the `AgentList` operationId).
+func (c *ClientWithResponses) AgentListWithResponse(ctx context.Context, params *AgentListParams, reqEditors ...RequestEditorFn) (*AgentListResponse, error) {
+	rsp, err := c.AgentList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentListResponse(rsp)
+}
+
+// AgentShowWithResponse Show an agent
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /agents/{id} (the `AgentShow` operationId).
+func (c *ClientWithResponses) AgentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*AgentShowResponse, error) {
+	rsp, err := c.AgentShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentShowResponse(rsp)
+}
+
+// AgentConfigShowWithResponse Show agent config
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /agents/{id}/config (the `AgentConfigShow` operationId).
+func (c *ClientWithResponses) AgentConfigShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*AgentConfigShowResponse, error) {
+	rsp, err := c.AgentConfigShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentConfigShowResponse(rsp)
+}
+
 // AttachListWithResponse List attaches
 //
 // Returns a wrapper object for the known response body format(s).
@@ -6113,6 +6556,105 @@ func (c *ClientWithResponses) TenantRenameWithResponse(ctx context.Context, id s
 		return nil, err
 	}
 	return ParseTenantRenameResponse(rsp)
+}
+
+// ParseAgentListResponse parses an HTTP response from a AgentListWithResponse call
+func ParseAgentListResponse(rsp *http.Response) (*AgentListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AgentListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageAgent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAgentShowResponse parses an HTTP response from a AgentShowWithResponse call
+func ParseAgentShowResponse(rsp *http.Response) (*AgentShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AgentShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Agent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAgentConfigShowResponse parses an HTTP response from a AgentConfigShowWithResponse call
+func ParseAgentConfigShowResponse(rsp *http.Response) (*AgentConfigShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AgentConfigShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentConfig
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseAttachListResponse parses an HTTP response from a AttachListWithResponse call
