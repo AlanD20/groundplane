@@ -65,7 +65,6 @@ type Health struct {
 	LastReady  time.Time
 	StaleAfter time.Time
 	Capacity   int32
-	InFlight   int32
 	Version    string
 }
 
@@ -179,6 +178,28 @@ func (manager *Manager) Reconcile(ctx context.Context) error {
 	}
 }
 
+// ListHealth returns the singleton durable Agent with matching live-session
+// telemetry, or an empty list when no Agent has been enrolled.
+func (manager *Manager) ListHealth(ctx context.Context) ([]Health, error) {
+	if ctx == nil {
+		return nil, errs.New(errs.KindInternal, "local agent context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	stored, err := manager.repository.GetSingleton(ctx)
+	if errors.Is(err, errs.New(errs.KindAgentNotFound, "")) {
+		return []Health{}, nil
+	}
+	if err != nil {
+		return nil, safePortError(ctx, err, "local agent durable record lookup failed")
+	}
+	if err := validateStored(stored); err != nil {
+		return nil, err
+	}
+	return []Health{manager.projectHealth(stored.Record)}, nil
+}
+
 // Health projects online state from a matching generation's authenticated Ready
 // heartbeat. Transport keepalive and a mismatched generation never count.
 func (manager *Manager) Health(ctx context.Context, agentID string) (Health, error) {
@@ -202,24 +223,25 @@ func (manager *Manager) Health(ctx context.Context, agentID string) (Health, err
 		return Health{}, agentNotFound(agentID)
 	}
 
-	health := Health{Agent: projectAgent(stored.Record)}
-	snapshot, ok := manager.sessions.Snapshot(agentID)
-	if !ok || snapshot.Generation != stored.Record.Generation {
-		return health, nil
+	return manager.projectHealth(stored.Record), nil
+}
+
+func (manager *Manager) projectHealth(record Record) Health {
+	health := Health{Agent: projectAgent(record)}
+	snapshot, ok := manager.sessions.Snapshot(record.ID)
+	if !ok || snapshot.Generation != record.Generation {
+		return health
 	}
 	health.LastReady = snapshot.LastReady
 	health.Capacity = snapshot.Capacity
 	health.Version = snapshot.Version
-	if snapshot.Capacity <= stored.Record.Config.MaxConcurrentTasks {
-		health.InFlight = stored.Record.Config.MaxConcurrentTasks - snapshot.Capacity
-	}
 	if !snapshot.LastReady.IsZero() {
-		health.StaleAfter = snapshot.LastReady.Add(StaleWindow(stored.Record.Config.PullIntervalSeconds))
+		health.StaleAfter = snapshot.LastReady.Add(StaleWindow(record.Config.PullIntervalSeconds))
 	}
-	health.Online = stored.Record.Phase != PhaseDeleting && snapshot.Online && !snapshot.Revoked &&
+	health.Online = record.Phase != PhaseDeleting && snapshot.Online && !snapshot.Revoked &&
 		!snapshot.LastReady.IsZero() && !manager.clock.Now().After(health.StaleAfter)
-	health.Healthy = stored.Record.Phase == PhaseReady && health.Online
-	return health, nil
+	health.Healthy = record.Phase == PhaseReady && health.Online
+	return health
 }
 
 // Remove fences work and credentials before deleting runtime state. The durable

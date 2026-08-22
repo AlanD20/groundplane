@@ -33,6 +33,7 @@ type Server struct {
 	API    huma.API
 
 	host          HostReader
+	agents        AgentReader
 	console       fs.FS
 	dispatcher    *Dispatcher
 	tasks         taskQueries
@@ -41,6 +42,7 @@ type Server struct {
 
 type Options struct {
 	Host    HostReader
+	Agents  AgentReader
 	Console fs.FS
 	Tasks   *etcd.TaskRepository
 }
@@ -66,6 +68,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		Mux:           mux,
 		API:           humago.NewWithPrefix(mux, "/api/v1", config),
 		host:          options.Host,
+		agents:        options.Agents,
 		console:       options.Console,
 		dispatcher:    NewDispatcher(),
 		tasks:         options.Tasks,
@@ -216,10 +219,10 @@ func (s *Server) routes() {
 
 	// host / agents
 	s.jsonRoute("POST /api/v1/agents", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/agents", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/agents/{id}", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/agents", s.agentList)
+	mux.HandleFunc("GET /api/v1/agents/{id}", s.agentShow)
 	mux.HandleFunc("DELETE /api/v1/agents/{id}", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.agentConfigShow)
 	s.jsonRoute("PUT /api/v1/agents/{id}/config", s.notImplemented)
 	// The signed update transport still needs its own independent limit
 	// decision; it must never inherit the ordinary JSON or Blueprint ceiling.

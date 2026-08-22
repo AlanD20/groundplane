@@ -219,8 +219,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
 	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: resolve local hostname: %w", err)
+	}
+	agentReads, err := newLocalAgentReadService(localAgentManager, tasks, hostname)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize local Agent reads: %w", err)
+	}
 
-	srv := controller.New(store, logger, controller.Options{Console: consoleAssets, Tasks: tasks})
+	srv := controller.New(store, logger, controller.Options{Agents: agentReads, Console: consoleAssets, Tasks: tasks})
 
 	return &Controller{
 		Config:     cfg,
