@@ -129,6 +129,39 @@ func (c *Client) RenameEnvironment(ctx context.Context, id, name string) (apiTyp
 	return generatedEnvironmentBody(http.MethodPost, path, response.Body, response.JSON200)
 }
 
+func (c *Client) ApplyEnvironmentBlueprint(
+	ctx context.Context,
+	id string,
+	body []byte,
+	contentType string,
+) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/environments/" + id + "/blueprint"
+	params := &generated.EnvironmentApplyParams{IdempotencyKey: ids.NewULID()}
+	response, err := client.EnvironmentApplyWithBodyWithResponse(
+		ctx, id, params, contentType, bytes.NewReader(body),
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPut, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPut, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	parsed := response.JSON202
+	if parsed == nil {
+		parsed = &generated.TaskAccepted{}
+		if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.TaskAccepted{}, err
+		}
+	}
+	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
+}
+
 func environmentFromGenerated(environment generated.Environment) apiTypes.Environment {
 	var createTaskID *string
 	if environment.CreateTaskId != nil {

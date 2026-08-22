@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net/http"
 	"net/textproto"
 	"os"
 	"path"
@@ -252,24 +251,9 @@ func blueprintCLIFilePartName(index int) string {
 
 func runBlueprintApply(cmd *cobra.Command, environmentID string, body []byte, contentType string) error {
 	app := fromContext(cmd)
-	var response struct {
-		TaskID string `json:"task_id"`
-	}
-	request := app.Client.NewEncodedRequest(
-		http.MethodPut, "/api/v1/environments/"+environmentID+"/blueprint",
-		nil, body, contentType, http.StatusAccepted,
-	)
-	if err := app.Client.Do(cmd.Context(), request, &response); err != nil {
+	accepted, err := app.Client.ApplyEnvironmentBlueprint(cmd.Context(), environmentID, body, contentType)
+	if err != nil {
 		return err
 	}
-	if response.TaskID == "" {
-		return errs.New(errs.KindInternal, "Blueprint apply response is missing task_id")
-	}
-	_, err := fmt.Fprintf(
-		cmd.OutOrStdout(),
-		"task %s dispatched - `groundplane task show %s` to follow\n",
-		response.TaskID,
-		response.TaskID,
-	)
-	return err
+	return renderTaskAccepted(cmd, accepted)
 }

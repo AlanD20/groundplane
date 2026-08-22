@@ -43,8 +43,6 @@ type Request struct {
 	Path           string
 	Query          map[string]string
 	Body           any
-	EncodedBody    []byte
-	ContentType    string
 	IdempotencyKey string
 	ExpectedStatus int
 }
@@ -76,23 +74,6 @@ func (c *Client) NewRequest(method, path string, query map[string]string, body a
 	if requiresIdempotencyKey(request.Method) {
 		request.IdempotencyKey = ids.NewULID()
 	}
-	return request
-}
-
-// NewEncodedRequest creates a reusable request whose body has already been
-// encoded according to contentType. It is reserved for non-JSON contracts such
-// as the deterministic Blueprint multipart upload.
-func (c *Client) NewEncodedRequest(
-	method string,
-	path string,
-	query map[string]string,
-	body []byte,
-	contentType string,
-	expectedStatus int,
-) Request {
-	request := c.NewRequest(method, path, query, nil, expectedStatus)
-	request.EncodedBody = append([]byte(nil), body...)
-	request.ContentType = contentType
 	return request
 }
 
@@ -136,14 +117,7 @@ func (c *Client) Do(ctx context.Context, request Request, out any) error {
 
 	var reader io.Reader
 	contentType := ""
-	if request.ContentType != "" || request.EncodedBody != nil {
-		mediaType, _, mediaTypeErr := mime.ParseMediaType(request.ContentType)
-		if request.Body != nil || mediaTypeErr != nil || mediaType == "" {
-			return errs.New(errs.KindInternal, "apiclient: encoded request body is invalid")
-		}
-		reader = bytes.NewReader(request.EncodedBody)
-		contentType = request.ContentType
-	} else if request.Body != nil {
+	if request.Body != nil {
 		b, err := json.Marshal(request.Body)
 		if err != nil {
 			return errs.Wrap(errs.KindInternal, fmt.Errorf("apiclient: marshal body: %w", err))

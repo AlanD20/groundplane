@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -14,41 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/oklog/ulid/v2"
 )
-
-// Rationale: Blueprint uploads need a non-JSON body while preserving the same
-// reusable mutation intent and exact one-key transport contract as JSON calls.
-func TestDoSendsCopiedEncodedBodyWithDeclaredContentType(t *testing.T) {
-	t.Parallel()
-	want := []byte("multipart-body")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		body, err := io.ReadAll(request.Body)
-		if err != nil {
-			t.Errorf("read request body: %v", err)
-		}
-		if string(body) != string(want) || request.Header.Get("Content-Type") != "multipart/form-data; boundary=test" {
-			t.Errorf("encoded request = %q, %q", body, request.Header.Get("Content-Type"))
-		}
-		if len(request.Header.Values("Idempotency-Key")) != 1 {
-			t.Errorf("Idempotency-Key values = %q", request.Header.Values("Idempotency-Key"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = io.WriteString(w, `{"task_id":"task_1"}`)
-	}))
-	defer server.Close()
-
-	client := New(server.URL)
-	source := append([]byte(nil), want...)
-	request := client.NewEncodedRequest(
-		http.MethodPut, "/blueprint", nil, source,
-		"multipart/form-data; boundary=test", http.StatusAccepted,
-	)
-	source[0] = 'X'
-	var result map[string]string
-	if err := client.Do(context.Background(), request, &result); err != nil {
-		t.Fatalf("Do() error = %v", err)
-	}
-}
 
 // Rationale: ordinary JSON calls must preserve the canonical Accept header and
 // normalized BaseURL behavior while using the typed request boundary.

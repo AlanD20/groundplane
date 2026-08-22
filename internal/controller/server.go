@@ -141,6 +141,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerProjects()
 	s.registerBackingServices()
 	s.registerEnvironments()
+	s.registerEnvironmentBlueprints()
 	s.registerServices()
 	s.registerEntries()
 	s.registerSecrets()
@@ -185,7 +186,6 @@ func (s *Server) routes() {
 	// environment singleton sub-resources
 	mux.HandleFunc("GET /api/v1/environments/{id}/backup-policy", s.notImplemented)
 	s.jsonRoute("PUT /api/v1/environments/{id}/backup-policy", s.notImplemented)
-	s.blueprintRoute("PUT /api/v1/environments/{id}/blueprint", s.environmentBlueprintApply)
 	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)

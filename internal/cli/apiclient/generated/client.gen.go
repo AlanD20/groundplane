@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Attach defines model for Attach.
@@ -500,6 +501,14 @@ type EnvironmentCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// EnvironmentApplyMultipartBody defines parameters for EnvironmentApply.
+type EnvironmentApplyMultipartBody = openapi_types.File
+
+// EnvironmentApplyParams defines parameters for EnvironmentApply.
+type EnvironmentApplyParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentRenameParams defines parameters for EnvironmentRename.
 type EnvironmentRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -585,6 +594,9 @@ type EntryCreateJSONRequestBody = EntryCreateRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
+
+// EnvironmentApplyMultipartRequestBody defines body for EnvironmentApply for multipart/form-data ContentType.
+type EnvironmentApplyMultipartRequestBody = EnvironmentApplyMultipartBody
 
 // EnvironmentRenameJSONRequestBody defines body for EnvironmentRename for application/json ContentType.
 type EnvironmentRenameJSONRequestBody = EnvironmentRename
@@ -784,6 +796,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 	EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentApplyWithBody Apply an environment Blueprint
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
+	EnvironmentApplyWithBody(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentRenameWithBody Rename an environment
 	//
@@ -1209,6 +1228,23 @@ func (c *Client) EnvironmentCreate(ctx context.Context, params *EnvironmentCreat
 // Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 func (c *Client) EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnvironmentShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentApplyWithBody Apply an environment Blueprint
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
+func (c *Client) EnvironmentApplyWithBody(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentApplyRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2326,6 +2362,55 @@ func NewEnvironmentShowRequest(server string, id string) (*http.Request, error) 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentApplyRequestWithBody constructs an http.Request for the EnvironmentApply method, with any body, and a specified content type
+func NewEnvironmentApplyRequestWithBody(server string, id string, params *EnvironmentApplyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/blueprint", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -3483,6 +3568,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 	EnvironmentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EnvironmentShowResponse, error)
 
+	// EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
+	EnvironmentApplyWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentApplyResponse, error)
+
 	// EnvironmentRenameWithBodyWithResponse Rename an environment
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -4319,6 +4411,61 @@ func (r EnvironmentShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EnvironmentShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnvironmentApplyResponse202Headers the declared response headers of an HTTP 202 response for EnvironmentApply
+type EnvironmentApplyResponse202Headers struct {
+	ContentType *string
+}
+
+type EnvironmentApplyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *EnvironmentApplyResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EnvironmentApplyResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentApplyResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentApplyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentApplyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentApplyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentApplyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5473,6 +5620,19 @@ func (c *ClientWithResponses) EnvironmentShowWithResponse(ctx context.Context, i
 	return ParseEnvironmentShowResponse(rsp)
 }
 
+// EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
+func (c *ClientWithResponses) EnvironmentApplyWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentApplyResponse, error) {
+	rsp, err := c.EnvironmentApplyWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentApplyResponse(rsp)
+}
+
 // EnvironmentRenameWithBodyWithResponse Rename an environment
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -6300,6 +6460,52 @@ func ParseEnvironmentShowResponse(rsp *http.Response) (*EnvironmentShowResponse,
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentApplyResponse parses an HTTP response from a EnvironmentApplyWithResponse call
+func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentApplyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers EnvironmentApplyResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil
