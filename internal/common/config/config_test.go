@@ -30,7 +30,7 @@ func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := DefaultControllerConfig()
+			cfg := validControllerConfig()
 			cfg.Listen.HTTP = test.address
 			err := cfg.Validate()
 			if (err != nil) != test.wantErr {
@@ -75,7 +75,7 @@ func TestAgentConfigRequiresCanonicalAgentID(t *testing.T) {
 func TestControllerAgentBootstrapDefaultsAndImageValidation(t *testing.T) {
 	t.Parallel()
 
-	defaults := DefaultControllerConfig()
+	defaults := validControllerConfig()
 	if defaults.Agent.Image != "" || defaults.Agent.Runtime.PullIntervalSeconds != 2 ||
 		defaults.Agent.Runtime.MaxConcurrentTasks != 3 || len(defaults.Agent.Runtime.Labels) != 0 {
 		t.Fatalf("default Agent bootstrap = %#v", defaults.Agent)
@@ -102,7 +102,7 @@ func TestControllerAgentBootstrapDefaultsAndImageValidation(t *testing.T) {
 
 func TestControllerVolumeRootDefaultAndSyntaxValidation(t *testing.T) {
 	t.Parallel()
-	defaults := DefaultControllerConfig()
+	defaults := validControllerConfig()
 	if defaults.Storage.VolumeRoot != "/var/lib/groundplane/vol" {
 		t.Fatalf("default storage.volume_root = %q", defaults.Storage.VolumeRoot)
 	}
@@ -168,5 +168,44 @@ func validAgentConfig() AgentConfig {
 	cfg.Runtime.PullIntervalSeconds = 2
 	cfg.Runtime.MaxConcurrentTasks = 3
 	cfg.Runtime.Labels = map[string]string{"arch": "arm64"}
+	return cfg
+}
+
+// Rationale: machine allocation roots are mandatory bootstrap decisions and
+// must be canonicalized before any Controller subsystem consumes them.
+func TestControllerConfigRequiresDisjointAllocationPools(t *testing.T) {
+	t.Parallel()
+
+	missing := DefaultControllerConfig()
+	if err := missing.Validate(); err == nil {
+		t.Fatal("missing allocation pools passed validation")
+	}
+
+	cfg := validControllerConfig()
+	pools, err := cfg.AllocationPools()
+	if err != nil {
+		t.Fatalf("AllocationPools() error = %v", err)
+	}
+	if pools.Environment.String() != "10.0.0.0/9" || pools.System.String() != "10.128.0.0/9" {
+		t.Fatalf("allocation pools = %#v", pools)
+	}
+
+	overlap := cfg
+	overlap.SystemPool = "10.64.0.0/10"
+	if err := overlap.Validate(); err == nil {
+		t.Fatal("overlapping allocation roots passed validation")
+	}
+
+	ipv6 := cfg
+	ipv6.EnvironmentPool = "fd00::/64"
+	if err := ipv6.Validate(); err == nil {
+		t.Fatal("IPv6 allocation root passed validation")
+	}
+}
+
+func validControllerConfig() ControllerConfig {
+	cfg := DefaultControllerConfig()
+	cfg.EnvironmentPool = "10.0.0.19/9"
+	cfg.SystemPool = "10.128.0.0/9"
 	return cfg
 }

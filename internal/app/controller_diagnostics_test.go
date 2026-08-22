@@ -44,7 +44,10 @@ func TestControllerConfigPathUsesDefaultAndEnvironmentOverride(t *testing.T) {
 // exact key path and configured endpoint order through their app ports.
 func TestControllerDiagnosticsLoadAndForwardControllerConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "controller.yaml")
-	contents := []byte("etcd:\n  endpoints: [10.0.0.2:2379, 10.0.0.1:2379]\nage_key_path: /custom/controller.age\n")
+	contents := []byte(
+		"environment_pool: 10.0.0.0/9\nsystem_pool: 10.128.0.0/9\n" +
+			"etcd:\n  endpoints: [10.0.0.2:2379, 10.0.0.1:2379]\nage_key_path: /custom/controller.age\n",
+	)
 	if err := os.WriteFile(configPath, contents, 0o600); err != nil {
 		t.Fatalf("write Controller config: %v", err)
 	}

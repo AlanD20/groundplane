@@ -16,7 +16,8 @@ import (
 func TestNewControllerRejectsInvalidHTTPListenerBeforeEtcdConstruction(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "controller.yaml")
 	contents := []byte(
-		"etcd:\n  endpoints: [\"://invalid\"]\nlisten:\n  http: 0.0.0.0:8080\nlog:\n  file:\n    enabled: false\n",
+		"environment_pool: 10.0.0.0/9\nsystem_pool: 10.128.0.0/9\n" +
+			"etcd:\n  endpoints: [\"://invalid\"]\nlisten:\n  http: 0.0.0.0:8080\nlog:\n  file:\n    enabled: false\n",
 	)
 	if err := os.WriteFile(configPath, contents, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,7 +46,9 @@ type LogConfig struct {
 // hold (this file + the controller age key) are exported with the DR
 // bundle. See mvp.md, "Everything is etcd (locked)".
 type ControllerConfig struct {
-	Etcd struct {
+	EnvironmentPool string `yaml:"environment_pool"`
+	SystemPool      string `yaml:"system_pool"`
+	Etcd            struct {
 		Endpoints []string `yaml:"endpoints"`
 		KeyPrefix string   `yaml:"key_prefix"`
 	} `yaml:"etcd"`
@@ -63,6 +67,13 @@ type ControllerConfig struct {
 	} `yaml:"agent"`
 	AgeKeyPath string    `yaml:"age_key_path"` // /etc/groundplane/controller.age
 	Log        LogConfig `yaml:"log"`
+}
+
+// AllocationPools is the canonical machine IPAM boundary consumed by
+// Controller application services after config validation.
+type AllocationPools struct {
+	Environment netip.Prefix
+	System      netip.Prefix
 }
 
 func DefaultControllerConfig() ControllerConfig {
@@ -133,6 +144,9 @@ func DefaultCLIConfig() CLIConfig {
 }
 
 func (c ControllerConfig) Validate() error {
+	if _, err := c.AllocationPools(); err != nil {
+		return err
+	}
 	if len(c.Etcd.Endpoints) == 0 {
 		return fmt.Errorf("config: controller etcd.endpoints must contain at least one endpoint")
 	}
@@ -167,6 +181,22 @@ func (c ControllerConfig) Validate() error {
 		return fmt.Errorf("config: controller age_key_path must be absolute")
 	}
 	return validateLog("controller", c.Log)
+}
+
+// AllocationPools parses and validates the two required machine allocation roots.
+func (c ControllerConfig) AllocationPools() (AllocationPools, error) {
+	environmentPool, err := ipam.ParseIPv4Prefix(c.EnvironmentPool)
+	if err != nil {
+		return AllocationPools{}, fmt.Errorf("config: controller environment_pool: %w", err)
+	}
+	systemPool, err := ipam.ParseIPv4Prefix(c.SystemPool)
+	if err != nil {
+		return AllocationPools{}, fmt.Errorf("config: controller system_pool: %w", err)
+	}
+	if err := ipam.ValidateRootPair(environmentPool, systemPool); err != nil {
+		return AllocationPools{}, fmt.Errorf("config: controller allocation pools: %w", err)
+	}
+	return AllocationPools{Environment: environmentPool, System: systemPool}, nil
 }
 
 func (c AgentConfig) Validate() error {
