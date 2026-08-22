@@ -1,0 +1,228 @@
+package etcd
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// BeginSecretDeletionWithTask atomically hides one Secret and publishes the
+// Controller Task that owns finalization. Metadata, indexes, and ciphertext
+// remain durable until the Task reaches a terminal state.
+func (repository *SecretRepository) BeginSecretDeletionWithTask(
+	ctx context.Context,
+	owner SecretOwner,
+	current Versioned[SecretRecord],
+	tombstone DeletionTombstoneRecord,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateSecretOwnership(ctx, owner, current.Record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateSecretVersion(current); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateDeletionTombstone(tombstone); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	secretID := current.Record.Secret.ID
+	if tombstone.TargetKind != DeletionTargetSecret || tombstone.TargetID != secretID ||
+		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
+		tombstone.Phase != DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != TaskExecutorController ||
+		task.Type != TaskRemove || task.Target != secretID || task.Status != TaskStatusPending ||
+		len(task.Params) != 1 || task.Params[TaskResourceKindParam] != TaskResourceSecret {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Secret deletion Task and tombstone do not match",
+		)
+	}
+	expectedScope, expectedScopeID := secretIdempotencyScope(owner)
+	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetSecret, ID: secretID}
+	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != expectedScope ||
+		marker.Locator.ScopeID != expectedScopeID || marker.ReplayTarget == nil ||
+		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Secret deletion marker does not match its Task",
+		)
+	}
+
+	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{
+			secretOwnerKey(current.Record.Secret),
+			secretScopedKey(current.Record.Secret),
+			secretValueKey(secretID),
+		},
+		Revision: current.ReadRevision,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if dependencies == nil || len(dependencies.Values) != 3 || dependencies.Values[0] == nil ||
+		dependencies.Values[1] == nil || dependencies.Values[2] == nil ||
+		string(dependencies.Values[0].Value) != secretID || string(dependencies.Values[1].Value) != secretID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Secret deletion indexes or encrypted value are corrupt",
+		)
+	}
+	encrypted, err := decodeSecretEncryptedValue(dependencies.Values[2].Value)
+	if err != nil || encrypted.SecretID != secretID {
+		clear(encrypted.Ciphertext)
+		return IdempotencyTransactionResult{}, corruptSecretRecord()
+	}
+	clear(encrypted.Ciphertext)
+
+	task = cloneTaskRecord(task)
+	if task.IdempotencyKey == "" {
+		task.IdempotencyKey = marker.Locator.Key
+	}
+	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	if err := validateTaskRecord(task); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(tombstoneValue)
+	taskValue, err := encodeTaskRecord(task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskValue)
+	reference, err := encodeTaskReference(task.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(reference)
+
+	conditions := []Condition{
+		{Key: taskKey(task.ID)},
+		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskActiveOperationKey(task.OperationID)},
+		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: secretRecordKey(secretID), ModRevision: current.Revision},
+		{Key: secretOwnerKey(current.Record.Secret), ModRevision: dependencies.Values[0].ModRevision},
+		{Key: secretScopedKey(current.Record.Secret), ModRevision: dependencies.Values[1].ModRevision},
+		{Key: secretValueKey(secretID), ModRevision: dependencies.Values[2].ModRevision},
+		{Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID)},
+	}
+	if owner.Project != nil {
+		conditions = append(conditions,
+			Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
+			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), owner.Project.Record.ID)},
+		)
+		if owner.Project.Record.TenantID != "" {
+			conditions = append(conditions, Condition{
+				Key: deletionTombstoneKey(string(DeletionTargetTenant), owner.Project.Record.TenantID),
+			})
+		}
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{
+			Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID),
+			Value: tombstoneValue,
+		},
+	}
+	plan, err := newTaskIdempotencyMutationPlan(
+		conditions,
+		mutations,
+		classifySecretDeletionStartConflict(owner, current, task.OperationID),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func secretIdempotencyScope(owner SecretOwner) (IdempotencyScopeKind, string) {
+	if owner.Project == nil {
+		return IdempotencyScopePlatform, "-"
+	}
+	return IdempotencyScopeProject, owner.Project.Record.ID
+}
+
+func classifySecretDeletionStartConflict(
+	owner SecretOwner,
+	current Versioned[SecretRecord],
+	operationID string,
+) idempotencyPlanClassifier {
+	return func(_ int64, values []*KeyValue) error {
+		expected := 9
+		if owner.Project != nil {
+			expected += 2
+			if owner.Project.Record.TenantID != "" {
+				expected++
+			}
+		}
+		if len(values) != expected {
+			return errs.New(errs.KindInternal, "Secret deletion compare evidence is incomplete")
+		}
+		if values[2] != nil {
+			activeTaskID, err := decodeTaskReference(values[2].Value)
+			if err != nil {
+				return err
+			}
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				operationID,
+				activeTaskID,
+			)
+		}
+		for _, index := range []int{0, 1, 3} {
+			if values[index] != nil {
+				return errs.New(errs.KindInternal, "Secret deletion collided with durable Task state")
+			}
+		}
+		if values[4] == nil {
+			return errs.New(errs.KindSecretNotFound, "Secret was not found")
+		}
+		if values[4].ModRevision != current.Revision {
+			return stateConflict("secret", current.Record.Secret.ID)
+		}
+		for _, index := range []int{5, 6} {
+			if values[index] == nil || string(values[index].Value) != current.Record.Secret.ID {
+				return errs.New(errs.KindInternal, "Secret deletion index changed or is corrupt")
+			}
+		}
+		if values[7] == nil {
+			return errs.New(errs.KindInternal, "Secret encrypted value disappeared during deletion")
+		}
+		if values[8] != nil {
+			return errs.New(errs.KindResourceInUse, "Secret deletion is already in progress")
+		}
+		position := 9
+		if owner.Project != nil {
+			if values[position] == nil {
+				return errs.New(errs.KindProjectNotFound, "project was not found")
+			}
+			if values[position].ModRevision != owner.Project.Revision {
+				return stateConflict("project", owner.Project.Record.ID)
+			}
+			position++
+			for ; position < len(values); position++ {
+				if values[position] != nil {
+					return errs.New(errs.KindResourceInUse, "Secret owner deletion is in progress")
+				}
+			}
+		}
+		return errs.New(errs.KindStateConflict, "Secret deletion state changed")
+	}
+}

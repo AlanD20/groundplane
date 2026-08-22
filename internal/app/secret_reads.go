@@ -179,3 +179,14 @@ func (repository *durableSecretReadRepository) CreateSecretIdempotent(
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)
 }
+
+func (repository *durableSecretReadRepository) BeginSecretDeletionWithTask(
+	ctx context.Context,
+	owner etcd.SecretOwner,
+	current etcd.Versioned[etcd.SecretRecord],
+	tombstone etcd.DeletionTombstoneRecord,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.secrets.BeginSecretDeletionWithTask(ctx, owner, current, tombstone, task, marker)
+}

@@ -18,6 +18,7 @@ const (
 	DeletionTargetTenant      DeletionTargetKind = "tenant"
 	DeletionTargetProject     DeletionTargetKind = "project"
 	DeletionTargetEnvironment DeletionTargetKind = "environment"
+	DeletionTargetSecret      DeletionTargetKind = "secret"
 )
 
 // DeletionPhase records which authority may advance a destructive operation.
@@ -36,9 +37,8 @@ type DeletionCheckpoint struct {
 	StableID     string `json:"stable_id,omitempty"`
 }
 
-// DeletionTombstoneRecord fences all mutations beneath one visible resource
-// while its destructive Task performs host effects and stable-id postorder
-// finalization.
+// DeletionTombstoneRecord fences one resource while its destructive Task
+// performs any authority-owned effects and atomic finalization.
 type DeletionTombstoneRecord struct {
 	TargetKind     DeletionTargetKind `json:"target_kind"`
 	TargetID       string             `json:"target_id"`
@@ -356,6 +356,8 @@ func validateDeletionTarget(kind DeletionTargetKind, id string) error {
 		expected = ids.KindProject
 	case DeletionTargetEnvironment:
 		expected = ids.KindEnvironment
+	case DeletionTargetSecret:
+		expected = ids.KindSecret
 	default:
 		return errs.New(errs.KindValidationFailed, "deletion target kind is invalid")
 	}

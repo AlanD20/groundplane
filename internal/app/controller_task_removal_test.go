@@ -19,9 +19,9 @@ func TestControllerTaskHandlerExecutesExactAgentRemoval(t *testing.T) {
 	t.Parallel()
 
 	agents := &removalTaskAgents{}
-	handler, err := newLocalAgentControllerTaskHandler(agents)
+	handler, err := newControllerTaskHandler(agents)
 	if err != nil {
-		t.Fatalf("newLocalAgentControllerTaskHandler() error = %v", err)
+		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
 	err = handler.Execute(context.Background(), validAgentRemovalTask())
 	if err != nil {
@@ -37,18 +37,18 @@ func TestControllerTaskHandlerRejectsInvalidAgentRemovalParameters(t *testing.T)
 
 	for name, params := range map[string]map[string]string{
 		"missing resource": {},
-		"wrong resource":   {agentTaskResourceKey: "service"},
+		"wrong resource":   {etcd.TaskResourceKindParam: "service"},
 		"extra parameter": {
-			agentTaskResourceKey: agentTaskResourceValue,
-			"unexpected":         "value",
+			etcd.TaskResourceKindParam: etcd.TaskResourceAgent,
+			"unexpected":               "value",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			agents := &removalTaskAgents{}
-			handler, err := newLocalAgentControllerTaskHandler(agents)
+			handler, err := newControllerTaskHandler(agents)
 			if err != nil {
-				t.Fatalf("newLocalAgentControllerTaskHandler() error = %v", err)
+				t.Fatalf("newControllerTaskHandler() error = %v", err)
 			}
 			task := validAgentRemovalTask()
 			task.Params = params
@@ -69,7 +69,7 @@ func validAgentRemovalTask() etcd.TaskRecord {
 		Executor: etcd.TaskExecutorController,
 		Type:     etcd.TaskRemove,
 		Target:   testControllerRemovalAgentID,
-		Params:   map[string]string{agentTaskResourceKey: agentTaskResourceValue},
+		Params:   map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceAgent},
 	}
 }
 

@@ -466,6 +466,11 @@ type SecretCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// SecretRemoveParams defines parameters for SecretRemove.
+type SecretRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ServiceListParams defines parameters for ServiceList.
 type ServiceListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -762,6 +767,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /secrets (the `SecretCreate` operationId).
 	SecretCreate(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretRemove Remove a reusable secret
+	//
+	// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+	SecretRemove(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretShow Show reusable secret metadata
 	//
@@ -1243,6 +1253,21 @@ func (c *Client) SecretCreateWithBody(ctx context.Context, params *SecretCreateP
 // Corresponds with POST /secrets (the `SecretCreate` operationId).
 func (c *Client) SecretCreate(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSecretCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretRemove Remove a reusable secret
+//
+// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+func (c *Client) SecretRemove(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2452,6 +2477,53 @@ func NewSecretCreateRequestWithBody(server string, params *SecretCreateParams, c
 	return req, nil
 }
 
+// NewSecretRemoveRequest constructs an http.Request for the SecretRemove method
+func NewSecretRemoveRequest(server string, id string, params *SecretRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/secrets/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewSecretShowRequest constructs an http.Request for the SecretShow method
 func NewSecretShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -3092,6 +3164,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /secrets (the `SecretCreate` operationId).
 	SecretCreateWithResponse(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretCreateResponse, error)
+
+	// SecretRemoveWithResponse Remove a reusable secret
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+	SecretRemoveWithResponse(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error)
 
 	// SecretShowWithResponse Show reusable secret metadata
 	//
@@ -4098,6 +4177,61 @@ func (r SecretCreateResponse) ContentType() string {
 	return ""
 }
 
+// SecretRemoveResponse202Headers the declared response headers of an HTTP 202 response for SecretRemove
+type SecretRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type SecretRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *SecretRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r SecretRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SecretRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SecretRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecretRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecretRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecretRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SecretShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4839,6 +4973,19 @@ func (c *ClientWithResponses) SecretCreateWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseSecretCreateResponse(rsp)
+}
+
+// SecretRemoveWithResponse Remove a reusable secret
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /secrets/{id} (the `SecretRemove` operationId).
+func (c *ClientWithResponses) SecretRemoveWithResponse(ctx context.Context, id string, params *SecretRemoveParams, reqEditors ...RequestEditorFn) (*SecretRemoveResponse, error) {
+	rsp, err := c.SecretRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretRemoveResponse(rsp)
 }
 
 // SecretShowWithResponse Show reusable secret metadata
@@ -5690,6 +5837,52 @@ func ParseSecretCreateResponse(rsp *http.Response) (*SecretCreateResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseSecretRemoveResponse parses an HTTP response from a SecretRemoveWithResponse call
+func ParseSecretRemoveResponse(rsp *http.Response) (*SecretRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecretRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers SecretRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

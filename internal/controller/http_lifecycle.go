@@ -172,6 +172,11 @@ func (l *httpLifecycle) serveOrdinary(
 	route routePolicy,
 	next http.Handler,
 ) {
+	if route.body == bodyless && (r.ContentLength > 0 || len(r.TransferEncoding) != 0 ||
+		(r.Body != nil && r.Body != http.NoBody)) {
+		l.server.writeRequestProblem(w, http.StatusBadRequest, "request body is not allowed")
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), l.policy.requestTimeout)
 	defer cancel()
 	r = r.WithContext(ctx)

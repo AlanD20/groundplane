@@ -55,7 +55,10 @@ type IdempotencyLocator struct {
 
 type IdempotencyReplayTargetKind string
 
-const IdempotencyReplayTargetAttach IdempotencyReplayTargetKind = "attach"
+const (
+	IdempotencyReplayTargetAttach IdempotencyReplayTargetKind = "attach"
+	IdempotencyReplayTargetSecret IdempotencyReplayTargetKind = "secret"
+)
 
 type IdempotencyReplayTarget struct {
 	Kind IdempotencyReplayTargetKind `json:"kind"`
@@ -258,6 +261,10 @@ func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
 	switch target.Kind {
 	case IdempotencyReplayTargetAttach:
 		if ids.Validate(ids.KindAttach, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetSecret:
+		if ids.Validate(ids.KindSecret, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
 	default:

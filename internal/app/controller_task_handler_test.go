@@ -18,9 +18,9 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 
 	task := testAgentEnrollmentTask()
 	agents := &fakeControllerTaskLocalAgents{healthErr: errs.New(errs.KindAgentNotFound, "missing")}
-	handler, err := newLocalAgentControllerTaskHandler(agents)
+	handler, err := newControllerTaskHandler(agents)
 	if err != nil {
-		t.Fatalf("newLocalAgentControllerTaskHandler() error = %v", err)
+		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
 	if err := handler.Execute(context.Background(), task); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -44,9 +44,9 @@ func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	agents := &fakeControllerTaskLocalAgents{health: localagent.Health{Agent: localagent.Agent{
 		ID: task.Target, EnrollmentTaskID: task.ID, Phase: localagent.PhaseReady,
 	}}}
-	handler, err := newLocalAgentControllerTaskHandler(agents)
+	handler, err := newControllerTaskHandler(agents)
 	if err != nil {
-		t.Fatalf("newLocalAgentControllerTaskHandler() error = %v", err)
+		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
 	if err := handler.Execute(context.Background(), task); err != nil {
 		t.Fatalf("Execute(replay) error = %v", err)
@@ -70,9 +70,9 @@ func TestLocalAgentControllerTaskHandlerRejectsAnotherEnrollmentOwner(t *testing
 		EnrollmentTaskID: ids.NewAt(ids.KindTask, task.CreatedAt.Add(time.Second), 22),
 		Phase:            localagent.PhaseReady,
 	}}}
-	handler, err := newLocalAgentControllerTaskHandler(agents)
+	handler, err := newControllerTaskHandler(agents)
 	if err != nil {
-		t.Fatalf("newLocalAgentControllerTaskHandler() error = %v", err)
+		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
 	err = handler.Execute(context.Background(), task)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || agents.reconcileCalls != 0 {
@@ -85,9 +85,9 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 
 	task := testAgentEnrollmentTask()
 	task.Params["surprise"] = "value"
-	handler, err := newLocalAgentControllerTaskHandler(&fakeControllerTaskLocalAgents{})
+	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{})
 	if err != nil {
-		t.Fatalf("newLocalAgentControllerTaskHandler() error = %v", err)
+		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
 	if err := handler.Execute(context.Background(), task); !errors.Is(
 		err,

@@ -35,6 +35,10 @@ type SecretMutator interface {
 	) (etcd.IdempotencyResponse, error)
 }
 
+type SecretDeleter interface {
+	DeleteSecret(context.Context, string, string) (etcd.IdempotencyResponse, error)
+}
+
 type secretCreateInput struct {
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	RawBody        []byte
@@ -49,6 +53,11 @@ type secretListInput struct {
 
 type secretShowInput struct {
 	ID string `path:"id" pattern:"^sec_[0-9A-HJKMNP-TV-Z]{26}$"`
+}
+
+type secretRemoveInput struct {
+	ID             string `path:"id" pattern:"^sec_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type secretPageOutput struct {
@@ -75,6 +84,11 @@ func (s *Server) registerSecrets() {
 		true,
 		"Secret",
 	)
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](),
+		true,
+		"TaskAccepted",
+	)
 	registerSecretMutation[apiTypes.SecretCreateRequest](
 		s,
 		huma.Operation{
@@ -99,7 +113,52 @@ func (s *Server) registerSecrets() {
 		OperationID: "secret.reveal", Method: http.MethodGet, Path: "/secrets/{id}/value",
 		Summary: "Reveal a reusable secret value", Tags: []string{"Secret"},
 	}, s.revealSecret)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "secret.remove", Method: http.MethodDelete, Path: "/secrets/{id}",
+		Summary: "Remove a reusable secret", Tags: []string{"Secret"}, DefaultStatus: http.StatusAccepted,
+		Middlewares: huma.Middlewares{s.rejectSecretDeleteBody, s.rejectSecretQuery},
+		Responses:   attachMutationResponses(taskAcceptedSchema),
+	}, s.removeSecret)
 	s.setRoutePolicy("POST /api/v1/secrets", routePolicy{body: jsonBody})
+}
+
+func (s *Server) rejectSecretDeleteBody(ctx huma.Context, next func(huma.Context)) {
+	var probe [1]byte
+	count, err := ctx.BodyReader().Read(probe[:])
+	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		if writeErr := huma.WriteErr(
+			s.API,
+			ctx,
+			http.StatusBadRequest,
+			"Secret deletion body is not allowed",
+		); writeErr != nil && s.Logger != nil {
+			s.Logger.Error("controller: write Secret request problem", slog.Any("error", writeErr))
+		}
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) removeSecret(
+	ctx context.Context,
+	request *secretRemoveInput,
+) (*secretMutationOutput, error) {
+	if s.secretDeletions == nil {
+		return nil, errs.New(errs.KindInternal, "Secret deleter is not configured")
+	}
+	response, err := s.secretDeletions.DeleteSecret(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &secretMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
+				s.Logger.Error("controller: write Secret deletion response", slog.Any("error", writeErr))
+			}
+		},
+	}, nil
 }
 
 func registerSecretMutation[InputBody any, Input any](

@@ -142,6 +142,28 @@ func (c *Client) ShowSecret(ctx context.Context, id string) (apiTypes.Secret, er
 	return secretFromGenerated(*parsed), nil
 }
 
+func (c *Client) RemoveSecret(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/secrets/" + id
+	response, err := client.SecretRemoveWithResponse(
+		ctx,
+		id,
+		&generated.SecretRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+}
+
 func secretFromGenerated(secret generated.Secret) apiTypes.Secret {
 	projectID := ""
 	if secret.ProjectId != nil {

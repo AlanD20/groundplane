@@ -269,10 +269,24 @@ func (repository *TaskRepository) RetryTask(
 		mutations = append(mutations, attachChange.mutations...)
 	}
 	defer clearAttachTaskChange(attachChange)
+	secretChange, err := repository.prepareSecretTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if secretChange.applies {
+		conditions = append(conditions, secretChange.conditions...)
+		mutations = append(mutations, secretChange.mutations...)
+	}
+	defer clearSecretTaskChange(secretChange)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
-		classifyTaskRetryConflict(sourceTaskID, retry.OperationID, attachChange.applies),
+		classifyTaskRetryConflict(
+			sourceTaskID,
+			retry.OperationID,
+			attachChange.applies,
+			len(secretChange.conditions),
+		),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -288,9 +302,10 @@ func classifyTaskRetryConflict(
 	sourceTaskID string,
 	operationID string,
 	attachLifecycle bool,
+	secretConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expectedValues := 5
+		expectedValues := 5 + secretConditions
 		if attachLifecycle {
 			expectedValues++
 		}
@@ -965,6 +980,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateSecretTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				return Versioned[TaskRecord]{
 					Record: task, Revision: taskValue.ModRevision,
 					ReadRevision: primaryAndAssignment.ReadRevision,
@@ -1146,12 +1166,28 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, attachChange.conditions...)
 			mutations = append(mutations, attachChange.mutations...)
 		}
+		secretChange, err := repository.prepareSecretTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if secretChange.applies {
+			conditions = append(conditions, secretChange.conditions...)
+			mutations = append(mutations, secretChange.mutations...)
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
 		clear(environmentValue)
 		clearAttachTaskChange(attachChange)
+		clearSecretTaskChange(secretChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -1261,6 +1297,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			return Versioned[TaskRecord]{}, err
 		}
 		if current.Record.Status == TaskStatusAborted {
+			if err := repository.validateSecretTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			return current, nil
 		}
 		if current.Record.Status != TaskStatusPending {
@@ -1333,22 +1374,38 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			return Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 		}
-		transaction, err := repository.store.Transact(ctx, []Condition{
+		secretChange, err := repository.prepareSecretTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			return Versioned[TaskRecord]{}, err
+		}
+		conditions := []Condition{
 			{Key: taskKey(taskID), ModRevision: current.Revision},
 			{Key: taskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
 			{Key: taskQueueKey(current.Record.Executor, taskID), ModRevision: companions.Values[2].ModRevision},
 			{Key: retentionKey},
-		}, []Mutation{
+		}
+		mutations := []Mutation{
 			{Type: MutationPut, Key: taskKey(taskID), Value: terminalValue},
 			{Type: MutationDelete, Key: taskActiveOperationKey(current.Record.OperationID)},
 			{Type: MutationDelete, Key: taskQueueKey(current.Record.Executor, taskID)},
 			{Type: MutationPut, Key: markerKey, Value: markerValue},
 			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
-		})
+		}
+		if secretChange.applies {
+			conditions = append(conditions, secretChange.conditions...)
+			mutations = append(mutations, secretChange.mutations...)
+		}
+		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
+		clearSecretTaskChange(secretChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}

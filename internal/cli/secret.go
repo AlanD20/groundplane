@@ -100,7 +100,11 @@ func newSecretCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/secrets/"+id)
+			accepted, err := fromContext(cmd).Client.RemoveSecret(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	})
 

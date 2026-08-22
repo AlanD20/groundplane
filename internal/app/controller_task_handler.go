@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	agentTaskResourceKey      = "resource_kind"
-	agentTaskResourceValue    = "agent"
 	agentTaskImageKey         = "image"
 	agentTaskPullIntervalKey  = "pull_interval_seconds"
 	agentTaskMaxConcurrentKey = "max_concurrent_tasks"
@@ -28,29 +26,41 @@ type controllerTaskLocalAgents interface {
 	Remove(context.Context, string) error
 }
 
-type localAgentControllerTaskHandler struct {
+type controllerTaskHandler struct {
 	agents controllerTaskLocalAgents
 }
 
-func newLocalAgentControllerTaskHandler(
+func newControllerTaskHandler(
 	agents controllerTaskLocalAgents,
-) (*localAgentControllerTaskHandler, error) {
+) (*controllerTaskHandler, error) {
 	if agents == nil {
 		return nil, errs.New(errs.KindInternal, "Controller Task local Agent lifecycle is required")
 	}
-	return &localAgentControllerTaskHandler{agents: agents}, nil
+	return &controllerTaskHandler{agents: agents}, nil
 }
 
-func (handler *localAgentControllerTaskHandler) Execute(
+func (handler *controllerTaskHandler) Execute(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "Controller Task context is required")
 	}
-	if task.Executor != etcd.TaskExecutorController ||
-		ids.Validate(ids.KindTask, task.ID) != nil || ids.Validate(ids.KindAgent, task.Target) != nil {
-		return errs.New(errs.KindValidationFailed, "Controller Task is not a valid Agent mutation")
+	if task.Executor != etcd.TaskExecutorController || ids.Validate(ids.KindTask, task.ID) != nil {
+		return errs.New(errs.KindValidationFailed, "Controller Task identity is invalid")
+	}
+	switch task.Params[etcd.TaskResourceKindParam] {
+	case etcd.TaskResourceAgent:
+		if ids.Validate(ids.KindAgent, task.Target) != nil {
+			return errs.New(errs.KindValidationFailed, "Controller Task Agent target is invalid")
+		}
+	case etcd.TaskResourceSecret:
+		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindSecret, task.Target) != nil || len(task.Params) != 1 {
+			return errs.New(errs.KindValidationFailed, "Controller Task Secret removal is invalid")
+		}
+		return nil
+	default:
+		return errs.New(errs.KindValidationFailed, "Controller Task resource kind is invalid")
 	}
 	switch task.Type {
 	case etcd.TaskCreate:
@@ -62,7 +72,7 @@ func (handler *localAgentControllerTaskHandler) Execute(
 	}
 }
 
-func (handler *localAgentControllerTaskHandler) executeEnrollment(
+func (handler *controllerTaskHandler) executeEnrollment(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) error {
@@ -97,11 +107,11 @@ func (handler *localAgentControllerTaskHandler) executeEnrollment(
 	return nil
 }
 
-func (handler *localAgentControllerTaskHandler) executeRemoval(
+func (handler *controllerTaskHandler) executeRemoval(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) error {
-	if len(task.Params) != 1 || task.Params[agentTaskResourceKey] != agentTaskResourceValue {
+	if len(task.Params) != 1 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceAgent {
 		return errs.New(errs.KindValidationFailed, "Agent removal Task parameters are invalid")
 	}
 	return handler.agents.Remove(ctx, task.Target)
@@ -113,13 +123,13 @@ func decodeAgentEnrollmentTask(task etcd.TaskRecord) (localagent.EnrollRequest, 
 		Config: localagent.Config{Labels: map[string]string{}},
 	}
 	required := map[string]bool{
-		agentTaskResourceKey: false, agentTaskImageKey: false,
+		etcd.TaskResourceKindParam: false, agentTaskImageKey: false,
 		agentTaskPullIntervalKey: false, agentTaskMaxConcurrentKey: false,
 	}
 	for key, value := range task.Params {
 		switch key {
-		case agentTaskResourceKey:
-			if value != agentTaskResourceValue {
+		case etcd.TaskResourceKindParam:
+			if value != etcd.TaskResourceAgent {
 				return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
 			}
 			required[key] = true
@@ -157,10 +167,10 @@ func decodeAgentEnrollmentTask(task etcd.TaskRecord) (localagent.EnrollRequest, 
 
 func agentEnrollmentTaskParams(image string, config localagent.Config) map[string]string {
 	params := map[string]string{
-		agentTaskResourceKey:      agentTaskResourceValue,
-		agentTaskImageKey:         image,
-		agentTaskPullIntervalKey:  strconv.FormatInt(int64(config.PullIntervalSeconds), 10),
-		agentTaskMaxConcurrentKey: strconv.FormatInt(int64(config.MaxConcurrentTasks), 10),
+		etcd.TaskResourceKindParam: etcd.TaskResourceAgent,
+		agentTaskImageKey:          image,
+		agentTaskPullIntervalKey:   strconv.FormatInt(int64(config.PullIntervalSeconds), 10),
+		agentTaskMaxConcurrentKey:  strconv.FormatInt(int64(config.MaxConcurrentTasks), 10),
 	}
 	for key, value := range config.Labels {
 		params[agentTaskLabelPrefix+key] = value

@@ -43,7 +43,7 @@ func TestAgentRemovalServiceCreatesBoundedControllerTask(t *testing.T) {
 	if response.Status != http.StatusAccepted || tasks.task.Executor != etcd.TaskExecutorController ||
 		tasks.task.Type != etcd.TaskRemove || tasks.task.Target != testAgentRemovalID ||
 		tasks.task.TimeoutSeconds != agentRemovalTimeoutSeconds || tasks.task.PlanHash == "" ||
-		tasks.task.Params[agentTaskResourceKey] != agentTaskResourceValue {
+		tasks.task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceAgent {
 		t.Fatalf("created Agent removal Task = %#v, response = %#v", tasks.task, response)
 	}
 	if targets.healthCalls != 1 || tasks.marker.Locator.Route != agentRemovalRoute ||

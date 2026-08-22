@@ -302,6 +302,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret creation service: %w", err)
 	}
+	secretDeletionIdempotency, err := newDurableSecretDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Secret deletion idempotency: %w", err)
+	}
+	secretDeletions, err := newSecretDeletionService(secretReadRepository, secretDeletionIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Secret deletion service: %w", err)
+	}
 	attachMutationRecords, err := newDurableAttachMutationRepository(
 		hierarchyRecords, serviceRecords, attachRecords,
 	)
@@ -511,7 +521,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
 	}
-	controllerTaskHandler, err := newLocalAgentControllerTaskHandler(localAgentManager)
+	controllerTaskHandler, err := newControllerTaskHandler(localAgentManager)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()
@@ -546,6 +556,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Services:              serviceReads,
 		Secrets:               secretReads,
 		SecretMutations:       secretMutations,
+		SecretDeletions:       secretDeletions,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,

@@ -149,7 +149,7 @@ func (repository *SecretRepository) GetSecret(
 	if err := validateID(ids.KindSecret, id); err != nil {
 		return Versioned[SecretRecord]{}, err
 	}
-	return getRecord(
+	current, err := getRecord(
 		ctx,
 		repository.store,
 		secretRecordKey(id),
@@ -158,6 +158,26 @@ func (repository *SecretRepository) GetSecret(
 		decodeSecretRecord,
 		func(record SecretRecord) string { return record.Secret.ID },
 	)
+	if err != nil {
+		return Versioned[SecretRecord]{}, err
+	}
+	tombstones, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys:     []string{deletionTombstoneKey(string(DeletionTargetSecret), id)},
+		Revision: current.ReadRevision,
+	})
+	if err != nil {
+		return Versioned[SecretRecord]{}, err
+	}
+	if tombstones == nil || len(tombstones.Values) != 1 {
+		return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret deletion fence read is incomplete")
+	}
+	if tombstones.Values[0] != nil {
+		if err := validateSecretDeletionFence(tombstones.Values[0], id); err != nil {
+			return Versioned[SecretRecord]{}, err
+		}
+		return Versioned[SecretRecord]{}, errs.New(errs.KindSecretNotFound, "Secret was not found")
+	}
+	return current, nil
 }
 
 func (repository *SecretRepository) GetSecretValue(
@@ -194,7 +214,7 @@ func (repository *SecretRepository) ListSecrets(
 		return Page[SecretRecord]{}, err
 	}
 	ownerKind, ownerID := secretScopeKey(scope, projectID)
-	return listIndexPage(
+	page, err := listIndexPage(
 		ctx,
 		repository.store,
 		"secrets",
@@ -210,6 +230,32 @@ func (repository *SecretRepository) ListSecrets(
 			return record.Secret.Scope == scope && record.Secret.ProjectID == projectID
 		},
 	)
+	if err != nil || len(page.Items) == 0 {
+		return page, err
+	}
+	keys := make([]string, len(page.Items))
+	for index, item := range page.Items {
+		keys[index] = deletionTombstoneKey(string(DeletionTargetSecret), item.Record.Secret.ID)
+	}
+	tombstones, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: page.Revision})
+	if err != nil {
+		return Page[SecretRecord]{}, err
+	}
+	if tombstones == nil || tombstones.ReadRevision != page.Revision || len(tombstones.Values) != len(keys) {
+		return Page[SecretRecord]{}, errs.New(errs.KindInternal, "Secret deletion fence page is incomplete")
+	}
+	visible := make([]Versioned[SecretRecord], 0, len(page.Items))
+	for index, item := range page.Items {
+		if tombstones.Values[index] == nil {
+			visible = append(visible, item)
+			continue
+		}
+		if err := validateSecretDeletionFence(tombstones.Values[index], item.Record.Secret.ID); err != nil {
+			return Page[SecretRecord]{}, err
+		}
+	}
+	page.Items = visible
+	return page, nil
 }
 
 // ResolveSecret accepts either an in-scope stable id or a key. Key lookup is
@@ -250,34 +296,63 @@ func (repository *SecretRepository) ResolveSecret(
 	if indexes == nil || len(indexes.Values) != 2 {
 		return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret fallback index read is incomplete")
 	}
-	selected := indexes.Values[0]
-	if selected == nil {
-		selected = indexes.Values[1]
+	for index, selected := range indexes.Values {
+		if selected == nil {
+			continue
+		}
+		id := string(selected.Value)
+		if ids.Validate(ids.KindSecret, id) != nil {
+			return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret key index is corrupt")
+		}
+		stored, err := repository.store.GetMany(ctx, GetManyRequest{
+			Keys: []string{
+				secretRecordKey(id),
+				deletionTombstoneKey(string(DeletionTargetSecret), id),
+			},
+			Revision: indexes.ReadRevision,
+		})
+		if err != nil {
+			return Versioned[SecretRecord]{}, err
+		}
+		if stored == nil || stored.ReadRevision != indexes.ReadRevision || len(stored.Values) != 2 ||
+			stored.Values[0] == nil {
+			return Versioned[SecretRecord]{}, errs.New(
+				errs.KindInternal,
+				"Secret key index references a missing record",
+			)
+		}
+		if stored.Values[1] != nil {
+			if err := validateSecretDeletionFence(stored.Values[1], id); err != nil {
+				return Versioned[SecretRecord]{}, err
+			}
+			continue
+		}
+		record, err := decodeSecretRecord(stored.Values[0].Value)
+		projectMatch := index == 0 && record.Secret.Scope == core.SecretScopeProject &&
+			record.Secret.ProjectID == projectID
+		platformMatch := index == 1 && record.Secret.Scope == core.SecretScopePlatform &&
+			record.Secret.ProjectID == ""
+		if err != nil || record.Secret.ID != id || record.Secret.Key != reference ||
+			(!projectMatch && !platformMatch) {
+			return Versioned[SecretRecord]{}, corruptSecretRecord()
+		}
+		return Versioned[SecretRecord]{
+			Record: record, Revision: stored.Values[0].ModRevision, ReadRevision: stored.ReadRevision,
+		}, nil
 	}
-	if selected == nil {
-		return Versioned[SecretRecord]{}, errs.New(errs.KindSecretNotFound, "Secret was not found in scope")
+	return Versioned[SecretRecord]{}, errs.New(errs.KindSecretNotFound, "Secret was not found in scope")
+}
+
+func validateSecretDeletionFence(value *KeyValue, secretID string) error {
+	if value == nil {
+		return errs.New(errs.KindInternal, "Secret deletion fence is missing")
 	}
-	id := string(selected.Value)
-	if ids.Validate(ids.KindSecret, id) != nil {
-		return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret key index is corrupt")
+	tombstone, err := decodeDeletionTombstone(value.Value)
+	if err != nil || tombstone.TargetKind != DeletionTargetSecret || tombstone.TargetID != secretID ||
+		tombstone.Phase != DeletionPhaseFinalizing {
+		return corruptDeletionTombstone()
 	}
-	primaries, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{secretRecordKey(id)}, Revision: indexes.ReadRevision,
-	})
-	if err != nil {
-		return Versioned[SecretRecord]{}, err
-	}
-	if primaries == nil || len(primaries.Values) != 1 || primaries.Values[0] == nil {
-		return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret key index references a missing record")
-	}
-	record, err := decodeSecretRecord(primaries.Values[0].Value)
-	if err != nil || record.Secret.ID != id || record.Secret.Key != reference ||
-		(record.Secret.Scope == core.SecretScopeProject && record.Secret.ProjectID != projectID) {
-		return Versioned[SecretRecord]{}, corruptSecretRecord()
-	}
-	return Versioned[SecretRecord]{
-		Record: record, Revision: primaries.Values[0].ModRevision, ReadRevision: primaries.ReadRevision,
-	}, nil
+	return nil
 }
 
 func (repository *SecretRepository) DeleteSecret(
