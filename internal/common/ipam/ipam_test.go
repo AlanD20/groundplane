@@ -93,3 +93,35 @@ func TestFirstAvailableChildRejectsExhaustion(t *testing.T) {
 		t.Fatalf("exhaustion error = %v, kind = %d, %t", err, kind, ok)
 	}
 }
+
+// Rationale: Caddy allocation must choose the first usable bridge address,
+// remain independent of reservation order, and never return reserved bridge
+// identities.
+func TestFirstAvailableUsableIPv4UsesLowestFreeAddress(t *testing.T) {
+	prefix := netip.MustParsePrefix("10.200.30.0/29")
+	got, err := FirstAvailableUsableIPv4(prefix, []netip.Addr{
+		netip.MustParseAddr("10.200.30.4"),
+		netip.MustParseAddr("10.200.30.2"),
+	})
+	if err != nil {
+		t.Fatalf("FirstAvailableUsableIPv4 error: %v", err)
+	}
+	if want := netip.MustParseAddr("10.200.30.3"); got != want {
+		t.Fatalf("address = %s, want %s", got, want)
+	}
+	for _, reserved := range []string{"10.200.30.0", "10.200.30.1", "10.200.30.7"} {
+		if err := ValidateUsableIPv4(prefix, netip.MustParseAddr(reserved)); err == nil {
+			t.Fatalf("ValidateUsableIPv4 accepted reserved address %s", reserved)
+		}
+	}
+}
+
+// Rationale: an exhausted Zone must fail without wrapping into its network,
+// gateway, or broadcast address.
+func TestFirstAvailableUsableIPv4RejectsExhaustion(t *testing.T) {
+	prefix := netip.MustParsePrefix("10.200.30.0/30")
+	_, err := FirstAvailableUsableIPv4(prefix, []netip.Addr{netip.MustParseAddr("10.200.30.2")})
+	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindStateConflict {
+		t.Fatalf("exhaustion error = %v, kind = %d, %t", err, kind, ok)
+	}
+}

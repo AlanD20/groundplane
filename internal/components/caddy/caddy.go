@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -128,26 +129,15 @@ func selectedZone(env core.Environment, component core.Component) (core.Zone, er
 }
 
 func validatePinnedAddress(zone core.Zone, raw string) error {
-	prefix, err := netip.ParsePrefix(zone.Subnet)
-	if err != nil || !prefix.Addr().Is4() || prefix.Bits() > 30 || prefix != prefix.Masked() {
+	prefix, err := ipam.ParseIPv4Prefix(zone.Subnet)
+	if err != nil || prefix.String() != zone.Subnet {
 		return errs.New(errs.KindValidationFailed, "caddy: selected Zone must have a canonical usable IPv4 subnet")
 	}
 	address, err := netip.ParseAddr(raw)
-	if err != nil || !address.Is4() || !prefix.Contains(address) {
-		return errs.New(errs.KindValidationFailed, "caddy: pinned IPv4 is not in the selected Zone")
-	}
-	network := ipv4Number(prefix.Addr())
-	candidate := ipv4Number(address)
-	size := uint64(1) << uint(32-prefix.Bits())
-	if candidate <= network+1 || candidate >= network+size-1 {
-		return errs.New(errs.KindValidationFailed, "caddy: pinned IPv4 is a reserved Zone address")
+	if err != nil || ipam.ValidateUsableIPv4(prefix, address) != nil {
+		return errs.New(errs.KindValidationFailed, "caddy: pinned IPv4 is not usable in the selected Zone")
 	}
 	return nil
-}
-
-func ipv4Number(address netip.Addr) uint64 {
-	octets := address.As4()
-	return uint64(octets[0])<<24 | uint64(octets[1])<<16 | uint64(octets[2])<<8 | uint64(octets[3])
 }
 
 func resolveRoutes(env core.Environment, zone core.Zone) ([]resolvedRoute, error) {

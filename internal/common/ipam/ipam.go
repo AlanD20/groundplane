@@ -134,6 +134,80 @@ func FirstAvailableChild(parent netip.Prefix, bits int, reserved []netip.Prefix)
 	)
 }
 
+// ValidateUsableIPv4 enforces the MVP bridge-address exclusions: network,
+// gateway, and broadcast addresses can never be assigned to a component.
+func ValidateUsableIPv4(prefix netip.Prefix, address netip.Addr) error {
+	prefix, err := canonicalIPv4(prefix)
+	if err != nil {
+		return err
+	}
+	if prefix.Bits() > 30 {
+		return errs.Newf(errs.KindValidationFailed, "IPv4 subnet %s has no usable component addresses", prefix)
+	}
+	if !address.IsValid() || !address.Is4() || !prefix.Contains(address) {
+		return errs.Newf(errs.KindValidationFailed, "IPv4 address %s is outside subnet %s", address, prefix)
+	}
+	interval := intervalOf(prefix)
+	value := ipv4Number(address)
+	if value <= interval.start+1 || value >= interval.end {
+		return errs.Newf(errs.KindValidationFailed, "IPv4 address %s is reserved in subnet %s", address, prefix)
+	}
+	return nil
+}
+
+// FirstAvailableUsableIPv4 returns the lowest bridge address not already
+// reserved after excluding the network, gateway, and broadcast addresses.
+func FirstAvailableUsableIPv4(prefix netip.Prefix, reserved []netip.Addr) (netip.Addr, error) {
+	prefix, err := canonicalIPv4(prefix)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	if prefix.Bits() > 30 {
+		return netip.Addr{}, errs.Newf(
+			errs.KindStateConflict,
+			"IPv4 subnet %s has no free usable component address",
+			prefix,
+		)
+	}
+	values := make([]uint64, len(reserved))
+	seen := make(map[uint64]struct{}, len(reserved))
+	for index, address := range reserved {
+		if err := ValidateUsableIPv4(prefix, address); err != nil {
+			return netip.Addr{}, err
+		}
+		value := ipv4Number(address)
+		if _, duplicate := seen[value]; duplicate {
+			return netip.Addr{}, errs.Newf(
+				errs.KindValidationFailed,
+				"IPv4 address %s is reserved more than once",
+				address,
+			)
+		}
+		seen[value] = struct{}{}
+		values[index] = value
+	}
+	sort.Slice(values, func(left, right int) bool { return values[left] < values[right] })
+	interval := intervalOf(prefix)
+	candidate := interval.start + 2
+	for _, reservedValue := range values {
+		if reservedValue == candidate {
+			candidate++
+			continue
+		}
+		if reservedValue > candidate {
+			break
+		}
+	}
+	if candidate >= interval.end {
+		return netip.Addr{}, errs.Newf(
+			errs.KindStateConflict,
+			"IPv4 subnet %s has no free usable component address",
+			prefix,
+		)
+	}
+	return ipv4FromNumber(candidate), nil
+}
+
 type addressInterval struct {
 	start uint64
 	end   uint64
@@ -168,4 +242,14 @@ func prefixFrom(start uint64, bits int) netip.Prefix {
 	var raw [4]byte
 	binary.BigEndian.PutUint32(raw[:], uint32(start))
 	return netip.PrefixFrom(netip.AddrFrom4(raw), bits)
+}
+
+func ipv4Number(address netip.Addr) uint64 {
+	return uint64(binary.BigEndian.Uint32(address.AsSlice()))
+}
+
+func ipv4FromNumber(value uint64) netip.Addr {
+	var raw [4]byte
+	binary.BigEndian.PutUint32(raw[:], uint32(value))
+	return netip.AddrFrom4(raw)
 }
