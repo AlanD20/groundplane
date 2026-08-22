@@ -520,6 +520,7 @@ func validateTaskRecord(record TaskRecord) error {
 		record.Steps,
 		materializationEnvironment,
 		hasMaterializationEnvironment,
+		uint64(record.RenderGeneration),
 	); err != nil {
 		return err
 	}

@@ -21,8 +21,9 @@ type EnvironmentRouteIdentity struct {
 	Path string `json:"path"`
 }
 
-// EnvironmentComposeProjection is the durable identity input needed to
-// reproduce one Environment render. Collections are strictly sorted by Name.
+// EnvironmentComposeProjection is the durable identity and Component input
+// needed to reproduce one Environment render. Named collections are sorted by
+// Name, Routes by host/path, and Components by kind.
 type EnvironmentComposeProjection struct {
 	EnvironmentID       string                       `json:"environment_id"`
 	BlueprintRevisionID string                       `json:"blueprint_revision_id"`
@@ -31,6 +32,8 @@ type EnvironmentComposeProjection struct {
 	Networks            []EnvironmentComposeIdentity `json:"networks,omitempty"`
 	Volumes             []EnvironmentComposeIdentity `json:"volumes,omitempty"`
 	Routes              []EnvironmentRouteIdentity   `json:"routes,omitempty"`
+	Components          []ComponentRecord            `json:"components,omitempty"`
+	Entries             []EntryRecord                `json:"entries,omitempty"`
 }
 
 func environmentComposeProjectionKey(environmentID string) string {
@@ -101,7 +104,49 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentComposeIdentities(ids.KindVolume, projection.Volumes); err != nil {
 		return err
 	}
-	return validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.Routes)
+	if err := validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.Routes); err != nil {
+		return err
+	}
+	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
+		return err
+	}
+	return validateEnvironmentEntryProjection(projection.EnvironmentID, projection.Entries)
+}
+
+func validateEnvironmentEntryProjection(environmentID string, values []EntryRecord) error {
+	previousID := ""
+	for _, value := range values {
+		if value.Entry.ID <= previousID || value.EnvironmentID != environmentID || validateEntryRecord(value) != nil {
+			return errs.New(errs.KindValidationFailed, "Environment Entry projection is invalid or unsorted")
+		}
+		previousID = value.Entry.ID
+	}
+	return nil
+}
+
+func validateEnvironmentComponentProjection(environmentID string, values []ComponentRecord) error {
+	if len(values) == 0 {
+		return nil
+	}
+	if len(values) != 2 {
+		return errs.New(errs.KindValidationFailed, "Environment Component projection must contain both singletons")
+	}
+	previousKind := core.ComponentKind("")
+	seenIDs := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		kind := value.Desired.Kind
+		if validateComponentRecord(value) != nil || value.Desired.Owner != core.ComponentOwnerEnvironment ||
+			value.Desired.OwnerID != environmentID || kind <= previousKind ||
+			(kind != core.ComponentKindIngressCaddy && kind != core.ComponentKindEdgeCloudflare) {
+			return errs.New(errs.KindValidationFailed, "Environment Component projection is invalid or unsorted")
+		}
+		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment Component projection id is duplicated")
+		}
+		seenIDs[value.Desired.ID] = struct{}{}
+		previousKind = kind
+	}
+	return nil
 }
 
 func validateEnvironmentRouteIdentities(environmentID string, values []EnvironmentRouteIdentity) error {
@@ -159,19 +204,46 @@ func validateEnvironmentComposeProjectionAdvance(
 	if previous.EnvironmentID != next.EnvironmentID || next.RenderGeneration != previous.RenderGeneration+1 {
 		return errs.New(errs.KindStateConflict, "Environment render generation did not advance exactly once")
 	}
-	if err := preserveEnvironmentComposeIdentities("service", previous.Services, next.Services); err != nil {
+	if err := preserveEnvironmentComposeIdentities(
+		"service",
+		previous.Services,
+		next.Services,
+		removedComponentGeneratedServiceIDs(previous.Components, next.Components),
+	); err != nil {
 		return err
 	}
-	if err := preserveEnvironmentComposeIdentities("network", previous.Networks, next.Networks); err != nil {
+	if err := preserveEnvironmentComposeIdentities("network", previous.Networks, next.Networks, nil); err != nil {
 		return err
 	}
-	return preserveEnvironmentComposeIdentities("volume", previous.Volumes, next.Volumes)
+	return preserveEnvironmentComposeIdentities("volume", previous.Volumes, next.Volumes, nil)
+}
+
+func removedComponentGeneratedServiceIDs(
+	previous []ComponentRecord,
+	next []ComponentRecord,
+) map[string]struct{} {
+	retained := make(map[string]struct{})
+	for _, component := range next {
+		for _, serviceID := range component.Runtime.GeneratedServices {
+			retained[serviceID] = struct{}{}
+		}
+	}
+	removed := make(map[string]struct{})
+	for _, component := range previous {
+		for _, serviceID := range component.Runtime.GeneratedServices {
+			if _, keep := retained[serviceID]; !keep {
+				removed[serviceID] = struct{}{}
+			}
+		}
+	}
+	return removed
 }
 
 func preserveEnvironmentComposeIdentities(
 	kind string,
 	previous []EnvironmentComposeIdentity,
 	next []EnvironmentComposeIdentity,
+	allowedRemovedIDs map[string]struct{},
 ) error {
 	byName := make(map[string]string, len(next))
 	for _, identity := range next {
@@ -180,6 +252,9 @@ func preserveEnvironmentComposeIdentities(
 	for _, identity := range previous {
 		nextID, exists := byName[identity.Name]
 		if !exists {
+			if _, allowed := allowedRemovedIDs[identity.ID]; allowed {
+				continue
+			}
 			return errs.Newf(
 				errs.KindResourceInUse,
 				"Blueprint omits existing %s %s; remove it explicitly before apply",

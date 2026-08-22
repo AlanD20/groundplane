@@ -222,6 +222,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone repository: %w", err)
 	}
+	componentRecords, err := etcd.NewComponentRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Component repository: %w", err)
+	}
 	serviceReadRepository, err := newDurableServiceReadRepository(hierarchyRecords, serviceRecords)
 	if err != nil {
 		_ = store.Close()
@@ -281,6 +286,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	materializationResolver, err := controller.NewTaskMaterializationResolver(
 		hierarchyRecords,
 		entryValues,
+		planResolver,
 		intentProtector,
 	)
 	if err != nil {
@@ -416,6 +422,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		zoneRecords,
 		serviceRecords,
 		routeRecords,
+		entryRecords,
+		componentRecords,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -425,6 +433,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		cfg.Storage.VolumeRoot,
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
+		materializationResolver,
 	)
 	if err != nil {
 		_ = store.Close()

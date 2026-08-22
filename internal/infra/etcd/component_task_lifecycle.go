@@ -18,6 +18,251 @@ type componentTaskChange struct {
 	values     [][]byte
 }
 
+func (repository *TaskRepository) prepareComponentTaskRetry(
+	ctx context.Context,
+	source TaskRecord,
+	retry TaskRecord,
+	revision int64,
+) (componentTaskChange, error) {
+	intentResult, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{componentTaskIntentKey(source.ID)}, Revision: revision,
+	})
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+	if intentResult == nil || len(intentResult.Values) != 1 {
+		return componentTaskChange{}, errs.New(errs.KindInternal, "Component retry read is incomplete")
+	}
+	intentValue := intentResult.Values[0]
+	if intentValue == nil {
+		return componentTaskChange{}, nil
+	}
+	intent, err := decodeComponentTaskIntent(intentValue.Value)
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+	if err := validateComponentTaskOwner(source, intent); err != nil {
+		return componentTaskChange{}, err
+	}
+	if source.TerminalAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
+		!intent.TerminalAt.Equal(*source.TerminalAt) || retry.Executor != source.Executor ||
+		retry.Type != source.Type || retry.Target != source.Target || retry.RetryOf != source.ID ||
+		retry.RenderGeneration != source.RenderGeneration {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry changed its pinned Task")
+	}
+	retryIntent, err := NewComponentTaskIntent(
+		retry.ID,
+		intent.EnvironmentID,
+		intent.Candidates,
+		retry.CreatedAt,
+	)
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+
+	zoneSet := make(map[string]struct{})
+	for _, candidate := range intent.Candidates {
+		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
+			binding, present, bindingErr := componentTaskAddress(record)
+			if bindingErr != nil {
+				return componentTaskChange{}, bindingErr
+			}
+			if present {
+				zoneSet[binding.zoneID] = struct{}{}
+			}
+		}
+	}
+	zones := make([]string, 0, len(zoneSet))
+	for zoneID := range zoneSet {
+		zones = append(zones, zoneID)
+	}
+	sort.Strings(zones)
+
+	keys := make([]string, 0, 2+len(intent.Candidates)+(2*len(zones)))
+	keys = append(
+		keys,
+		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentComposeProjectionKey(intent.EnvironmentID),
+	)
+	for _, candidate := range intent.Candidates {
+		keys = append(keys, componentKey(candidate.Current.Desired.ID))
+	}
+	for _, zoneID := range zones {
+		keys = append(keys, zoneKey(zoneID))
+	}
+	for _, zoneID := range zones {
+		keys = append(keys, componentAddressRegistryKey(zoneID))
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+	if state == nil || len(state.Values) != len(keys) || state.Values[1] == nil {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry state is incomplete")
+	}
+	if state.Values[0] != nil && ids.Validate(ids.KindTask, string(state.Values[0].Value)) != nil {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry ownership is corrupt")
+	}
+	projection, err := decodeEnvironmentComposeProjection(state.Values[1].Value)
+	if err != nil {
+		return componentTaskChange{}, err
+	}
+	if projection.EnvironmentID != intent.EnvironmentID ||
+		projection.RenderGeneration != uint64(source.RenderGeneration) ||
+		!componentRetryProjectionMatches(intent, projection) {
+		return componentTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"Component retry no longer matches the pinned Environment projection",
+		)
+	}
+
+	change := componentTaskChange{
+		applies: true,
+		conditions: []Condition{
+			{Key: componentTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
+			{Key: componentTaskIntentKey(retry.ID)},
+			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+			{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+		},
+	}
+	for index, candidate := range intent.Candidates {
+		value := state.Values[index+2]
+		if value == nil || value.ModRevision != candidate.CurrentRevision {
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"active Component changed before retry",
+			)
+		}
+		active, decodeErr := decodeComponentRecord(value.Value)
+		if decodeErr != nil {
+			return componentTaskChange{}, decodeErr
+		}
+		if !reflect.DeepEqual(active, candidate.Current) {
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"active Component no longer matches retry base",
+			)
+		}
+		change.conditions = append(change.conditions, Condition{
+			Key: componentKey(active.Desired.ID), ModRevision: value.ModRevision,
+		})
+	}
+
+	zoneRecords := make(map[string]ZoneRecord, len(zones))
+	registries := make(map[string]componentAddressRegistry, len(zones))
+	zoneOffset := 2 + len(intent.Candidates)
+	registryOffset := zoneOffset + len(zones)
+	for index, zoneID := range zones {
+		zoneValue := state.Values[zoneOffset+index]
+		if zoneValue == nil {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry Zone was removed")
+		}
+		zone, decodeErr := decodeZoneRecord(zoneValue.Value)
+		if decodeErr != nil {
+			return componentTaskChange{}, decodeErr
+		}
+		if zone.Desired.ID != zoneID || zone.EnvironmentID != intent.EnvironmentID {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry Zone ownership changed")
+		}
+		registryValue := state.Values[registryOffset+index]
+		registry := componentAddressRegistry{Reservations: map[string]string{}}
+		if registryValue != nil {
+			registry, decodeErr = decodeEnvelope[componentAddressRegistry](
+				registryValue.Value,
+				"component_address_registry",
+			)
+			if decodeErr != nil || validateComponentAddressRegistry(zone, registry) != nil {
+				return componentTaskChange{}, corruptComponentAddressRegistry()
+			}
+		}
+		zoneRecords[zoneID] = zone
+		registries[zoneID] = registry
+		change.conditions = append(change.conditions, Condition{
+			Key: zoneKey(zoneID), ModRevision: zoneValue.ModRevision,
+		})
+		registryCondition := Condition{Key: componentAddressRegistryKey(zoneID)}
+		if registryValue != nil {
+			registryCondition.ModRevision = registryValue.ModRevision
+		}
+		change.conditions = append(change.conditions, registryCondition)
+	}
+
+	changedRegistries := make(map[string]struct{})
+	for _, candidate := range intent.Candidates {
+		current, currentPresent, _ := componentTaskAddress(candidate.Current)
+		if currentPresent && registries[current.zoneID].Reservations[candidate.Current.Desired.ID] != current.address {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "active Component address changed")
+		}
+		next, nextPresent, _ := componentTaskAddress(candidate.Candidate)
+		if !nextPresent || componentTaskBindingsEqual(current, currentPresent, next, nextPresent) {
+			continue
+		}
+		registry := registries[next.zoneID]
+		replacement, reserveErr := registry.reserveExact(
+			zoneRecords[next.zoneID],
+			candidate.Candidate.Desired.ID,
+			next.address,
+		)
+		if reserveErr != nil {
+			return componentTaskChange{}, reserveErr
+		}
+		if !reflect.DeepEqual(registry, replacement) {
+			registries[next.zoneID] = replacement
+			changedRegistries[next.zoneID] = struct{}{}
+		}
+	}
+	for _, zoneID := range zones {
+		if _, changed := changedRegistries[zoneID]; !changed {
+			continue
+		}
+		value, encodeErr := encodeComponentAddressRegistry(zoneRecords[zoneID], registries[zoneID])
+		if encodeErr != nil {
+			clearComponentTaskChange(change)
+			return componentTaskChange{}, encodeErr
+		}
+		change.values = append(change.values, value)
+		change.mutations = append(change.mutations, Mutation{
+			Type: MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
+		})
+	}
+	intentBytes, err := encodeComponentTaskIntent(retryIntent)
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	change.values = append(change.values, intentBytes)
+	change.mutations = append(change.mutations,
+		Mutation{Type: MutationPut, Key: componentTaskIntentKey(retry.ID), Value: intentBytes},
+		Mutation{
+			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
+		},
+	)
+	return change, nil
+}
+
+func componentRetryProjectionMatches(
+	intent ComponentTaskIntent,
+	projection EnvironmentComposeProjection,
+) bool {
+	for _, candidate := range intent.Candidates {
+		matched := false
+		for _, component := range projection.Components {
+			if component.Desired.ID != candidate.Candidate.Desired.ID {
+				continue
+			}
+			if !reflect.DeepEqual(component, candidate.Candidate) {
+				return false
+			}
+			matched = true
+			break
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
 func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,

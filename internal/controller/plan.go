@@ -16,6 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -74,6 +75,7 @@ type TaskPlanResolver struct {
 	attaches         attachPlanRecordReader
 	services         attachPlanServiceReader
 	attachIdentities attachPlanIdentityResolver
+	componentCatalog []components.Registration
 }
 
 type blueprintPlanStateReader interface {
@@ -95,7 +97,7 @@ func NewTaskPlanResolver(volumeRoot string) (*TaskPlanResolver, error) {
 	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
 		return nil, err
 	}
-	return &TaskPlanResolver{volumeRoot: volumeRoot}, nil
+	return &TaskPlanResolver{volumeRoot: volumeRoot, componentCatalog: components.All()}, nil
 }
 
 func NewTaskPlanResolverWithBlueprints(
@@ -166,7 +168,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != 3 ||
-		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Materializations) != 0 {
+		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
 	}
 	revisionID := task.Params[etcd.EnvironmentBlueprintRevisionParam]
@@ -179,7 +181,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	expectedSteps := 1
+	expectedSteps := len(task.Materializations) + 1
 	if len(artifact.Volumes) != 0 {
 		expectedSteps++
 	}
@@ -188,6 +190,25 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	steps := make([]*agentpb.ExecutionStep, 0, expectedSteps)
 	stepIndex := 0
+	materializations := make(map[string]etcd.TaskMaterializationRecord, len(task.Materializations))
+	for _, reference := range task.Materializations {
+		materializations[reference.StepID] = reference
+	}
+	for ; stepIndex < len(task.Materializations); stepIndex++ {
+		reference, exists := materializations[task.Steps[stepIndex].ID]
+		if !exists {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint materialization order is invalid")
+		}
+		step, stepErr := BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+		if stepErr != nil {
+			return nil, stepErr
+		}
+		steps = append(steps, step)
+		delete(materializations, reference.StepID)
+	}
+	if len(materializations) != 0 {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint materialization steps are incomplete")
+	}
 	if len(artifact.Volumes) != 0 {
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
@@ -358,35 +379,12 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
 	projection etcd.EnvironmentComposeProjection,
 	transform environmentComposeTransform,
 ) (*agentpb.ComposeArtifact, error) {
-	revision, found, err := resolver.blueprints.GetEnvironmentBlueprintRevision(
-		ctx, identity.EnvironmentID, revisionID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, errs.New(errs.KindInternal, "Blueprint Task immutable revision is missing")
-	}
-	bundle := core.BlueprintBundle{
-		RootPath:       revision.Record.RootPath,
-		ComposeSources: append([]string(nil), revision.Record.ComposeSources...),
-		Interpolation:  cloneBlueprintInterpolation(revision.Record.Interpolation),
-		Files:          make([]core.BlueprintFile, len(revision.Record.Files)),
-	}
-	for index, file := range revision.Record.Files {
-		bundle.Files[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
-		defer clear(bundle.Files[index].Content)
-	}
-	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
-		EnvironmentID: identity.EnvironmentID,
-		Tenant:        identity.TenantSlug, Project: identity.ProjectSlug, Environment: identity.EnvironmentName,
-	}, bundle)
+	parsed, err := resolver.parsePinnedEnvironmentBlueprint(ctx, identity, revisionID)
 	if err != nil {
 		return nil, err
 	}
 	if len(parsed.Extensions.Requires) != 0 || len(parsed.Extensions.Attachments) != 0 ||
-		len(parsed.Extensions.Entries) != 0 || len(parsed.Extensions.Routes) != 0 ||
-		len(parsed.Extensions.Components) != 0 || parsed.Extensions.Backup != nil ||
+		len(parsed.Extensions.Entries) != 0 || parsed.Extensions.Backup != nil ||
 		len(parsed.Extensions.ReleaseGroups) != 0 || len(parsed.Project.Configs) != 0 ||
 		len(parsed.Project.Secrets) != 0 {
 		return nil, errs.New(errs.KindNotImplemented, "Blueprint materialized resources are not yet executable")
@@ -398,14 +396,68 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
 			return nil, err
 		}
 	}
+	renderProject := parsed.Project
+	if len(projection.Components) != 0 {
+		componentProjection, componentErr := projectPinnedEnvironmentComponents(
+			parsed.Project,
+			identity,
+			projection,
+			parsed.Extensions.Routes,
+			parsed.Extensions.Components,
+			projectedEnvironmentEntries(projection.Entries),
+			resolver.componentCatalog,
+		)
+		if componentErr != nil {
+			return nil, componentErr
+		}
+		renderProject = componentProjection.Project
+	}
 	return RenderCompose(ComposeRenderInput{
-		Project: parsed.Project, ArtifactID: artifactID,
+		Project: renderProject, ArtifactID: artifactID,
 		TenantID: identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
 		Identities:          composeIdentitySnapshotFromProjection(projection),
 		ExternalNetworks:    externalNetworks,
 	})
+}
+
+func (resolver *TaskPlanResolver) parsePinnedEnvironmentBlueprint(
+	ctx context.Context,
+	identity pinnedEnvironmentIdentity,
+	revisionID string,
+) (blueprintparser.Result, error) {
+	revision, found, err := resolver.blueprints.GetEnvironmentBlueprintRevision(
+		ctx, identity.EnvironmentID, revisionID,
+	)
+	if err != nil {
+		return blueprintparser.Result{}, err
+	}
+	if !found {
+		return blueprintparser.Result{}, errs.New(errs.KindInternal, "Blueprint Task immutable revision is missing")
+	}
+	bundle := core.BlueprintBundle{
+		RootPath:       revision.Record.RootPath,
+		ComposeSources: append([]string(nil), revision.Record.ComposeSources...),
+		Interpolation:  cloneBlueprintInterpolation(revision.Record.Interpolation),
+		Files:          make([]core.BlueprintFile, len(revision.Record.Files)),
+	}
+	for index, file := range revision.Record.Files {
+		bundle.Files[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+		defer clear(bundle.Files[index].Content)
+	}
+	return blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
+		EnvironmentID: identity.EnvironmentID,
+		Tenant:        identity.TenantSlug, Project: identity.ProjectSlug, Environment: identity.EnvironmentName,
+	}, bundle)
+}
+
+func projectedEnvironmentEntries(records []etcd.EntryRecord) []core.EnvEntry {
+	entries := make([]core.EnvEntry, len(records))
+	for index, record := range records {
+		entries[index] = record.Entry
+	}
+	return entries
 }
 
 func composeIdentitySnapshotFromProjection(

@@ -77,6 +77,47 @@ func (registry componentAddressRegistry) reserve(
 	return next, address.String(), nil
 }
 
+func (registry componentAddressRegistry) reserveExact(
+	zone ZoneRecord,
+	componentID string,
+	rawAddress string,
+) (componentAddressRegistry, error) {
+	if err := validateComponentAddressRegistry(zone, registry); err != nil {
+		return componentAddressRegistry{}, err
+	}
+	if err := ids.Validate(ids.KindComponent, componentID); err != nil {
+		return componentAddressRegistry{}, errs.New(errs.KindValidationFailed, "Component id is invalid")
+	}
+	prefix, err := ipam.ParseIPv4Prefix(zone.Desired.Subnet)
+	if err != nil || prefix.String() != zone.Desired.Subnet {
+		return componentAddressRegistry{}, errs.New(errs.KindValidationFailed, "Zone subnet is invalid")
+	}
+	address, err := netip.ParseAddr(rawAddress)
+	if err != nil || address.String() != rawAddress || ipam.ValidateUsableIPv4(prefix, address) != nil {
+		return componentAddressRegistry{}, errs.New(errs.KindValidationFailed, "Component address is invalid")
+	}
+	if existing, found := registry.Reservations[componentID]; found {
+		if existing != rawAddress {
+			return componentAddressRegistry{}, errs.New(
+				errs.KindStateConflict,
+				"Component already has another address reservation",
+			)
+		}
+		return cloneComponentAddressRegistry(registry), nil
+	}
+	for ownerID, reserved := range registry.Reservations {
+		if reserved == rawAddress && ownerID != componentID {
+			return componentAddressRegistry{}, errs.New(
+				errs.KindStateConflict,
+				"Component address is reserved by another Component",
+			)
+		}
+	}
+	next := cloneComponentAddressRegistry(registry)
+	next.Reservations[componentID] = rawAddress
+	return next, nil
+}
+
 func (registry componentAddressRegistry) release(
 	zone ZoneRecord,
 	componentID string,

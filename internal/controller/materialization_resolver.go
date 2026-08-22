@@ -29,23 +29,52 @@ type materializationEntryValueReader interface {
 	GetSecret(context.Context, string, string) (etcd.SecretEntryValueGeneration, bool, error)
 }
 
+type materializationComponentFileReader interface {
+	ResolveComponentFile(
+		context.Context,
+		string,
+		etcd.TaskComponentFileValueReference,
+	) ([]byte, error)
+}
+
 // TaskMaterializationResolver resolves only the immutable Controller source
 // named by one durable Task reference and returns one clearing byte stream.
 type TaskMaterializationResolver struct {
 	blueprints materializationBlueprintReader
 	values     materializationEntryValueReader
+	components materializationComponentFileReader
 	protector  *secretvalue.Protector
 }
 
 func NewTaskMaterializationResolver(
 	blueprints materializationBlueprintReader,
 	values materializationEntryValueReader,
+	components materializationComponentFileReader,
 	protector *secretvalue.Protector,
 ) (*TaskMaterializationResolver, error) {
-	if blueprints == nil || values == nil || protector == nil {
+	if blueprints == nil || values == nil || components == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "materialization value resolver dependencies are required")
 	}
-	return &TaskMaterializationResolver{blueprints: blueprints, values: values, protector: protector}, nil
+	return &TaskMaterializationResolver{
+		blueprints: blueprints, values: values, components: components, protector: protector,
+	}, nil
+}
+
+// ResolveTaskMaterializationSource resolves one closed immutable source for
+// Controller-side plan construction. The caller owns and must clear the bytes.
+func (resolver *TaskMaterializationResolver) ResolveTaskMaterializationSource(
+	ctx context.Context,
+	environmentID string,
+	source etcd.TaskMaterializationSource,
+) ([]byte, error) {
+	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil ||
+		resolver.components == nil || resolver.protector == nil {
+		return nil, errs.New(errs.KindInternal, "materialization value resolver is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return resolver.resolveSource(ctx, environmentID, source)
 }
 
 func (resolver *TaskMaterializationResolver) ResolveMaterialization(
@@ -60,7 +89,8 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.protector == nil {
+	if resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.components == nil ||
+		resolver.protector == nil {
 		return nil, errs.New(errs.KindInternal, "materialization value resolver is not configured")
 	}
 	materialization := step.GetMaterializeFile()
@@ -75,6 +105,9 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 	}
 	if reference.EnvironmentID != materialization.EnvironmentId {
 		return nil, errs.New(errs.KindInternal, "materialization source Environment is inconsistent")
+	}
+	if !taskMaterializationMetadataMatches(reference, materialization) {
+		return nil, errs.New(errs.KindInternal, "materialization Task and plan metadata are inconsistent")
 	}
 	content, err := resolver.resolveSource(ctx, reference.EnvironmentID, reference.Source)
 	if err != nil {
@@ -127,17 +160,26 @@ func (resolver *TaskMaterializationResolver) resolveSource(
 ) ([]byte, error) {
 	switch source.Kind {
 	case etcd.TaskMaterializationSourceBlueprintFile:
-		if source.BlueprintFile == nil || source.EntryValue != nil || source.GeneratedEnvironment != nil {
+		if source.BlueprintFile == nil || source.ComponentFile != nil || source.EntryValue != nil ||
+			source.GeneratedEnvironment != nil {
 			return nil, corruptMaterializationSource()
 		}
 		return resolver.resolveBlueprintFile(ctx, environmentID, *source.BlueprintFile)
+	case etcd.TaskMaterializationSourceComponentFile:
+		if source.ComponentFile == nil || source.BlueprintFile != nil || source.EntryValue != nil ||
+			source.GeneratedEnvironment != nil {
+			return nil, corruptMaterializationSource()
+		}
+		return resolver.components.ResolveComponentFile(ctx, environmentID, *source.ComponentFile)
 	case etcd.TaskMaterializationSourceEntryValue:
-		if source.EntryValue == nil || source.BlueprintFile != nil || source.GeneratedEnvironment != nil {
+		if source.EntryValue == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
+			source.GeneratedEnvironment != nil {
 			return nil, corruptMaterializationSource()
 		}
 		return resolver.resolveEntryValue(ctx, environmentID, *source.EntryValue)
 	case etcd.TaskMaterializationSourceGeneratedEnvironment:
-		if source.GeneratedEnvironment == nil || source.BlueprintFile != nil || source.EntryValue != nil {
+		if source.GeneratedEnvironment == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
+			source.EntryValue != nil {
 			return nil, corruptMaterializationSource()
 		}
 		return resolver.resolveGeneratedEnvironment(ctx, environmentID, *source.GeneratedEnvironment)

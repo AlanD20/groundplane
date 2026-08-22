@@ -79,6 +79,19 @@ func TestTaskMaterializationReferencesRejectConfusedShapes(t *testing.T) {
 		"invalid Component identity": func(task *TaskRecord) {
 			task.Materializations[1].Source.ComponentFile.ComponentID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		},
+		"duplicate materialization id": func(task *TaskRecord) {
+			task.Materializations[1].MaterializationID = task.Materializations[0].MaterializationID
+		},
+		"invalid digest": func(task *TaskRecord) {
+			task.Materializations[0].SHA256 = "not-a-digest"
+		},
+		"unsafe output policy": func(task *TaskRecord) {
+			task.Materializations[0].Mode = 0o600
+		},
+		"source output mismatch": func(task *TaskRecord) {
+			task.Materializations[0].OutputKind = TaskMaterializationOutputSecretFile
+			task.Materializations[0].Mode = 0o600
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -118,7 +131,10 @@ func taskWithMaterializationReferences() TaskRecord {
 	}
 	task.Materializations = []TaskMaterializationRecord{
 		{
-			StepID: stepIDs[0], EnvironmentID: environmentID,
+			StepID: stepIDs[0], MaterializationID: ids.NewAt(ids.KindConfig, now, 40),
+			EnvironmentID: environmentID, Destination: "config/app.yaml",
+			OutputKind: TaskMaterializationOutputPlainFile, Mode: 0o444, Length: 12,
+			SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			Source: TaskMaterializationSource{
 				Kind: TaskMaterializationSourceBlueprintFile,
 				BlueprintFile: &TaskBlueprintFileValueReference{
@@ -127,7 +143,10 @@ func taskWithMaterializationReferences() TaskRecord {
 			},
 		},
 		{
-			StepID: stepIDs[1], EnvironmentID: environmentID,
+			StepID: stepIDs[1], MaterializationID: ids.NewAt(ids.KindConfig, now, 41),
+			EnvironmentID: environmentID, Destination: "components/caddy/Caddyfile",
+			OutputKind: TaskMaterializationOutputPlainFile, Mode: 0o444, Length: 13,
+			SHA256: "1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			Source: TaskMaterializationSource{
 				Kind: TaskMaterializationSourceComponentFile,
 				ComponentFile: &TaskComponentFileValueReference{
@@ -138,11 +157,19 @@ func taskWithMaterializationReferences() TaskRecord {
 			},
 		},
 		{
-			StepID: stepIDs[2], EnvironmentID: environmentID,
+			StepID: stepIDs[2], MaterializationID: ids.NewAt(ids.KindConfig, now, 42),
+			EnvironmentID: environmentID, Destination: "config/plain.txt",
+			OutputKind: TaskMaterializationOutputPlainFile, UID: 1000, GID: 1000, Mode: 0o444, Length: 14,
+			SHA256: "2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			Source: TaskMaterializationSource{Kind: TaskMaterializationSourceEntryValue, EntryValue: &plain},
 		},
 		{
-			StepID: stepIDs[3], EnvironmentID: environmentID,
+			StepID: stepIDs[3], MaterializationID: ids.NewAt(ids.KindConfig, now, 43),
+			EnvironmentID: environmentID, Destination: "secrets/.env." + environmentID + ".app",
+			ServiceID: ids.NewAt(ids.KindService, now, 44), ServiceName: "app",
+			OutputKind: TaskMaterializationOutputGeneratedEnvironment,
+			Mode:       0o600, Length: 15,
+			SHA256: "3123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			Source: TaskMaterializationSource{
 				Kind: TaskMaterializationSourceGeneratedEnvironment,
 				GeneratedEnvironment: &TaskGeneratedEnvironmentValueReference{

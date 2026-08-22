@@ -278,6 +278,15 @@ func (repository *TaskRepository) RetryTask(
 		mutations = append(mutations, secretChange.mutations...)
 	}
 	defer clearSecretTaskChange(secretChange)
+	componentChange, err := repository.prepareComponentTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if componentChange.applies {
+		conditions = append(conditions, componentChange.conditions...)
+		mutations = append(mutations, componentChange.mutations...)
+	}
+	defer clearComponentTaskChange(componentChange)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
@@ -286,6 +295,7 @@ func (repository *TaskRepository) RetryTask(
 			retry.OperationID,
 			attachChange.applies,
 			len(secretChange.conditions),
+			len(componentChange.conditions),
 		),
 	)
 	if err != nil {
@@ -303,9 +313,10 @@ func classifyTaskRetryConflict(
 	operationID string,
 	attachLifecycle bool,
 	secretConditions int,
+	componentConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expectedValues := 5 + secretConditions
+		expectedValues := 5 + secretConditions + componentConditions
 		if attachLifecycle {
 			expectedValues++
 		}
@@ -1328,6 +1339,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
+			if err := repository.validateComponentTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			return current, nil
 		}
 		if current.Record.Status != TaskStatusPending {
@@ -1409,6 +1425,16 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(retentionValue)
 			return Versioned[TaskRecord]{}, err
 		}
+		componentChange, err := repository.prepareComponentTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
 		conditions := []Condition{
 			{Key: taskKey(taskID), ModRevision: current.Revision},
 			{Key: taskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
@@ -1427,11 +1453,16 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, secretChange.conditions...)
 			mutations = append(mutations, secretChange.mutations...)
 		}
+		if componentChange.applies {
+			conditions = append(conditions, componentChange.conditions...)
+			mutations = append(mutations, componentChange.mutations...)
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
 		clearSecretTaskChange(secretChange)
+		clearComponentTaskChange(componentChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}

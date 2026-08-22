@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -129,6 +130,168 @@ func TestTaskTimeoutDiscardsComponentCandidateAndNewReservation(t *testing.T) {
 		t.Fatalf("TimeoutAgentAssignments() count/error = %d/%v", count, err)
 	}
 	assertComponentTaskTerminalState(t, store, task, records, TaskStatusTimedOut, false)
+}
+
+func TestPendingTaskAbortDiscardsComponentCandidateAndNewReservation(t *testing.T) {
+	// Rationale: aborting before Agent assignment must release the unpublished
+	// Component address and fence in the same transaction as the Task abort.
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	now := taskJournalTime().Add(20 * time.Second)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1251)
+	task := validTaskRecord(now)
+	task.Type = TaskUpdate
+	task.Target = environmentID
+	createLifecycleTask(t, repository, task)
+	records := componentTaskLifecycleRecords(t, environmentID, now, true)
+	seedComponentTaskLifecycle(t, store, task, records)
+
+	terminalAt := now.Add(time.Second)
+	terminal, err := repository.AbortPendingTask(ctx, task.ID, terminalAt)
+	if err != nil || terminal.Record.Status != TaskStatusAborted {
+		t.Fatalf("AbortPendingTask() = %#v, %v", terminal, err)
+	}
+	assertComponentTaskTerminalState(t, store, task, records, TaskStatusAborted, false)
+	if _, err := repository.AbortPendingTask(ctx, task.ID, terminalAt); err != nil {
+		t.Fatalf("AbortPendingTask(replay) error = %v", err)
+	}
+}
+
+func TestRetryTaskReacquiresExactComponentCandidateReservation(t *testing.T) {
+	// Rationale: retry preserves the source plan hash, so it must publish the
+	// same Component candidate and reacquire its exact pinned address.
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	now := taskJournalTime().Add(30 * time.Second)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1261)
+	source := validTaskRecord(now)
+	source.Type = TaskUpdate
+	source.Target = environmentID
+	createLifecycleTask(t, repository, source)
+	records := componentTaskLifecycleRecords(t, environmentID, now, true)
+	seedComponentTaskLifecycle(t, store, source, records)
+	seedComponentRetryProjection(t, store, source, records)
+	terminalAt := now.Add(time.Second)
+	if _, err := repository.AbortPendingTask(ctx, source.ID, terminalAt); err != nil {
+		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+
+	retryID := ids.NewAt(ids.KindTask, terminalAt.Add(time.Second), 1262)
+	marker := pendingRetryMarker(source, retryID, terminalAt.Add(time.Second), "component-retry-key-0001")
+	result, err := repository.RetryTask(ctx, source.ID, retryID, marker)
+	if err != nil {
+		t.Fatalf("RetryTask() error = %v", err)
+	}
+	outcome, _, conflict, err := result.Classify()
+	if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+		t.Fatalf("RetryTask() outcome/conflict/error = %v/%v/%v", outcome, conflict, err)
+	}
+	registry := readComponentTaskRegistry(t, store, records.candidateZone)
+	if registry.Reservations[records.candidate.Desired.ID] != records.candidate.Runtime.PinnedIPv4 {
+		t.Fatal("Component retry did not reacquire the exact candidate address")
+	}
+	intentValue, err := store.Get(ctx, componentTaskIntentKey(retryID))
+	if err != nil || intentValue.Entry == nil {
+		t.Fatalf("Get(retry Component intent) = %#v, %v", intentValue, err)
+	}
+	intent, err := decodeComponentTaskIntent(intentValue.Entry.Value)
+	if err != nil || intent.Status != TaskStatusPending || intent.TaskID != retryID ||
+		!intent.CreatedAt.Equal(marker.CreatedAt) || len(intent.Candidates) != 1 ||
+		intent.Candidates[0].CurrentRevision <= 0 ||
+		!reflect.DeepEqual(intent.Candidates[0].Current, records.current) ||
+		!reflect.DeepEqual(intent.Candidates[0].Candidate, records.candidate) {
+		t.Fatalf("retry Component intent = %#v, %v", intent, err)
+	}
+}
+
+func TestRetryTaskRejectsTakenComponentCandidateReservation(t *testing.T) {
+	// Rationale: a retry cannot silently allocate another address because that
+	// would execute bytes different from the retained source plan.
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	now := taskJournalTime().Add(40 * time.Second)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1271)
+	source := validTaskRecord(now)
+	source.Type = TaskUpdate
+	source.Target = environmentID
+	createLifecycleTask(t, repository, source)
+	records := componentTaskLifecycleRecords(t, environmentID, now, true)
+	seedComponentTaskLifecycle(t, store, source, records)
+	seedComponentRetryProjection(t, store, source, records)
+	terminalAt := now.Add(time.Second)
+	if _, err := repository.AbortPendingTask(ctx, source.ID, terminalAt); err != nil {
+		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+	registry := componentAddressRegistry{Reservations: map[string]string{
+		ids.NewAt(ids.KindComponent, now, 1272): records.candidate.Runtime.PinnedIPv4,
+	}}
+	value, err := encodeComponentAddressRegistry(records.candidateZone, registry)
+	if err != nil {
+		t.Fatalf("encodeComponentAddressRegistry() error = %v", err)
+	}
+	registryKey := componentAddressRegistryKey(records.candidateZone.Desired.ID)
+	stored, err := store.Get(ctx, registryKey)
+	if err != nil || stored.Entry == nil {
+		t.Fatalf("Get(Component registry) = %#v, %v", stored, err)
+	}
+	transaction, err := store.Transact(ctx, []Condition{{
+		Key: registryKey, ModRevision: stored.Entry.ModRevision,
+	}}, []Mutation{{Type: MutationPut, Key: registryKey, Value: value}})
+	if err != nil || !transaction.Succeeded {
+		t.Fatalf("replace Component registry = %#v, %v", transaction, err)
+	}
+
+	retryID := ids.NewAt(ids.KindTask, terminalAt.Add(time.Second), 1273)
+	marker := pendingRetryMarker(source, retryID, terminalAt.Add(time.Second), "component-retry-key-0002")
+	if _, err := repository.RetryTask(ctx, source.ID, retryID, marker); err == nil {
+		t.Fatal("RetryTask() accepted a candidate address reserved by another Component")
+	}
+}
+
+func seedComponentRetryProjection(
+	t *testing.T,
+	store *memoryTaskStore,
+	task TaskRecord,
+	records componentTaskLifecycleFixture,
+) {
+	t.Helper()
+	tunnel, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, task.CreatedAt, 1281), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: task.Target, Kind: core.ComponentKindEdgeCloudflare,
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord(tunnel) error = %v", err)
+	}
+	components := []ComponentRecord{records.candidate, tunnel}
+	sort.Slice(components, func(left int, right int) bool {
+		return components[left].Desired.Kind < components[right].Desired.Kind
+	})
+	projection := EnvironmentComposeProjection{
+		EnvironmentID:       task.Target,
+		BlueprintRevisionID: ids.NewAt(ids.KindTask, task.CreatedAt, 1282),
+		RenderGeneration:    uint64(task.RenderGeneration),
+		Components:          components,
+	}
+	value, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
+	}
+	seedTaskRepositoryValue(t, store, environmentComposeProjectionKey(task.Target), value)
 }
 
 type componentTaskLifecycleFixture struct {

@@ -1,8 +1,11 @@
 package etcd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,12 +32,30 @@ const (
 	TaskEntryValueStorageSecret TaskEntryValueStorage = "secret"
 )
 
+type TaskMaterializationOutputKind string
+
+const (
+	TaskMaterializationOutputGeneratedEnvironment TaskMaterializationOutputKind = "generated_env"
+	TaskMaterializationOutputPlainFile            TaskMaterializationOutputKind = "plain_file"
+	TaskMaterializationOutputSecretFile           TaskMaterializationOutputKind = "secret_file"
+)
+
 // TaskMaterializationRecord is the durable Controller-only source ledger for
 // one metadata-only Agent materialization step. It never contains value bytes.
 type TaskMaterializationRecord struct {
-	StepID        string                    `json:"step_id"`
-	EnvironmentID string                    `json:"environment_id"`
-	Source        TaskMaterializationSource `json:"source"`
+	StepID            string                        `json:"step_id"`
+	MaterializationID string                        `json:"materialization_id"`
+	EnvironmentID     string                        `json:"environment_id"`
+	Destination       string                        `json:"destination"`
+	ServiceID         string                        `json:"service_id,omitempty"`
+	ServiceName       string                        `json:"service_name,omitempty"`
+	OutputKind        TaskMaterializationOutputKind `json:"output_kind"`
+	UID               uint32                        `json:"uid"`
+	GID               uint32                        `json:"gid"`
+	Mode              uint32                        `json:"mode"`
+	Length            uint64                        `json:"length"`
+	SHA256            string                        `json:"sha256"`
+	Source            TaskMaterializationSource     `json:"source"`
 }
 
 // TaskMaterializationSource is a closed tagged union. Exactly one pointer must
@@ -85,6 +106,7 @@ func validateTaskMaterializationReferences(
 	steps []TaskStepRecord,
 	environmentID string,
 	hasEnvironment bool,
+	renderGeneration uint64,
 ) error {
 	if len(references) == 0 {
 		return nil
@@ -97,6 +119,7 @@ func validateTaskMaterializationReferences(
 		availableSteps[step.ID] = struct{}{}
 	}
 	previousStepID := ""
+	materializationIDs := make(map[string]struct{}, len(references))
 	for _, reference := range references {
 		if reference.StepID <= previousStepID || reference.EnvironmentID != environmentID {
 			return errs.New(errs.KindValidationFailed, "task materialization references are not uniquely sorted")
@@ -104,10 +127,82 @@ func validateTaskMaterializationReferences(
 		if _, exists := availableSteps[reference.StepID]; !exists {
 			return errs.New(errs.KindValidationFailed, "task materialization reference step is unknown")
 		}
+		if _, duplicate := materializationIDs[reference.MaterializationID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "task materialization id is duplicated")
+		}
+		if err := validateTaskMaterializationMetadata(reference, renderGeneration); err != nil {
+			return err
+		}
 		if err := validateTaskMaterializationSource(reference.Source); err != nil {
 			return err
 		}
+		if err := validateTaskMaterializationBinding(reference); err != nil {
+			return err
+		}
+		materializationIDs[reference.MaterializationID] = struct{}{}
 		previousStepID = reference.StepID
+	}
+	return nil
+}
+
+func validateTaskMaterializationBinding(reference TaskMaterializationRecord) error {
+	valid := false
+	switch reference.Source.Kind {
+	case TaskMaterializationSourceBlueprintFile, TaskMaterializationSourceComponentFile:
+		valid = reference.OutputKind == TaskMaterializationOutputPlainFile
+	case TaskMaterializationSourceEntryValue:
+		if reference.Source.EntryValue != nil {
+			if reference.Source.EntryValue.Storage == TaskEntryValueStoragePlain {
+				valid = reference.OutputKind == TaskMaterializationOutputPlainFile
+			} else if reference.Source.EntryValue.Storage == TaskEntryValueStorageSecret {
+				valid = reference.OutputKind == TaskMaterializationOutputSecretFile
+			}
+		}
+	case TaskMaterializationSourceGeneratedEnvironment:
+		valid = reference.OutputKind == TaskMaterializationOutputGeneratedEnvironment
+	}
+	if !valid {
+		return errs.New(errs.KindValidationFailed, "task materialization source and output kind are inconsistent")
+	}
+	return nil
+}
+
+func validateTaskMaterializationMetadata(reference TaskMaterializationRecord, renderGeneration uint64) error {
+	if validateStableID(ids.KindConfig, reference.MaterializationID) != nil ||
+		reference.Length > entrymaterialization.MaximumContentBytes {
+		return errs.New(errs.KindValidationFailed, "task materialization metadata is invalid")
+	}
+	digest, err := hex.DecodeString(reference.SHA256)
+	if err != nil || len(digest) != sha256.Size {
+		return errs.New(errs.KindValidationFailed, "task materialization digest is invalid")
+	}
+	if reference.ServiceID != "" && (validateStableID(ids.KindService, reference.ServiceID) != nil ||
+		!validEnvironmentComposeName(reference.ServiceName)) {
+		return errs.New(errs.KindValidationFailed, "task materialization Service identity is invalid")
+	}
+	outputKind := entrymaterialization.OutputKind(0)
+	switch reference.OutputKind {
+	case TaskMaterializationOutputGeneratedEnvironment:
+		outputKind = entrymaterialization.OutputGeneratedEnv
+	case TaskMaterializationOutputPlainFile:
+		outputKind = entrymaterialization.OutputPlainFile
+	case TaskMaterializationOutputSecretFile:
+		outputKind = entrymaterialization.OutputSecretFile
+	default:
+		return errs.New(errs.KindValidationFailed, "task materialization output kind is invalid")
+	}
+	if err := entrymaterialization.ValidateMetadata(entrymaterialization.MetadataSpec{
+		EnvironmentID: reference.EnvironmentID,
+		Generation:    renderGeneration,
+		Destination:   reference.Destination,
+		ServiceID:     reference.ServiceID,
+		ServiceName:   reference.ServiceName,
+		OutputKind:    outputKind,
+		UID:           reference.UID,
+		GID:           reference.GID,
+		Mode:          entrymaterialization.Mode(reference.Mode),
+	}); err != nil {
+		return errs.New(errs.KindValidationFailed, "task materialization output policy is invalid")
 	}
 	return nil
 }

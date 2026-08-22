@@ -2,10 +2,12 @@ package etcd
 
 import (
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -37,5 +39,141 @@ func TestEnvironmentComposeProjectionPinsSortedRouteIdentities(t *testing.T) {
 		errs.New(errs.KindValidationFailed, ""),
 	) {
 		t.Fatalf("encodeEnvironmentComposeProjection(unsorted Routes) error = %v", err)
+	}
+}
+
+// Rationale: a queued Blueprint task must retain the exact effective
+// Component graph instead of re-reading mutable active Component records.
+func TestEnvironmentComposeProjectionPinsSortedComponentSnapshots(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 22, 22, 30, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 10)
+	componentRecord := func(kind core.ComponentKind, offset int64) ComponentRecord {
+		record, err := NewComponentRecord(core.Component{
+			ID: ids.NewAt(ids.KindComponent, now, offset), Owner: core.ComponentOwnerEnvironment,
+			OwnerID: environmentID, Kind: kind,
+		})
+		if err != nil {
+			t.Fatalf("NewComponentRecord() error = %v", err)
+		}
+		return record
+	}
+	projection := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 11),
+		RenderGeneration: 1,
+		Components: []ComponentRecord{
+			componentRecord(core.ComponentKindIngressCaddy, 12),
+			componentRecord(core.ComponentKindEdgeCloudflare, 13),
+		},
+	}
+	encoded, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
+	}
+	decoded, err := decodeEnvironmentComposeProjection(encoded)
+	if err != nil || len(decoded.Components) != 2 ||
+		decoded.Components[1].Desired.ID != projection.Components[1].Desired.ID {
+		t.Fatalf("decodeEnvironmentComposeProjection() = %#v, %v", decoded, err)
+	}
+	projection.Components[0], projection.Components[1] = projection.Components[1], projection.Components[0]
+	if _, err := encodeEnvironmentComposeProjection(projection); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("encodeEnvironmentComposeProjection(unsorted Components) error = %v", err)
+	}
+}
+
+// Rationale: Component secret bindings must retain exact non-secret Entry
+// metadata and immutable generation ids without storing their value bytes.
+func TestEnvironmentComposeProjectionPinsSortedEntrySnapshots(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 22, 22, 45, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 20)
+	entryRecord := func(offset int64, key string) EntryRecord {
+		record, err := NewEntryRecord(environmentID, core.EnvEntry{
+			ID: ids.NewAt(ids.KindEnvEntry, now, offset), Kind: core.EntryKindEnv, Key: key,
+			Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"cloudflare-tunnel"}, Secret: true,
+		}, ids.NewAt(ids.KindConfig, now, offset+10))
+		if err != nil {
+			t.Fatalf("NewEntryRecord() error = %v", err)
+		}
+		return record
+	}
+	entries := []EntryRecord{
+		entryRecord(22, "CLOUDFLARE_TUNNEL_TOKEN"),
+		entryRecord(23, "SECOND_TOKEN"),
+	}
+	sort.Slice(entries, func(left int, right int) bool { return entries[left].Entry.ID < entries[right].Entry.ID })
+	projection := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 21),
+		RenderGeneration: 1, Entries: entries,
+	}
+	encoded, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
+	}
+	decoded, err := decodeEnvironmentComposeProjection(encoded)
+	if err != nil || len(decoded.Entries) != 2 ||
+		decoded.Entries[1].CurrentValueGenerationID != projection.Entries[1].CurrentValueGenerationID {
+		t.Fatalf("decodeEnvironmentComposeProjection() = %#v, %v", decoded, err)
+	}
+	projection.Entries[0], projection.Entries[1] = projection.Entries[1], projection.Entries[0]
+	if _, err := encodeEnvironmentComposeProjection(projection); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("encodeEnvironmentComposeProjection(unsorted Entries) error = %v", err)
+	}
+}
+
+// Rationale: explicit Component disable may remove only its generated Service;
+// authored Service omission must remain blocked by the same projection CAS.
+func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemoval(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 40)
+	generatedServiceID := ids.NewAt(ids.KindService, now, 41)
+	componentRecord := func(kind core.ComponentKind, offset int64, enabled bool, services []string) ComponentRecord {
+		record, err := NewComponentRecord(core.Component{
+			ID: ids.NewAt(ids.KindComponent, now, offset), Owner: core.ComponentOwnerEnvironment,
+			OwnerID: environmentID, Kind: kind, Enabled: enabled, GeneratedServices: services,
+		})
+		if err != nil {
+			t.Fatalf("NewComponentRecord() error = %v", err)
+		}
+		return record
+	}
+	previous := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 44),
+		RenderGeneration: 1,
+		Services:         []EnvironmentComposeIdentity{{ID: generatedServiceID, Name: "cloudflare-tunnel"}},
+		Components: []ComponentRecord{
+			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),
+			componentRecord(core.ComponentKindEdgeCloudflare, 43, true, []string{generatedServiceID}),
+		},
+	}
+	next := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 45),
+		RenderGeneration: 2,
+		Components: []ComponentRecord{
+			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),
+			componentRecord(core.ComponentKindEdgeCloudflare, 43, false, nil),
+		},
+	}
+	if err := validateEnvironmentComposeProjectionAdvance(previous, true, next); err != nil {
+		t.Fatalf("validateEnvironmentComposeProjectionAdvance() error = %v", err)
+	}
+	previous.Services = append(previous.Services, EnvironmentComposeIdentity{
+		ID: ids.NewAt(ids.KindService, now, 46), Name: "worker",
+	})
+	sort.Slice(previous.Services, func(left int, right int) bool {
+		return previous.Services[left].Name < previous.Services[right].Name
+	})
+	if err := validateEnvironmentComposeProjectionAdvance(previous, true, next); !errors.Is(
+		err,
+		errs.New(errs.KindResourceInUse, ""),
+	) {
+		t.Fatalf("validateEnvironmentComposeProjectionAdvance(authored omission) error = %v", err)
 	}
 }

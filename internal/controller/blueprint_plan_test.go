@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -72,10 +73,11 @@ func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan(replay) error = %v", err)
 	}
-	if !bytes.Equal(first.PlanHash, second.PlanHash) || len(first.Artifacts) != 1 || len(first.Steps) != 2 ||
+	if !bytes.Equal(first.PlanHash, second.PlanHash) || len(first.Artifacts) != 1 || len(first.Steps) != 3 ||
 		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE ||
-		first.Steps[0].GetManagedVolumeDirectoriesEnsure() == nil ||
-		first.Steps[1].GetComposeApply() == nil || !first.Steps[1].GetComposeApply().FullReconcile {
+		first.Steps[0].GetMaterializeFile() == nil ||
+		first.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
+		first.Steps[2].GetComposeApply() == nil || !first.Steps[2].GetComposeApply().FullReconcile {
 		t.Fatalf("resolved Blueprint plans = %#v / %#v", first, second)
 	}
 }
@@ -142,8 +144,21 @@ volumes:
 		Steps: []etcd.TaskStepRecord{
 			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"},
+			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAX"},
 		},
 		TimeoutSeconds: 120, Status: etcd.TaskStatusPending, CreatedAt: at,
 	}
+	emptyDigest := sha256.Sum256(nil)
+	task.Materializations = []etcd.TaskMaterializationRecord{{
+		StepID: task.Steps[0].ID, MaterializationID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		EnvironmentID: environmentID, Destination: "secrets/.env." + environmentID + ".api",
+		ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api",
+		OutputKind: etcd.TaskMaterializationOutputGeneratedEnvironment, Mode: 0o600,
+		Length: 0, SHA256: hex.EncodeToString(emptyDigest[:]),
+		Source: etcd.TaskMaterializationSource{
+			Kind:                 etcd.TaskMaterializationSourceGeneratedEnvironment,
+			GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{FormatVersion: 1},
+		},
+	}}
 	return reader, task
 }
