@@ -102,6 +102,31 @@ func (repository *TaskRepository) GetTask(
 	}, nil
 }
 
+// TaskRetryScope is the immutable durable owner used to domain-separate a
+// human retry intent from the same idempotency key under another owner.
+type TaskRetryScope struct {
+	Kind IdempotencyScopeKind
+	ID   string
+}
+
+func (repository *TaskRepository) GetTaskRetryScope(
+	ctx context.Context,
+	taskID string,
+) (TaskRetryScope, error) {
+	task, err := repository.GetTask(ctx, taskID)
+	if err != nil {
+		return TaskRetryScope{}, err
+	}
+	if task.Record.idempotencyMarker == nil {
+		return TaskRetryScope{}, errs.New(errs.KindInternal, "Task retry owner scope is missing")
+	}
+	locator := *task.Record.idempotencyMarker
+	if err := validateIdempotencyLocator(locator); err != nil {
+		return TaskRetryScope{}, errs.New(errs.KindInternal, "Task retry owner scope is corrupt")
+	}
+	return TaskRetryScope{Kind: locator.ScopeKind, ID: locator.ScopeID}, nil
+}
+
 func (repository *TaskRepository) ListTasks(
 	ctx context.Context,
 	request PageRequest,

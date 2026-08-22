@@ -516,7 +516,7 @@ func pendingTaskMarker(task TaskRecord) IdempotencyMarker {
 func pendingRetryMarker(source TaskRecord, retryID string, createdAt time.Time, key string) IdempotencyMarker {
 	marker := pendingTaskMarker(source)
 	marker.Locator.Method = http.MethodPost
-	marker.Locator.Route = "/tasks/{task}/retry"
+	marker.Locator.Route = "/tasks/{id}/retry"
 	marker.Locator.Key = key
 	marker.TaskID = retryID
 	marker.CreatedAt = createdAt

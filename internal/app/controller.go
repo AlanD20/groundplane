@@ -230,6 +230,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
 	}
+	taskRetryIdempotency, err := newDurableTaskRetryIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Task retry idempotency: %w", err)
+	}
+	taskMutations, err := newTaskRetryService(tasks, taskRetryIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)
+	}
 	environmentBlueprintIdempotency, err := newDurableEnvironmentBlueprintIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
@@ -438,6 +448,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,
 		EnvironmentDeletions:  environmentDeletions,
+		TaskMutations:         taskMutations,
 		TenantMutations:       tenantMutations,
 		TenantChanges:         tenantChanges,
 		Console:               consoleAssets, Tasks: tasks,

@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -46,8 +47,8 @@ type Server struct {
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
 	environmentDeletions  EnvironmentDeleter
+	taskMutations         TaskRetrier
 	console               fs.FS
-	dispatcher            *Dispatcher
 	tasks                 taskQueries
 	routePolicies         map[string]routePolicy
 }
@@ -67,6 +68,7 @@ type Options struct {
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
 	EnvironmentDeletions  EnvironmentDeleter
+	TaskMutations         TaskRetrier
 	Console               fs.FS
 	Tasks                 *etcd.TaskRepository
 }
@@ -105,8 +107,8 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
 		environmentDeletions:  options.EnvironmentDeletions,
+		taskMutations:         options.TaskMutations,
 		console:               options.Console,
-		dispatcher:            NewDispatcher(),
 		tasks:                 options.Tasks,
 		routePolicies:         make(map[string]routePolicy),
 	}
@@ -249,7 +251,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/tasks", s.taskList)
 	mux.HandleFunc("GET /api/v1/tasks/{id}", s.taskShow)
 	s.streamRoute("GET /api/v1/tasks/{id}/events", s.notImplemented)
-	s.jsonRoute("POST /api/v1/tasks/{id}/retry", s.retryTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/retry", s.retryTask)
 	s.jsonRoute("POST /api/v1/tasks/{id}/abort", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/activity", s.taskList) // exact JSON alias of Task list
 
@@ -266,19 +268,31 @@ func (s *Server) routes() {
 }
 
 func (s *Server) retryTask(w http.ResponseWriter, r *http.Request) {
-	task, err := s.dispatcher.Retry(r.Context(), r.PathValue("id"))
-	if err != nil {
-		var domainError *errs.Error
-		if errors.As(err, &domainError) {
-			s.writeProblem(w, domainError)
-			return
-		}
-		s.writeProblem(w, errs.Wrap(errs.KindInternal, err))
+	if s.taskMutations == nil {
+		s.writeProblem(w, errs.New(errs.KindInternal, "Task retrier is not configured"))
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	if err := json.NewEncoder(w).Encode(apiTypes.TaskAccepted{TaskID: task.ID}); err != nil {
+	taskID := r.PathValue("id")
+	if ids.Validate(ids.KindTask, taskID) != nil {
+		s.writeTaskProblem(w, errs.New(errs.KindMalformedRequest, "Task id is invalid"))
+		return
+	}
+	if len(r.URL.Query()) != 0 {
+		s.writeTaskProblem(w, errs.New(errs.KindMalformedRequest, "Task retry query is invalid"))
+		return
+	}
+	if err := validateBodylessAgentMutation(r); err != nil {
+		s.writeTaskProblem(w, errs.New(errs.KindMalformedRequest, "Task retry body is not allowed"))
+		return
+	}
+	response, err := s.taskMutations.RetryTask(r.Context(), taskID, r.Header.Get(idempotencyKeyHeader))
+	if err != nil {
+		s.writeTaskProblem(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", response.ContentKind)
+	w.WriteHeader(response.Status)
+	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
 		s.Logger.Error("controller: write retry response", slog.Any("error", err))
 	}
 }
