@@ -67,6 +67,7 @@ func TestEnvironmentCreateRejectsDuplicateOrUnknownMembers(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/environments", stringReader(body))
+			request.Header.Set(idempotencyKeyHeader, "environment-create-key-0002")
 			response := httptest.NewRecorder()
 			server.Mux.ServeHTTP(response, request)
 			if response.Code != http.StatusBadRequest {

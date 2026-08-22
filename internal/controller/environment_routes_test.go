@@ -23,7 +23,7 @@ const (
 func TestEnvironmentReadRoutesExposeProvisioningProjection(t *testing.T) {
 	t.Parallel()
 	stub := &environmentRouteStub{record: EnvironmentRecordForRouteTest(etcd.EnvironmentProvisioningReady)}
-	server := &Server{environments: stub}
+	server := New(nil, nil, Options{Environments: stub})
 
 	listRequest := httptest.NewRequest(
 		http.MethodGet,
@@ -31,7 +31,7 @@ func TestEnvironmentReadRoutesExposeProvisioningProjection(t *testing.T) {
 		nil,
 	)
 	listResponse := httptest.NewRecorder()
-	server.environmentList(listResponse, listRequest)
+	server.Mux.ServeHTTP(listResponse, listRequest)
 	if listResponse.Code != http.StatusOK || stub.listProjectID != environmentRouteProjectID ||
 		stub.listRequest.Limit != 2 {
 		t.Fatalf("list response/scope = %d, %q, %#v", listResponse.Code, stub.listProjectID, stub.listRequest)
@@ -47,9 +47,8 @@ func TestEnvironmentReadRoutesExposeProvisioningProjection(t *testing.T) {
 
 	stub.record = EnvironmentRecordForRouteTest(etcd.EnvironmentProvisioningFailed)
 	showRequest := httptest.NewRequest(http.MethodGet, "/api/v1/environments/"+environmentRouteID, nil)
-	showRequest.SetPathValue("id", environmentRouteID)
 	showResponse := httptest.NewRecorder()
-	server.environmentShow(showResponse, showRequest)
+	server.Mux.ServeHTTP(showResponse, showRequest)
 	var detail apiTypes.Environment
 	if err := json.Unmarshal(showResponse.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("decode detail response: %v", err)
@@ -65,16 +64,15 @@ func TestEnvironmentRenameRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 	stub := &environmentRouteStub{renameResponse: etcd.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"name":"live"}`),
 	}}
-	server := &Server{environmentChanges: stub}
+	server := New(nil, nil, Options{EnvironmentChanges: stub})
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/environments/"+environmentRouteID+"/rename",
 		strings.NewReader(`{"name":"live"}`),
 	)
-	request.SetPathValue("id", environmentRouteID)
 	request.Header.Set(idempotencyKeyHeader, "environment-rename-key-0001")
 	response := httptest.NewRecorder()
-	server.environmentRename(response, request)
+	server.Mux.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || stub.renameID != environmentRouteID ||
 		stub.renameInput.Name != "live" || stub.renameKey != "environment-rename-key-0001" {
 		t.Fatalf(
@@ -90,9 +88,14 @@ func TestEnvironmentRenameRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 		t.Fatalf("rename response body = %s", body)
 	}
 
-	duplicate := httptest.NewRequest(http.MethodPost, "/rename", strings.NewReader(`{"name":"a","name":"b"}`))
+	duplicate := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/environments/"+environmentRouteID+"/rename",
+		strings.NewReader(`{"name":"a","name":"b"}`),
+	)
+	duplicate.Header.Set(idempotencyKeyHeader, "environment-rename-key-0002")
 	duplicateResponse := httptest.NewRecorder()
-	server.environmentRename(duplicateResponse, duplicate)
+	server.Mux.ServeHTTP(duplicateResponse, duplicate)
 	if duplicateResponse.Code != http.StatusBadRequest {
 		t.Fatalf("duplicate member status = %d", duplicateResponse.Code)
 	}

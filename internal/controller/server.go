@@ -115,6 +115,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.routes()
 	s.registerTenants()
 	s.registerProjects()
+	s.registerEnvironments()
 	s.registerHost()
 	return s
 }
@@ -147,11 +148,8 @@ func (s *Server) routes() {
 	// contract has a durable executor.
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.acceptTask)
 
-	// environment (?project=)
-	mux.HandleFunc("GET /api/v1/environments", s.environmentList)
-	s.jsonRoute("POST /api/v1/environments", s.environmentCreate)
-	mux.HandleFunc("GET /api/v1/environments/{id}", s.environmentShow)
-	s.jsonRoute("POST /api/v1/environments/{id}/rename", s.environmentRename)
+	// environment (?project=). Typed list/show/create/rename operations are
+	// registered through Huma after the legacy mux surface is assembled.
 	s.streamRoute("GET /api/v1/environments/{id}/logs", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.environmentDelete)
 

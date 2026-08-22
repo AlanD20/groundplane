@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
-	"net/http"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
@@ -24,42 +22,28 @@ type EnvironmentChanger interface {
 	) (etcd.IdempotencyResponse, error)
 }
 
-func (s *Server) environmentRename(w http.ResponseWriter, r *http.Request) {
+func (s *Server) renameEnvironment(
+	ctx context.Context,
+	request *environmentRenameInput,
+) (*environmentMutationOutput, error) {
 	if s.environmentChanges == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Environment changer is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Environment changer is not configured")
 	}
-	input, err := decodeEnvironmentRename(r)
+	defer clear(request.RawBody)
+	input, err := decodeEnvironmentRename(request.RawBody)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
 	response, err := s.environmentChanges.RenameEnvironment(
-		r.Context(), r.PathValue("id"), input, r.Header.Get(idempotencyKeyHeader),
+		ctx, request.ID, input, request.IdempotencyKey,
 	)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	w.Header().Set("Content-Type", response.ContentKind)
-	w.WriteHeader(response.Status)
-	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Environment rename response", slog.Any("error", err))
-	}
+	return s.environmentMutationResponse(response, "rename"), nil
 }
 
-func decodeEnvironmentRename(r *http.Request) (hierarchy.RenameEnvironmentInput, error) {
-	if len(r.URL.Query()) != 0 {
-		return hierarchy.RenameEnvironmentInput{}, errs.New(
-			errs.KindMalformedRequest,
-			"Environment rename query is invalid",
-		)
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return hierarchy.RenameEnvironmentInput{}, errs.Wrap(errs.KindMalformedRequest, err)
-	}
-	defer clear(body)
+func decodeEnvironmentRename(body []byte) (hierarchy.RenameEnvironmentInput, error) {
 	if !utf8.Valid(body) {
 		return hierarchy.RenameEnvironmentInput{}, errs.New(
 			errs.KindMalformedRequest,

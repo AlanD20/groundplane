@@ -16,6 +16,49 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Environment defines model for Environment.
+type Environment struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Environment.json
+	Schema            *string `json:"$schema,omitempty"`
+	CreateTaskId      *string `json:"create_task_id"`
+	Id                string  `json:"id"`
+	Name              string  `json:"name"`
+	ProjectId         string  `json:"project_id"`
+	ProvisioningState string  `json:"provisioning_state"`
+	VolumeDir         string  `json:"volume_dir"`
+}
+
+// EnvironmentCreate defines model for EnvironmentCreate.
+type EnvironmentCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentCreate.json
+	Schema    *string `json:"$schema,omitempty"`
+	Name      string  `json:"name"`
+	ProjectId string  `json:"project_id"`
+}
+
+// EnvironmentPage defines model for EnvironmentPage.
+type EnvironmentPage struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentPage.json
+	Schema     *string        `json:"$schema,omitempty"`
+	Items      *[]Environment `json:"items"`
+	NextCursor *string        `json:"next_cursor,omitempty"`
+}
+
+// EnvironmentRename defines model for EnvironmentRename.
+type EnvironmentRename struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentRename.json
+	Schema *string `json:"$schema,omitempty"`
+	Name   string  `json:"name"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -140,6 +183,15 @@ type ProjectRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// TaskAccepted defines model for TaskAccepted.
+type TaskAccepted struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TaskAccepted.json
+	Schema *string `json:"$schema,omitempty"`
+	TaskId string  `json:"task_id"`
+}
+
 // Tenant defines model for Tenant.
 type Tenant struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -192,6 +244,23 @@ type TenantRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// EnvironmentListParams defines parameters for EnvironmentList.
+type EnvironmentListParams struct {
+	Project string  `form:"project" json:"project"`
+	Limit   *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// EnvironmentCreateParams defines parameters for EnvironmentCreate.
+type EnvironmentCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// EnvironmentRenameParams defines parameters for EnvironmentRename.
+type EnvironmentRenameParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ProjectListParams defines parameters for ProjectList.
 type ProjectListParams struct {
 	Kind   *string `form:"kind,omitempty" json:"kind,omitempty"`
@@ -235,6 +304,12 @@ type TenantEditParams struct {
 type TenantRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
+
+// EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
+type EnvironmentCreateJSONRequestBody = EnvironmentCreate
+
+// EnvironmentRenameJSONRequestBody defines body for EnvironmentRename for application/json ContentType.
+type EnvironmentRenameJSONRequestBody = EnvironmentRename
 
 // ProjectCreateJSONRequestBody defines body for ProjectCreate for application/json ContentType.
 type ProjectCreateJSONRequestBody = ProjectCreate
@@ -327,6 +402,44 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// EnvironmentList List environments
+	//
+	// Corresponds with GET /environments (the `EnvironmentList` operationId).
+	EnvironmentList(ctx context.Context, params *EnvironmentListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentCreateWithBody Create an environment
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+	EnvironmentCreateWithBody(ctx context.Context, params *EnvironmentCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentCreate Create an environment
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+	EnvironmentCreate(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentShow Show an environment
+	//
+	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
+	EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentRenameWithBody Rename an environment
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+	EnvironmentRenameWithBody(ctx context.Context, id string, params *EnvironmentRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentRename Rename an environment
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+	EnvironmentRename(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// HostShow Show host health
 	//
@@ -436,6 +549,104 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// EnvironmentList List environments
+//
+// Corresponds with GET /environments (the `EnvironmentList` operationId).
+func (c *Client) EnvironmentList(ctx context.Context, params *EnvironmentListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentCreateWithBody Create an environment
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+func (c *Client) EnvironmentCreateWithBody(ctx context.Context, params *EnvironmentCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentCreate Create an environment
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+func (c *Client) EnvironmentCreate(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentShow Show an environment
+//
+// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
+func (c *Client) EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentRenameWithBody Rename an environment
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+func (c *Client) EnvironmentRenameWithBody(ctx context.Context, id string, params *EnvironmentRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentRenameRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentRename Rename an environment
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+func (c *Client) EnvironmentRename(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // HostShow Show host health
@@ -715,6 +926,227 @@ func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRena
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewEnvironmentListRequest constructs an http.Request for the EnvironmentList method
+func NewEnvironmentListRequest(server string, params *EnvironmentListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentCreateRequest calls the generic EnvironmentCreate builder with application/json body
+func NewEnvironmentCreateRequest(server string, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnvironmentCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewEnvironmentCreateRequestWithBody constructs an http.Request for the EnvironmentCreate method, with any body, and a specified content type
+func NewEnvironmentCreateRequestWithBody(server string, params *EnvironmentCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentShowRequest constructs an http.Request for the EnvironmentShow method
+func NewEnvironmentShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentRenameRequest calls the generic EnvironmentRename builder with application/json body
+func NewEnvironmentRenameRequest(server string, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnvironmentRenameRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewEnvironmentRenameRequestWithBody constructs an http.Request for the EnvironmentRename method, with any body, and a specified content type
+func NewEnvironmentRenameRequestWithBody(server string, id string, params *EnvironmentRenameParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/rename", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
 }
 
 // NewHostShowRequest constructs an http.Request for the HostShow method
@@ -1358,6 +1790,48 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// EnvironmentListWithResponse List environments
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments (the `EnvironmentList` operationId).
+	EnvironmentListWithResponse(ctx context.Context, params *EnvironmentListParams, reqEditors ...RequestEditorFn) (*EnvironmentListResponse, error)
+
+	// EnvironmentCreateWithBodyWithResponse Create an environment
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+	EnvironmentCreateWithBodyWithResponse(ctx context.Context, params *EnvironmentCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentCreateResponse, error)
+
+	// EnvironmentCreateWithResponse Create an environment
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+	EnvironmentCreateWithResponse(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentCreateResponse, error)
+
+	// EnvironmentShowWithResponse Show an environment
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
+	EnvironmentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EnvironmentShowResponse, error)
+
+	// EnvironmentRenameWithBodyWithResponse Rename an environment
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+	EnvironmentRenameWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentRenameResponse, error)
+
+	// EnvironmentRenameWithResponse Rename an environment
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+	EnvironmentRenameWithResponse(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentRenameResponse, error)
+
 	// HostShowWithResponse Show host health
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -1476,6 +1950,212 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
+}
+
+type EnvironmentListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentListResponse) GetJSON200() *EnvironmentPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnvironmentCreateResponse202Headers the declared response headers of an HTTP 202 response for EnvironmentCreate
+type EnvironmentCreateResponse202Headers struct {
+	ContentType *string
+}
+
+type EnvironmentCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *EnvironmentCreateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EnvironmentCreateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EnvironmentShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Environment
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentShowResponse) GetJSON200() *Environment {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnvironmentRenameResponse200Headers the declared response headers of an HTTP 200 response for EnvironmentRename
+type EnvironmentRenameResponse200Headers struct {
+	ContentType *string
+}
+
+type EnvironmentRenameResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Environment
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EnvironmentRenameResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentRenameResponse) GetJSON200() *Environment {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentRenameResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentRenameResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentRenameResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentRenameResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentRenameResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type HostShowResponse struct {
@@ -2048,6 +2728,84 @@ func (r TenantRenameResponse) ContentType() string {
 	return ""
 }
 
+// EnvironmentListWithResponse List environments
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /environments (the `EnvironmentList` operationId).
+func (c *ClientWithResponses) EnvironmentListWithResponse(ctx context.Context, params *EnvironmentListParams, reqEditors ...RequestEditorFn) (*EnvironmentListResponse, error) {
+	rsp, err := c.EnvironmentList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentListResponse(rsp)
+}
+
+// EnvironmentCreateWithBodyWithResponse Create an environment
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+func (c *ClientWithResponses) EnvironmentCreateWithBodyWithResponse(ctx context.Context, params *EnvironmentCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentCreateResponse, error) {
+	rsp, err := c.EnvironmentCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentCreateResponse(rsp)
+}
+
+// EnvironmentCreateWithResponse Create an environment
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
+func (c *ClientWithResponses) EnvironmentCreateWithResponse(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentCreateResponse, error) {
+	rsp, err := c.EnvironmentCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentCreateResponse(rsp)
+}
+
+// EnvironmentShowWithResponse Show an environment
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
+func (c *ClientWithResponses) EnvironmentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EnvironmentShowResponse, error) {
+	rsp, err := c.EnvironmentShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentShowResponse(rsp)
+}
+
+// EnvironmentRenameWithBodyWithResponse Rename an environment
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+func (c *ClientWithResponses) EnvironmentRenameWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentRenameResponse, error) {
+	rsp, err := c.EnvironmentRenameWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentRenameResponse(rsp)
+}
+
+// EnvironmentRenameWithResponse Rename an environment
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
+func (c *ClientWithResponses) EnvironmentRenameWithResponse(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentRenameResponse, error) {
+	rsp, err := c.EnvironmentRename(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentRenameResponse(rsp)
+}
+
 // HostShowWithResponse Show host health
 //
 // Returns a wrapper object for the known response body format(s).
@@ -2267,6 +3025,164 @@ func (c *ClientWithResponses) TenantRenameWithResponse(ctx context.Context, id s
 		return nil, err
 	}
 	return ParseTenantRenameResponse(rsp)
+}
+
+// ParseEnvironmentListResponse parses an HTTP response from a EnvironmentListWithResponse call
+func ParseEnvironmentListResponse(rsp *http.Response) (*EnvironmentListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentCreateResponse parses an HTTP response from a EnvironmentCreateWithResponse call
+func ParseEnvironmentCreateResponse(rsp *http.Response) (*EnvironmentCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers EnvironmentCreateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentShowResponse parses an HTTP response from a EnvironmentShowWithResponse call
+func ParseEnvironmentShowResponse(rsp *http.Response) (*EnvironmentShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Environment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentRenameResponse parses an HTTP response from a EnvironmentRenameWithResponse call
+func ParseEnvironmentRenameResponse(rsp *http.Response) (*EnvironmentRenameResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentRenameResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Environment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EnvironmentRenameResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseHostShowResponse parses an HTTP response from a HostShowWithResponse call

@@ -82,6 +82,20 @@ type Environment struct {
 	CreateTaskID      *string                      `json:"create_task_id"`
 }
 
+type EnvironmentCreate struct {
+	ProjectID string `json:"project_id"`
+	Name      string `json:"name"`
+}
+
+type EnvironmentRename struct {
+	Name string `json:"name"`
+}
+
+type EnvironmentPage struct {
+	Items      []Environment `json:"items"`
+	NextCursor string        `json:"next_cursor,omitempty"`
+}
+
 type EnvironmentProvisioningState string
 
 const (

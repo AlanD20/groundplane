@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strconv"
 	"unicode/utf8"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type EnvironmentReader interface {
@@ -31,42 +33,177 @@ type EnvironmentMutator interface {
 	) (etcd.IdempotencyResponse, error)
 }
 
-func (s *Server) environmentCreate(w http.ResponseWriter, r *http.Request) {
-	if s.environmentMutations == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Environment mutator is not configured"))
-		return
-	}
-	input, err := decodeEnvironmentCreate(r)
-	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
-	}
-	response, err := s.environmentMutations.CreateEnvironment(
-		r.Context(), input, r.Header.Get(idempotencyKeyHeader),
+type environmentListInput struct {
+	Project string `query:"project" required:"true"`
+	Limit   int    `query:"limit" required:"false"`
+	Cursor  string `query:"cursor" required:"false"`
+}
+
+type environmentShowInput struct {
+	ID string `path:"id"`
+}
+
+type environmentCreateInput struct {
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type environmentRenameInput struct {
+	ID             string `path:"id"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type environmentOutput struct {
+	Body apiTypes.Environment
+}
+
+type environmentPageOutput struct {
+	Body apiTypes.EnvironmentPage
+}
+
+type environmentMutationOutput struct {
+	Status      int
+	ContentType string `header:"Content-Type"`
+	Body        func(huma.Context)
+}
+
+func (s *Server) registerEnvironments() {
+	environmentSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.Environment](),
+		true,
+		"Environment",
 	)
-	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", response.ContentKind)
-	w.WriteHeader(response.Status)
-	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Environment creation response", slog.Any("error", err))
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](),
+		true,
+		"TaskAccepted",
+	)
+	registerEnvironmentMutation[apiTypes.EnvironmentCreate](
+		s,
+		huma.Operation{
+			OperationID: "environment.create", Method: http.MethodPost, Path: "/environments",
+			Summary: "Create an environment", Tags: []string{"Environment"}, DefaultStatus: http.StatusAccepted,
+			Middlewares: huma.Middlewares{s.rejectEnvironmentQuery},
+		},
+		taskAcceptedSchema,
+		s.createEnvironment,
+		"EnvironmentCreate",
+	)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "environment.list", Method: http.MethodGet, Path: "/environments",
+		Summary: "List environments", Tags: []string{"Environment"},
+		Middlewares: huma.Middlewares{s.validateEnvironmentListQuery},
+	}, s.listEnvironments)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "environment.show", Method: http.MethodGet, Path: "/environments/{id}",
+		Summary: "Show an environment", Tags: []string{"Environment"},
+		Middlewares: huma.Middlewares{s.rejectEnvironmentQuery},
+	}, s.showEnvironment)
+	registerEnvironmentMutation[apiTypes.EnvironmentRename](
+		s,
+		huma.Operation{
+			OperationID: "environment.rename", Method: http.MethodPost, Path: "/environments/{id}/rename",
+			Summary: "Rename an environment", Tags: []string{"Environment"}, DefaultStatus: http.StatusOK,
+			Middlewares: huma.Middlewares{s.rejectEnvironmentQuery},
+		},
+		environmentSchema,
+		s.renameEnvironment,
+		"EnvironmentRename",
+	)
+
+	for _, pattern := range []string{
+		"POST /api/v1/environments",
+		"POST /api/v1/environments/{id}/rename",
+	} {
+		s.setRoutePolicy(pattern, routePolicy{body: jsonBody})
 	}
 }
 
-func decodeEnvironmentCreate(r *http.Request) (hierarchy.CreateEnvironmentInput, error) {
-	if len(r.URL.Query()) != 0 {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(
-			errs.KindMalformedRequest,
-			"Environment creation query is invalid",
-		)
+func registerEnvironmentMutation[InputBody any, Input any](
+	s *Server,
+	operation huma.Operation,
+	responseSchema *huma.Schema,
+	handler func(context.Context, *Input) (*environmentMutationOutput, error),
+	requestName string,
+) {
+	operation.SkipValidateBody = true
+	operation.RequestBody = &huma.RequestBody{
+		Required: true,
+		Content: map[string]*huma.MediaType{
+			"application/json": {
+				Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[InputBody](),
+					true,
+					requestName,
+				),
+			},
+		},
 	}
-	body, err := io.ReadAll(r.Body)
+	operation.Responses = map[string]*huma.Response{
+		strconv.Itoa(operation.DefaultStatus): {
+			Description: http.StatusText(operation.DefaultStatus),
+			Content: map[string]*huma.MediaType{
+				"application/json": {Schema: responseSchema},
+			},
+		},
+	}
+	huma.Register(s.API, operation, handler)
+}
+
+func (s *Server) validateEnvironmentListQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	query := requestURL.Query()
+	for key, values := range query {
+		if key != "project" && key != "limit" && key != "cursor" {
+			s.writeEnvironmentHumaProblem(ctx, "Environment list query is invalid")
+			return
+		}
+		if len(values) != 1 {
+			s.writeEnvironmentHumaProblem(ctx, "Environment list query contains duplicate values")
+			return
+		}
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectEnvironmentQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeEnvironmentHumaProblem(ctx, "Environment request query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) writeEnvironmentHumaProblem(ctx huma.Context, detail string) {
+	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
+		s.Logger.Error("controller: write Environment request problem", slog.Any("error", err))
+	}
+}
+
+func (s *Server) createEnvironment(
+	ctx context.Context,
+	request *environmentCreateInput,
+) (*environmentMutationOutput, error) {
+	if s.environmentMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Environment mutator is not configured")
+	}
+	defer clear(request.RawBody)
+	input, err := decodeEnvironmentCreate(request.RawBody)
 	if err != nil {
-		return hierarchy.CreateEnvironmentInput{}, errs.Wrap(errs.KindMalformedRequest, err)
+		return nil, normalizeProjectError(err)
 	}
-	defer clear(body)
+	response, err := s.environmentMutations.CreateEnvironment(
+		ctx, input, request.IdempotencyKey,
+	)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return s.environmentMutationResponse(response, "create"), nil
+}
+
+func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, error) {
 	if !utf8.Valid(body) {
 		return hierarchy.CreateEnvironmentInput{}, errs.New(
 			errs.KindMalformedRequest,
@@ -150,79 +287,58 @@ func decodeEnvironmentCreate(r *http.Request) (hierarchy.CreateEnvironmentInput,
 	return input, nil
 }
 
-func (s *Server) environmentList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listEnvironments(
+	ctx context.Context,
+	request *environmentListInput,
+) (*environmentPageOutput, error) {
 	if s.environments == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Environment reader is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Environment reader is not configured")
 	}
-	projectID, request, err := environmentListRequest(r)
+	pageRequest, err := environmentListRequest(request.Project, request.Limit, request.Cursor)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	page, err := s.environments.ListEnvironments(r.Context(), projectID, request)
+	page, err := s.environments.ListEnvironments(ctx, request.Project, pageRequest)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	response := apiTypes.Page[apiTypes.Environment]{
+	response := apiTypes.EnvironmentPage{
 		Items: make([]apiTypes.Environment, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
 		response.Items[index] = environmentResponse(item.Record)
 	}
-	s.writeEnvironmentJSON(w, response)
+	return &environmentPageOutput{Body: response}, nil
 }
 
-func (s *Server) environmentShow(w http.ResponseWriter, r *http.Request) {
+func (s *Server) showEnvironment(
+	ctx context.Context,
+	request *environmentShowInput,
+) (*environmentOutput, error) {
 	if s.environments == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Environment reader is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Environment reader is not configured")
 	}
-	if len(r.URL.Query()) != 0 {
-		s.writeProjectProblem(w, errs.New(errs.KindMalformedRequest, "Environment detail query is invalid"))
-		return
-	}
-	stored, err := s.environments.GetEnvironment(r.Context(), r.PathValue("id"))
+	stored, err := s.environments.GetEnvironment(ctx, request.ID)
 	if err != nil {
-		s.writeProjectProblem(w, err)
-		return
+		return nil, normalizeProjectError(err)
 	}
-	s.writeEnvironmentJSON(w, environmentResponse(stored.Record))
+	return &environmentOutput{Body: environmentResponse(stored.Record)}, nil
 }
 
-func environmentListRequest(r *http.Request) (string, etcd.PageRequest, error) {
-	query := r.URL.Query()
-	for key, values := range query {
-		if key != "project" && key != "limit" && key != "cursor" {
-			return "", etcd.PageRequest{}, errs.New(errs.KindMalformedRequest, "Environment list query is invalid")
-		}
-		if len(values) != 1 {
-			return "", etcd.PageRequest{}, errs.New(
-				errs.KindMalformedRequest,
-				"Environment list query contains duplicate values",
-			)
-		}
-	}
-	projectID := query.Get("project")
+func environmentListRequest(projectID string, limit int, cursor string) (etcd.PageRequest, error) {
 	if err := ids.Validate(ids.KindProject, projectID); err != nil {
-		return "", etcd.PageRequest{}, errs.New(
+		return etcd.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment list requires a stable project id",
 		)
 	}
-	request := etcd.PageRequest{Cursor: query.Get("cursor")}
-	if raw := query.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit <= 0 {
-			return "", etcd.PageRequest{}, errs.New(
-				errs.KindValidationFailed,
-				"Environment list limit must be a positive integer",
-			)
-		}
-		request.Limit = limit
+	if limit < 0 {
+		return etcd.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment list limit must be a positive integer",
+		)
 	}
-	return projectID, request, nil
+	return etcd.PageRequest{Cursor: cursor, Limit: limit}, nil
 }
 
 func environmentResponse(record etcd.EnvironmentRecord) apiTypes.Environment {
@@ -238,9 +354,22 @@ func environmentResponse(record etcd.EnvironmentRecord) apiTypes.Environment {
 	}
 }
 
-func (s *Server) writeEnvironmentJSON(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(value); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Environment response", slog.Any("error", err))
+func (s *Server) environmentMutationResponse(
+	response etcd.IdempotencyResponse,
+	action string,
+) *environmentMutationOutput {
+	return &environmentMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, err := ctx.BodyWriter().Write(response.Body); err != nil && s.Logger != nil {
+				s.Logger.Error(
+					"controller: write Environment mutation response",
+					"action",
+					action,
+					slog.Any("error", err),
+				)
+			}
+		},
 	}
 }

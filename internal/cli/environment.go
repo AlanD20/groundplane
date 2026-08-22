@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"net/http"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,7 +29,16 @@ func newEnvironmentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runList(cmd, "/api/v1/environments", map[string]string{"project": projectID})
+			page, err := app.Client.ListEnvironments(cmd.Context(), projectID, 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, environment := range page.Items {
+				items[index] = environmentFields(environment)
+			}
+			headers, rows := tabulateVia(app, items)
+			return app.Out.Render(headers, rows, page)
 		},
 	})
 
@@ -43,7 +51,11 @@ func newEnvironmentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runShow(cmd, "/api/v1/environments/"+id)
+			environment, err := fromContext(cmd).Client.ShowEnvironment(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderEnvironment(cmd, environment)
 		},
 	})
 
@@ -57,9 +69,13 @@ func newEnvironmentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runCreate(cmd, "/api/v1/environments", map[string]string{
-				"name": args[0], "project_id": projectID,
+			accepted, err := app.Client.CreateEnvironment(cmd.Context(), apiTypes.EnvironmentCreate{
+				Name: args[0], ProjectID: projectID,
 			})
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	}
 	cmd.AddCommand(create)
@@ -74,8 +90,11 @@ func newEnvironmentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			path := "/api/v1/environments/" + id + "/rename"
-			return runPostUpdate(cmd, path, map[string]string{"name": newName})
+			environment, err := fromContext(cmd).Client.RenameEnvironment(cmd.Context(), id, newName)
+			if err != nil {
+				return err
+			}
+			return renderEnvironment(cmd, environment)
 		},
 	}
 	rename.Flags().StringVar(&newName, "name", "", "new display name")
@@ -165,15 +184,8 @@ func resolveEnvironmentTarget(cmd *cobra.Command, argument string) (string, erro
 	}
 	cursor := ""
 	for {
-		var page apiTypes.Page[apiTypes.Environment]
-		request := app.Client.NewRequest(
-			http.MethodGet,
-			"/api/v1/environments",
-			map[string]string{"project": projectID, "limit": "200", "cursor": cursor},
-			nil,
-			http.StatusOK,
-		)
-		if err := app.Client.Do(cmd.Context(), request, &page); err != nil {
+		page, err := app.Client.ListEnvironments(cmd.Context(), projectID, 200, cursor)
+		if err != nil {
 			return "", err
 		}
 		for _, environment := range page.Items {
@@ -186,4 +198,24 @@ func resolveEnvironmentTarget(cmd *cobra.Command, argument string) (string, erro
 		}
 		cursor = page.NextCursor
 	}
+}
+
+func renderEnvironment(cmd *cobra.Command, environment apiTypes.Environment) error {
+	item := environmentFields(environment)
+	fields, values := fieldsOfVia(item)
+	return fromContext(cmd).Out.RenderOne(fields, values, environment)
+}
+
+func environmentFields(environment apiTypes.Environment) map[string]any {
+	return map[string]any{
+		"id": environment.ID, "project_id": environment.ProjectID, "name": environment.Name,
+		"volume_dir": environment.VolumeDir, "provisioning_state": environment.ProvisioningState,
+		"create_task_id": environment.CreateTaskID,
+	}
+}
+
+func renderTaskAccepted(cmd *cobra.Command, accepted apiTypes.TaskAccepted) error {
+	item := map[string]any{"task_id": accepted.TaskID}
+	fields, values := fieldsOfVia(item)
+	return fromContext(cmd).Out.RenderOne(fields, values, accepted)
 }
