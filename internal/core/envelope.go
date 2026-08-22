@@ -149,10 +149,11 @@ type EntrySourceSpec struct {
 
 // RouteSpec is one x-gp-routes entry. See blueprint.md, "x-gp-route".
 type RouteSpec struct {
-	Hostname string `yaml:"hostname,omitempty"`
-	Path     string `yaml:"path,omitempty"`
-	Target   string `yaml:"target"`
-	Exposure string `yaml:"exposure"` // "public" | "internal"
+	Hostname   string `yaml:"hostname,omitempty"`
+	Path       string `yaml:"path,omitempty"`
+	Target     string `yaml:"target"`
+	TargetPort uint16 `yaml:"target_port"`
+	Exposure   string `yaml:"exposure"` // "public" | "internal"
 }
 
 // ComponentSpec is one x-gp-components entry, keyed by component name. Config is

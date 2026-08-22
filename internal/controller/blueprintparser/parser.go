@@ -205,6 +205,10 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
 	}
+	authored.Routes, err = normalizeRoutes(authored.Routes)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
 
 	root.Content = composeNodes
 	compose, err := yaml.Marshal(document)
@@ -217,6 +221,26 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 		ReleaseGroups: authored.ReleaseGroups,
 	}
 	return authored.Envelope, extensions, compose, nil
+}
+
+func normalizeRoutes(routes []core.RouteSpec) ([]core.RouteSpec, error) {
+	normalized := append([]core.RouteSpec(nil), routes...)
+	for index := range normalized {
+		route := &normalized[index]
+		if route.Path == "" {
+			route.Path = "/"
+		}
+		if route.Target == "" {
+			return nil, validationError("Blueprint Route target is required")
+		}
+		if err := (core.Route{
+			Host: route.Hostname, Path: route.Path, TargetServiceID: "authored",
+			TargetPort: route.TargetPort, Exposure: route.Exposure,
+		}).Validate(); err != nil {
+			return nil, validationError("Blueprint Route is invalid")
+		}
+	}
+	return normalized, nil
 }
 
 func normalizeReleaseGroups(

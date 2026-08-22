@@ -366,11 +366,12 @@ type Component struct {
 // Route is a domain or path routed to a Service. Public routes require
 // an enabled ingress component to be served.
 type Route struct {
-	ID          string `yaml:"id"             json:"id"` // rte_<ulid>
-	Host        string `yaml:"host,omitempty" json:"host,omitempty"`
-	Path        string `yaml:"path,omitempty" json:"path,omitempty"`
-	ServiceName string `yaml:"service"        json:"service"`
-	Exposure    string `yaml:"exposure"` // "public" | "internal"
+	ID              string `yaml:"id"                        json:"id"` // rte_<ulid>
+	Host            string `yaml:"host,omitempty"            json:"host,omitempty"`
+	Path            string `yaml:"path"                       json:"path"`
+	TargetServiceID string `yaml:"target_service_id"          json:"target_service_id"`
+	TargetPort      uint16 `yaml:"target_port"                json:"target_port"`
+	Exposure        string `yaml:"exposure"                   json:"exposure"` // "public" | "internal"
 }
 
 // Volume is persistent storage owned by an Environment, named and

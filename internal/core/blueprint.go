@@ -103,16 +103,29 @@ func (e Environment) Validate() error {
 		}
 	}
 
+	routeMatches := make(map[string]struct{}, len(e.Routes))
 	for _, route := range e.Routes {
 		if err := route.Validate(); err != nil {
 			return fmt.Errorf("route: %w", err)
 		}
-		if _, ok := e.Services[route.ServiceName]; !ok {
+		targetFound := false
+		for _, service := range e.Services {
+			if service.ID == route.TargetServiceID {
+				targetFound = true
+				break
+			}
+		}
+		if !targetFound {
 			return fmt.Errorf(
 				"route: target service %q is not declared on this environment",
-				route.ServiceName,
+				route.TargetServiceID,
 			)
 		}
+		match := route.Host + "\x00" + route.Path
+		if _, duplicate := routeMatches[match]; duplicate {
+			return fmt.Errorf("route: host and path tuple is duplicated")
+		}
+		routeMatches[match] = struct{}{}
 	}
 
 	// Public routes with no enabled ingress component is a WARNING in the
@@ -264,15 +277,26 @@ func (e EnvEntry) Validate() error {
 // service set and is checked in Environment.Validate's caller
 // (internal/controller); this method checks the shape it can see alone.
 func (r Route) Validate() error {
-	if r.ServiceName == "" {
-		return fmt.Errorf("route: service is required")
+	if r.TargetServiceID == "" {
+		return fmt.Errorf("route: target_service_id is required")
 	}
-	if r.Host == "" && r.Path == "" {
-		return fmt.Errorf("route: at least one of host or path is required")
+	if r.TargetPort == 0 {
+		return fmt.Errorf("route: target_port is required")
+	}
+	if r.Path == "" || r.Path[0] != '/' || strings.ContainsAny(r.Path, "?#") ||
+		(strings.Contains(r.Path, "*") &&
+			(!strings.HasSuffix(r.Path, "*") || strings.Count(r.Path, "*") != 1)) {
+		return fmt.Errorf("route: path must be absolute, queryless, fragmentless, and use only an optional terminal *")
 	}
 	switch r.Exposure {
-	case "public", "internal":
-		// ok
+	case "public":
+		if !validRouteHost(r.Host) {
+			return fmt.Errorf("route: public exposure requires a lowercase ASCII DNS host")
+		}
+	case "internal":
+		if r.Host != "" && !validRouteHost(r.Host) {
+			return fmt.Errorf("route: host must be a lowercase ASCII DNS host")
+		}
 	default:
 		return fmt.Errorf(
 			"route: exposure must be %q or %q, got %q",
@@ -282,6 +306,23 @@ func (r Route) Validate() error {
 		)
 	}
 	return nil
+}
+
+func validRouteHost(host string) bool {
+	if host == "" || len(host) > 253 || strings.HasSuffix(host, ".") || strings.ToLower(host) != host {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (a Attach) Validate() error {

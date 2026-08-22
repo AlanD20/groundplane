@@ -23,7 +23,7 @@ func TestParseReturnsTypedProjectAndRootExtensions(t *testing.T) {
 schema: 1
 metadata: {tenant: acme, project: shop, environment: production}
 x-gp-routes:
-  - {target: web, exposure: internal}
+  - {target: web, target_port: 8080, exposure: internal}
 services:
   web: {image: "${IMAGE}"}
 `,
@@ -39,7 +39,8 @@ services:
 		result.Project.Services["web"].Image != "overridden" {
 		t.Fatalf("Parse() result = %+v", result)
 	}
-	if len(result.Extensions.Routes) != 1 || result.Extensions.Routes[0].Target != "web" {
+	if len(result.Extensions.Routes) != 1 || result.Extensions.Routes[0].Target != "web" ||
+		result.Extensions.Routes[0].TargetPort != 8080 || result.Extensions.Routes[0].Path != "/" {
 		t.Fatalf("routes = %+v", result.Extensions.Routes)
 	}
 	if _, exists := result.Project.Extensions["x-gp-routes"]; exists {
@@ -394,7 +395,7 @@ services:
 func TestParseRejectsUnknownTypedExtensionField(t *testing.T) {
 	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
 		"root.yaml": environmentRoot(
-			"x-gp-routes:\n  - target: web\n    exposure: internal\n    typo: value\nservices:\n  web: {image: nginx}\n",
+			"x-gp-routes:\n  - target: web\n    target_port: 8080\n    exposure: internal\n    typo: value\nservices:\n  web: {image: nginx}\n",
 		),
 	})
 	requireValidationError(t, parseError(bundle))

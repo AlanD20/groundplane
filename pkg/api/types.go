@@ -123,6 +123,34 @@ type Zone struct {
 	OwnedBy  string `json:"owned_by,omitempty"`
 }
 
+type Route struct {
+	ID              string `json:"id"`
+	EnvironmentID   string `json:"environment_id"`
+	Host            string `json:"host,omitempty"`
+	Path            string `json:"path"`
+	Exposure        string `json:"exposure"`
+	TargetServiceID string `json:"target_service_id"`
+	TargetPort      uint16 `json:"target_port"`
+}
+
+type RouteCreate struct {
+	EnvironmentID   string `json:"environment_id"`
+	Host            string `json:"host,omitempty"`
+	Path            string `json:"path,omitempty"`
+	Exposure        string `json:"exposure"`
+	TargetServiceID string `json:"target_service_id"`
+	TargetPort      uint16 `json:"target_port"`
+}
+
+type RouteEdit struct {
+	Exposure string `json:"exposure"`
+}
+
+type RoutePage struct {
+	Items      []Route `json:"items"`
+	NextCursor string  `json:"next_cursor,omitempty"`
+}
+
 // OnFailure is the shared service and release-group failure policy.
 type OnFailure string
 
@@ -208,14 +236,6 @@ type Attach struct {
 	BackingNetworkID     string   `json:"backing_network_id"`
 	GrantAttachIDs       []string `json:"grant_attach_ids,omitempty"`
 	Status               string   `json:"status"`
-}
-
-type Route struct {
-	ID          string `json:"id"`
-	Host        string `json:"host,omitempty"`
-	Path        string `json:"path,omitempty"`
-	ServiceName string `json:"service"`
-	Exposure    string `json:"exposure"` // "public" | "internal"
 }
 
 type Volume struct {

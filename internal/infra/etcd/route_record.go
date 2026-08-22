@@ -31,7 +31,8 @@ func ReplaceRouteDesired(record RouteRecord, desired core.Route) (RouteRecord, e
 		return RouteRecord{}, err
 	}
 	if desired.ID != record.Desired.ID || desired.Host != record.Desired.Host ||
-		desired.Path != record.Desired.Path || desired.ServiceName != record.Desired.ServiceName {
+		desired.Path != record.Desired.Path || desired.TargetServiceID != record.Desired.TargetServiceID ||
+		desired.TargetPort != record.Desired.TargetPort {
 		return RouteRecord{}, errs.New(
 			errs.KindValidationFailed,
 			"Route replacement changed immutable identity, match, or target Service",
@@ -55,11 +56,19 @@ func routeOwnerKey(environmentID string, routeID string) string {
 	return routeOwnerPrefix(environmentID) + routeID
 }
 
+func routeMatchKey(environmentID string, host string, path string) string {
+	return "/v1/indexes/routes/by-match/environment/" + environmentID + "/" +
+		encodeDynamicSegment(host) + "/" + encodeDynamicSegment(path)
+}
+
 func validateRouteRecord(record RouteRecord) error {
 	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
 	if err := validateID(ids.KindRoute, record.Desired.ID); err != nil {
+		return err
+	}
+	if err := validateID(ids.KindService, record.Desired.TargetServiceID); err != nil {
 		return err
 	}
 	if err := record.Desired.Validate(); err != nil {

@@ -21,7 +21,8 @@ func TestRouteRecordPreservesTypedMatchAndTarget(t *testing.T) {
 	}
 	if replacement.EnvironmentID != record.EnvironmentID || replacement.Desired.Host != record.Desired.Host ||
 		replacement.Desired.Path != record.Desired.Path ||
-		replacement.Desired.ServiceName != record.Desired.ServiceName {
+		replacement.Desired.TargetServiceID != record.Desired.TargetServiceID ||
+		replacement.Desired.TargetPort != record.Desired.TargetPort {
 		t.Fatalf("replacement = %#v, want immutable fields from %#v", replacement, record)
 	}
 	desired.Path = "/changed/*"
@@ -75,7 +76,8 @@ func routeRecordTestRecord(t *testing.T, offset int64) RouteRecord {
 		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1000),
 		core.Route{
 			ID: ids.NewAt(ids.KindRoute, serviceRecordTestTime(), offset), Host: "app.example.com",
-			Path: "/api/*", ServiceName: "api", Exposure: "public",
+			Path: "/api/*", TargetServiceID: ids.NewAt(ids.KindService, serviceRecordTestTime(), 1004),
+			TargetPort: 8080, Exposure: "public",
 		},
 	)
 	if err != nil {

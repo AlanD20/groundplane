@@ -41,11 +41,15 @@ func (repository *RouteRepository) CreateRoute(
 	}
 	defer clear(value)
 
-	conditions := routeWriteConditions(environment, project, target, record, nil, 0)
+	conditions := routeWriteConditions(environment, project, target, record, nil, 0, 0)
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationPut, Key: routeKey(record.Desired.ID), Value: value},
 		{
 			Type: MutationPut, Key: routeOwnerKey(record.EnvironmentID, record.Desired.ID),
+			Value: []byte(record.Desired.ID),
+		},
+		{
+			Type: MutationPut, Key: routeMatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path),
 			Value: []byte(record.Desired.ID),
 		},
 	})
@@ -122,16 +126,20 @@ func (repository *RouteRepository) ReplaceDesired(
 	if err := validateRouteVersion(current); err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
-	index, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys:     []string{routeOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID)},
+	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{
+			routeOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
+			routeMatchKey(current.Record.EnvironmentID, current.Record.Desired.Host, current.Record.Desired.Path),
+		},
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
-	if index == nil || len(index.Values) != 1 || index.Values[0] == nil ||
-		string(index.Values[0].Value) != current.Record.Desired.ID {
-		return Versioned[RouteRecord]{}, errs.New(errs.KindInternal, "Route owner index is missing or corrupt")
+	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
+		string(indexes.Values[1].Value) != current.Record.Desired.ID {
+		return Versioned[RouteRecord]{}, errs.New(errs.KindInternal, "Route indexes are missing or corrupt")
 	}
 	value, err := encodeRouteRecord(replacement)
 	if err != nil {
@@ -146,7 +154,8 @@ func (repository *RouteRepository) ReplaceDesired(
 			target,
 			current.Record,
 			&current,
-			index.Values[0].ModRevision,
+			indexes.Values[0].ModRevision,
+			indexes.Values[1].ModRevision,
 		),
 		[]Mutation{{Type: MutationPut, Key: routeKey(replacement.Desired.ID), Value: value}},
 	)
@@ -170,16 +179,20 @@ func routeWriteConditions(
 	record RouteRecord,
 	current *Versioned[RouteRecord],
 	ownerRevision int64,
+	matchRevision int64,
 ) []Condition {
 	routeCondition := Condition{Key: routeKey(record.Desired.ID)}
 	ownerCondition := Condition{Key: routeOwnerKey(record.EnvironmentID, record.Desired.ID)}
+	matchCondition := Condition{Key: routeMatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path)}
 	if current != nil {
 		routeCondition.ModRevision = current.Revision
 		ownerCondition.ModRevision = ownerRevision
+		matchCondition.ModRevision = matchRevision
 	}
 	conditions := []Condition{
 		routeCondition,
 		ownerCondition,
+		matchCondition,
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: serviceKey(target.Record.Desired.ID), ModRevision: target.Revision},
@@ -219,7 +232,7 @@ func validateRouteHierarchy(
 	if environment.Revision <= 0 || environment.ReadRevision < environment.Revision || project.Revision <= 0 ||
 		project.ReadRevision < project.Revision || record.EnvironmentID != environment.Record.ID ||
 		environment.Record.ProjectID != project.Record.ID || target.Record.EnvironmentID != environment.Record.ID ||
-		target.Record.Desired.Name != record.Desired.ServiceName {
+		target.Record.Desired.ID != record.Desired.TargetServiceID {
 		return errs.New(errs.KindValidationFailed, "Route hierarchy or target Service is invalid")
 	}
 	return nil
@@ -243,7 +256,7 @@ func classifyRouteWriteConflict(
 	record RouteRecord,
 	expectedRouteRevision int64,
 ) error {
-	expected := 9
+	expected := 10
 	if project.Record.TenantID != "" {
 		expected++
 	}
@@ -254,6 +267,9 @@ func classifyRouteWriteConflict(
 		if values[0] != nil || values[1] != nil {
 			return errs.New(errs.KindStateConflict, "Route stable identity is already in use")
 		}
+		if values[2] != nil {
+			return errs.New(errs.KindNameConflict, "Route host and path are already in use")
+		}
 	} else {
 		if values[0] == nil {
 			return errs.New(errs.KindRouteNotFound, "Route was not found")
@@ -261,34 +277,36 @@ func classifyRouteWriteConflict(
 		if values[0].ModRevision != expectedRouteRevision {
 			return stateConflict("route", record.Desired.ID)
 		}
-		if values[1] == nil || string(values[1].Value) != record.Desired.ID {
-			return errs.New(errs.KindInternal, "Route owner index changed or is corrupt")
+		for _, index := range []int{1, 2} {
+			if values[index] == nil || string(values[index].Value) != record.Desired.ID {
+				return errs.New(errs.KindInternal, "Route index changed or is corrupt")
+			}
 		}
 	}
-	if values[2] == nil {
+	if values[3] == nil {
 		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 	}
-	if values[2].ModRevision != environment.Revision {
+	if values[3].ModRevision != environment.Revision {
 		return stateConflict("environment", environment.Record.ID)
 	}
-	if values[3] == nil {
+	if values[4] == nil {
 		return errs.New(errs.KindProjectNotFound, "Project was not found")
 	}
-	if values[3].ModRevision != project.Revision {
+	if values[4].ModRevision != project.Revision {
 		return stateConflict("project", project.Record.ID)
 	}
-	if values[4] == nil {
+	if values[5] == nil {
 		return errs.New(errs.KindServiceNotFound, "Route target Service was not found")
 	}
-	if values[4].ModRevision != target.Revision {
+	if values[5].ModRevision != target.Revision {
 		return stateConflict("service", target.Record.Desired.ID)
 	}
-	for _, index := range []int{5, 6, 7, 8} {
+	for _, index := range []int{6, 7, 8, 9} {
 		if values[index] != nil {
 			return errs.New(errs.KindResourceInUse, "Route hierarchy or target deletion is in progress")
 		}
 	}
-	if expected == 10 && values[9] != nil {
+	if expected == 11 && values[10] != nil {
 		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 	}
 	return stateConflict("route", record.Desired.ID)

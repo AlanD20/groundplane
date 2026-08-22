@@ -16,13 +16,20 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 	ctx := context.Background()
 	repository, _, environment, project, target := routeRepositoryTestHierarchy(t)
 	records := []RouteRecord{
-		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.Name, 1010, "/api/*"),
-		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.Name, 1011, "/admin/*"),
+		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1010, "/api/*"),
+		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1011, "/admin/*"),
 	}
 	for _, record := range records {
 		if _, err := repository.CreateRoute(ctx, environment, project, target, record); err != nil {
 			t.Fatalf("CreateRoute(%s) error = %v", record.Desired.Path, err)
 		}
+	}
+	duplicateMatch := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1012, "/api/*")
+	if _, err := repository.CreateRoute(ctx, environment, project, target, duplicateMatch); !isKind(
+		err,
+		errs.KindNameConflict,
+	) {
+		t.Fatalf("CreateRoute(duplicate match) error = %v", err)
 	}
 	stored, err := repository.GetRoute(ctx, records[0].Desired.ID)
 	if err != nil || stored.Record != records[0] {
@@ -49,8 +56,8 @@ func TestRouteRepositoryRejectsMissingOrDeletingTargetService(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	wrongTarget := target
-	wrongTarget.Record.Desired.Name = "worker"
-	record := routeRepositoryTestRecord(t, environment.Record.ID, "api", 1020, "/api/*")
+	wrongTarget.Record.Desired.ID = ids.NewAt(ids.KindService, serviceRecordTestTime(), 1021)
+	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1020, "/api/*")
 	if _, err := repository.CreateRoute(ctx, environment, project, wrongTarget, record); err == nil {
 		t.Fatal("CreateRoute() accepted the wrong target Service")
 	}
@@ -83,7 +90,7 @@ func TestRouteRepositoryUpdatesExposureByCAS(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	repository, _, environment, project, target := routeRepositoryTestHierarchy(t)
-	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.Name, 1030, "/api/*")
+	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1030, "/api/*")
 	current, err := repository.CreateRoute(ctx, environment, project, target, record)
 	if err != nil {
 		t.Fatalf("CreateRoute() error = %v", err)
@@ -141,14 +148,14 @@ func routeRepositoryTestHierarchy(
 func routeRepositoryTestRecord(
 	t *testing.T,
 	environmentID string,
-	serviceName string,
+	serviceID string,
 	offset int64,
 	path string,
 ) RouteRecord {
 	t.Helper()
 	record, err := NewRouteRecord(environmentID, core.Route{
 		ID: ids.NewAt(ids.KindRoute, serviceRecordTestTime(), offset), Host: "app.example.com",
-		Path: path, ServiceName: serviceName, Exposure: "public",
+		Path: path, TargetServiceID: serviceID, TargetPort: 8080, Exposure: "public",
 	})
 	if err != nil {
 		t.Fatalf("NewRouteRecord() error = %v", err)
