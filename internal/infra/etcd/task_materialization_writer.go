@@ -33,6 +33,28 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 	return environmentID, true, nil
 }
 
+func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
+	materializationEnvironment, materializes, err := taskMaterializationEnvironment(record)
+	if err != nil {
+		return "", false, err
+	}
+	mutationEnvironment, mutates := record.Params[TaskMutationEnvironmentParam]
+	if materializes && mutates {
+		return "", false, errs.New(errs.KindValidationFailed, "task declares multiple Environment writers")
+	}
+	if materializes {
+		return materializationEnvironment, true, nil
+	}
+	if !mutates {
+		return "", false, nil
+	}
+	if record.Executor != TaskExecutorAgent || validateStableID(ids.KindEnvironment, mutationEnvironment) != nil ||
+		(record.Type != TaskAttach && record.Type != TaskDetach) {
+		return "", false, errs.New(errs.KindValidationFailed, "task mutation Environment is invalid")
+	}
+	return mutationEnvironment, true, nil
+}
+
 func taskMaterializationWriter(record TaskRecord, environmentID string) taskMaterializationWriterRecord {
 	return taskMaterializationWriterRecord{
 		EnvironmentID: environmentID, TaskID: record.ID, RenderGeneration: record.RenderGeneration,

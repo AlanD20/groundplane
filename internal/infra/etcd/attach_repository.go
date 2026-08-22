@@ -13,8 +13,11 @@ import (
 const attachRecordPrefix = "/v1/records/attaches/"
 
 type AttachCreateScope struct {
+	Tenant             Versioned[TenantRecord]
 	Project            Versioned[ProjectRecord]
 	Environment        Versioned[EnvironmentRecord]
+	BlueprintRevision  Versioned[EnvironmentBlueprintRevision]
+	ComposeProjection  Versioned[EnvironmentComposeProjection]
 	Services           []Versioned[ServiceRecord]
 	BackingProject     Versioned[ProjectRecord]
 	BackingEnvironment Versioned[EnvironmentRecord]
@@ -38,6 +41,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	scope AttachCreateScope,
 	record AttachRecord,
 	facts *AttachEncryptedFacts,
+	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -45,6 +49,9 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateAttachCreationTask(record, task, marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateAttachTaskRenderInputScope(scope, record, task, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if attachCreateWithTaskOperationCount(record, facts != nil) > maximumTransactionOperations {
@@ -69,6 +76,11 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(recordValue)
+	renderInputValue, err := encodeAttachTaskRenderInput(renderInput)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(renderInputValue)
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -102,6 +114,16 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Key: deletionTombstoneKey("environment", record.BackingEnvironmentID)},
 		{Key: deletionTombstoneKey("project", record.BackingProjectID)},
 		{Key: deletionTombstoneKey("service", record.BackingServiceID)},
+		{Key: attachTaskRenderInputKey(task.PlanID)},
+		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
+		{
+			Key:         environmentBlueprintManifestKey(record.EnvironmentID, renderInput.BlueprintRevisionID),
+			ModRevision: scope.BlueprintRevision.Revision,
+		},
+		{
+			Key:         environmentComposeProjectionKey(record.EnvironmentID),
+			ModRevision: scope.ComposeProjection.Revision,
+		},
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
@@ -113,6 +135,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Type: MutationPut, Key: attachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: attachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
+		{Type: MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
@@ -490,11 +513,14 @@ func validateAttachCreateScope(
 	if err := validateAttachRecord(record); err != nil {
 		return err
 	}
-	if scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 || scope.BackingProject.Revision <= 0 ||
+	if scope.Tenant.Revision <= 0 || scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 ||
+		scope.BlueprintRevision.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
+		scope.BackingProject.Revision <= 0 ||
 		scope.BackingEnvironment.Revision <= 0 || scope.BackingService.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach scope records must be versioned")
 	}
-	if scope.Project.Record.Kind != ProjectKindTenant || scope.Project.Record.TenantID == "" ||
+	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != ProjectKindTenant ||
+		scope.Project.Record.TenantID == "" ||
 		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach consumer hierarchy is invalid")
@@ -559,7 +585,8 @@ func validateAttachCreationTask(record AttachRecord, task TaskRecord, marker Ide
 	pendingAttachOwned := record.Status == core.AttachPending && record.Operation == AttachOperationProvision &&
 		record.TaskID == task.ID && record.CreatedAt.Equal(task.CreatedAt)
 	validTaskShape := task.Type == TaskAttach && task.Target == record.ID && task.Executor == TaskExecutorAgent &&
-		task.Status == TaskStatusPending && len(task.Params) == 0 && len(task.Materializations) == 0
+		task.Status == TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
+		task.Params[TaskMutationEnvironmentParam] == record.EnvironmentID
 	if !pendingAttachOwned || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach creation Task does not own its pending Attach")
 	}
@@ -576,7 +603,7 @@ func validateAttachCreationTask(record AttachRecord, task TaskRecord, marker Ide
 }
 
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 32 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	operations := 37 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
 	if hasFacts {
 		operations++
 	}

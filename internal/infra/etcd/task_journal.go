@@ -19,6 +19,7 @@ const (
 	MaximumTaskEvents                   = 1000
 	TaskRetention                       = 90 * 24 * time.Hour
 	TaskMaterializationEnvironmentParam = "materialization_environment_id"
+	TaskMutationEnvironmentParam        = "mutation_environment_id"
 )
 
 // TaskType is the closed durable task catalog. It is a persistence DTO rather

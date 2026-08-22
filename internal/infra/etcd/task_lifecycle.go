@@ -552,7 +552,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 				task.idempotencyMarker == nil {
 				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
 			}
-			environmentID, materializes, err := taskMaterializationEnvironment(task)
+			environmentID, materializes, err := taskEnvironmentWriter(task)
 			if err != nil {
 				return taskClaimCandidate{}, false, err
 			}
@@ -1016,7 +1016,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		materializationEnvironmentID, materializes, err := taskMaterializationEnvironment(task)
+		materializationEnvironmentID, materializes, err := taskEnvironmentWriter(task)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}

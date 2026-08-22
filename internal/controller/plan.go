@@ -315,13 +315,6 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 	if err != nil {
 		return nil, err
 	}
-	revision, found, err := resolver.blueprints.GetEnvironmentBlueprintRevision(ctx, task.Target, revisionID)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, errs.New(errs.KindInternal, "Blueprint Task immutable revision is missing")
-	}
 	projection, found, err := resolver.blueprints.GetEnvironmentComposeProjection(ctx, task.Target)
 	if err != nil {
 		return nil, err
@@ -329,6 +322,50 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 	if !found || projection.Record.BlueprintRevisionID != revisionID ||
 		projection.Record.RenderGeneration != uint64(task.RenderGeneration) {
 		return nil, errs.New(errs.KindInternal, "Blueprint Task Compose projection is stale")
+	}
+	return resolver.renderPinnedEnvironmentArtifact(
+		ctx,
+		task,
+		pinnedEnvironmentIdentity{
+			TenantID: tenant.Record.ID, TenantSlug: tenant.Record.Slug,
+			ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
+			EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
+			AuthorizedVolumeDir: environment.Record.VolumeDir,
+		},
+		revisionID,
+		artifactID,
+		projection.Record,
+		nil,
+	)
+}
+
+type pinnedEnvironmentIdentity struct {
+	TenantID            string
+	TenantSlug          string
+	ProjectID           string
+	ProjectSlug         string
+	EnvironmentID       string
+	EnvironmentName     string
+	AuthorizedVolumeDir string
+}
+
+func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	identity pinnedEnvironmentIdentity,
+	revisionID string,
+	artifactID string,
+	projection etcd.EnvironmentComposeProjection,
+	transform environmentComposeTransform,
+) (*agentpb.ComposeArtifact, error) {
+	revision, found, err := resolver.blueprints.GetEnvironmentBlueprintRevision(
+		ctx, identity.EnvironmentID, revisionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errs.New(errs.KindInternal, "Blueprint Task immutable revision is missing")
 	}
 	bundle := core.BlueprintBundle{
 		RootPath:       revision.Record.RootPath,
@@ -341,8 +378,8 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 		defer clear(bundle.Files[index].Content)
 	}
 	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
-		EnvironmentID: task.Target,
-		Tenant:        tenant.Record.Slug, Project: project.Record.Slug, Environment: environment.Record.Name,
+		EnvironmentID: identity.EnvironmentID,
+		Tenant:        identity.TenantSlug, Project: identity.ProjectSlug, Environment: identity.EnvironmentName,
 	}, bundle)
 	if err != nil {
 		return nil, err
@@ -354,12 +391,20 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 		len(parsed.Project.Secrets) != 0 {
 		return nil, errs.New(errs.KindNotImplemented, "Blueprint materialized resources are not yet executable")
 	}
+	externalNetworks := []ComposeResourceIdentity(nil)
+	if transform != nil {
+		externalNetworks, err = transform(parsed.Project, projection)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return RenderCompose(ComposeRenderInput{
 		Project: parsed.Project, ArtifactID: artifactID,
-		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
+		TenantID: identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
-		AuthorizedVolumeDir: environment.Record.VolumeDir,
-		Identities:          composeIdentitySnapshotFromProjection(projection.Record),
+		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
+		Identities:          composeIdentitySnapshotFromProjection(projection),
+		ExternalNetworks:    externalNetworks,
 	})
 }
 

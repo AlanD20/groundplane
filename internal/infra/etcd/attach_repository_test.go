@@ -227,7 +227,8 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	tenant := TenantRecord{
 		ID: ids.NewAt(ids.KindTenant, testAttachTime, 1), Slug: "acme", Name: "Acme",
 	}
-	if _, err = hierarchy.CreateTenant(ctx, tenant); err != nil {
+	tenantVersion, err := hierarchy.CreateTenant(ctx, tenant)
+	if err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
 	project, err := hierarchy.CreateProject(ctx, ProjectRecord{
@@ -321,8 +322,64 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	backingService := Versioned[ServiceRecord]{
 		Record: backingServiceRecord, Revision: backingServiceRevision, ReadRevision: backingServiceRevision,
 	}
+	blueprintRevision := EnvironmentBlueprintRevision{
+		EnvironmentID: environment.Record.ID, RevisionID: ids.NewAt(ids.KindTask, testAttachTime, 10),
+		RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
+		Files: []EnvironmentBlueprintFile{{
+			Path: "blueprint.yaml", Content: []byte("services:\n  api:\n    image: example/api:1\n"),
+		}},
+		CreatedAt: testAttachTime,
+	}
+	manifestValue, err := encodeEnvironmentBlueprintManifest(blueprintRevision)
+	if err != nil {
+		t.Fatalf("encodeEnvironmentBlueprintManifest() error = %v", err)
+	}
+	defer clear(manifestValue)
+	manifestRevision, err := store.Put(
+		ctx,
+		environmentBlueprintManifestKey(environment.Record.ID, blueprintRevision.RevisionID),
+		manifestValue,
+	)
+	if err != nil {
+		t.Fatalf("Put(Blueprint manifest) error = %v", err)
+	}
+	if _, err := store.Put(
+		ctx,
+		environmentBlueprintFileKey(environment.Record.ID, blueprintRevision.RevisionID, 0),
+		blueprintRevision.Files[0].Content,
+	); err != nil {
+		t.Fatalf("Put(Blueprint file) error = %v", err)
+	}
+	projection := EnvironmentComposeProjection{
+		EnvironmentID:       environment.Record.ID,
+		BlueprintRevisionID: blueprintRevision.RevisionID,
+		RenderGeneration:    1,
+		Services: []EnvironmentComposeIdentity{
+			{ID: service.Record.Desired.ID, Name: service.Record.Desired.Name},
+		},
+	}
+	projectionValue, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
+	}
+	defer clear(projectionValue)
+	projectionRevision, err := store.Put(
+		ctx,
+		environmentComposeProjectionKey(environment.Record.ID),
+		projectionValue,
+	)
+	if err != nil {
+		t.Fatalf("Put(Environment Compose projection) error = %v", err)
+	}
 	return AttachCreateScope{
-		Project: project, Environment: environment, Services: []Versioned[ServiceRecord]{service},
+		Tenant: tenantVersion, Project: project, Environment: environment,
+		BlueprintRevision: Versioned[EnvironmentBlueprintRevision]{
+			Record: blueprintRevision, Revision: manifestRevision, ReadRevision: manifestRevision,
+		},
+		ComposeProjection: Versioned[EnvironmentComposeProjection]{
+			Record: projection, Revision: projectionRevision, ReadRevision: projectionRevision,
+		},
+		Services:       []Versioned[ServiceRecord]{service},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment, BackingService: backingService,
 	}
 }
@@ -408,14 +465,32 @@ func createTestAttach(
 	recordDigest := sha256.Sum256([]byte(record.ID))
 	seed := int64(binary.BigEndian.Uint64(recordDigest[:8]))
 	planDigest := sha256.Sum256([]byte("attach-plan-" + record.ID))
+	stepCount := len(record.GrantAttachIDs) + 2
+	if scope.BackingService.Record.Desired.Adapter == "manual" {
+		stepCount = 1
+	}
+	steps := make([]TaskStepRecord, stepCount)
+	for index := range steps {
+		steps[index] = TaskStepRecord{ID: ids.NewAt(ids.KindStep, record.CreatedAt, seed+2+int64(index))}
+	}
 	task := TaskRecord{
-		ID: record.TaskID, OperationID: ids.NewAt(ids.KindOperation, record.CreatedAt, seed),
+		ID:             record.TaskID,
+		OperationID:    ids.NewAt(ids.KindOperation, record.CreatedAt, seed),
 		IdempotencyKey: "attach-create-key-" + record.ID,
-		Executor:       TaskExecutorAgent, PlanID: ids.NewAt(ids.KindPlan, record.CreatedAt, seed+1),
-		PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
-		Type: TaskAttach, Target: record.ID,
-		Steps:          []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, record.CreatedAt, seed+2)}},
-		TimeoutSeconds: 120, Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: record.CreatedAt,
+		Executor:       TaskExecutorAgent,
+		PlanID:         ids.NewAt(ids.KindPlan, record.CreatedAt, seed+1),
+		PlanHash: hex.EncodeToString(
+			planDigest[:],
+		),
+		RenderGeneration:  int32(scope.ComposeProjection.Record.RenderGeneration),
+		Type:              TaskAttach,
+		Target:            record.ID,
+		Params:            map[string]string{TaskMutationEnvironmentParam: record.EnvironmentID},
+		Steps:             steps,
+		TimeoutSeconds:    120,
+		Status:            TaskStatusPending,
+		NextEventSequence: 1,
+		CreatedAt:         record.CreatedAt,
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
@@ -438,7 +513,26 @@ func createTestAttach(
 		},
 		TaskID: task.ID, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
 	}
-	result, err := repository.CreateAttachWithTask(ctx, scope, record, facts, task, marker)
+	networkID := ids.NewAt(ids.KindNetwork, record.CreatedAt, seed+1000)
+	renderInput := AttachTaskRenderInput{
+		PlanID: task.PlanID, AttachID: record.ID,
+		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
+		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
+		EnvironmentID: record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
+		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir,
+		BackingServiceID:    scope.BackingService.Record.Desired.ID,
+		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
+		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
+		ArtifactID:          ids.NewAt(ids.KindConfig, record.CreatedAt, seed+2000),
+		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
+		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
+		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
+		Volumes:             append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		NetworkJoins: []AttachTaskNetworkJoin{{
+			NetworkID: networkID, ServiceIDs: append([]string(nil), record.ServiceIDs...),
+		}},
+	}
+	result, err := repository.CreateAttachWithTask(ctx, scope, record, facts, renderInput, task, marker)
 	if err != nil {
 		t.Fatalf("CreateAttachWithTask() error = %v", err)
 	}
@@ -458,6 +552,10 @@ func createTestAttach(
 	queued, err := repository.store.Get(ctx, taskQueueKey(TaskExecutorAgent, task.ID))
 	if err != nil || queued == nil || queued.Entry == nil || queued.Entry.ModRevision != created.Revision {
 		t.Fatalf("Attach Task queue = %#v, error = %v", queued, err)
+	}
+	storedRenderInput, err := repository.GetAttachTaskRenderInput(ctx, task.PlanID)
+	if err != nil || storedRenderInput.Record.PlanID != task.PlanID || storedRenderInput.Revision != created.Revision {
+		t.Fatalf("Attach Task render input = %#v, error = %v", storedRenderInput, err)
 	}
 	return created
 }
