@@ -260,10 +260,19 @@ func (repository *TaskRepository) RetryTask(
 		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
 	}
+	attachChange, err := repository.prepareAttachTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if attachChange.applies {
+		conditions = append(conditions, attachChange.condition)
+		mutations = append(mutations, attachChange.mutation)
+	}
+	defer clear(attachChange.value)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
-		classifyTaskRetryConflict(sourceTaskID, retry.OperationID),
+		classifyTaskRetryConflict(sourceTaskID, retry.OperationID, attachChange.applies),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -275,9 +284,17 @@ func (repository *TaskRepository) RetryTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func classifyTaskRetryConflict(sourceTaskID string, operationID string) idempotencyPlanClassifier {
+func classifyTaskRetryConflict(
+	sourceTaskID string,
+	operationID string,
+	attachLifecycle bool,
+) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 5 {
+		expectedValues := 5
+		if attachLifecycle {
+			expectedValues++
+		}
+		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "Task retry compare evidence is incomplete")
 		}
 		if values[0] == nil {
@@ -434,10 +451,24 @@ func (repository *TaskRepository) claimNextTask(
 				Type: MutationPut, Key: candidate.writerKey, Value: writerValue,
 			})
 		}
+		attachChange, err := repository.prepareAttachTaskClaim(ctx, task, candidate.readRevision)
+		if err != nil {
+			clear(runningValue)
+			clear(assignmentValue)
+			clear(writerValue)
+			return TaskAssignment{}, false, err
+		}
+		if attachChange.applies {
+			conditions = append(conditions, attachChange.condition)
+			if attachChange.mutates {
+				mutations = append(mutations, attachChange.mutation)
+			}
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(runningValue)
 		clear(assignmentValue)
 		clear(writerValue)
+		clear(attachChange.value)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -786,8 +817,9 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 }
 
 // AcknowledgeTask atomically records the Agent's terminal acknowledgement,
-// removes assignment and active-operation state, and terminalizes replay
-// evidence. Replaying the same terminal acknowledgement is idempotent.
+// removes assignment and active-operation state, terminalizes replay evidence,
+// and advances any owned Attach lifecycle. Replaying the same terminal
+// acknowledgement is idempotent.
 func (repository *TaskRepository) AcknowledgeTask(
 	ctx context.Context,
 	agentID string,
@@ -927,6 +959,11 @@ func (repository *TaskRepository) acknowledgeTask(
 					); err != nil {
 						return Versioned[TaskRecord]{}, err
 					}
+				}
+				if err := repository.validateAttachTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
 				}
 				return Versioned[TaskRecord]{
 					Record: task, Revision: taskValue.ModRevision,
@@ -1095,11 +1132,26 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, environmentConditions...)
 			mutations = append(mutations, environmentMutations...)
 		}
+		attachChange, err := repository.prepareAttachTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			return Versioned[TaskRecord]{}, err
+		}
+		if attachChange.applies {
+			conditions = append(conditions, attachChange.condition)
+			mutations = append(mutations, attachChange.mutation)
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
 		clear(environmentValue)
+		clear(attachChange.value)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
