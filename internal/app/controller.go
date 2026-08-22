@@ -217,6 +217,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Route repository: %w", err)
 	}
+	routeReadRepository, err := newDurableRouteReadRepository(hierarchyRecords, routeRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route read repositories: %w", err)
+	}
+	routeReads, err := newRouteReadService(routeReadRepository)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route reads: %w", err)
+	}
 	zoneRecords, err := etcd.NewZoneRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -236,6 +246,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone creation repositories: %w", err)
+	}
+	routeMutationRepository, err := newDurableRouteMutationRepository(
+		hierarchyRecords, serviceRecords, routeRecords,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route mutation repositories: %w", err)
 	}
 	componentRecords, err := etcd.NewComponentRepository(store)
 	if err != nil {
@@ -328,6 +345,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone creation service: %w", err)
+	}
+	routeMutationIdempotency, err := newDurableRouteMutationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route mutation idempotency: %w", err)
+	}
+	routeMutations, err := newRouteMutationService(routeMutationRepository, routeMutationIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route mutation service: %w", err)
 	}
 	agentConfigIdempotency, err := newDurableLocalAgentConfigIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -659,6 +686,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Services:              serviceReads,
 		Zones:                 zoneReads,
 		ZoneMutations:         zoneMutations,
+		Routes:                routeReads,
+		RouteMutations:        routeMutations,
 		Entries:               entryReads,
 		EntryMutations:        entryMutations,
 		Secrets:               secretReads,

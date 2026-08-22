@@ -1,6 +1,9 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/spf13/cobra"
+)
 
 // route: list | show | add | edit | remove. Public routes need an enabled
 // ingress component to be served. See mvp.md, "Route", and blueprint.md,
@@ -13,7 +16,20 @@ func newRouteCmd() *cobra.Command {
 		Short: "List routes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/routes", scopeQuery(fromContext(cmd), "environment"))
+			environmentID, err := resolveEnvironmentTarget(cmd, fromContext(cmd).Scope.Environment)
+			if err != nil {
+				return err
+			}
+			page, err := fromContext(cmd).Client.ListRoutes(cmd.Context(), environmentID, 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, route := range page.Items {
+				items[index] = routeFields(route)
+			}
+			headers, rows := tabulateVia(fromContext(cmd), items)
+			return fromContext(cmd).Out.Render(headers, rows, page)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -21,7 +37,12 @@ func newRouteCmd() *cobra.Command {
 		Short: "Show a route",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runShow(cmd, "/api/v1/routes/"+target(fromContext(cmd), args[0]))
+			route, err := fromContext(cmd).Client.GetRoute(cmd.Context(), target(fromContext(cmd), args[0]))
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(routeFields(route))
+			return fromContext(cmd).Out.RenderOne(fields, values, route)
 		},
 	})
 
@@ -41,18 +62,27 @@ func newRouteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runCreate(cmd, "/api/v1/routes", map[string]any{
-				"host": host, "path": path, "target_service_id": serviceID,
-				"target_port": targetPort, "exposure": exposure, "environment_id": environmentID,
+			route, err := app.Client.CreateRoute(cmd.Context(), apiTypes.RouteCreate{
+				EnvironmentID: environmentID, Host: host, Path: path,
+				TargetServiceID: serviceID, TargetPort: targetPort, Exposure: exposure,
 			})
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(routeFields(route))
+			return app.Out.RenderOne(fields, values, route)
 		},
 	}
 	add.Flags().StringVar(&host, "host", "", "hostname")
-	add.Flags().StringVar(&path, "path", "/", "path prefix")
+	add.Flags().StringVar(&path, "path", "/", "absolute path with optional terminal *")
 	add.Flags().StringVar(&service, "service", "", "target service name")
 	add.Flags().Uint16Var(&targetPort, "target-port", 0, "required internal target port")
-	add.Flags().
-		StringVar(&exposure, "exposure", "internal", "public | internal (public needs an enabled ingress component)")
+	add.Flags().StringVar(
+		&exposure,
+		"exposure",
+		"internal",
+		"public | internal (public needs an enabled ingress component)",
+	)
 	_ = add.MarkFlagRequired("service")
 	_ = add.MarkFlagRequired("target-port")
 	cmd.AddCommand(add)
@@ -60,17 +90,22 @@ func newRouteCmd() *cobra.Command {
 	var editExposure string
 	edit := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Edit a route",
+		Short: "Edit a route's exposure",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(
-				cmd,
-				"/api/v1/routes/"+target(fromContext(cmd), args[0]),
-				changedStringFields(cmd, map[string]string{"exposure": editExposure}),
+			app := fromContext(cmd)
+			route, err := app.Client.EditRoute(
+				cmd.Context(), target(app, args[0]), apiTypes.RouteEdit{Exposure: editExposure},
 			)
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(routeFields(route))
+			return app.Out.RenderOne(fields, values, route)
 		},
 	}
 	edit.Flags().StringVar(&editExposure, "exposure", "", "public | internal")
+	_ = edit.MarkFlagRequired("exposure")
 	cmd.AddCommand(edit)
 
 	cmd.AddCommand(&cobra.Command{
@@ -84,4 +119,12 @@ func newRouteCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func routeFields(route apiTypes.Route) map[string]any {
+	return map[string]any{
+		"id": route.ID, "environment_id": route.EnvironmentID, "host": route.Host,
+		"path": route.Path, "exposure": route.Exposure,
+		"target_service_id": route.TargetServiceID, "target_port": route.TargetPort,
+	}
 }

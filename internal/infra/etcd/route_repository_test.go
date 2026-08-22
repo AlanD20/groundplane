@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -46,6 +47,50 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 	)
 	if err != nil || len(second.Items) != 1 || second.NextCursor != "" || second.Revision != first.Revision {
 		t.Fatalf("ListRoutes(second) = %#v, %v", second, err)
+	}
+}
+
+func TestRouteRepositoryCommitsIdempotentCreateAndExposureEdit(t *testing.T) {
+	// Rationale: a synchronous Route response must never exist without the
+	// exact durable mutation, indexes, and replay marker from the same txn.
+	t.Parallel()
+	ctx := context.Background()
+	repository, _, environment, project, target := routeRepositoryTestHierarchy(t)
+	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1005, "/api/*")
+	createMarker := testDirectMarker()
+	createMarker.Locator.ScopeKind = IdempotencyScopeEnvironment
+	createMarker.Locator.ScopeID = environment.Record.ID
+	createMarker.Locator.Method = http.MethodPost
+	createMarker.Locator.Route = "/routes"
+	createMarker.Locator.Key = "route-create-key-0001"
+	if _, err := repository.CreateRouteIdempotent(
+		ctx, environment, project, target, record, createMarker,
+	); err != nil {
+		t.Fatalf("CreateRouteIdempotent() error = %v", err)
+	}
+	current, err := repository.GetRoute(ctx, record.Desired.ID)
+	if err != nil || current.Record != record {
+		t.Fatalf("GetRoute(created) = %#v, %v", current, err)
+	}
+	desired := current.Record.Desired
+	desired.Exposure = "internal"
+	editMarker := testDirectMarker()
+	editMarker.Locator.ScopeKind = IdempotencyScopeEnvironment
+	editMarker.Locator.ScopeID = environment.Record.ID
+	editMarker.Locator.Method = http.MethodPatch
+	editMarker.Locator.Route = "/routes/{id}"
+	editMarker.Locator.Key = "route-edit-key-000001"
+	if _, err := repository.ReplaceDesiredIdempotent(
+		ctx, environment, project, target, current, desired, editMarker,
+	); err != nil {
+		t.Fatalf("ReplaceDesiredIdempotent() error = %v", err)
+	}
+	updated, err := repository.GetRoute(ctx, record.Desired.ID)
+	if err != nil || updated.Record.Desired.Exposure != "internal" ||
+		updated.Record.Desired.Host != record.Desired.Host || updated.Record.Desired.Path != record.Desired.Path ||
+		updated.Record.Desired.TargetServiceID != record.Desired.TargetServiceID ||
+		updated.Record.Desired.TargetPort != record.Desired.TargetPort {
+		t.Fatalf("GetRoute(edited) = %#v, %v", updated, err)
 	}
 }
 

@@ -32,17 +32,68 @@ func (repository *RouteRepository) CreateRoute(
 	target Versioned[ServiceRecord],
 	record RouteRecord,
 ) (Versioned[RouteRecord], error) {
-	if err := validateRouteHierarchy(ctx, environment, project, target, record); err != nil {
-		return Versioned[RouteRecord]{}, err
-	}
-	value, err := encodeRouteRecord(record)
+	conditions, mutations, classify, err := repository.prepareRouteCreation(ctx, environment, project, target, record)
 	if err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
-	defer clear(value)
+	defer clearMutationValues(mutations)
+	result, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return Versioned[RouteRecord]{}, err
+	}
+	if !result.Succeeded {
+		return Versioned[RouteRecord]{}, classify(result.Revision, result.FailureReads)
+	}
+	return Versioned[RouteRecord]{
+		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
 
+// CreateRouteIdempotent atomically publishes the Route, ownership and match
+// indexes, and the exact synchronous replay marker.
+func (repository *RouteRepository) CreateRouteIdempotent(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	target Versioned[ServiceRecord],
+	record RouteRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateRouteMutationMarker(marker, record.EnvironmentID); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	conditions, mutations, classify, err := repository.prepareRouteCreation(ctx, environment, project, target, record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearMutationValues(mutations)
+	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func (repository *RouteRepository) prepareRouteCreation(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	target Versioned[ServiceRecord],
+	record RouteRecord,
+) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+	if err := validateRouteHierarchy(ctx, environment, project, target, record); err != nil {
+		return nil, nil, nil, err
+	}
+	value, err := encodeRouteRecord(record)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	conditions := routeWriteConditions(environment, project, target, record, nil, 0, 0)
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
+	mutations := []Mutation{
 		{Type: MutationPut, Key: routeKey(record.Desired.ID), Value: value},
 		{
 			Type: MutationPut, Key: routeOwnerKey(record.EnvironmentID, record.Desired.ID),
@@ -52,18 +103,11 @@ func (repository *RouteRepository) CreateRoute(
 			Type: MutationPut, Key: routeMatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path),
 			Value: []byte(record.Desired.ID),
 		},
-	})
-	if err != nil {
-		return Versioned[RouteRecord]{}, err
 	}
-	if !result.Succeeded {
-		return Versioned[RouteRecord]{}, classifyRouteWriteConflict(
-			result.FailureReads, environment, project, target, record, 0,
-		)
+	classify := func(_ int64, values []*KeyValue) error {
+		return classifyRouteWriteConflict(values, environment, project, target, record, 0)
 	}
-	return Versioned[RouteRecord]{
-		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
+	return conditions, mutations, classify, nil
 }
 
 func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (Versioned[RouteRecord], error) {
@@ -116,15 +160,74 @@ func (repository *RouteRepository) ReplaceDesired(
 	current Versioned[RouteRecord],
 	desired core.Route,
 ) (Versioned[RouteRecord], error) {
-	replacement, err := ReplaceRouteDesired(current.Record, desired)
+	replacement, conditions, mutations, classify, err := repository.prepareRouteReplacement(
+		ctx, environment, project, target, current, desired,
+	)
 	if err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
-	if err := validateRouteHierarchy(ctx, environment, project, target, replacement); err != nil {
+	defer clearMutationValues(mutations)
+	result, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
+	if !result.Succeeded {
+		return Versioned[RouteRecord]{}, classify(result.Revision, result.FailureReads)
+	}
+	return Versioned[RouteRecord]{
+		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
+// ReplaceDesiredIdempotent atomically edits Route exposure and commits the
+// exact synchronous replay marker.
+func (repository *RouteRepository) ReplaceDesiredIdempotent(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	target Versioned[ServiceRecord],
+	current Versioned[RouteRecord],
+	desired core.Route,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateRouteMutationMarker(marker, current.Record.EnvironmentID); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	_, conditions, mutations, classify, err := repository.prepareRouteReplacement(
+		ctx, environment, project, target, current, desired,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearMutationValues(mutations)
+	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func (repository *RouteRepository) prepareRouteReplacement(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	target Versioned[ServiceRecord],
+	current Versioned[RouteRecord],
+	desired core.Route,
+) (RouteRecord, []Condition, []Mutation, idempotencyPlanClassifier, error) {
+	replacement, err := ReplaceRouteDesired(current.Record, desired)
+	if err != nil {
+		return RouteRecord{}, nil, nil, nil, err
+	}
+	if err := validateRouteHierarchy(ctx, environment, project, target, replacement); err != nil {
+		return RouteRecord{}, nil, nil, nil, err
+	}
 	if err := validateRouteVersion(current); err != nil {
-		return Versioned[RouteRecord]{}, err
+		return RouteRecord{}, nil, nil, nil, err
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
@@ -134,42 +237,37 @@ func (repository *RouteRepository) ReplaceDesired(
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[RouteRecord]{}, err
+		return RouteRecord{}, nil, nil, nil, err
 	}
 	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
 		string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return Versioned[RouteRecord]{}, errs.New(errs.KindInternal, "Route indexes are missing or corrupt")
+		return RouteRecord{}, nil, nil, nil, errs.New(errs.KindInternal, "Route indexes are missing or corrupt")
 	}
 	value, err := encodeRouteRecord(replacement)
 	if err != nil {
-		return Versioned[RouteRecord]{}, err
+		return RouteRecord{}, nil, nil, nil, err
 	}
-	defer clear(value)
-	result, err := repository.store.Transact(
-		ctx,
-		routeWriteConditions(
-			environment,
-			project,
-			target,
-			current.Record,
-			&current,
-			indexes.Values[0].ModRevision,
-			indexes.Values[1].ModRevision,
-		),
-		[]Mutation{{Type: MutationPut, Key: routeKey(replacement.Desired.ID), Value: value}},
+	conditions := routeWriteConditions(
+		environment, project, target, current.Record, &current,
+		indexes.Values[0].ModRevision, indexes.Values[1].ModRevision,
 	)
-	if err != nil {
-		return Versioned[RouteRecord]{}, err
+	mutations := []Mutation{{Type: MutationPut, Key: routeKey(replacement.Desired.ID), Value: value}}
+	classify := func(_ int64, values []*KeyValue) error {
+		return classifyRouteWriteConflict(values, environment, project, target, current.Record, current.Revision)
 	}
-	if !result.Succeeded {
-		return Versioned[RouteRecord]{}, classifyRouteWriteConflict(
-			result.FailureReads, environment, project, target, current.Record, current.Revision,
+	return replacement, conditions, mutations, classify, nil
+}
+
+func validateRouteMutationMarker(marker IdempotencyMarker, environmentID string) error {
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Route mutation marker must be a completed Environment-scoped direct mutation",
 		)
 	}
-	return Versioned[RouteRecord]{
-		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
+	return validateIdempotencyMarker(marker)
 }
 
 func routeWriteConditions(

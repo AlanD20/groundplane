@@ -313,6 +313,16 @@ type PageEntry struct {
 	NextCursor *string  `json:"next_cursor,omitempty"`
 }
 
+// PageRoute defines model for PageRoute.
+type PageRoute struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageRoute.json
+	Schema     *string  `json:"$schema,omitempty"`
+	Items      *[]Route `json:"items"`
+	NextCursor *string  `json:"next_cursor,omitempty"`
+}
+
 // PageSecret defines model for PageSecret.
 type PageSecret struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -395,6 +405,44 @@ type ProjectRename struct {
 	// Examples: /api/v1/ProjectRename.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// Route defines model for Route.
+type Route struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Route.json
+	Schema          *string `json:"$schema,omitempty"`
+	EnvironmentId   string  `json:"environment_id"`
+	Exposure        string  `json:"exposure"`
+	Host            *string `json:"host,omitempty"`
+	Id              string  `json:"id"`
+	Path            string  `json:"path"`
+	TargetPort      int32   `json:"target_port"`
+	TargetServiceId string  `json:"target_service_id"`
+}
+
+// RouteCreate defines model for RouteCreate.
+type RouteCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RouteCreate.json
+	Schema          *string `json:"$schema,omitempty"`
+	EnvironmentId   string  `json:"environment_id"`
+	Exposure        string  `json:"exposure"`
+	Host            *string `json:"host,omitempty"`
+	Path            *string `json:"path,omitempty"`
+	TargetPort      int32   `json:"target_port"`
+	TargetServiceId string  `json:"target_service_id"`
+}
+
+// RouteEdit defines model for RouteEdit.
+type RouteEdit struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RouteEdit.json
+	Schema   *string `json:"$schema,omitempty"`
+	Exposure string  `json:"exposure"`
 }
 
 // Secret defines model for Secret.
@@ -669,6 +717,23 @@ type ProjectRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// RouteListParams defines parameters for RouteList.
+type RouteListParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// RouteCreateParams defines parameters for RouteCreate.
+type RouteCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RouteEditParams defines parameters for RouteEdit.
+type RouteEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // SecretListParams defines parameters for SecretList.
 type SecretListParams struct {
 	Project  *string `form:"project,omitempty" json:"project,omitempty"`
@@ -756,6 +821,12 @@ type ProjectEditJSONRequestBody = ProjectEdit
 
 // ProjectRenameJSONRequestBody defines body for ProjectRename for application/json ContentType.
 type ProjectRenameJSONRequestBody = ProjectRename
+
+// RouteCreateJSONRequestBody defines body for RouteCreate for application/json ContentType.
+type RouteCreateJSONRequestBody = RouteCreate
+
+// RouteEditJSONRequestBody defines body for RouteEdit for application/json ContentType.
+type RouteEditJSONRequestBody = RouteEdit
 
 // SecretCreateJSONRequestBody defines body for SecretCreate for application/json ContentType.
 type SecretCreateJSONRequestBody = SecretCreateRequest
@@ -1063,6 +1134,44 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteList List routes
+	//
+	// Corresponds with GET /routes (the `RouteList` operationId).
+	RouteList(ctx context.Context, params *RouteListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteCreateWithBody Create a route
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /routes (the `RouteCreate` operationId).
+	RouteCreateWithBody(ctx context.Context, params *RouteCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteCreate Create a route
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /routes (the `RouteCreate` operationId).
+	RouteCreate(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteShow Show a route
+	//
+	// Corresponds with GET /routes/{id} (the `RouteShow` operationId).
+	RouteShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteEditWithBody Edit route exposure
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+	RouteEditWithBody(ctx context.Context, id string, params *RouteEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteEdit Edit route exposure
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+	RouteEdit(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretList List reusable secrets
 	//
@@ -1753,6 +1862,104 @@ func (c *Client) ProjectRenameWithBody(ctx context.Context, id string, params *P
 // Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 func (c *Client) ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewProjectRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteList List routes
+//
+// Corresponds with GET /routes (the `RouteList` operationId).
+func (c *Client) RouteList(ctx context.Context, params *RouteListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteCreateWithBody Create a route
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /routes (the `RouteCreate` operationId).
+func (c *Client) RouteCreateWithBody(ctx context.Context, params *RouteCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteCreate Create a route
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /routes (the `RouteCreate` operationId).
+func (c *Client) RouteCreate(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteShow Show a route
+//
+// Corresponds with GET /routes/{id} (the `RouteShow` operationId).
+func (c *Client) RouteShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteEditWithBody Edit route exposure
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+func (c *Client) RouteEditWithBody(ctx context.Context, id string, params *RouteEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteEdit Edit route exposure
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+func (c *Client) RouteEdit(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3487,6 +3694,227 @@ func NewProjectRenameRequestWithBody(server string, id string, params *ProjectRe
 	return req, nil
 }
 
+// NewRouteListRequest constructs an http.Request for the RouteList method
+func NewRouteListRequest(server string, params *RouteListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/routes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRouteCreateRequest calls the generic RouteCreate builder with application/json body
+func NewRouteCreateRequest(server string, params *RouteCreateParams, body RouteCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRouteCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewRouteCreateRequestWithBody constructs an http.Request for the RouteCreate method, with any body, and a specified content type
+func NewRouteCreateRequestWithBody(server string, params *RouteCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/routes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRouteShowRequest constructs an http.Request for the RouteShow method
+func NewRouteShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/routes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRouteEditRequest calls the generic RouteEdit builder with application/json body
+func NewRouteEditRequest(server string, id string, params *RouteEditParams, body RouteEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRouteEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRouteEditRequestWithBody constructs an http.Request for the RouteEdit method, with any body, and a specified content type
+func NewRouteEditRequestWithBody(server string, id string, params *RouteEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/routes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewSecretListRequest constructs an http.Request for the SecretList method
 func NewSecretListRequest(server string, params *SecretListParams) (*http.Request, error) {
 	var err error
@@ -4582,6 +5010,48 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRenameWithResponse(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error)
+
+	// RouteListWithResponse List routes
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /routes (the `RouteList` operationId).
+	RouteListWithResponse(ctx context.Context, params *RouteListParams, reqEditors ...RequestEditorFn) (*RouteListResponse, error)
+
+	// RouteCreateWithBodyWithResponse Create a route
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /routes (the `RouteCreate` operationId).
+	RouteCreateWithBodyWithResponse(ctx context.Context, params *RouteCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteCreateResponse, error)
+
+	// RouteCreateWithResponse Create a route
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /routes (the `RouteCreate` operationId).
+	RouteCreateWithResponse(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteCreateResponse, error)
+
+	// RouteShowWithResponse Show a route
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /routes/{id} (the `RouteShow` operationId).
+	RouteShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RouteShowResponse, error)
+
+	// RouteEditWithBodyWithResponse Edit route exposure
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+	RouteEditWithBodyWithResponse(ctx context.Context, id string, params *RouteEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteEditResponse, error)
+
+	// RouteEditWithResponse Edit route exposure
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+	RouteEditWithResponse(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteEditResponse, error)
 
 	// SecretListWithResponse List reusable secrets
 	//
@@ -6111,6 +6581,212 @@ func (r ProjectRenameResponse) ContentType() string {
 	return ""
 }
 
+type RouteListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageRoute
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RouteListResponse) GetJSON200() *PageRoute {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouteListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouteListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouteListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouteListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouteListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RouteCreateResponse201Headers the declared response headers of an HTTP 201 response for RouteCreate
+type RouteCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type RouteCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Route
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *RouteCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r RouteCreateResponse) GetJSON201() *Route {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouteCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouteCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouteCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouteCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouteCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RouteShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Route
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RouteShowResponse) GetJSON200() *Route {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouteShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouteShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouteShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouteShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouteShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RouteEditResponse200Headers the declared response headers of an HTTP 200 response for RouteEdit
+type RouteEditResponse200Headers struct {
+	ContentType *string
+}
+
+type RouteEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Route
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *RouteEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RouteEditResponse) GetJSON200() *Route {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouteEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouteEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouteEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouteEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouteEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SecretListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7339,6 +8015,84 @@ func (c *ClientWithResponses) ProjectRenameWithResponse(ctx context.Context, id 
 		return nil, err
 	}
 	return ParseProjectRenameResponse(rsp)
+}
+
+// RouteListWithResponse List routes
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /routes (the `RouteList` operationId).
+func (c *ClientWithResponses) RouteListWithResponse(ctx context.Context, params *RouteListParams, reqEditors ...RequestEditorFn) (*RouteListResponse, error) {
+	rsp, err := c.RouteList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteListResponse(rsp)
+}
+
+// RouteCreateWithBodyWithResponse Create a route
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /routes (the `RouteCreate` operationId).
+func (c *ClientWithResponses) RouteCreateWithBodyWithResponse(ctx context.Context, params *RouteCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteCreateResponse, error) {
+	rsp, err := c.RouteCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteCreateResponse(rsp)
+}
+
+// RouteCreateWithResponse Create a route
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /routes (the `RouteCreate` operationId).
+func (c *ClientWithResponses) RouteCreateWithResponse(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteCreateResponse, error) {
+	rsp, err := c.RouteCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteCreateResponse(rsp)
+}
+
+// RouteShowWithResponse Show a route
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /routes/{id} (the `RouteShow` operationId).
+func (c *ClientWithResponses) RouteShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RouteShowResponse, error) {
+	rsp, err := c.RouteShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteShowResponse(rsp)
+}
+
+// RouteEditWithBodyWithResponse Edit route exposure
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+func (c *ClientWithResponses) RouteEditWithBodyWithResponse(ctx context.Context, id string, params *RouteEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RouteEditResponse, error) {
+	rsp, err := c.RouteEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteEditResponse(rsp)
+}
+
+// RouteEditWithResponse Edit route exposure
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
+func (c *ClientWithResponses) RouteEditWithResponse(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteEditResponse, error) {
+	rsp, err := c.RouteEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteEditResponse(rsp)
 }
 
 // SecretListWithResponse List reusable secrets
@@ -8648,6 +9402,164 @@ func ParseProjectRenameResponse(rsp *http.Response) (*ProjectRenameResponse, err
 	switch {
 	case rsp.StatusCode == 200:
 		var headers ProjectRenameResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRouteListResponse parses an HTTP response from a RouteListWithResponse call
+func ParseRouteListResponse(rsp *http.Response) (*RouteListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouteListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageRoute
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRouteCreateResponse parses an HTTP response from a RouteCreateWithResponse call
+func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouteCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Route
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers RouteCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRouteShowResponse parses an HTTP response from a RouteShowWithResponse call
+func ParseRouteShowResponse(rsp *http.Response) (*RouteShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouteShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Route
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRouteEditResponse parses an HTTP response from a RouteEditWithResponse call
+func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouteEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Route
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers RouteEditResponse200Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
