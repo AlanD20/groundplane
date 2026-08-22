@@ -131,9 +131,9 @@ func (s *Server) HTTPHandler() http.Handler {
 func (s *Server) routes() {
 	mux := s.Mux
 
-	// OpenAPI — served from the code-first generator once wired (Huma /
-	// oapi-codegen). TODO.
-	mux.HandleFunc("GET /openapi.json", s.notImplemented)
+	// OpenAPI is serialized from this Server's registered Huma operations; it
+	// is never loaded from a generated file or maintained as a parallel route table.
+	mux.HandleFunc("GET /openapi.json", s.openAPI)
 
 	// tenant — destructive delete is a task (api-cli.md's resource map)
 	mux.HandleFunc("GET /api/v1/tenants", s.tenantList)

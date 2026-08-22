@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-dev agent proto console console-toolchain console-verify console-release-smoke clean test tidy ci
+.PHONY: build cli controller controller-dev agent proto api generate console console-toolchain console-verify console-release-smoke clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
@@ -28,6 +28,14 @@ proto:
 		--go_out=. --go_opt=module=github.com/AlanD20/groundplane \
 		--go-grpc_out=. --go-grpc_opt=module=github.com/AlanD20/groundplane \
 		proto/agent.proto
+
+api: console-toolchain
+	test -x console/node_modules/.bin/openapi-typescript
+	go run ./internal/openapigen -output openapi.json
+	go tool oapi-codegen -config internal/cli/apiclient/generated/oapi-codegen.yaml openapi.json
+	cd console && npm run generate:api
+
+generate: proto api
 
 console-toolchain:
 	test "$$(cat .node-version)" = "$(NODE_VERSION)"
@@ -83,6 +91,8 @@ tidy:
 # `go generate` line is commented out until proto/agentpb and an
 # OpenAPI-generated client actually exist to regenerate.
 ci: console | $(BIN_DIR)
+	$(MAKE) generate
+	git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
 	go mod tidy && git diff --exit-code go.mod go.sum
 	test -z "$$(gofmt -l .)"
 	test -z "$$(golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./console/)"
@@ -90,7 +100,6 @@ ci: console | $(BIN_DIR)
 	go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
 	go build -tags groundplane_console -o $(BIN_DIR)/controller ./cmd/controller
 	$(MAKE) console-release-smoke
-	# go generate ./...
 
 clean:
 	rm -rf $(BIN_DIR) console/dist

@@ -1,0 +1,270 @@
+{
+  "components": {
+    "schemas": {
+      "Error": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/Error.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "status": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ],
+        "type": "object"
+      },
+      "Host": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/Host.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/HostAgent"
+          },
+          "arch": {
+            "type": "string"
+          },
+          "controller": {
+            "$ref": "#/components/schemas/HostController"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/HostCPU"
+          },
+          "disk": {
+            "$ref": "#/components/schemas/HostResource"
+          },
+          "docker": {
+            "type": "string"
+          },
+          "etcd": {
+            "$ref": "#/components/schemas/HostEtcd"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/HostResource"
+          },
+          "os": {
+            "type": "string"
+          },
+          "swap": {
+            "$ref": "#/components/schemas/HostResource"
+          },
+          "uptime": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname",
+          "arch",
+          "os",
+          "uptime",
+          "cpu",
+          "memory",
+          "disk",
+          "swap",
+          "docker",
+          "etcd",
+          "controller",
+          "agent"
+        ],
+        "type": "object"
+      },
+      "HostAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "max_concurrent": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pull_interval": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "pull_interval",
+          "max_concurrent",
+          "labels"
+        ],
+        "type": "object"
+      },
+      "HostCPU": {
+        "additionalProperties": false,
+        "properties": {
+          "cores": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "load": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "cores",
+          "load"
+        ],
+        "type": "object"
+      },
+      "HostController": {
+        "additionalProperties": false,
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "status",
+          "version"
+        ],
+        "type": "object"
+      },
+      "HostEtcd": {
+        "additionalProperties": false,
+        "properties": {
+          "db_size": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node",
+          "status",
+          "db_size"
+        ],
+        "type": "object"
+      },
+      "HostResource": {
+        "additionalProperties": false,
+        "properties": {
+          "total": {
+            "type": "string"
+          },
+          "used": {
+            "type": "string"
+          },
+          "used_pct": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "used",
+          "used_pct"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Groundplane API",
+    "version": "dev"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/host": {
+      "get": {
+        "operationId": "host.show",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Host"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show host health",
+        "tags": [
+          "Host"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ]
+}
