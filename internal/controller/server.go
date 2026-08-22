@@ -46,6 +46,7 @@ type Server struct {
 	environments          EnvironmentReader
 	services              ServiceReader
 	zones                 ZoneReader
+	zoneMutations         ZoneMutator
 	entries               EntryReader
 	entryMutations        EntryMutator
 	secrets               SecretReader
@@ -76,6 +77,7 @@ type Options struct {
 	Environments          EnvironmentReader
 	Services              ServiceReader
 	Zones                 ZoneReader
+	ZoneMutations         ZoneMutator
 	Entries               EntryReader
 	EntryMutations        EntryMutator
 	Secrets               SecretReader
@@ -124,6 +126,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environments:          options.Environments,
 		services:              options.Services,
 		zones:                 options.Zones,
+		zoneMutations:         options.ZoneMutations,
 		entries:               options.Entries,
 		entryMutations:        options.EntryMutations,
 		secrets:               options.Secrets,
@@ -221,9 +224,8 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
 	s.jsonRoute("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
 
-	// Zone reads are typed Huma operations. Creation and Task-backed removal
-	// remain explicit placeholders; Zone fields are immutable and have no PATCH.
-	s.jsonRoute("POST /api/v1/zones", s.notImplemented)
+	// Zone reads and synchronous creation are typed Huma operations. Task-backed
+	// removal remains explicit; Zone fields are immutable and have no PATCH.
 	mux.HandleFunc("DELETE /api/v1/zones/{id}", s.acceptTask)
 
 	// route / volume / script (?environment=) — destructive delete is a task

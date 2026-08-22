@@ -1,8 +1,7 @@
 package etcd
 
 import (
-	"strings"
-
+	"github.com/AlanD20/groundplane/internal/common/composekey"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -48,8 +47,8 @@ func validateZoneRecord(record ZoneRecord) error {
 	if err := validateID(ids.KindNetwork, record.Desired.ID); err != nil {
 		return err
 	}
-	if strings.TrimSpace(record.Desired.Name) == "" {
-		return errs.New(errs.KindValidationFailed, "Zone name is required")
+	if err := composekey.Validate(record.Desired.Name); err != nil {
+		return err
 	}
 	subnet, err := ipam.ParseIPv4Prefix(record.Desired.Subnet)
 	if err != nil || subnet.String() != record.Desired.Subnet {

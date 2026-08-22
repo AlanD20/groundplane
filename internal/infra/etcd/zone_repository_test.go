@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -92,6 +93,31 @@ func TestZoneRepositoryEnforcesEnvironmentPoolAndSiblingIsolation(t *testing.T) 
 	outside.Desired.Subnet = "10.99.0.0/24"
 	if _, err := repository.CreateZone(ctx, environment, project, outside); !isKind(err, errs.KindValidationFailed) {
 		t.Fatalf("CreateZone(outside pool) error = %v", err)
+	}
+}
+
+func TestZoneRepositoryIdempotentCreateCommitsReservationAndMarker(t *testing.T) {
+	// Rationale: a retried synchronous Zone request must never publish a subnet
+	// reservation without its exact replay evidence or create the Zone twice.
+	t.Parallel()
+	ctx := context.Background()
+	repository, _, environment, project := zoneRepositoryTestHierarchy(t)
+	record := zoneRepositoryTestRecord(t, environment.Record.ID, 940, "backend.v2")
+	marker := testDirectMarker()
+	marker.Locator = IdempotencyLocator{
+		ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+		Method: http.MethodPost, Route: "/zones", Key: "zone-create-key-0001",
+	}
+	marker.Response.Status = http.StatusCreated
+	if _, err := repository.CreateZoneIdempotent(ctx, environment, project, record, marker); err != nil {
+		t.Fatalf("CreateZoneIdempotent() error = %v", err)
+	}
+	if _, err := repository.CreateZoneIdempotent(ctx, environment, project, record, marker); err != nil {
+		t.Fatalf("CreateZoneIdempotent(replay) error = %v", err)
+	}
+	stored, err := repository.GetZone(ctx, record.Desired.ID)
+	if err != nil || stored.Record != record {
+		t.Fatalf("GetZone() = %#v, %v", stored, err)
 	}
 }
 

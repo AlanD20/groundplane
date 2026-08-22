@@ -31,29 +31,86 @@ func (repository *ZoneRepository) CreateZone(
 	project Versioned[ProjectRecord],
 	record ZoneRecord,
 ) (Versioned[ZoneRecord], error) {
-	if err := validateZoneHierarchy(ctx, environment, project, record); err != nil {
+	conditions, mutations, classify, err := repository.prepareZoneCreation(ctx, environment, project, record)
+	if err != nil {
 		return Versioned[ZoneRecord]{}, err
+	}
+	defer clearMutationValues(mutations)
+	result, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return Versioned[ZoneRecord]{}, err
+	}
+	if !result.Succeeded {
+		return Versioned[ZoneRecord]{}, classify(result.Revision, result.FailureReads)
+	}
+	return Versioned[ZoneRecord]{
+		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
+// CreateZoneIdempotent atomically publishes the Zone, its immutable subnet
+// reservation and indexes, and the exact synchronous replay marker.
+func (repository *ZoneRepository) CreateZoneIdempotent(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	record ZoneRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != record.EnvironmentID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Zone creation marker must be a completed Environment-scoped direct mutation",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	conditions, mutations, classify, err := repository.prepareZoneCreation(ctx, environment, project, record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearMutationValues(mutations)
+	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func (repository *ZoneRepository) prepareZoneCreation(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	record ZoneRecord,
+) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+	if err := validateZoneHierarchy(ctx, environment, project, record); err != nil {
+		return nil, nil, nil, err
 	}
 	poolRegistry, err := repository.getZonePoolRegistry(ctx, environment.Record.ID)
 	if err != nil {
-		return Versioned[ZoneRecord]{}, err
+		return nil, nil, nil, err
 	}
 	nextPoolRegistry, err := poolRegistry.Record.reserve(environment.Record, record)
 	if err != nil {
-		return Versioned[ZoneRecord]{}, err
+		return nil, nil, nil, err
 	}
 	poolRegistry.Record = nextPoolRegistry
 	value, err := encodeZoneRecord(record)
 	if err != nil {
-		return Versioned[ZoneRecord]{}, err
+		return nil, nil, nil, err
 	}
-	defer clear(value)
 	poolRegistryValue, err := encodeEnvelope("zone_pool_registry", poolRegistry.Record)
 	if err != nil {
-		return Versioned[ZoneRecord]{}, err
+		clear(value)
+		return nil, nil, nil, err
 	}
-	defer clear(poolRegistryValue)
-
 	conditions := []Condition{
 		{Key: zoneKey(record.Desired.ID)},
 		{Key: zoneNameKey(record.EnvironmentID, record.Desired.Name)},
@@ -70,7 +127,7 @@ func (repository *ZoneRepository) CreateZone(
 	conditions = append(conditions, Condition{
 		Key: zonePoolRegistryKey(environment.Record.ID), ModRevision: poolRegistry.Revision,
 	})
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
+	mutations := []Mutation{
 		{Type: MutationPut, Key: zoneKey(record.Desired.ID), Value: value},
 		{
 			Type: MutationPut, Key: zoneNameKey(record.EnvironmentID, record.Desired.Name),
@@ -81,18 +138,11 @@ func (repository *ZoneRepository) CreateZone(
 			Type: MutationPut, Key: zoneOwnerKey(record.EnvironmentID, record.Desired.ID),
 			Value: []byte(record.Desired.ID),
 		},
-	})
-	if err != nil {
-		return Versioned[ZoneRecord]{}, err
 	}
-	if !result.Succeeded {
-		return Versioned[ZoneRecord]{}, classifyZoneWriteConflict(
-			result.FailureReads, environment, project, poolRegistry, record,
-		)
+	classify := func(_ int64, values []*KeyValue) error {
+		return classifyZoneWriteConflict(values, environment, project, poolRegistry, record)
 	}
-	return Versioned[ZoneRecord]{
-		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
+	return conditions, mutations, classify, nil
 }
 
 func (repository *ZoneRepository) GetZone(ctx context.Context, id string) (Versioned[ZoneRecord], error) {

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"reflect"
 	"testing"
 	"time"
@@ -10,7 +11,24 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
+
+type fakeZoneMutator struct {
+	input          apiTypes.ZoneCreate
+	idempotencyKey string
+	response       etcd.IdempotencyResponse
+}
+
+func (fake *fakeZoneMutator) CreateZone(
+	_ context.Context,
+	input apiTypes.ZoneCreate,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	fake.input = input
+	fake.idempotencyKey = idempotencyKey
+	return fake.response, nil
+}
 
 type fakeZoneReader struct {
 	zone        etcd.Versioned[etcd.ZoneRecord]
@@ -66,6 +84,53 @@ func TestZoneRoutesProjectExactPublicRecord(t *testing.T) {
 	}
 }
 
+func TestZoneCreateRouteForwardsStrictInputAndExactResponse(t *testing.T) {
+	// Rationale: Zone creation is one synchronous operator capability, so the
+	// HTTP boundary must preserve its exact body and idempotency identity.
+	t.Parallel()
+	record := zoneRouteTestRecord()
+	want := zoneResponse(record)
+	body, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal Zone: %v", err)
+	}
+	mutator := &fakeZoneMutator{response: etcd.IdempotencyResponse{
+		Status: http.StatusCreated, ContentKind: "application/json", Body: body,
+	}}
+	server := &Server{zoneMutations: mutator}
+	input := apiTypes.ZoneCreate{
+		EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
+		Subnet: record.Desired.Subnet, Internal: record.Desired.Internal,
+	}
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal Zone create: %v", err)
+	}
+	output, err := server.createZone(context.Background(), &zoneCreateInput{
+		IdempotencyKey: "zone-create-key-0001", RawBody: raw,
+	})
+	if err != nil || output.Status != http.StatusCreated || output.ContentType != "application/json" ||
+		!reflect.DeepEqual(mutator.input, input) || mutator.idempotencyKey != "zone-create-key-0001" {
+		t.Fatalf("createZone() = %#v, %v; forwarded %#v/%q", output, err, mutator.input, mutator.idempotencyKey)
+	}
+}
+
+func TestDecodeZoneCreateRejectsAmbiguousJSON(t *testing.T) {
+	// Rationale: idempotency protects one canonical intent, so duplicate,
+	// unknown, missing, and incorrectly typed members must fail before hashing.
+	t.Parallel()
+	for _, body := range []string{
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"a","name":"b","subnet":"10.0.0.0/24","internal":false}`,
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"a","subnet":"10.0.0.0/24","internal":false,"extra":1}`,
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"a","subnet":"10.0.0.0/24"}`,
+		`{"environment_id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"a","subnet":"10.0.0.0/24","internal":"false"}`,
+	} {
+		if _, err := decodeZoneCreate([]byte(body)); err == nil {
+			t.Fatalf("decodeZoneCreate(%s) error = nil", body)
+		}
+	}
+}
+
 // Rationale: both Zone reads are operator capabilities, so the generated
 // contract must carry their canonical 1:1 operation identities.
 func TestZoneOpenAPIContainsReadOperations(t *testing.T) {
@@ -81,6 +146,9 @@ func TestZoneOpenAPIContainsReadOperations(t *testing.T) {
 	}
 	if err := json.Unmarshal(document, &contract); err != nil {
 		t.Fatalf("decode OpenAPI: %v", err)
+	}
+	if got := contract.Paths["/zones"]["post"].OperationID; got != "zone.create" {
+		t.Fatalf("POST /zones operationId = %q, want zone.create", got)
 	}
 	if got := contract.Paths["/zones"]["get"].OperationID; got != "zone.list" {
 		t.Fatalf("GET /zones operationId = %q, want zone.list", got)

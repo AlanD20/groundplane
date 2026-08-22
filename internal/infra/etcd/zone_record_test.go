@@ -48,7 +48,7 @@ func TestZoneRecordKeysUseStableEnvironmentScope(t *testing.T) {
 	// Rationale: the primary, membership, and scoped-name keys are the atomic
 	// contract shared by direct mutations and Blueprint reconciliation.
 	t.Parallel()
-	record := zoneRecordTestRecord(t, "api/backend", 903)
+	record := zoneRecordTestRecord(t, "api.backend", 903)
 	if got := zoneKey(record.Desired.ID); got != "/v1/records/zones/"+record.Desired.ID {
 		t.Fatalf("zoneKey() = %q", got)
 	}
@@ -57,7 +57,7 @@ func TestZoneRecordKeysUseStableEnvironmentScope(t *testing.T) {
 		t.Fatalf("zoneOwnerKey() = %q", got)
 	}
 	if got := zoneNameKey(record.EnvironmentID, record.Desired.Name); got !=
-		"/v1/indexes/zones/by-name/environment/"+record.EnvironmentID+"/~YXBpL2JhY2tlbmQ" {
+		"/v1/indexes/zones/by-name/environment/"+record.EnvironmentID+"/~YXBpLmJhY2tlbmQ" {
 		t.Fatalf("zoneNameKey() = %q", got)
 	}
 }

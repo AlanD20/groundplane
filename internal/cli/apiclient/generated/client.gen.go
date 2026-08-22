@@ -548,6 +548,18 @@ type Zone struct {
 	Subnet        string  `json:"subnet"`
 }
 
+// ZoneCreate defines model for ZoneCreate.
+type ZoneCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ZoneCreate.json
+	Schema        *string `json:"$schema,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	Internal      bool    `json:"internal"`
+	Name          string  `json:"name"`
+	Subnet        string  `json:"subnet"`
+}
+
 // AgentListParams defines parameters for AgentList.
 type AgentListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -710,6 +722,11 @@ type ZoneListParams struct {
 	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ZoneCreateParams defines parameters for ZoneCreate.
+type ZoneCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // AgentConfigSetJSONRequestBody defines body for AgentConfigSet for application/json ContentType.
 type AgentConfigSetJSONRequestBody = AgentConfigReplacement
 
@@ -751,6 +768,9 @@ type TenantEditJSONRequestBody = TenantEdit
 
 // TenantRenameJSONRequestBody defines body for TenantRename for application/json ContentType.
 type TenantRenameJSONRequestBody = TenantRename
+
+// ZoneCreateJSONRequestBody defines body for ZoneCreate for application/json ContentType.
+type ZoneCreateJSONRequestBody = ZoneCreate
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -1144,6 +1164,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /zones (the `ZoneList` operationId).
 	ZoneList(ctx context.Context, params *ZoneListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneCreateWithBody Create a network zone
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /zones (the `ZoneCreate` operationId).
+	ZoneCreateWithBody(ctx context.Context, params *ZoneCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneCreate Create a network zone
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /zones (the `ZoneCreate` operationId).
+	ZoneCreate(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ZoneShow Show a network zone
 	//
@@ -1990,6 +2024,40 @@ func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRena
 // Corresponds with GET /zones (the `ZoneList` operationId).
 func (c *Client) ZoneList(ctx context.Context, params *ZoneListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewZoneListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneCreateWithBody Create a network zone
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /zones (the `ZoneCreate` operationId).
+func (c *Client) ZoneCreateWithBody(ctx context.Context, params *ZoneCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneCreate Create a network zone
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /zones (the `ZoneCreate` operationId).
+func (c *Client) ZoneCreate(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneCreateRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4132,6 +4200,59 @@ func NewZoneListRequest(server string, params *ZoneListParams) (*http.Request, e
 	return req, nil
 }
 
+// NewZoneCreateRequest calls the generic ZoneCreate builder with application/json body
+func NewZoneCreateRequest(server string, params *ZoneCreateParams, body ZoneCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewZoneCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewZoneCreateRequestWithBody constructs an http.Request for the ZoneCreate method, with any body, and a specified content type
+func NewZoneCreateRequestWithBody(server string, params *ZoneCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/zones")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewZoneShowRequest constructs an http.Request for the ZoneShow method
 func NewZoneShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -4580,6 +4701,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /zones (the `ZoneList` operationId).
 	ZoneListWithResponse(ctx context.Context, params *ZoneListParams, reqEditors ...RequestEditorFn) (*ZoneListResponse, error)
+
+	// ZoneCreateWithBodyWithResponse Create a network zone
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /zones (the `ZoneCreate` operationId).
+	ZoneCreateWithBodyWithResponse(ctx context.Context, params *ZoneCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZoneCreateResponse, error)
+
+	// ZoneCreateWithResponse Create a network zone
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /zones (the `ZoneCreate` operationId).
+	ZoneCreateWithResponse(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ZoneCreateResponse, error)
 
 	// ZoneShowWithResponse Show a network zone
 	//
@@ -6635,6 +6770,61 @@ func (r ZoneListResponse) ContentType() string {
 	return ""
 }
 
+// ZoneCreateResponse201Headers the declared response headers of an HTTP 201 response for ZoneCreate
+type ZoneCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type ZoneCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Zone
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ZoneCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ZoneCreateResponse) GetJSON201() *Zone {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ZoneCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ZoneCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ZoneCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ZoneCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ZoneCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ZoneShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7370,6 +7560,32 @@ func (c *ClientWithResponses) ZoneListWithResponse(ctx context.Context, params *
 		return nil, err
 	}
 	return ParseZoneListResponse(rsp)
+}
+
+// ZoneCreateWithBodyWithResponse Create a network zone
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /zones (the `ZoneCreate` operationId).
+func (c *ClientWithResponses) ZoneCreateWithBodyWithResponse(ctx context.Context, params *ZoneCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZoneCreateResponse, error) {
+	rsp, err := c.ZoneCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneCreateResponse(rsp)
+}
+
+// ZoneCreateWithResponse Create a network zone
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /zones (the `ZoneCreate` operationId).
+func (c *ClientWithResponses) ZoneCreateWithResponse(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ZoneCreateResponse, error) {
+	rsp, err := c.ZoneCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneCreateResponse(rsp)
 }
 
 // ZoneShowWithResponse Show a network zone
@@ -8934,6 +9150,52 @@ func ParseZoneListResponse(rsp *http.Response) (*ZoneListResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseZoneCreateResponse parses an HTTP response from a ZoneCreateWithResponse call
+func ParseZoneCreateResponse(rsp *http.Response) (*ZoneCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ZoneCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Zone
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ZoneCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
 	}
 
 	return response, nil

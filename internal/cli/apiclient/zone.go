@@ -6,8 +6,43 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
+
+func (c *Client) CreateZone(ctx context.Context, input apiTypes.ZoneCreate) (apiTypes.Zone, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Zone{}, err
+	}
+	params := &generated.ZoneCreateParams{IdempotencyKey: ids.NewULID()}
+	body := generated.ZoneCreateJSONRequestBody{
+		EnvironmentId: input.EnvironmentID, Name: input.Name,
+		Subnet: input.Subnet, Internal: input.Internal,
+	}
+	response, err := client.ZoneCreateWithResponse(ctx, params, body)
+	if err != nil {
+		return apiTypes.Zone{}, generatedCallError(ctx, http.MethodPost, "/api/v1/zones", err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, "/api/v1/zones", response.HTTPResponse, response.Body, http.StatusCreated,
+	); err != nil {
+		return apiTypes.Zone{}, err
+	}
+	parsed := response.JSON201
+	if parsed == nil {
+		parsed = &generated.Zone{}
+		if err := decodeSingleJSON(
+			http.MethodPost,
+			"/api/v1/zones",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.Zone{}, err
+		}
+	}
+	return zoneFromGenerated(*parsed), nil
+}
 
 func (c *Client) ListZones(
 	ctx context.Context,

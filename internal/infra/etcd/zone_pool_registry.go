@@ -51,6 +51,19 @@ func (registry zonePoolRegistry) reserve(
 	if err != nil || candidate.String() != zone.Desired.Subnet {
 		return zonePoolRegistry{}, errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
 	}
+	if current, exists := registry.Reservations[zone.Desired.ID]; exists {
+		if current != candidate.String() {
+			return zonePoolRegistry{}, errs.New(
+				errs.KindStateConflict,
+				"Zone stable identity already reserves a different subnet",
+			)
+		}
+		next := zonePoolRegistry{Reservations: make(map[string]string, len(registry.Reservations))}
+		for zoneID, subnet := range registry.Reservations {
+			next.Reservations[zoneID] = subnet
+		}
+		return next, nil
+	}
 	reserved, err := registry.prefixes()
 	if err != nil {
 		return zonePoolRegistry{}, err

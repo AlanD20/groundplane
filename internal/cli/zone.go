@@ -62,9 +62,14 @@ func newZoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runCreate(cmd, "/api/v1/zones", map[string]interface{}{
-				"name": args[0], "subnet": subnet, "internal": internal, "environment_id": environmentID,
+			zone, err := fromContext(cmd).Client.CreateZone(cmd.Context(), apiTypes.ZoneCreate{
+				EnvironmentID: environmentID, Name: args[0], Subnet: subnet, Internal: internal,
 			})
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(zoneFields(zone))
+			return fromContext(cmd).Out.RenderOne(fields, values, zone)
 		},
 	}
 	add.Flags().StringVar(&subnet, "subnet", "", "IPv4 CIDR reserved inside the Environment pool")

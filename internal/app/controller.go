@@ -232,6 +232,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone reads: %w", err)
 	}
+	zoneCreationRepository, err := newDurableZoneCreationRepository(hierarchyRecords, zoneRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone creation repositories: %w", err)
+	}
 	componentRecords, err := etcd.NewComponentRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -313,6 +318,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	zoneCreationIdempotency, err := newDurableZoneCreationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone creation idempotency: %w", err)
+	}
+	zoneMutations, err := newZoneCreationService(zoneCreationRepository, zoneCreationIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone creation service: %w", err)
 	}
 	agentConfigIdempotency, err := newDurableLocalAgentConfigIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -643,6 +658,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
 		Zones:                 zoneReads,
+		ZoneMutations:         zoneMutations,
 		Entries:               entryReads,
 		EntryMutations:        entryMutations,
 		Secrets:               secretReads,

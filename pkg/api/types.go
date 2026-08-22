@@ -125,6 +125,13 @@ type Zone struct {
 	OwnerID       string        `json:"owner_id"`
 }
 
+type ZoneCreate struct {
+	EnvironmentID string `json:"environment_id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Name          string `json:"name" pattern:"^[A-Za-z0-9._-]+$"`
+	Subnet        string `json:"subnet"`
+	Internal      bool   `json:"internal"`
+}
+
 type ZoneOwnerKind string
 
 const (
