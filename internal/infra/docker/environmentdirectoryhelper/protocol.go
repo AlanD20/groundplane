@@ -180,7 +180,10 @@ func validateRequest(
 	request *agentpb.EnvironmentDirectoryHelperRequest,
 ) (*agentpb.EnvironmentDirectoryHelperRequest, *agentpb.ExecutionStep, error) {
 	if request == nil || request.Schema != SchemaVersion {
-		return nil, nil, errs.New(errs.KindValidationFailed, "Environment directory helper request schema is unsupported")
+		return nil, nil, errs.New(
+			errs.KindValidationFailed,
+			"Environment directory helper request schema is unsupported",
+		)
 	}
 	if err := executionplan.RejectUnknown(request); err != nil {
 		return nil, nil, err
@@ -236,7 +239,10 @@ func validateResponse(response *agentpb.EnvironmentDirectoryHelperResponse) erro
 	}
 	if response.ExitCode == 0 {
 		if response.FailedStepId != "" {
-			return errs.New(errs.KindValidationFailed, "successful Environment directory helper response is inconsistent")
+			return errs.New(
+				errs.KindValidationFailed,
+				"successful Environment directory helper response is inconsistent",
+			)
 		}
 		return nil
 	}
@@ -248,7 +254,11 @@ func validateResponse(response *agentpb.EnvironmentDirectoryHelperResponse) erro
 
 func frame(encoded []byte, kind string) ([]byte, error) {
 	if len(encoded) == 0 || len(encoded) > maximumFramedBytes {
-		return nil, errs.Newf(errs.KindValidationFailed, "Environment directory helper %s frame length is invalid", kind)
+		return nil, errs.Newf(
+			errs.KindValidationFailed,
+			"Environment directory helper %s frame length is invalid",
+			kind,
+		)
 	}
 	framed := make([]byte, frameHeaderBytes+len(encoded))
 	binary.BigEndian.PutUint32(framed[:frameHeaderBytes], uint32(len(encoded)))
@@ -265,22 +275,38 @@ func readFrame(ctx context.Context, input io.Reader, kind string) ([]byte, error
 	}
 	var header [frameHeaderBytes]byte
 	if _, err := io.ReadFull(input, header[:]); err != nil {
-		return nil, errs.Newf(errs.KindValidationFailed, "Environment directory helper %s frame header is incomplete", kind)
+		return nil, errs.Newf(
+			errs.KindValidationFailed,
+			"Environment directory helper %s frame header is incomplete",
+			kind,
+		)
 	}
 	length := binary.BigEndian.Uint32(header[:])
 	if length == 0 || length > maximumFramedBytes {
-		return nil, errs.Newf(errs.KindValidationFailed, "Environment directory helper %s frame length is invalid", kind)
+		return nil, errs.Newf(
+			errs.KindValidationFailed,
+			"Environment directory helper %s frame length is invalid",
+			kind,
+		)
 	}
 	encoded := make([]byte, int(length))
 	if _, err := io.ReadFull(input, encoded); err != nil {
-		return nil, errs.Newf(errs.KindValidationFailed, "Environment directory helper %s frame payload is incomplete", kind)
+		return nil, errs.Newf(
+			errs.KindValidationFailed,
+			"Environment directory helper %s frame payload is incomplete",
+			kind,
+		)
 	}
 	extra, err := io.ReadAll(io.LimitReader(input, 1))
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	if len(extra) != 0 {
-		return nil, errs.Newf(errs.KindValidationFailed, "Environment directory helper %s frame has trailing bytes", kind)
+		return nil, errs.Newf(
+			errs.KindValidationFailed,
+			"Environment directory helper %s frame has trailing bytes",
+			kind,
+		)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

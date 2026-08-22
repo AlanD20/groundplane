@@ -227,7 +227,10 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		{Key: environmentKey(environment.ID), ModRevision: environmentValue.ModRevision},
 		{Key: environmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
 		{Key: environmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID), ModRevision: tombstoneValue.ModRevision},
+		{
+			Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
+			ModRevision: tombstoneValue.ModRevision,
+		},
 		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
 		{Key: environmentComposeProjectionKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
 	}
@@ -245,7 +248,10 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			return nil, nil, errs.New(errs.KindInternal, "Environment Blueprint finalization revision changed")
 		}
 		if len(remaining.Values) != 0 {
-			return nil, nil, errs.New(errs.KindStateConflict, "Environment Blueprint revisions remain during finalization")
+			return nil, nil, errs.New(
+				errs.KindStateConflict,
+				"Environment Blueprint revisions remain during finalization",
+			)
 		}
 		if stored.Values[2] != nil {
 			mutations = append(mutations,

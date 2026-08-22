@@ -132,7 +132,10 @@ func (repository *LocalAgentRepository) CreateSingleton(
 		return Versioned[LocalAgentRecord]{}, err
 	}
 	if record.Phase != LocalAgentPhaseProvisioning {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindValidationFailed, "local Agent must be created in provisioning phase")
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"local Agent must be created in provisioning phase",
+		)
 	}
 	if record.TokenUpdatedAt.IsZero() {
 		record.TokenUpdatedAt = record.CreatedAt
@@ -165,7 +168,10 @@ func (repository *LocalAgentRepository) CreateSingleton(
 		if len(result.FailureReads) == len(conditions) && result.FailureReads[0] != nil {
 			return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "the local Agent already exists")
 		}
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindInternal, "local Agent creation collided with durable state")
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindInternal,
+			"local Agent creation collided with durable state",
+		)
 	}
 	return Versioned[LocalAgentRecord]{
 		Record: cloneLocalAgentRecord(record), Revision: result.Revision, ReadRevision: result.Revision,
@@ -232,10 +238,16 @@ func (repository *LocalAgentRepository) UpdateConfig(
 	}
 	if evidence.record.ID != agentID || evidence.record.Generation != generation ||
 		evidence.primaryRevision != revision {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent generation or revision changed")
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent generation or revision changed",
+		)
 	}
 	if evidence.record.Phase == LocalAgentPhaseDeleting {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "deleting local Agent config cannot be changed")
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"deleting local Agent config cannot be changed",
+		)
 	}
 	if equalLocalAgentConfig(evidence.record.Config, config) {
 		return Versioned[LocalAgentRecord]{
@@ -281,7 +293,10 @@ func (repository *LocalAgentRepository) BeginDelete(
 	}
 	if evidence.record.ID != agentID || evidence.record.Generation != generation ||
 		evidence.primaryRevision != revision {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent generation or revision changed")
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent generation or revision changed",
+		)
 	}
 	if evidence.record.Phase == LocalAgentPhaseDeleting {
 		return Versioned[LocalAgentRecord]{
@@ -290,7 +305,10 @@ func (repository *LocalAgentRepository) BeginDelete(
 		}, nil
 	}
 	if evidence.digest == nil {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindInternal, "active local Agent is missing its credential index")
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindInternal,
+			"active local Agent is missing its credential index",
+		)
 	}
 	replacement := cloneLocalAgentRecord(evidence.record)
 	replacement.Phase = LocalAgentPhaseDeleting
@@ -398,11 +416,17 @@ func (repository *LocalAgentRepository) ResolveAgentChannel(
 		return LocalAgentChannelAuthorization{}, err
 	}
 	if len(values.Values) != 3 || values.Values[0] == nil || values.Values[1] == nil || values.Values[2] == nil {
-		return LocalAgentChannelAuthorization{}, errs.New(errs.KindInternal, "Agent credential references incomplete durable state")
+		return LocalAgentChannelAuthorization{}, errs.New(
+			errs.KindInternal,
+			"Agent credential references incomplete durable state",
+		)
 	}
 	singletonAgentID, err := decodeLocalAgentReference(values.Values[0].Value)
 	if err != nil || singletonAgentID != resolvedAgentID {
-		return LocalAgentChannelAuthorization{}, errs.New(errs.KindInternal, "Agent singleton does not match credential lookup")
+		return LocalAgentChannelAuthorization{}, errs.New(
+			errs.KindInternal,
+			"Agent singleton does not match credential lookup",
+		)
 	}
 	primary, err := decodeLocalAgentPrimary(values.Values[1].Value)
 	if err != nil {
@@ -441,7 +465,10 @@ func (repository *LocalAgentRepository) transitionPhase(
 	}
 	if evidence.record.ID != agentID || evidence.record.Generation != generation ||
 		evidence.primaryRevision != revision {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent generation or revision changed")
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent generation or revision changed",
+		)
 	}
 	if idempotent && evidence.record.Phase == next {
 		return Versioned[LocalAgentRecord]{
@@ -548,7 +575,10 @@ func (repository *LocalAgentRepository) readSingleton(ctx context.Context) (loca
 	}
 	if primary.Phase == LocalAgentPhaseDeleting {
 		if digestValue != nil {
-			return localAgentEvidence{}, errs.New(errs.KindInternal, "deleting local Agent still has credential authority")
+			return localAgentEvidence{}, errs.New(
+				errs.KindInternal,
+				"deleting local Agent still has credential authority",
+			)
 		}
 	} else if digestValue == nil {
 		return localAgentEvidence{}, errs.New(errs.KindInternal, "active local Agent is missing credential authority")

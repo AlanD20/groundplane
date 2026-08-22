@@ -57,41 +57,58 @@ func TestDecodeBlueprintMultipartRejectsAmbiguousOrUnverifiedParts(t *testing.T)
 			name: "duplicate manifest member",
 			manifest: bytes.Replace(validManifest, []byte(`"root":"blueprint.yaml"`),
 				[]byte(`"root":"blueprint.yaml","root":"other.yaml"`), 1),
-			parts: []blueprintTestPart{{name: "file-000001", contentType: "application/octet-stream", content: content}},
-			kind:  errs.KindMalformedRequest,
+			parts: []blueprintTestPart{
+				{name: "file-000001", contentType: "application/octet-stream", content: content},
+			},
+			kind: errs.KindMalformedRequest,
 		},
 		{
 			name: "unknown manifest member",
 			manifest: bytes.Replace(validManifest, []byte(`{"root"`),
 				[]byte(`{"unknown":true,"root"`), 1),
-			parts: []blueprintTestPart{{name: "file-000001", contentType: "application/octet-stream", content: content}},
-			kind:  errs.KindMalformedRequest,
+			parts: []blueprintTestPart{
+				{name: "file-000001", contentType: "application/octet-stream", content: content},
+			},
+			kind: errs.KindMalformedRequest,
 		},
 		{
 			name:     "wrong part identity",
 			manifest: validManifest,
-			parts:    []blueprintTestPart{{name: "file-000002", contentType: "application/octet-stream", content: content}},
-			kind:     errs.KindMalformedRequest,
+			parts: []blueprintTestPart{
+				{name: "file-000002", contentType: "application/octet-stream", content: content},
+			},
+			kind: errs.KindMalformedRequest,
 		},
 		{
 			name:     "filename smuggling",
 			manifest: validManifest,
-			parts:    []blueprintTestPart{{name: "file-000001", filename: "blueprint.yaml", contentType: "application/octet-stream", content: content}},
-			kind:     errs.KindMalformedRequest,
+			parts: []blueprintTestPart{
+				{
+					name:        "file-000001",
+					filename:    "blueprint.yaml",
+					contentType: "application/octet-stream",
+					content:     content,
+				},
+			},
+			kind: errs.KindMalformedRequest,
 		},
 		{
 			name: "digest mismatch",
 			manifest: bytes.Replace(validManifest, []byte(blueprintTestDigest(content)),
 				[]byte(fmt.Sprintf("%064x", 1)), 1),
-			parts: []blueprintTestPart{{name: "file-000001", contentType: "application/octet-stream", content: content}},
-			kind:  errs.KindMalformedRequest,
+			parts: []blueprintTestPart{
+				{name: "file-000001", contentType: "application/octet-stream", content: content},
+			},
+			kind: errs.KindMalformedRequest,
 		},
 		{
 			name: "declared size mismatch",
 			manifest: bytes.Replace(validManifest,
 				[]byte(fmt.Sprintf(`"size":%d`, len(content))), []byte(`"size":1`), 1),
-			parts: []blueprintTestPart{{name: "file-000001", contentType: "application/octet-stream", content: content}},
-			kind:  errs.KindMalformedRequest,
+			parts: []blueprintTestPart{
+				{name: "file-000001", contentType: "application/octet-stream", content: content},
+			},
+			kind: errs.KindMalformedRequest,
 		},
 		{
 			name:     "undeclared trailing part",
@@ -133,7 +150,8 @@ func TestDecodeBlueprintMultipartRejectsInvalidClosedNamespace(t *testing.T) {
 func blueprintTestManifest(content []byte) []byte {
 	return []byte(fmt.Sprintf(
 		`{"root":"blueprint.yaml","compose_sources":["blueprint.yaml"],"interpolation":{"TAG":"v1"},"files":[{"path":"blueprint.yaml","part":"file-000001","size":%d,"sha256":"%s"}]}`,
-		len(content), blueprintTestDigest(content),
+		len(content),
+		blueprintTestDigest(content),
 	))
 }
 
@@ -179,7 +197,11 @@ func blueprintMultipartTestRequest(
 	if err := writer.Close(); err != nil {
 		t.Fatalf("close multipart writer: %v", err)
 	}
-	request, err := http.NewRequest(http.MethodPut, "/api/v1/environments/env_x/blueprint", bytes.NewReader(body.Bytes()))
+	request, err := http.NewRequest(
+		http.MethodPut,
+		"/api/v1/environments/env_x/blueprint",
+		bytes.NewReader(body.Bytes()),
+	)
 	if err != nil {
 		t.Fatalf("NewRequest(): %v", err)
 	}

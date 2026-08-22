@@ -30,7 +30,10 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	if current.Record.ID != replacement.ID || current.Record.TenantID != replacement.TenantID ||
 		current.Record.Description != replacement.Description || current.Revision <= 0 ||
 		current.ReadRevision < current.Revision {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Project mutation identity is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Project mutation identity is invalid",
+		)
 	}
 	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != IdempotencyScopeProject || marker.Locator.ScopeID != current.Record.ID {
@@ -59,10 +62,16 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	}
 	if len(secondary.Values) != len(secondaryKeys) || secondary.Values[0] == nil ||
 		string(secondary.Values[0].Value) != current.Record.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Project slug index is missing or mismatched")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Project slug index is missing or mismatched",
+		)
 	}
 	if secondary.Values[1] == nil || string(secondary.Values[1].Value) != current.Record.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Project owner index is missing or mismatched")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Project owner index is missing or mismatched",
+		)
 	}
 	if secondary.Values[2] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Project deletion is in progress")

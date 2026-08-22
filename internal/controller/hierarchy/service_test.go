@@ -399,7 +399,11 @@ func TestServiceRejectsInvalidWriteMetadataAndOversizedPages(t *testing.T) {
 			return Page[core.Tenant]{
 				Items: []Versioned[core.Tenant]{
 					{Record: tenant, Revision: 5, ReadRevision: 5},
-					{Record: core.Tenant{ID: otherTenantID, Slug: "other", Name: "Other"}, Revision: 5, ReadRevision: 5},
+					{
+						Record:       core.Tenant{ID: otherTenantID, Slug: "other", Name: "Other"},
+						Revision:     5,
+						ReadRevision: 5,
+					},
 				},
 				Revision: 5,
 			}, nil

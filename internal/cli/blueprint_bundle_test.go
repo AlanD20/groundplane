@@ -61,7 +61,8 @@ func TestBuildBlueprintMultipartProducesCanonicalManifestAndParts(t *testing.T) 
 			t.Fatalf("NextPart(%d): %v", index, err)
 		}
 		got, err := io.ReadAll(part)
-		if err != nil || !bytes.Equal(got, want) || part.FormName() != blueprintCLIFilePartName(index) || part.FileName() != "" {
+		if err != nil || !bytes.Equal(got, want) || part.FormName() != blueprintCLIFilePartName(index) ||
+			part.FileName() != "" {
 			t.Fatalf("part %d = %q, %q, %q, %v", index, part.FormName(), part.FileName(), got, err)
 		}
 	}

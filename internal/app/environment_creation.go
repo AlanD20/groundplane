@@ -196,7 +196,10 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Environment creation replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}

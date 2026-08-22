@@ -65,14 +65,25 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 		t.Fatalf("tick(before daily prune) error = %v", err)
 	}
 	if expiration.calls != 2 || agents.calls != 2 || pruning.calls != 1 {
-		t.Fatalf("before daily deadline expiration/stale/pruning calls = %d/%d/%d", expiration.calls, agents.calls, pruning.calls)
+		t.Fatalf(
+			"before daily deadline expiration/stale/pruning calls = %d/%d/%d",
+			expiration.calls,
+			agents.calls,
+			pruning.calls,
+		)
 	}
 	now = wantNow.Add(dailyMaintenanceInterval)
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatalf("tick(at daily prune) error = %v", err)
 	}
 	if expiration.calls != 3 || agents.calls != 3 || pruning.calls != 2 || !pruning.now.Equal(now) {
-		t.Fatalf("at daily deadline expiration/stale/pruning calls/time = %d/%d/%d/%s", expiration.calls, agents.calls, pruning.calls, pruning.now)
+		t.Fatalf(
+			"at daily deadline expiration/stale/pruning calls/time = %d/%d/%d/%s",
+			expiration.calls,
+			agents.calls,
+			pruning.calls,
+			pruning.now,
+		)
 	}
 }
 

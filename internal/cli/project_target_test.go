@@ -28,7 +28,10 @@ func TestProjectSlugTargetResolvesThroughTenantAndProjectCollections(t *testing.
 				query.Get("limit") != "200" || query.Get("cursor") != "" {
 				t.Errorf("Project resolution request = %s %s", r.Method, r.URL.String())
 			}
-			_, _ = io.WriteString(w, `{"items":[{"id":"`+projectID+`","tenant_id":"`+tenantID+`","slug":"console","name":"Console","description":"","kind":"tenant"}]}`)
+			_, _ = io.WriteString(
+				w,
+				`{"items":[{"id":"`+projectID+`","tenant_id":"`+tenantID+`","slug":"console","name":"Console","description":"","kind":"tenant"}]}`,
+			)
 		case 3:
 			body, _ := io.ReadAll(r.Body)
 			if r.Method != http.MethodPatch || r.URL.Path != "/api/v1/projects/"+projectID ||

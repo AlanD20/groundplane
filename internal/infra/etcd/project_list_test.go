@@ -19,7 +19,13 @@ func TestHierarchyListProjectsFiltersMixedKindsWithStableCursor(t *testing.T) {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
 	projects := []ProjectRecord{
-		{ID: hierarchyTestID(ids.KindProject, 312), TenantID: tenant.ID, Slug: "api", Name: "API", Kind: ProjectKindTenant},
+		{
+			ID:       hierarchyTestID(ids.KindProject, 312),
+			TenantID: tenant.ID,
+			Slug:     "api",
+			Name:     "API",
+			Kind:     ProjectKindTenant,
+		},
 		{ID: hierarchyTestID(ids.KindProject, 313), Slug: "postgres", Name: "Postgres", Kind: ProjectKindBacking},
 		{ID: hierarchyTestID(ids.KindProject, 314), Slug: "valkey", Name: "Valkey", Kind: ProjectKindBacking},
 	}

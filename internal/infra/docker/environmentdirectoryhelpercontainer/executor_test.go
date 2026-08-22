@@ -46,32 +46,69 @@ func TestCreateOptionsGrantOnlyConfiguredVolumeRoot(t *testing.T) {
 
 func TestNewWithEngineRejectsMutableImageAndInvalidRoot(t *testing.T) {
 	engine := stubEngine{}
-	if _, err := NewWithEngine(engine, "registry.example/agent:latest", "/srv/groundplane/vol"); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := NewWithEngine(
+		engine,
+		"registry.example/agent:latest",
+		"/srv/groundplane/vol",
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("NewWithEngine(tag) error = %v", err)
 	}
-	if _, err := NewWithEngine(engine, helperImage, "relative"); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := NewWithEngine(
+		engine,
+		helperImage,
+		"relative",
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("NewWithEngine(root) error = %v", err)
 	}
 }
 
 type stubEngine struct{}
 
-func (stubEngine) ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error) {
+func (stubEngine) ContainerCreate(
+	context.Context,
+	client.ContainerCreateOptions,
+) (client.ContainerCreateResult, error) {
 	return client.ContainerCreateResult{}, nil
 }
-func (stubEngine) ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error) {
+
+func (stubEngine) ContainerAttach(
+	context.Context,
+	string,
+	client.ContainerAttachOptions,
+) (client.ContainerAttachResult, error) {
 	return client.ContainerAttachResult{}, nil
 }
 func (stubEngine) ContainerWait(context.Context, string, client.ContainerWaitOptions) client.ContainerWaitResult {
 	return client.ContainerWaitResult{}
 }
-func (stubEngine) ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error) {
+
+func (stubEngine) ContainerStart(
+	context.Context,
+	string,
+	client.ContainerStartOptions,
+) (client.ContainerStartResult, error) {
 	return client.ContainerStartResult{}, nil
 }
-func (stubEngine) ContainerStop(context.Context, string, client.ContainerStopOptions) (client.ContainerStopResult, error) {
+
+func (stubEngine) ContainerStop(
+	context.Context,
+	string,
+	client.ContainerStopOptions,
+) (client.ContainerStopResult, error) {
 	return client.ContainerStopResult{}, nil
 }
-func (stubEngine) ContainerRemove(context.Context, string, client.ContainerRemoveOptions) (client.ContainerRemoveResult, error) {
+
+func (stubEngine) ContainerRemove(
+	context.Context,
+	string,
+	client.ContainerRemoveOptions,
+) (client.ContainerRemoveResult, error) {
 	return client.ContainerRemoveResult{}, nil
 }
 func (stubEngine) Close() error { return nil }

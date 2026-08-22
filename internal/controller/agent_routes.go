@@ -93,7 +93,11 @@ func (s *Server) writeAgentMutationResponse(
 	w.Header().Set("Content-Type", response.ContentKind)
 	w.WriteHeader(response.Status)
 	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Agent mutation response", slog.String("action", action), slog.Any("error", err))
+		s.Logger.Error(
+			"controller: write Agent mutation response",
+			slog.String("action", action),
+			slog.Any("error", err),
+		)
 	}
 }
 
@@ -195,7 +199,10 @@ func decodeAgentConfigRequest(r *http.Request) (apiTypes.AgentConfig, error) {
 		return apiTypes.AgentConfig{}, errs.New(errs.KindMalformedRequest, "Agent config body has trailing data")
 	}
 	if request.PullIntervalSeconds == nil || request.MaxConcurrentTasks == nil || request.Labels == nil {
-		return apiTypes.AgentConfig{}, errs.New(errs.KindValidationFailed, "Agent config replacement requires every field")
+		return apiTypes.AgentConfig{}, errs.New(
+			errs.KindValidationFailed,
+			"Agent config replacement requires every field",
+		)
 	}
 	if *request.PullIntervalSeconds <= 0 || *request.PullIntervalSeconds > math.MaxInt32 ||
 		*request.MaxConcurrentTasks <= 0 || *request.MaxConcurrentTasks > math.MaxInt32 {

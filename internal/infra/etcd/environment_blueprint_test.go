@@ -78,7 +78,8 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	if err != nil {
 		t.Fatalf("first apply error = %v", err)
 	}
-	if outcome, _, conflict, classifyErr := firstResult.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := firstResult.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("first apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	head, found, err := repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
@@ -98,7 +99,8 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	if err != nil {
 		t.Fatalf("second apply error = %v", err)
 	}
-	if outcome, _, conflict, classifyErr := secondResult.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := secondResult.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("second apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 
@@ -131,7 +133,8 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first apply error = %v", err)
 	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("first apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	head, found, err := repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)

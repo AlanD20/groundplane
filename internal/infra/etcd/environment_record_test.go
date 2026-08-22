@@ -54,7 +54,11 @@ func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing
 			if record.VolumeDir != test.want || record.ProvisioningState != EnvironmentProvisioningProvisioning {
 				t.Fatalf("record = %#v, want volume %q in provisioning", record, test.want)
 			}
-			if err := ValidateEnvironmentVolumeDir(environmentpath.DefaultVolumeRoot, test.project, record); err != nil {
+			if err := ValidateEnvironmentVolumeDir(
+				environmentpath.DefaultVolumeRoot,
+				test.project,
+				record,
+			); err != nil {
 				t.Fatalf("ValidateEnvironmentVolumeDir() error = %v", err)
 			}
 		})

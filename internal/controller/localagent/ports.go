@@ -73,7 +73,13 @@ type Repository interface {
 		revision int64,
 		config Config,
 	) (StoredRecord, error)
-	MarkReady(ctx context.Context, id string, generation uint64, revision int64, readyAt time.Time) (StoredRecord, error)
+	MarkReady(
+		ctx context.Context,
+		id string,
+		generation uint64,
+		revision int64,
+		readyAt time.Time,
+	) (StoredRecord, error)
 	BeginDelete(ctx context.Context, id string, generation uint64, revision int64) (StoredRecord, error)
 	Delete(ctx context.Context, id string, generation uint64, revision int64) error
 }

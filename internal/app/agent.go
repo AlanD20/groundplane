@@ -221,7 +221,8 @@ func preferAgentComposeCleanup(operationErr, cleanupErr error) error {
 	if cleanupErr == nil {
 		return operationErr
 	}
-	if operationErr == nil || errors.Is(operationErr, context.Canceled) || errors.Is(operationErr, context.DeadlineExceeded) {
+	if operationErr == nil || errors.Is(operationErr, context.Canceled) ||
+		errors.Is(operationErr, context.DeadlineExceeded) {
 		return cleanupErr
 	}
 	return errs.Wrap(errs.KindInternal, errors.Join(operationErr, cleanupErr))

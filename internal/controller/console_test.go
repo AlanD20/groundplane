@@ -38,11 +38,41 @@ func TestConsoleDispatcherPreservesControllerRoutePrecedence(t *testing.T) {
 		code   errs.Code
 	}{
 		{name: "known API", method: http.MethodGet, path: "/api/v1/ping", status: http.StatusOK},
-		{name: "exact API namespace", method: http.MethodGet, path: "/api", status: http.StatusNotFound, code: errs.CodeRequestNotFound},
-		{name: "unknown API", method: http.MethodGet, path: "/api/v1/missing", status: http.StatusNotFound, code: errs.CodeRequestNotFound},
-		{name: "API wrong method", method: http.MethodPost, path: "/api/v1/ping", status: http.StatusMethodNotAllowed, code: errs.CodeRequestMethodNotAllowed},
-		{name: "operational wrong method", method: http.MethodPost, path: "/openapi.json", status: http.StatusMethodNotAllowed, code: errs.CodeRequestMethodNotAllowed},
-		{name: "static wrong method", method: http.MethodPost, path: "/", status: http.StatusMethodNotAllowed, code: errs.CodeRequestMethodNotAllowed},
+		{
+			name:   "exact API namespace",
+			method: http.MethodGet,
+			path:   "/api",
+			status: http.StatusNotFound,
+			code:   errs.CodeRequestNotFound,
+		},
+		{
+			name:   "unknown API",
+			method: http.MethodGet,
+			path:   "/api/v1/missing",
+			status: http.StatusNotFound,
+			code:   errs.CodeRequestNotFound,
+		},
+		{
+			name:   "API wrong method",
+			method: http.MethodPost,
+			path:   "/api/v1/ping",
+			status: http.StatusMethodNotAllowed,
+			code:   errs.CodeRequestMethodNotAllowed,
+		},
+		{
+			name:   "operational wrong method",
+			method: http.MethodPost,
+			path:   "/openapi.json",
+			status: http.StatusMethodNotAllowed,
+			code:   errs.CodeRequestMethodNotAllowed,
+		},
+		{
+			name:   "static wrong method",
+			method: http.MethodPost,
+			path:   "/",
+			status: http.StatusMethodNotAllowed,
+			code:   errs.CodeRequestMethodNotAllowed,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -107,10 +137,37 @@ func TestConsoleServesExactFilesWithDeterministicHeaders(t *testing.T) {
 		cache       string
 		body        string
 	}{
-		{name: "index", method: http.MethodGet, path: "/", contentType: "text/html; charset=utf-8", cache: "no-cache", body: "console-index"},
-		{name: "head", method: http.MethodHead, path: "/app.css", contentType: "text/css; charset=utf-8", cache: "no-cache"},
-		{name: "fingerprinted asset", method: http.MethodGet, path: "/assets/app-1a2b3c4d.js", contentType: "text/javascript; charset=utf-8", cache: "public, max-age=31536000, immutable", body: "console-js"},
-		{name: "unfingerprinted asset", method: http.MethodGet, path: "/assets/plain.js", contentType: "text/javascript; charset=utf-8", cache: "no-cache", body: "plain-js"},
+		{
+			name:        "index",
+			method:      http.MethodGet,
+			path:        "/",
+			contentType: "text/html; charset=utf-8",
+			cache:       "no-cache",
+			body:        "console-index",
+		},
+		{
+			name:        "head",
+			method:      http.MethodHead,
+			path:        "/app.css",
+			contentType: "text/css; charset=utf-8",
+			cache:       "no-cache",
+		},
+		{
+			name:        "fingerprinted asset",
+			method:      http.MethodGet,
+			path:        "/assets/app-1a2b3c4d.js",
+			contentType: "text/javascript; charset=utf-8",
+			cache:       "public, max-age=31536000, immutable",
+			body:        "console-js",
+		},
+		{
+			name:        "unfingerprinted asset",
+			method:      http.MethodGet,
+			path:        "/assets/plain.js",
+			contentType: "text/javascript; charset=utf-8",
+			cache:       "no-cache",
+			body:        "plain-js",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -149,9 +206,27 @@ func TestConsoleFallbackRequiresPositiveExactHTMLAccept(t *testing.T) {
 	}{
 		{name: "absent", path: "/workspace", status: http.StatusNotFound, vary: "Accept"},
 		{name: "wildcard", path: "/workspace", accept: "*/*", status: http.StatusNotFound, vary: "Accept"},
-		{name: "malformed", path: "/workspace", accept: "text/html;q=broken", status: http.StatusNotFound, vary: "Accept"},
-		{name: "zero quality", path: "/workspace", accept: "text/html;q=0", status: http.StatusNotFound, vary: "Accept"},
-		{name: "positive HTML", path: "/workspace", accept: "application/json, text/html;q=0.5", status: http.StatusOK, vary: "Accept"},
+		{
+			name:   "malformed",
+			path:   "/workspace",
+			accept: "text/html;q=broken",
+			status: http.StatusNotFound,
+			vary:   "Accept",
+		},
+		{
+			name:   "zero quality",
+			path:   "/workspace",
+			accept: "text/html;q=0",
+			status: http.StatusNotFound,
+			vary:   "Accept",
+		},
+		{
+			name:   "positive HTML",
+			path:   "/workspace",
+			accept: "application/json, text/html;q=0.5",
+			status: http.StatusOK,
+			vary:   "Accept",
+		},
 		{name: "missing asset", path: "/assets/missing.js", accept: "text/html", status: http.StatusNotFound},
 		{name: "directory", path: "/dir", accept: "text/html", status: http.StatusNotFound},
 	}
@@ -164,7 +239,13 @@ func TestConsoleFallbackRequiresPositiveExactHTMLAccept(t *testing.T) {
 			response := httptest.NewRecorder()
 			server.requestHandler().ServeHTTP(response, request)
 			if response.Code != test.status || response.Header().Get("Vary") != test.vary {
-				t.Fatalf("response = %d Vary %q; want %d %q", response.Code, response.Header().Get("Vary"), test.status, test.vary)
+				t.Fatalf(
+					"response = %d Vary %q; want %d %q",
+					response.Code,
+					response.Header().Get("Vary"),
+					test.status,
+					test.vary,
+				)
 			}
 			if test.status == http.StatusOK && response.Body.String() != "console-index" {
 				t.Fatalf("fallback body = %q", response.Body.String())

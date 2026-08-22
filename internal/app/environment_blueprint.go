@@ -33,7 +33,10 @@ type environmentBlueprintRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
-	GetEnvironmentComposeProjection(context.Context, string) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	ApplyEnvironmentBlueprintWithTask(
 		context.Context,
 		etcd.Versioned[etcd.ProjectRecord],
@@ -215,7 +218,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Environment Blueprint replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
@@ -269,7 +275,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if len(changes.RemovedServiceIDs) != 0 || len(changes.RemovedNetworkIDs) != 0 || len(changes.RemovedVolumeIDs) != 0 {
+	if len(changes.RemovedServiceIDs) != 0 || len(changes.RemovedNetworkIDs) != 0 ||
+		len(changes.RemovedVolumeIDs) != 0 {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindResourceInUse,
 			"Blueprint omits an existing owned resource; remove it explicitly before apply",
@@ -370,7 +377,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 
 func environmentBlueprintIntentManifest(bundle core.BlueprintBundle) (idempotentintent.BlueprintManifestV1, error) {
 	if err := bundle.Validate(); err != nil {
-		return idempotentintent.BlueprintManifestV1{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
+		return idempotentintent.BlueprintManifestV1{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint bundle is invalid",
+		)
 	}
 	keys := make([]string, 0, len(bundle.Interpolation))
 	for key := range bundle.Interpolation {
@@ -412,7 +422,10 @@ func environmentBlueprintState(
 	hasProjection bool,
 ) (int64, controller.ComposeIdentitySnapshot, uint64, error) {
 	if hasHead != hasProjection {
-		return 0, controller.ComposeIdentitySnapshot{}, 0, errs.New(errs.KindInternal, "Environment desired-state pointers are inconsistent")
+		return 0, controller.ComposeIdentitySnapshot{}, 0, errs.New(
+			errs.KindInternal,
+			"Environment desired-state pointers are inconsistent",
+		)
 	}
 	if !hasHead {
 		return 0, controller.ComposeIdentitySnapshot{}, 1, nil
@@ -420,7 +433,10 @@ func environmentBlueprintState(
 	if head.Record.EnvironmentID != environmentID || projection.Record.EnvironmentID != environmentID ||
 		head.Record.RevisionID != projection.Record.BlueprintRevisionID || head.Revision <= 0 ||
 		projection.Revision != head.Revision || projection.Record.RenderGeneration == math.MaxUint64 {
-		return 0, controller.ComposeIdentitySnapshot{}, 0, errs.New(errs.KindInternal, "Environment desired-state pointers are corrupt")
+		return 0, controller.ComposeIdentitySnapshot{}, 0, errs.New(
+			errs.KindInternal,
+			"Environment desired-state pointers are corrupt",
+		)
 	}
 	return head.Revision, composeIdentitySnapshot(projection.Record), projection.Record.RenderGeneration + 1, nil
 }
@@ -456,7 +472,11 @@ func composeIdentitySnapshot(projection etcd.EnvironmentComposeProjection) contr
 		return result
 	}
 	return controller.ComposeIdentitySnapshot{
-		Services: convert(projection.Services), Networks: convert(projection.Networks), Volumes: convert(projection.Volumes),
+		Services: convert(
+			projection.Services,
+		),
+		Networks: convert(projection.Networks),
+		Volumes:  convert(projection.Volumes),
 	}
 }
 

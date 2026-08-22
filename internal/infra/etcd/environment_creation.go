@@ -128,7 +128,12 @@ func classifyEnvironmentCreateConflict(
 			if err != nil {
 				return err
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", operationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				operationID,
+				activeTaskID,
+			)
 		}
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {

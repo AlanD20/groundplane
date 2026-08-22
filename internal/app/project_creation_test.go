@@ -57,10 +57,14 @@ func TestProjectCreationServicePersistsEffectiveInputAndExactResponse(t *testing
 		t.Fatalf("canonical Project = %#v", idempotency.project)
 	}
 	marker := repository.marker
-	if marker.Locator.ScopeKind != etcd.IdempotencyScopeTenant || marker.Locator.ScopeID != projectCreationTestTenantID ||
-		marker.Locator.Method != http.MethodPost || marker.Locator.Route != projectCreationRoute ||
-		marker.Locator.Key != "project-create-key-0001" || marker.CreatedAt != now ||
-		marker.RetainUntil != now.Add(90*24*time.Hour) || !reflect.DeepEqual(marker.Response, response) {
+	if marker.Locator.ScopeKind != etcd.IdempotencyScopeTenant ||
+		marker.Locator.ScopeID != projectCreationTestTenantID ||
+		marker.Locator.Method != http.MethodPost ||
+		marker.Locator.Route != projectCreationRoute ||
+		marker.Locator.Key != "project-create-key-0001" ||
+		marker.CreatedAt != now ||
+		marker.RetainUntil != now.Add(90*24*time.Hour) ||
+		!reflect.DeepEqual(marker.Response, response) {
 		t.Fatalf("persisted marker = %#v", marker)
 	}
 }
@@ -68,8 +72,11 @@ func TestProjectCreationServicePersistsEffectiveInputAndExactResponse(t *testing
 func TestProjectCreationServiceReplaysBeforeRepositoryAccess(t *testing.T) {
 	t.Parallel()
 	want := etcd.IdempotencyResponse{
-		Status: http.StatusCreated, ContentKind: "application/json",
-		Body: []byte(`{"id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","tenant_id":"` + projectCreationTestTenantID + `","slug":"console","name":"Console","description":"","kind":"tenant"}`),
+		Status:      http.StatusCreated,
+		ContentKind: "application/json",
+		Body: []byte(
+			`{"id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","tenant_id":"` + projectCreationTestTenantID + `","slug":"console","name":"Console","description":"","kind":"tenant"}`,
+		),
 	}
 	repository := &fakeProjectCreationRepository{}
 	service, err := newProjectCreationService(repository, &fakeProjectCreationIdempotency{

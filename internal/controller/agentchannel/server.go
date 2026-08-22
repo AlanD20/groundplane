@@ -743,7 +743,8 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 			return errs.New(errs.KindValidationFailed, "Agent Compose Task observation is invalid")
 		}
 		for _, collision := range project.GetCollisions() {
-			if collision == nil || collision.GetKind() == agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_UNSPECIFIED ||
+			if collision == nil ||
+				collision.GetKind() == agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_UNSPECIFIED ||
 				collision.GetName() == "" {
 				return errs.New(errs.KindValidationFailed, "Agent Compose Task collision is invalid")
 			}

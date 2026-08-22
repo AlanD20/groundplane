@@ -94,8 +94,12 @@ func (runtime *ComposeRuntime) mutate(
 ) (composeStepResult, error) {
 	result := composeStepResult{MutationAttempted: true}
 	response, helperErr := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
-		Schema: composeHelperSchema, TaskId: assignment.TaskID, OperationId: assignment.OperationID,
-		Plan: assignment.Plan, StepId: step.GetStepId(), TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
+		Schema:         composeHelperSchema,
+		TaskId:         assignment.TaskID,
+		OperationId:    assignment.OperationID,
+		Plan:           assignment.Plan,
+		StepId:         step.GetStepId(),
+		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
 
 	observed, observeErr := runtime.observeAfterMutation(ctx, assignment.Plan, artifactID)
@@ -128,7 +132,8 @@ func (runtime *ComposeRuntime) mutate(
 			response.GetDiagnostic().String(),
 		)
 	}
-	if response.GetExitCode() != 0 || response.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
+	if response.GetExitCode() != 0 ||
+		response.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
 		result.ReconciliationRequired = true
 		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an inconsistent success response")
 	}
@@ -233,7 +238,11 @@ func stoppedServices(observed *agentpb.ObservedProject, serviceIDs []string) err
 			continue
 		}
 		if container.GetState() == agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING {
-			return errs.Newf(errs.KindRequestFailed, "agent: service %s remained running after Compose stop", container.GetServiceId())
+			return errs.Newf(
+				errs.KindRequestFailed,
+				"agent: service %s remained running after Compose stop",
+				container.GetServiceId(),
+			)
 		}
 	}
 	return nil
@@ -243,7 +252,11 @@ func removedServices(observed *agentpb.ObservedProject, serviceIDs []string) err
 	selected := selectedServiceIDs(serviceIDs)
 	for _, container := range observed.GetContainers() {
 		if container != nil && selectedIncludes(selected, container.GetServiceId()) {
-			return errs.Newf(errs.KindRequestFailed, "agent: service %s remained after Compose remove", container.GetServiceId())
+			return errs.Newf(
+				errs.KindRequestFailed,
+				"agent: service %s remained after Compose remove",
+				container.GetServiceId(),
+			)
 		}
 	}
 	return nil

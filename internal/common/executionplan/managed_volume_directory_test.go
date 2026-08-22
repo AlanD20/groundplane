@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -33,10 +34,10 @@ func TestManagedVolumeDirectoriesEnsureHasClosedArtifactShape(t *testing.T) {
 			plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_STOP
 		},
 		"duplicate Compose leaf": func(plan *agentpb.ExecutionPlan) {
-			duplicate := *plan.Artifacts[0].Volumes[0]
+			duplicate := proto.Clone(plan.Artifacts[0].Volumes[0]).(*agentpb.ComposeVolume)
 			duplicate.VolumeId = "vol_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 			duplicate.DockerName = "gp_vol_" + duplicate.VolumeId
-			plan.Artifacts[0].Volumes = append(plan.Artifacts[0].Volumes, &duplicate)
+			plan.Artifacts[0].Volumes = append(plan.Artifacts[0].Volumes, duplicate)
 		},
 	}
 	for name, mutate := range tests {

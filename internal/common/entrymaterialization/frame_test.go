@@ -461,7 +461,13 @@ func canonicalFrame(t *testing.T, content []byte) []byte {
 	}
 	var frame bytes.Buffer
 	owned := bytes.Clone(content)
-	if err := Encode(context.Background(), &frame, header, OwnBytes(owned), testLimits(uint64(len(content)))); err != nil {
+	if err := Encode(
+		context.Background(),
+		&frame,
+		header,
+		OwnBytes(owned),
+		testLimits(uint64(len(content))),
+	); err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
 	return frame.Bytes()

@@ -216,7 +216,10 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		project.ReadRevision < project.Revision || environment.ReadRevision < environment.Revision ||
 		environment.Record.ProjectID != project.Record.ID ||
 		environment.Record.ProvisioningState != EnvironmentProvisioningReady || expectedHeadRevision < 0 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment is not ready for Blueprint apply")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Environment is not ready for Blueprint apply",
+		)
 	}
 	if err := validateEnvironmentBlueprintRevision(revision); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -307,12 +310,19 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: environmentBlueprintManifestKey(revision.EnvironmentID, revision.RevisionID), Value: manifestValue},
+		{
+			Type:  MutationPut,
+			Key:   environmentBlueprintManifestKey(revision.EnvironmentID, revision.RevisionID),
+			Value: manifestValue,
+		},
 	}
 	for index, file := range revision.Files {
 		key := environmentBlueprintFileKey(revision.EnvironmentID, revision.RevisionID, index)
 		conditions = append(conditions, Condition{Key: key})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: append([]byte(nil), file.Content...)})
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationPut, Key: key, Value: append([]byte(nil), file.Content...)},
+		)
 	}
 	conditions = append(conditions,
 		Condition{Key: environmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
@@ -323,9 +333,14 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		Condition{Key: deletionTombstoneKey("project", project.Record.ID)},
 		Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
 	)
-	mutations = append(mutations,
+	mutations = append(
+		mutations,
 		Mutation{Type: MutationPut, Key: environmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
-		Mutation{Type: MutationPut, Key: environmentComposeProjectionKey(revision.EnvironmentID), Value: projectionValue},
+		Mutation{
+			Type:  MutationPut,
+			Key:   environmentComposeProjectionKey(revision.EnvironmentID),
+			Value: projectionValue,
+		},
 	)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
@@ -360,7 +375,12 @@ func classifyEnvironmentBlueprintApplyConflict(
 			if err != nil {
 				return err
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", operationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				operationID,
+				activeTaskID,
+			)
 		}
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {

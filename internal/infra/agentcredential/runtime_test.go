@@ -68,7 +68,9 @@ func TestMaterializeRecreatesExactRuntimeFromStoredCiphertext(t *testing.T) {
 		"    max_concurrent_tasks: 3\n" +
 		"    labels:\n" +
 		"        arch: arm64\n" +
-		"        role: local\n"
+		"        role: local\n" +
+		"storage:\n" +
+		"    volume_root: /var/lib/groundplane/vol\n"
 	if string(contents) != wantConfig {
 		t.Fatalf("config =\n%s\nwant exact canonical config =\n%s", contents, wantConfig)
 	}

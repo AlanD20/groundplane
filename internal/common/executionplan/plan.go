@@ -206,7 +206,10 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			return err
 		}
 		if remove := step.GetEnvironmentDirectoryRemove(); remove != nil && remove.EnvironmentId != plan.TargetId {
-			return errs.New(errs.KindValidationFailed, "environment directory removal does not identify the plan target")
+			return errs.New(
+				errs.KindValidationFailed,
+				"environment directory removal does not identify the plan target",
+			)
 		}
 		if _, duplicate := stepIDs[step.StepId]; duplicate {
 			return errs.New(errs.KindValidationFailed, "execution plan step ids must be unique")
@@ -219,7 +222,10 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			materializationIDs[materialization.MaterializationId] = struct{}{}
 			destinationKey := materialization.ArtifactId + "\x00" + materialization.Destination
 			if _, duplicate := materializationDestinations[destinationKey]; duplicate {
-				return errs.New(errs.KindValidationFailed, "materialization destinations must be unique within an artifact")
+				return errs.New(
+					errs.KindValidationFailed,
+					"materialization destinations must be unique within an artifact",
+				)
 			}
 			materializationDestinations[destinationKey] = struct{}{}
 		}

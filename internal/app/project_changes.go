@@ -244,7 +244,10 @@ func (service *projectChangeService) changeProjectOnce(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Project change replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}

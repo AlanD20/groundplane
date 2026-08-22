@@ -79,12 +79,18 @@ func validateEnvironmentRecordPath(record EnvironmentRecord) error {
 	projectDir := filepath.Dir(record.VolumeDir)
 	ownerDir := filepath.Dir(projectDir)
 	if filepath.Base(record.VolumeDir) != record.ID || filepath.Base(projectDir) != record.ProjectID {
-		return errs.New(errs.KindValidationFailed, "environment volume_dir must end with its stable project and environment ids")
+		return errs.New(
+			errs.KindValidationFailed,
+			"environment volume_dir must end with its stable project and environment ids",
+		)
 	}
 	owner := filepath.Base(ownerDir)
 	if owner != "platform" {
 		if err := ids.Validate(ids.KindTenant, owner); err != nil {
-			return errs.New(errs.KindValidationFailed, "environment volume_dir owner must be platform or a stable tenant id")
+			return errs.New(
+				errs.KindValidationFailed,
+				"environment volume_dir owner must be platform or a stable tenant id",
+			)
 		}
 	}
 	return nil
@@ -101,7 +107,10 @@ func CompleteEnvironmentProvisioning(
 		return EnvironmentRecord{}, errs.New(errs.KindStateConflict, "environment is not provisioning")
 	}
 	if record.CreateTaskID != createTaskID {
-		return EnvironmentRecord{}, errs.New(errs.KindStateConflict, "environment create Task no longer owns provisioning")
+		return EnvironmentRecord{}, errs.New(
+			errs.KindStateConflict,
+			"environment create Task no longer owns provisioning",
+		)
 	}
 	if succeeded {
 		record.ProvisioningState = EnvironmentProvisioningReady
@@ -115,7 +124,10 @@ func CompleteEnvironmentProvisioning(
 // new retry Task without changing Environment identity or volume_dir.
 func RetryEnvironmentProvisioning(record EnvironmentRecord, createTaskID string) (EnvironmentRecord, error) {
 	if record.ProvisioningState != EnvironmentProvisioningFailed {
-		return EnvironmentRecord{}, errs.New(errs.KindStateConflict, "only failed environment provisioning can be retried")
+		return EnvironmentRecord{}, errs.New(
+			errs.KindStateConflict,
+			"only failed environment provisioning can be retried",
+		)
 	}
 	if err := ids.Validate(ids.KindTask, createTaskID); err != nil {
 		return EnvironmentRecord{}, errs.New(errs.KindValidationFailed, "environment create_task_id is invalid")

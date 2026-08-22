@@ -92,17 +92,28 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	defer clear(value)
 	conditions := []Condition{
 		{Key: environmentKey(current.Record.ID), ModRevision: current.Revision},
-		{Key: environmentNameKey(current.Record.ProjectID, current.Record.Name), ModRevision: secondary.Values[0].ModRevision},
-		{Key: environmentOwnerKey(current.Record.ProjectID, current.Record.ID), ModRevision: secondary.Values[1].ModRevision},
+		{
+			Key:         environmentNameKey(current.Record.ProjectID, current.Record.Name),
+			ModRevision: secondary.Values[0].ModRevision,
+		},
+		{
+			Key:         environmentOwnerKey(current.Record.ProjectID, current.Record.ID),
+			ModRevision: secondary.Values[1].ModRevision,
+		},
 		{Key: deletionTombstoneKey("environment", current.Record.ID)},
 		{Key: deletionTombstoneKey("project", current.Record.ProjectID)},
 	}
 	mutations := []Mutation{{Type: MutationPut, Key: environmentKey(current.Record.ID), Value: value}}
 	if renaming {
 		conditions = append(conditions, Condition{Key: environmentNameKey(replacement.ProjectID, replacement.Name)})
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			Mutation{Type: MutationDelete, Key: environmentNameKey(current.Record.ProjectID, current.Record.Name)},
-			Mutation{Type: MutationPut, Key: environmentNameKey(replacement.ProjectID, replacement.Name), Value: []byte(current.Record.ID)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   environmentNameKey(replacement.ProjectID, replacement.Name),
+				Value: []byte(current.Record.ID),
+			},
 		)
 	}
 	plan, err := newIdempotencyMutationPlan(

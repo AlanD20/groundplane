@@ -84,11 +84,17 @@ func Parse(root string, volumeDir string) (Scope, error) {
 	}
 	relative, ok := strings.CutPrefix(volumeDir, root+"/")
 	if !ok {
-		return Scope{}, errs.New(errs.KindValidationFailed, "environment volume directory is outside the configured root")
+		return Scope{}, errs.New(
+			errs.KindValidationFailed,
+			"environment volume directory is outside the configured root",
+		)
 	}
 	components := strings.Split(relative, "/")
 	if len(components) != 3 {
-		return Scope{}, errs.New(errs.KindValidationFailed, "environment volume directory has an invalid ownership shape")
+		return Scope{}, errs.New(
+			errs.KindValidationFailed,
+			"environment volume directory has an invalid ownership shape",
+		)
 	}
 	scope := Scope{ProjectID: components[1], EnvironmentID: components[2]}
 	if components[0] == "platform" {

@@ -227,7 +227,10 @@ func (manager *Manager) UpdateConfig(ctx context.Context, agentID string, config
 	}
 	if updated.Record.ID != agentID || updated.Record.Generation != stored.Record.Generation ||
 		updated.Record.Phase == PhaseDeleting {
-		return Config{}, errs.New(errs.KindInternal, "local agent repository replaced config on the wrong lifecycle record")
+		return Config{}, errs.New(
+			errs.KindInternal,
+			"local agent repository replaced config on the wrong lifecycle record",
+		)
 	}
 	if err := manager.runtime.Materialize(ctx, RuntimeMaterial{
 		AgentID:        updated.Record.ID,

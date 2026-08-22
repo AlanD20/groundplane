@@ -66,7 +66,10 @@ func (repository *HierarchyRepository) GetDeletionTombstone(
 		return Versioned[DeletionTombstoneRecord]{}, false, err
 	}
 	if result == nil {
-		return Versioned[DeletionTombstoneRecord]{}, false, errs.New(errs.KindInternal, "deletion tombstone read is empty")
+		return Versioned[DeletionTombstoneRecord]{}, false, errs.New(
+			errs.KindInternal,
+			"deletion tombstone read is empty",
+		)
 	}
 	if result.Entry == nil {
 		return Versioned[DeletionTombstoneRecord]{ReadRevision: result.ReadRevision}, false, nil
@@ -102,12 +105,18 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if expectedBlueprintRevision < 0 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "expected Blueprint revision cannot be negative")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"expected Blueprint revision cannot be negative",
+		)
 	}
 	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 || environment.Revision <= 0 ||
 		project.ReadRevision < project.Revision || environment.ReadRevision < environment.Revision ||
 		environment.Record.ProjectID != project.Record.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment hierarchy changed before deletion")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Environment hierarchy changed before deletion",
+		)
 	}
 	if err := validateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -117,13 +126,19 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		tombstone.Phase != DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != TaskExecutorAgent ||
 		task.Type != TaskRemove || task.Target != environment.Record.ID || task.Status != TaskStatusPending {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Environment deletion Task and tombstone do not match")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment deletion Task and tombstone do not match",
+		)
 	}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Environment deletion marker does not match its Task")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment deletion marker does not match its Task",
+		)
 	}
 
 	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -139,12 +154,20 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if secondary == nil || len(secondary.Values) != 4 || secondary.Values[0] == nil || secondary.Values[1] == nil ||
-		string(secondary.Values[0].Value) != environment.Record.ID || string(secondary.Values[1].Value) != environment.Record.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Environment deletion index evidence is corrupt")
+		string(
+			secondary.Values[0].Value,
+		) != environment.Record.ID || string(secondary.Values[1].Value) != environment.Record.ID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Environment deletion index evidence is corrupt",
+		)
 	}
 	if expectedBlueprintRevision == 0 {
 		if secondary.Values[2] != nil || secondary.Values[3] != nil || len(task.Params) != 1 {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment Blueprint state changed")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindStateConflict,
+				"Environment Blueprint state changed",
+			)
 		}
 	} else if secondary.Values[2] == nil || secondary.Values[3] == nil ||
 		secondary.Values[2].ModRevision != expectedBlueprintRevision || secondary.Values[3].ModRevision != expectedBlueprintRevision ||
@@ -187,8 +210,14 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: environmentNameKey(environment.Record.ProjectID, environment.Record.Name), ModRevision: secondary.Values[0].ModRevision},
-		{Key: environmentOwnerKey(environment.Record.ProjectID, environment.Record.ID), ModRevision: secondary.Values[1].ModRevision},
+		{
+			Key:         environmentNameKey(environment.Record.ProjectID, environment.Record.Name),
+			ModRevision: secondary.Values[0].ModRevision,
+		},
+		{
+			Key:         environmentOwnerKey(environment.Record.ProjectID, environment.Record.ID),
+			ModRevision: secondary.Values[1].ModRevision,
+		},
 		{Key: tombstoneKey},
 		{Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: expectedBlueprintRevision},
 		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: expectedBlueprintRevision},
@@ -233,7 +262,12 @@ func classifyEnvironmentDeletionStartConflict(
 			if err != nil {
 				return err
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", operationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				operationID,
+				activeTaskID,
+			)
 		}
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {
@@ -254,7 +288,8 @@ func classifyEnvironmentDeletionStartConflict(
 		if values[7] != nil {
 			return errs.New(errs.KindResourceInUse, "Environment deletion is already in progress")
 		}
-		if keyValueRevision(values[8]) != expectedBlueprintRevision || keyValueRevision(values[9]) != expectedBlueprintRevision {
+		if keyValueRevision(values[8]) != expectedBlueprintRevision ||
+			keyValueRevision(values[9]) != expectedBlueprintRevision {
 			return errs.New(errs.KindStateConflict, "Environment Blueprint state changed")
 		}
 		if values[10] == nil {

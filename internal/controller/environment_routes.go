@@ -57,7 +57,10 @@ func (s *Server) environmentCreate(w http.ResponseWriter, r *http.Request) {
 
 func decodeEnvironmentCreate(r *http.Request) (hierarchy.CreateEnvironmentInput, error) {
 	if len(r.URL.Query()) != 0 {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment creation query is invalid")
+		return hierarchy.CreateEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment creation query is invalid",
+		)
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -65,7 +68,10 @@ func decodeEnvironmentCreate(r *http.Request) (hierarchy.CreateEnvironmentInput,
 	}
 	defer clear(body)
 	if !utf8.Valid(body) {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment creation body is not valid UTF-8")
+		return hierarchy.CreateEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment creation body is not valid UTF-8",
+		)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	opening, err := decoder.Token()
@@ -73,7 +79,10 @@ func decodeEnvironmentCreate(r *http.Request) (hierarchy.CreateEnvironmentInput,
 		return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
 	}
 	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment creation body must be an object")
+		return hierarchy.CreateEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment creation body must be an object",
+		)
 	}
 	input := hierarchy.CreateEnvironmentInput{}
 	seen := make(map[string]struct{}, 2)
@@ -84,20 +93,32 @@ func decodeEnvironmentCreate(r *http.Request) (hierarchy.CreateEnvironmentInput,
 		}
 		member, ok := token.(string)
 		if !ok {
-			return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment creation member name is invalid")
+			return hierarchy.CreateEnvironmentInput{}, errs.New(
+				errs.KindMalformedRequest,
+				"Environment creation member name is invalid",
+			)
 		}
 		if _, duplicate := seen[member]; duplicate {
-			return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment creation body contains a duplicate member")
+			return hierarchy.CreateEnvironmentInput{}, errs.New(
+				errs.KindMalformedRequest,
+				"Environment creation body contains a duplicate member",
+			)
 		}
 		seen[member] = struct{}{}
 		if member != "project_id" && member != "name" {
-			return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment creation body contains an unknown member")
+			return hierarchy.CreateEnvironmentInput{}, errs.New(
+				errs.KindMalformedRequest,
+				"Environment creation body contains an unknown member",
+			)
 		}
 		var value string
 		if err := decoder.Decode(&value); err != nil {
 			var typeError *json.UnmarshalTypeError
 			if errors.As(err, &typeError) {
-				return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindValidationFailed, "Environment creation members must be strings")
+				return hierarchy.CreateEnvironmentInput{}, errs.New(
+					errs.KindValidationFailed,
+					"Environment creation members must be strings",
+				)
 			}
 			return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
 		}
@@ -112,7 +133,10 @@ func decodeEnvironmentCreate(r *http.Request) (hierarchy.CreateEnvironmentInput,
 		return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
 	}
 	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment creation body is malformed")
+		return hierarchy.CreateEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment creation body is malformed",
+		)
 	}
 	if _, err := decoder.Token(); err != io.EOF {
 		if err == nil {
@@ -174,18 +198,27 @@ func environmentListRequest(r *http.Request) (string, etcd.PageRequest, error) {
 			return "", etcd.PageRequest{}, errs.New(errs.KindMalformedRequest, "Environment list query is invalid")
 		}
 		if len(values) != 1 {
-			return "", etcd.PageRequest{}, errs.New(errs.KindMalformedRequest, "Environment list query contains duplicate values")
+			return "", etcd.PageRequest{}, errs.New(
+				errs.KindMalformedRequest,
+				"Environment list query contains duplicate values",
+			)
 		}
 	}
 	projectID := query.Get("project")
 	if err := ids.Validate(ids.KindProject, projectID); err != nil {
-		return "", etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Environment list requires a stable project id")
+		return "", etcd.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment list requires a stable project id",
+		)
 	}
 	request := etcd.PageRequest{Cursor: query.Get("cursor")}
 	if raw := query.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit <= 0 {
-			return "", etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Environment list limit must be a positive integer")
+			return "", etcd.PageRequest{}, errs.New(
+				errs.KindValidationFailed,
+				"Environment list limit must be a positive integer",
+			)
 		}
 		request.Limit = limit
 	}

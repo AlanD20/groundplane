@@ -216,7 +216,8 @@ func validateComposeRenderInput(input ComposeRenderInput) error {
 			return errs.New(errs.KindInternal, "compose render identity is invalid")
 		}
 	}
-	if !filepath.IsAbs(input.AuthorizedVolumeDir) || filepath.Clean(input.AuthorizedVolumeDir) != input.AuthorizedVolumeDir {
+	if !filepath.IsAbs(input.AuthorizedVolumeDir) ||
+		filepath.Clean(input.AuthorizedVolumeDir) != input.AuthorizedVolumeDir {
 		return errs.New(errs.KindInternal, "compose authorized volume directory is invalid")
 	}
 	return nil

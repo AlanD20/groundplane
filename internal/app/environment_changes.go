@@ -185,7 +185,10 @@ func (service *environmentChangeService) renameEnvironmentOnce(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment change replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Environment change replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}

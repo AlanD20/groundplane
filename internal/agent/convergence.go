@@ -28,7 +28,10 @@ func evaluateComposeConvergence(
 		return composeConvergence{}, errs.New(errs.KindInternal, "compose convergence project identity does not match")
 	}
 	if len(observed.GetCollisions()) > 0 {
-		return composeConvergence{}, errs.New(errs.KindStateConflict, "compose project ownership collision prevents convergence")
+		return composeConvergence{}, errs.New(
+			errs.KindStateConflict,
+			"compose project ownership collision prevents convergence",
+		)
 	}
 
 	services, err := convergenceServices(artifact, selectedServices)
@@ -65,12 +68,20 @@ func evaluateComposeConvergence(
 		for _, container := range matching {
 			if container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING {
 				return composeConvergence{
-					Summary: fmt.Sprintf("service %s container %s is not running", service.GetComposeName(), container.GetName()),
+					Summary: fmt.Sprintf(
+						"service %s container %s is not running",
+						service.GetComposeName(),
+						container.GetName(),
+					),
 				}, nil
 			}
 			if container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 				return composeConvergence{
-					Summary: fmt.Sprintf("service %s container %s is not healthy", service.GetComposeName(), container.GetName()),
+					Summary: fmt.Sprintf(
+						"service %s container %s is not healthy",
+						service.GetComposeName(),
+						container.GetName(),
+					),
 				}, nil
 			}
 		}

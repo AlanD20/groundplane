@@ -71,10 +71,26 @@ func TestProjectAgentStatusIsClosed(t *testing.T) {
 		want    apiTypes.AgentStatus
 		wantErr bool
 	}{
-		{name: "provisioning", health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseProvisioning}}, want: apiTypes.AgentPending},
-		{name: "ready online", health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseReady}, Healthy: true}, want: apiTypes.AgentHealthy},
-		{name: "ready offline", health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseReady}}, want: apiTypes.AgentDegraded},
-		{name: "deleting", health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseDeleting}}, want: apiTypes.AgentStopped},
+		{
+			name:   "provisioning",
+			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseProvisioning}},
+			want:   apiTypes.AgentPending,
+		},
+		{
+			name:   "ready online",
+			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseReady}, Healthy: true},
+			want:   apiTypes.AgentHealthy,
+		},
+		{
+			name:   "ready offline",
+			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseReady}},
+			want:   apiTypes.AgentDegraded,
+		},
+		{
+			name:   "deleting",
+			health: localagent.Health{Agent: localagent.Agent{Phase: localagent.PhaseDeleting}},
+			want:   apiTypes.AgentStopped,
+		},
 		{name: "invalid", health: localagent.Health{}, wantErr: true},
 	}
 	for _, test := range tests {

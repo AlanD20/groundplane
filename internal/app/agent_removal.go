@@ -174,7 +174,10 @@ func (service *agentRemovalService) RemoveAgent(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if health.Agent.ID != agentID {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal target lookup returned another Agent")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Agent removal target lookup returned another Agent",
+		)
 	}
 	now := service.now().UTC()
 	task, err := newAgentRemovalTask(now, agentID, idempotencyKey)

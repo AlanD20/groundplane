@@ -309,7 +309,10 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	if current.Record.ID != replacement.ID || current.Revision <= 0 || current.ReadRevision <= 0 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Tenant mutation revision is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Tenant mutation revision is invalid",
+		)
 	}
 	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(

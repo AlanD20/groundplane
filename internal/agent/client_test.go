@@ -57,10 +57,12 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 	planHash := hashForPlan(assignment.Plan)
 	stream := newFakeStream(
 		configMessage(60, 1),
-		&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
-			TaskId: workerTestTaskID, OperationId: assignment.OperationID,
-			Plan: assignment.Plan, TimeoutSeconds: 60,
-		}}},
+		&agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
+				TaskId: workerTestTaskID, OperationId: assignment.OperationID,
+				Plan: assignment.Plan, TimeoutSeconds: 60,
+			}},
+		},
 	)
 	client := newTestClient(t, bytes.Repeat([]byte{0x30}, agentprotocol.RawTokenBytes), stream)
 	ctx, cancel := context.WithCancel(context.Background())

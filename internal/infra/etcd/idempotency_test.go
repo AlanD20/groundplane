@@ -332,8 +332,20 @@ func TestIdempotencyMutationPlanRejectsDuplicateAndReservedKeys(t *testing.T) {
 			[]Mutation{{Type: MutationPut, Key: "/record", Value: []byte("x")}}},
 		{nil, []Mutation{{Type: MutationPut, Key: idempotencyRetentionPrefix + "owned", Value: []byte("x")}}},
 	} {
-		if _, err := newIdempotencyMutationPlan(test.conditions, test.mutations, classifier); !isKind(err, errs.KindInternal) {
-			t.Fatalf("newIdempotencyMutationPlan(%#v, %#v) error = %v, want internal", test.conditions, test.mutations, err)
+		if _, err := newIdempotencyMutationPlan(
+			test.conditions,
+			test.mutations,
+			classifier,
+		); !isKind(
+			err,
+			errs.KindInternal,
+		) {
+			t.Fatalf(
+				"newIdempotencyMutationPlan(%#v, %#v) error = %v, want internal",
+				test.conditions,
+				test.mutations,
+				err,
+			)
 		}
 	}
 	if _, err := newIdempotencyMutationPlan(
@@ -418,7 +430,11 @@ func TestIdempotencyRepositoryPrunesAtMost24ValidatedCounterparts(t *testing.T) 
 		t.Fatalf("pruneExpired(24) = %d, %v", revision, err)
 	}
 	if len(backend.transaction.conditions) != 48 || len(backend.transaction.operations) != 48 {
-		t.Fatalf("prune transaction conditions/operations = %d/%d", len(backend.transaction.conditions), len(backend.transaction.operations))
+		t.Fatalf(
+			"prune transaction conditions/operations = %d/%d",
+			len(backend.transaction.conditions),
+			len(backend.transaction.operations),
+		)
 	}
 	for _, operation := range backend.transaction.operations {
 		if !operation.IsDelete() {
@@ -428,7 +444,14 @@ func TestIdempotencyRepositoryPrunesAtMost24ValidatedCounterparts(t *testing.T) 
 
 	backend.transaction = nil
 	tooMany := append(append([]idempotencyPruneCandidate(nil), candidates...), candidates[0])
-	if _, err := repository.pruneExpired(context.Background(), testMarkerTime(), tooMany); !isKind(err, errs.KindValidationFailed) {
+	if _, err := repository.pruneExpired(
+		context.Background(),
+		testMarkerTime(),
+		tooMany,
+	); !isKind(
+		err,
+		errs.KindValidationFailed,
+	) {
 		t.Fatalf("pruneExpired(25) error = %v, want validation", err)
 	}
 	if backend.transaction != nil {
@@ -653,7 +676,8 @@ func (store *collectorTestStore) GetMany(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if store.getManyCalls >= len(store.snapshots) || request.Revision != store.snapshots[store.getManyCalls].rangeResult.ReadRevision {
+	if store.getManyCalls >= len(store.snapshots) ||
+		request.Revision != store.snapshots[store.getManyCalls].rangeResult.ReadRevision {
 		return nil, errs.New(errs.KindInternal, "unexpected collector multi-get")
 	}
 	snapshot := store.snapshots[store.getManyCalls]
@@ -767,7 +791,11 @@ func testCollectorSnapshot(
 func cloneKeyValueSlice(values []KeyValue) []KeyValue {
 	result := make([]KeyValue, len(values))
 	for index, value := range values {
-		result[index] = KeyValue{Key: value.Key, Value: append([]byte(nil), value.Value...), ModRevision: value.ModRevision}
+		result[index] = KeyValue{
+			Key:         value.Key,
+			Value:       append([]byte(nil), value.Value...),
+			ModRevision: value.ModRevision,
+		}
 	}
 	return result
 }
@@ -776,7 +804,11 @@ func cloneKeyValuePointers(values []*KeyValue) []*KeyValue {
 	result := make([]*KeyValue, len(values))
 	for index, value := range values {
 		if value != nil {
-			result[index] = &KeyValue{Key: value.Key, Value: append([]byte(nil), value.Value...), ModRevision: value.ModRevision}
+			result[index] = &KeyValue{
+				Key:         value.Key,
+				Value:       append([]byte(nil), value.Value...),
+				ModRevision: value.ModRevision,
+			}
 		}
 	}
 	return result

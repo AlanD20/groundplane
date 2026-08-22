@@ -265,7 +265,8 @@ func validateIdempotencyMarker(marker IdempotencyMarker) error {
 	if len(marker.Response.Body) > maximumReplayBody {
 		return corruptIdempotencyMarker()
 	}
-	if !validMarkerTime(marker.CreatedAt) || !validMarkerTime(marker.UpdatedAt) || marker.UpdatedAt.Before(marker.CreatedAt) {
+	if !validMarkerTime(marker.CreatedAt) || !validMarkerTime(marker.UpdatedAt) ||
+		marker.UpdatedAt.Before(marker.CreatedAt) {
 		return corruptIdempotencyMarker()
 	}
 	switch marker.Kind {
@@ -497,7 +498,8 @@ func decodeRawBase64(value string) ([]byte, error) {
 }
 
 func idempotencyRetentionKey(markerKey string, retainUntil time.Time) (string, error) {
-	if !validMarkerTime(retainUntil) || retainUntil.UnixNano() < 0 || !strings.HasPrefix(markerKey, idempotencyMarkerPrefix) {
+	if !validMarkerTime(retainUntil) || retainUntil.UnixNano() < 0 ||
+		!strings.HasPrefix(markerKey, idempotencyMarkerPrefix) {
 		return "", corruptIdempotencyMarker()
 	}
 	return idempotencyRetentionPrefix + fmt.Sprintf("%020d", retainUntil.UnixNano()) + "/" +
@@ -864,7 +866,10 @@ func (repository *IdempotencyRepository) Apply(
 	}
 	conflict := classify(result.Revision, result.FailureReads[1:])
 	if conflict == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "idempotency plan conflict was not classified")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"idempotency plan conflict was not classified",
+		)
 	}
 	return IdempotencyTransactionResult{
 		kind: idempotencyTransactionConflict, revision: result.Revision, conflict: conflict,

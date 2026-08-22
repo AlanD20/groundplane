@@ -21,7 +21,9 @@ const testProjectRouteID = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 func TestProjectCreateRoutePreservesExactMutationResponse(t *testing.T) {
 	t.Parallel()
 	want := etcd.IdempotencyResponse{
-		Status: http.StatusCreated, ContentKind: "application/json", Body: []byte(`{"id":"` + testProjectRouteID + `"}`),
+		Status:      http.StatusCreated,
+		ContentKind: "application/json",
+		Body:        []byte(`{"id":"` + testProjectRouteID + `"}`),
 	}
 	mutator := &fakeProjectMutator{response: want}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{ProjectMutations: mutator})
@@ -34,7 +36,12 @@ func TestProjectCreateRoutePreservesExactMutationResponse(t *testing.T) {
 	server.Mux.ServeHTTP(response, request)
 	if response.Code != want.Status || response.Header().Get("Content-Type") != want.ContentKind ||
 		!bytes.Equal(response.Body.Bytes(), want.Body) {
-		t.Fatalf("POST /projects = %d %q %s", response.Code, response.Header().Get("Content-Type"), response.Body.Bytes())
+		t.Fatalf(
+			"POST /projects = %d %q %s",
+			response.Code,
+			response.Header().Get("Content-Type"),
+			response.Body.Bytes(),
+		)
 	}
 	if mutator.input.TenantID != testTenantRouteID || mutator.input.Slug != "console" ||
 		mutator.input.Name == nil || *mutator.input.Name != "Console" ||

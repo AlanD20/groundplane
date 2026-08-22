@@ -28,7 +28,12 @@ func TestProjectChangeRoutesPreserveExactResponses(t *testing.T) {
 	server.Mux.ServeHTTP(editResponse, edit)
 	if editResponse.Code != http.StatusOK || !bytes.Equal(editResponse.Body.Bytes(), want.Body) ||
 		changer.edit.Name == nil || *changer.edit.Name != "Operator Console" || changer.id != testProjectRouteID {
-		t.Fatalf("PATCH /projects response/input = %d %s %#v", editResponse.Code, editResponse.Body.Bytes(), changer.edit)
+		t.Fatalf(
+			"PATCH /projects response/input = %d %s %#v",
+			editResponse.Code,
+			editResponse.Body.Bytes(),
+			changer.edit,
+		)
 	}
 	rename := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+testProjectRouteID+"/rename",
 		bytes.NewBufferString(`{"slug":"operator-console"}`))

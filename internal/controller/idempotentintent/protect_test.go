@@ -267,7 +267,15 @@ func TestProtectAndCompareProtectedFailClosed(t *testing.T) {
 		t.Fatal("Protect() early failure retained digest")
 	}
 
-	if _, err := CompareProtected(nil, nil, secretvalue.Envelope{}, secretvalue.Envelope{}); !hasKind(err, errs.KindInternal) {
+	if _, err := CompareProtected(
+		nil,
+		nil,
+		secretvalue.Envelope{},
+		secretvalue.Envelope{},
+	); !hasKind(
+		err,
+		errs.KindInternal,
+	) {
 		t.Fatalf("CompareProtected() error = %v, want internal", err)
 	}
 }

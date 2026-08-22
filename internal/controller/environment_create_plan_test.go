@@ -41,7 +41,13 @@ func TestTaskPlanResolverRejectsExtraDurableParameter(t *testing.T) {
 	}
 	task := environmentCreateTaskForPlanTest()
 	task.Params["other"] = "confused"
-	if _, err := resolver.ResolveExecutionPlan(context.Background(), task); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := resolver.ResolveExecutionPlan(
+		context.Background(),
+		task,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
 		t.Fatalf("ResolveExecutionPlan(extra param) error = %v, want internal", err)
 	}
 }

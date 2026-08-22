@@ -53,7 +53,13 @@ func TestHierarchyCreateTenantIdempotentCommitsResourceIndexesAndMarker(t *testi
 		!isKind(conflict.conflict, errs.KindSlugConflict) {
 		t.Fatalf("CreateTenantIdempotent(conflict) = %#v, %v", conflict, err)
 	}
-	if _, err := repository.GetTenant(context.Background(), conflictingRecord.ID); !isKind(err, errs.KindTenantNotFound) {
+	if _, err := repository.GetTenant(
+		context.Background(),
+		conflictingRecord.ID,
+	); !isKind(
+		err,
+		errs.KindTenantNotFound,
+	) {
 		t.Fatalf("conflicting Tenant persisted: %v", err)
 	}
 }

@@ -44,12 +44,15 @@ func TestAgentReadRoutesExposeTheConfiguredProjection(t *testing.T) {
 				t.Fatalf("Agent response = %#v, %v", agent, err)
 			}
 		}},
-		{path: "/api/v1/agents/" + testAgentReadID + "/config", check: func(t *testing.T, response *httptest.ResponseRecorder) {
-			var config apiTypes.AgentConfig
-			if err := json.Unmarshal(response.Body.Bytes(), &config); err != nil || config.MaxConcurrentTasks != 3 {
-				t.Fatalf("Agent config response = %#v, %v", config, err)
-			}
-		}},
+		{
+			path: "/api/v1/agents/" + testAgentReadID + "/config",
+			check: func(t *testing.T, response *httptest.ResponseRecorder) {
+				var config apiTypes.AgentConfig
+				if err := json.Unmarshal(response.Body.Bytes(), &config); err != nil || config.MaxConcurrentTasks != 3 {
+					t.Fatalf("Agent config response = %#v, %v", config, err)
+				}
+			},
+		},
 	}
 	for _, test := range tests {
 		test := test

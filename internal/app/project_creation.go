@@ -185,7 +185,10 @@ func (service *projectCreationService) createProjectOnce(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project creation replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Project creation replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}

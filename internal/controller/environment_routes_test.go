@@ -77,7 +77,13 @@ func TestEnvironmentRenameRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 	server.environmentRename(response, request)
 	if response.Code != http.StatusOK || stub.renameID != environmentRouteID ||
 		stub.renameInput.Name != "live" || stub.renameKey != "environment-rename-key-0001" {
-		t.Fatalf("rename response/call = %d, %q, %#v, %q", response.Code, stub.renameID, stub.renameInput, stub.renameKey)
+		t.Fatalf(
+			"rename response/call = %d, %q, %#v, %q",
+			response.Code,
+			stub.renameID,
+			stub.renameInput,
+			stub.renameKey,
+		)
 	}
 	body, _ := io.ReadAll(response.Result().Body)
 	if string(body) != `{"name":"live"}` {

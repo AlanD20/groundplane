@@ -30,7 +30,12 @@ func TestUpdateConfigCommitsBeforeRuntimeMaterializationAndCopiesState(t *testin
 		t.Fatalf("UpdateConfig() error = %v", err)
 	}
 	if !repository.updated || !runtime.materialized || runtime.beforeCommit {
-		t.Fatalf("update ordering = repository %t, runtime %t, before commit %t", repository.updated, runtime.materialized, runtime.beforeCommit)
+		t.Fatalf(
+			"update ordering = repository %t, runtime %t, before commit %t",
+			repository.updated,
+			runtime.materialized,
+			runtime.beforeCommit,
+		)
 	}
 	updated.Labels["zone"] = "changed"
 	desired.Labels["zone"] = "also-changed"
@@ -79,7 +84,14 @@ func (repository *configTestRepository) UpdateConfig(
 	repository.stored.Record.Config = cloneConfig(config)
 	return StoredRecord{Record: cloneRecord(repository.stored.Record), Revision: repository.stored.Revision}, nil
 }
-func (repository *configTestRepository) MarkReady(context.Context, string, uint64, int64, time.Time) (StoredRecord, error) {
+
+func (repository *configTestRepository) MarkReady(
+	context.Context,
+	string,
+	uint64,
+	int64,
+	time.Time,
+) (StoredRecord, error) {
 	return StoredRecord{}, nil
 }
 func (repository *configTestRepository) BeginDelete(context.Context, string, uint64, int64) (StoredRecord, error) {

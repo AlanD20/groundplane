@@ -20,7 +20,11 @@ import (
 
 type ProjectReader interface {
 	GetProject(context.Context, string) (hierarchy.Versioned[core.Project], error)
-	ListAllProjects(context.Context, hierarchy.ProjectFilter, hierarchy.PageRequest) (hierarchy.Page[core.Project], error)
+	ListAllProjects(
+		context.Context,
+		hierarchy.ProjectFilter,
+		hierarchy.PageRequest,
+	) (hierarchy.Page[core.Project], error)
 }
 
 type ProjectMutator interface {
@@ -71,7 +75,10 @@ func decodeProjectCreate(r *http.Request) (hierarchy.CreateProjectInput, error) 
 		return hierarchy.CreateProjectInput{}, projectCreateJSONError(err)
 	}
 	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
-		return hierarchy.CreateProjectInput{}, errs.New(errs.KindMalformedRequest, "Project creation body must be an object")
+		return hierarchy.CreateProjectInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Project creation body must be an object",
+		)
 	}
 	input := hierarchy.CreateProjectInput{}
 	seen := make(map[string]struct{}, 4)
@@ -82,7 +89,10 @@ func decodeProjectCreate(r *http.Request) (hierarchy.CreateProjectInput, error) 
 		}
 		key, ok := token.(string)
 		if !ok {
-			return hierarchy.CreateProjectInput{}, errs.New(errs.KindMalformedRequest, "Project creation member name is invalid")
+			return hierarchy.CreateProjectInput{}, errs.New(
+				errs.KindMalformedRequest,
+				"Project creation member name is invalid",
+			)
 		}
 		if _, duplicate := seen[key]; duplicate {
 			return hierarchy.CreateProjectInput{}, errs.New(

@@ -314,10 +314,22 @@ func TestTaskRepositoryTimesOutExactAgentGenerationAssignments(t *testing.T) {
 	createLifecycleTask(t, repository, first)
 	createLifecycleTask(t, repository, second)
 	agentID := ids.NewAt(ids.KindAgent, first.CreatedAt, 701)
-	if _, found, err := repository.ClaimNextTask(ctx, agentID, 9, second.CreatedAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := repository.ClaimNextTask(
+		ctx,
+		agentID,
+		9,
+		second.CreatedAt.Add(time.Second),
+	); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextTask(first) found/error = %v/%v", found, err)
 	}
-	if _, found, err := repository.ClaimNextTask(ctx, agentID, 9, second.CreatedAt.Add(2*time.Second)); err != nil || !found {
+	if _, found, err := repository.ClaimNextTask(
+		ctx,
+		agentID,
+		9,
+		second.CreatedAt.Add(2*time.Second),
+	); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextTask(second) found/error = %v/%v", found, err)
 	}
 

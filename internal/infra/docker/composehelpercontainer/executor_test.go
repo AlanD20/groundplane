@@ -83,7 +83,13 @@ func TestExecuteCleanupFailureTakesPrecedence(t *testing.T) {
 // through a mutable tag.
 func TestNewWithEngineRejectsUnpinnedImage(t *testing.T) {
 	engine := newFakeEngine(t, successfulResponse())
-	if _, err := NewWithEngine(engine, "registry.example/groundplane-agent:latest"); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := NewWithEngine(
+		engine,
+		"registry.example/groundplane-agent:latest",
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("NewWithEngine(tag) error = %v, want validation.failed", err)
 	}
 }

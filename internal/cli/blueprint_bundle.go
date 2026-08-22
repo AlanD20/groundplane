@@ -80,7 +80,10 @@ func buildBlueprintMultipart(
 			return nil, "", err
 		}
 		if _, exists := declared[normalized]; !exists {
-			return nil, "", errs.New(errs.KindValidationFailed, "Blueprint Compose source is not present in the bundle directory")
+			return nil, "", errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Compose source is not present in the bundle directory",
+			)
 		}
 		if _, exists := seenSources[normalized]; exists {
 			return nil, "", errs.New(errs.KindValidationFailed, "Blueprint Compose sources must be unique")
@@ -230,7 +233,10 @@ func parseBlueprintCLIInterpolation(values []string) (map[string]string, error) 
 		key, value, exists := strings.Cut(assignment, "=")
 		if !exists || !blueprintCLIInterpolationKey.MatchString(key) || !utf8.ValidString(value) ||
 			strings.ContainsRune(value, 0) {
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint interpolation must use NUL-free KEY=VALUE entries")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint interpolation must use NUL-free KEY=VALUE entries",
+			)
 		}
 		if _, duplicate := result[key]; duplicate {
 			return nil, errs.New(errs.KindValidationFailed, "Blueprint interpolation keys must be unique")

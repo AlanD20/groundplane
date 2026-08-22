@@ -39,7 +39,13 @@ func TestRequestFrameRoundTripsAndRejectsTrailingBytes(t *testing.T) {
 		t.Fatalf("decoded request differs: got=%#v want=%#v", decoded, request)
 	}
 	framed = append(framed, 0)
-	if _, err := ReadRequest(context.Background(), bytes.NewReader(framed)); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := ReadRequest(
+		context.Background(),
+		bytes.NewReader(framed),
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("ReadRequest(trailing) error = %v, want validation.failed", err)
 	}
 }

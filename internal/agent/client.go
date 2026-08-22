@@ -194,7 +194,10 @@ func (c *Client) Run(ctx context.Context) error {
 					return errs.New(errs.KindInternal, "agent: Controller sent invalid live configuration")
 				}
 				if c.pool.Capacity() != int(config.MaxConcurrentTasks) {
-					return errs.New(errs.KindStateConflict, "agent: live configuration arrived before the worker pool drained")
+					return errs.New(
+						errs.KindStateConflict,
+						"agent: live configuration arrived before the worker pool drained",
+					)
 				}
 				poolCancel()
 				<-workersDone

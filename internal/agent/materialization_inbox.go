@@ -138,10 +138,18 @@ func (inbox *materializationInbox) acceptHeader(
 		return inbox.failStep(step, "agent: materialization transfer output kind is invalid")
 	}
 	validated, err := entrymaterialization.NewHeader(entrymaterialization.HeaderSpec{
-		TaskID: transfer.GetTaskId(), StepID: transfer.GetStepId(), EnvironmentID: header.GetEnvironmentId(),
-		Generation: header.GetRenderGeneration(), Destination: header.GetDestination(), ServiceID: header.GetServiceId(),
-		OutputKind: outputKind, UID: header.GetUid(), GID: header.GetGid(),
-		Mode: entrymaterialization.Mode(header.GetMode()), Length: header.GetLength(), Digest: digest,
+		TaskID:        transfer.GetTaskId(),
+		StepID:        transfer.GetStepId(),
+		EnvironmentID: header.GetEnvironmentId(),
+		Generation:    header.GetRenderGeneration(),
+		Destination:   header.GetDestination(),
+		ServiceID:     header.GetServiceId(),
+		OutputKind:    outputKind,
+		UID:           header.GetUid(),
+		GID:           header.GetGid(),
+		Mode:          entrymaterialization.Mode(header.GetMode()),
+		Length:        header.GetLength(),
+		Digest:        digest,
 	})
 	if err != nil || header.GetRenderGeneration() != task.renderGeneration {
 		return inbox.failStep(step, "agent: materialization transfer header policy is invalid")

@@ -50,7 +50,10 @@ func (s *Server) environmentRename(w http.ResponseWriter, r *http.Request) {
 
 func decodeEnvironmentRename(r *http.Request) (hierarchy.RenameEnvironmentInput, error) {
 	if len(r.URL.Query()) != 0 {
-		return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment rename query is invalid")
+		return hierarchy.RenameEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment rename query is invalid",
+		)
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -58,7 +61,10 @@ func decodeEnvironmentRename(r *http.Request) (hierarchy.RenameEnvironmentInput,
 	}
 	defer clear(body)
 	if !utf8.Valid(body) {
-		return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment rename body is not valid UTF-8")
+		return hierarchy.RenameEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment rename body is not valid UTF-8",
+		)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	opening, err := decoder.Token()
@@ -66,7 +72,10 @@ func decodeEnvironmentRename(r *http.Request) (hierarchy.RenameEnvironmentInput,
 		return hierarchy.RenameEnvironmentInput{}, projectCreateJSONError(err)
 	}
 	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
-		return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment rename body must be an object")
+		return hierarchy.RenameEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment rename body must be an object",
+		)
 	}
 	input := hierarchy.RenameEnvironmentInput{}
 	seen := false
@@ -77,19 +86,31 @@ func decodeEnvironmentRename(r *http.Request) (hierarchy.RenameEnvironmentInput,
 		}
 		member, ok := token.(string)
 		if !ok {
-			return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment rename member name is invalid")
+			return hierarchy.RenameEnvironmentInput{}, errs.New(
+				errs.KindMalformedRequest,
+				"Environment rename member name is invalid",
+			)
 		}
 		if member != "name" {
-			return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment rename body contains an unknown member")
+			return hierarchy.RenameEnvironmentInput{}, errs.New(
+				errs.KindMalformedRequest,
+				"Environment rename body contains an unknown member",
+			)
 		}
 		if seen {
-			return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment rename body contains a duplicate member")
+			return hierarchy.RenameEnvironmentInput{}, errs.New(
+				errs.KindMalformedRequest,
+				"Environment rename body contains a duplicate member",
+			)
 		}
 		seen = true
 		if err := decoder.Decode(&input.Name); err != nil {
 			var typeError *json.UnmarshalTypeError
 			if errors.As(err, &typeError) {
-				return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindValidationFailed, "Environment name must be a string")
+				return hierarchy.RenameEnvironmentInput{}, errs.New(
+					errs.KindValidationFailed,
+					"Environment name must be a string",
+				)
 			}
 			return hierarchy.RenameEnvironmentInput{}, projectCreateJSONError(err)
 		}
@@ -99,7 +120,10 @@ func decodeEnvironmentRename(r *http.Request) (hierarchy.RenameEnvironmentInput,
 		return hierarchy.RenameEnvironmentInput{}, projectCreateJSONError(err)
 	}
 	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
-		return hierarchy.RenameEnvironmentInput{}, errs.New(errs.KindMalformedRequest, "Environment rename body is malformed")
+		return hierarchy.RenameEnvironmentInput{}, errs.New(
+			errs.KindMalformedRequest,
+			"Environment rename body is malformed",
+		)
 	}
 	if _, err := decoder.Token(); err != io.EOF {
 		if err == nil {

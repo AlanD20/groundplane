@@ -28,14 +28,20 @@ func TestEnvironmentNameTargetResolvesThroughFullScopeChain(t *testing.T) {
 				query.Get("tenant") != tenantID || query.Get("kind") != "tenant" {
 				t.Errorf("Project resolution request = %s %s", r.Method, r.URL.String())
 			}
-			_, _ = io.WriteString(w, `{"items":[{"id":"`+projectID+`","tenant_id":"`+tenantID+`","slug":"console","name":"Console","description":"","kind":"tenant"}]}`)
+			_, _ = io.WriteString(
+				w,
+				`{"items":[{"id":"`+projectID+`","tenant_id":"`+tenantID+`","slug":"console","name":"Console","description":"","kind":"tenant"}]}`,
+			)
 		case 3:
 			query := r.URL.Query()
 			if r.Method != http.MethodGet || r.URL.Path != "/api/v1/environments" ||
 				query.Get("project") != projectID || query.Get("limit") != "200" {
 				t.Errorf("Environment resolution request = %s %s", r.Method, r.URL.String())
 			}
-			_, _ = io.WriteString(w, `{"items":[{"id":"`+environmentID+`","project_id":"`+projectID+`","name":"production","volume_dir":"/var/lib/groundplane/vol/x","provisioning_state":"ready","create_task_id":null}]}`)
+			_, _ = io.WriteString(
+				w,
+				`{"items":[{"id":"`+environmentID+`","project_id":"`+projectID+`","name":"production","volume_dir":"/var/lib/groundplane/vol/x","provisioning_state":"ready","create_task_id":null}]}`,
+			)
 		case 4:
 			body, _ := io.ReadAll(r.Body)
 			if r.Method != http.MethodPost || r.URL.Path != "/api/v1/environments/"+environmentID+"/rename" ||

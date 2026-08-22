@@ -59,7 +59,13 @@ func TestEnvironmentDirectoryCreateAuthorizationRejectsDifferentTrustedRoot(t *t
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
-	if err := AuthorizeVolumeDirectories(sealed, "/var/lib/groundplane/vol"); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if err := AuthorizeVolumeDirectories(
+		sealed,
+		"/var/lib/groundplane/vol",
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("AuthorizeVolumeDirectories() error = %v, want validation.failed", err)
 	}
 }

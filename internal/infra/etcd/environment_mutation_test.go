@@ -65,7 +65,14 @@ func TestHierarchyEnvironmentIdempotentRenameMovesOnlyScopedName(t *testing.T) {
 		resolved.Record.ProvisioningState != record.ProvisioningState {
 		t.Fatalf("ResolveEnvironment(new name) = %#v, %v", resolved.Record, err)
 	}
-	if _, err := repository.ResolveEnvironment(ctx, project.ID, "production"); !isKind(err, errs.KindEnvironmentNotFound) {
+	if _, err := repository.ResolveEnvironment(
+		ctx,
+		project.ID,
+		"production",
+	); !isKind(
+		err,
+		errs.KindEnvironmentNotFound,
+	) {
 		t.Fatalf("ResolveEnvironment(old name) error = %v", err)
 	}
 }
@@ -79,9 +86,16 @@ func TestHierarchyEnvironmentMutationRejectsProvisioningChanges(t *testing.T) {
 	}
 	createdAt := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
 	record := EnvironmentRecord{
-		ID: hierarchyTestID(ids.KindEnvironment, 605), ProjectID: hierarchyTestID(ids.KindProject, 606),
-		Name:              "production",
-		VolumeDir:         environmentpath.DefaultVolumeRoot + "/platform/" + hierarchyTestID(ids.KindProject, 606) + "/" + hierarchyTestID(ids.KindEnvironment, 605),
+		ID:        hierarchyTestID(ids.KindEnvironment, 605),
+		ProjectID: hierarchyTestID(ids.KindProject, 606),
+		Name:      "production",
+		VolumeDir: environmentpath.DefaultVolumeRoot + "/platform/" + hierarchyTestID(
+			ids.KindProject,
+			606,
+		) + "/" + hierarchyTestID(
+			ids.KindEnvironment,
+			605,
+		),
 		ProvisioningState: EnvironmentProvisioningProvisioning,
 		CreateTaskID:      hierarchyTestID(ids.KindTask, 607),
 		CreatedAt:         createdAt,

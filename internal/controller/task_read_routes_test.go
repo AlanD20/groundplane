@@ -34,7 +34,10 @@ func (queries *fakeTaskQueries) ListTaskEvents(context.Context, string, int64) (
 	return queries.events, nil
 }
 
-func (queries *fakeTaskQueries) ListTasks(_ context.Context, request etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error) {
+func (queries *fakeTaskQueries) ListTasks(
+	_ context.Context,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.TaskRecord], error) {
 	queries.request = request
 	return queries.page, nil
 }

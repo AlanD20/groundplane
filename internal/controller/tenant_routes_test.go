@@ -38,7 +38,12 @@ func TestTenantCreateRoutePreservesExactMutationResponse(t *testing.T) {
 	server.Mux.ServeHTTP(response, request)
 	if response.Code != want.Status || response.Header().Get("Content-Type") != want.ContentKind ||
 		!bytes.Equal(response.Body.Bytes(), want.Body) {
-		t.Fatalf("POST /tenants = %d %q %s", response.Code, response.Header().Get("Content-Type"), response.Body.Bytes())
+		t.Fatalf(
+			"POST /tenants = %d %q %s",
+			response.Code,
+			response.Header().Get("Content-Type"),
+			response.Body.Bytes(),
+		)
 	}
 	if mutator.input.Slug != "acme" || mutator.input.Name == nil || *mutator.input.Name != "Acme" ||
 		mutator.input.Description != "Production" || mutator.key != "tenant-create-key-0001" {
@@ -57,7 +62,11 @@ func TestTenantCreateRouteRejectsInvalidBodies(t *testing.T) {
 		{name: "duplicate", body: []byte(`{"slug":"acme","slug":"other"}`), status: http.StatusBadRequest},
 		{name: "unknown", body: []byte(`{"slug":"acme","owner":"platform"}`), status: http.StatusBadRequest},
 		{name: "unknown non-string", body: []byte(`{"slug":"acme","owner":1}`), status: http.StatusBadRequest},
-		{name: "invalid utf8", body: []byte{'{', '"', 's', 'l', 'u', 'g', '"', ':', '"', 0xff, '"', '}'}, status: http.StatusBadRequest},
+		{
+			name:   "invalid utf8",
+			body:   []byte{'{', '"', 's', 'l', 'u', 'g', '"', ':', '"', 0xff, '"', '}'},
+			status: http.StatusBadRequest,
+		},
 		{name: "non-string", body: []byte(`{"slug":42}`), status: http.StatusUnprocessableEntity},
 		{name: "not object", body: []byte(`[]`), status: http.StatusBadRequest},
 		{name: "trailing", body: []byte(`{"slug":"acme"}{}`), status: http.StatusBadRequest},
@@ -93,17 +102,30 @@ func TestTenantChangeRoutesPreserveExactResponses(t *testing.T) {
 	changer := &fakeTenantChanger{response: want}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{TenantChanges: changer})
 
-	edit := httptest.NewRequest(http.MethodPatch, "/api/v1/tenants/"+testTenantRouteID, bytes.NewBufferString(`{"description":"Updated"}`))
+	edit := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/tenants/"+testTenantRouteID,
+		bytes.NewBufferString(`{"description":"Updated"}`),
+	)
 	edit.Header.Set("Content-Type", "application/json")
 	edit.Header.Set(idempotencyKeyHeader, "tenant-edit-key-0001")
 	editResponse := httptest.NewRecorder()
 	server.Mux.ServeHTTP(editResponse, edit)
 	if editResponse.Code != http.StatusOK || !bytes.Equal(editResponse.Body.Bytes(), want.Body) ||
 		changer.edit.Description == nil || *changer.edit.Description != "Updated" || changer.id != testTenantRouteID {
-		t.Fatalf("PATCH /tenants response/input = %d %s %#v", editResponse.Code, editResponse.Body.Bytes(), changer.edit)
+		t.Fatalf(
+			"PATCH /tenants response/input = %d %s %#v",
+			editResponse.Code,
+			editResponse.Body.Bytes(),
+			changer.edit,
+		)
 	}
 
-	rename := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/"+testTenantRouteID+"/rename", bytes.NewBufferString(`{"slug":"acme-inc"}`))
+	rename := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/tenants/"+testTenantRouteID+"/rename",
+		bytes.NewBufferString(`{"slug":"acme-inc"}`),
+	)
 	rename.Header.Set("Content-Type", "application/json")
 	rename.Header.Set(idempotencyKeyHeader, "tenant-rename-key-0001")
 	renameResponse := httptest.NewRecorder()

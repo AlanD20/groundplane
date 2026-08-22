@@ -458,7 +458,11 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid operation id")
 	}
 	if assignment.RetryOf != "" {
-		if err := ids.Validate(ids.KindTask, assignment.RetryOf); err != nil || assignment.RetryOf == assignment.TaskID {
+		if err := ids.Validate(
+			ids.KindTask,
+			assignment.RetryOf,
+		); err != nil ||
+			assignment.RetryOf == assignment.TaskID {
 			return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid retry identity")
 		}
 	}

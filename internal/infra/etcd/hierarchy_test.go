@@ -81,7 +81,14 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 		renamedProject.Record.Name != "Console" || renamedProject.Record.Kind != ProjectKindTenant {
 		t.Fatalf("renamed project changed identity: %+v", renamedProject.Record)
 	}
-	if _, err := repository.ResolveTenantProject(ctx, tenantID, "console"); !errors.Is(err, errs.New(errs.KindProjectNotFound, "")) {
+	if _, err := repository.ResolveTenantProject(
+		ctx,
+		tenantID,
+		"console",
+	); !errors.Is(
+		err,
+		errs.New(errs.KindProjectNotFound, ""),
+	) {
 		t.Fatalf("ResolveTenantProject(old slug) error = %v, want project.not_found", err)
 	}
 	afterProjectEnvironment, err := repository.GetEnvironment(ctx, environmentID)
@@ -118,7 +125,15 @@ func TestHierarchyScopedSlugUniquenessIsAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTenant(B): %v", err)
 	}
-	if _, err := repository.RenameTenant(ctx, tenantB, tenantBCurrent.Revision, "a"); !errors.Is(err, errs.New(errs.KindSlugConflict, "")) {
+	if _, err := repository.RenameTenant(
+		ctx,
+		tenantB,
+		tenantBCurrent.Revision,
+		"a",
+	); !errors.Is(
+		err,
+		errs.New(errs.KindSlugConflict, ""),
+	) {
 		t.Fatalf("RenameTenant(collision) error = %v, want slug.conflict", err)
 	}
 	if current, err := repository.ResolveTenant(ctx, "b"); err != nil || current.Record.ID != tenantB {
@@ -318,7 +333,13 @@ func TestHierarchyRenameCannotCommitAfterDeletionBegins(t *testing.T) {
 			if getErr != nil || current.Record.Slug != "before" || current.Record.Name != "Display Name" {
 				t.Fatalf("tenant after blocked rename = %+v, %v", current.Record, getErr)
 			}
-			if _, resolveErr := repository.ResolveTenant(context.Background(), "after"); !errors.Is(resolveErr, errs.New(errs.KindTenantNotFound, "")) {
+			if _, resolveErr := repository.ResolveTenant(
+				context.Background(),
+				"after",
+			); !errors.Is(
+				resolveErr,
+				errs.New(errs.KindTenantNotFound, ""),
+			) {
 				t.Fatalf("ResolveTenant(after) error = %v, want tenant.not_found", resolveErr)
 			}
 		})

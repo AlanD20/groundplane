@@ -11,13 +11,24 @@ type environmentRemovalPlanReader struct {
 	environment etcd.Versioned[etcd.EnvironmentRecord]
 }
 
-func (reader environmentRemovalPlanReader) GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error) {
+func (reader environmentRemovalPlanReader) GetTenant(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.TenantRecord], error) {
 	return etcd.Versioned[etcd.TenantRecord]{}, nil
 }
-func (reader environmentRemovalPlanReader) GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error) {
+
+func (reader environmentRemovalPlanReader) GetProject(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.ProjectRecord], error) {
 	return etcd.Versioned[etcd.ProjectRecord]{}, nil
 }
-func (reader environmentRemovalPlanReader) GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+
+func (reader environmentRemovalPlanReader) GetEnvironment(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.EnvironmentRecord], error) {
 	return reader.environment, nil
 }
 func (reader environmentRemovalPlanReader) GetEnvironmentBlueprintRevision(
