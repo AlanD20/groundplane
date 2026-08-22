@@ -64,6 +64,13 @@ type StoredRecord struct {
 type Repository interface {
 	CreateSingleton(ctx context.Context, record Record) (StoredRecord, error)
 	GetSingleton(ctx context.Context) (StoredRecord, error)
+	UpdateConfig(
+		ctx context.Context,
+		id string,
+		generation uint64,
+		revision int64,
+		config Config,
+	) (StoredRecord, error)
 	MarkReady(ctx context.Context, id string, generation uint64, revision int64) (StoredRecord, error)
 	BeginDelete(ctx context.Context, id string, generation uint64, revision int64) (StoredRecord, error)
 	Delete(ctx context.Context, id string, generation uint64, revision int64) error

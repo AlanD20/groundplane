@@ -178,6 +178,64 @@ func (manager *Manager) Reconcile(ctx context.Context) error {
 	}
 }
 
+// UpdateConfig replaces the complete Controller-owned runtime config. Desired
+// state commits before host materialization; a failed materialization is safely
+// retried by this idempotent operation or the normal reconciliation loop.
+func (manager *Manager) UpdateConfig(ctx context.Context, agentID string, config Config) (Config, error) {
+	if err := manager.enter(ctx); err != nil {
+		return Config{}, err
+	}
+	defer manager.leave()
+	if err := validateAgentID(agentID); err != nil {
+		return Config{}, err
+	}
+	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
+		return Config{}, errs.New(errs.KindValidationFailed, "agent runtime config limits must be positive")
+	}
+	if !validLabels(config.Labels) {
+		return Config{}, errs.New(errs.KindValidationFailed, "agent labels must contain valid NUL-free UTF-8")
+	}
+	stored, err := manager.repository.GetSingleton(ctx)
+	if err != nil {
+		return Config{}, safePortError(ctx, err, "local agent durable record lookup failed")
+	}
+	if err := validateStored(stored); err != nil {
+		return Config{}, err
+	}
+	if stored.Record.ID != agentID {
+		return Config{}, agentNotFound(agentID)
+	}
+	if stored.Record.Phase == PhaseDeleting {
+		return Config{}, errs.New(errs.KindStateConflict, "deleting local agent config cannot be changed")
+	}
+	updated, err := manager.repository.UpdateConfig(
+		ctx,
+		agentID,
+		stored.Record.Generation,
+		stored.Revision,
+		cloneConfig(config),
+	)
+	if err != nil {
+		return Config{}, safePortError(ctx, err, "local agent durable config replacement failed")
+	}
+	if err := validateStored(updated); err != nil {
+		return Config{}, err
+	}
+	if updated.Record.ID != agentID || updated.Record.Generation != stored.Record.Generation ||
+		updated.Record.Phase == PhaseDeleting {
+		return Config{}, errs.New(errs.KindInternal, "local agent repository replaced config on the wrong lifecycle record")
+	}
+	if err := manager.runtime.Materialize(ctx, RuntimeMaterial{
+		AgentID:        updated.Record.ID,
+		Generation:     updated.Record.Generation,
+		Config:         cloneConfig(updated.Record.Config),
+		EncryptedToken: append([]byte(nil), updated.Record.Credential.EncryptedToken...),
+	}); err != nil {
+		return Config{}, safePortError(ctx, err, "local agent runtime materialization failed")
+	}
+	return cloneConfig(updated.Record.Config), nil
+}
+
 // ListHealth returns the singleton durable Agent with matching live-session
 // telemetry, or an empty list when no Agent has been enrolled.
 func (manager *Manager) ListHealth(ctx context.Context) ([]Health, error) {

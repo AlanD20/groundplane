@@ -201,6 +201,62 @@ func (repository *LocalAgentRepository) MarkReady(
 	)
 }
 
+// UpdateConfig replaces only the generation-bound config singleton. The
+// primary record revision fences lifecycle changes while the config revision
+// serializes concurrent replacements. Equal desired state is idempotent.
+func (repository *LocalAgentRepository) UpdateConfig(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	revision int64,
+	config LocalAgentConfig,
+) (Versioned[LocalAgentRecord], error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	if err := validateLocalAgentConfig(config); err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	evidence, err := repository.readSingleton(ctx)
+	if err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	if evidence.record.ID != agentID || evidence.record.Generation != generation ||
+		evidence.primaryRevision != revision {
+		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent generation or revision changed")
+	}
+	if evidence.record.Phase == LocalAgentPhaseDeleting {
+		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "deleting local Agent config cannot be changed")
+	}
+	if equalLocalAgentConfig(evidence.record.Config, config) {
+		return Versioned[LocalAgentRecord]{
+			Record: cloneLocalAgentRecord(evidence.record), Revision: evidence.primaryRevision,
+			ReadRevision: evidence.readRevision,
+		}, nil
+	}
+	replacement := cloneLocalAgentRecord(evidence.record)
+	replacement.Config = cloneLocalAgentConfig(config)
+	configValue, err := encodeLocalAgentConfig(replacement)
+	if err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	defer clear(configValue)
+	result, err := repository.store.Transact(ctx, []Condition{
+		{Key: localAgentPrimaryKey(agentID), ModRevision: evidence.primary.ModRevision},
+		{Key: localAgentConfigKey(agentID), ModRevision: evidence.config.ModRevision},
+	}, []Mutation{{Type: MutationPut, Key: localAgentConfigKey(agentID), Value: configValue}})
+	if err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	clearKeyValues(result.FailureReads)
+	if !result.Succeeded {
+		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent config changed")
+	}
+	return Versioned[LocalAgentRecord]{
+		Record: replacement, Revision: evidence.primaryRevision, ReadRevision: result.Revision,
+	}, nil
+}
+
 func (repository *LocalAgentRepository) BeginDelete(
 	ctx context.Context,
 	agentID string,
@@ -521,12 +577,7 @@ func encodeLocalAgentValues(record LocalAgentRecord) ([]byte, []byte, []byte, []
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	config, err := encodeEnvelope("agent_config", localAgentConfigData{
-		AgentID: record.ID, Generation: record.Generation,
-		PullIntervalSeconds: record.Config.PullIntervalSeconds,
-		MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
-		Labels:              cloneStringMap(record.Config.Labels),
-	})
+	config, err := encodeLocalAgentConfig(record)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -544,6 +595,15 @@ func encodeLocalAgentValues(record LocalAgentRecord) ([]byte, []byte, []byte, []
 		return nil, nil, nil, nil, err
 	}
 	return primary, config, token, reference, nil
+}
+
+func encodeLocalAgentConfig(record LocalAgentRecord) ([]byte, error) {
+	return encodeEnvelope("agent_config", localAgentConfigData{
+		AgentID: record.ID, Generation: record.Generation,
+		PullIntervalSeconds: record.Config.PullIntervalSeconds,
+		MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
+		Labels:              cloneStringMap(record.Config.Labels),
+	})
 }
 
 func encodeLocalAgentPrimary(record LocalAgentRecord) ([]byte, error) {
@@ -737,6 +797,19 @@ func cloneLocalAgentRecord(record LocalAgentRecord) LocalAgentRecord {
 func cloneLocalAgentConfig(config LocalAgentConfig) LocalAgentConfig {
 	config.Labels = cloneStringMap(config.Labels)
 	return config
+}
+
+func equalLocalAgentConfig(left LocalAgentConfig, right LocalAgentConfig) bool {
+	if left.PullIntervalSeconds != right.PullIntervalSeconds ||
+		left.MaxConcurrentTasks != right.MaxConcurrentTasks || len(left.Labels) != len(right.Labels) {
+		return false
+	}
+	for key, value := range left.Labels {
+		if right.Labels[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func agentCredentialNotFound() error {

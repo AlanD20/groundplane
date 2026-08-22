@@ -118,6 +118,18 @@ func (repository *fakeLocalAgentRecords) GetSingleton(
 	return repository.get, nil
 }
 
+func (repository *fakeLocalAgentRecords) UpdateConfig(
+	_ context.Context,
+	_ string,
+	_ uint64,
+	_ int64,
+	config etcd.LocalAgentConfig,
+) (etcd.Versioned[etcd.LocalAgentRecord], error) {
+	record := repository.created
+	record.Config = config
+	return etcd.Versioned[etcd.LocalAgentRecord]{Record: record, Revision: 11}, nil
+}
+
 func (repository *fakeLocalAgentRecords) MarkReady(
 	_ context.Context,
 	_ string,

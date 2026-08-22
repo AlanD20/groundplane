@@ -11,6 +11,13 @@ import (
 type localAgentRecords interface {
 	CreateSingleton(context.Context, etcd.LocalAgentRecord) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	UpdateConfig(
+		context.Context,
+		string,
+		uint64,
+		int64,
+		etcd.LocalAgentConfig,
+	) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	MarkReady(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	BeginDelete(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	Delete(context.Context, string, uint64, int64) error
@@ -49,6 +56,24 @@ func (adapter *localAgentRepositoryAdapter) GetSingleton(
 	ctx context.Context,
 ) (localagent.StoredRecord, error) {
 	stored, err := adapter.repository.GetSingleton(ctx)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) UpdateConfig(
+	ctx context.Context,
+	id string,
+	generation uint64,
+	revision int64,
+	config localagent.Config,
+) (localagent.StoredRecord, error) {
+	stored, err := adapter.repository.UpdateConfig(ctx, id, generation, revision, etcd.LocalAgentConfig{
+		PullIntervalSeconds: config.PullIntervalSeconds,
+		MaxConcurrentTasks:  config.MaxConcurrentTasks,
+		Labels:              cloneLocalAgentLabels(config.Labels),
+	})
 	if err != nil {
 		return localagent.StoredRecord{}, err
 	}
