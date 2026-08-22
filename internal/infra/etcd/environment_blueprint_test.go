@@ -28,11 +28,12 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 
 	desiredProjection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+	zoneChanges := environmentBlueprintTestZoneChanges(t, repository, desiredProjection)
 	serviceChanges := environmentBlueprintTestServiceChanges(t, repository, desiredProjection)
 	routeChanges := environmentBlueprintTestRouteChanges(t, repository, desiredProjection)
 	result, err := repository.ApplyEnvironmentBlueprintWithTask(
 		ctx, project, environment, 0, revision,
-		desiredProjection, serviceChanges, routeChanges, task, marker,
+		desiredProjection, zoneChanges, serviceChanges, routeChanges, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("ApplyEnvironmentBlueprintWithTask() error = %v", err)
@@ -54,6 +55,7 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 	if head.Revision != stored.Revision || head.ReadRevision != stored.ReadRevision {
 		t.Fatalf("head and revision were not published at one MVCC revision: %#v / %#v", head, stored)
 	}
+	assertEnvironmentBlueprintZoneRevision(t, store, desiredProjection, head.Revision)
 	serviceRepository, err := newServiceRepository(store)
 	if err != nil {
 		t.Fatalf("newServiceRepository() error = %v", err)
@@ -93,10 +95,12 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	firstTask := environmentBlueprintTestTask(environment.Record.ID, 30)
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {old: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
+	firstZoneChanges := environmentBlueprintTestZoneChanges(t, repository, firstProjection)
 	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
 	firstRouteChanges := environmentBlueprintTestRouteChanges(t, repository, firstProjection)
 	firstResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, 0, first, firstProjection, firstServiceChanges, firstRouteChanges, firstTask,
+		ctx, project, environment, 0, first, firstProjection, firstZoneChanges, firstServiceChanges,
+		firstRouteChanges, firstTask,
 		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -116,11 +120,12 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	secondProjection := firstProjection
 	secondProjection.BlueprintRevisionID = secondTask.ID
 	secondProjection.RenderGeneration = 2
+	secondZoneChanges := environmentBlueprintTestZoneChanges(t, repository, secondProjection)
 	secondServiceChanges := environmentBlueprintTestServiceChanges(t, repository, secondProjection)
 	secondRouteChanges := environmentBlueprintTestRouteChanges(t, repository, secondProjection)
 	secondResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, secondProjection, secondServiceChanges, secondRouteChanges,
-		secondTask,
+		ctx, project, environment, head.Revision, second, secondProjection, secondZoneChanges, secondServiceChanges,
+		secondRouteChanges, secondTask,
 		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -153,11 +158,12 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	firstTask := environmentBlueprintTestTask(environment.Record.ID, 50)
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {api: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
+	firstZoneChanges := environmentBlueprintTestZoneChanges(t, repository, firstProjection)
 	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
 	firstRouteChanges := environmentBlueprintTestRouteChanges(t, repository, firstProjection)
 	result, err := repository.ApplyEnvironmentBlueprintWithTask(
 		ctx, project, environment, 0, first,
-		firstProjection, firstServiceChanges, firstRouteChanges, firstTask,
+		firstProjection, firstZoneChanges, firstServiceChanges, firstRouteChanges, firstTask,
 		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -175,8 +181,9 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	second := environmentBlueprintTestRevision(environment.Record.ID, secondTask, "services: {}\n")
 	omitted := environmentBlueprintTestProjection(environment.Record.ID, secondTask, 2)
 	omitted.Services = nil
+	omittedZoneChanges := environmentBlueprintTestZoneChanges(t, repository, omitted)
 	_, err = repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, omitted, nil, nil, secondTask,
+		ctx, project, environment, head.Revision, second, omitted, omittedZoneChanges, nil, nil, secondTask,
 		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
 	)
 	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {

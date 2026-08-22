@@ -37,6 +37,7 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
 	ApplyEnvironmentBlueprintWithTask(
@@ -46,6 +47,7 @@ type environmentBlueprintRepository interface {
 		int64,
 		etcd.EnvironmentBlueprintRevision,
 		etcd.EnvironmentComposeProjection,
+		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
 		etcd.TaskRecord,
@@ -159,23 +161,34 @@ type environmentBlueprintService struct {
 
 type durableEnvironmentBlueprintRepository struct {
 	*etcd.HierarchyRepository
+	zones    *etcd.ZoneRepository
 	services *etcd.ServiceRepository
 	routes   *etcd.RouteRepository
 }
 
 func newDurableEnvironmentBlueprintRepository(
 	hierarchy *etcd.HierarchyRepository,
+	zones *etcd.ZoneRepository,
 	services *etcd.ServiceRepository,
 	routes *etcd.RouteRepository,
 ) (*durableEnvironmentBlueprintRepository, error) {
-	if hierarchy == nil || services == nil || routes == nil {
+	if hierarchy == nil || zones == nil || services == nil || routes == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint repositories are not configured")
 	}
 	return &durableEnvironmentBlueprintRepository{
 		HierarchyRepository: hierarchy,
+		zones:               zones,
 		services:            services,
 		routes:              routes,
 	}, nil
+}
+
+func (repository *durableEnvironmentBlueprintRepository) ListZones(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.ZoneRecord], error) {
+	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
 func (repository *durableEnvironmentBlueprintRepository) ListServices(
@@ -323,6 +336,18 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			"Blueprint omits an existing owned resource; remove it explicitly before apply",
 		)
 	}
+	desiredZones, err := controller.ProjectZoneProjection(parsed.Project, changes.Current, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	currentZones, err := service.listBlueprintZones(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	zoneChanges, err := prepareEnvironmentBlueprintZoneChanges(environmentID, desiredZones, currentZones)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	desiredServices, err := controller.ProjectServiceProjection(parsed.Project, changes.Current)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -448,6 +473,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		expectedHeadRevision,
 		revision,
 		projection,
+		zoneChanges,
 		serviceChanges,
 		routeChanges,
 		task,
@@ -472,6 +498,76 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint resolution is invalid")
 	}
+}
+
+func (service *environmentBlueprintService) listBlueprintZones(
+	ctx context.Context,
+	environmentID string,
+) ([]etcd.Versioned[etcd.ZoneRecord], error) {
+	zones := []etcd.Versioned[etcd.ZoneRecord](nil)
+	cursor := ""
+	for {
+		page, err := service.repository.ListZones(
+			ctx,
+			environmentID,
+			etcd.PageRequest{Limit: 200, Cursor: cursor},
+		)
+		if err != nil {
+			return nil, err
+		}
+		zones = append(zones, page.Items...)
+		if page.NextCursor == "" {
+			return zones, nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func prepareEnvironmentBlueprintZoneChanges(
+	environmentID string,
+	desired []core.Zone,
+	current []etcd.Versioned[etcd.ZoneRecord],
+) ([]etcd.EnvironmentBlueprintZoneChange, error) {
+	currentByID := make(map[string]etcd.Versioned[etcd.ZoneRecord], len(current))
+	for _, zone := range current {
+		if zone.Record.EnvironmentID != environmentID || zone.Record.Desired.ID == "" {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Zone state is inconsistent")
+		}
+		if _, duplicate := currentByID[zone.Record.Desired.ID]; duplicate {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Zone state repeats an id")
+		}
+		currentByID[zone.Record.Desired.ID] = zone
+	}
+	changes := make([]etcd.EnvironmentBlueprintZoneChange, 0, len(desired))
+	for _, next := range desired {
+		if existing, found := currentByID[next.ID]; found {
+			if existing.Record.Desired != next {
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint changed an immutable Zone; add a new Zone and move Services explicitly",
+				)
+			}
+			currentCopy := existing
+			changes = append(changes, etcd.EnvironmentBlueprintZoneChange{
+				Current: &currentCopy,
+				Record:  existing.Record,
+			})
+			delete(currentByID, next.ID)
+			continue
+		}
+		record, err := etcd.NewZoneRecord(environmentID, next)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, etcd.EnvironmentBlueprintZoneChange{Record: record})
+	}
+	if len(currentByID) != 0 {
+		return nil, errs.New(
+			errs.KindResourceInUse,
+			"Blueprint omits an existing Zone; remove it explicitly after moving Services",
+		)
+	}
+	return changes, nil
 }
 
 func (service *environmentBlueprintService) listBlueprintServices(

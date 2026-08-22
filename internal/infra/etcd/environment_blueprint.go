@@ -49,6 +49,13 @@ type EnvironmentBlueprintHead struct {
 	RevisionID    string
 }
 
+// EnvironmentBlueprintZoneChange is one immutable existing Zone fence or one
+// new Zone and subnet reservation committed with the Blueprint head.
+type EnvironmentBlueprintZoneChange struct {
+	Current *Versioned[ZoneRecord]
+	Record  ZoneRecord
+}
+
 // EnvironmentBlueprintServiceChange is one desired-only Service replacement
 // committed with the Blueprint head. Current is nil only when the Blueprint
 // first introduces the stable Service id.
@@ -215,6 +222,7 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	expectedHeadRevision int64,
 	revision EnvironmentBlueprintRevision,
 	projection EnvironmentComposeProjection,
+	zoneChanges []EnvironmentBlueprintZoneChange,
 	serviceChanges []EnvironmentBlueprintServiceChange,
 	routeChanges []EnvironmentBlueprintRouteChange,
 	task TaskRecord,
@@ -265,6 +273,16 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	preparedZones, err := repository.prepareEnvironmentBlueprintZoneChanges(
+		ctx,
+		environment,
+		projection,
+		zoneChanges,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearPreparedEnvironmentBlueprintZones(preparedZones)
 	preparedServices, err := repository.prepareEnvironmentBlueprintServiceChanges(
 		ctx,
 		environment,
@@ -379,6 +397,51 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			Value: projectionValue,
 		},
 	)
+	for _, zone := range preparedZones.changes {
+		primaryCondition := Condition{Key: zoneKey(zone.change.Record.Desired.ID)}
+		nameCondition := Condition{
+			Key: zoneNameKey(zone.change.Record.EnvironmentID, zone.change.Record.Desired.Name),
+		}
+		ownerCondition := Condition{
+			Key: zoneOwnerKey(zone.change.Record.EnvironmentID, zone.change.Record.Desired.ID),
+		}
+		if zone.change.Current != nil {
+			primaryCondition.ModRevision = zone.change.Current.Revision
+			nameCondition.ModRevision = zone.nameRevision
+			ownerCondition.ModRevision = zone.ownerRevision
+		}
+		conditions = append(
+			conditions,
+			primaryCondition,
+			nameCondition,
+			ownerCondition,
+			Condition{Key: deletionTombstoneKey("zone", zone.change.Record.Desired.ID)},
+		)
+		if zone.change.Current == nil {
+			mutations = append(
+				mutations,
+				Mutation{Type: MutationPut, Key: zoneKey(zone.change.Record.Desired.ID), Value: zone.value},
+				Mutation{
+					Type:  MutationPut,
+					Key:   zoneNameKey(zone.change.Record.EnvironmentID, zone.change.Record.Desired.Name),
+					Value: []byte(zone.change.Record.Desired.ID),
+				},
+				Mutation{
+					Type:  MutationPut,
+					Key:   zoneOwnerKey(zone.change.Record.EnvironmentID, zone.change.Record.Desired.ID),
+					Value: []byte(zone.change.Record.Desired.ID),
+				},
+			)
+		}
+	}
+	conditions = append(conditions, Condition{
+		Key: zonePoolRegistryKey(environment.Record.ID), ModRevision: preparedZones.registry.Revision,
+	})
+	if len(preparedZones.registryValue) != 0 {
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: zonePoolRegistryKey(environment.Record.ID), Value: preparedZones.registryValue,
+		})
+	}
 	for _, service := range preparedServices {
 		primaryCondition := Condition{Key: serviceKey(service.change.Record.Desired.ID)}
 		nameCondition := Condition{
@@ -467,8 +530,8 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		conditions,
 		mutations,
 		classifyEnvironmentBlueprintApplyConflict(
-			len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedServices,
-			preparedRoutes,
+			len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedZones,
+			preparedServices, preparedRoutes,
 		),
 	)
 	if err != nil {
@@ -487,12 +550,14 @@ func classifyEnvironmentBlueprintApplyConflict(
 	project Versioned[ProjectRecord],
 	environment Versioned[EnvironmentRecord],
 	operationID string,
+	zones preparedEnvironmentBlueprintZones,
 	services []preparedEnvironmentBlueprintService,
 	routes []preparedEnvironmentBlueprintRoute,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		baseCount := 12 + fileCount
-		if len(values) != baseCount+4*len(services)+4*len(routes) {
+		zoneRegistryIndex := baseCount + 4*len(zones.changes)
+		if len(values) != zoneRegistryIndex+1+4*len(services)+4*len(routes) {
 			return errs.New(errs.KindInternal, "Blueprint apply compare evidence is incomplete")
 		}
 		if err := classifyEnvironmentBlueprintBaseConflict(
@@ -500,8 +565,44 @@ func classifyEnvironmentBlueprintApplyConflict(
 		); err != nil {
 			return err
 		}
-		for index, service := range services {
+		for index, zone := range zones.changes {
 			offset := baseCount + index*4
+			primary := values[offset]
+			name := values[offset+1]
+			owner := values[offset+2]
+			tombstone := values[offset+3]
+			zoneID := zone.change.Record.Desired.ID
+			if zone.change.Current == nil {
+				if primary != nil || owner != nil {
+					return errs.New(errs.KindStateConflict, "Zone stable identity is already in use")
+				}
+				if name != nil {
+					return errs.New(errs.KindNameConflict, "Zone name is already in use")
+				}
+			} else {
+				if primary == nil {
+					return errs.New(errs.KindZoneNotFound, "Zone was not found")
+				}
+				if primary.ModRevision != zone.change.Current.Revision {
+					return stateConflict("zone", zoneID)
+				}
+				if name == nil || owner == nil || string(name.Value) != zoneID || string(owner.Value) != zoneID {
+					return errs.New(errs.KindInternal, "Zone indexes changed or are corrupt")
+				}
+			}
+			if tombstone != nil {
+				return errs.New(errs.KindResourceInUse, "Zone deletion is in progress")
+			}
+		}
+		registry := values[zoneRegistryIndex]
+		if (zones.registry.Revision == 0 && registry != nil) ||
+			(zones.registry.Revision > 0 &&
+				(registry == nil || registry.ModRevision != zones.registry.Revision)) {
+			return stateConflict("Zone pool registry", environment.Record.ID)
+		}
+		serviceOffset := zoneRegistryIndex + 1
+		for index, service := range services {
+			offset := serviceOffset + index*4
 			primary := values[offset]
 			name := values[offset+1]
 			owner := values[offset+2]
@@ -529,7 +630,7 @@ func classifyEnvironmentBlueprintApplyConflict(
 				return errs.New(errs.KindResourceInUse, "Service deletion is in progress")
 			}
 		}
-		routeOffset := baseCount + 4*len(services)
+		routeOffset := serviceOffset + 4*len(services)
 		for index, route := range routes {
 			offset := routeOffset + index*4
 			primary := values[offset]
@@ -559,7 +660,7 @@ func classifyEnvironmentBlueprintApplyConflict(
 				return errs.New(errs.KindResourceInUse, "Route deletion is in progress")
 			}
 		}
-		return errs.New(errs.KindStateConflict, "Environment Blueprint Service state changed")
+		return errs.New(errs.KindStateConflict, "Environment Blueprint resource state changed")
 	}
 }
 
@@ -635,6 +736,132 @@ type preparedEnvironmentBlueprintService struct {
 	value         []byte
 	nameRevision  int64
 	ownerRevision int64
+}
+
+type preparedEnvironmentBlueprintZone struct {
+	change        EnvironmentBlueprintZoneChange
+	value         []byte
+	nameRevision  int64
+	ownerRevision int64
+}
+
+type preparedEnvironmentBlueprintZones struct {
+	changes       []preparedEnvironmentBlueprintZone
+	registry      Versioned[zonePoolRegistry]
+	registryValue []byte
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintZoneChanges(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	projection EnvironmentComposeProjection,
+	changes []EnvironmentBlueprintZoneChange,
+) (preparedEnvironmentBlueprintZones, error) {
+	if len(changes) != len(projection.Networks) {
+		return preparedEnvironmentBlueprintZones{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Zone changes do not cover the Compose network projection",
+		)
+	}
+	identities := make(map[string]string, len(projection.Networks))
+	for _, identity := range projection.Networks {
+		identities[identity.ID] = identity.Name
+	}
+	zoneRepository, err := newZoneRepository(repository.store)
+	if err != nil {
+		return preparedEnvironmentBlueprintZones{}, err
+	}
+	registry, err := zoneRepository.getZonePoolRegistry(ctx, environment.Record.ID)
+	if err != nil {
+		return preparedEnvironmentBlueprintZones{}, err
+	}
+	result := preparedEnvironmentBlueprintZones{
+		changes:  make([]preparedEnvironmentBlueprintZone, 0, len(changes)),
+		registry: registry,
+	}
+	nextRegistry := registry.Record
+	for _, change := range changes {
+		if err := validateZoneRecord(change.Record); err != nil {
+			clearPreparedEnvironmentBlueprintZones(result)
+			return preparedEnvironmentBlueprintZones{}, err
+		}
+		zoneID := change.Record.Desired.ID
+		if change.Record.EnvironmentID != environment.Record.ID ||
+			identities[zoneID] != change.Record.Desired.Name {
+			clearPreparedEnvironmentBlueprintZones(result)
+			return preparedEnvironmentBlueprintZones{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Zone change does not match its network projection",
+			)
+		}
+		item := preparedEnvironmentBlueprintZone{change: change}
+		if change.Current != nil {
+			if err := validateZoneRecord(change.Current.Record); err != nil || change.Current.Revision <= 0 ||
+				change.Current.ReadRevision < change.Current.Revision || change.Current.Record != change.Record {
+				clearPreparedEnvironmentBlueprintZones(result)
+				return preparedEnvironmentBlueprintZones{}, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Zone replacement changed immutable desired state",
+				)
+			}
+			if registry.Record.Reservations[zoneID] != change.Record.Desired.Subnet {
+				clearPreparedEnvironmentBlueprintZones(result)
+				return preparedEnvironmentBlueprintZones{}, errs.New(
+					errs.KindInternal,
+					"Zone subnet reservation is missing or corrupt",
+				)
+			}
+			indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+				Keys: []string{
+					zoneNameKey(environment.Record.ID, change.Record.Desired.Name),
+					zoneOwnerKey(environment.Record.ID, zoneID),
+				},
+				Revision: change.Current.ReadRevision,
+			})
+			if err != nil {
+				clearPreparedEnvironmentBlueprintZones(result)
+				return preparedEnvironmentBlueprintZones{}, err
+			}
+			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+				string(indexes.Values[0].Value) != zoneID || string(indexes.Values[1].Value) != zoneID {
+				clearPreparedEnvironmentBlueprintZones(result)
+				return preparedEnvironmentBlueprintZones{}, errs.New(
+					errs.KindInternal,
+					"Zone indexes are missing or corrupt",
+				)
+			}
+			item.nameRevision = indexes.Values[0].ModRevision
+			item.ownerRevision = indexes.Values[1].ModRevision
+		} else {
+			nextRegistry, err = nextRegistry.reserve(environment.Record, change.Record)
+			if err != nil {
+				clearPreparedEnvironmentBlueprintZones(result)
+				return preparedEnvironmentBlueprintZones{}, err
+			}
+			value, err := encodeZoneRecord(change.Record)
+			if err != nil {
+				clearPreparedEnvironmentBlueprintZones(result)
+				return preparedEnvironmentBlueprintZones{}, err
+			}
+			item.value = value
+		}
+		result.changes = append(result.changes, item)
+	}
+	if len(nextRegistry.Reservations) != len(registry.Record.Reservations) {
+		result.registryValue, err = encodeEnvelope("zone_pool_registry", nextRegistry)
+		if err != nil {
+			clearPreparedEnvironmentBlueprintZones(result)
+			return preparedEnvironmentBlueprintZones{}, err
+		}
+	}
+	return result, nil
+}
+
+func clearPreparedEnvironmentBlueprintZones(zones preparedEnvironmentBlueprintZones) {
+	for index := range zones.changes {
+		clear(zones.changes[index].value)
+	}
+	clear(zones.registryValue)
 }
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges(
