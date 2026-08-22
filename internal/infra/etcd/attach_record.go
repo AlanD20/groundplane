@@ -15,12 +15,16 @@ import (
 )
 
 const (
+	MaximumAttachNameBytes           = 255
 	MaximumAttachGrants              = 8
 	MaximumAttachFactsPerSet         = 32
 	MaximumAttachFactCiphertextBytes = 256 << 10
 )
 
-var attachFactKeyPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,127}$`)
+var (
+	attachFactKeyPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,127}$`)
+	attachNamePattern    = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+)
 
 type AttachOperation string
 
@@ -243,8 +247,8 @@ func validateAttachRecord(record AttachRecord) error {
 			return err
 		}
 	}
-	if record.Name == "" || strings.TrimSpace(record.Name) != record.Name {
-		return errs.New(errs.KindValidationFailed, "Attach name must be nonempty and have no surrounding whitespace")
+	if err := ValidateAttachName(record.Name); err != nil {
+		return err
 	}
 	if record.CreatedAt.IsZero() {
 		return errs.New(errs.KindValidationFailed, "Attach created_at is required")
@@ -288,6 +292,17 @@ func validateAttachRecord(record AttachRecord) error {
 		}
 	default:
 		return attachStateError(record, "unknown lifecycle state")
+	}
+	return nil
+}
+
+func ValidateAttachName(name string) error {
+	if len(name) == 0 || len(name) > MaximumAttachNameBytes || !attachNamePattern.MatchString(name) {
+		return errs.Newf(
+			errs.KindValidationFailed,
+			"Attach name must be a lowercase ASCII hyphen label of 1-%d bytes",
+			MaximumAttachNameBytes,
+		)
 	}
 	return nil
 }

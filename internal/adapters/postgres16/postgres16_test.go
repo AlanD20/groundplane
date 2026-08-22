@@ -14,7 +14,7 @@ func TestProvisionStepsCompileResolvedIdentity(t *testing.T) {
 		Database: "api_5d3f9a", Role: "api_5d3f9a", Password: []byte("URL_safe-1"),
 	})
 	if len(steps) != 3 || steps[0].Database != "postgres" ||
-		!bytes.Contains(steps[0].Stdin, []byte("PASSWORD 'URL_safe-1'")) ||
+		!bytes.Contains(steps[0].Stdin, []byte(`CREATE ROLE "api_5d3f9a" WITH LOGIN PASSWORD 'URL_safe-1'`)) ||
 		bytes.Contains(steps[0].Stdin, []byte("<generated>")) {
 		t.Fatalf("ProvisionSteps() = %#v", steps)
 	}
@@ -35,7 +35,21 @@ func TestGrantAndDetachStepsUseCorrectDatabaseContext(t *testing.T) {
 	defer adapters.ClearSteps(grant)
 	defer adapters.ClearSteps(detach)
 	if len(grant) != 2 || grant[1].Database != "other_4a1b2c" || len(detach) != 3 ||
-		!bytes.Contains(detach[1].Stdin, []byte("ALTER DATABASE api_5d3f9a OWNER TO postgres")) {
+		!bytes.Contains(detach[1].Stdin, []byte(`ALTER DATABASE "api_5d3f9a" OWNER TO postgres`)) {
 		t.Fatalf("GrantSteps()/DetachSteps() = %#v / %#v", grant, detach)
+	}
+}
+
+// Rationale: service-derived identities may contain hyphens, so every PostgreSQL identifier must be
+// delimited without allowing a generated value to change the fixed statement structure.
+func TestPostgreSQLStepsQuoteServiceDerivedIdentifiers(t *testing.T) {
+	steps := (&adapter{}).ProvisionSteps(adapters.ProvisionParams{
+		Database: `api-web_5d3f9a`, Role: `api-web_5d3f9a`, Password: []byte("safe'password"),
+	})
+	defer adapters.ClearSteps(steps)
+	if !bytes.Contains(steps[0].Stdin, []byte(`CREATE ROLE "api-web_5d3f9a"`)) ||
+		!bytes.Contains(steps[0].Stdin, []byte(`PASSWORD 'safe''password'`)) ||
+		!bytes.Contains(steps[1].Stdin, []byte(`CREATE DATABASE "api-web_5d3f9a" OWNER "api-web_5d3f9a"`)) {
+		t.Fatalf("ProvisionSteps() did not safely delimit identity: %#v", steps)
 	}
 }
