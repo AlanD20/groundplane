@@ -10,11 +10,28 @@ import (
 
 type serviceReadRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 }
 
 type serviceReadService struct {
 	repository serviceReadRepository
+}
+
+func (service *serviceReadService) GetService(
+	ctx context.Context,
+	serviceID string,
+) (etcd.Versioned[etcd.ServiceRecord], error) {
+	if ctx == nil {
+		return etcd.Versioned[etcd.ServiceRecord]{}, errs.New(errs.KindInternal, "Service read context is required")
+	}
+	if ids.Validate(ids.KindService, serviceID) != nil {
+		return etcd.Versioned[etcd.ServiceRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Service read requires a stable Service id",
+		)
+	}
+	return service.repository.GetService(ctx, serviceID)
 }
 
 func newServiceReadService(repository serviceReadRepository) (*serviceReadService, error) {
@@ -78,4 +95,11 @@ func (repository *durableServiceReadRepository) ListServices(
 	request etcd.PageRequest,
 ) (etcd.Page[etcd.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
+}
+
+func (repository *durableServiceReadRepository) GetService(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ServiceRecord], error) {
+	return repository.services.GetService(ctx, id)
 }

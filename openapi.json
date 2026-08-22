@@ -1404,20 +1404,86 @@
       "Service": {
         "additionalProperties": false,
         "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/Service.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
           "adapter": {
             "type": "string"
+          },
+          "aliases": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "type": "object"
           },
           "backing_network_id": {
             "type": "string"
           },
+          "command": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "depends_on": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ServiceDependency"
+            },
+            "type": "object"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "expose": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "facts_prefix": {
             "type": "string"
+          },
+          "healthcheck": {
+            "$ref": "#/components/schemas/ServiceHealthcheck"
           },
           "id": {
             "type": "string"
           },
           "image": {
             "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "logging": {
+            "$ref": "#/components/schemas/ServiceLogging"
+          },
+          "mounts": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceMount"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -1428,6 +1494,12 @@
           "replicas": {
             "format": "int64",
             "type": "integer"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ServiceResources"
+          },
+          "restart": {
+            "type": "string"
           },
           "runtime_intent": {
             "type": "string"
@@ -1447,10 +1519,247 @@
         },
         "required": [
           "id",
+          "environment_id",
           "name",
           "image",
           "runtime_intent"
         ],
+        "type": "object"
+      },
+      "ServiceCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ServiceCreate.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "expose": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "healthcheck": {
+            "$ref": "#/components/schemas/ServiceHealthcheck"
+          },
+          "image": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "replicas": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ServiceResources"
+          },
+          "restart": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "environment_id",
+          "name",
+          "image",
+          "zones",
+          "strategy",
+          "on_failure",
+          "healthcheck",
+          "resources",
+          "expose",
+          "restart",
+          "replicas"
+        ],
+        "type": "object"
+      },
+      "ServiceDependency": {
+        "additionalProperties": false,
+        "properties": {
+          "condition": {
+            "type": "string"
+          },
+          "phases": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "condition"
+        ],
+        "type": "object"
+      },
+      "ServiceEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ServiceEdit.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "expose": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "healthcheck": {
+            "$ref": "#/components/schemas/ServiceHealthcheck"
+          },
+          "image": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "replicas": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ServiceResources"
+          },
+          "restart": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "image",
+          "zones",
+          "strategy",
+          "on_failure",
+          "healthcheck",
+          "resources",
+          "expose",
+          "restart",
+          "replicas"
+        ],
+        "type": "object"
+      },
+      "ServiceHealthcheck": {
+        "additionalProperties": false,
+        "properties": {
+          "http": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "pgrep": {
+            "type": "string"
+          },
+          "retries": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "start_period": {
+            "type": "string"
+          },
+          "tcp": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ServiceLogging": {
+        "additionalProperties": false,
+        "properties": {
+          "max_file": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_size": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ServiceMount": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "mount": {
+            "type": "string"
+          },
+          "ro": {
+            "type": "boolean"
+          },
+          "volume": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mount"
+        ],
+        "type": "object"
+      },
+      "ServiceResources": {
+        "additionalProperties": false,
+        "properties": {
+          "cpus": {
+            "format": "double",
+            "type": "number"
+          },
+          "mem": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Task": {
@@ -3864,6 +4173,175 @@
           }
         },
         "summary": "List services",
+        "tags": [
+          "Service"
+        ]
+      },
+      "post": {
+        "operationId": "service.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a service",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/services/{id}": {
+      "get": {
+        "operationId": "service.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a service",
+        "tags": [
+          "Service"
+        ]
+      },
+      "patch": {
+        "operationId": "service.edit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Edit a service's direct desired fields",
         "tags": [
           "Service"
         ]

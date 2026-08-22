@@ -185,18 +185,87 @@ const (
 	ServiceRuntimeIntentAbsent  ServiceRuntimeIntent = "absent"
 )
 
+type ServiceHealthcheck struct {
+	HTTP        string `json:"http,omitempty"`
+	TCP         string `json:"tcp,omitempty"`
+	Pgrep       string `json:"pgrep,omitempty"`
+	Interval    string `json:"interval,omitempty"`
+	Timeout     string `json:"timeout,omitempty"`
+	StartPeriod string `json:"start_period,omitempty"`
+	Retries     int    `json:"retries,omitempty"`
+}
+
+type ServiceResources struct {
+	Mem  string  `json:"mem,omitempty"`
+	CPUs float64 `json:"cpus,omitempty"`
+}
+
+type ServiceMount struct {
+	Volume string `json:"volume,omitempty"`
+	File   string `json:"file,omitempty"`
+	Mount  string `json:"mount"`
+	RO     bool   `json:"ro,omitempty"`
+}
+
+type ServiceDependency struct {
+	Condition string   `json:"condition"`
+	Phases    []string `json:"phases,omitempty"`
+}
+
+type ServiceLogging struct {
+	MaxSize string `json:"max_size,omitempty"`
+	MaxFile int    `json:"max_file,omitempty"`
+}
+
 type Service struct {
-	ID               string               `json:"id"`
-	Name             string               `json:"name"`
-	Image            string               `json:"image"`
-	RuntimeIntent    ServiceRuntimeIntent `json:"runtime_intent"`
-	Zones            []string             `json:"zones,omitempty"`
-	Strategy         string               `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
-	OnFailure        OnFailure            `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
-	Replicas         int                  `json:"replicas,omitempty"`
-	Adapter          string               `json:"adapter,omitempty"`
-	FactsPrefix      string               `json:"facts_prefix,omitempty"`
-	BackingNetworkID string               `json:"backing_network_id,omitempty"`
+	ID               string                       `json:"id"`
+	EnvironmentID    string                       `json:"environment_id"`
+	Name             string                       `json:"name"`
+	Image            string                       `json:"image"`
+	RuntimeIntent    ServiceRuntimeIntent         `json:"runtime_intent"`
+	Zones            []string                     `json:"zones,omitempty"`
+	Strategy         string                       `json:"strategy,omitempty"`   // declared default: "blue-green" | "recreate"
+	OnFailure        OnFailure                    `json:"on_failure,omitempty"` // declared default: "switch_back" | "leave_active"
+	Healthcheck      *ServiceHealthcheck          `json:"healthcheck,omitempty"`
+	Resources        ServiceResources             `json:"resources,omitempty"`
+	Command          []string                     `json:"command,omitempty"`
+	Mounts           []ServiceMount               `json:"mounts,omitempty"`
+	Aliases          map[string][]string          `json:"aliases,omitempty"`
+	DependsOn        map[string]ServiceDependency `json:"depends_on,omitempty"`
+	Expose           []string                     `json:"expose,omitempty"`
+	Restart          string                       `json:"restart,omitempty"`
+	Logging          ServiceLogging               `json:"logging,omitempty"`
+	Replicas         int                          `json:"replicas,omitempty"`
+	Adapter          string                       `json:"adapter,omitempty"`
+	FactsPrefix      string                       `json:"facts_prefix,omitempty"`
+	Label            string                       `json:"label,omitempty"`
+	BackingNetworkID string                       `json:"backing_network_id,omitempty"`
+}
+
+type ServiceCreate struct {
+	EnvironmentID string             `json:"environment_id"`
+	Name          string             `json:"name"`
+	Image         string             `json:"image"`
+	Zones         []string           `json:"zones"`
+	Strategy      string             `json:"strategy"`
+	OnFailure     OnFailure          `json:"on_failure"`
+	Healthcheck   ServiceHealthcheck `json:"healthcheck"`
+	Resources     ServiceResources   `json:"resources"`
+	Expose        []string           `json:"expose"`
+	Restart       string             `json:"restart"`
+	Replicas      int                `json:"replicas"`
+}
+
+type ServiceEdit struct {
+	Image       string             `json:"image"`
+	Zones       []string           `json:"zones"`
+	Strategy    string             `json:"strategy"`
+	OnFailure   OnFailure          `json:"on_failure"`
+	Healthcheck ServiceHealthcheck `json:"healthcheck"`
+	Resources   ServiceResources   `json:"resources"`
+	Expose      []string           `json:"expose"`
+	Restart     string             `json:"restart"`
+	Replicas    int                `json:"replicas"`
 }
 
 // EntrySource is the discriminated union api-cli.md section 4 shows:

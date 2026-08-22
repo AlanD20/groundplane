@@ -485,17 +485,105 @@ type SecretValue struct {
 
 // Service defines model for Service.
 type Service struct {
-	Adapter          *string   `json:"adapter,omitempty"`
-	BackingNetworkId *string   `json:"backing_network_id,omitempty"`
-	FactsPrefix      *string   `json:"facts_prefix,omitempty"`
-	Id               string    `json:"id"`
-	Image            string    `json:"image"`
-	Name             string    `json:"name"`
-	OnFailure        *string   `json:"on_failure,omitempty"`
-	Replicas         *int64    `json:"replicas,omitempty"`
-	RuntimeIntent    string    `json:"runtime_intent"`
-	Strategy         *string   `json:"strategy,omitempty"`
-	Zones            *[]string `json:"zones,omitempty"`
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Service.json
+	Schema           *string                       `json:"$schema,omitempty"`
+	Adapter          *string                       `json:"adapter,omitempty"`
+	Aliases          *map[string]*[]string         `json:"aliases,omitempty"`
+	BackingNetworkId *string                       `json:"backing_network_id,omitempty"`
+	Command          *[]string                     `json:"command,omitempty"`
+	DependsOn        *map[string]ServiceDependency `json:"depends_on,omitempty"`
+	EnvironmentId    string                        `json:"environment_id"`
+	Expose           *[]string                     `json:"expose,omitempty"`
+	FactsPrefix      *string                       `json:"facts_prefix,omitempty"`
+	Healthcheck      *ServiceHealthcheck           `json:"healthcheck,omitempty"`
+	Id               string                        `json:"id"`
+	Image            string                        `json:"image"`
+	Label            *string                       `json:"label,omitempty"`
+	Logging          *ServiceLogging               `json:"logging,omitempty"`
+	Mounts           *[]ServiceMount               `json:"mounts,omitempty"`
+	Name             string                        `json:"name"`
+	OnFailure        *string                       `json:"on_failure,omitempty"`
+	Replicas         *int64                        `json:"replicas,omitempty"`
+	Resources        *ServiceResources             `json:"resources,omitempty"`
+	Restart          *string                       `json:"restart,omitempty"`
+	RuntimeIntent    string                        `json:"runtime_intent"`
+	Strategy         *string                       `json:"strategy,omitempty"`
+	Zones            *[]string                     `json:"zones,omitempty"`
+}
+
+// ServiceCreate defines model for ServiceCreate.
+type ServiceCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ServiceCreate.json
+	Schema        *string            `json:"$schema,omitempty"`
+	EnvironmentId string             `json:"environment_id"`
+	Expose        *[]string          `json:"expose"`
+	Healthcheck   ServiceHealthcheck `json:"healthcheck"`
+	Image         string             `json:"image"`
+	Name          string             `json:"name"`
+	OnFailure     string             `json:"on_failure"`
+	Replicas      int64              `json:"replicas"`
+	Resources     ServiceResources   `json:"resources"`
+	Restart       string             `json:"restart"`
+	Strategy      string             `json:"strategy"`
+	Zones         *[]string          `json:"zones"`
+}
+
+// ServiceDependency defines model for ServiceDependency.
+type ServiceDependency struct {
+	Condition string    `json:"condition"`
+	Phases    *[]string `json:"phases,omitempty"`
+}
+
+// ServiceEdit defines model for ServiceEdit.
+type ServiceEdit struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ServiceEdit.json
+	Schema      *string            `json:"$schema,omitempty"`
+	Expose      *[]string          `json:"expose"`
+	Healthcheck ServiceHealthcheck `json:"healthcheck"`
+	Image       string             `json:"image"`
+	OnFailure   string             `json:"on_failure"`
+	Replicas    int64              `json:"replicas"`
+	Resources   ServiceResources   `json:"resources"`
+	Restart     string             `json:"restart"`
+	Strategy    string             `json:"strategy"`
+	Zones       *[]string          `json:"zones"`
+}
+
+// ServiceHealthcheck defines model for ServiceHealthcheck.
+type ServiceHealthcheck struct {
+	Http        *string `json:"http,omitempty"`
+	Interval    *string `json:"interval,omitempty"`
+	Pgrep       *string `json:"pgrep,omitempty"`
+	Retries     *int64  `json:"retries,omitempty"`
+	StartPeriod *string `json:"start_period,omitempty"`
+	Tcp         *string `json:"tcp,omitempty"`
+	Timeout     *string `json:"timeout,omitempty"`
+}
+
+// ServiceLogging defines model for ServiceLogging.
+type ServiceLogging struct {
+	MaxFile *int64  `json:"max_file,omitempty"`
+	MaxSize *string `json:"max_size,omitempty"`
+}
+
+// ServiceMount defines model for ServiceMount.
+type ServiceMount struct {
+	File   *string `json:"file,omitempty"`
+	Mount  string  `json:"mount"`
+	Ro     *bool   `json:"ro,omitempty"`
+	Volume *string `json:"volume,omitempty"`
+}
+
+// ServiceResources defines model for ServiceResources.
+type ServiceResources struct {
+	Cpus *float64 `json:"cpus,omitempty"`
+	Mem  *string  `json:"mem,omitempty"`
 }
 
 // Task defines model for Task.
@@ -759,6 +847,16 @@ type ServiceListParams struct {
 	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ServiceCreateParams defines parameters for ServiceCreate.
+type ServiceCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ServiceEditParams defines parameters for ServiceEdit.
+type ServiceEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // TenantListParams defines parameters for TenantList.
 type TenantListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -830,6 +928,12 @@ type RouteEditJSONRequestBody = RouteEdit
 
 // SecretCreateJSONRequestBody defines body for SecretCreate for application/json ContentType.
 type SecretCreateJSONRequestBody = SecretCreateRequest
+
+// ServiceCreateJSONRequestBody defines body for ServiceCreate for application/json ContentType.
+type ServiceCreateJSONRequestBody = ServiceCreate
+
+// ServiceEditJSONRequestBody defines body for ServiceEdit for application/json ContentType.
+type ServiceEditJSONRequestBody = ServiceEdit
 
 // TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
 type TenantCreateJSONRequestBody = TenantCreate
@@ -1211,6 +1315,39 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /services (the `ServiceList` operationId).
 	ServiceList(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceCreateWithBody Create a service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /services (the `ServiceCreate` operationId).
+	ServiceCreateWithBody(ctx context.Context, params *ServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceCreate Create a service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /services (the `ServiceCreate` operationId).
+	ServiceCreate(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceShow Show a service
+	//
+	// Corresponds with GET /services/{id} (the `ServiceShow` operationId).
+	ServiceShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceEditWithBody Edit a service's direct desired fields
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+	ServiceEditWithBody(ctx context.Context, id string, params *ServiceEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceEdit Edit a service's direct desired fields
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+	ServiceEdit(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TaskShow Show a task
 	//
@@ -2069,6 +2206,89 @@ func (c *Client) SecretReveal(ctx context.Context, id string, reqEditors ...Requ
 // Corresponds with GET /services (the `ServiceList` operationId).
 func (c *Client) ServiceList(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceCreateWithBody Create a service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /services (the `ServiceCreate` operationId).
+func (c *Client) ServiceCreateWithBody(ctx context.Context, params *ServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceCreate Create a service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /services (the `ServiceCreate` operationId).
+func (c *Client) ServiceCreate(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceShow Show a service
+//
+// Corresponds with GET /services/{id} (the `ServiceShow` operationId).
+func (c *Client) ServiceShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceEditWithBody Edit a service's direct desired fields
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+func (c *Client) ServiceEditWithBody(ctx context.Context, id string, params *ServiceEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceEdit Edit a service's direct desired fields
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+func (c *Client) ServiceEdit(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4247,6 +4467,153 @@ func NewServiceListRequest(server string, params *ServiceListParams) (*http.Requ
 	return req, nil
 }
 
+// NewServiceCreateRequest calls the generic ServiceCreate builder with application/json body
+func NewServiceCreateRequest(server string, params *ServiceCreateParams, body ServiceCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewServiceCreateRequestWithBody constructs an http.Request for the ServiceCreate method, with any body, and a specified content type
+func NewServiceCreateRequestWithBody(server string, params *ServiceCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewServiceShowRequest constructs an http.Request for the ServiceShow method
+func NewServiceShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewServiceEditRequest calls the generic ServiceEdit builder with application/json body
+func NewServiceEditRequest(server string, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceEditRequestWithBody constructs an http.Request for the ServiceEdit method, with any body, and a specified content type
+func NewServiceEditRequestWithBody(server string, id string, params *ServiceEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewTaskShowRequest constructs an http.Request for the TaskShow method
 func NewTaskShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -5101,6 +5468,41 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /services (the `ServiceList` operationId).
 	ServiceListWithResponse(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*ServiceListResponse, error)
+
+	// ServiceCreateWithBodyWithResponse Create a service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services (the `ServiceCreate` operationId).
+	ServiceCreateWithBodyWithResponse(ctx context.Context, params *ServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceCreateResponse, error)
+
+	// ServiceCreateWithResponse Create a service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services (the `ServiceCreate` operationId).
+	ServiceCreateWithResponse(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceCreateResponse, error)
+
+	// ServiceShowWithResponse Show a service
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /services/{id} (the `ServiceShow` operationId).
+	ServiceShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ServiceShowResponse, error)
+
+	// ServiceEditWithBodyWithResponse Edit a service's direct desired fields
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+	ServiceEditWithBodyWithResponse(ctx context.Context, id string, params *ServiceEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceEditResponse, error)
+
+	// ServiceEditWithResponse Edit a service's direct desired fields
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+	ServiceEditWithResponse(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceEditResponse, error)
 
 	// TaskShowWithResponse Show a task
 	//
@@ -7089,6 +7491,164 @@ func (r ServiceListResponse) ContentType() string {
 	return ""
 }
 
+// ServiceCreateResponse201Headers the declared response headers of an HTTP 201 response for ServiceCreate
+type ServiceCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type ServiceCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Service
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ServiceCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ServiceCreateResponse) GetJSON201() *Service {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ServiceShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Service
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ServiceShowResponse) GetJSON200() *Service {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ServiceEditResponse200Headers the declared response headers of an HTTP 200 response for ServiceEdit
+type ServiceEditResponse200Headers struct {
+	ContentType *string
+}
+
+type ServiceEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Service
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ServiceEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ServiceEditResponse) GetJSON200() *Service {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TaskShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8184,6 +8744,71 @@ func (c *ClientWithResponses) ServiceListWithResponse(ctx context.Context, param
 		return nil, err
 	}
 	return ParseServiceListResponse(rsp)
+}
+
+// ServiceCreateWithBodyWithResponse Create a service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services (the `ServiceCreate` operationId).
+func (c *ClientWithResponses) ServiceCreateWithBodyWithResponse(ctx context.Context, params *ServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceCreateResponse, error) {
+	rsp, err := c.ServiceCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceCreateResponse(rsp)
+}
+
+// ServiceCreateWithResponse Create a service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services (the `ServiceCreate` operationId).
+func (c *ClientWithResponses) ServiceCreateWithResponse(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceCreateResponse, error) {
+	rsp, err := c.ServiceCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceCreateResponse(rsp)
+}
+
+// ServiceShowWithResponse Show a service
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /services/{id} (the `ServiceShow` operationId).
+func (c *ClientWithResponses) ServiceShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ServiceShowResponse, error) {
+	rsp, err := c.ServiceShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceShowResponse(rsp)
+}
+
+// ServiceEditWithBodyWithResponse Edit a service's direct desired fields
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+func (c *ClientWithResponses) ServiceEditWithBodyWithResponse(ctx context.Context, id string, params *ServiceEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceEditResponse, error) {
+	rsp, err := c.ServiceEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceEditResponse(rsp)
+}
+
+// ServiceEditWithResponse Edit a service's direct desired fields
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
+func (c *ClientWithResponses) ServiceEditWithResponse(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceEditResponse, error) {
+	rsp, err := c.ServiceEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceEditResponse(rsp)
 }
 
 // TaskShowWithResponse Show a task
@@ -9792,6 +10417,131 @@ func ParseServiceListResponse(rsp *http.Response) (*ServiceListResponse, error) 
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseServiceCreateResponse parses an HTTP response from a ServiceCreateWithResponse call
+func ParseServiceCreateResponse(rsp *http.Response) (*ServiceCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Service
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ServiceCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceShowResponse parses an HTTP response from a ServiceShowWithResponse call
+func ParseServiceShowResponse(rsp *http.Response) (*ServiceShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Service
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseServiceEditResponse parses an HTTP response from a ServiceEditWithResponse call
+func ParseServiceEditResponse(rsp *http.Response) (*ServiceEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Service
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ServiceEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

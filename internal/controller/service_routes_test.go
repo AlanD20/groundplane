@@ -12,10 +12,21 @@ import (
 )
 
 type fakeServiceReader struct {
+	record      etcd.Versioned[etcd.ServiceRecord]
 	page        etcd.Page[etcd.ServiceRecord]
 	wantRequest etcd.PageRequest
 	wantEnv     string
 	listed      bool
+}
+
+func (fake *fakeServiceReader) GetService(
+	_ context.Context,
+	serviceID string,
+) (etcd.Versioned[etcd.ServiceRecord], error) {
+	if fake.record.Record.Desired.ID == serviceID {
+		return fake.record, nil
+	}
+	return etcd.Versioned[etcd.ServiceRecord]{}, nil
 }
 
 func (fake *fakeServiceReader) ListServices(
@@ -25,6 +36,37 @@ func (fake *fakeServiceReader) ListServices(
 ) (etcd.Page[etcd.ServiceRecord], error) {
 	fake.listed = environmentID == fake.wantEnv && request == fake.wantRequest
 	return fake.page, nil
+}
+
+func TestShowServiceProjectsStableOwnerAndFullDesiredState(t *testing.T) {
+	// Rationale: detail is the Console edit source, so it must project the
+	// stable Environment owner and complete durable desired/runtime record.
+	t.Parallel()
+	environmentID := ids.NewAt(ids.KindEnvironment, serviceRouteTestTime(), 11)
+	serviceID := ids.NewAt(ids.KindService, serviceRouteTestTime(), 12)
+	record := etcd.ServiceRecord{
+		EnvironmentID: environmentID,
+		Desired: core.Service{
+			ID:          serviceID,
+			Name:        "api",
+			Image:       "app:stable",
+			Zones:       []string{"backend"},
+			Strategy:    core.StrategyRecreate,
+			OnFailure:   core.OnFailureSwitchBack,
+			Healthcheck: core.Healthcheck{HTTP: "/up", Interval: "10s", Retries: 3},
+			Resources:   core.Resources{Mem: "512m", CPUs: 0.5},
+			Expose:      []string{"8080"},
+			Replicas:    2,
+		},
+		Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
+	}
+	server := &Server{services: &fakeServiceReader{record: etcd.Versioned[etcd.ServiceRecord]{Record: record}}}
+	output, err := server.showService(context.Background(), &serviceShowInput{ID: serviceID})
+	if err != nil || output.Body.EnvironmentID != environmentID || output.Body.Healthcheck == nil ||
+		output.Body.Healthcheck.HTTP != "/up" ||
+		output.Body.Resources.CPUs != 0.5 {
+		t.Fatalf("showService() = %#v, %v", output, err)
+	}
 }
 
 // Rationale: the Service API must expose Controller-owned runtime intent alongside the desired

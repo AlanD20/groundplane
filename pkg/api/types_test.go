@@ -11,6 +11,7 @@ func TestServiceRuntimeIntentJSON(t *testing.T) {
 	// snake_case JSON while keeping it out of Blueprint input.
 	encoded, err := json.Marshal(Service{
 		ID:            "svc_x",
+		EnvironmentID: "env_x",
 		Name:          "api",
 		Image:         "app:latest",
 		RuntimeIntent: ServiceRuntimeIntentStopped,
@@ -19,7 +20,7 @@ func TestServiceRuntimeIntentJSON(t *testing.T) {
 		t.Fatalf("Marshal() error: %v", err)
 	}
 
-	want := `{"id":"svc_x","name":"api","image":"app:latest","runtime_intent":"stopped"}`
+	want := `{"id":"svc_x","environment_id":"env_x","name":"api","image":"app:latest","runtime_intent":"stopped","resources":{},"logging":{}}`
 	if string(encoded) != want {
 		t.Fatalf("Marshal() = %s, want %s", encoded, want)
 	}

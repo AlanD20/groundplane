@@ -242,6 +242,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone reads: %w", err)
 	}
+	serviceMutationRepository, err := newDurableServiceMutationRepository(hierarchyRecords, serviceRecords, zoneRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service mutation repositories: %w", err)
+	}
 	zoneCreationRepository, err := newDurableZoneCreationRepository(hierarchyRecords, zoneRecords)
 	if err != nil {
 		_ = store.Close()
@@ -345,6 +350,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone creation service: %w", err)
+	}
+	serviceMutationIdempotency, err := newDurableServiceMutationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service mutation idempotency: %w", err)
+	}
+	serviceMutations, err := newServiceMutationService(serviceMutationRepository, serviceMutationIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service mutation service: %w", err)
 	}
 	routeMutationIdempotency, err := newDurableRouteMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -684,6 +699,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackingServices:       backingServiceReads,
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
+		ServiceMutations:      serviceMutations,
 		Zones:                 zoneReads,
 		ZoneMutations:         zoneMutations,
 		Routes:                routeReads,

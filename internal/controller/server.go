@@ -45,6 +45,7 @@ type Server struct {
 	backingServices       BackingServiceReader
 	environments          EnvironmentReader
 	services              ServiceReader
+	serviceMutations      ServiceMutator
 	zones                 ZoneReader
 	zoneMutations         ZoneMutator
 	routeReads            RouteReader
@@ -78,6 +79,7 @@ type Options struct {
 	BackingServices       BackingServiceReader
 	Environments          EnvironmentReader
 	Services              ServiceReader
+	ServiceMutations      ServiceMutator
 	Zones                 ZoneReader
 	ZoneMutations         ZoneMutator
 	Routes                RouteReader
@@ -129,6 +131,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		backingServices:       options.BackingServices,
 		environments:          options.Environments,
 		services:              options.Services,
+		serviceMutations:      options.ServiceMutations,
 		zones:                 options.Zones,
 		zoneMutations:         options.ZoneMutations,
 		routeReads:            options.Routes,
@@ -211,9 +214,6 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/environments/{id}/router", s.notImplemented)
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
-	s.jsonRoute("POST /api/v1/services", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/services/{id}", s.notImplemented) // includes the release ledger once C06 is durable
-	s.jsonRoute("PATCH /api/v1/services/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/services/{id}/deploy", s.acceptTask) // {tag?, strategy?, on_failure?}
 	s.jsonRoute("POST /api/v1/services/{id}/rollback", s.acceptTask)
