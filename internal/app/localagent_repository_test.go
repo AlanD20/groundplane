@@ -24,7 +24,8 @@ func TestLocalAgentRepositoryAdapterTranslatesLifecycleWithoutAliasing(t *testin
 	}
 	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 	record := localagent.Record{
-		ID: runtimeAdapterAgentID, Image: testAppAgentImage, Generation: 7,
+		ID: runtimeAdapterAgentID, EnrollmentTaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Image: testAppAgentImage, Generation: 7,
 		Phase: localagent.PhaseProvisioning,
 		Config: localagent.Config{
 			PullIntervalSeconds: 5, MaxConcurrentTasks: 4,
@@ -51,11 +52,13 @@ func TestLocalAgentRepositoryAdapterTranslatesLifecycleWithoutAliasing(t *testin
 		t.Fatalf("created lifecycle record = %#v", created)
 	}
 
-	ready, err := adapter.MarkReady(context.Background(), runtimeAdapterAgentID, 7, 11)
+	readyAt := now.Add(time.Second)
+	ready, err := adapter.MarkReady(context.Background(), runtimeAdapterAgentID, 7, 11, readyAt)
 	if err != nil {
 		t.Fatalf("MarkReady() error = %v", err)
 	}
 	if repository.markGeneration != 7 || repository.markRevision != 11 ||
+		!repository.markReadyAt.Equal(readyAt) || !ready.Record.ReadyAt.Equal(readyAt) ||
 		ready.Record.Phase != localagent.PhaseReady || ready.Revision != 12 {
 		t.Fatalf("ready transition = %#v, repository = %#v", ready, repository)
 	}
@@ -100,6 +103,7 @@ type fakeLocalAgentRecords struct {
 	get              etcd.Versioned[etcd.LocalAgentRecord]
 	markGeneration   uint64
 	markRevision     int64
+	markReadyAt      time.Time
 	deleteGeneration uint64
 	deleteRevision   int64
 }
@@ -135,11 +139,14 @@ func (repository *fakeLocalAgentRecords) MarkReady(
 	_ string,
 	generation uint64,
 	revision int64,
+	readyAt time.Time,
 ) (etcd.Versioned[etcd.LocalAgentRecord], error) {
 	repository.markGeneration = generation
 	repository.markRevision = revision
+	repository.markReadyAt = readyAt
 	record := repository.created
 	record.Phase = etcd.LocalAgentPhaseReady
+	record.ReadyAt = readyAt
 	return etcd.Versioned[etcd.LocalAgentRecord]{Record: record, Revision: 12}, nil
 }
 

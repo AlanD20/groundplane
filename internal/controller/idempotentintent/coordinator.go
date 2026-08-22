@@ -105,6 +105,35 @@ func (coordinator *Coordinator) ResolveKnown(
 	}
 }
 
+// ResolveExisting performs the deliberate pre-mutation marker lookup needed by
+// destructive routes. A completed delete must replay after its target record
+// is gone, while a first request must still validate the current target before
+// claiming a marker and creating its Task.
+func (coordinator *Coordinator) ResolveExisting(
+	ctx context.Context,
+	repository *infraetcd.IdempotencyRepository,
+	locator infraetcd.IdempotencyLocator,
+	candidate ProtectedEvidence,
+) (Resolution, bool, error) {
+	if ctx == nil || repository == nil {
+		return Resolution{}, false, internalError("existing-outcome evidence is incomplete")
+	}
+	evidence, err := repository.Read(ctx, locator)
+	if err != nil {
+		return Resolution{}, false, err
+	}
+	if evidence == nil {
+		return Resolution{}, false, nil
+	}
+	marker, err := evidence.Marker()
+	if err != nil {
+		return Resolution{}, true, err
+	}
+	defer clearProtectedMarker(marker)
+	resolution, err := coordinator.classifyMarker(ctx, candidate, marker)
+	return resolution, true, err
+}
+
 // ResolveUnknown performs the only permitted latest linearizable reread: a
 // Store outcome whose commit status was unknown. Missing or unavailable
 // evidence preserves the original retryable/cancellation error.

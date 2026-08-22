@@ -45,7 +45,8 @@ func validPlanBuildInput() PlanBuildInput {
 	yamlHash := sha256.Sum256(yaml)
 	artifactID := ids.NewAt(ids.KindConfig, at, 4)
 	return PlanBuildInput{
-		PlanID: ids.NewAt(ids.KindPlan, at, 1), RenderGeneration: 1,
+		VolumeRoot: "/var/lib/groundplane/vol",
+		PlanID:     ids.NewAt(ids.KindPlan, at, 1), RenderGeneration: 1,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
 		TargetID:  ids.NewAt(ids.KindComponent, at, 2),
 		Artifacts: []*agentpb.ComposeArtifact{{

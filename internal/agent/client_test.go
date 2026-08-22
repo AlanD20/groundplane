@@ -104,7 +104,10 @@ func TestNewClientRequiresExactlyThirtyTwoTokenBytes(t *testing.T) {
 	t.Parallel()
 
 	for _, size := range []int{0, agentprotocol.RawTokenBytes - 1, agentprotocol.RawTokenBytes + 1} {
-		_, err := NewClient(agentprotocol.SocketPath, clientTestAgentID, make([]byte, size), testLogger())
+		_, err := NewClient(
+			agentprotocol.SocketPath, clientTestAgentID, make([]byte, size),
+			"/var/lib/groundplane/vol", testLogger(),
+		)
 		if err == nil {
 			t.Fatalf("NewClient() with %d token bytes returned nil error", size)
 		}
@@ -194,7 +197,9 @@ func TestClientDoesNotLeakTokenFromTransportError(t *testing.T) {
 
 func newTestClient(t *testing.T, token []byte, stream *fakeStream) *Client {
 	t.Helper()
-	client, err := NewClient(agentprotocol.SocketPath, clientTestAgentID, token, testLogger())
+	client, err := NewClient(
+		agentprotocol.SocketPath, clientTestAgentID, token, "/var/lib/groundplane/vol", testLogger(),
+	)
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
@@ -258,11 +263,19 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 		s.readyOnce.Do(func() { close(s.readySent) })
 	}
 	if acknowledgement := message.GetTaskAck(); acknowledgement != nil {
-		copyMessage.Payload = &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
+		owned := &agentpb.TaskAck{
 			TaskId: acknowledgement.TaskId, PlanHash: append([]byte(nil), acknowledgement.PlanHash...),
 			Terminal: acknowledgement.Terminal, ExitCode: acknowledgement.ExitCode,
-			Result: &agentpb.TaskAck_ComposeResult{ComposeResult: acknowledgement.GetComposeResult()},
-		}}
+		}
+		if acknowledgement.GetComposeResult() != nil {
+			owned.Result = &agentpb.TaskAck_ComposeResult{ComposeResult: acknowledgement.GetComposeResult()}
+		}
+		if acknowledgement.GetEnvironmentDirectoryResult() != nil {
+			owned.Result = &agentpb.TaskAck_EnvironmentDirectoryResult{
+				EnvironmentDirectoryResult: acknowledgement.GetEnvironmentDirectoryResult(),
+			}
+		}
+		copyMessage.Payload = &agentpb.AgentMessage_TaskAck{TaskAck: owned}
 		s.taskAckOnce.Do(func() { close(s.taskAckSent) })
 	}
 	if event := message.GetTaskEvent(); event != nil {

@@ -21,7 +21,8 @@ import (
 const (
 	testImage = "registry.example/groundplane-agent@sha256:" +
 		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	testVolumeDir = "/infra/vol/" +
+	testVolumeRoot = "/var/lib/groundplane/vol"
+	testVolumeDir  = testVolumeRoot + "/" +
 		"tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 		"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -89,24 +90,26 @@ func TestRunRejectsInvalidRequestBeforeDocker(t *testing.T) {
 		volumeDir string
 		stream    io.ReadCloser
 	}{
-		{name: "relative path", volumeDir: "infra/vol/tnt/prj/env"},
+		{name: "relative path", volumeDir: "var/lib/groundplane/vol/tnt/prj/env"},
 		{name: "trailing slash", volumeDir: testVolumeDir + "/"},
-		{name: "double separator", volumeDir: "/infra//vol/tnt/prj/env"},
+		{name: "double separator", volumeDir: "/var/lib//groundplane/vol/tnt/prj/env"},
 		{name: "traversal", volumeDir: testVolumeDir + "/../other"},
-		{name: "wrong root", volumeDir: "/var/lib/groundplane/vol/tnt/prj/env"},
+		{name: "wrong root", volumeDir: "/srv/groundplane-volumes/" +
+			"tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+			"env_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 		{
 			name: "wrong tenant kind",
-			volumeDir: "/infra/vol/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+			volumeDir: testVolumeRoot + "/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 				"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 		{
 			name: "wrong project kind",
-			volumeDir: "/infra/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+			volumeDir: testVolumeRoot + "/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 				"env_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 		{
 			name: "wrong environment kind",
-			volumeDir: "/infra/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+			volumeDir: testVolumeRoot + "/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 				"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 		{name: "missing stream", volumeDir: testVolumeDir, stream: nil},
@@ -727,7 +730,10 @@ func (f *fakeEngine) callNames() []string {
 }
 
 func newTestRunner(client engineClient) *Runner {
-	return &Runner{client: client, image: testImage, cleanupTimeout: time.Second}
+	return &Runner{
+		client: client, image: testImage, volumeRoot: testVolumeRoot,
+		cleanupTimeout: time.Second,
+	}
 }
 
 func equalStrings(left, right []string) bool {

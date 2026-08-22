@@ -16,6 +16,7 @@ import (
 // consumed by the assignment transaction, not the transaction's new revision.
 type TaskAssignmentRecord struct {
 	TaskID              string
+	Executor            TaskExecutor
 	AgentID             string
 	AgentGeneration     uint64
 	ClaimedTaskRevision int64
@@ -30,13 +31,14 @@ type TaskAssignment struct {
 }
 
 type taskAssignmentJSON struct {
-	Schema              int    `json:"schema"`
-	TaskID              string `json:"task_id"`
-	AgentID             string `json:"agent_id"`
-	AgentGeneration     uint64 `json:"agent_generation"`
-	ClaimedTaskRevision int64  `json:"claimed_task_revision"`
-	AssignedAt          string `json:"assigned_at"`
-	Deadline            string `json:"deadline"`
+	Schema              int          `json:"schema"`
+	TaskID              string       `json:"task_id"`
+	Executor            TaskExecutor `json:"executor"`
+	AgentID             string       `json:"agent_id"`
+	AgentGeneration     uint64       `json:"agent_generation"`
+	ClaimedTaskRevision int64        `json:"claimed_task_revision"`
+	AssignedAt          string       `json:"assigned_at"`
+	Deadline            string       `json:"deadline"`
 }
 
 func encodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
@@ -44,7 +46,7 @@ func encodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(taskAssignmentJSON{
-		Schema: 1, TaskID: record.TaskID, AgentID: record.AgentID,
+		Schema: 1, TaskID: record.TaskID, Executor: record.Executor, AgentID: record.AgentID,
 		AgentGeneration: record.AgentGeneration, ClaimedTaskRevision: record.ClaimedTaskRevision,
 		AssignedAt: record.AssignedAt.Format(time.RFC3339Nano),
 		Deadline:   record.Deadline.Format(time.RFC3339Nano),
@@ -70,7 +72,7 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
 	record := TaskAssignmentRecord{
-		TaskID: data.TaskID, AgentID: data.AgentID, AgentGeneration: data.AgentGeneration,
+		TaskID: data.TaskID, Executor: data.Executor, AgentID: data.AgentID, AgentGeneration: data.AgentGeneration,
 		ClaimedTaskRevision: data.ClaimedTaskRevision, AssignedAt: assignedAt, Deadline: deadline,
 	}
 	if err := validateTaskAssignment(record); err != nil {
@@ -80,12 +82,18 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 }
 
 func validateTaskAssignment(record TaskAssignmentRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindAgent, record.AgentID) != nil ||
-		record.AgentGeneration == 0 || record.ClaimedTaskRevision <= 0 ||
+	if validateStableID(ids.KindTask, record.TaskID) != nil || !validTaskExecutor(record.Executor) ||
+		record.ClaimedTaskRevision <= 0 ||
 		validateTimestamp("task assignment assigned_at", record.AssignedAt) != nil ||
 		validateTimestamp("task assignment deadline", record.Deadline) != nil ||
 		!record.Deadline.After(record.AssignedAt) {
+		return corruptTaskAssignment()
+	}
+	if record.Executor == TaskExecutorAgent &&
+		(validateStableID(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0) {
+		return corruptTaskAssignment()
+	}
+	if record.Executor == TaskExecutorController && (record.AgentID != "" || record.AgentGeneration != 0) {
 		return corruptTaskAssignment()
 	}
 	return nil
@@ -136,13 +144,13 @@ func (repository *TaskRepository) CreateTask(
 		{Key: taskKey(record.ID)},
 		{Key: taskOperationIndexKey(record.OperationID, record.ID)},
 		{Key: taskActiveOperationKey(record.OperationID)},
-		{Key: taskQueueKey(record.ID)},
+		{Key: taskQueueKey(record.Executor, record.ID)},
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(record.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(record.OperationID, record.ID), Value: reference},
 		{Type: MutationPut, Key: taskActiveOperationKey(record.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(record.ID), Value: reference},
+		{Type: MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
@@ -241,13 +249,13 @@ func (repository *TaskRepository) RetryTask(
 		{Key: taskKey(retry.ID)},
 		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskActiveOperationKey(retry.OperationID)},
-		{Key: taskQueueKey(retry.ID)},
+		{Key: taskQueueKey(retry.Executor, retry.ID)},
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
 		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(retry.ID), Value: reference},
+		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
@@ -300,11 +308,32 @@ func (repository *TaskRepository) ClaimNextTask(
 	agentGeneration uint64,
 	assignedAt time.Time,
 ) (TaskAssignment, bool, error) {
+	return repository.claimNextTask(ctx, TaskExecutorAgent, agentID, agentGeneration, assignedAt)
+}
+
+// ClaimNextControllerTask claims the oldest native Controller Task without
+// manufacturing an Agent identity or assignment generation.
+func (repository *TaskRepository) ClaimNextControllerTask(
+	ctx context.Context,
+	assignedAt time.Time,
+) (TaskAssignment, bool, error) {
+	return repository.claimNextTask(ctx, TaskExecutorController, "", 0, assignedAt)
+}
+
+func (repository *TaskRepository) claimNextTask(
+	ctx context.Context,
+	executor TaskExecutor,
+	agentID string,
+	agentGeneration uint64,
+	assignedAt time.Time,
+) (TaskAssignment, bool, error) {
 	if err := validateContext(ctx); err != nil {
 		return TaskAssignment{}, false, err
 	}
-	if validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 {
-		return TaskAssignment{}, false, errs.New(errs.KindValidationFailed, "Agent assignment identity is invalid")
+	if !validTaskExecutor(executor) ||
+		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0)) ||
+		(executor == TaskExecutorController && (agentID != "" || agentGeneration != 0)) {
+		return TaskAssignment{}, false, errs.New(errs.KindValidationFailed, "Task execution claim identity is invalid")
 	}
 	if err := validateTimestamp("task assignment assigned_at", assignedAt); err != nil {
 		return TaskAssignment{}, false, err
@@ -312,52 +341,29 @@ func (repository *TaskRepository) ClaimNextTask(
 
 	conflicts := 0
 	for {
-		queue, err := repository.store.Range(ctx, RangeRequest{Prefix: taskQueuePrefix, Limit: 1})
-		if err != nil {
+		candidate, found, err := repository.nextTaskClaimCandidate(ctx, executor)
+		if err != nil || !found {
 			return TaskAssignment{}, false, err
 		}
-		if len(queue.Values) == 0 {
-			return TaskAssignment{}, false, nil
-		}
-		queued := queue.Values[0]
-		taskID, err := taskIDFromQueueKey(queued.Key)
-		if err != nil {
-			return TaskAssignment{}, false, err
-		}
-		referencedTaskID, err := decodeTaskReference(queued.Value)
-		if err != nil || referencedTaskID != taskID {
-			return TaskAssignment{}, false, errs.New(errs.KindInternal, "task queue record does not match its key")
-		}
-		taskRead, err := repository.store.GetMany(ctx, GetManyRequest{
-			Keys: []string{taskKey(taskID)}, Revision: queue.ReadRevision,
-		})
-		if err != nil {
-			return TaskAssignment{}, false, err
-		}
-		if len(taskRead.Values) != 1 || taskRead.Values[0] == nil {
-			return TaskAssignment{}, false, errs.New(errs.KindInternal, "queued Task primary is missing")
-		}
-		taskValue := taskRead.Values[0]
-		task, err := decodeTaskRecord(taskValue.Value)
-		if err != nil {
-			return TaskAssignment{}, false, err
-		}
-		if task.ID != taskID || task.Status != TaskStatusPending || task.idempotencyMarker == nil {
-			return TaskAssignment{}, false, errs.New(errs.KindInternal, "queued Task is not a claimable pending Task")
-		}
+		queued := candidate.queued
+		taskValue := candidate.taskValue
+		task := candidate.task
 		activeKey := taskActiveOperationKey(task.OperationID)
-		assignmentKey := taskAssignmentKey(agentID, task.ID)
+		assignmentKey := taskExecutionClaimKey(executor, agentID, task.ID)
 		assignmentIndexKey := taskAssignmentIndexKey(task.ID)
 		deadline := assignedAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
 		timeoutIndexKey := taskTimeoutIndexKey(task.ID, deadline)
+		companionKeys := []string{activeKey, assignmentKey, assignmentIndexKey, timeoutIndexKey}
+		if candidate.writerKey != "" {
+			companionKeys = append(companionKeys, candidate.writerKey)
+		}
 		companions, err := repository.store.GetMany(ctx, GetManyRequest{
-			Keys:     []string{activeKey, assignmentKey, assignmentIndexKey, timeoutIndexKey},
-			Revision: queue.ReadRevision,
+			Keys: companionKeys, Revision: candidate.readRevision,
 		})
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
-		if len(companions.Values) != 4 || companions.Values[0] == nil || companions.Values[1] != nil ||
+		if len(companions.Values) != len(companionKeys) || companions.Values[0] == nil || companions.Values[1] != nil ||
 			companions.Values[2] != nil || companions.Values[3] != nil {
 			return TaskAssignment{}, false, errs.New(errs.KindInternal, "queued Task lifecycle records are inconsistent")
 		}
@@ -365,12 +371,19 @@ func (repository *TaskRepository) ClaimNextTask(
 		if err != nil || activeTaskID != task.ID {
 			return TaskAssignment{}, false, errs.New(errs.KindInternal, "active-operation record does not match queued Task")
 		}
+		if candidate.writerKey != "" && companions.Values[4] != nil {
+			conflicts++
+			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
+				return TaskAssignment{}, false, err
+			}
+			continue
+		}
 		running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, assignedAt)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
 		assignment := TaskAssignmentRecord{
-			TaskID: task.ID, AgentID: agentID, AgentGeneration: agentGeneration,
+			TaskID: task.ID, Executor: executor, AgentID: agentID, AgentGeneration: agentGeneration,
 			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: assignedAt, Deadline: deadline,
 		}
 		runningValue, err := encodeTaskRecord(running)
@@ -382,22 +395,40 @@ func (repository *TaskRepository) ClaimNextTask(
 			clear(runningValue)
 			return TaskAssignment{}, false, err
 		}
-		transaction, err := repository.store.Transact(ctx, []Condition{
+		conditions := []Condition{
 			{Key: queued.Key, ModRevision: queued.ModRevision},
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: activeKey, ModRevision: companions.Values[0].ModRevision},
 			{Key: assignmentKey},
 			{Key: assignmentIndexKey},
 			{Key: timeoutIndexKey},
-		}, []Mutation{
+		}
+		mutations := []Mutation{
 			{Type: MutationPut, Key: taskKey(task.ID), Value: runningValue},
 			{Type: MutationDelete, Key: queued.Key},
 			{Type: MutationPut, Key: assignmentKey, Value: assignmentValue},
 			{Type: MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
 			{Type: MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
-		})
+		}
+		var writerValue []byte
+		if candidate.writerKey != "" {
+			writerValue, err = encodeTaskMaterializationWriter(
+				taskMaterializationWriter(task, candidate.environmentID),
+			)
+			if err != nil {
+				clear(runningValue)
+				clear(assignmentValue)
+				return TaskAssignment{}, false, err
+			}
+			conditions = append(conditions, Condition{Key: candidate.writerKey})
+			mutations = append(mutations, Mutation{
+				Type: MutationPut, Key: candidate.writerKey, Value: writerValue,
+			})
+		}
+		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(runningValue)
 		clear(assignmentValue)
+		clear(writerValue)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -417,6 +448,103 @@ func (repository *TaskRepository) ClaimNextTask(
 				Record: running, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			},
 		}, true, nil
+	}
+}
+
+const taskClaimQueuePageSize = 64
+
+type taskClaimCandidate struct {
+	queued        KeyValue
+	taskValue     *KeyValue
+	task          TaskRecord
+	readRevision  int64
+	writerKey     string
+	environmentID string
+}
+
+func (repository *TaskRepository) nextTaskClaimCandidate(
+	ctx context.Context,
+	executor TaskExecutor,
+) (taskClaimCandidate, bool, error) {
+	prefix := taskQueueScopePrefix(executor)
+	start := ""
+	var revision int64
+	for {
+		page, err := repository.store.Range(ctx, RangeRequest{
+			Prefix: prefix, StartExclusive: start, Limit: taskClaimQueuePageSize, Revision: revision,
+		})
+		if err != nil {
+			return taskClaimCandidate{}, false, err
+		}
+		if revision == 0 {
+			revision = page.ReadRevision
+		}
+		if page.ReadRevision != revision {
+			return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "task queue scan changed MVCC revision")
+		}
+		for _, queued := range page.Values {
+			taskID, err := taskIDFromQueueKey(executor, queued.Key)
+			if err != nil {
+				return taskClaimCandidate{}, false, err
+			}
+			referencedTaskID, err := decodeTaskReference(queued.Value)
+			if err != nil || referencedTaskID != taskID {
+				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "task queue record does not match its key")
+			}
+			taskRead, err := repository.store.GetMany(ctx, GetManyRequest{
+				Keys: []string{taskKey(taskID)}, Revision: revision,
+			})
+			if err != nil {
+				return taskClaimCandidate{}, false, err
+			}
+			if len(taskRead.Values) != 1 || taskRead.Values[0] == nil {
+				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task primary is missing")
+			}
+			taskValue := taskRead.Values[0]
+			task, err := decodeTaskRecord(taskValue.Value)
+			if err != nil {
+				return taskClaimCandidate{}, false, err
+			}
+			if task.ID != taskID || task.Executor != executor || task.Status != TaskStatusPending ||
+				task.idempotencyMarker == nil {
+				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
+			}
+			environmentID, materializes, err := taskMaterializationEnvironment(task)
+			if err != nil {
+				return taskClaimCandidate{}, false, err
+			}
+			writerKey := ""
+			if materializes {
+				writerKey = taskMaterializationWriterKey(environmentID)
+				writerRead, err := repository.store.GetMany(ctx, GetManyRequest{
+					Keys: []string{writerKey}, Revision: revision,
+				})
+				if err != nil {
+					return taskClaimCandidate{}, false, err
+				}
+				if len(writerRead.Values) != 1 {
+					return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "materialization writer read is incomplete")
+				}
+				if writerRead.Values[0] != nil {
+					writer, err := decodeTaskMaterializationWriter(writerRead.Values[0].Value)
+					if err != nil || writer.EnvironmentID != environmentID || writer.TaskID == task.ID {
+						return taskClaimCandidate{}, false, corruptTaskMaterializationWriter()
+					}
+					continue
+				}
+			}
+			return taskClaimCandidate{
+				queued: queued, taskValue: taskValue, task: task, readRevision: revision,
+				writerKey: writerKey, environmentID: environmentID,
+			}, true, nil
+		}
+		if !page.More {
+			return taskClaimCandidate{}, false, nil
+		}
+		if len(page.Values) == 0 {
+			return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "task queue page is empty before completion")
+		}
+		start = page.Values[len(page.Values)-1].Key
 	}
 }
 
@@ -498,6 +626,25 @@ func (repository *TaskRepository) ListAgentAssignments(
 			taskValue.ModRevision < assignmentValue.ModRevision || task.idempotencyMarker == nil {
 			return nil, errs.New(errs.KindInternal, "durable Task assignment and Task are inconsistent")
 		}
+		environmentID, materializes, err := taskMaterializationEnvironment(task)
+		if err != nil {
+			return nil, err
+		}
+		if materializes {
+			writerRead, err := repository.store.GetMany(ctx, GetManyRequest{
+				Keys: []string{taskMaterializationWriterKey(environmentID)}, Revision: assignments.ReadRevision,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if len(writerRead.Values) != 1 || writerRead.Values[0] == nil {
+				return nil, errs.New(errs.KindInternal, "assigned Task materialization writer is missing")
+			}
+			writer, err := decodeTaskMaterializationWriter(writerRead.Values[0].Value)
+			if err != nil || writer != taskMaterializationWriter(task, environmentID) {
+				return nil, corruptTaskMaterializationWriter()
+			}
+		}
 		result[index] = TaskAssignment{
 			Assignment: Versioned[TaskAssignmentRecord]{
 				Record: record, Revision: assignmentValue.ModRevision,
@@ -510,6 +657,68 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 	}
 	return result, nil
+}
+
+// ListControllerTaskClaims restores the single native Controller execution
+// claim at one MVCC revision. The MVP runs one Controller worker serially, so
+// more than one durable claim is corruption rather than hidden concurrency.
+func (repository *TaskRepository) ListControllerTaskClaims(
+	ctx context.Context,
+) ([]TaskAssignment, error) {
+	if err := validateContext(ctx); err != nil {
+		return nil, err
+	}
+	claims, err := repository.store.Range(ctx, RangeRequest{
+		Prefix: controllerTaskClaimPrefix,
+		Limit:  2,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if claims.More || len(claims.Values) > 1 {
+		return nil, errs.New(errs.KindInternal, "Controller Task claims exceed serial execution")
+	}
+	if len(claims.Values) == 0 {
+		return []TaskAssignment{}, nil
+	}
+	claimValue := claims.Values[0]
+	claim, err := decodeTaskAssignment(claimValue.Value)
+	if err != nil {
+		return nil, err
+	}
+	if claim.Executor != TaskExecutorController || claimValue.Key != controllerTaskClaimKey(claim.TaskID) ||
+		claim.ClaimedTaskRevision >= claimValue.ModRevision {
+		return nil, errs.New(errs.KindInternal, "Controller Task claim does not match its key")
+	}
+	tasks, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{taskKey(claim.TaskID)}, Revision: claims.ReadRevision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(tasks.Values) != 1 || tasks.Values[0] == nil {
+		return nil, errs.New(errs.KindInternal, "claimed Controller Task primary is missing")
+	}
+	taskValue := tasks.Values[0]
+	task, err := decodeTaskRecord(taskValue.Value)
+	if err != nil {
+		return nil, err
+	}
+	if task.ID != claim.TaskID || task.Executor != TaskExecutorController ||
+		task.Status != TaskStatusRunning || task.StartedAt == nil ||
+		!task.StartedAt.Equal(claim.AssignedAt) ||
+		!claim.Deadline.Equal(claim.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
+		taskValue.ModRevision < claimValue.ModRevision || task.idempotencyMarker == nil {
+		return nil, errs.New(errs.KindInternal, "Controller Task claim and Task are inconsistent")
+	}
+	return []TaskAssignment{{
+		Assignment: Versioned[TaskAssignmentRecord]{
+			Record: claim, Revision: claimValue.ModRevision, ReadRevision: claims.ReadRevision,
+		},
+		Task: Versioned[TaskRecord]{
+			Record: task, Revision: taskValue.ModRevision, ReadRevision: claims.ReadRevision,
+		},
+	}}, nil
 }
 
 // TimeoutAgentAssignments terminalizes the complete configured assignment set
@@ -570,21 +779,81 @@ func (repository *TaskRepository) AcknowledgeTask(
 	result TaskResultRecord,
 	terminalAt time.Time,
 ) (Versioned[TaskRecord], error) {
+	return repository.acknowledgeTask(
+		ctx, TaskExecutorAgent, agentID, agentGeneration, taskID, terminalStatus, &result, terminalAt, "",
+	)
+}
+
+// AcknowledgeEnvironmentCreation atomically terminalizes one Agent Task and
+// moves its owned Environment from provisioning to ready or failed.
+func (repository *TaskRepository) AcknowledgeEnvironmentCreation(
+	ctx context.Context,
+	agentID string,
+	agentGeneration uint64,
+	taskID string,
+	environmentID string,
+	terminalStatus TaskStatus,
+	result TaskResultRecord,
+	terminalAt time.Time,
+) (Versioned[TaskRecord], error) {
+	return repository.acknowledgeTask(
+		ctx,
+		TaskExecutorAgent,
+		agentID,
+		agentGeneration,
+		taskID,
+		terminalStatus,
+		&result,
+		terminalAt,
+		environmentID,
+	)
+}
+
+// AcknowledgeControllerTask terminalizes one Controller claim. Native Tasks
+// have no Compose result; their durable event journal carries execution detail.
+func (repository *TaskRepository) AcknowledgeControllerTask(
+	ctx context.Context,
+	taskID string,
+	terminalStatus TaskStatus,
+	terminalAt time.Time,
+) (Versioned[TaskRecord], error) {
+	return repository.acknowledgeTask(
+		ctx, TaskExecutorController, "", 0, taskID, terminalStatus, nil, terminalAt, "",
+	)
+}
+
+func (repository *TaskRepository) acknowledgeTask(
+	ctx context.Context,
+	executor TaskExecutor,
+	agentID string,
+	agentGeneration uint64,
+	taskID string,
+	terminalStatus TaskStatus,
+	result *TaskResultRecord,
+	terminalAt time.Time,
+	environmentID string,
+) (Versioned[TaskRecord], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
-	if validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 ||
-		validateStableID(ids.KindTask, taskID) != nil || !isTerminalTaskStatus(terminalStatus) {
+	if !validTaskExecutor(executor) || validateStableID(ids.KindTask, taskID) != nil ||
+		!isTerminalTaskStatus(terminalStatus) ||
+		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || result == nil)) ||
+		(executor == TaskExecutorController && (agentID != "" || agentGeneration != 0 || result != nil)) {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Task acknowledgement is invalid")
 	}
 	if err := validateTimestamp("task terminal_at", terminalAt); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
+	if environmentID != "" && validateStableID(ids.KindEnvironment, environmentID) != nil {
+		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Environment creation acknowledgement is invalid")
+	}
 
+	claimKey := taskExecutionClaimKey(executor, agentID, taskID)
 	conflicts := 0
 	for {
 		primaryAndAssignment, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-			taskKey(taskID), taskAssignmentKey(agentID, taskID), taskAssignmentIndexKey(taskID),
+			taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 		}})
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
@@ -599,14 +868,45 @@ func (repository *TaskRepository) AcknowledgeTask(
 		}
 		assignmentValue := primaryAndAssignment.Values[1]
 		assignmentIndexValue := primaryAndAssignment.Values[2]
-		if err := validateTaskResult(result, task.Steps, terminalStatus); err != nil {
-			return Versioned[TaskRecord]{}, err
+		if task.Executor != executor {
+			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Task execution authority changed")
+		}
+		environmentCreation := executor == TaskExecutorAgent && task.Type == TaskCreate &&
+			validateStableID(ids.KindEnvironment, task.Target) == nil
+		environmentRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
+			validateStableID(ids.KindEnvironment, task.Target) == nil
+		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
+			return Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"Environment creation Task requires its atomic provisioning acknowledgement",
+			)
+		}
+		if result != nil {
+			if err := validateTaskResult(*result, task.Steps, terminalStatus); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 		}
 		if assignmentValue == nil {
 			if assignmentIndexValue != nil {
 				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Task assignment index is orphaned")
 			}
-			if task.Status == terminalStatus && task.Result != nil && taskResultsEqual(*task.Result, result) {
+			if task.Status == terminalStatus &&
+				((result == nil && task.Result == nil) ||
+					(result != nil && task.Result != nil && taskResultsEqual(*task.Result, *result))) {
+				if environmentID != "" {
+					if err := repository.validateEnvironmentCreationReplay(
+						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+					); err != nil {
+						return Versioned[TaskRecord]{}, err
+					}
+				}
+				if environmentRemoval {
+					if err := repository.validateEnvironmentRemovalReplay(
+						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+					); err != nil {
+						return Versioned[TaskRecord]{}, err
+					}
+				}
 				return Versioned[TaskRecord]{
 					Record: task, Revision: taskValue.ModRevision,
 					ReadRevision: primaryAndAssignment.ReadRevision,
@@ -621,17 +921,26 @@ func (repository *TaskRepository) AcknowledgeTask(
 		if assignmentIndexValue == nil || !bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
 			return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Task assignment index does not match assignment")
 		}
-		if assignment.TaskID != task.ID || assignment.AgentID != agentID ||
+		if assignment.TaskID != task.ID || assignment.Executor != executor || assignment.AgentID != agentID ||
 			assignment.AgentGeneration != agentGeneration ||
 			assignment.ClaimedTaskRevision >= assignmentValue.ModRevision || task.StartedAt == nil ||
 			!assignment.AssignedAt.Equal(*task.StartedAt) {
 			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Task assignment does not match the Agent generation")
 		}
+		if environmentRemoval && terminalStatus == TaskStatusCompleted {
+			processed, err := repository.finalizeEnvironmentBlueprintRevisionBatch(ctx, task, terminalAt)
+			if err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+			if processed {
+				continue
+			}
+		}
 		terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		terminal.Result = cloneTaskResult(&result)
+		terminal.Result = cloneTaskResult(result)
 		if err := validateTaskRecord(terminal); err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -643,23 +952,42 @@ func (repository *TaskRepository) AcknowledgeTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
+		materializationEnvironmentID, materializes, err := taskMaterializationEnvironment(task)
+		if err != nil {
+			return Versioned[TaskRecord]{}, err
+		}
+		companionKeys := []string{
+			taskActiveOperationKey(task.OperationID), markerKey, taskQueueKey(task.Executor, task.ID), retentionKey,
+			taskTimeoutIndexKey(task.ID, assignment.Deadline),
+		}
+		writerKey := ""
+		if materializes {
+			writerKey = taskMaterializationWriterKey(materializationEnvironmentID)
+			companionKeys = append(companionKeys, writerKey)
+		}
 		companions, err := repository.store.GetMany(ctx, GetManyRequest{
-			Keys: []string{
-				taskActiveOperationKey(task.OperationID), markerKey, taskQueueKey(task.ID), retentionKey,
-				taskTimeoutIndexKey(task.ID, assignment.Deadline),
-			},
+			Keys:     companionKeys,
 			Revision: primaryAndAssignment.ReadRevision,
 		})
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		if len(companions.Values) != 5 || companions.Values[0] == nil || companions.Values[1] == nil ||
+		if len(companions.Values) != len(companionKeys) || companions.Values[0] == nil || companions.Values[1] == nil ||
 			companions.Values[2] != nil || companions.Values[3] != nil || companions.Values[4] == nil ||
 			!bytes.Equal(companions.Values[4].Value, assignmentValue.Value) {
 			return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "running Task lifecycle records are inconsistent")
 		}
 		if err := validateTaskLifecycleCompanions(task, companions.Values[0], companions.Values[1]); err != nil {
 			return Versioned[TaskRecord]{}, err
+		}
+		if materializes {
+			if companions.Values[5] == nil {
+				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task materialization writer is missing")
+			}
+			writer, err := decodeTaskMaterializationWriter(companions.Values[5].Value)
+			if err != nil || writer != taskMaterializationWriter(task, materializationEnvironmentID) {
+				return Versioned[TaskRecord]{}, corruptTaskMaterializationWriter()
+			}
 		}
 		transitionedMarker, err = hydrateTerminalTaskMarker(transitionedMarker, companions.Values[1].Value)
 		if err != nil {
@@ -682,27 +1010,63 @@ func (repository *TaskRepository) AcknowledgeTask(
 			clear(markerValue)
 			return Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 		}
-		transaction, err := repository.store.Transact(ctx, []Condition{
+		conditions := []Condition{
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
-			{Key: taskAssignmentKey(agentID, task.ID), ModRevision: assignmentValue.ModRevision},
+			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
 			{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
 			{Key: taskActiveOperationKey(task.OperationID), ModRevision: companions.Values[0].ModRevision},
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
-			{Key: taskQueueKey(task.ID)},
+			{Key: taskQueueKey(task.Executor, task.ID)},
 			{Key: retentionKey},
 			{Key: taskTimeoutIndexKey(task.ID, assignment.Deadline), ModRevision: companions.Values[4].ModRevision},
-		}, []Mutation{
+		}
+		mutations := []Mutation{
 			{Type: MutationPut, Key: taskKey(task.ID), Value: terminalValue},
-			{Type: MutationDelete, Key: taskAssignmentKey(agentID, task.ID)},
+			{Type: MutationDelete, Key: claimKey},
 			{Type: MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
 			{Type: MutationDelete, Key: taskActiveOperationKey(task.OperationID)},
 			{Type: MutationPut, Key: markerKey, Value: markerValue},
 			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
 			{Type: MutationDelete, Key: taskTimeoutIndexKey(task.ID, assignment.Deadline)},
-		})
+		}
+		if materializes {
+			conditions = append(conditions, Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
+			mutations = append(mutations, Mutation{Type: MutationDelete, Key: writerKey})
+		}
+		var environmentValue []byte
+		if environmentID != "" {
+			environmentCondition, environmentMutation, value, err := repository.prepareEnvironmentCreationAcknowledgement(
+				ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+			)
+			if err != nil {
+				clear(terminalValue)
+				clear(markerValue)
+				clear(retentionValue)
+				return Versioned[TaskRecord]{}, err
+			}
+			environmentValue = value
+			conditions = append(conditions, environmentCondition)
+			mutations = append(mutations, environmentMutation)
+		}
+		if environmentRemoval {
+			environmentConditions, environmentMutations, err := repository.prepareEnvironmentRemovalAcknowledgement(
+				ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+			)
+			if err != nil {
+				clear(terminalValue)
+				clear(markerValue)
+				clear(retentionValue)
+				clear(environmentValue)
+				return Versioned[TaskRecord]{}, err
+			}
+			conditions = append(conditions, environmentConditions...)
+			mutations = append(mutations, environmentMutations...)
+		}
+		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
+		clear(environmentValue)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -746,18 +1110,22 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 		if deadline.After(now) {
 			break
 		}
-		_, err = repository.AcknowledgeTask(
-			ctx,
-			assignment.AgentID,
-			assignment.AgentGeneration,
-			taskID,
-			TaskStatusTimedOut,
-			TaskResultRecord{
-				Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-				ReconciliationRequired: true,
-			},
-			now,
-		)
+		if assignment.Executor == TaskExecutorController {
+			_, err = repository.AcknowledgeControllerTask(ctx, taskID, TaskStatusTimedOut, now)
+		} else {
+			_, err = repository.AcknowledgeTask(
+				ctx,
+				assignment.AgentID,
+				assignment.AgentGeneration,
+				taskID,
+				TaskStatusTimedOut,
+				TaskResultRecord{
+					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+					ReconciliationRequired: true,
+				},
+				now,
+			)
+		}
 		if err != nil {
 			if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 				continue
@@ -828,7 +1196,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		companions, err := repository.store.GetMany(ctx, GetManyRequest{
 			Keys: []string{
 				taskActiveOperationKey(current.Record.OperationID), markerKey,
-				taskQueueKey(taskID), retentionKey,
+				taskQueueKey(current.Record.Executor, taskID), retentionKey,
 			},
 			Revision: current.ReadRevision,
 		})
@@ -871,12 +1239,12 @@ func (repository *TaskRepository) AbortPendingTask(
 			{Key: taskKey(taskID), ModRevision: current.Revision},
 			{Key: taskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
-			{Key: taskQueueKey(taskID), ModRevision: companions.Values[2].ModRevision},
+			{Key: taskQueueKey(current.Record.Executor, taskID), ModRevision: companions.Values[2].ModRevision},
 			{Key: retentionKey},
 		}, []Mutation{
 			{Type: MutationPut, Key: taskKey(taskID), Value: terminalValue},
 			{Type: MutationDelete, Key: taskActiveOperationKey(current.Record.OperationID)},
-			{Type: MutationDelete, Key: taskQueueKey(taskID)},
+			{Type: MutationDelete, Key: taskQueueKey(current.Record.Executor, taskID)},
 			{Type: MutationPut, Key: markerKey, Value: markerValue},
 			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
 		})

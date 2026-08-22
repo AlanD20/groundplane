@@ -13,6 +13,7 @@ import (
 type localAgentHealthReader interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 	Health(context.Context, string) (localagent.Health, error)
+	UpdateConfig(context.Context, string, localagent.Config) (localagent.Config, error)
 }
 
 type localAgentAssignmentReader interface {
@@ -74,6 +75,22 @@ func (service *localAgentReadService) GetAgentConfig(ctx context.Context, id str
 	return projectAgentConfig(health.Agent.Config), nil
 }
 
+func (service *localAgentReadService) UpdateAgentConfig(
+	ctx context.Context,
+	id string,
+	config apiTypes.AgentConfig,
+) (apiTypes.AgentConfig, error) {
+	updated, err := service.health.UpdateConfig(ctx, id, localagent.Config{
+		PullIntervalSeconds: int32(config.PullIntervalSeconds),
+		MaxConcurrentTasks:  int32(config.MaxConcurrentTasks),
+		Labels:              copyAgentLabels(config.Labels),
+	})
+	if err != nil {
+		return apiTypes.AgentConfig{}, err
+	}
+	return projectAgentConfig(updated), nil
+}
+
 func (service *localAgentReadService) projectAgent(
 	ctx context.Context,
 	health localagent.Health,
@@ -92,11 +109,16 @@ func (service *localAgentReadService) projectAgent(
 		return apiTypes.Agent{}, err
 	}
 	agent := apiTypes.Agent{
-		ID:       health.Agent.ID,
-		Host:     service.hostname,
-		Status:   status,
-		Labels:   copyAgentLabels(health.Agent.Config.Labels),
-		InFlight: len(assignments),
+		ID:               health.Agent.ID,
+		EnrollmentTaskID: health.Agent.EnrollmentTaskID,
+		Host:             service.hostname,
+		Status:           status,
+		Labels:           copyAgentLabels(health.Agent.Config.Labels),
+		InFlight:         len(assignments),
+	}
+	if !health.Agent.ReadyAt.IsZero() {
+		readyAt := health.Agent.ReadyAt.UTC()
+		agent.ReadyAt = &readyAt
 	}
 	if health.Version != "" {
 		version := health.Version

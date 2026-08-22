@@ -23,7 +23,7 @@ import (
 func TestAgentChannelRuntimeServesUDSAndFailsClosedWithoutAuthenticator(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "agent.sock")
 	listening := make(chan struct{})
-	runtime := newAgentChannelRuntime(nil, nil)
+	runtime := newAgentChannelRuntime(nil, nil, nil, nil)
 	runtime.listen = func(context.Context) (net.Listener, error) {
 		listener, err := net.Listen("unix", socketPath)
 		if err == nil {

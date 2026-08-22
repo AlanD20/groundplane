@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	MaximumTaskRecordBytes = 256 * 1024
-	MaximumTaskEventBytes  = 32 * 1024
-	MaximumTaskEvents      = 1000
-	TaskRetention          = 90 * 24 * time.Hour
+	MaximumTaskRecordBytes              = 256 * 1024
+	MaximumTaskEventBytes               = 32 * 1024
+	MaximumTaskEvents                   = 1000
+	TaskRetention                       = 90 * 24 * time.Hour
+	TaskMaterializationEnvironmentParam = "materialization_environment_id"
 )
 
 // TaskType is the closed durable task catalog. It is a persistence DTO rather
@@ -42,6 +43,25 @@ const (
 	TaskDestroy   TaskType = "destroy"
 	TaskRotate    TaskType = "rotate"
 )
+
+// TaskExecutor is the immutable authority allowed to claim a Task. It is
+// explicit durable input so execution placement is never inferred from type or
+// target identity.
+type TaskExecutor string
+
+const (
+	TaskExecutorAgent      TaskExecutor = "agent"
+	TaskExecutorController TaskExecutor = "controller"
+)
+
+func validTaskExecutor(executor TaskExecutor) bool {
+	switch executor {
+	case TaskExecutorAgent, TaskExecutorController:
+		return true
+	default:
+		return false
+	}
+}
 
 // TaskStatus is the durable state machine. Acknowledgement remains a streamed
 // Agent event and is deliberately not a task status.
@@ -78,7 +98,10 @@ type TaskStepRecord struct {
 
 type TaskResultKind string
 
-const TaskResultCompose TaskResultKind = "compose"
+const (
+	TaskResultCompose              TaskResultKind = "compose"
+	TaskResultEnvironmentDirectory TaskResultKind = "environment_directory"
+)
 
 type TaskResultDiagnostic string
 
@@ -111,26 +134,28 @@ type TaskResultRecord struct {
 // pruning scheduler can delete the task, events, and dedupe records together
 // after RetainUntil without deriving time from a ULID.
 type TaskRecord struct {
-	ID                string            `json:"id"`
-	OperationID       string            `json:"operation_id"`
-	RetryOf           string            `json:"retry_of,omitempty"`
-	IdempotencyKey    string            `json:"idempotency_key,omitempty"`
-	PlanID            string            `json:"plan_id"`
-	PlanHash          string            `json:"plan_hash,omitempty"`
-	RenderGeneration  int32             `json:"render_generation"`
-	Type              TaskType          `json:"type"`
-	Target            string            `json:"target"`
-	Params            map[string]string `json:"params,omitempty"`
-	Steps             []TaskStepRecord  `json:"steps,omitempty"`
-	TimeoutSeconds    int64             `json:"timeout_seconds"`
-	Status            TaskStatus        `json:"status"`
-	Result            *TaskResultRecord `json:"result,omitempty"`
-	NextEventSequence uint64            `json:"next_event_sequence"`
-	EventCount        uint32            `json:"event_count"`
-	CreatedAt         time.Time         `json:"created_at"`
-	StartedAt         *time.Time        `json:"started_at,omitempty"`
-	TerminalAt        *time.Time        `json:"terminal_at,omitempty"`
-	RetainUntil       *time.Time        `json:"retain_until,omitempty"`
+	ID                string                      `json:"id"`
+	OperationID       string                      `json:"operation_id"`
+	RetryOf           string                      `json:"retry_of,omitempty"`
+	IdempotencyKey    string                      `json:"idempotency_key,omitempty"`
+	Executor          TaskExecutor                `json:"executor"`
+	PlanID            string                      `json:"plan_id"`
+	PlanHash          string                      `json:"plan_hash,omitempty"`
+	RenderGeneration  int32                       `json:"render_generation"`
+	Type              TaskType                    `json:"type"`
+	Target            string                      `json:"target"`
+	Params            map[string]string           `json:"params,omitempty"`
+	Steps             []TaskStepRecord            `json:"steps,omitempty"`
+	Materializations  []TaskMaterializationRecord `json:"materializations,omitempty"`
+	TimeoutSeconds    int64                       `json:"timeout_seconds"`
+	Status            TaskStatus                  `json:"status"`
+	Result            *TaskResultRecord           `json:"result,omitempty"`
+	NextEventSequence uint64                      `json:"next_event_sequence"`
+	EventCount        uint32                      `json:"event_count"`
+	CreatedAt         time.Time                   `json:"created_at"`
+	StartedAt         *time.Time                  `json:"started_at,omitempty"`
+	TerminalAt        *time.Time                  `json:"terminal_at,omitempty"`
+	RetainUntil       *time.Time                  `json:"retain_until,omitempty"`
 	idempotencyMarker *IdempotencyLocator
 }
 
@@ -180,27 +205,29 @@ type PreparedTaskEvent struct {
 }
 
 type taskRecordData struct {
-	ID                string              `json:"id"`
-	OperationID       string              `json:"operation_id"`
-	RetryOf           string              `json:"retry_of,omitempty"`
-	IdempotencyKey    string              `json:"idempotency_key,omitempty"`
-	PlanID            string              `json:"plan_id"`
-	PlanHash          string              `json:"plan_hash,omitempty"`
-	RenderGeneration  int32               `json:"render_generation"`
-	Type              TaskType            `json:"type"`
-	Target            string              `json:"target"`
-	Params            map[string]string   `json:"params,omitempty"`
-	Steps             []TaskStepRecord    `json:"steps,omitempty"`
-	TimeoutSeconds    int64               `json:"timeout_seconds"`
-	Status            TaskStatus          `json:"status"`
-	Result            *taskResultData     `json:"result,omitempty"`
-	NextEventSequence uint64              `json:"next_event_sequence"`
-	EventCount        uint32              `json:"event_count"`
-	CreatedAt         string              `json:"created_at"`
-	StartedAt         string              `json:"started_at,omitempty"`
-	TerminalAt        string              `json:"terminal_at,omitempty"`
-	RetainUntil       string              `json:"retain_until,omitempty"`
-	IdempotencyMarker *IdempotencyLocator `json:"idempotency_marker,omitempty"`
+	ID                string                      `json:"id"`
+	OperationID       string                      `json:"operation_id"`
+	RetryOf           string                      `json:"retry_of,omitempty"`
+	IdempotencyKey    string                      `json:"idempotency_key,omitempty"`
+	Executor          TaskExecutor                `json:"executor"`
+	PlanID            string                      `json:"plan_id"`
+	PlanHash          string                      `json:"plan_hash,omitempty"`
+	RenderGeneration  int32                       `json:"render_generation"`
+	Type              TaskType                    `json:"type"`
+	Target            string                      `json:"target"`
+	Params            map[string]string           `json:"params,omitempty"`
+	Steps             []TaskStepRecord            `json:"steps,omitempty"`
+	Materializations  []TaskMaterializationRecord `json:"materializations,omitempty"`
+	TimeoutSeconds    int64                       `json:"timeout_seconds"`
+	Status            TaskStatus                  `json:"status"`
+	Result            *taskResultData             `json:"result,omitempty"`
+	NextEventSequence uint64                      `json:"next_event_sequence"`
+	EventCount        uint32                      `json:"event_count"`
+	CreatedAt         string                      `json:"created_at"`
+	StartedAt         string                      `json:"started_at,omitempty"`
+	TerminalAt        string                      `json:"terminal_at,omitempty"`
+	RetainUntil       string                      `json:"retain_until,omitempty"`
+	IdempotencyMarker *IdempotencyLocator         `json:"idempotency_marker,omitempty"`
 }
 
 type taskResultData struct {
@@ -244,7 +271,7 @@ func newTaskRecord(
 	createdAt time.Time,
 ) TaskRecord {
 	return TaskRecord{
-		ID: id, OperationID: operationID, Type: taskType, Target: target,
+		ID: id, OperationID: operationID, Executor: TaskExecutorAgent, Type: taskType, Target: target,
 		TimeoutSeconds: timeoutSeconds, Status: TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: createdAt,
 	}
@@ -271,11 +298,12 @@ func cloneRetryTask(source TaskRecord, id string, createdAt time.Time) (TaskReco
 
 	retry := TaskRecord{
 		ID: id, OperationID: source.OperationID, RetryOf: source.ID,
-		IdempotencyKey: source.IdempotencyKey, PlanID: source.PlanID,
+		IdempotencyKey: source.IdempotencyKey, Executor: source.Executor, PlanID: source.PlanID,
 		PlanHash: source.PlanHash, RenderGeneration: source.RenderGeneration,
 		Type: source.Type, Target: source.Target, Params: cloneStringMap(source.Params),
 		Steps: cloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
-		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt,
+		Materializations: cloneTaskMaterializationReferences(source.Materializations),
+		Status:           TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt,
 	}
 	if err := validateTaskRecord(retry); err != nil {
 		return TaskRecord{}, err
@@ -444,6 +472,9 @@ func validateTaskRecord(record TaskRecord) error {
 			return errs.New(errs.KindValidationFailed, "task retry_of must name another task")
 		}
 	}
+	if !validTaskExecutor(record.Executor) {
+		return errs.New(errs.KindValidationFailed, "task executor is invalid")
+	}
 	if !validTaskType(record.Type) {
 		return errs.New(errs.KindValidationFailed, "task type is not in the durable task catalog")
 	}
@@ -458,6 +489,10 @@ func validateTaskRecord(record TaskRecord) error {
 	}
 	if record.RenderGeneration <= 0 {
 		return errs.New(errs.KindValidationFailed, "task render_generation must be positive")
+	}
+	materializationEnvironment, hasMaterializationEnvironment, err := taskMaterializationEnvironment(record)
+	if err != nil {
+		return err
 	}
 	if record.idempotencyMarker != nil {
 		if err := validateIdempotencyLocator(*record.idempotencyMarker); err != nil {
@@ -479,6 +514,14 @@ func validateTaskRecord(record TaskRecord) error {
 	if err := validateTaskSteps(record.Steps); err != nil {
 		return err
 	}
+	if err := validateTaskMaterializationReferences(
+		record.Materializations,
+		record.Steps,
+		materializationEnvironment,
+		hasMaterializationEnvironment,
+	); err != nil {
+		return err
+	}
 	if record.Result != nil {
 		if !isTerminalTaskStatus(record.Status) {
 			return errs.New(errs.KindInternal, "nonterminal task has a completion result")
@@ -491,7 +534,7 @@ func validateTaskRecord(record TaskRecord) error {
 }
 
 func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
-	if result.Kind != TaskResultCompose {
+	if result.Kind != TaskResultCompose && result.Kind != TaskResultEnvironmentDirectory {
 		return errs.New(errs.KindValidationFailed, "task result kind is invalid")
 	}
 	switch result.Diagnostic {
@@ -514,6 +557,10 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 	if status == TaskStatusCompleted && (result.ExitCode != 0 || result.FailedStepID != "" ||
 		result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
 		return errs.New(errs.KindValidationFailed, "completed task result is inconsistent")
+	}
+	if result.Kind == TaskResultEnvironmentDirectory &&
+		(len(result.Projects) != 0 || result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
+		return errs.New(errs.KindValidationFailed, "environment directory task result is inconsistent")
 	}
 	if len(result.Projects) > 64 {
 		return errs.New(errs.KindValidationFailed, "task result has too many project summaries")
@@ -808,11 +855,12 @@ func decodeTaskEventDedupRecord(value []byte) (TaskEventDedupRecord, error) {
 func taskRecordToData(record TaskRecord) taskRecordData {
 	return taskRecordData{
 		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
-		IdempotencyKey: record.IdempotencyKey, PlanID: record.PlanID,
+		IdempotencyKey: record.IdempotencyKey, Executor: record.Executor, PlanID: record.PlanID,
 		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
 		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
-		Status: record.Status, NextEventSequence: record.NextEventSequence,
+		Materializations: cloneTaskMaterializationReferences(record.Materializations),
+		Status:           record.Status, NextEventSequence: record.NextEventSequence,
 		Result:     taskResultToData(record.Result),
 		EventCount: record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
 		StartedAt:         formatOptionalTimestamp(record.StartedAt),
@@ -845,10 +893,11 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 	}
 	return TaskRecord{
 		ID: data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
-		IdempotencyKey: data.IdempotencyKey, PlanID: data.PlanID,
+		IdempotencyKey: data.IdempotencyKey, Executor: data.Executor, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
-		TimeoutSeconds: data.TimeoutSeconds, Status: data.Status,
+		Materializations: data.Materializations,
+		TimeoutSeconds:   data.TimeoutSeconds, Status: data.Status,
 		Result:            result,
 		NextEventSequence: data.NextEventSequence, EventCount: data.EventCount,
 		CreatedAt: createdAt, StartedAt: startedAt, TerminalAt: terminalAt,
@@ -937,6 +986,7 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned := record
 	cloned.Params = cloneStringMap(record.Params)
 	cloned.Steps = cloneTaskSteps(record.Steps)
+	cloned.Materializations = cloneTaskMaterializationReferences(record.Materializations)
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
 	cloned.TerminalAt = cloneTimePointer(record.TerminalAt)
 	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)

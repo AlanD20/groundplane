@@ -71,8 +71,8 @@ func projectSlugKey(record ProjectRecord) string {
 	return projectTenantSlugKey(record.TenantID, record.Slug)
 }
 
-func environmentSlugKey(projectID string, slug string) string {
-	return "/v1/indexes/environments/by-slug/project/" + projectID + "/" + encodeDynamicSegment(slug)
+func environmentNameKey(projectID string, name string) string {
+	return "/v1/indexes/environments/by-name/project/" + projectID + "/" + encodeDynamicSegment(name)
 }
 
 func projectTenantOwnerPrefix(tenantID string) string {
@@ -126,7 +126,13 @@ func validateTenant(record TenantRecord) error {
 	if err := validateLabel("tenant slug", record.Slug); err != nil {
 		return err
 	}
-	return validateLabel("tenant name", record.Name)
+	if err := validateLabel("tenant name", record.Name); err != nil {
+		return err
+	}
+	if record.Description != "" && !utf8.ValidString(record.Description) {
+		return errs.New(errs.KindValidationFailed, "tenant description must be valid UTF-8")
+	}
+	return nil
 }
 
 func validateProject(record ProjectRecord) error {
@@ -138,6 +144,9 @@ func validateProject(record ProjectRecord) error {
 	}
 	if err := validateLabel("project name", record.Name); err != nil {
 		return err
+	}
+	if record.Description != "" && !utf8.ValidString(record.Description) {
+		return errs.New(errs.KindValidationFailed, "project description must be valid UTF-8")
 	}
 	switch record.Kind {
 	case ProjectKindTenant:
@@ -159,13 +168,16 @@ func validateEnvironment(record EnvironmentRecord) error {
 	if err := validateID(ids.KindProject, record.ProjectID); err != nil {
 		return err
 	}
-	if err := validateLabel("environment slug", record.Slug); err != nil {
-		return err
-	}
 	if err := validateLabel("environment name", record.Name); err != nil {
 		return err
 	}
 	if err := validateLabel("environment volume directory", record.VolumeDir); err != nil {
+		return err
+	}
+	if err := validateEnvironmentRecordPath(record); err != nil {
+		return err
+	}
+	if err := validateEnvironmentProvisioning(record); err != nil {
 		return err
 	}
 	_, offset := record.CreatedAt.Zone()
@@ -187,16 +199,18 @@ func encodeTenant(record TenantRecord) ([]byte, error)   { return encodeEnvelope
 func encodeProject(record ProjectRecord) ([]byte, error) { return encodeEnvelope("project", record) }
 func encodeEnvironment(record EnvironmentRecord) ([]byte, error) {
 	type environmentData struct {
-		ID        string `json:"id"`
-		ProjectID string `json:"project_id"`
-		Slug      string `json:"slug"`
-		Name      string `json:"name"`
-		VolumeDir string `json:"volume_dir"`
-		CreatedAt string `json:"created_at"`
+		ID                string                       `json:"id"`
+		ProjectID         string                       `json:"project_id"`
+		Name              string                       `json:"name"`
+		VolumeDir         string                       `json:"volume_dir"`
+		ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
+		CreateTaskID      string                       `json:"create_task_id"`
+		CreatedAt         string                       `json:"created_at"`
 	}
 	return encodeEnvelope("environment", environmentData{
-		ID: record.ID, ProjectID: record.ProjectID, Slug: record.Slug, Name: record.Name,
-		VolumeDir: record.VolumeDir, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
+		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name,
+		VolumeDir: record.VolumeDir, ProvisioningState: record.ProvisioningState,
+		CreateTaskID: record.CreateTaskID, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
 	})
 }
 
@@ -224,12 +238,13 @@ func decodeProject(value []byte) (ProjectRecord, error) {
 
 func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 	type environmentData struct {
-		ID        string `json:"id"`
-		ProjectID string `json:"project_id"`
-		Slug      string `json:"slug"`
-		Name      string `json:"name"`
-		VolumeDir string `json:"volume_dir"`
-		CreatedAt string `json:"created_at"`
+		ID                string                       `json:"id"`
+		ProjectID         string                       `json:"project_id"`
+		Name              string                       `json:"name"`
+		VolumeDir         string                       `json:"volume_dir"`
+		ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
+		CreateTaskID      string                       `json:"create_task_id"`
+		CreatedAt         string                       `json:"created_at"`
 	}
 	data, err := decodeEnvelope[environmentData](value, "environment")
 	if err != nil {
@@ -240,8 +255,9 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 		return EnvironmentRecord{}, errs.New(errs.KindInternal, "environment record has an invalid created_at")
 	}
 	record := EnvironmentRecord{
-		ID: data.ID, ProjectID: data.ProjectID, Slug: data.Slug, Name: data.Name,
-		VolumeDir: data.VolumeDir, CreatedAt: createdAt,
+		ID: data.ID, ProjectID: data.ProjectID, Name: data.Name,
+		VolumeDir: data.VolumeDir, ProvisioningState: data.ProvisioningState,
+		CreateTaskID: data.CreateTaskID, CreatedAt: createdAt,
 	}
 	if err := validateEnvironment(record); err != nil {
 		return EnvironmentRecord{}, corruptRecord()
@@ -699,6 +715,81 @@ func listPrimaryPage[T any](
 		return Page[T]{}, err
 	}
 	return Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
+}
+
+func listFilteredPrimaryPage[T any](
+	ctx context.Context,
+	store hierarchyStore,
+	collection string,
+	filterKind string,
+	filterID string,
+	prefix string,
+	idKind ids.Kind,
+	request PageRequest,
+	decode func([]byte) (T, error),
+	identity func(T) string,
+	matches func(T) bool,
+) (Page[T], error) {
+	if err := validateContext(ctx); err != nil {
+		return Page[T]{}, err
+	}
+	limit, revision, start, query, err := normalizePageRequest(
+		request, collection, filterKind, filterID, prefix, idKind,
+	)
+	if err != nil {
+		return Page[T]{}, err
+	}
+	items := make([]Versioned[T], 0, limit)
+	continuations := make([]KeyValue, 0, limit)
+	readRevision := revision
+	for {
+		rangeResult, err := store.Range(ctx, RangeRequest{
+			Prefix: prefix, StartExclusive: start, Limit: int64(MaximumPageLimit), Revision: readRevision,
+		})
+		if err != nil {
+			return Page[T]{}, err
+		}
+		if rangeResult.ReadRevision <= 0 || (readRevision > 0 && rangeResult.ReadRevision != readRevision) {
+			return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list changed revision")
+		}
+		readRevision = rangeResult.ReadRevision
+		for _, value := range rangeResult.Values {
+			if err := validateListKey(prefix, value.Key, idKind); err != nil {
+				return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list contains an invalid key")
+			}
+			record, err := decode(value.Value)
+			if err != nil {
+				return Page[T]{}, err
+			}
+			expectedID := strings.TrimPrefix(value.Key, prefix)
+			if identity(record) != expectedID {
+				return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list key does not match its record id")
+			}
+			if !matches(record) {
+				continue
+			}
+			if len(items) == limit {
+				next, err := nextPageCursor(&RangeResult{
+					Values: continuations, More: true, ReadRevision: readRevision,
+				}, query, idKind, prefix)
+				if err != nil {
+					return Page[T]{}, err
+				}
+				return Page[T]{Items: items, NextCursor: next, Revision: readRevision}, nil
+			}
+			items = append(items, Versioned[T]{
+				Record: record, Revision: value.ModRevision, ReadRevision: readRevision,
+			})
+			continuations = append(continuations, value)
+		}
+		if !rangeResult.More {
+			return Page[T]{Items: items, Revision: readRevision}, nil
+		}
+		if len(rangeResult.Values) == 0 {
+			return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list returned an empty continuation")
+		}
+		start = rangeResult.Values[len(rangeResult.Values)-1].Key
+	}
 }
 
 func listIndexPage[T any](

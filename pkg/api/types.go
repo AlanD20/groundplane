@@ -18,26 +18,43 @@ package api
 // grammar for the full internal shape) ---
 
 type Tenant struct {
-	ID   string `json:"id"`
-	Slug string `json:"slug"`
-	Name string `json:"name"`
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type TenantCreate struct {
+	Slug        string  `json:"slug"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 type Project struct {
-	ID       string `json:"id"`
-	TenantID string `json:"tenant_id,omitempty"`
-	Slug     string `json:"slug"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"` // "tenant" | "backing"
+	ID          string `json:"id"`
+	TenantID    string `json:"tenant_id,omitempty"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Kind        string `json:"kind"` // "tenant" | "backing"
 }
 
 type Environment struct {
-	ID        string `json:"id"`
-	ProjectID string `json:"project_id"`
-	Slug      string `json:"slug"`
-	Name      string `json:"name"`
-	VolumeDir string `json:"volume_dir"`
+	ID                string                       `json:"id"`
+	ProjectID         string                       `json:"project_id"`
+	Name              string                       `json:"name"`
+	VolumeDir         string                       `json:"volume_dir"`
+	ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
+	CreateTaskID      *string                      `json:"create_task_id"`
 }
+
+type EnvironmentProvisioningState string
+
+const (
+	EnvironmentProvisioning EnvironmentProvisioningState = "provisioning"
+	EnvironmentReady        EnvironmentProvisioningState = "ready"
+	EnvironmentFailed       EnvironmentProvisioningState = "failed"
+)
 
 type Zone struct {
 	ID       string `json:"id"`

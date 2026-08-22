@@ -32,19 +32,43 @@ type Server struct {
 	Mux    *http.ServeMux
 	API    huma.API
 
-	host          HostReader
-	agents        AgentReader
-	console       fs.FS
-	dispatcher    *Dispatcher
-	tasks         taskQueries
-	routePolicies map[string]routePolicy
+	host                  HostReader
+	agents                AgentReader
+	agentMutations        AgentMutator
+	tenants               TenantReader
+	tenantMutations       TenantMutator
+	tenantChanges         TenantChanger
+	projects              ProjectReader
+	projectMutations      ProjectMutator
+	projectChanges        ProjectChanger
+	environments          EnvironmentReader
+	environmentMutations  EnvironmentMutator
+	environmentChanges    EnvironmentChanger
+	environmentBlueprints EnvironmentBlueprintMutator
+	environmentDeletions  EnvironmentDeleter
+	console               fs.FS
+	dispatcher            *Dispatcher
+	tasks                 taskQueries
+	routePolicies         map[string]routePolicy
 }
 
 type Options struct {
-	Host    HostReader
-	Agents  AgentReader
-	Console fs.FS
-	Tasks   *etcd.TaskRepository
+	Host                  HostReader
+	Agents                AgentReader
+	AgentMutations        AgentMutator
+	Tenants               TenantReader
+	TenantMutations       TenantMutator
+	TenantChanges         TenantChanger
+	Projects              ProjectReader
+	ProjectMutations      ProjectMutator
+	ProjectChanges        ProjectChanger
+	Environments          EnvironmentReader
+	EnvironmentMutations  EnvironmentMutator
+	EnvironmentChanges    EnvironmentChanger
+	EnvironmentBlueprints EnvironmentBlueprintMutator
+	EnvironmentDeletions  EnvironmentDeleter
+	Console               fs.FS
+	Tasks                 *etcd.TaskRepository
 }
 
 type taskQueries interface {
@@ -63,16 +87,28 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	config.RejectUnknownQueryParameters = true
 
 	s := &Server{
-		Store:         store,
-		Logger:        logger,
-		Mux:           mux,
-		API:           humago.NewWithPrefix(mux, "/api/v1", config),
-		host:          options.Host,
-		agents:        options.Agents,
-		console:       options.Console,
-		dispatcher:    NewDispatcher(),
-		tasks:         options.Tasks,
-		routePolicies: make(map[string]routePolicy),
+		Store:                 store,
+		Logger:                logger,
+		Mux:                   mux,
+		API:                   humago.NewWithPrefix(mux, "/api/v1", config),
+		host:                  options.Host,
+		agents:                options.Agents,
+		agentMutations:        options.AgentMutations,
+		tenants:               options.Tenants,
+		tenantMutations:       options.TenantMutations,
+		tenantChanges:         options.TenantChanges,
+		projects:              options.Projects,
+		projectMutations:      options.ProjectMutations,
+		projectChanges:        options.ProjectChanges,
+		environments:          options.Environments,
+		environmentMutations:  options.EnvironmentMutations,
+		environmentChanges:    options.EnvironmentChanges,
+		environmentBlueprints: options.EnvironmentBlueprints,
+		environmentDeletions:  options.EnvironmentDeletions,
+		console:               options.Console,
+		dispatcher:            NewDispatcher(),
+		tasks:                 options.Tasks,
+		routePolicies:         make(map[string]routePolicy),
 	}
 	s.routes()
 	s.registerHost()
@@ -91,33 +127,33 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /openapi.json", s.notImplemented)
 
 	// tenant — destructive delete is a task (api-cli.md's resource map)
-	mux.HandleFunc("GET /api/v1/tenants", s.notImplemented)
-	s.jsonRoute("POST /api/v1/tenants", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/tenants/{id}", s.notImplemented)
-	s.jsonRoute("PATCH /api/v1/tenants/{id}", s.notImplemented)
-	s.jsonRoute("POST /api/v1/tenants/{id}/rename", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/tenants", s.tenantList)
+	s.jsonRoute("POST /api/v1/tenants", s.tenantCreate)
+	mux.HandleFunc("GET /api/v1/tenants/{id}", s.tenantShow)
+	s.jsonRoute("PATCH /api/v1/tenants/{id}", s.tenantEdit)
+	s.jsonRoute("POST /api/v1/tenants/{id}/rename", s.tenantRename)
 	mux.HandleFunc("DELETE /api/v1/tenants/{id}", s.acceptTask)
 
 	// project (?kind=tenant|backing)
-	mux.HandleFunc("GET /api/v1/projects", s.notImplemented)
-	s.jsonRoute("POST /api/v1/projects", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/projects/{id}", s.notImplemented)
-	s.jsonRoute("PATCH /api/v1/projects/{id}", s.notImplemented)
-	s.jsonRoute("POST /api/v1/projects/{id}/rename", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/projects", s.projectList)
+	s.jsonRoute("POST /api/v1/projects", s.projectCreate)
+	mux.HandleFunc("GET /api/v1/projects/{id}", s.projectShow)
+	s.jsonRoute("PATCH /api/v1/projects/{id}", s.projectEdit)
+	s.jsonRoute("POST /api/v1/projects/{id}/rename", s.projectRename)
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.acceptTask)
 
 	// environment (?project=)
-	mux.HandleFunc("GET /api/v1/environments", s.notImplemented)
-	s.jsonRoute("POST /api/v1/environments", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/environments/{id}", s.notImplemented)
-	s.jsonRoute("POST /api/v1/environments/{id}/rename", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/environments", s.environmentList)
+	s.jsonRoute("POST /api/v1/environments", s.environmentCreate)
+	mux.HandleFunc("GET /api/v1/environments/{id}", s.environmentShow)
+	s.jsonRoute("POST /api/v1/environments/{id}/rename", s.environmentRename)
 	s.streamRoute("GET /api/v1/environments/{id}/logs", s.notImplemented)
-	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.acceptTask)
+	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.environmentDelete)
 
 	// environment singleton sub-resources
 	mux.HandleFunc("GET /api/v1/environments/{id}/backup-policy", s.notImplemented)
 	s.jsonRoute("PUT /api/v1/environments/{id}/backup-policy", s.notImplemented)
-	s.blueprintRoute("PUT /api/v1/environments/{id}/blueprint", s.acceptTask)
+	s.blueprintRoute("PUT /api/v1/environments/{id}/blueprint", s.environmentBlueprintApply)
 	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
@@ -218,12 +254,12 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/activity", s.taskList) // exact JSON alias of Task list
 
 	// host / agents
-	s.jsonRoute("POST /api/v1/agents", s.acceptTask)
+	mux.HandleFunc("POST /api/v1/agents", s.agentEnroll)
 	mux.HandleFunc("GET /api/v1/agents", s.agentList)
 	mux.HandleFunc("GET /api/v1/agents/{id}", s.agentShow)
-	mux.HandleFunc("DELETE /api/v1/agents/{id}", s.acceptTask)
+	mux.HandleFunc("DELETE /api/v1/agents/{id}", s.agentRemove)
 	mux.HandleFunc("GET /api/v1/agents/{id}/config", s.agentConfigShow)
-	s.jsonRoute("PUT /api/v1/agents/{id}/config", s.notImplemented)
+	s.jsonRoute("PUT /api/v1/agents/{id}/config", s.agentConfigUpdate)
 	// The signed update transport still needs its own independent limit
 	// decision; it must never inherit the ordinary JSON or Blueprint ceiling.
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)

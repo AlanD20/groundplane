@@ -85,25 +85,28 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			server := &fakeControllerServer{err: test.serveErr}
 			agent := &fakeControllerAgentChannel{err: test.agentErr, stopped: make(chan struct{})}
 			scheduler := &fakeControllerScheduler{stopped: make(chan struct{})}
+			controllerTasks := &fakeControllerScheduler{stopped: make(chan struct{})}
 			localAgent := &fakeControllerScheduler{stopped: make(chan struct{})}
 			container := &fakeOwnedContainer{
 				err: test.containerErr, localAgentStopped: localAgent.stopped,
 			}
 			store := &fakeOwnedStore{
-				err:              test.closeErr,
-				serverReturned:   &server.returned,
-				schedulerStopped: scheduler.stopped,
-				agentStopped:     agent.stopped,
-				containerClosed:  &container.closed,
+				err:                    test.closeErr,
+				serverReturned:         &server.returned,
+				schedulerStopped:       scheduler.stopped,
+				controllerTasksStopped: controllerTasks.stopped,
+				agentStopped:           agent.stopped,
+				containerClosed:        &container.closed,
 			}
 			controller := &Controller{
-				Config:     config.DefaultControllerConfig(),
-				server:     server,
-				agent:      agent,
-				scheduler:  scheduler,
-				localAgent: localAgent,
-				container:  container,
-				store:      store,
+				Config:          config.DefaultControllerConfig(),
+				server:          server,
+				agent:           agent,
+				scheduler:       scheduler,
+				controllerTasks: controllerTasks,
+				localAgent:      localAgent,
+				container:       container,
+				store:           store,
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -134,6 +137,9 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			}
 			if store.closedBeforeSchedulerStopped {
 				t.Fatal("Store.Close ran before the scheduler stopped")
+			}
+			if store.closedBeforeControllerTasksStopped {
+				t.Fatal("Store.Close ran before the Controller Task runner stopped")
 			}
 			if store.closedBeforeAgentStopped {
 				t.Fatal("Store.Close ran before the Agent channel stopped")
@@ -206,16 +212,18 @@ func (s *fakeControllerScheduler) Run(ctx context.Context) {
 }
 
 type fakeOwnedStore struct {
-	err                          error
-	closeCalls                   int
-	serverReturned               *bool
-	schedulerStopped             <-chan struct{}
-	agentStopped                 <-chan struct{}
-	containerClosed              *bool
-	closedBeforeServerReturned   bool
-	closedBeforeSchedulerStopped bool
-	closedBeforeAgentStopped     bool
-	closedBeforeContainer        bool
+	err                                error
+	closeCalls                         int
+	serverReturned                     *bool
+	schedulerStopped                   <-chan struct{}
+	controllerTasksStopped             <-chan struct{}
+	agentStopped                       <-chan struct{}
+	containerClosed                    *bool
+	closedBeforeServerReturned         bool
+	closedBeforeSchedulerStopped       bool
+	closedBeforeControllerTasksStopped bool
+	closedBeforeAgentStopped           bool
+	closedBeforeContainer              bool
 }
 
 func (s *fakeOwnedStore) Close() error {
@@ -225,6 +233,11 @@ func (s *fakeOwnedStore) Close() error {
 	case <-s.schedulerStopped:
 	default:
 		s.closedBeforeSchedulerStopped = true
+	}
+	select {
+	case <-s.controllerTasksStopped:
+	default:
+		s.closedBeforeControllerTasksStopped = true
 	}
 	select {
 	case <-s.agentStopped:

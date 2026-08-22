@@ -20,7 +20,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"gopkg.in/yaml.v3"
 )
 
@@ -52,6 +54,13 @@ type ControllerConfig struct {
 	Scheduler struct {
 		TickInterval string `yaml:"tick_interval"` // e.g. "30s"
 	} `yaml:"scheduler"`
+	Storage struct {
+		VolumeRoot string `yaml:"volume_root"`
+	} `yaml:"storage"`
+	Agent struct {
+		Image   string             `yaml:"image"`
+		Runtime AgentRuntimeConfig `yaml:"runtime"`
+	} `yaml:"agent"`
 	AgeKeyPath string    `yaml:"age_key_path"` // /etc/groundplane/controller.age
 	Log        LogConfig `yaml:"log"`
 }
@@ -62,6 +71,10 @@ func DefaultControllerConfig() ControllerConfig {
 	c.Etcd.KeyPrefix = "/groundplane/"
 	c.Listen.HTTP = "127.0.0.1:8080"
 	c.Scheduler.TickInterval = "30s"
+	c.Storage.VolumeRoot = environmentpath.DefaultVolumeRoot
+	c.Agent.Runtime.PullIntervalSeconds = 2
+	c.Agent.Runtime.MaxConcurrentTasks = 3
+	c.Agent.Runtime.Labels = map[string]string{}
 	c.AgeKeyPath = "/etc/groundplane/controller.age"
 	c.Log.Level = "warn"
 	c.Log.Console.Enabled = true
@@ -86,10 +99,14 @@ type AgentConfig struct {
 	AgentID string             `yaml:"agent_id"`
 	Log     LogConfig          `yaml:"log"`
 	Runtime AgentRuntimeConfig `yaml:"runtime"`
+	Storage struct {
+		VolumeRoot string `yaml:"volume_root"`
+	} `yaml:"storage"`
 }
 
 func DefaultAgentConfig() AgentConfig {
 	var c AgentConfig
+	c.Storage.VolumeRoot = environmentpath.DefaultVolumeRoot
 	c.Log.Level = "warn"
 	c.Log.Console.Enabled = true
 	c.Log.File.Enabled = true
@@ -137,6 +154,15 @@ func (c ControllerConfig) Validate() error {
 	if tick <= 0 {
 		return fmt.Errorf("config: controller scheduler.tick_interval must be positive")
 	}
+	if err := environmentpath.ValidateRoot(c.Storage.VolumeRoot); err != nil {
+		return fmt.Errorf("config: controller storage.volume_root: %w", err)
+	}
+	if c.Agent.Image != "" && !imageref.IsDigestPinned(c.Agent.Image) {
+		return fmt.Errorf("config: controller agent.image must be empty or a digest-pinned OCI reference")
+	}
+	if err := validateAgentRuntime("controller agent.runtime", c.Agent.Runtime); err != nil {
+		return err
+	}
 	if !filepath.IsAbs(c.AgeKeyPath) {
 		return fmt.Errorf("config: controller age_key_path must be absolute")
 	}
@@ -147,19 +173,29 @@ func (c AgentConfig) Validate() error {
 	if err := ids.Validate(ids.KindAgent, c.AgentID); err != nil {
 		return fmt.Errorf("config: agent agent_id must be a canonical agt-prefixed ULID: %w", err)
 	}
-	if c.Runtime.PullIntervalSeconds <= 0 {
-		return fmt.Errorf("config: agent runtime.pull_interval_seconds must be positive")
+	if err := validateAgentRuntime("agent runtime", c.Runtime); err != nil {
+		return err
 	}
-	if c.Runtime.MaxConcurrentTasks <= 0 {
-		return fmt.Errorf("config: agent runtime.max_concurrent_tasks must be positive")
-	}
-	for key, value := range c.Runtime.Labels {
-		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||
-			!utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
-			return fmt.Errorf("config: agent runtime.labels must contain valid NUL-free UTF-8")
-		}
+	if err := environmentpath.ValidateRoot(c.Storage.VolumeRoot); err != nil {
+		return fmt.Errorf("config: agent storage.volume_root: %w", err)
 	}
 	return validateLog("agent", c.Log)
+}
+
+func validateAgentRuntime(label string, runtime AgentRuntimeConfig) error {
+	if runtime.PullIntervalSeconds <= 0 {
+		return fmt.Errorf("config: %s.pull_interval_seconds must be positive", label)
+	}
+	if runtime.MaxConcurrentTasks <= 0 {
+		return fmt.Errorf("config: %s.max_concurrent_tasks must be positive", label)
+	}
+	for key, value := range runtime.Labels {
+		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||
+			!utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
+			return fmt.Errorf("config: %s.labels must contain valid NUL-free UTF-8", label)
+		}
+	}
+	return nil
 }
 
 func (c CLIConfig) Validate() error {

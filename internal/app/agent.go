@@ -16,6 +16,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
+	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelpercontainer"
+	"github.com/AlanD20/groundplane/internal/infra/docker/materializerrunner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,10 +26,10 @@ const DefaultAgentConfigPath = agentprotocol.RuntimeConfigPath
 // Agent is the wired Agent binary: config, logging, and the gRPC
 // client. cmd/agent/main.go is nothing but NewAgent + Run.
 type Agent struct {
-	Config  config.AgentConfig
-	Logger  *slog.Logger
-	Client  *agent.Client
-	compose *agentComposeResources
+	Config    config.AgentConfig
+	Logger    *slog.Logger
+	Client    *agent.Client
+	resources *agentRuntimeResources
 }
 
 type ownedComposeHelper interface {
@@ -38,6 +40,22 @@ type ownedComposeHelper interface {
 type ownedComposeObserver interface {
 	agent.ComposeObserver
 	io.Closer
+}
+
+type ownedEnvironmentDirectoryHelper interface {
+	agent.EnvironmentDirectoryHelper
+	io.Closer
+}
+
+type ownedMaterializationHelper interface {
+	agent.MaterializationHelper
+	io.Closer
+}
+
+type agentRuntimeResources struct {
+	compose                *agentComposeResources
+	environmentDirectories ownedEnvironmentDirectoryHelper
+	materializer           ownedMaterializationHelper
 }
 
 type agentComposeResources struct {
@@ -72,8 +90,9 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 		return nil, err
 	}
 	defer clear(token)
+	image := os.Getenv(agentprotocol.AgentImageEnv)
 	compose, resources, err := newAgentComposeRuntime(
-		os.Getenv(agentprotocol.AgentImageEnv),
+		image,
 		func(image string) (ownedComposeHelper, error) {
 			return composehelpercontainer.New(image)
 		},
@@ -84,26 +103,74 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := agent.NewClientWithComposeRuntime(
-		agentprotocol.SocketPath,
-		cfg.AgentID,
-		token,
-		logger,
-		compose,
+	directoryHelper, err := environmentdirectoryhelpercontainer.New(
+		os.Getenv(agentprotocol.AgentImageEnv),
+		cfg.Storage.VolumeRoot,
 	)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, resources.Close())
 	}
+	directories, err := agent.NewEnvironmentDirectoryRuntime(directoryHelper)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, errors.Join(directoryHelper.Close(), resources.Close()))
+	}
+	materializerHelper, err := materializerrunner.New(ctx, image, cfg.Storage.VolumeRoot)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, errors.Join(directoryHelper.Close(), resources.Close()))
+	}
+	materializer, err := agent.NewMaterializationRuntime(materializerHelper)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			err,
+			errors.Join(materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
+	runtimeResources := &agentRuntimeResources{
+		compose: resources, environmentDirectories: directoryHelper, materializer: materializerHelper,
+	}
+	client, err := agent.NewClientWithRuntimes(
+		agentprotocol.SocketPath,
+		cfg.AgentID,
+		token,
+		cfg.Storage.VolumeRoot,
+		logger,
+		compose,
+		directories,
+		materializer,
+	)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
 
-	return &Agent{Config: cfg, Logger: logger, Client: client, compose: resources}, nil
+	return &Agent{Config: cfg, Logger: logger, Client: client, resources: runtimeResources}, nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
 	runErr := a.Client.Run(ctx)
-	if a.compose == nil {
+	if a.resources == nil {
 		return runErr
 	}
-	return preferAgentComposeCleanup(runErr, a.compose.Close())
+	return preferAgentComposeCleanup(runErr, a.resources.Close())
+}
+
+func (resources *agentRuntimeResources) Close() error {
+	if resources == nil {
+		return nil
+	}
+	var materializerErr, directoryErr, composeErr error
+	if resources.materializer != nil {
+		materializerErr = resources.materializer.Close()
+	}
+	if resources.environmentDirectories != nil {
+		directoryErr = resources.environmentDirectories.Close()
+	}
+	if resources.compose != nil {
+		composeErr = resources.compose.Close()
+	}
+	if joined := errors.Join(materializerErr, directoryErr, composeErr); joined != nil {
+		return errs.Wrap(errs.KindInternal, joined)
+	}
+	return nil
 }
 
 func newAgentComposeRuntime(

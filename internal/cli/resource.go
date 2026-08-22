@@ -188,11 +188,8 @@ func scopeQuery(app *App, keys ...string) map[string]string {
 	return q
 }
 
-// target resolves a positional argument to its API path segment. With
-// --id, the raw value is used as-is (it's already an id); otherwise it's
-// passed through as a slug for the Controller to resolve within the
-// active scope chain (tenant -> project -> environment) — never
-// ambiguous, since slugs are scoped-unique.
+// target escapes an already-resolved API path segment. Resource commands own
+// slug-to-id resolution through collection reads; --id bypasses that lookup.
 func target(app *App, arg string) string {
 	return url.PathEscape(arg)
 }

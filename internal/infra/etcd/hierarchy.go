@@ -23,30 +23,33 @@ const (
 // TenantRecord is the versioned persistence DTO. It is intentionally not a
 // core aggregate or a public API DTO.
 type TenantRecord struct {
-	ID   string `json:"id"`
-	Slug string `json:"slug"`
-	Name string `json:"name"`
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 // ProjectRecord keeps ownership in the flat primary. Backing projects have no
 // tenant owner and use the platform owner index.
 type ProjectRecord struct {
-	ID       string      `json:"id"`
-	TenantID string      `json:"tenant_id,omitempty"`
-	Slug     string      `json:"slug"`
-	Name     string      `json:"name"`
-	Kind     ProjectKind `json:"kind"`
+	ID          string      `json:"id"`
+	TenantID    string      `json:"tenant_id,omitempty"`
+	Slug        string      `json:"slug"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Kind        ProjectKind `json:"kind"`
 }
 
 // EnvironmentRecord persists only the environment record itself. Desired
 // resources are separate flat records and never embedded here.
 type EnvironmentRecord struct {
-	ID        string    `json:"id"`
-	ProjectID string    `json:"project_id"`
-	Slug      string    `json:"slug"`
-	Name      string    `json:"name"`
-	VolumeDir string    `json:"volume_dir"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                string                       `json:"id"`
+	ProjectID         string                       `json:"project_id"`
+	Name              string                       `json:"name"`
+	VolumeDir         string                       `json:"volume_dir"`
+	ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
+	CreateTaskID      string                       `json:"create_task_id"`
+	CreatedAt         time.Time                    `json:"created_at"`
 }
 
 type Versioned[T any] struct {
@@ -64,6 +67,11 @@ type Page[T any] struct {
 	Items      []Versioned[T]
 	NextCursor string
 	Revision   int64
+}
+
+type ProjectFilter struct {
+	TenantID string
+	Kind     ProjectKind
 }
 
 type hierarchyStore interface {
@@ -120,6 +128,283 @@ func (repository *HierarchyRepository) CreateTenant(
 		return Versioned[TenantRecord]{}, repository.diagnoseCreate(ctx, primary, slug)
 	}
 	return Versioned[TenantRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+}
+
+// CreateTenantIdempotent atomically claims the direct HTTP marker and creates
+// the Tenant primary plus globally unique slug index.
+func (repository *HierarchyRepository) CreateTenantIdempotent(
+	ctx context.Context,
+	record TenantRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateTenant(record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Tenant creation marker must be a completed direct mutation",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	value, err := encodeTenant(record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(value)
+	plan, err := newIdempotencyMutationPlan(
+		[]Condition{{Key: tenantKey(record.ID)}, {Key: tenantSlugKey(record.Slug)}},
+		[]Mutation{
+			{Type: MutationPut, Key: tenantKey(record.ID), Value: value},
+			{Type: MutationPut, Key: tenantSlugKey(record.Slug), Value: []byte(record.ID)},
+		},
+		classifyTenantCreateConflict(record.Slug),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func classifyTenantCreateConflict(slug string) idempotencyPlanClassifier {
+	return func(_ int64, values []*KeyValue) error {
+		if len(values) != 2 {
+			return errs.New(errs.KindInternal, "Tenant creation compare evidence is incomplete")
+		}
+		if values[0] != nil {
+			return errs.New(errs.KindInternal, "generated Tenant id collided with durable state")
+		}
+		if values[1] != nil {
+			return errs.Newf(errs.KindSlugConflict, "tenant slug %q already exists", slug)
+		}
+		return errs.New(errs.KindInternal, "Tenant creation compare failure was not classified")
+	}
+}
+
+// CreateProjectIdempotent atomically creates one tenant-owned Project, its
+// scoped indexes, and the exact replay marker while fencing the owning Tenant
+// and its deletion tombstone.
+func (repository *HierarchyRepository) CreateProjectIdempotent(
+	ctx context.Context,
+	record ProjectRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateProject(record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if record.Kind != ProjectKindTenant {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed, "direct Project creation requires a tenant-owned Project",
+		)
+	}
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed, "Project creation marker must be a completed direct mutation",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	owner, err := repository.GetTenant(ctx, record.TenantID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	tombstoneKey := deletionTombstoneKey("tenant", record.TenantID)
+	ownerState, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{tombstoneKey}, Revision: owner.ReadRevision,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if len(ownerState.Values) != 1 {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Tenant deletion evidence is incomplete")
+	}
+	if ownerState.Values[0] != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+	}
+	value, err := encodeProject(record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(value)
+	plan, err := newIdempotencyMutationPlan(
+		[]Condition{
+			{Key: projectKey(record.ID)},
+			{Key: projectSlugKey(record)},
+			{Key: projectOwnerKey(record)},
+			{Key: tenantKey(record.TenantID), ModRevision: owner.Revision},
+			{Key: tombstoneKey},
+		},
+		[]Mutation{
+			{Type: MutationPut, Key: projectKey(record.ID), Value: value},
+			{Type: MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
+			{Type: MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
+		},
+		classifyProjectCreateConflict(record, owner.Revision),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func classifyProjectCreateConflict(record ProjectRecord, ownerRevision int64) idempotencyPlanClassifier {
+	return func(_ int64, values []*KeyValue) error {
+		if len(values) != 5 {
+			return errs.New(errs.KindInternal, "Project creation compare evidence is incomplete")
+		}
+		if values[0] != nil {
+			return errs.New(errs.KindInternal, "generated Project id collided with durable state")
+		}
+		if values[1] != nil {
+			return errs.Newf(errs.KindSlugConflict, "project slug %q already exists", record.Slug)
+		}
+		if values[2] != nil {
+			return errs.New(errs.KindInternal, "generated Project owner index collided with durable state")
+		}
+		if values[3] == nil {
+			return errs.New(errs.KindTenantNotFound, "Tenant was not found")
+		}
+		if values[4] != nil {
+			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+		}
+		if values[3].ModRevision != ownerRevision {
+			return stateConflict("tenant", record.TenantID)
+		}
+		return errs.New(errs.KindInternal, "Project creation compare failure was not classified")
+	}
+}
+
+// MutateTenantIdempotent atomically commits a Tenant field edit or slug move
+// with its completed direct idempotency marker and exact public response.
+func (repository *HierarchyRepository) MutateTenantIdempotent(
+	ctx context.Context,
+	current Versioned[TenantRecord],
+	replacement TenantRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateTenant(current.Record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateTenant(replacement); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if current.Record.ID != replacement.ID || current.Revision <= 0 || current.ReadRevision <= 0 {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Tenant mutation revision is invalid")
+	}
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Tenant mutation marker must be a completed direct mutation",
+		)
+	}
+	secondaryKeys := []string{
+		tenantSlugKey(current.Record.Slug),
+		deletionTombstoneKey("tenant", current.Record.ID),
+	}
+	renaming := current.Record.Slug != replacement.Slug
+	if renaming {
+		secondaryKeys = append(secondaryKeys, tenantSlugKey(replacement.Slug))
+	}
+	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: secondaryKeys, Revision: current.ReadRevision,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if len(secondary.Values) != len(secondaryKeys) || secondary.Values[0] == nil ||
+		string(secondary.Values[0].Value) != current.Record.ID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Tenant slug index is missing or mismatched")
+	}
+	if secondary.Values[1] != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+	}
+	if renaming && secondary.Values[2] != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindSlugConflict, "Tenant slug is already in use")
+	}
+	value, err := encodeTenant(replacement)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(value)
+	conditions := []Condition{
+		{Key: tenantKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: tenantSlugKey(current.Record.Slug), ModRevision: secondary.Values[0].ModRevision},
+		{Key: deletionTombstoneKey("tenant", current.Record.ID)},
+	}
+	mutations := []Mutation{{Type: MutationPut, Key: tenantKey(current.Record.ID), Value: value}}
+	if renaming {
+		conditions = append(conditions, Condition{Key: tenantSlugKey(replacement.Slug)})
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationDelete, Key: tenantSlugKey(current.Record.Slug)},
+			Mutation{Type: MutationPut, Key: tenantSlugKey(replacement.Slug), Value: []byte(current.Record.ID)},
+		)
+	}
+	plan, err := newIdempotencyMutationPlan(
+		conditions,
+		mutations,
+		classifyTenantMutationConflict(current, replacement, renaming),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func classifyTenantMutationConflict(
+	current Versioned[TenantRecord],
+	replacement TenantRecord,
+	renaming bool,
+) idempotencyPlanClassifier {
+	return func(_ int64, values []*KeyValue) error {
+		expected := 3
+		if renaming {
+			expected++
+		}
+		if len(values) != expected {
+			return errs.New(errs.KindInternal, "Tenant mutation compare evidence is incomplete")
+		}
+		if values[0] == nil {
+			return errs.New(errs.KindTenantNotFound, "Tenant was not found")
+		}
+		if values[2] != nil {
+			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+		}
+		if renaming && values[3] != nil {
+			return errs.Newf(errs.KindSlugConflict, "Tenant slug %q already exists", replacement.Slug)
+		}
+		if values[0].ModRevision != current.Revision {
+			return stateConflict("tenant", current.Record.ID)
+		}
+		if values[1] == nil || string(values[1].Value) != current.Record.ID {
+			return errs.New(errs.KindInternal, "Tenant slug index is missing or mismatched")
+		}
+		return stateConflict("tenant", current.Record.ID)
+	}
 }
 
 func (repository *HierarchyRepository) CreateProject(
@@ -187,18 +472,18 @@ func (repository *HierarchyRepository) CreateEnvironment(
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	primary := environmentKey(record.ID)
-	slug := environmentSlugKey(record.ProjectID, record.Slug)
+	label := environmentNameKey(record.ProjectID, record.Name)
 	ownerIndex := environmentOwnerKey(record.ProjectID, record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]Condition{
 			{Key: primary},
-			{Key: slug},
+			{Key: label},
 			{Key: ownerIndex},
 			{Key: projectKey(record.ProjectID), ModRevision: owner.Revision},
 		},
 		[]Mutation{
 			{Type: MutationPut, Key: primary, Value: value},
-			{Type: MutationPut, Key: slug, Value: []byte(record.ID)},
+			{Type: MutationPut, Key: label, Value: []byte(record.ID)},
 			{Type: MutationPut, Key: ownerIndex, Value: []byte(record.ID)},
 		},
 	)
@@ -206,7 +491,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, slug)
+		return Versioned[EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)
 	}
 	return Versioned[EnvironmentRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
@@ -339,7 +624,7 @@ func (repository *HierarchyRepository) ResolveBackingProject(
 func (repository *HierarchyRepository) ResolveEnvironment(
 	ctx context.Context,
 	projectID string,
-	slug string,
+	name string,
 ) (Versioned[EnvironmentRecord], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
@@ -347,19 +632,19 @@ func (repository *HierarchyRepository) ResolveEnvironment(
 	if err := validateID(ids.KindProject, projectID); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
-	if err := validateLabel("environment slug", slug); err != nil {
+	if err := validateLabel("environment name", name); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
 		repository.store,
-		environmentSlugKey(projectID, slug),
+		environmentNameKey(projectID, name),
 		environmentKey,
 		ids.KindEnvironment,
 		errs.KindEnvironmentNotFound,
 		decodeEnvironment,
 		func(record EnvironmentRecord) string { return record.ID },
-		func(record EnvironmentRecord) bool { return record.ProjectID == projectID && record.Slug == slug },
+		func(record EnvironmentRecord) bool { return record.ProjectID == projectID && record.Name == name },
 	)
 }
 
@@ -479,6 +764,47 @@ func (repository *HierarchyRepository) ListTenantProjects(
 		func(record ProjectRecord) string { return record.ID },
 		func(record ProjectRecord) bool {
 			return record.Kind == ProjectKindTenant && record.TenantID == tenantID
+		},
+	)
+}
+
+func (repository *HierarchyRepository) ListProjects(
+	ctx context.Context,
+	filter ProjectFilter,
+	request PageRequest,
+) (Page[ProjectRecord], error) {
+	if filter.Kind != "" && filter.Kind != ProjectKindTenant && filter.Kind != ProjectKindBacking {
+		return Page[ProjectRecord]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
+	}
+	if filter.TenantID != "" {
+		if err := validateID(ids.KindTenant, filter.TenantID); err != nil {
+			return Page[ProjectRecord]{}, err
+		}
+		if filter.Kind == ProjectKindBacking {
+			return Page[ProjectRecord]{}, errs.New(
+				errs.KindValidationFailed,
+				"backing projects cannot have a tenant filter",
+			)
+		}
+	}
+	ownerID := filter.TenantID
+	if ownerID == "" {
+		ownerID = "-"
+	}
+	return listFilteredPrimaryPage(
+		ctx,
+		repository.store,
+		"projects",
+		"filter:"+string(filter.Kind),
+		ownerID,
+		projectPrefix,
+		ids.KindProject,
+		request,
+		decodeProject,
+		func(record ProjectRecord) string { return record.ID },
+		func(record ProjectRecord) bool {
+			return (filter.Kind == "" || record.Kind == filter.Kind) &&
+				(filter.TenantID == "" || record.TenantID == filter.TenantID)
 		},
 	)
 }

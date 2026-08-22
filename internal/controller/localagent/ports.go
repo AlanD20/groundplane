@@ -43,13 +43,15 @@ type Credential struct {
 // Record is the durable singleton aggregate. It is an internal persistence
 // contract, not an operator-facing API response.
 type Record struct {
-	ID         string     `json:"id"`
-	Image      string     `json:"image"`
-	Generation uint64     `json:"generation"`
-	Phase      Phase      `json:"phase"`
-	Config     Config     `json:"config"`
-	Credential Credential `json:"credential"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID               string     `json:"id"`
+	EnrollmentTaskID string     `json:"enrollment_task_id"`
+	Image            string     `json:"image"`
+	Generation       uint64     `json:"generation"`
+	Phase            Phase      `json:"phase"`
+	Config           Config     `json:"config"`
+	Credential       Credential `json:"credential"`
+	CreatedAt        time.Time  `json:"created_at"`
+	ReadyAt          time.Time  `json:"ready_at,omitempty"`
 }
 
 // StoredRecord carries the repository CAS revision independently of the record.
@@ -71,7 +73,7 @@ type Repository interface {
 		revision int64,
 		config Config,
 	) (StoredRecord, error)
-	MarkReady(ctx context.Context, id string, generation uint64, revision int64) (StoredRecord, error)
+	MarkReady(ctx context.Context, id string, generation uint64, revision int64, readyAt time.Time) (StoredRecord, error)
 	BeginDelete(ctx context.Context, id string, generation uint64, revision int64) (StoredRecord, error)
 	Delete(ctx context.Context, id string, generation uint64, revision int64) error
 }

@@ -72,6 +72,57 @@ func TestAgentConfigRequiresCanonicalAgentID(t *testing.T) {
 	}
 }
 
+func TestControllerAgentBootstrapDefaultsAndImageValidation(t *testing.T) {
+	t.Parallel()
+
+	defaults := DefaultControllerConfig()
+	if defaults.Agent.Image != "" || defaults.Agent.Runtime.PullIntervalSeconds != 2 ||
+		defaults.Agent.Runtime.MaxConcurrentTasks != 3 || len(defaults.Agent.Runtime.Labels) != 0 {
+		t.Fatalf("default Agent bootstrap = %#v", defaults.Agent)
+	}
+
+	tagged := defaults
+	tagged.Agent.Image = "ghcr.io/aland20/groundplane-agent:latest"
+	if err := tagged.Validate(); err == nil {
+		t.Fatal("tagged Agent bootstrap image passed validation")
+	}
+
+	pinned := defaults
+	pinned.Agent.Image = "ghcr.io/aland20/groundplane-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	if err := pinned.Validate(); err != nil {
+		t.Fatalf("digest-pinned Agent bootstrap image error = %v", err)
+	}
+
+	invalidRuntime := defaults
+	invalidRuntime.Agent.Runtime.MaxConcurrentTasks = 0
+	if err := invalidRuntime.Validate(); err == nil {
+		t.Fatal("invalid Agent bootstrap runtime passed validation")
+	}
+}
+
+func TestControllerVolumeRootDefaultAndSyntaxValidation(t *testing.T) {
+	t.Parallel()
+	defaults := DefaultControllerConfig()
+	if defaults.Storage.VolumeRoot != "/var/lib/groundplane/vol" {
+		t.Fatalf("default storage.volume_root = %q", defaults.Storage.VolumeRoot)
+	}
+	for _, root := range []string{
+		"", "/", "var/lib/groundplane/vol", "/var/lib/groundplane/vol/",
+		"/var/lib/../lib/groundplane/vol", "/var/lib/groundplane/vol\x00other",
+	} {
+		cfg := defaults
+		cfg.Storage.VolumeRoot = root
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("storage.volume_root %q passed validation", root)
+		}
+	}
+	custom := defaults
+	custom.Storage.VolumeRoot = "/srv/groundplane-volumes"
+	if err := custom.Validate(); err != nil {
+		t.Fatalf("custom storage.volume_root error = %v", err)
+	}
+}
+
 // Rationale: the injected runtime document must fail before the Agent starts
 // when Controller-owned execution limits or labels are unusable.
 func TestAgentConfigRequiresValidRuntimePolicy(t *testing.T) {
@@ -90,6 +141,9 @@ func TestAgentConfigRequiresValidRuntimePolicy(t *testing.T) {
 		}},
 		{name: "invalid label", mutate: func(cfg *AgentConfig) {
 			cfg.Runtime.Labels = map[string]string{"role": "worker\x00admin"}
+		}},
+		{name: "invalid volume root", mutate: func(cfg *AgentConfig) {
+			cfg.Storage.VolumeRoot = "/"
 		}},
 	}
 

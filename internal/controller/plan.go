@@ -10,8 +10,23 @@
 package controller
 
 import (
+	"context"
+	"math"
+
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+)
+
+const (
+	EnvironmentCreateVolumeDirectoryParam = "expected_volume_dir"
+	EnvironmentBlueprintArtifactParam     = "compose_artifact_id"
+	EnvironmentRemoveVolumeDirectoryParam = "remove_volume_dir"
 )
 
 // ExecutionPlan is what internal/controller/renderer.go ultimately
@@ -25,6 +40,7 @@ type ExecutionPlan = agentpb.ExecutionPlan
 // sequencing. It deliberately contains no persisted rendered-artifact handle:
 // a resolver rebuilds these values from retained desired-state inputs.
 type PlanBuildInput struct {
+	VolumeRoot       string
 	PlanID           string
 	RenderGeneration uint64
 	Operation        agentpb.PlanOperation
@@ -36,9 +52,324 @@ type PlanBuildInput struct {
 // BuildPlan owns schema selection, defensive copying, deterministic hashing,
 // and closed-shape validation for every Controller-produced execution plan.
 func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
-	return executionplan.Seal(&agentpb.ExecutionPlan{
+	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: 1, PlanId: input.PlanID, RenderGeneration: input.RenderGeneration,
 		Operation: input.Operation, TargetId: input.TargetID,
 		Artifacts: input.Artifacts, Steps: input.Steps,
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err := executionplan.AuthorizeVolumeDirectories(plan, input.VolumeRoot); err != nil {
+		return nil, err
+	}
+	return plan, nil
+}
+
+// TaskPlanResolver rebuilds ephemeral plans exclusively from closed durable
+// Task inputs and daemon-owned path policy. Rendered plans are never stored.
+type TaskPlanResolver struct {
+	volumeRoot string
+	blueprints blueprintPlanStateReader
+}
+
+type blueprintPlanStateReader interface {
+	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironmentBlueprintRevision(
+		context.Context,
+		string,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+}
+
+func NewTaskPlanResolver(volumeRoot string) (*TaskPlanResolver, error) {
+	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
+		return nil, err
+	}
+	return &TaskPlanResolver{volumeRoot: volumeRoot}, nil
+}
+
+func NewTaskPlanResolverWithBlueprints(
+	volumeRoot string,
+	blueprints blueprintPlanStateReader,
+) (*TaskPlanResolver, error) {
+	resolver, err := NewTaskPlanResolver(volumeRoot)
+	if err != nil {
+		return nil, err
+	}
+	if blueprints == nil {
+		return nil, errs.New(errs.KindInternal, "Blueprint plan state reader is required")
+	}
+	resolver.blueprints = blueprints
+	return resolver, nil
+}
+
+func (resolver *TaskPlanResolver) ResolveExecutionPlan(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
+	if ctx == nil {
+		return nil, errs.New(errs.KindInternal, "execution plan resolution context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if resolver == nil || resolver.volumeRoot == "" {
+		return nil, errs.New(errs.KindInternal, "execution plan resolver is not configured")
+	}
+	if task.Type == etcd.TaskUpdate {
+		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
+	}
+	if task.Type == etcd.TaskRemove {
+		return resolver.resolveEnvironmentRemovalPlan(ctx, task)
+	}
+	if task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskCreate ||
+		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != 1 ||
+		len(task.Steps) != 1 || task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
+		return nil, errs.New(errs.KindInternal, "durable Environment creation Task shape is invalid")
+	}
+	volumeDirectory, exists := task.Params[EnvironmentCreateVolumeDirectoryParam]
+	if !exists || ids.Validate(ids.KindStep, task.Steps[0].ID) != nil {
+		return nil, errs.New(errs.KindInternal, "durable Environment creation Task procedure is invalid")
+	}
+	return BuildPlan(PlanBuildInput{
+		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
+		RenderGeneration: uint64(task.RenderGeneration),
+		Operation:        agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
+		TargetID:         task.Target,
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
+				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
+					EnvironmentId: task.Target, ExpectedVolumeDir: volumeDirectory,
+				},
+			},
+		}},
+	})
+}
+
+func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
+	if resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
+		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != 3 ||
+		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Materializations) != 0 {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
+	}
+	revisionID := task.Params[etcd.EnvironmentBlueprintRevisionParam]
+	artifactID := task.Params[EnvironmentBlueprintArtifactParam]
+	if task.Params[etcd.TaskMaterializationEnvironmentParam] != task.Target ||
+		ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint Task parameters are invalid")
+	}
+	artifact, err := resolver.renderPinnedEnvironmentBlueprintArtifact(ctx, task, revisionID, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	expectedSteps := 1
+	if len(artifact.Volumes) != 0 {
+		expectedSteps++
+	}
+	if len(task.Steps) != expectedSteps {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint Task step count is invalid")
+	}
+	steps := make([]*agentpb.ExecutionStep, 0, expectedSteps)
+	stepIndex := 0
+	if len(artifact.Volumes) != 0 {
+		steps = append(steps, &agentpb.ExecutionStep{
+			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
+				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{ArtifactId: artifactID},
+			},
+		})
+		stepIndex++
+	}
+	steps = append(steps, &agentpb.ExecutionStep{
+		StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+			ArtifactId: artifactID, FullReconcile: true,
+		}},
+	})
+	return BuildPlan(PlanBuildInput{
+		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
+		RenderGeneration: uint64(task.RenderGeneration),
+		Operation:        agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: task.Target,
+		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
+	})
+}
+
+func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
+	if resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
+		ids.Validate(ids.KindEnvironment, task.Target) != nil || task.TimeoutSeconds <= 0 ||
+		task.TimeoutSeconds > math.MaxUint32 || len(task.Materializations) != 0 ||
+		(len(task.Params) != 1 && len(task.Params) != 4) {
+		return nil, errs.New(errs.KindInternal, "durable Environment removal Task shape is invalid")
+	}
+	volumeDirectory, exists := task.Params[EnvironmentRemoveVolumeDirectoryParam]
+	if !exists {
+		return nil, errs.New(errs.KindInternal, "durable Environment removal directory is missing")
+	}
+	environment, err := resolver.blueprints.GetEnvironment(ctx, task.Target)
+	if err != nil {
+		return nil, err
+	}
+	if environment.Record.VolumeDir != volumeDirectory {
+		return nil, errs.New(errs.KindInternal, "durable Environment removal directory changed")
+	}
+	directoryStep := func(stepID string) *agentpb.ExecutionStep {
+		return &agentpb.ExecutionStep{
+			StepId: stepID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryRemove{
+				EnvironmentDirectoryRemove: &agentpb.EnvironmentDirectoryRemove{
+					EnvironmentId: task.Target, ExpectedVolumeDir: volumeDirectory,
+				},
+			},
+		}
+	}
+	if len(task.Params) == 1 {
+		if len(task.Steps) != 1 || ids.Validate(ids.KindStep, task.Steps[0].ID) != nil {
+			return nil, errs.New(errs.KindInternal, "artifact-free Environment removal procedure is invalid")
+		}
+		_, found, err := resolver.blueprints.GetEnvironmentComposeProjection(ctx, task.Target)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			return nil, errs.New(errs.KindInternal, "artifact-free Environment removal lost its pinned desired state")
+		}
+		return BuildPlan(PlanBuildInput{
+			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
+			RenderGeneration: uint64(task.RenderGeneration),
+			Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: task.Target,
+			Steps: []*agentpb.ExecutionStep{directoryStep(task.Steps[0].ID)},
+		})
+	}
+	if len(task.Steps) != 2 || ids.Validate(ids.KindStep, task.Steps[0].ID) != nil ||
+		ids.Validate(ids.KindStep, task.Steps[1].ID) != nil {
+		return nil, errs.New(errs.KindInternal, "Environment removal procedure is invalid")
+	}
+	revisionID := task.Params[etcd.EnvironmentBlueprintRevisionParam]
+	artifactID := task.Params[EnvironmentBlueprintArtifactParam]
+	if task.Params[etcd.TaskMaterializationEnvironmentParam] != task.Target ||
+		ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil {
+		return nil, errs.New(errs.KindInternal, "Environment removal Blueprint parameters are invalid")
+	}
+	artifact, err := resolver.renderPinnedEnvironmentBlueprintArtifact(ctx, task, revisionID, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	return BuildPlan(PlanBuildInput{
+		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
+		RenderGeneration: uint64(task.RenderGeneration),
+		Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: task.Target,
+		Artifacts: []*agentpb.ComposeArtifact{artifact},
+		Steps: []*agentpb.ExecutionStep{
+			{
+				StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{
+					ArtifactId: artifactID, WholeProject: true,
+				}},
+			},
+			directoryStep(task.Steps[1].ID),
+		},
+	})
+}
+
+func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	revisionID string,
+	artifactID string,
+) (*agentpb.ComposeArtifact, error) {
+	environment, err := resolver.blueprints.GetEnvironment(ctx, task.Target)
+	if err != nil {
+		return nil, err
+	}
+	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+		return nil, errs.New(errs.KindInternal, "Blueprint Task Environment is not ready")
+	}
+	project, err := resolver.blueprints.GetProject(ctx, environment.Record.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if project.Record.Kind != etcd.ProjectKindTenant {
+		return nil, errs.New(errs.KindInternal, "Blueprint Task Project is not tenant-owned")
+	}
+	tenant, err := resolver.blueprints.GetTenant(ctx, project.Record.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	revision, found, err := resolver.blueprints.GetEnvironmentBlueprintRevision(ctx, task.Target, revisionID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errs.New(errs.KindInternal, "Blueprint Task immutable revision is missing")
+	}
+	projection, found, err := resolver.blueprints.GetEnvironmentComposeProjection(ctx, task.Target)
+	if err != nil {
+		return nil, err
+	}
+	if !found || projection.Record.BlueprintRevisionID != revisionID ||
+		projection.Record.RenderGeneration != uint64(task.RenderGeneration) {
+		return nil, errs.New(errs.KindInternal, "Blueprint Task Compose projection is stale")
+	}
+	bundle := core.BlueprintBundle{
+		RootPath:       revision.Record.RootPath,
+		ComposeSources: append([]string(nil), revision.Record.ComposeSources...),
+		Interpolation:  cloneBlueprintInterpolation(revision.Record.Interpolation),
+		Files:          make([]core.BlueprintFile, len(revision.Record.Files)),
+	}
+	for index, file := range revision.Record.Files {
+		bundle.Files[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+		defer clear(bundle.Files[index].Content)
+	}
+	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
+		EnvironmentID: task.Target,
+		Tenant:        tenant.Record.Slug, Project: project.Record.Slug, Environment: environment.Record.Name,
+	}, bundle)
+	if err != nil {
+		return nil, err
+	}
+	if len(parsed.Extensions.Requires) != 0 || len(parsed.Extensions.Attachments) != 0 ||
+		len(parsed.Extensions.Entries) != 0 || len(parsed.Extensions.Routes) != 0 ||
+		len(parsed.Extensions.Components) != 0 || parsed.Extensions.Backup != nil ||
+		len(parsed.Extensions.ReleaseGroups) != 0 || len(parsed.Project.Configs) != 0 ||
+		len(parsed.Project.Secrets) != 0 {
+		return nil, errs.New(errs.KindNotImplemented, "Blueprint materialized resources are not yet executable")
+	}
+	return RenderCompose(ComposeRenderInput{
+		Project: parsed.Project, ArtifactID: artifactID,
+		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environment.Record.ID,
+		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
+		AuthorizedVolumeDir: environment.Record.VolumeDir,
+		Identities:          composeIdentitySnapshotFromProjection(projection.Record),
+	})
+}
+
+func composeIdentitySnapshotFromProjection(
+	projection etcd.EnvironmentComposeProjection,
+) ComposeIdentitySnapshot {
+	convert := func(values []etcd.EnvironmentComposeIdentity) []ComposeResourceIdentity {
+		result := make([]ComposeResourceIdentity, len(values))
+		for index, value := range values {
+			result[index] = ComposeResourceIdentity{ID: value.ID, Name: value.Name}
+		}
+		return result
+	}
+	return ComposeIdentitySnapshot{
+		Services: convert(projection.Services),
+		Networks: convert(projection.Networks),
+		Volumes:  convert(projection.Volumes),
+	}
 }

@@ -61,11 +61,13 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 		t.Fatalf("ResolveAgentChannel(wrong) error = %v, want agent.not_found", err)
 	}
 
-	ready, err := repository.MarkReady(ctx, record.ID, record.Generation, stored.Revision)
+	readyAt := record.CreatedAt.Add(time.Second)
+	ready, err := repository.MarkReady(ctx, record.ID, record.Generation, stored.Revision, readyAt)
 	if err != nil {
 		t.Fatalf("MarkReady() error = %v", err)
 	}
-	if ready.Record.Phase != LocalAgentPhaseReady || ready.Revision <= stored.Revision {
+	if ready.Record.Phase != LocalAgentPhaseReady || !ready.Record.ReadyAt.Equal(readyAt) ||
+		ready.Revision <= stored.Revision {
 		t.Fatalf("MarkReady() = %#v", ready)
 	}
 	deleting, err := repository.BeginDelete(ctx, record.ID, record.Generation, ready.Revision)
@@ -163,9 +165,10 @@ func localAgentTestRecord(
 ) LocalAgentRecord {
 	digest := sha256.Sum256(token[:])
 	return LocalAgentRecord{
-		ID:         ids.NewAt(ids.KindAgent, now, 41),
-		Image:      "ghcr.io/groundplane/agent@sha256:" + strings.Repeat("a", 64),
-		Generation: 1, Phase: LocalAgentPhaseProvisioning,
+		ID:               ids.NewAt(ids.KindAgent, now, 41),
+		EnrollmentTaskID: ids.NewAt(ids.KindTask, now, 40),
+		Image:            "ghcr.io/groundplane/agent@sha256:" + strings.Repeat("a", 64),
+		Generation:       1, Phase: LocalAgentPhaseProvisioning,
 		Config: LocalAgentConfig{
 			PullIntervalSeconds: 5, MaxConcurrentTasks: 4,
 			Labels: map[string]string{"role": "local"},

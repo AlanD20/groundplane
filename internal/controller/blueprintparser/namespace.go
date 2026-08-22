@@ -17,7 +17,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/compose-spec/compose-go/v2/dotenv"
 	"github.com/compose-spec/compose-go/v2/format"
-	"github.com/compose-spec/compose-go/v2/interpolation"
 	"github.com/compose-spec/compose-go/v2/loader"
 	composepaths "github.com/compose-spec/compose-go/v2/paths"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -60,6 +59,10 @@ var knownGroundplaneExtensions = map[string]struct{}{
 	"x-gp-task": {}, "x-gp-execution": {}, "x-gp-managed": {},
 }
 
+var generatedGroundplaneExtensions = map[string]struct{}{
+	"x-gp-resource": {}, "x-gp-execution": {}, "x-gp-managed": {},
+}
+
 func newParsePlan(
 	bundle core.BlueprintBundle,
 	rootCompose []byte,
@@ -100,7 +103,7 @@ func (p *parsePlan) scan(ctx context.Context, request scanRequest) error {
 		return nil
 	}
 	if content, exists := p.files[request.filename]; exists {
-		if err := validateAuthoredProjectName(content, request.env, p.projectName); err != nil {
+		if err := validateNoAuthoredProjectName(content); err != nil {
 			return err
 		}
 	}
@@ -259,7 +262,7 @@ func makeIncludeEnvironmentExplicit(model map[string]any, emptyEnv string) error
 	return nil
 }
 
-func validateAuthoredProjectName(content []byte, environment types.Mapping, expected string) error {
+func validateNoAuthoredProjectName(content []byte) error {
 	document, err := decodeSingleDocument(content)
 	if err != nil {
 		return err
@@ -269,31 +272,8 @@ func validateAuthoredProjectName(content []byte, environment types.Mapping, expe
 	}
 	root := document.Content[0]
 	for index := 0; index+1 < len(root.Content); index += 2 {
-		if root.Content[index].Value != "name" {
-			continue
-		}
-		var authored string
-		if root.Content[index+1].Kind != yaml.ScalarNode ||
-			root.Content[index+1].Decode(&authored) != nil {
-			return validationError("blueprint Compose project name is invalid")
-		}
-		resolved, err := interpolation.Interpolate(
-			map[string]any{"name": authored},
-			interpolation.Options{
-				LookupValue: func(key string) (string, bool) {
-					value, exists := environment[key]
-					return value, exists
-				},
-			},
-		)
-		if err != nil {
-			return validationError("blueprint Compose project name is invalid")
-		}
-		name, ok := resolved["name"].(string)
-		if !ok || loader.NormalizeProjectName(name) != expected {
-			return validationError(
-				"blueprint Compose project name conflicts with environment metadata",
-			)
+		if root.Content[index].Value == "name" {
+			return validationError("blueprint Compose project name is Controller-generated")
 		}
 	}
 	return nil
@@ -668,6 +648,9 @@ func (p *parsePlan) inspectVolumes(baseDir string, raw any) error {
 		if !ok {
 			continue
 		}
+		if _, authoredName := volume["name"]; authoredName {
+			return validationError("blueprint volume runtime name is Controller-generated")
+		}
 		driver, _ := volume["driver"].(string)
 		if driver != "" && driver != "local" {
 			return validationError("blueprint non-local volume drivers are forbidden")
@@ -807,6 +790,9 @@ func validateGroundplaneExtensionNames(value any) error {
 			if strings.HasPrefix(key, "x-gp-") {
 				if _, known := knownGroundplaneExtensions[key]; !known {
 					return validationError("blueprint has an unknown Groundplane extension")
+				}
+				if _, generated := generatedGroundplaneExtensions[key]; generated {
+					return validationError("blueprint contains Controller-generated metadata")
 				}
 			}
 			if err := validateGroundplaneExtensionNames(child); err != nil {

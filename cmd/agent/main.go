@@ -22,6 +22,25 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == app.EnvironmentDirectoryHelperArgument {
+		if err := app.RunEnvironmentDirectoryHelper(
+			ctx,
+			os.Stdin,
+			os.Stdout,
+			os.Getenv(app.EnvironmentVolumeRootEnv),
+		); err != nil {
+			fmt.Fprintln(os.Stderr, "agent Environment directory helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == app.EntryMaterializerArgument {
+		if err := app.RunEntryMaterializer(ctx, os.Stdin); err != nil {
+			fmt.Fprintln(os.Stderr, "agent entry materializer:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) != 1 {
 		fmt.Fprintln(os.Stderr, "agent: unsupported execution mode")
 		os.Exit(1)

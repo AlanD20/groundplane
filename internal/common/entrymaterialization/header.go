@@ -3,7 +3,6 @@
 package entrymaterialization
 
 import (
-	"math"
 	"path"
 	"strings"
 	"unicode/utf8"
@@ -101,34 +100,16 @@ func (h Header) validate() error {
 		ids.Validate(ids.KindEnvironment, h.environmentID) != nil {
 		return protocolError("invalid stable identity")
 	}
-	if h.generation == 0 {
-		return protocolError("invalid render generation")
-	}
-	if err := validateDestination(h.destination); err != nil {
-		return err
-	}
-	if h.uid == math.MaxUint32 || h.gid == math.MaxUint32 {
-		return protocolError("invalid numeric identity")
-	}
-
-	switch h.outputKind {
-	case OutputGeneratedEnv:
-		destination, err := GeneratedEnvDestination(h.environmentID, h.serviceID)
-		if err != nil || h.uid != 0 || h.gid != 0 || h.mode != ModePrivate || h.destination != destination {
-			return protocolError("invalid generated environment output")
-		}
-	case OutputPlainFile:
-		if h.serviceID != "" || h.mode != ModeReadOnly {
-			return protocolError("invalid plain file output")
-		}
-	case OutputSecretFile:
-		if h.serviceID != "" || h.mode != ModePrivate {
-			return protocolError("invalid secret file output")
-		}
-	default:
-		return protocolError("unknown output kind")
-	}
-	return nil
+	return ValidateMetadata(MetadataSpec{
+		EnvironmentID: h.environmentID,
+		Generation:    h.generation,
+		Destination:   h.destination,
+		ServiceID:     h.serviceID,
+		OutputKind:    h.outputKind,
+		UID:           h.uid,
+		GID:           h.gid,
+		Mode:          h.mode,
+	})
 }
 
 func validateDestination(value string) error {

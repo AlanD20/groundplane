@@ -40,15 +40,17 @@ type LocalAgentConfig struct {
 }
 
 type LocalAgentRecord struct {
-	ID             string
-	Image          string
-	Generation     uint64
-	Phase          LocalAgentPhase
-	Config         LocalAgentConfig
-	EncryptedToken []byte
-	TokenDigest    string
-	CreatedAt      time.Time
-	TokenUpdatedAt time.Time
+	ID               string
+	EnrollmentTaskID string
+	Image            string
+	Generation       uint64
+	Phase            LocalAgentPhase
+	Config           LocalAgentConfig
+	EncryptedToken   []byte
+	TokenDigest      string
+	CreatedAt        time.Time
+	ReadyAt          time.Time
+	TokenUpdatedAt   time.Time
 }
 
 type LocalAgentChannelAuthorization struct {
@@ -58,11 +60,13 @@ type LocalAgentChannelAuthorization struct {
 }
 
 type localAgentPrimaryData struct {
-	ID         string          `json:"id"`
-	Image      string          `json:"image"`
-	Generation uint64          `json:"generation"`
-	Phase      LocalAgentPhase `json:"phase"`
-	CreatedAt  string          `json:"created_at"`
+	ID               string          `json:"id"`
+	EnrollmentTaskID string          `json:"enrollment_task_id"`
+	Image            string          `json:"image"`
+	Generation       uint64          `json:"generation"`
+	Phase            LocalAgentPhase `json:"phase"`
+	CreatedAt        string          `json:"created_at"`
+	ReadyAt          string          `json:"ready_at,omitempty"`
 }
 
 type localAgentConfigData struct {
@@ -189,7 +193,11 @@ func (repository *LocalAgentRepository) MarkReady(
 	agentID string,
 	generation uint64,
 	revision int64,
+	readyAt time.Time,
 ) (Versioned[LocalAgentRecord], error) {
+	if err := validateTimestamp("local Agent ready_at", readyAt); err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
 	return repository.transitionPhase(
 		ctx,
 		agentID,
@@ -198,6 +206,7 @@ func (repository *LocalAgentRepository) MarkReady(
 		LocalAgentPhaseProvisioning,
 		LocalAgentPhaseReady,
 		false,
+		readyAt,
 	)
 }
 
@@ -421,6 +430,7 @@ func (repository *LocalAgentRepository) transitionPhase(
 	expected LocalAgentPhase,
 	next LocalAgentPhase,
 	idempotent bool,
+	readyAt time.Time,
 ) (Versioned[LocalAgentRecord], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[LocalAgentRecord]{}, err
@@ -444,6 +454,7 @@ func (repository *LocalAgentRepository) transitionPhase(
 	}
 	replacement := cloneLocalAgentRecord(evidence.record)
 	replacement.Phase = next
+	replacement.ReadyAt = readyAt
 	primaryValue, err := encodeLocalAgentPrimary(replacement)
 	if err != nil {
 		return Versioned[LocalAgentRecord]{}, err
@@ -543,9 +554,11 @@ func (repository *LocalAgentRepository) readSingleton(ctx context.Context) (loca
 		return localAgentEvidence{}, errs.New(errs.KindInternal, "active local Agent is missing credential authority")
 	}
 	record := LocalAgentRecord{
-		ID: primary.ID, Image: primary.Image, Generation: primary.Generation, Phase: primary.Phase,
+		ID: primary.ID, EnrollmentTaskID: primary.EnrollmentTaskID,
+		Image: primary.Image, Generation: primary.Generation, Phase: primary.Phase,
 		Config: config.Config, EncryptedToken: token.EncryptedToken,
-		TokenDigest: digestText, CreatedAt: primary.CreatedAt, TokenUpdatedAt: token.UpdatedAt,
+		TokenDigest: digestText, CreatedAt: primary.CreatedAt, ReadyAt: primary.ReadyAt,
+		TokenUpdatedAt: token.UpdatedAt,
 	}
 	if err := validateLocalAgentRecord(record); err != nil {
 		return localAgentEvidence{}, errs.New(errs.KindInternal, "local Agent aggregate is corrupt")
@@ -607,9 +620,14 @@ func encodeLocalAgentConfig(record LocalAgentRecord) ([]byte, error) {
 }
 
 func encodeLocalAgentPrimary(record LocalAgentRecord) ([]byte, error) {
+	readyAt := ""
+	if !record.ReadyAt.IsZero() {
+		readyAt = record.ReadyAt.Format(time.RFC3339Nano)
+	}
 	return encodeEnvelope("agent", localAgentPrimaryData{
-		ID: record.ID, Image: record.Image, Generation: record.Generation,
-		Phase: record.Phase, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
+		ID: record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
+		Image: record.Image, Generation: record.Generation,
+		Phase: record.Phase, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano), ReadyAt: readyAt,
 	})
 }
 
@@ -622,9 +640,17 @@ func decodeLocalAgentPrimary(value []byte) (LocalAgentRecord, error) {
 	if err != nil {
 		return LocalAgentRecord{}, corruptRecord()
 	}
+	var readyAt time.Time
+	if data.ReadyAt != "" {
+		readyAt, err = parseCanonicalTimestamp(data.ReadyAt)
+		if err != nil {
+			return LocalAgentRecord{}, corruptRecord()
+		}
+	}
 	record := LocalAgentRecord{
-		ID: data.ID, Image: data.Image, Generation: data.Generation,
-		Phase: data.Phase, CreatedAt: createdAt,
+		ID: data.ID, EnrollmentTaskID: data.EnrollmentTaskID,
+		Image: data.Image, Generation: data.Generation,
+		Phase: data.Phase, CreatedAt: createdAt, ReadyAt: readyAt,
 	}
 	if err := validateLocalAgentPrimary(record); err != nil {
 		return LocalAgentRecord{}, corruptRecord()
@@ -727,18 +753,34 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 	if err := validateStableID(ids.KindAgent, record.ID); err != nil {
 		return err
 	}
+	if err := validateStableID(ids.KindTask, record.EnrollmentTaskID); err != nil {
+		return err
+	}
 	if !imageref.IsDigestPinned(record.Image) {
 		return errs.New(errs.KindValidationFailed, "local Agent image must be digest-pinned")
 	}
 	if record.Generation == 0 {
 		return errs.New(errs.KindValidationFailed, "local Agent generation must be positive")
 	}
+	if err := validateTimestamp("local Agent created_at", record.CreatedAt); err != nil {
+		return err
+	}
 	switch record.Phase {
-	case LocalAgentPhaseProvisioning, LocalAgentPhaseReady, LocalAgentPhaseDeleting:
+	case LocalAgentPhaseProvisioning:
+		if !record.ReadyAt.IsZero() {
+			return errs.New(errs.KindValidationFailed, "provisioning local Agent ready_at must be empty")
+		}
+	case LocalAgentPhaseReady, LocalAgentPhaseDeleting:
+		if err := validateTimestamp("local Agent ready_at", record.ReadyAt); err != nil {
+			return err
+		}
+		if record.ReadyAt.Before(record.CreatedAt) {
+			return errs.New(errs.KindValidationFailed, "local Agent ready_at precedes creation")
+		}
 	default:
 		return errs.New(errs.KindValidationFailed, "local Agent phase is invalid")
 	}
-	return validateTimestamp("local Agent created_at", record.CreatedAt)
+	return nil
 }
 
 func validateLocalAgentConfig(config LocalAgentConfig) error {

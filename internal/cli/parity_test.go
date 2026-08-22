@@ -154,21 +154,27 @@ func TestDedicatedRenameRoutesReturnUpdatedEntities(t *testing.T) {
 		path    string
 		args    []string
 		body    string
+		scope   Scope
 	}{
 		{
-			name: "tenant", command: newTenantCmd(), path: "/api/v1/tenants/acme/rename",
-			args: []string{"rename", "acme", "--slug", "acme-inc"}, body: `{"slug":"acme-inc"}`,
+			name: "tenant", command: newTenantCmd(),
+			path: "/api/v1/tenants/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/rename",
+			args: []string{"rename", "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV", "--slug", "acme-inc"},
+			body: `{"slug":"acme-inc"}`, scope: Scope{AsID: true},
 		},
 		{
-			name: "project", command: newProjectCmd(), path: "/api/v1/projects/api/rename",
-			args: []string{"rename", "api", "--slug", "api-v2"}, body: `{"slug":"api-v2"}`,
+			name: "project", command: newProjectCmd(),
+			path: "/api/v1/projects/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/rename",
+			args: []string{"rename", "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV", "--slug", "api-v2"},
+			body: `{"slug":"api-v2"}`, scope: Scope{AsID: true},
 		},
 		{
 			name:    "environment",
 			command: newEnvironmentCmd(),
-			path:    "/api/v1/environments/production/rename",
-			args:    []string{"rename", "production", "--name", "prod"},
+			path:    "/api/v1/environments/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/rename",
+			args:    []string{"rename", "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", "--name", "prod"},
 			body:    `{"name":"prod"}`,
+			scope:   Scope{AsID: true},
 		},
 	}
 	for _, test := range tests {
@@ -182,7 +188,7 @@ func TestDedicatedRenameRoutesReturnUpdatedEntities(t *testing.T) {
 				`{}`,
 			)
 			defer server.Close()
-			executeNoun(t, test.command, server.URL, Scope{}, test.args...)
+			executeNoun(t, test.command, server.URL, test.scope, test.args...)
 		})
 	}
 }

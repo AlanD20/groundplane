@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"path"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +16,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -56,12 +54,13 @@ type engineClient interface {
 type Runner struct {
 	client         engineClient
 	image          string
+	volumeRoot     string
 	cleanupTimeout time.Duration
 }
 
 // New connects to the local Docker Engine socket and fixes one approved Agent
 // image for every helper created by the returned runner.
-func New(ctx context.Context, image string) (*Runner, error) {
+func New(ctx context.Context, image string, volumeRoot string) (*Runner, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "materializer runner: context is required")
 	}
@@ -71,11 +70,17 @@ func New(ctx context.Context, image string) (*Runner, error) {
 	if !imageref.IsDigestPinned(image) {
 		return nil, errs.New(errs.KindInternal, "materializer runner: helper image is not digest-pinned")
 	}
+	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
+		return nil, errs.New(errs.KindInternal, "materializer runner: volume root policy is invalid")
+	}
 	engine, err := client.New(client.WithHost(dockerHost))
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("materializer runner: create Docker client: %w", err))
 	}
-	return &Runner{client: engine, image: image, cleanupTimeout: productionCleanupTimeout}, nil
+	return &Runner{
+		client: engine, image: image, volumeRoot: volumeRoot,
+		cleanupTimeout: productionCleanupTimeout,
+	}, nil
 }
 
 // Close releases the Docker client transport.
@@ -128,7 +133,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (resultErr error) {
 	if !imageref.IsDigestPinned(r.image) {
 		return errs.New(errs.KindInternal, "materializer runner: helper image is not digest-pinned")
 	}
-	if err := validateRequest(request); err != nil {
+	if err := validateRequest(r.volumeRoot, request); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
@@ -244,28 +249,14 @@ func createOptions(image string, request Request) client.ContainerCreateOptions 
 	}
 }
 
-func validateRequest(request Request) error {
-	if !isCanonicalVolumeDir(request.VolumeDir) {
+func validateRequest(volumeRoot string, request Request) error {
+	if _, err := environmentpath.Parse(volumeRoot, request.VolumeDir); err != nil {
 		return errs.New(errs.KindInternal, "materializer runner: environment volume path is invalid")
 	}
 	if request.Stream == nil {
 		return errs.New(errs.KindInternal, "materializer runner: request stream is required")
 	}
 	return nil
-}
-
-func isCanonicalVolumeDir(value string) bool {
-	if value == "" || path.Clean(value) != value || strings.Contains(value, `\`) {
-		return false
-	}
-	components := strings.Split(value, "/")
-	return len(components) == 6 &&
-		components[0] == "" &&
-		components[1] == "infra" &&
-		components[2] == "vol" &&
-		ids.Validate(ids.KindTenant, components[3]) == nil &&
-		ids.Validate(ids.KindProject, components[4]) == nil &&
-		ids.Validate(ids.KindEnvironment, components[5]) == nil
 }
 
 func (r *Runner) wait(

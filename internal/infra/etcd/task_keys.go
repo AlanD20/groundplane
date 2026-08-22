@@ -11,17 +11,19 @@ import (
 )
 
 const (
-	taskPrefix                  = "/v1/tasks/"
-	taskOperationIndexPrefix    = "/v1/indexes/tasks/operation/"
-	taskActiveOperationPrefix   = "/v1/indexes/tasks/active-operation/"
-	taskEventRootPrefix         = "/v1/runtime/task-events/"
-	taskEventDedupRootPrefix    = "/v1/runtime/task-event-dedup/"
-	taskQueuePrefix             = "/v1/runtime/task-queue/"
-	taskAssignmentRootPrefix    = "/v1/runtime/assignments/"
-	taskAssignmentIndexPrefix   = "/v1/indexes/tasks/assignment/"
-	taskTimeoutIndexPrefix      = "/v1/indexes/tasks/timeout/"
-	deletionTombstoneRootPrefix = "/v1/runtime/deletions/"
-	taskEventSequenceWidth      = 20
+	taskPrefix                      = "/v1/tasks/"
+	taskOperationIndexPrefix        = "/v1/indexes/tasks/operation/"
+	taskActiveOperationPrefix       = "/v1/indexes/tasks/active-operation/"
+	taskEventRootPrefix             = "/v1/runtime/task-events/"
+	taskEventDedupRootPrefix        = "/v1/runtime/task-event-dedup/"
+	taskQueueRootPrefix             = "/v1/runtime/task-queue/"
+	taskAssignmentRootPrefix        = "/v1/runtime/assignments/"
+	controllerTaskClaimPrefix       = "/v1/runtime/controller-task-claims/"
+	taskAssignmentIndexPrefix       = "/v1/indexes/tasks/assignment/"
+	taskTimeoutIndexPrefix          = "/v1/indexes/tasks/timeout/"
+	taskMaterializationWriterPrefix = "/v1/runtime/task-materialization-writers/"
+	deletionTombstoneRootPrefix     = "/v1/runtime/deletions/"
+	taskEventSequenceWidth          = 20
 )
 
 func taskKey(taskID string) string {
@@ -40,6 +42,10 @@ func taskActiveOperationKey(operationID string) string {
 	return taskActiveOperationPrefix + operationID
 }
 
+func taskMaterializationWriterKey(environmentID string) string {
+	return taskMaterializationWriterPrefix + environmentID
+}
+
 func taskEventScopePrefix(taskID string) string {
 	return taskEventRootPrefix + taskID + "/"
 }
@@ -53,15 +59,20 @@ func taskEventDedupKey(identity TaskEventIdentity) string {
 		strconv.FormatUint(uint64(identity.Attempt), 10) + "/" + strconv.FormatUint(identity.Ordinal, 10)
 }
 
-func taskQueueKey(taskID string) string {
-	return taskQueuePrefix + taskID
+func taskQueueScopePrefix(executor TaskExecutor) string {
+	return taskQueueRootPrefix + string(executor) + "/"
 }
 
-func taskIDFromQueueKey(key string) (string, error) {
-	if !strings.HasPrefix(key, taskQueuePrefix) {
+func taskQueueKey(executor TaskExecutor, taskID string) string {
+	return taskQueueScopePrefix(executor) + taskID
+}
+
+func taskIDFromQueueKey(executor TaskExecutor, key string) (string, error) {
+	prefix := taskQueueScopePrefix(executor)
+	if !validTaskExecutor(executor) || !strings.HasPrefix(key, prefix) {
 		return "", errs.New(errs.KindInternal, "task queue key is outside the queue")
 	}
-	taskID := strings.TrimPrefix(key, taskQueuePrefix)
+	taskID := strings.TrimPrefix(key, prefix)
 	if strings.Contains(taskID, "/") || validateStableID(ids.KindTask, taskID) != nil {
 		return "", errs.New(errs.KindInternal, "task queue key has an invalid task id")
 	}
@@ -70,6 +81,17 @@ func taskIDFromQueueKey(key string) (string, error) {
 
 func taskAssignmentKey(agentID string, taskID string) string {
 	return taskAssignmentScopePrefix(agentID) + taskID
+}
+
+func controllerTaskClaimKey(taskID string) string {
+	return controllerTaskClaimPrefix + taskID
+}
+
+func taskExecutionClaimKey(executor TaskExecutor, agentID string, taskID string) string {
+	if executor == TaskExecutorController {
+		return controllerTaskClaimKey(taskID)
+	}
+	return taskAssignmentKey(agentID, taskID)
 }
 
 func taskAssignmentScopePrefix(agentID string) string {

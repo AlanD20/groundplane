@@ -20,10 +20,14 @@ import (
 	controllercomponent "github.com/AlanD20/groundplane/internal/components/controller"
 	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/controllertask"
+	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
+	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
+	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -58,12 +62,13 @@ type Controller struct {
 	Config config.ControllerConfig
 	Logger *slog.Logger
 
-	server     controllerServer
-	agent      controllerAgentChannel
-	scheduler  controllerScheduler
-	localAgent controllerScheduler
-	container  ownedStore
-	store      ownedStore
+	server          controllerServer
+	agent           controllerAgentChannel
+	scheduler       controllerScheduler
+	controllerTasks controllerScheduler
+	localAgent      controllerScheduler
+	container       ownedStore
+	store           ownedStore
 }
 
 type controllerServer interface {
@@ -98,6 +103,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	cfg, err := loadControllerConfig(ctx, configPath)
 	if err != nil {
 		return nil, err
+	}
+	if _, err := environmentroot.Validate(ctx, cfg.Storage.VolumeRoot); err != nil {
+		return nil, fmt.Errorf("controller: validate Environment volume root: %w", err)
 	}
 	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
 	if err != nil {
@@ -138,6 +146,25 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotency repository: %w", err)
 	}
+	hierarchyRecords, err := etcd.NewHierarchyRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize hierarchy repository: %w", err)
+	}
+	if err := hierarchyRecords.ValidateEnvironmentVolumeDirs(ctx, cfg.Storage.VolumeRoot); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: validate persisted environment volume directories: %w", err)
+	}
+	hierarchyRepository, err := hierarchycontroller.NewEtcdRepository(hierarchyRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize hierarchy adapter: %w", err)
+	}
+	hierarchyService, err := hierarchycontroller.NewService(hierarchyRepository)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize hierarchy service: %w", err)
+	}
 	agents, err := etcd.NewLocalAgentRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -148,7 +175,36 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Agent channel authenticator: %w", err)
 	}
-	agentRuntime := newAgentChannelRuntime(authenticator, tasks)
+	controllerKey := &ageinfra.ControllerKey{Path: cfg.AgeKeyPath}
+	if err := controllerKey.Load(ctx); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: load Controller age key: %w", err)
+	}
+	intentProtector, err := newSecretValueProtector(controllerKey)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize idempotent intent protector: %w", err)
+	}
+	entryValues, err := etcd.NewEntryValueGenerationRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry value generation repository: %w", err)
+	}
+	planResolver, err := controller.NewTaskPlanResolverWithBlueprints(cfg.Storage.VolumeRoot, hierarchyRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize execution plan resolver: %w", err)
+	}
+	materializationResolver, err := controller.NewTaskMaterializationResolver(
+		hierarchyRecords,
+		entryValues,
+		intentProtector,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize materialization value resolver: %w", err)
+	}
+	agentRuntime := newAgentChannelRuntime(authenticator, tasks, planResolver, materializationResolver)
 	staleTasks, err := newStaleAgentTaskMaintenance(agents, agentRuntime.registry, tasks)
 	if err != nil {
 		_ = store.Close()
@@ -169,10 +225,126 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent Task adapter: %w", err)
 	}
-	controllerKey := &ageinfra.ControllerKey{Path: cfg.AgeKeyPath}
-	if err := controllerKey.Load(ctx); err != nil {
+	intentCoordinator, err := idempotentintent.NewCoordinator(intentProtector)
+	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: load Controller age key: %w", err)
+		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	environmentBlueprintIdempotency, err := newDurableEnvironmentBlueprintIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment Blueprint idempotency: %w", err)
+	}
+	environmentBlueprints, err := newEnvironmentBlueprintService(
+		cfg.Storage.VolumeRoot,
+		hierarchyRecords,
+		environmentBlueprintIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
+	}
+	tenantCreationIdempotency, err := newDurableTenantCreationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Tenant creation idempotency: %w", err)
+	}
+	tenantMutations, err := newTenantCreationService(hierarchyRecords, tenantCreationIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Tenant creation service: %w", err)
+	}
+	tenantChangeIdempotency, err := newDurableTenantChangeIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Tenant change idempotency: %w", err)
+	}
+	tenantChanges, err := newTenantChangeService(hierarchyRecords, tenantChangeIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Tenant change service: %w", err)
+	}
+	projectCreationIdempotency, err := newDurableProjectCreationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Project creation idempotency: %w", err)
+	}
+	projectMutations, err := newProjectCreationService(hierarchyRecords, projectCreationIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Project creation service: %w", err)
+	}
+	projectChangeIdempotency, err := newDurableProjectChangeIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Project change idempotency: %w", err)
+	}
+	projectChanges, err := newProjectChangeService(hierarchyRecords, projectChangeIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Project change service: %w", err)
+	}
+	environmentChangeIdempotency, err := newDurableEnvironmentChangeIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment change idempotency: %w", err)
+	}
+	environmentChanges, err := newEnvironmentChangeService(hierarchyRecords, environmentChangeIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment change service: %w", err)
+	}
+	environmentDeletionIdempotency, err := newDurableEnvironmentDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment deletion idempotency: %w", err)
+	}
+	environmentDeletions, err := newEnvironmentDeletionService(
+		hierarchyRecords,
+		planResolver,
+		environmentDeletionIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment deletion service: %w", err)
+	}
+	environmentCreationIdempotency, err := newDurableEnvironmentCreationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment creation idempotency: %w", err)
+	}
+	environmentMutations, err := newEnvironmentCreationService(
+		cfg.Storage.VolumeRoot,
+		hierarchyRecords,
+		environmentCreationIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment creation service: %w", err)
+	}
+	agentEnrollmentIdempotency, err := newDurableAgentEnrollmentIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent enrollment idempotency: %w", err)
+	}
+	agentEnrollments, err := newAgentEnrollmentService(
+		cfg.Agent.Image,
+		localagent.Config{
+			PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
+			MaxConcurrentTasks:  cfg.Agent.Runtime.MaxConcurrentTasks,
+			Labels:              cfg.Agent.Runtime.Labels,
+		},
+		tasks,
+		agentEnrollmentIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent enrollment service: %w", err)
+	}
+	agentRemovalIdempotency, err := newDurableAgentRemovalIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent removal idempotency: %w", err)
 	}
 	credentialCipher, err := newCredentialCipher(controllerKey)
 	if err != nil {
@@ -184,7 +356,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Agent credential runtime: %w", err)
 	}
-	runtimeAdapter, err := newLocalAgentRuntimeAdapter(credentialManager, cfg.Log)
+	runtimeAdapter, err := newLocalAgentRuntimeAdapter(credentialManager, cfg.Log, cfg.Storage.VolumeRoot)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent runtime adapter: %w", err)
@@ -213,11 +385,35 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent lifecycle: %w", err)
 	}
+	agentRemovals, err := newAgentRemovalService(localAgentManager, tasks, agentRemovalIdempotency)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent removal service: %w", err)
+	}
+	agentMutations, err := newAgentMutationService(agentEnrollments, agentRemovals)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent mutations: %w", err)
+	}
 	localAgentReconciliation, err := newLocalAgentReconciliation(localAgentManager, tick, logger)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
+	}
+	controllerTaskHandler, err := newLocalAgentControllerTaskHandler(localAgentManager)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
+	}
+	controllerTaskRunner, err := controllertask.New(tasks, controllerTaskHandler, tick, logger)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -232,17 +428,31 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize local Agent reads: %w", err)
 	}
 
-	srv := controller.New(store, logger, controller.Options{Agents: agentReads, Console: consoleAssets, Tasks: tasks})
+	srv := controller.New(store, logger, controller.Options{
+		Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
+		Projects:              hierarchyService,
+		ProjectMutations:      projectMutations,
+		ProjectChanges:        projectChanges,
+		Environments:          hierarchyRecords,
+		EnvironmentMutations:  environmentMutations,
+		EnvironmentChanges:    environmentChanges,
+		EnvironmentBlueprints: environmentBlueprints,
+		EnvironmentDeletions:  environmentDeletions,
+		TenantMutations:       tenantMutations,
+		TenantChanges:         tenantChanges,
+		Console:               consoleAssets, Tasks: tasks,
+	})
 
 	return &Controller{
-		Config:     cfg,
-		Logger:     logger,
-		server:     srv,
-		agent:      agentRuntime,
-		scheduler:  controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks),
-		localAgent: localAgentReconciliation,
-		container:  containerManager,
-		store:      store,
+		Config:          cfg,
+		Logger:          logger,
+		server:          srv,
+		agent:           agentRuntime,
+		scheduler:       controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks),
+		controllerTasks: controllerTaskRunner,
+		localAgent:      localAgentReconciliation,
+		container:       containerManager,
+		store:           store,
 	}, nil
 }
 
@@ -279,6 +489,11 @@ func (c *Controller) Run(ctx context.Context) error {
 		defer close(schedulerDone)
 		c.scheduler.Run(runCtx)
 	}()
+	controllerTasksDone := make(chan struct{})
+	go func() {
+		defer close(controllerTasksDone)
+		c.controllerTasks.Run(runCtx)
+	}()
 	localAgentDone := make(chan struct{})
 	go func() {
 		defer close(localAgentDone)
@@ -314,6 +529,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 	}
 	<-schedulerDone
+	<-controllerTasksDone
 	<-localAgentDone
 
 	containerCloseErr := c.container.Close()

@@ -113,6 +113,17 @@ func (repository *EtcdRepository) ListTenantProjects(
 	return projectPageFromEtcd(page), err
 }
 
+func (repository *EtcdRepository) ListProjects(
+	ctx context.Context,
+	filter ProjectFilter,
+	request PageRequest,
+) (Page[core.Project], error) {
+	page, err := repository.repository.ListProjects(ctx, etcdinfra.ProjectFilter{
+		TenantID: filter.TenantID, Kind: etcdinfra.ProjectKind(filter.Kind),
+	}, pageRequestToEtcd(request))
+	return projectPageFromEtcd(page), err
+}
+
 func (repository *EtcdRepository) RenameProject(
 	ctx context.Context,
 	id string,
@@ -124,13 +135,16 @@ func (repository *EtcdRepository) RenameProject(
 }
 
 func tenantToEtcd(record core.Tenant) etcdinfra.TenantRecord {
-	return etcdinfra.TenantRecord{ID: record.ID, Slug: record.Slug, Name: record.Name}
+	return etcdinfra.TenantRecord{
+		ID: record.ID, Slug: record.Slug, Name: record.Name, Description: record.Description,
+	}
 }
 
 func tenantFromEtcd(stored etcdinfra.Versioned[etcdinfra.TenantRecord]) Versioned[core.Tenant] {
 	return Versioned[core.Tenant]{
 		Record: core.Tenant{
 			ID: stored.Record.ID, Slug: stored.Record.Slug, Name: stored.Record.Name,
+			Description: stored.Record.Description,
 		},
 		Revision: stored.Revision, ReadRevision: stored.ReadRevision,
 	}
@@ -138,22 +152,24 @@ func tenantFromEtcd(stored etcdinfra.Versioned[etcdinfra.TenantRecord]) Versione
 
 func projectToEtcd(record core.Project) etcdinfra.ProjectRecord {
 	return etcdinfra.ProjectRecord{
-		ID:       record.ID,
-		TenantID: record.TenantID,
-		Slug:     record.Slug,
-		Name:     record.Name,
-		Kind:     etcdinfra.ProjectKind(record.Kind),
+		ID:          record.ID,
+		TenantID:    record.TenantID,
+		Slug:        record.Slug,
+		Name:        record.Name,
+		Description: record.Description,
+		Kind:        etcdinfra.ProjectKind(record.Kind),
 	}
 }
 
 func projectFromEtcd(stored etcdinfra.Versioned[etcdinfra.ProjectRecord]) Versioned[core.Project] {
 	return Versioned[core.Project]{
 		Record: core.Project{
-			ID:       stored.Record.ID,
-			TenantID: stored.Record.TenantID,
-			Slug:     stored.Record.Slug,
-			Name:     stored.Record.Name,
-			Kind:     core.ProjectKind(stored.Record.Kind),
+			ID:          stored.Record.ID,
+			TenantID:    stored.Record.TenantID,
+			Slug:        stored.Record.Slug,
+			Name:        stored.Record.Name,
+			Description: stored.Record.Description,
+			Kind:        core.ProjectKind(stored.Record.Kind),
 		},
 		Revision: stored.Revision, ReadRevision: stored.ReadRevision,
 	}

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/compose-spec/compose-go/v2/loader"
@@ -18,6 +19,15 @@ import (
 )
 
 const maxResolvedResources = 512
+
+// EnvironmentScope is the route-resolved owner of an Environment Blueprint.
+// Human labels authenticate the envelope target; only EnvironmentID determines runtime identity.
+type EnvironmentScope struct {
+	EnvironmentID string
+	Tenant        string
+	Project       string
+	Environment   string
+}
 
 // Extensions is the typed document-level Groundplane input stripped from the
 // root before native Compose loading.
@@ -55,10 +65,14 @@ var rootGroundplaneFields = map[string]struct{}{
 	"x-gp-components": {}, "x-gp-backup": {}, "x-gp-release-groups": {},
 }
 
-// Parse validates and loads a closed Blueprint bundle without ambient input.
-func Parse(ctx context.Context, bundle core.BlueprintBundle) (Result, error) {
+// Parse validates and loads a closed Blueprint bundle for one already-resolved Environment without ambient input.
+func Parse(ctx context.Context, scope EnvironmentScope, bundle core.BlueprintBundle) (Result, error) {
 	if ctx == nil {
 		return Result{}, errs.New(errs.KindInternal, "blueprint parser context is required")
+	}
+	if ids.Validate(ids.KindEnvironment, scope.EnvironmentID) != nil || scope.Tenant == "" || scope.Project == "" ||
+		scope.Environment == "" {
+		return Result{}, errs.New(errs.KindInternal, "blueprint parser environment scope is invalid")
 	}
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
@@ -75,10 +89,11 @@ func Parse(ctx context.Context, bundle core.BlueprintBundle) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	projectName := loader.NormalizeProjectName(envelope.Metadata.Environment)
-	if projectName == "" {
-		return Result{}, validationError("blueprint environment metadata is invalid")
+	if envelope.Metadata.Tenant != scope.Tenant || envelope.Metadata.Project != scope.Project ||
+		envelope.Metadata.Environment != scope.Environment {
+		return Result{}, validationError("blueprint metadata does not match the resolved environment")
 	}
+	projectName := "gp-" + strings.ToLower(scope.EnvironmentID)
 
 	workspace, err := os.MkdirTemp("", "groundplane-blueprint-")
 	if err != nil {
@@ -179,9 +194,6 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	var authored rootDocument
 	if err := decodeKnownFields(typed, &authored); err != nil {
 		return core.Envelope{}, Extensions{}, nil, validationError("blueprint root extension is invalid")
-	}
-	if authored.Schema == 0 {
-		authored.Schema = core.EnvelopeSchema
 	}
 	if authored.Kind != core.KindDocEnvironment || authored.Schema != core.EnvelopeSchema {
 		return core.Envelope{}, Extensions{}, nil, validationError("blueprint root envelope is invalid")

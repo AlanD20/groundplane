@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -18,7 +19,7 @@ type localAgentRecords interface {
 		int64,
 		etcd.LocalAgentConfig,
 	) (etcd.Versioned[etcd.LocalAgentRecord], error)
-	MarkReady(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	MarkReady(context.Context, string, uint64, int64, time.Time) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	BeginDelete(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	Delete(context.Context, string, uint64, int64) error
 }
@@ -85,8 +86,9 @@ func (adapter *localAgentRepositoryAdapter) MarkReady(
 	id string,
 	generation uint64,
 	revision int64,
+	readyAt time.Time,
 ) (localagent.StoredRecord, error) {
-	stored, err := adapter.repository.MarkReady(ctx, id, generation, revision)
+	stored, err := adapter.repository.MarkReady(ctx, id, generation, revision, readyAt)
 	if err != nil {
 		return localagent.StoredRecord{}, err
 	}
@@ -121,7 +123,8 @@ func localAgentRecordToDurable(record localagent.Record) (etcd.LocalAgentRecord,
 		return etcd.LocalAgentRecord{}, err
 	}
 	return etcd.LocalAgentRecord{
-		ID: record.ID, Image: record.Image, Generation: record.Generation, Phase: phase,
+		ID: record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
+		Image: record.Image, Generation: record.Generation, Phase: phase,
 		Config: etcd.LocalAgentConfig{
 			PullIntervalSeconds: record.Config.PullIntervalSeconds,
 			MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
@@ -130,6 +133,7 @@ func localAgentRecordToDurable(record localagent.Record) (etcd.LocalAgentRecord,
 		EncryptedToken: append([]byte(nil), record.Credential.EncryptedToken...),
 		TokenDigest:    record.Credential.Digest,
 		CreatedAt:      record.CreatedAt,
+		ReadyAt:        record.ReadyAt,
 		TokenUpdatedAt: record.CreatedAt,
 	}, nil
 }
@@ -143,7 +147,8 @@ func localAgentRecordFromDurable(
 	}
 	return localagent.StoredRecord{
 		Record: localagent.Record{
-			ID: stored.Record.ID, Image: stored.Record.Image,
+			ID: stored.Record.ID, EnrollmentTaskID: stored.Record.EnrollmentTaskID,
+			Image:      stored.Record.Image,
 			Generation: stored.Record.Generation, Phase: phase,
 			Config: localagent.Config{
 				PullIntervalSeconds: stored.Record.Config.PullIntervalSeconds,
@@ -155,6 +160,7 @@ func localAgentRecordFromDurable(
 				Digest:         stored.Record.TokenDigest,
 			},
 			CreatedAt: stored.Record.CreatedAt,
+			ReadyAt:   stored.Record.ReadyAt,
 		},
 		Revision: stored.Revision,
 	}, nil

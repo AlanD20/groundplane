@@ -36,8 +36,10 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 		t.Fatalf("CreateProject(): %v", err)
 	}
 	environment, err := repository.CreateEnvironment(ctx, EnvironmentRecord{
-		ID: environmentID, ProjectID: projectID, Slug: "production", Name: "Production",
-		VolumeDir: "/infra/vol/" + tenantID + "/" + projectID + "/" + environmentID,
+		ProvisioningState: EnvironmentProvisioningReady,
+		CreateTaskID:      "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		ID:                environmentID, ProjectID: projectID, Name: "production",
+		VolumeDir: "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
 		CreatedAt: time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
@@ -445,8 +447,10 @@ func TestHierarchyRejectsStandaloneBackingEnvironmentCreation(t *testing.T) {
 		t.Fatalf("CreateProject(backing): %v", err)
 	}
 	_, err = repository.CreateEnvironment(ctx, EnvironmentRecord{
-		ID: hierarchyTestID(ids.KindEnvironment, 61), ProjectID: projectID,
-		Slug: "main", Name: "Main", VolumeDir: "/infra/vol/main",
+		ProvisioningState: EnvironmentProvisioningReady,
+		CreateTaskID:      "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		ID:                hierarchyTestID(ids.KindEnvironment, 61), ProjectID: projectID, Name: "main",
+		VolumeDir: "/var/lib/groundplane/vol/platform/" + projectID + "/" + hierarchyTestID(ids.KindEnvironment, 61),
 		CreatedAt: time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC),
 	})
 	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
@@ -591,7 +595,13 @@ func (store *memoryHierarchyStore) Transact(
 			actualRevision = value.ModRevision
 		}
 		if actualRevision != condition.ModRevision {
-			return TransactionResult{Succeeded: false, Revision: store.revision}, nil
+			failureReads := make([]*KeyValue, len(conditions))
+			for index, failedCondition := range conditions {
+				failureReads[index] = store.valueAt(failedCondition.Key, store.revision)
+			}
+			return TransactionResult{
+				Succeeded: false, Revision: store.revision, FailureReads: failureReads,
+			}, nil
 		}
 	}
 	store.revision++

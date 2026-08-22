@@ -560,8 +560,9 @@ func newTestManager(t *testing.T, repository *fakeRepository, trace *traceLog) *
 
 func testRequest(agentID string) EnrollRequest {
 	return EnrollRequest{
-		AgentID: agentID,
-		Image:   testImage,
+		AgentID:          agentID,
+		EnrollmentTaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Image:            testImage,
 		Config: Config{
 			PullIntervalSeconds: 10,
 			MaxConcurrentTasks:  2,
@@ -583,6 +584,11 @@ func testCredential() Credential {
 
 func seededRepository(trace *traceLog, phase Phase) *fakeRepository {
 	credential := testCredential()
+	request := testRequest(testAgentID)
+	readyAt := time.Time{}
+	if phase != PhaseProvisioning {
+		readyAt = testNow
+	}
 	if phase == PhaseDeleting {
 		credential.Digest = ""
 	}
@@ -591,13 +597,15 @@ func seededRepository(trace *traceLog, phase Phase) *fakeRepository {
 		exists: true,
 		record: StoredRecord{
 			Record: Record{
-				ID:         testAgentID,
-				Image:      testImage,
-				Generation: initialGeneration,
-				Phase:      phase,
-				Config:     testRequest(testAgentID).Config,
-				Credential: credential,
-				CreatedAt:  testNow,
+				ID:               testAgentID,
+				EnrollmentTaskID: request.EnrollmentTaskID,
+				Image:            testImage,
+				Generation:       initialGeneration,
+				Phase:            phase,
+				Config:           request.Config,
+				Credential:       credential,
+				CreatedAt:        testNow,
+				ReadyAt:          readyAt,
 			},
 			Revision: 1,
 		},
@@ -666,6 +674,7 @@ func (repository *fakeRepository) MarkReady(
 	id string,
 	generation uint64,
 	revision int64,
+	readyAt time.Time,
 ) (StoredRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return StoredRecord{}, err
@@ -677,6 +686,7 @@ func (repository *fakeRepository) MarkReady(
 		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
 	}
 	repository.record.Record.Phase = PhaseReady
+	repository.record.Record.ReadyAt = readyAt
 	repository.record.Revision++
 	return cloneStored(repository.record), nil
 }

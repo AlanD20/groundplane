@@ -7,10 +7,13 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/common/version"
@@ -35,17 +38,26 @@ type Client struct {
 	socketPath string
 	agentID    string
 	token      [agentprotocol.RawTokenBytes]byte
+	volumeRoot string
 	logger     *slog.Logger
 	connect    streamConnector
 
-	mu          sync.Mutex
-	started     bool
-	pool        *WorkerPool
-	workersDone <-chan struct{}
-	compose     *ComposeRuntime
+	mu                     sync.Mutex
+	started                bool
+	pool                   *WorkerPool
+	workersDone            <-chan struct{}
+	compose                *ComposeRuntime
+	environmentDirectories *EnvironmentDirectoryRuntime
+	materializer           *MaterializationRuntime
 }
 
-func NewClient(socketPath, agentID string, token []byte, logger *slog.Logger) (*Client, error) {
+func NewClient(
+	socketPath string,
+	agentID string,
+	token []byte,
+	volumeRoot string,
+	logger *slog.Logger,
+) (*Client, error) {
 	if socketPath != agentprotocol.SocketPath {
 		return nil, errs.New(errs.KindValidationFailed, "agent: invalid Controller socket path")
 	}
@@ -62,10 +74,14 @@ func NewClient(socketPath, agentID string, token []byte, logger *slog.Logger) (*
 	if logger == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: logger is required")
 	}
+	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
+		return nil, errs.New(errs.KindValidationFailed, "agent: invalid volume root policy")
+	}
 
 	client := &Client{
 		socketPath: socketPath,
 		agentID:    agentID,
+		volumeRoot: volumeRoot,
 		logger:     logger,
 		connect:    connectGRPC,
 	}
@@ -73,21 +89,26 @@ func NewClient(socketPath, agentID string, token []byte, logger *slog.Logger) (*
 	return client, nil
 }
 
-func NewClientWithComposeRuntime(
+func NewClientWithRuntimes(
 	socketPath string,
 	agentID string,
 	token []byte,
+	volumeRoot string,
 	logger *slog.Logger,
 	compose *ComposeRuntime,
+	environmentDirectories *EnvironmentDirectoryRuntime,
+	materializer *MaterializationRuntime,
 ) (*Client, error) {
-	if compose == nil {
-		return nil, errs.New(errs.KindValidationFailed, "agent: Compose runtime is required")
+	if compose == nil || environmentDirectories == nil || materializer == nil {
+		return nil, errs.New(errs.KindValidationFailed, "agent: execution runtimes are required")
 	}
-	client, err := NewClient(socketPath, agentID, token, logger)
+	client, err := NewClient(socketPath, agentID, token, volumeRoot, logger)
 	if err != nil {
 		return nil, err
 	}
 	client.compose = compose
+	client.environmentDirectories = environmentDirectories
+	client.materializer = materializer
 	return client, nil
 }
 
@@ -136,29 +157,15 @@ func (c *Client) Run(ctx context.Context) error {
 	if config == nil {
 		return errs.New(errs.KindInternal, "agent: Controller did not send configuration first")
 	}
-	if config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
+	if !validRuntimeConfig(config) {
 		return errs.New(errs.KindInternal, "agent: Controller sent invalid initial configuration")
 	}
 
 	pullInterval := time.Duration(config.PullIntervalSeconds) * time.Second
-	if c.compose == nil {
-		c.pool = NewWorkerPool(int(config.MaxConcurrentTasks), runner.New(c.logger), c.logger)
-	} else {
-		c.pool = NewWorkerPoolWithCompose(
-			int(config.MaxConcurrentTasks),
-			runner.New(c.logger),
-			c.logger,
-			c.compose,
-		)
-	}
-	workersDone := make(chan struct{})
-	c.workersDone = workersDone
-	go func() {
-		defer close(workersDone)
-		c.pool.Run(streamCtx)
-	}()
+	config = proto.Clone(config).(*agentpb.AgentConfig)
+	poolCancel, workersDone := c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
 	defer func() {
-		cancel()
+		poolCancel()
 		<-workersDone
 	}()
 	if err := c.sendReady(stream); err != nil {
@@ -180,6 +187,26 @@ func (c *Client) Run(ctx context.Context) error {
 		case result := <-received:
 			if result.err != nil {
 				return transportError(ctx, "agent: receive Controller message")
+			}
+			if update := result.message.GetConfigUpdate(); update != nil {
+				next := update.GetAgentConfig()
+				if !validRuntimeConfig(next) {
+					return errs.New(errs.KindInternal, "agent: Controller sent invalid live configuration")
+				}
+				if c.pool.Capacity() != int(config.MaxConcurrentTasks) {
+					return errs.New(errs.KindStateConflict, "agent: live configuration arrived before the worker pool drained")
+				}
+				poolCancel()
+				<-workersDone
+				config = proto.Clone(next).(*agentpb.AgentConfig)
+				poolCancel, workersDone = c.startWorkerPool(streamCtx, int(config.MaxConcurrentTasks))
+				pullInterval = time.Duration(config.PullIntervalSeconds) * time.Second
+				ticker.Reset(pullInterval)
+				receiveNext(streamCtx, stream, received)
+				if err := c.sendReady(stream); err != nil {
+					return transportError(ctx, "agent: send readiness after configuration update")
+				}
+				continue
 			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
@@ -210,6 +237,45 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (c *Client) startWorkerPool(ctx context.Context, size int) (context.CancelFunc, <-chan struct{}) {
+	poolCtx, cancel := context.WithCancel(ctx)
+	var pool *WorkerPool
+	if c.compose == nil && c.environmentDirectories == nil && c.materializer == nil {
+		pool = NewWorkerPool(size, c.volumeRoot, runner.New(c.logger), c.logger)
+	} else {
+		pool = NewWorkerPoolWithRuntimes(
+			size,
+			c.volumeRoot,
+			runner.New(c.logger),
+			c.logger,
+			c.compose,
+			c.environmentDirectories,
+			c.materializer,
+		)
+	}
+	c.pool = pool
+	done := make(chan struct{})
+	c.workersDone = done
+	go func() {
+		defer close(done)
+		pool.Run(poolCtx)
+	}()
+	return cancel, done
+}
+
+func validRuntimeConfig(config *agentpb.AgentConfig) bool {
+	if config == nil || config.PullIntervalSeconds <= 0 || config.MaxConcurrentTasks <= 0 {
+		return false
+	}
+	for key, value := range config.Labels {
+		if !utf8.ValidString(key) || strings.IndexByte(key, 0) >= 0 ||
+			!utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Client) sendTaskEvent(stream agentStream, progress TaskProgress) error {
@@ -266,18 +332,18 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 	if abort := message.GetTaskAbort(); abort != nil {
 		return false, c.pool.Abort(ctx, abort.TaskId)
 	}
+	if transfer := message.GetMaterializationTransfer(); transfer != nil {
+		return false, c.pool.AcceptMaterializationTransfer(ctx, transfer)
+	}
 	if message.GetShutdown() != nil {
 		return true, nil
-	}
-	if message.GetConfigUpdate() != nil {
-		return false, errs.New(errs.KindNotImplemented, "agent: live configuration update is not implemented")
 	}
 	return false, errs.New(errs.KindInternal, "agent: Controller sent an empty message")
 }
 
 func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
-	if result.Compose == nil {
-		return errs.New(errs.KindInternal, "agent: worker returned an empty Compose result")
+	if (result.Compose == nil) == (result.EnvironmentDirectory == nil) {
+		return errs.New(errs.KindInternal, "agent: worker returned an invalid task result union")
 	}
 	terminal := agentpb.TaskTerminal_TASK_TERMINAL_UNSPECIFIED
 	switch result.Terminal {
@@ -292,11 +358,20 @@ func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
 	default:
 		return errs.New(errs.KindInternal, "agent: worker returned an invalid terminal state")
 	}
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
+	acknowledgement := &agentpb.TaskAck{
 		TaskId: result.TaskID, PlanHash: append([]byte(nil), result.PlanHash[:]...), Terminal: terminal,
 		ExitCode: result.ExitCode,
-		Result:   &agentpb.TaskAck_ComposeResult{ComposeResult: proto.Clone(result.Compose).(*agentpb.ComposeTaskResult)},
-	}}})
+	}
+	if result.Compose != nil {
+		acknowledgement.Result = &agentpb.TaskAck_ComposeResult{
+			ComposeResult: proto.Clone(result.Compose).(*agentpb.ComposeTaskResult),
+		}
+	} else {
+		acknowledgement.Result = &agentpb.TaskAck_EnvironmentDirectoryResult{
+			EnvironmentDirectoryResult: proto.Clone(result.EnvironmentDirectory).(*agentpb.EnvironmentDirectoryTaskResult),
+		}
+	}
+	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: acknowledgement}})
 }
 
 type receiveResult struct {

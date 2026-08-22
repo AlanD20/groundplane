@@ -141,6 +141,7 @@ message TaskAck {
   int32 exit_code = 4;
   oneof result {
     ComposeTaskResult compose_result = 5;
+    EnvironmentDirectoryTaskResult environment_directory_result = 6;
   }
 }
 
@@ -149,6 +150,10 @@ message ComposeTaskResult {
   string failed_step_id = 2;
   ComposeHelperDiagnostic diagnostic = 3;
   bool reconciliation_required = 4;
+}
+
+message EnvironmentDirectoryTaskResult {
+  string failed_step_id = 1;
 }
 
 enum TaskTerminal {
@@ -165,9 +170,48 @@ message ControllerMessage {
   oneof payload {
     TaskAssignment task_assignment = 1; // the full procedure: steps, params, timeout
     TaskAbort task_abort = 2;           // cancel in-flight work NOW
-    ConfigUpdate config_update = 3;     // applied on next Ready, no restart
+    ConfigUpdate config_update = 3;     // delivered at the first fully idle Ready; applied without process restart
     Shutdown shutdown = 4;
+    MaterializationTransfer materialization_transfer = 5; // transient bytes; never durable Task or plan state
   }
+}
+
+// MaterializationTransfer is one ordered transient record for a metadata-only
+// MaterializeFile step. The header repeats the sealed step metadata; content
+// exists only in chunk records and is never part of ExecutionPlan.
+message MaterializationTransfer {
+  string task_id = 1;
+  bytes plan_hash = 2;
+  string step_id = 3;
+  oneof record {
+    MaterializationTransferHeader header = 4;
+    MaterializationTransferChunk chunk = 5;
+    MaterializationTransferEnd end = 6;
+  }
+}
+
+message MaterializationTransferHeader {
+  string artifact_id = 1;
+  string materialization_id = 2;
+  string environment_id = 3;
+  uint64 render_generation = 4;
+  string destination = 5;
+  string service_id = 6;
+  MaterializationOutputKind output_kind = 7;
+  uint32 uid = 8;
+  uint32 gid = 9;
+  uint32 mode = 10;
+  uint64 length = 11;
+  bytes sha256 = 12;
+}
+
+message MaterializationTransferChunk {
+  uint32 sequence = 1; // one-based within this task step
+  bytes content = 2;
+}
+
+message MaterializationTransferEnd {
+  uint32 chunk_count = 1;
 }
 
 message TaskAssignment {
@@ -199,6 +243,7 @@ enum PlanOperation {
   PLAN_OPERATION_DESTROY = 6;
   PLAN_OPERATION_REMOVE = 7;
   PLAN_OPERATION_COMPONENT_APPLY = 8;
+  PLAN_OPERATION_ENVIRONMENT_CREATE = 9;
 }
 
 message ComposeArtifact {
@@ -255,7 +300,34 @@ message ExecutionStep {
     ComposeStop compose_stop = 4;
     ComposeRemove compose_remove = 5;
     WaitHealthy wait_healthy = 6;
+    EnvironmentDirectoryCreate environment_directory_create = 7;
+    MaterializeFile materialize_file = 8;
+    ManagedVolumeDirectoriesEnsure managed_volume_directories_ensure = 9;
+    EnvironmentDirectoryRemove environment_directory_remove = 10;
   }
+}
+
+enum MaterializationOutputKind {
+  MATERIALIZATION_OUTPUT_KIND_UNSPECIFIED = 0;
+  MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV = 1;
+  MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE = 2;
+  MATERIALIZATION_OUTPUT_KIND_SECRET_FILE = 3;
+}
+
+// MaterializeFile contains authenticated metadata and a durable reference id,
+// never plaintext. Bytes arrive separately in MaterializationTransfer.
+message MaterializeFile {
+  string artifact_id = 1;
+  string materialization_id = 2;
+  string environment_id = 3;
+  string destination = 4;
+  string service_id = 5;
+  MaterializationOutputKind output_kind = 6;
+  uint32 uid = 7;
+  uint32 gid = 8;
+  uint32 mode = 9;
+  uint64 length = 10;
+  bytes sha256 = 11;
 }
 
 message ComposeApply {
@@ -279,6 +351,42 @@ message ComposeRemove {
 message WaitHealthy {
   string artifact_id = 1;
   repeated string service_ids = 2;
+}
+
+message EnvironmentDirectoryCreate {
+  string environment_id = 1;
+  string expected_volume_dir = 2;
+}
+
+// EnvironmentDirectoryRemove names the same Controller-authorized directory
+// identity as creation. The helper validates it beneath its configured root
+// and never follows a symlink while removing it.
+message EnvironmentDirectoryRemove {
+  string environment_id = 1;
+  string expected_volume_dir = 2;
+}
+
+// ManagedVolumeDirectoriesEnsure selects the managed volume table from one
+// authenticated Environment Compose artifact. It never carries a host path.
+message ManagedVolumeDirectoriesEnsure {
+  string artifact_id = 1;
+}
+
+// EnvironmentDirectoryHelperRequest is the single length-framed stdin message
+// accepted by the static environment-directory-helper Agent-binary mode.
+message EnvironmentDirectoryHelperRequest {
+  uint32 schema = 1; // exactly 1
+  string task_id = 2;
+  string operation_id = 3;
+  ExecutionPlan plan = 4;
+  string step_id = 5;
+  uint32 timeout_seconds = 6; // remaining bounded execution time
+}
+
+message EnvironmentDirectoryHelperResponse {
+  uint32 schema = 1; // exactly 1
+  int32 exit_code = 2;
+  string failed_step_id = 3;
 }
 
 // ComposeHelperRequest is the single length-framed stdin message accepted by

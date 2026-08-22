@@ -167,8 +167,8 @@ func TestServiceReadsResolvesAndListsFixedRevisionHierarchy(t *testing.T) {
 }
 
 func TestServiceFailsClosedOnProjectScopeOrKindMismatch(t *testing.T) {
-	// Rationale: the normal-project facade must never expose a backing project
-	// or trust a scoped repository result whose tenant owner does not match the query.
+	// Stable-ID detail reads include both project kinds. Tenant-scoped slug
+	// resolution and lists must still fail closed on ownership mismatches.
 	t.Parallel()
 
 	backing := core.Project{
@@ -194,8 +194,9 @@ func TestServiceFailsClosedOnProjectScopeOrKindMismatch(t *testing.T) {
 	}
 	service := mustService(t, repository)
 
-	if _, err := service.GetProject(context.Background(), testProjectID); !hasKind(err, errs.KindProjectNotFound) {
-		t.Fatalf("GetProject(backing) error = %v, want project.not_found", err)
+	got, err := service.GetProject(context.Background(), testProjectID)
+	if err != nil || got.Record != backing {
+		t.Fatalf("GetProject(backing) = %#v, %v, want %#v", got.Record, err, backing)
 	}
 	if _, err := service.ResolveProject(
 		context.Background(), testTenantID, "console",
@@ -636,6 +637,7 @@ type repositoryStub struct {
 	getProject           func(context.Context, string) (Versioned[core.Project], error)
 	resolveTenantProject func(context.Context, string, string) (Versioned[core.Project], error)
 	listTenantProjects   func(context.Context, string, PageRequest) (Page[core.Project], error)
+	listProjects         func(context.Context, ProjectFilter, PageRequest) (Page[core.Project], error)
 	renameProject        func(context.Context, string, int64, string) (Versioned[core.Project], error)
 }
 
@@ -708,6 +710,14 @@ func (repository *repositoryStub) ListTenantProjects(
 	request PageRequest,
 ) (Page[core.Project], error) {
 	return repository.listTenantProjects(ctx, tenantID, request)
+}
+
+func (repository *repositoryStub) ListProjects(
+	ctx context.Context,
+	filter ProjectFilter,
+	request PageRequest,
+) (Page[core.Project], error) {
+	return repository.listProjects(ctx, filter, request)
 }
 
 func (repository *repositoryStub) RenameProject(

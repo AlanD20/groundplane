@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -63,18 +64,23 @@ type credentialRuntime interface {
 // lifecycle model and infrastructure. It is the only place where their types
 // are translated, preserving the one-way import matrix.
 type localAgentRuntimeAdapter struct {
-	runtime credentialRuntime
-	log     config.LogConfig
+	runtime    credentialRuntime
+	log        config.LogConfig
+	volumeRoot string
 }
 
 func newLocalAgentRuntimeAdapter(
 	runtime credentialRuntime,
 	logConfig config.LogConfig,
+	volumeRoot string,
 ) (*localAgentRuntimeAdapter, error) {
 	if runtime == nil {
 		return nil, errs.New(errs.KindInternal, "local agent credential runtime is required")
 	}
-	return &localAgentRuntimeAdapter{runtime: runtime, log: logConfig}, nil
+	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	return &localAgentRuntimeAdapter{runtime: runtime, log: logConfig, volumeRoot: volumeRoot}, nil
 }
 
 func (adapter *localAgentRuntimeAdapter) GenerateCredential(
@@ -100,6 +106,7 @@ func (adapter *localAgentRuntimeAdapter) Materialize(
 	runtimeConfig := config.DefaultAgentConfig()
 	runtimeConfig.AgentID = material.AgentID
 	runtimeConfig.Log = adapter.log
+	runtimeConfig.Storage.VolumeRoot = adapter.volumeRoot
 	runtimeConfig.Runtime.PullIntervalSeconds = material.Config.PullIntervalSeconds
 	runtimeConfig.Runtime.MaxConcurrentTasks = material.Config.MaxConcurrentTasks
 	runtimeConfig.Runtime.Labels = cloneRuntimeLabels(material.Config.Labels)

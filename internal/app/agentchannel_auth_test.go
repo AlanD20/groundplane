@@ -26,6 +26,17 @@ func (resolver *fakeAgentChannelResolver) ResolveAgentChannel(
 	return resolver.authorization, nil
 }
 
+func (resolver *fakeAgentChannelResolver) GetSingleton(
+	context.Context,
+) (etcd.Versioned[etcd.LocalAgentRecord], error) {
+	return etcd.Versioned[etcd.LocalAgentRecord]{Record: etcd.LocalAgentRecord{
+		ID:         resolver.authorization.AgentID,
+		Generation: resolver.authorization.Generation,
+		Phase:      etcd.LocalAgentPhaseReady,
+		Config:     resolver.authorization.Config,
+	}, Revision: 1}, nil
+}
+
 func TestAgentChannelAuthenticatorTranslatesDurableAuthorization(t *testing.T) {
 	resolver := &fakeAgentChannelResolver{authorization: etcd.LocalAgentChannelAuthorization{
 		AgentID: "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV", Generation: 7,

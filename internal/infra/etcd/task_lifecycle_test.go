@@ -20,7 +20,8 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 
 	now := taskJournalTime()
 	record := TaskAssignmentRecord{
-		TaskID: ids.NewAt(ids.KindTask, now, 1), AgentID: ids.NewAt(ids.KindAgent, now, 2),
+		TaskID: ids.NewAt(ids.KindTask, now, 1), Executor: TaskExecutorAgent,
+		AgentID:         ids.NewAt(ids.KindAgent, now, 2),
 		AgentGeneration: 7, ClaimedTaskRevision: 41, AssignedAt: now, Deadline: now.Add(time.Minute),
 	}
 	value, err := encodeTaskAssignment(record)
@@ -38,6 +39,18 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 	unknown := bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"extra":true`), 1)
 	if _, err := decodeTaskAssignment(unknown); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskAssignment(unknown) error = %v, want internal", err)
+	}
+	controller := record
+	controller.Executor = TaskExecutorController
+	controller.AgentID = ""
+	controller.AgentGeneration = 0
+	controllerValue, err := encodeTaskAssignment(controller)
+	if err != nil {
+		t.Fatalf("encodeTaskAssignment(controller) error = %v", err)
+	}
+	decodedController, err := decodeTaskAssignment(controllerValue)
+	if err != nil || decodedController != controller {
+		t.Fatalf("decodeTaskAssignment(controller) = %#v, %v", decodedController, err)
 	}
 }
 
@@ -62,7 +75,7 @@ func TestTaskRepositoryCreatesAndReplaysAtomicTask(t *testing.T) {
 	assertTaskLifecycleValue(t, store, taskKey(task.ID), true)
 	assertTaskLifecycleValue(t, store, taskOperationIndexKey(task.OperationID, task.ID), true)
 	assertTaskLifecycleValue(t, store, taskActiveOperationKey(task.OperationID), true)
-	assertTaskLifecycleValue(t, store, taskQueueKey(task.ID), true)
+	assertTaskLifecycleValue(t, store, taskQueueKey(task.Executor, task.ID), true)
 	markerKey, keyErr := idempotencyMarkerKey(marker.Locator)
 	if keyErr != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", keyErr)
@@ -127,6 +140,7 @@ func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
 	}
 	if persisted.Record.RetryOf != source.ID || persisted.Record.OperationID != source.OperationID ||
 		persisted.Record.IdempotencyKey != source.IdempotencyKey ||
+		persisted.Record.Executor != source.Executor ||
 		persisted.Record.PlanID != source.PlanID || persisted.Record.PlanHash != source.PlanHash ||
 		persisted.Record.Status != TaskStatusPending || persisted.Record.idempotencyMarker == nil ||
 		*persisted.Record.idempotencyMarker != marker.Locator {
@@ -134,7 +148,7 @@ func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
 	}
 	assertTaskLifecycleValue(t, store, taskOperationIndexKey(source.OperationID, retryID), true)
 	assertTaskLifecycleValue(t, store, taskActiveOperationKey(source.OperationID), true)
-	assertTaskLifecycleValue(t, store, taskQueueKey(retryID), true)
+	assertTaskLifecycleValue(t, store, taskQueueKey(source.Executor, retryID), true)
 
 	replayID := ids.NewAt(ids.KindTask, terminalAt.Add(2*time.Second), 602)
 	replayMarker := pendingRetryMarker(source, replayID, terminalAt.Add(2*time.Second), marker.Locator.Key)
@@ -207,11 +221,11 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		claim.Assignment.Record.ClaimedTaskRevision <= 0 {
 		t.Fatalf("ClaimNextTask() = %#v", claim)
 	}
-	assertTaskLifecycleValue(t, store, taskQueueKey(first.ID), false)
+	assertTaskLifecycleValue(t, store, taskQueueKey(first.Executor, first.ID), false)
 	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, first.ID), true)
 	assertTaskLifecycleValue(t, store, taskAssignmentIndexKey(first.ID), true)
 	assertTaskLifecycleValue(t, store, taskTimeoutIndexKey(first.ID, claim.Assignment.Record.Deadline), true)
-	assertTaskLifecycleValue(t, store, taskQueueKey(second.ID), true)
+	assertTaskLifecycleValue(t, store, taskQueueKey(second.Executor, second.ID), true)
 	recovered, err := repository.ListAgentAssignments(ctx, agentID, 3, 4)
 	if err != nil || len(recovered) != 1 ||
 		recovered[0].Task.Record.ID != first.ID ||
@@ -329,6 +343,74 @@ func TestTaskRepositoryTimesOutExactAgentGenerationAssignments(t *testing.T) {
 	}
 }
 
+func TestTaskRepositoryIsolatesControllerAndAgentExecutionClaims(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	now := taskJournalTime()
+	controllerTask := validTaskRecord(now)
+	controllerTask.Executor = TaskExecutorController
+	agentTask := validTaskRecord(now.Add(time.Second))
+	createLifecycleTask(t, repository, controllerTask)
+	createLifecycleTask(t, repository, agentTask)
+
+	agentID := ids.NewAt(ids.KindAgent, now, 701)
+	agentClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(2*time.Second))
+	if err != nil || !found || agentClaim.Task.Record.ID != agentTask.ID ||
+		agentClaim.Assignment.Record.Executor != TaskExecutorAgent {
+		t.Fatalf("ClaimNextTask() = %#v, %v, %v", agentClaim, found, err)
+	}
+	controllerClaim, found, err := repository.ClaimNextControllerTask(ctx, now.Add(2*time.Second))
+	if err != nil || !found || controllerClaim.Task.Record.ID != controllerTask.ID ||
+		controllerClaim.Assignment.Record.Executor != TaskExecutorController ||
+		controllerClaim.Assignment.Record.AgentID != "" || controllerClaim.Assignment.Record.AgentGeneration != 0 {
+		t.Fatalf("ClaimNextControllerTask() = %#v, %v, %v", controllerClaim, found, err)
+	}
+	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, agentTask.ID), true)
+	assertTaskLifecycleValue(t, store, controllerTaskClaimKey(controllerTask.ID), true)
+	recovered, err := repository.ListControllerTaskClaims(ctx)
+	if err != nil || len(recovered) != 1 ||
+		recovered[0].Task.Record.ID != controllerTask.ID ||
+		recovered[0].Assignment.Record != controllerClaim.Assignment.Record {
+		t.Fatalf("ListControllerTaskClaims() = %#v, %v", recovered, err)
+	}
+
+	terminalAt := now.Add(3 * time.Second)
+	terminal, err := repository.AcknowledgeControllerTask(
+		ctx,
+		controllerTask.ID,
+		TaskStatusCompleted,
+		terminalAt,
+	)
+	if err != nil || terminal.Record.Status != TaskStatusCompleted || terminal.Record.Result != nil {
+		t.Fatalf("AcknowledgeControllerTask() = %#v, %v", terminal, err)
+	}
+	assertTaskLifecycleValue(t, store, controllerTaskClaimKey(controllerTask.ID), false)
+	assertTaskLifecycleValue(t, store, taskAssignmentIndexKey(controllerTask.ID), false)
+	assertTaskLifecycleValue(
+		t,
+		store,
+		taskTimeoutIndexKey(controllerTask.ID, controllerClaim.Assignment.Record.Deadline),
+		false,
+	)
+	replayed, err := repository.AcknowledgeControllerTask(
+		ctx,
+		controllerTask.ID,
+		TaskStatusCompleted,
+		terminalAt,
+	)
+	if err != nil || replayed.Record.Status != TaskStatusCompleted || replayed.Record.Result != nil {
+		t.Fatalf("AcknowledgeControllerTask(replay) = %#v, %v", replayed, err)
+	}
+	recovered, err = repository.ListControllerTaskClaims(ctx)
+	if err != nil || len(recovered) != 0 {
+		t.Fatalf("ListControllerTaskClaims(terminal) = %#v, %v", recovered, err)
+	}
+}
+
 func TestTaskRepositoryRejectsStaleGenerationAndAbortsPendingTask(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
@@ -370,7 +452,7 @@ func TestTaskRepositoryRejectsStaleGenerationAndAbortsPendingTask(t *testing.T) 
 	if aborted.Record.Status != TaskStatusAborted {
 		t.Fatalf("AbortPendingTask() = %#v", aborted)
 	}
-	assertTaskLifecycleValue(t, store, taskQueueKey(pendingTask.ID), false)
+	assertTaskLifecycleValue(t, store, taskQueueKey(pendingTask.Executor, pendingTask.ID), false)
 	assertTaskLifecycleValue(t, store, taskActiveOperationKey(pendingTask.OperationID), false)
 	marker := pendingTaskMarker(pendingTask)
 	idempotency, err := newIdempotencyRepository(store)

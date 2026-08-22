@@ -31,7 +31,7 @@ services:
 	})
 	bundle.Interpolation = map[string]string{"IMAGE": "declared"}
 
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -64,7 +64,7 @@ func TestParseExcludesAmbientEnvironmentAndDotEnv(t *testing.T) {
 		"root.yaml": environmentRoot("services:\n  web: {image: \"${IMAGE:-fallback}\"}\n"),
 	})
 
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -84,7 +84,7 @@ func TestParseDisablesImplicitIncludedDotEnv(t *testing.T) {
 		),
 	})
 
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -104,7 +104,7 @@ func TestParseNestedRootUsesClosedBundlePaths(t *testing.T) {
 		),
 	})
 
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -128,7 +128,7 @@ func TestParseIncludeUsesDeclaredEnvironmentFile(t *testing.T) {
 		"vars/child.env": "CHILD_IMAGE=busybox\n",
 	})
 
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -137,26 +137,53 @@ func TestParseIncludeUsesDeclaredEnvironmentFile(t *testing.T) {
 	}
 }
 
-// Rationale: the Controller-derived environment name is the stable Compose
-// project identity; authored names may express it but cannot override it.
-func TestParseEnforcesControllerProjectName(t *testing.T) {
-	matching := parserBundle([]string{"root.yaml"}, map[string]string{
-		"root.yaml": environmentRoot("name: Production\nservices:\n  web: {image: nginx}\n"),
+// Rationale: only the stable Environment id may determine Compose project identity; even a matching authored value
+// is forbidden derived state.
+func TestParseDerivesAndRejectsAuthoredProjectName(t *testing.T) {
+	withoutName := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot("services:\n  web: {image: nginx}\n"),
 	})
-	result, err := Parse(context.Background(), matching)
+	result, err := Parse(context.Background(), parserEnvironmentScope, withoutName)
 	if err != nil {
-		t.Fatalf("Parse() matching normalized project name: %v", err)
+		t.Fatalf("Parse() generated project name: %v", err)
 	}
-	if result.Project.Name != "production" {
-		t.Fatalf("project name = %q, want production", result.Project.Name)
+	if result.Project.Name != "gp-env_01arz3ndektsv4rrffq69g5fav" {
+		t.Fatalf("project name = %q, want stable Environment-derived name", result.Project.Name)
 	}
 
-	conflicting := parserBundle([]string{"root.yaml"}, map[string]string{
-		"root.yaml": environmentRoot(
-			"name: another-environment\nservices:\n  web: {image: nginx}\n",
-		),
+	for _, name := range []string{"gp-env_01arz3ndektsv4rrffq69g5fav", "production"} {
+		authored := parserBundle([]string{"root.yaml"}, map[string]string{
+			"root.yaml": environmentRoot("name: " + name + "\nservices:\n  web: {image: nginx}\n"),
+		})
+		requireValidationError(t, parseError(authored))
+	}
+}
+
+// Rationale: the route-resolved scope is authoritative and a bundle addressed to another mutable label chain must fail.
+func TestParseRejectsEnvelopeOutsideResolvedScope(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": `kind: environment
+schema: 1
+metadata: {tenant: acme, project: shop, environment: staging}
+services: {web: {image: nginx}}
+`,
 	})
-	requireValidationError(t, parseError(conflicting))
+
+	_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+	requireValidationError(t, err)
+}
+
+// Rationale: schema selects the authored grammar and must be explicit; treating omission as version 1 is ambiguous.
+func TestParseRejectsMissingEnvelopeSchema(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": `kind: environment
+metadata: {tenant: acme, project: shop, environment: production}
+services: {web: {image: nginx}}
+`,
+	})
+
+	_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+	requireValidationError(t, err)
 }
 
 // Rationale: native Compose short bind syntax must pass through the same
@@ -168,7 +195,7 @@ func TestParseAcceptsReadOnlyShortBind(t *testing.T) {
 			"services:\n  web:\n    image: nginx\n    volumes: [./data:/data:ro]\n",
 		),
 	})
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() read-only short bind: %v", err)
 	}
@@ -227,9 +254,21 @@ func TestParseAllowsOrdinaryLocalNamedVolume(t *testing.T) {
 			"services:\n  web: {image: nginx, volumes: [data:/data]}\nvolumes:\n  data: {}\n",
 		),
 	})
-	if _, err := Parse(context.Background(), bundle); err != nil {
+	if _, err := Parse(context.Background(), parserEnvironmentScope, bundle); err != nil {
 		t.Fatalf("Parse() local named volume: %v", err)
 	}
+}
+
+// Rationale: Docker volume names are derived from stable Volume ids, so an authored physical name is forbidden.
+func TestParseRejectsAuthoredVolumeRuntimeName(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(
+			"services:\n  web: {image: nginx, volumes: [data:/data]}\nvolumes:\n  data: {name: mutable}\n",
+		),
+	})
+
+	_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+	requireValidationError(t, err)
 }
 
 // Rationale: declared bundle-relative includes, env files, label files,
@@ -254,7 +293,7 @@ services:
 		"child.yaml": "services:\n  worker: {image: busybox}\n",
 	})
 
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -325,7 +364,11 @@ func TestParseRejectsUnsafeFileSurfaces(t *testing.T) {
 				"secret.txt": "private",
 				"data":       "x",
 			}
-			_, err := Parse(context.Background(), parserBundle([]string{"root.yaml"}, files))
+			_, err := Parse(
+				context.Background(),
+				parserEnvironmentScope,
+				parserBundle([]string{"root.yaml"}, files),
+			)
 			requireValidationError(t, err)
 		})
 	}
@@ -376,7 +419,7 @@ services:
 `),
 	})
 
-	result, err := Parse(context.Background(), bundle)
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -447,7 +490,7 @@ func TestParseReleaseGroupFailurePolicyIsClosed(t *testing.T) {
 				"services:\n  api: {image: app}\n  worker: {image: app}\n",
 		),
 	})
-	result, err := Parse(context.Background(), valid)
+	result, err := Parse(context.Background(), parserEnvironmentScope, valid)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -593,7 +636,7 @@ services:
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := Parse(context.Background(), parserBundle(test.sources, test.files))
+			result, err := Parse(context.Background(), parserEnvironmentScope, parserBundle(test.sources, test.files))
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}
@@ -632,11 +675,11 @@ services:
 `),
 	})
 
-	firstResult, err := Parse(context.Background(), first)
+	firstResult, err := Parse(context.Background(), parserEnvironmentScope, first)
 	if err != nil {
 		t.Fatalf("Parse() first order: %v", err)
 	}
-	secondResult, err := Parse(context.Background(), second)
+	secondResult, err := Parse(context.Background(), parserEnvironmentScope, second)
 	if err != nil {
 		t.Fatalf("Parse() second order: %v", err)
 	}
@@ -666,7 +709,7 @@ services:
 // cannot create a deeper loader graph.
 func TestParseIncludeDepthBoundary(t *testing.T) {
 	atLimit := includeChainBundle(16)
-	if _, err := Parse(context.Background(), atLimit); err != nil {
+	if _, err := Parse(context.Background(), parserEnvironmentScope, atLimit); err != nil {
 		t.Fatalf("Parse() at include depth limit: %v", err)
 	}
 	requireValidationError(t, parseError(includeChainBundle(17)))
@@ -675,7 +718,7 @@ func TestParseIncludeDepthBoundary(t *testing.T) {
 // Rationale: the accepted aggregate resource ceiling counts Compose's
 // resolved implicit default network as well as authored resources.
 func TestParseResolvedResourceBoundary(t *testing.T) {
-	if _, err := Parse(context.Background(), serviceBundle(511)); err != nil {
+	if _, err := Parse(context.Background(), parserEnvironmentScope, serviceBundle(511)); err != nil {
 		t.Fatalf("Parse() at resource limit: %v", err)
 	}
 	requireValidationError(t, parseError(serviceBundle(512)))
@@ -688,15 +731,32 @@ func TestParseDoesNotLeakContent(t *testing.T) {
 	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
 		"root.yaml": environmentRoot("services: " + marker + "\n"),
 	})
-	_, err := Parse(context.Background(), bundle)
+	_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	requireValidationError(t, err)
 	if strings.Contains(err.Error(), marker) {
 		t.Fatalf("Parse() leaked source content: %v", err)
 	}
 }
 
+// Rationale: generated identity and execution projections are Controller output and cannot be supplied as authored
+// authority, even though their names are valid in generated Compose.
+func TestParseRejectsControllerGeneratedExtensions(t *testing.T) {
+	for _, extension := range []string{"x-gp-resource", "x-gp-execution", "x-gp-managed"} {
+		t.Run(extension, func(t *testing.T) {
+			bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+				"root.yaml": environmentRoot(
+					"services:\n  web:\n    image: nginx\n    " + extension + ": {value: forged}\n",
+				),
+			})
+
+			_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+			requireValidationError(t, err)
+		})
+	}
+}
+
 func parseError(bundle core.BlueprintBundle) error {
-	_, err := Parse(context.Background(), bundle)
+	_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	return err
 }
 
@@ -721,6 +781,13 @@ func parserBundle(sources []string, contents map[string]string) core.BlueprintBu
 
 func environmentRoot(body string) string {
 	return "kind: environment\nschema: 1\nmetadata: {tenant: acme, project: shop, environment: production}\n" + body
+}
+
+var parserEnvironmentScope = EnvironmentScope{
+	EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+	Tenant:        "acme",
+	Project:       "shop",
+	Environment:   "production",
 }
 
 func includeChainBundle(depth int) core.BlueprintBundle {

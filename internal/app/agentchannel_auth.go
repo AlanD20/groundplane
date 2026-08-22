@@ -16,6 +16,7 @@ type agentChannelCredentialResolver interface {
 		string,
 		[agentprotocol.RawTokenBytes]byte,
 	) (etcd.LocalAgentChannelAuthorization, error)
+	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
 }
 
 type agentChannelAuthenticator struct {
@@ -46,18 +47,38 @@ func (authenticator *agentChannelAuthenticator) Authenticate(
 	if resolved.AgentID != agentID || resolved.Generation == 0 {
 		return agentchannel.Authorization{}, errs.New(errs.KindInternal, "Agent channel authorization is inconsistent")
 	}
-	labels := make(map[string]string, len(resolved.Config.Labels))
-	for key, value := range resolved.Config.Labels {
-		labels[key] = value
-	}
 	return agentchannel.Authorization{
 		Generation: resolved.Generation,
-		Config: &agentpb.AgentConfig{
-			PullIntervalSeconds: resolved.Config.PullIntervalSeconds,
-			MaxConcurrentTasks:  resolved.Config.MaxConcurrentTasks,
-			Labels:              labels,
-		},
+		Config:     agentChannelConfig(resolved.Config),
 	}, nil
+}
+
+func (authenticator *agentChannelAuthenticator) Configuration(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+) (*agentpb.AgentConfig, error) {
+	stored, err := authenticator.resolver.GetSingleton(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if stored.Record.ID != agentID || stored.Record.Generation != generation ||
+		stored.Record.Phase == etcd.LocalAgentPhaseDeleting {
+		return nil, errs.New(errs.KindStateConflict, "Agent channel generation is no longer current")
+	}
+	return agentChannelConfig(stored.Record.Config), nil
+}
+
+func agentChannelConfig(config etcd.LocalAgentConfig) *agentpb.AgentConfig {
+	labels := make(map[string]string, len(config.Labels))
+	for key, value := range config.Labels {
+		labels[key] = value
+	}
+	return &agentpb.AgentConfig{
+		PullIntervalSeconds: config.PullIntervalSeconds,
+		MaxConcurrentTasks:  config.MaxConcurrentTasks,
+		Labels:              labels,
+	}
 }
 
 var _ agentchannel.Authenticator = (*agentChannelAuthenticator)(nil)

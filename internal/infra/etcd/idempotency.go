@@ -108,6 +108,31 @@ type IdempotencyMarker struct {
 	RetainUntil time.Time
 }
 
+// NewCompletedDirectIdempotencyMarker fixes the lifecycle of a synchronous
+// mutation marker: the exact public result is terminal at commit and retained
+// for the accepted 90-day replay window.
+func NewCompletedDirectIdempotencyMarker(
+	locator IdempotencyLocator,
+	intent ProtectedIntentRecord,
+	response IdempotencyResponse,
+	now time.Time,
+) (IdempotencyMarker, error) {
+	marker := IdempotencyMarker{
+		Kind: IdempotencyMarkerDirect, State: IdempotencyMarkerCompleted,
+		Locator: locator, Intent: intent, Response: response,
+		CreatedAt: now, UpdatedAt: now, TerminalAt: now,
+		RetainUntil: now.Add(markerRetention),
+	}
+	marker.Intent.Ciphertext = append([]byte(nil), intent.Ciphertext...)
+	marker.Response.Body = append([]byte(nil), response.Body...)
+	if err := validateIdempotencyMarker(marker); err != nil {
+		clear(marker.Intent.Ciphertext)
+		clear(marker.Response.Body)
+		return IdempotencyMarker{}, err
+	}
+	return marker, nil
+}
+
 func (marker IdempotencyMarker) String() string {
 	return fmt.Sprintf("IdempotencyMarker{kind:%s,state:%s,redacted}", marker.Kind, marker.State)
 }
@@ -285,7 +310,8 @@ func validTerminalTimes(marker IdempotencyMarker) bool {
 func validDirectResponse(method string, response IdempotencyResponse) bool {
 	switch method {
 	case http.MethodPost:
-		return response.Status == http.StatusCreated && response.ContentKind == "application/json" &&
+		return (response.Status == http.StatusOK || response.Status == http.StatusCreated) &&
+			response.ContentKind == "application/json" &&
 			json.Valid(response.Body)
 	case http.MethodPut, http.MethodPatch:
 		return response.Status == http.StatusOK && response.ContentKind == "application/json" &&

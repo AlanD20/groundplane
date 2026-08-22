@@ -1,0 +1,181 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"strings"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/localagent"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const (
+	agentTaskResourceKey      = "resource_kind"
+	agentTaskResourceValue    = "agent"
+	agentTaskImageKey         = "image"
+	agentTaskPullIntervalKey  = "pull_interval_seconds"
+	agentTaskMaxConcurrentKey = "max_concurrent_tasks"
+	agentTaskLabelPrefix      = "label:"
+)
+
+type controllerTaskLocalAgents interface {
+	Enroll(context.Context, localagent.EnrollRequest) (localagent.Agent, error)
+	Reconcile(context.Context) error
+	Health(context.Context, string) (localagent.Health, error)
+	Remove(context.Context, string) error
+}
+
+type localAgentControllerTaskHandler struct {
+	agents controllerTaskLocalAgents
+}
+
+func newLocalAgentControllerTaskHandler(
+	agents controllerTaskLocalAgents,
+) (*localAgentControllerTaskHandler, error) {
+	if agents == nil {
+		return nil, errs.New(errs.KindInternal, "Controller Task local Agent lifecycle is required")
+	}
+	return &localAgentControllerTaskHandler{agents: agents}, nil
+}
+
+func (handler *localAgentControllerTaskHandler) Execute(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) error {
+	if ctx == nil {
+		return errs.New(errs.KindInternal, "Controller Task context is required")
+	}
+	if task.Executor != etcd.TaskExecutorController ||
+		ids.Validate(ids.KindTask, task.ID) != nil || ids.Validate(ids.KindAgent, task.Target) != nil {
+		return errs.New(errs.KindValidationFailed, "Controller Task is not a valid Agent mutation")
+	}
+	switch task.Type {
+	case etcd.TaskCreate:
+		return handler.executeEnrollment(ctx, task)
+	case etcd.TaskRemove:
+		return handler.executeRemoval(ctx, task)
+	default:
+		return errs.New(errs.KindValidationFailed, "Controller Task Agent mutation type is invalid")
+	}
+}
+
+func (handler *localAgentControllerTaskHandler) executeEnrollment(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) error {
+	request, err := decodeAgentEnrollmentTask(task)
+	if err != nil {
+		return err
+	}
+	health, err := handler.agents.Health(ctx, request.AgentID)
+	if errors.Is(err, errs.New(errs.KindAgentNotFound, "")) {
+		_, enrollErr := handler.agents.Enroll(ctx, request)
+		return enrollErr
+	}
+	if err != nil {
+		return err
+	}
+	if health.Agent.EnrollmentTaskID != task.ID {
+		return errs.New(errs.KindStateConflict, "local Agent belongs to another enrollment Task")
+	}
+	if health.Agent.Phase == localagent.PhaseDeleting {
+		return errs.New(errs.KindStateConflict, "deleting local Agent cannot resume enrollment")
+	}
+	if err := handler.agents.Reconcile(ctx); err != nil {
+		return err
+	}
+	health, err = handler.agents.Health(ctx, request.AgentID)
+	if err != nil {
+		return err
+	}
+	if health.Agent.EnrollmentTaskID != task.ID || health.Agent.Phase != localagent.PhaseReady {
+		return errs.New(errs.KindStateConflict, "local Agent enrollment did not reach Ready")
+	}
+	return nil
+}
+
+func (handler *localAgentControllerTaskHandler) executeRemoval(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) error {
+	if len(task.Params) != 1 || task.Params[agentTaskResourceKey] != agentTaskResourceValue {
+		return errs.New(errs.KindValidationFailed, "Agent removal Task parameters are invalid")
+	}
+	return handler.agents.Remove(ctx, task.Target)
+}
+
+func decodeAgentEnrollmentTask(task etcd.TaskRecord) (localagent.EnrollRequest, error) {
+	request := localagent.EnrollRequest{
+		AgentID: task.Target, EnrollmentTaskID: task.ID,
+		Config: localagent.Config{Labels: map[string]string{}},
+	}
+	required := map[string]bool{
+		agentTaskResourceKey: false, agentTaskImageKey: false,
+		agentTaskPullIntervalKey: false, agentTaskMaxConcurrentKey: false,
+	}
+	for key, value := range task.Params {
+		switch key {
+		case agentTaskResourceKey:
+			if value != agentTaskResourceValue {
+				return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
+			}
+			required[key] = true
+		case agentTaskImageKey:
+			request.Image = value
+			required[key] = true
+		case agentTaskPullIntervalKey:
+			parsed, err := parseCanonicalPositiveInt32(value)
+			if err != nil {
+				return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
+			}
+			request.Config.PullIntervalSeconds = parsed
+			required[key] = true
+		case agentTaskMaxConcurrentKey:
+			parsed, err := parseCanonicalPositiveInt32(value)
+			if err != nil {
+				return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
+			}
+			request.Config.MaxConcurrentTasks = parsed
+			required[key] = true
+		default:
+			if !strings.HasPrefix(key, agentTaskLabelPrefix) {
+				return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
+			}
+			request.Config.Labels[strings.TrimPrefix(key, agentTaskLabelPrefix)] = value
+		}
+	}
+	for _, present := range required {
+		if !present {
+			return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
+		}
+	}
+	return request, nil
+}
+
+func agentEnrollmentTaskParams(image string, config localagent.Config) map[string]string {
+	params := map[string]string{
+		agentTaskResourceKey:      agentTaskResourceValue,
+		agentTaskImageKey:         image,
+		agentTaskPullIntervalKey:  strconv.FormatInt(int64(config.PullIntervalSeconds), 10),
+		agentTaskMaxConcurrentKey: strconv.FormatInt(int64(config.MaxConcurrentTasks), 10),
+	}
+	for key, value := range config.Labels {
+		params[agentTaskLabelPrefix+key] = value
+	}
+	return params
+}
+
+func parseCanonicalPositiveInt32(value string) (int32, error) {
+	parsed, err := strconv.ParseInt(value, 10, 32)
+	if err != nil || parsed <= 0 || strconv.FormatInt(parsed, 10) != value {
+		return 0, errs.New(errs.KindValidationFailed, "positive canonical int32 is required")
+	}
+	return int32(parsed), nil
+}
+
+func invalidAgentEnrollmentTask() error {
+	return errs.New(errs.KindValidationFailed, "Agent enrollment Task parameters are invalid")
+}

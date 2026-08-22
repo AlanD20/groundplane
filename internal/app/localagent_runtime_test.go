@@ -26,7 +26,9 @@ func TestLocalAgentRuntimeAdapterGeneratesIndependentCredential(t *testing.T) {
 			Digest:         agentcredential.TokenDigest("digest"),
 		},
 	}
-	adapter, err := newLocalAgentRuntimeAdapter(runtime, config.DefaultAgentConfig().Log)
+	adapter, err := newLocalAgentRuntimeAdapter(
+		runtime, config.DefaultAgentConfig().Log, "/srv/groundplane-volumes",
+	)
 	if err != nil {
 		t.Fatalf("newLocalAgentRuntimeAdapter() error = %v", err)
 	}
@@ -50,7 +52,7 @@ func TestLocalAgentRuntimeAdapterMaterializesCompleteRuntime(t *testing.T) {
 
 	runtime := &fakeCredentialRuntime{}
 	logConfig := config.DefaultAgentConfig().Log
-	adapter, err := newLocalAgentRuntimeAdapter(runtime, logConfig)
+	adapter, err := newLocalAgentRuntimeAdapter(runtime, logConfig, "/srv/groundplane-volumes")
 	if err != nil {
 		t.Fatalf("newLocalAgentRuntimeAdapter() error = %v", err)
 	}
@@ -71,6 +73,7 @@ func TestLocalAgentRuntimeAdapterMaterializesCompleteRuntime(t *testing.T) {
 		runtime.runtimeConfig.Runtime.PullIntervalSeconds != 2 ||
 		runtime.runtimeConfig.Runtime.MaxConcurrentTasks != 3 ||
 		runtime.runtimeConfig.Runtime.Labels["arch"] != "arm64" ||
+		runtime.runtimeConfig.Storage.VolumeRoot != "/srv/groundplane-volumes" ||
 		runtime.runtimeConfig.Log != logConfig {
 		t.Fatalf("materialized config = %#v, want complete durable runtime", runtime.runtimeConfig)
 	}

@@ -10,6 +10,9 @@ listen:
   http: 127.0.0.1:8080   # human API (REST/JSON)
 scheduler:
   tick_interval: 30s
+storage:
+  # Must already exist as a root-owned directory with exact mode 0700.
+  volume_root: /var/lib/groundplane/vol
 age_key_path: /etc/groundplane/controller.age
 log:
   level: warn            # --debug > --verbose > GROUNDPLANE_LOG_LEVEL > this > WARN

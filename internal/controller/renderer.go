@@ -16,14 +16,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// RenderCompose maps an Environment's zones/services to a docker-compose
-// YAML document, per mvp.md's environment-document mapping table.
-// TODO: full field-by-field mapping (healthcheck kinds, mounts, aliases,
-// depends_on conditions, logging limits, replicas).
-func RenderCompose(env core.Environment) ([]byte, error) {
-	return nil, errs.New(errs.KindNotImplemented, "Compose renderer is not implemented")
-}
-
 // RenderCorefile renders CoreDNS's config from platform DNS settings
 // plus every environment's Caddy split-horizon static entries. Must be
 // validated (dry-run parse) before the Agent reloads CoreDNS — an

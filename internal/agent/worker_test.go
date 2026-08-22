@@ -24,7 +24,7 @@ const (
 // replace the cancellation authority reserved by the first delivery.
 func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *testing.T) {
 	t.Parallel()
-	pool := NewWorkerPool(2, nil, testLogger())
+	pool := NewWorkerPool(2, "/var/lib/groundplane/vol", nil, testLogger())
 	started := make(chan struct{}, 2)
 	pool.executeStep = func(ctx context.Context, _ *agentpb.ExecutionStep) error {
 		started <- struct{}{}
@@ -82,7 +82,7 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 // must exist while queued and must suppress every step side effect.
 func TestWorkerPoolRetainsQueuedAbortAndReservationCapacity(t *testing.T) {
 	t.Parallel()
-	pool := NewWorkerPool(1, nil, testLogger())
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
 	executed := make(chan struct{}, 1)
 	pool.executeStep = func(context.Context, *agentpb.ExecutionStep) error {
 		executed <- struct{}{}
@@ -122,7 +122,7 @@ func TestWorkerPoolRetainsQueuedAbortAndReservationCapacity(t *testing.T) {
 // full pool must reject promptly instead of blocking TaskAbort or Shutdown.
 func TestWorkerPoolSubmitReturnsConflictWithoutBlockingWhenFull(t *testing.T) {
 	t.Parallel()
-	pool := NewWorkerPool(1, nil, testLogger())
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
 	ctx := context.Background()
 	if err := pool.Submit(ctx, workerAssignment(workerTestTaskID, "plan-a")); err != nil {
 		t.Fatalf("Submit(first) error = %v", err)
@@ -143,7 +143,7 @@ func TestWorkerPoolSubmitReturnsConflictWithoutBlockingWhenFull(t *testing.T) {
 // reach active task contexts and wait for their executor cleanup.
 func TestWorkerPoolCancellationJoinsActiveWorkers(t *testing.T) {
 	t.Parallel()
-	pool := NewWorkerPool(1, nil, testLogger())
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
 	started := make(chan struct{})
 	exited := make(chan struct{})
 	pool.executeStep = func(ctx context.Context, _ *agentpb.ExecutionStep) error {

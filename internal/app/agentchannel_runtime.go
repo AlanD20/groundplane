@@ -28,13 +28,18 @@ type agentChannelGRPCServer interface {
 func newAgentChannelRuntime(
 	authenticator agentchannel.Authenticator,
 	tasks agentchannel.TaskStore,
+	plans agentchannel.PlanResolver,
+	materials agentchannel.MaterializationResolver,
 ) *agentChannelRuntime {
 	return &agentChannelRuntime{
 		registry: agentchannel.NewRegistry(),
 		listen:   agentlistener.Listen,
 		newServer: func(registry *agentchannel.Registry) agentChannelGRPCServer {
 			server := grpc.NewServer()
-			agentpb.RegisterAgentChannelServer(server, agentchannel.New(authenticator, registry, tasks, nil))
+			agentpb.RegisterAgentChannelServer(
+				server,
+				agentchannel.NewWithMaterializations(authenticator, registry, tasks, plans, materials),
+			)
 			return server
 		},
 	}

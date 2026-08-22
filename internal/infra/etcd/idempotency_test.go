@@ -95,7 +95,8 @@ func TestIdempotencyDirectResponseIsBoundToMethod(t *testing.T) {
 		valid    bool
 	}{
 		{http.MethodPost, IdempotencyResponse{Status: 201, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
-		{http.MethodPost, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, false},
+		{http.MethodPost, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
+		{http.MethodPost, IdempotencyResponse{Status: 202, ContentKind: "application/json", Body: []byte(`{"task_id":"task"}`)}, false},
 		{http.MethodPut, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
 		{http.MethodPut, IdempotencyResponse{Status: 201, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, false},
 		{http.MethodPatch, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},

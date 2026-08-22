@@ -3,6 +3,8 @@ package agentchannel
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,6 +12,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -35,6 +38,7 @@ type Authorization struct {
 // returning its credential.
 type Authenticator interface {
 	Authenticate(context.Context, string, Token) (Authorization, error)
+	Configuration(context.Context, string, uint64) (*agentpb.AgentConfig, error)
 }
 
 // TaskStore is the durable execution seam used by one authenticated stream.
@@ -56,29 +60,68 @@ type TaskStore interface {
 	) (etcd.Versioned[etcd.TaskRecord], error)
 }
 
+type environmentCreationTaskStore interface {
+	AcknowledgeEnvironmentCreation(
+		context.Context,
+		string,
+		uint64,
+		string,
+		string,
+		etcd.TaskStatus,
+		etcd.TaskResultRecord,
+		time.Time,
+	) (etcd.Versioned[etcd.TaskRecord], error)
+}
+
 // PlanResolver deterministically rebuilds one Task's ephemeral execution plan
 // from retained etcd inputs. Rendered artifacts are never persisted.
 type PlanResolver interface {
 	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
 }
 
+// MaterializationResolver returns one task-owned transient plaintext source.
+// The channel takes ownership and closes it on every path.
+type MaterializationResolver interface {
+	ResolveMaterialization(
+		context.Context,
+		etcd.TaskRecord,
+		*agentpb.ExecutionPlan,
+		*agentpb.ExecutionStep,
+	) (io.ReadCloser, error)
+}
+
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
-	auth     Authenticator
-	sessions *Registry
-	tasks    TaskStore
-	plans    PlanResolver
-	now      func() time.Time
+	auth      Authenticator
+	sessions  *Registry
+	tasks     TaskStore
+	plans     PlanResolver
+	materials MaterializationResolver
+	now       func() time.Time
 }
 
 // New returns an AgentChannel server backed by the supplied authenticator and
 // session registry. A nil registry creates an isolated registry.
 func New(auth Authenticator, sessions *Registry, tasks TaskStore, plans PlanResolver) *Server {
+	return NewWithMaterializations(auth, sessions, tasks, plans, nil)
+}
+
+// NewWithMaterializations returns a server with the transient value resolver
+// needed by metadata-only materialization steps.
+func NewWithMaterializations(
+	auth Authenticator,
+	sessions *Registry,
+	tasks TaskStore,
+	plans PlanResolver,
+	materials MaterializationResolver,
+) *Server {
 	if sessions == nil {
 		sessions = NewRegistry()
 	}
-	return &Server{auth: auth, sessions: sessions, tasks: tasks, plans: plans, now: time.Now}
+	return &Server{
+		auth: auth, sessions: sessions, tasks: tasks, plans: plans, materials: materials, now: time.Now,
+	}
 }
 
 // Connect authenticates the first message, publishes the authorized config,
@@ -113,6 +156,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		authorization.Config.MaxConcurrentTasks <= 0 {
 		return status.Error(codes.Internal, "agent configuration is invalid")
 	}
+	authorization.Config = proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 
 	session, err := s.sessions.Open(stream.Context(), authenticate.AgentId, authorization.Generation)
 	if err != nil {
@@ -188,6 +232,36 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
+				}
+				currentConfig, err := s.auth.Configuration(
+					stream.Context(),
+					authenticate.AgentId,
+					authorization.Generation,
+				)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if currentConfig == nil || currentConfig.PullIntervalSeconds <= 0 ||
+					currentConfig.MaxConcurrentTasks <= 0 {
+					return status.Error(codes.Internal, "agent configuration is invalid")
+				}
+				if !proto.Equal(currentConfig, authorization.Config) {
+					// A config replacement drains under the old worker limit. The
+					// Agent applies it only when every reservation has completed,
+					// then advertises fresh capacity before dispatch resumes.
+					if ready.Capacity != authorization.Config.MaxConcurrentTasks {
+						continue
+					}
+					nextConfig := proto.Clone(currentConfig).(*agentpb.AgentConfig)
+					if err := stream.Send(&agentpb.ControllerMessage{
+						Payload: &agentpb.ControllerMessage_ConfigUpdate{ConfigUpdate: &agentpb.ConfigUpdate{
+							AgentConfig: proto.Clone(nextConfig).(*agentpb.AgentConfig),
+						}},
+					}); err != nil {
+						return err
+					}
+					authorization.Config = nextConfig
+					continue
 				}
 				if s.tasks == nil {
 					return status.Error(codes.Internal, "agent task store is not configured")
@@ -349,9 +423,120 @@ func (s *Server) sendTaskAssignment(
 	if err != nil {
 		return err
 	}
-	return stream.Send(&agentpb.ControllerMessage{
+	if err := stream.Send(&agentpb.ControllerMessage{
 		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: assignment},
-	})
+	}); err != nil {
+		return err
+	}
+	for _, step := range assignment.GetPlan().GetSteps() {
+		if step.GetMaterializeFile() == nil {
+			continue
+		}
+		if err := s.sendMaterialization(stream, task, assignment.GetPlan(), step); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) sendMaterialization(
+	stream agentpb.AgentChannel_ConnectServer,
+	task etcd.TaskRecord,
+	plan *agentpb.ExecutionPlan,
+	step *agentpb.ExecutionStep,
+) (resultErr error) {
+	if s.materials == nil {
+		return errs.New(errs.KindInternal, "materialization resolver is not configured")
+	}
+	source, err := s.materials.ResolveMaterialization(stream.Context(), task, plan, step)
+	if err != nil {
+		return err
+	}
+	if source == nil {
+		return errs.New(errs.KindInternal, "materialization resolver returned an empty source")
+	}
+	defer func() {
+		if closeErr := source.Close(); closeErr != nil {
+			resultErr = errs.Wrap(errs.KindInternal, errors.Join(resultErr, closeErr))
+		}
+	}()
+	materialization := step.GetMaterializeFile()
+	header := &agentpb.MaterializationTransferHeader{
+		ArtifactId: materialization.GetArtifactId(), MaterializationId: materialization.GetMaterializationId(),
+		EnvironmentId: materialization.GetEnvironmentId(), RenderGeneration: plan.GetRenderGeneration(),
+		Destination: materialization.GetDestination(), ServiceId: materialization.GetServiceId(),
+		OutputKind: materialization.GetOutputKind(), Uid: materialization.GetUid(), Gid: materialization.GetGid(),
+		Mode: materialization.GetMode(), Length: materialization.GetLength(),
+		Sha256: append([]byte(nil), materialization.GetSha256()...),
+	}
+	headerMessage := materializationControllerMessage(task.ID, plan.GetPlanHash(), step.GetStepId())
+	headerMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Header{Header: header}
+	if err := stream.Send(headerMessage); err != nil {
+		return err
+	}
+	buffer := make([]byte, entrymaterialization.MaximumChunkBytes)
+	defer clear(buffer)
+	hasher := sha256.New()
+	remaining := materialization.GetLength()
+	var sequence uint32
+	for remaining > 0 {
+		readSize := min(uint64(len(buffer)), remaining)
+		read, readErr := source.Read(buffer[:int(readSize)])
+		if read < 0 || read > int(readSize) || (read == 0 && readErr == nil) {
+			return errs.New(errs.KindInternal, "materialization source returned an invalid read")
+		}
+		if read > 0 {
+			if _, err := hasher.Write(buffer[:read]); err != nil {
+				return errs.New(errs.KindInternal, "materialization source digest failed")
+			}
+			remaining -= uint64(read)
+			sequence++
+			content := append([]byte(nil), buffer[:read]...)
+			chunk := &agentpb.MaterializationTransferChunk{Sequence: sequence, Content: content}
+			chunkMessage := materializationControllerMessage(task.ID, plan.GetPlanHash(), step.GetStepId())
+			chunkMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Chunk{Chunk: chunk}
+			sendErr := stream.Send(chunkMessage)
+			clear(content)
+			chunk.Content = nil
+			if sendErr != nil {
+				return sendErr
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) && remaining == 0 {
+				break
+			}
+			return errs.New(errs.KindInternal, "materialization source ended before its declared length")
+		}
+	}
+	var extra [1]byte
+	read, readErr := source.Read(extra[:])
+	clear(extra[:])
+	if read != 0 || !errors.Is(readErr, io.EOF) {
+		return errs.New(errs.KindInternal, "materialization source exceeds its declared length")
+	}
+	digest := hasher.Sum(nil)
+	defer clear(digest)
+	if subtle.ConstantTimeCompare(digest, materialization.GetSha256()) != 1 {
+		return errs.New(errs.KindInternal, "materialization source digest does not match its plan")
+	}
+	endMessage := materializationControllerMessage(task.ID, plan.GetPlanHash(), step.GetStepId())
+	endMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_End{
+		End: &agentpb.MaterializationTransferEnd{ChunkCount: sequence},
+	}
+	return stream.Send(endMessage)
+}
+
+func materializationControllerMessage(
+	taskID string,
+	planHash []byte,
+	stepID string,
+) *agentpb.ControllerMessage {
+	return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_MaterializationTransfer{
+		MaterializationTransfer: &agentpb.MaterializationTransfer{
+			TaskId: taskID, PlanHash: append([]byte(nil), planHash...), StepId: stepID,
+		},
+	}}
 }
 
 func (s *Server) taskAssignmentMessage(ctx context.Context, task etcd.TaskRecord) (*agentpb.TaskAssignment, error) {
@@ -410,6 +595,10 @@ func operationMatchesTask(operation agentpb.PlanOperation, taskType etcd.TaskTyp
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DESTROY
 	case etcd.TaskRemove:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE
+	case etcd.TaskCreate:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
+	case etcd.TaskUpdate:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
 	default:
 		return false
 	}
@@ -424,11 +613,17 @@ func (s *Server) acknowledge(
 	if acknowledgement == nil || len(acknowledgement.PlanHash) != 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
 	}
-	if err := validateComposeTaskResult(acknowledgement); err != nil {
-		return err
-	}
 	task, err := s.tasks.GetTask(ctx, acknowledgement.TaskId)
 	if err != nil {
+		return err
+	}
+	environmentCreation := task.Record.Type == etcd.TaskCreate &&
+		ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
+	if environmentCreation {
+		if err := validateEnvironmentDirectoryTaskResult(acknowledgement); err != nil {
+			return err
+		}
+	} else if err := validateComposeTaskResult(acknowledgement); err != nil {
 		return err
 	}
 	planHash, err := hex.DecodeString(task.Record.PlanHash)
@@ -448,16 +643,53 @@ func (s *Server) acknowledge(
 	default:
 		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement terminal state is invalid")
 	}
-	_, err = s.tasks.AcknowledgeTask(
-		ctx,
-		agentID,
-		agentGeneration,
-		acknowledgement.TaskId,
-		terminal,
-		durableComposeTaskResult(acknowledgement),
-		s.now().UTC(),
-	)
+	if environmentCreation {
+		store, ok := s.tasks.(environmentCreationTaskStore)
+		if !ok {
+			return errs.New(errs.KindInternal, "Environment creation Task store is not configured")
+		}
+		_, err = store.AcknowledgeEnvironmentCreation(
+			ctx,
+			agentID,
+			agentGeneration,
+			acknowledgement.TaskId,
+			task.Record.Target,
+			terminal,
+			durableEnvironmentDirectoryTaskResult(acknowledgement),
+			s.now().UTC(),
+		)
+	} else {
+		_, err = s.tasks.AcknowledgeTask(
+			ctx,
+			agentID,
+			agentGeneration,
+			acknowledgement.TaskId,
+			terminal,
+			durableComposeTaskResult(acknowledgement),
+			s.now().UTC(),
+		)
+	}
 	return err
+}
+
+func durableEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {
+	return etcd.TaskResultRecord{
+		Kind: etcd.TaskResultEnvironmentDirectory, ExitCode: acknowledgement.GetExitCode(),
+		FailedStepID: acknowledgement.GetEnvironmentDirectoryResult().GetFailedStepId(),
+		Diagnostic:   etcd.TaskResultDiagnosticNone,
+	}
+}
+
+func validateEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) error {
+	result := acknowledgement.GetEnvironmentDirectoryResult()
+	if result == nil {
+		return errs.New(errs.KindValidationFailed, "Agent Environment directory Task result is invalid")
+	}
+	if acknowledgement.GetTerminal() == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED &&
+		(acknowledgement.GetExitCode() != 0 || result.GetFailedStepId() != "") {
+		return errs.New(errs.KindValidationFailed, "completed Agent Environment directory Task result is inconsistent")
+	}
+	return nil
 }
 
 func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {

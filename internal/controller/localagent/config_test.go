@@ -40,17 +40,20 @@ func TestUpdateConfigCommitsBeforeRuntimeMaterializationAndCopiesState(t *testin
 }
 
 func configTestRecord() Record {
+	createdAt := time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC)
 	return Record{
-		ID:         "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Image:      "example.com/groundplane-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-		Generation: 1,
-		Phase:      PhaseReady,
-		Config:     Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, Labels: map[string]string{}},
+		ID:               "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		EnrollmentTaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Image:            "example.com/groundplane-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		Generation:       1,
+		Phase:            PhaseReady,
+		Config:           Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, Labels: map[string]string{}},
 		Credential: Credential{
 			EncryptedToken: []byte("ciphertext"),
 			Digest:         base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
 		},
-		CreatedAt: time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC),
+		CreatedAt: createdAt,
+		ReadyAt:   createdAt,
 	}
 }
 
@@ -76,7 +79,7 @@ func (repository *configTestRepository) UpdateConfig(
 	repository.stored.Record.Config = cloneConfig(config)
 	return StoredRecord{Record: cloneRecord(repository.stored.Record), Revision: repository.stored.Revision}, nil
 }
-func (repository *configTestRepository) MarkReady(context.Context, string, uint64, int64) (StoredRecord, error) {
+func (repository *configTestRepository) MarkReady(context.Context, string, uint64, int64, time.Time) (StoredRecord, error) {
 	return StoredRecord{}, nil
 }
 func (repository *configTestRepository) BeginDelete(context.Context, string, uint64, int64) (StoredRecord, error) {

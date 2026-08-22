@@ -24,18 +24,20 @@ const (
 
 // Tenant is a strict isolation boundary (mvp.md, "Model").
 type Tenant struct {
-	ID   string `yaml:"id"   json:"id"`   // tnt_<ulid>
-	Slug string `yaml:"slug" json:"slug"` // globally unique, renamable
-	Name string `yaml:"name" json:"name"`
+	ID          string `yaml:"id"          json:"id"`   // tnt_<ulid>
+	Slug        string `yaml:"slug"        json:"slug"` // globally unique, renamable
+	Name        string `yaml:"name"        json:"name"`
+	Description string `yaml:"description" json:"description"` // optional operator-authored summary
 }
 
 // Project is either a tenant application or a backing service.
 type Project struct {
-	ID       string      `yaml:"id"                  json:"id"`                  // prj_<ulid>
-	TenantID string      `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty"` // empty for backing
-	Slug     string      `yaml:"slug"                json:"slug"`                // unique within tenant
-	Name     string      `yaml:"name"                json:"name"`
-	Kind     ProjectKind `yaml:"kind"                json:"kind"`
+	ID          string      `yaml:"id"                  json:"id"`                  // prj_<ulid>
+	TenantID    string      `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty"` // empty for backing
+	Slug        string      `yaml:"slug"                json:"slug"`                // unique within tenant
+	Name        string      `yaml:"name"                json:"name"`
+	Description string      `yaml:"description"         json:"description"` // optional create-time summary
+	Kind        ProjectKind `yaml:"kind"                json:"kind"`
 }
 
 // Environment is one deployable instance of a Project. Its id is static
@@ -48,10 +50,9 @@ type Project struct {
 type Environment struct {
 	ID        string `yaml:"id"         json:"id"` // env_<ulid>, generated once, never regenerated
 	ProjectID string `yaml:"project_id" json:"project_id"`
-	Slug      string `yaml:"slug"       json:"slug"` // unique within project, freely renamable
-	Name      string `yaml:"name"       json:"name"` // label only
+	Name      string `yaml:"name"       json:"name"` // sole human/URL label; unique within project, freely renamable
 
-	VolumeDir string `yaml:"volume_dir" json:"volume_dir"` // derived from ID: /infra/vol/<tenant-id>/<project-id>/<environment-id>
+	VolumeDir string `yaml:"volume_dir" json:"volume_dir"` // ADR 0025: generated from configured root and stable owner ids
 
 	Zones      map[string]Zone    `yaml:"zones,omitempty"      json:"zones,omitempty"` // Groundplane's "zone" IS a Compose network — see blueprint.md
 	Services   map[string]Service `yaml:"services,omitempty"   json:"services,omitempty"`

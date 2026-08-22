@@ -42,19 +42,22 @@ type Manager struct {
 // EnrollRequest contains only decisions made by the calling task. The caller owns
 // stable ID generation and image selection; this module never invents either.
 type EnrollRequest struct {
-	AgentID string
-	Image   string
-	Config  Config
+	AgentID          string
+	EnrollmentTaskID string
+	Image            string
+	Config           Config
 }
 
 // Agent is the non-secret durable lifecycle projection returned to callers.
 type Agent struct {
-	ID         string
-	Image      string
-	Generation uint64
-	Phase      Phase
-	Config     Config
-	CreatedAt  time.Time
+	ID               string
+	EnrollmentTaskID string
+	Image            string
+	Generation       uint64
+	Phase            Phase
+	Config           Config
+	CreatedAt        time.Time
+	ReadyAt          time.Time
 }
 
 // Health combines durable intent with the latest matching authenticated session.
@@ -125,13 +128,14 @@ func (manager *Manager) Enroll(ctx context.Context, request EnrollRequest) (Agen
 		)
 	}
 	record := Record{
-		ID:         request.AgentID,
-		Image:      request.Image,
-		Generation: initialGeneration,
-		Phase:      PhaseProvisioning,
-		Config:     cloneConfig(request.Config),
-		Credential: cloneCredential(credential),
-		CreatedAt:  createdAt,
+		ID:               request.AgentID,
+		EnrollmentTaskID: request.EnrollmentTaskID,
+		Image:            request.Image,
+		Generation:       initialGeneration,
+		Phase:            PhaseProvisioning,
+		Config:           cloneConfig(request.Config),
+		Credential:       cloneCredential(credential),
+		CreatedAt:        createdAt,
 	}
 	stored, err := manager.repository.CreateSingleton(ctx, cloneRecord(record))
 	if err != nil {
@@ -369,6 +373,7 @@ func (manager *Manager) provision(ctx context.Context, stored StoredRecord) (Sto
 		stored.Record.ID,
 		stored.Record.Generation,
 		stored.Revision,
+		manager.clock.Now(),
 	)
 	if err != nil {
 		return StoredRecord{}, safePortError(ctx, err, "local agent ready transition failed")
@@ -495,6 +500,9 @@ func validateEnrollRequest(request EnrollRequest) error {
 	if err := validateAgentID(request.AgentID); err != nil {
 		return err
 	}
+	if err := ids.Validate(ids.KindTask, request.EnrollmentTaskID); err != nil {
+		return errs.New(errs.KindValidationFailed, "agent enrollment Task id is invalid")
+	}
 	if !imageref.IsDigestPinned(request.Image) {
 		return errs.New(errs.KindValidationFailed, "agent image must be a non-empty digest-pinned reference")
 	}
@@ -524,6 +532,9 @@ func validateStored(stored StoredRecord) error {
 	if err := ids.Validate(ids.KindAgent, stored.Record.ID); err != nil {
 		return errs.New(errs.KindInternal, "local agent record has an invalid id")
 	}
+	if err := ids.Validate(ids.KindTask, stored.Record.EnrollmentTaskID); err != nil {
+		return errs.New(errs.KindInternal, "local agent record has an invalid enrollment Task id")
+	}
 	if !imageref.IsDigestPinned(stored.Record.Image) {
 		return errs.New(errs.KindInternal, "local agent record has an invalid image")
 	}
@@ -532,6 +543,16 @@ func validateStored(stored StoredRecord) error {
 	}
 	if !isNonzeroUTC(stored.Record.CreatedAt) {
 		return errs.New(errs.KindInternal, "local agent record has an invalid creation time")
+	}
+	switch stored.Record.Phase {
+	case PhaseProvisioning:
+		if !stored.Record.ReadyAt.IsZero() {
+			return errs.New(errs.KindInternal, "provisioning local agent has a Ready timestamp")
+		}
+	case PhaseReady, PhaseDeleting:
+		if !isNonzeroUTC(stored.Record.ReadyAt) || stored.Record.ReadyAt.Before(stored.Record.CreatedAt) {
+			return errs.New(errs.KindInternal, "local agent record has an invalid Ready timestamp")
+		}
 	}
 	if stored.Record.Config.PullIntervalSeconds <= 0 || stored.Record.Config.MaxConcurrentTasks <= 0 {
 		return errs.New(errs.KindInternal, "local agent record has an invalid runtime config")
@@ -586,12 +607,14 @@ func StaleWindow(pullIntervalSeconds int32) time.Duration {
 
 func projectAgent(record Record) Agent {
 	return Agent{
-		ID:         record.ID,
-		Image:      record.Image,
-		Generation: record.Generation,
-		Phase:      record.Phase,
-		Config:     cloneConfig(record.Config),
-		CreatedAt:  record.CreatedAt,
+		ID:               record.ID,
+		EnrollmentTaskID: record.EnrollmentTaskID,
+		Image:            record.Image,
+		Generation:       record.Generation,
+		Phase:            record.Phase,
+		Config:           cloneConfig(record.Config),
+		CreatedAt:        record.CreatedAt,
+		ReadyAt:          record.ReadyAt,
 	}
 }
 

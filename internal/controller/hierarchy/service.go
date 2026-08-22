@@ -35,6 +35,11 @@ type Page[T any] struct {
 	Revision   int64
 }
 
+type ProjectFilter struct {
+	TenantID string
+	Kind     core.ProjectKind
+}
+
 // Repository is the persistence port for this closed hierarchy subset. It
 // owns atomic slug uniqueness, owner-at-commit validation, CAS, and pinned
 // pagination. Project methods accept and return ordinary tenant projects only.
@@ -51,20 +56,32 @@ type Repository interface {
 	GetProject(context.Context, string) (Versioned[core.Project], error)
 	ResolveTenantProject(context.Context, string, string) (Versioned[core.Project], error)
 	ListTenantProjects(context.Context, string, PageRequest) (Page[core.Project], error)
+	ListProjects(context.Context, ProjectFilter, PageRequest) (Page[core.Project], error)
 	RenameProject(context.Context, string, int64, string) (Versioned[core.Project], error)
 }
 
 const maximumRenameAttempts = 3
 
 type CreateTenantInput struct {
+	Slug        string
+	Name        *string
+	Description string
+}
+
+type EditTenantInput struct {
+	Name        *string
+	Description *string
+}
+
+type RenameTenantInput struct {
 	Slug string
-	Name *string
 }
 
 type CreateProjectInput struct {
-	TenantID string
-	Slug     string
-	Name     *string
+	TenantID    string
+	Slug        string
+	Name        *string
+	Description string
 }
 
 // Service owns stable-id generation, the normal-project restriction, output
@@ -87,17 +104,10 @@ func (service *Service) CreateTenant(
 	if err := requireContext(ctx); err != nil {
 		return Versioned[core.Tenant]{}, err
 	}
-	if err := validateSlug("tenant slug", input.Slug); err != nil {
+	record, err := PrepareTenant(input)
+	if err != nil {
 		return Versioned[core.Tenant]{}, err
 	}
-	name := input.Slug
-	if input.Name != nil {
-		name = *input.Name
-	}
-	if err := validateText("tenant name", name); err != nil {
-		return Versioned[core.Tenant]{}, err
-	}
-	record := core.Tenant{ID: ids.New(ids.KindTenant), Slug: input.Slug, Name: name}
 	stored, err := service.repository.CreateTenant(ctx, record)
 	if err != nil {
 		return Versioned[core.Tenant]{}, repositoryError(ctx, err)
@@ -112,6 +122,93 @@ func (service *Service) CreateTenant(
 		return Versioned[core.Tenant]{}, internalInvariant("repository changed the created tenant")
 	}
 	return stored, nil
+}
+
+// PrepareTenant validates the complete effective create input and generates
+// its stable identity without persistence. Atomic idempotent callers use this
+// exact constructor before building their same-transaction marker plan.
+func PrepareTenant(input CreateTenantInput) (core.Tenant, error) {
+	if err := validateSlug("tenant slug", input.Slug); err != nil {
+		return core.Tenant{}, err
+	}
+	name := input.Slug
+	if input.Name != nil {
+		name = *input.Name
+	}
+	if err := validateText("tenant name", name); err != nil {
+		return core.Tenant{}, err
+	}
+	if err := validateOptionalText("tenant description", input.Description); err != nil {
+		return core.Tenant{}, err
+	}
+	return core.Tenant{
+		ID: ids.New(ids.KindTenant), Slug: input.Slug, Name: name, Description: input.Description,
+	}, nil
+}
+
+func ValidateTenantEditInput(input EditTenantInput) error {
+	if input.Name == nil && input.Description == nil {
+		return errs.New(errs.KindValidationFailed, "Tenant edit requires at least one field")
+	}
+	if input.Name != nil {
+		if err := validateText("tenant name", *input.Name); err != nil {
+			return err
+		}
+	}
+	if input.Description != nil {
+		if err := validateOptionalText("tenant description", *input.Description); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func PrepareTenantEdit(current core.Tenant, input EditTenantInput) (core.Tenant, error) {
+	if err := ValidateTenantEditInput(input); err != nil {
+		return core.Tenant{}, err
+	}
+	replacement := current
+	if input.Name != nil {
+		replacement.Name = *input.Name
+	}
+	if input.Description != nil {
+		replacement.Description = *input.Description
+	}
+	if err := validateStableID(ids.KindTenant, replacement.ID); err != nil {
+		return core.Tenant{}, err
+	}
+	if err := validateSlug("tenant slug", replacement.Slug); err != nil {
+		return core.Tenant{}, err
+	}
+	if err := validateText("tenant name", replacement.Name); err != nil {
+		return core.Tenant{}, err
+	}
+	if err := validateOptionalText("tenant description", replacement.Description); err != nil {
+		return core.Tenant{}, err
+	}
+	return replacement, nil
+}
+
+func ValidateTenantRenameInput(input RenameTenantInput) error {
+	return validateSlug("tenant slug", input.Slug)
+}
+
+func PrepareTenantRename(current core.Tenant, input RenameTenantInput) (core.Tenant, error) {
+	if err := ValidateTenantRenameInput(input); err != nil {
+		return core.Tenant{}, err
+	}
+	replacement := current
+	replacement.Slug = input.Slug
+	if err := validateStableID(ids.KindTenant, replacement.ID); err != nil {
+		return core.Tenant{}, err
+	}
+	if err := validateText("tenant name", replacement.Name); err != nil {
+		return core.Tenant{}, err
+	}
+	if err := validateOptionalText("tenant description", replacement.Description); err != nil {
+		return core.Tenant{}, err
+	}
+	return replacement, nil
 }
 
 func (service *Service) GetTenant(
@@ -217,6 +314,7 @@ func (service *Service) RenameTenant(
 			return Versioned[core.Tenant]{}, err
 		}
 		if renamed.Record.ID != current.Record.ID || renamed.Record.Name != current.Record.Name ||
+			renamed.Record.Description != current.Record.Description ||
 			renamed.Record.Slug != slug {
 			return Versioned[core.Tenant]{}, internalInvariant("repository changed tenant identity during rename")
 		}
@@ -239,25 +337,9 @@ func (service *Service) CreateProject(
 	if err := requireContext(ctx); err != nil {
 		return Versioned[core.Project]{}, err
 	}
-	if err := validateStableID(ids.KindTenant, input.TenantID); err != nil {
+	record, err := PrepareProject(input)
+	if err != nil {
 		return Versioned[core.Project]{}, err
-	}
-	if err := validateSlug("project slug", input.Slug); err != nil {
-		return Versioned[core.Project]{}, err
-	}
-	name := input.Slug
-	if input.Name != nil {
-		name = *input.Name
-	}
-	if err := validateText("project name", name); err != nil {
-		return Versioned[core.Project]{}, err
-	}
-	record := core.Project{
-		ID:       ids.New(ids.KindProject),
-		TenantID: input.TenantID,
-		Slug:     input.Slug,
-		Name:     name,
-		Kind:     core.ProjectKindTenant,
 	}
 	stored, err := service.repository.CreateProject(ctx, record)
 	if err != nil {
@@ -275,6 +357,33 @@ func (service *Service) CreateProject(
 	return stored, nil
 }
 
+// PrepareProject validates effective public input and generates the stable
+// identity without persisting it. Protected idempotent creation uses this
+// exact preparation path before its atomic durable transaction.
+func PrepareProject(input CreateProjectInput) (core.Project, error) {
+	if err := validateStableID(ids.KindTenant, input.TenantID); err != nil {
+		return core.Project{}, err
+	}
+	if err := validateSlug("project slug", input.Slug); err != nil {
+		return core.Project{}, err
+	}
+	name := input.Slug
+	if input.Name != nil {
+		name = *input.Name
+	}
+	if err := validateText("project name", name); err != nil {
+		return core.Project{}, err
+	}
+	if err := validateOptionalText("project description", input.Description); err != nil {
+		return core.Project{}, err
+	}
+	return core.Project{
+		ID: ids.New(ids.KindProject), TenantID: input.TenantID,
+		Slug: input.Slug, Name: name, Description: input.Description,
+		Kind: core.ProjectKindTenant,
+	}, nil
+}
+
 func (service *Service) GetProject(
 	ctx context.Context,
 	id string,
@@ -289,16 +398,49 @@ func (service *Service) GetProject(
 	if err != nil {
 		return Versioned[core.Project]{}, repositoryError(ctx, err)
 	}
-	if stored.Record.Kind == core.ProjectKindBacking {
-		return Versioned[core.Project]{}, errs.New(errs.KindProjectNotFound, "project was not found")
-	}
-	if err := validateProjectVersion(stored); err != nil {
+	if err := validateAnyProjectVersion(stored); err != nil {
 		return Versioned[core.Project]{}, err
 	}
 	if stored.Record.ID != id {
 		return Versioned[core.Project]{}, internalInvariant("repository returned the wrong project")
 	}
 	return stored, nil
+}
+
+func (service *Service) ListAllProjects(
+	ctx context.Context,
+	filter ProjectFilter,
+	request PageRequest,
+) (Page[core.Project], error) {
+	if err := requireContext(ctx); err != nil {
+		return Page[core.Project]{}, err
+	}
+	if filter.Kind != "" && filter.Kind != core.ProjectKindTenant && filter.Kind != core.ProjectKindBacking {
+		return Page[core.Project]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
+	}
+	if filter.TenantID != "" {
+		if err := validateStableID(ids.KindTenant, filter.TenantID); err != nil {
+			return Page[core.Project]{}, err
+		}
+		if filter.Kind == core.ProjectKindBacking {
+			return Page[core.Project]{}, errs.New(
+				errs.KindValidationFailed,
+				"backing projects cannot have a tenant filter",
+			)
+		}
+	}
+	limit, err := validatePageRequest(request)
+	if err != nil {
+		return Page[core.Project]{}, err
+	}
+	page, err := service.repository.ListProjects(ctx, filter, request)
+	if err != nil {
+		return Page[core.Project]{}, repositoryError(ctx, err)
+	}
+	if err := validateAllProjectPage(page, filter, limit); err != nil {
+		return Page[core.Project]{}, err
+	}
+	return page, nil
 }
 
 func (service *Service) ResolveProject(
@@ -373,6 +515,9 @@ func (service *Service) RenameProject(
 		if err != nil {
 			return Versioned[core.Project]{}, err
 		}
+		if current.Record.Kind != core.ProjectKindTenant {
+			return Versioned[core.Project]{}, errs.New(errs.KindProjectNotFound, "project was not found")
+		}
 		if err := requireContext(ctx); err != nil {
 			return Versioned[core.Project]{}, err
 		}
@@ -388,7 +533,8 @@ func (service *Service) RenameProject(
 			return Versioned[core.Project]{}, err
 		}
 		if renamed.Record.ID != current.Record.ID || renamed.Record.TenantID != current.Record.TenantID ||
-			renamed.Record.Name != current.Record.Name || renamed.Record.Kind != current.Record.Kind ||
+			renamed.Record.Name != current.Record.Name || renamed.Record.Description != current.Record.Description ||
+			renamed.Record.Kind != current.Record.Kind ||
 			renamed.Record.Slug != slug {
 			return Versioned[core.Project]{}, internalInvariant("repository changed project identity during rename")
 		}
@@ -416,6 +562,13 @@ func validateText(field string, value string) error {
 		return errs.Newf(errs.KindValidationFailed, "%s is required and must be valid UTF-8", field)
 	}
 	return nil
+}
+
+func validateOptionalText(field string, value string) error {
+	if value == "" {
+		return nil
+	}
+	return validateText(field, value)
 }
 
 func validateSlug(field string, value string) error {
@@ -493,27 +646,49 @@ func validateTenantVersion(stored Versioned[core.Tenant]) error {
 	if err := validateSlug("tenant slug", stored.Record.Slug); err != nil {
 		return internalInvariant("repository returned a noncanonical tenant slug")
 	}
+	if err := validateOptionalText("tenant description", stored.Record.Description); err != nil {
+		return internalInvariant("repository returned an invalid tenant description")
+	}
 	return nil
 }
 
 func validateProjectVersion(stored Versioned[core.Project]) error {
+	if err := validateAnyProjectVersion(stored); err != nil {
+		return err
+	}
+	if stored.Record.Kind != core.ProjectKindTenant || stored.Record.TenantID == "" {
+		return internalInvariant("repository returned a non-tenant project")
+	}
+	return nil
+}
+
+func validateAnyProjectVersion(stored Versioned[core.Project]) error {
 	if err := validateVersion(stored.Revision, stored.ReadRevision); err != nil {
 		return err
 	}
 	if err := ids.Validate(ids.KindProject, stored.Record.ID); err != nil {
 		return internalInvariant("repository returned an invalid project id")
 	}
-	if stored.Record.Kind != core.ProjectKindTenant || stored.Record.TenantID == "" {
-		return internalInvariant("repository returned a non-tenant project")
-	}
-	if err := ids.Validate(ids.KindTenant, stored.Record.TenantID); err != nil {
-		return internalInvariant("repository returned an invalid project owner")
+	switch stored.Record.Kind {
+	case core.ProjectKindTenant:
+		if err := ids.Validate(ids.KindTenant, stored.Record.TenantID); err != nil {
+			return internalInvariant("repository returned an invalid project owner")
+		}
+	case core.ProjectKindBacking:
+		if stored.Record.TenantID != "" {
+			return internalInvariant("repository returned an owned backing project")
+		}
+	default:
+		return internalInvariant("repository returned an invalid project kind")
 	}
 	if err := stored.Record.Validate(); err != nil {
 		return internalInvariant("repository returned an invalid project")
 	}
 	if err := validateSlug("project slug", stored.Record.Slug); err != nil {
 		return internalInvariant("repository returned a noncanonical project slug")
+	}
+	if err := validateOptionalText("project description", stored.Record.Description); err != nil {
+		return internalInvariant("repository returned an invalid project description")
 	}
 	return nil
 }
@@ -559,6 +734,25 @@ func validateProjectPage(page Page[core.Project], tenantID string, limit int) er
 		}
 		if item.ReadRevision != page.Revision || item.Record.TenantID != tenantID || item.Record.ID <= previousID {
 			return internalInvariant("repository returned an inconsistent project page")
+		}
+		previousID = item.Record.ID
+	}
+	return nil
+}
+
+func validateAllProjectPage(page Page[core.Project], filter ProjectFilter, limit int) error {
+	if page.Revision <= 0 || len(page.Items) > limit {
+		return internalInvariant("repository returned an invalid global project page")
+	}
+	previousID := ""
+	for _, item := range page.Items {
+		if err := validateAnyProjectVersion(item); err != nil {
+			return err
+		}
+		if item.ReadRevision != page.Revision || item.Record.ID <= previousID ||
+			(filter.Kind != "" && item.Record.Kind != filter.Kind) ||
+			(filter.TenantID != "" && item.Record.TenantID != filter.TenantID) {
+			return internalInvariant("repository returned an inconsistent global project page")
 		}
 		previousID = item.Record.ID
 	}

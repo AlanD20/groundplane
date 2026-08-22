@@ -106,3 +106,17 @@ func TestProjectValidate_BackingProjectMustNotHaveTenant(t *testing.T) {
 		t.Error("expected Validate() to reject a backing project with a tenant_id, got nil")
 	}
 }
+
+func TestEnvironmentValidate_NameIsTheOnlyLabel(t *testing.T) {
+	// Rationale: mvp.md defines Environment name as its sole human and URL
+	// label. Validation must not depend on the superseded slug concept.
+	e := Environment{
+		ID:        "env_x",
+		ProjectID: "prj_x",
+		Name:      "production",
+		VolumeDir: "/var/lib/groundplane/vol/tnt_x/prj_x/env_x",
+	}
+	if err := e.Validate(); err != nil {
+		t.Fatalf("Validate() rejected an Environment with its required name: %v", err)
+	}
+}

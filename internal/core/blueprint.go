@@ -54,13 +54,13 @@ func (p Project) Validate() error {
 }
 
 func (e Environment) Validate() error {
-	if e.ID == "" || e.ProjectID == "" || e.Slug == "" {
-		return fmt.Errorf("environment: id, project_id, and slug are required")
+	if e.ID == "" || e.ProjectID == "" || e.Name == "" {
+		return fmt.Errorf("environment: id, project_id, and name are required")
 	}
 	if e.VolumeDir == "" {
 		return fmt.Errorf(
 			"environment %s: volume_dir is required (must derive from id, never the label)",
-			e.Slug,
+			e.Name,
 		)
 	}
 

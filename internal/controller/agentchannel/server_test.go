@@ -19,10 +19,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 type fakeAuthenticator struct {
 	authorization Authorization
+	configuration *agentpb.AgentConfig
 	err           error
 	calls         int
 	seenID        string
@@ -132,11 +134,22 @@ func (a *pausedAuthenticator) Authenticate(ctx context.Context, _ string, _ Toke
 	}
 }
 
+func (a *pausedAuthenticator) Configuration(context.Context, string, uint64) (*agentpb.AgentConfig, error) {
+	return proto.Clone(a.authorization.Config).(*agentpb.AgentConfig), nil
+}
+
 func (a *fakeAuthenticator) Authenticate(_ context.Context, id string, token Token) (Authorization, error) {
 	a.calls++
 	a.seenID = id
 	a.seenToken = token
 	return a.authorization, a.err
+}
+
+func (a *fakeAuthenticator) Configuration(context.Context, string, uint64) (*agentpb.AgentConfig, error) {
+	if a.configuration != nil {
+		return proto.Clone(a.configuration).(*agentpb.AgentConfig), nil
+	}
+	return proto.Clone(a.authorization.Config).(*agentpb.AgentConfig), nil
 }
 
 type scriptedStream struct {

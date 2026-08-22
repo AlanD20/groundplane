@@ -37,11 +37,12 @@ const (
 )
 
 type TaskResult struct {
-	TaskID   string
-	PlanHash PlanHash
-	Terminal TaskTerminal
-	ExitCode int32
-	Compose  *agentpb.ComposeTaskResult
+	TaskID               string
+	PlanHash             PlanHash
+	Terminal             TaskTerminal
+	ExitCode             int32
+	Compose              *agentpb.ComposeTaskResult
+	EnvironmentDirectory *agentpb.EnvironmentDirectoryTaskResult
 }
 
 type TaskProgressState uint8
@@ -79,13 +80,17 @@ type taskReservation struct {
 
 // WorkerPool reserves at most size queued or active assignments.
 type WorkerPool struct {
-	size        int
-	runner      runner.Runner
-	logger      *slog.Logger
-	work        chan *taskReservation
-	outputs     chan WorkerOutput
-	executeStep func(context.Context, *agentpb.ExecutionStep) error
-	compose     *ComposeRuntime
+	size                   int
+	volumeRoot             string
+	runner                 runner.Runner
+	logger                 *slog.Logger
+	work                   chan *taskReservation
+	outputs                chan WorkerOutput
+	executeStep            func(context.Context, *agentpb.ExecutionStep) error
+	compose                *ComposeRuntime
+	environmentDirectories *EnvironmentDirectoryRuntime
+	materializer           *MaterializationRuntime
+	materializations       *materializationInbox
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -93,27 +98,34 @@ type WorkerPool struct {
 	stopped      bool
 }
 
-func NewWorkerPool(size int, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
+func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
 	pool := &WorkerPool{
-		size:         size,
-		runner:       taskRunner,
-		logger:       logger,
-		work:         make(chan *taskReservation, size),
-		outputs:      make(chan WorkerOutput, size),
-		reservations: make(map[string]*taskReservation, size),
+		size:             size,
+		volumeRoot:       volumeRoot,
+		runner:           taskRunner,
+		logger:           logger,
+		work:             make(chan *taskReservation, size),
+		outputs:          make(chan WorkerOutput, size),
+		reservations:     make(map[string]*taskReservation, size),
+		materializations: newMaterializationInbox(),
 	}
 	pool.executeStep = pool.runStep
 	return pool
 }
 
-func NewWorkerPoolWithCompose(
+func NewWorkerPoolWithRuntimes(
 	size int,
+	volumeRoot string,
 	taskRunner runner.Runner,
 	logger *slog.Logger,
 	compose *ComposeRuntime,
+	environmentDirectories *EnvironmentDirectoryRuntime,
+	materializer *MaterializationRuntime,
 ) *WorkerPool {
-	pool := NewWorkerPool(size, taskRunner, logger)
+	pool := NewWorkerPool(size, volumeRoot, taskRunner, logger)
 	pool.compose = compose
+	pool.environmentDirectories = environmentDirectories
+	pool.materializer = materializer
 	return pool
 }
 
@@ -171,6 +183,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	reconciliationRequired := false
 	mutationAttempted := false
 	projects := make(map[string]*agentpb.ObservedProject)
+	environmentDirectoryTask := reservation.assignment.Plan.Operation ==
+		agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	for _, step := range reservation.assignment.Plan.Steps {
 		if err != nil {
 			break
@@ -183,7 +197,31 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			reservation.ctx,
 			time.Duration(step.TimeoutSeconds)*time.Second,
 		)
-		if p.compose == nil {
+		if step.GetMaterializeFile() != nil {
+			var payload materializationPayload
+			payload, err = p.materializations.Take(
+				stepCtx,
+				reservation.assignment.TaskID,
+				step.GetStepId(),
+			)
+			if err == nil {
+				if p.materializer == nil {
+					err = closeMaterializationSource(payload.Source, "agent: materialization runtime is not configured")
+				} else {
+					err = p.materializer.executeStep(stepCtx, reservation.assignment, step, payload)
+				}
+			}
+		} else if (step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
+			step.GetManagedVolumeDirectoriesEnsure() != nil) && p.environmentDirectories != nil {
+			var stepResult environmentDirectoryStepResult
+			stepResult, err = p.environmentDirectories.executeStep(stepCtx, reservation.assignment, step)
+			if stepResult.ExitCode != 0 {
+				exitCode = stepResult.ExitCode
+			}
+			if stepResult.FailedStepID != "" {
+				failedStepID = stepResult.FailedStepID
+			}
+		} else if p.compose == nil {
 			err = p.executeStep(stepCtx, step)
 		} else {
 			var stepResult composeStepResult
@@ -217,11 +255,16 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	if err != nil && terminal == TaskTerminalFailed && p.logger != nil {
 		p.logger.Error("agent: step failed", "task_id", reservation.assignment.TaskID, "error", err)
 	}
-	p.complete(runCtx, reservation, TaskResult{
+	result := TaskResult{
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
 		ExitCode: exitCode,
-		Compose:  composeTaskResult(projects, failedStepID, diagnostic, reconciliationRequired),
-	})
+	}
+	if environmentDirectoryTask {
+		result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{FailedStepId: failedStepID}
+	} else {
+		result.Compose = composeTaskResult(projects, failedStepID, diagnostic, reconciliationRequired)
+	}
+	p.complete(runCtx, reservation, result)
 }
 
 func composeTaskResult(
@@ -287,6 +330,9 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	if result.Compose != nil {
 		owned.Compose = proto.Clone(result.Compose).(*agentpb.ComposeTaskResult)
 	}
+	if result.EnvironmentDirectory != nil {
+		owned.EnvironmentDirectory = proto.Clone(result.EnvironmentDirectory).(*agentpb.EnvironmentDirectoryTaskResult)
+	}
 	select {
 	case p.outputs <- WorkerOutput{Result: &owned}:
 	case <-runCtx.Done():
@@ -297,6 +343,7 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	}
 	p.mu.Unlock()
 	reservation.cancel()
+	p.materializations.Release(result.TaskID)
 }
 
 func (p *WorkerPool) stop() {
@@ -312,13 +359,18 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 	for {
 		select {
 		case reservation := <-p.work:
-			p.complete(runCtx, reservation, TaskResult{
+			result := TaskResult{
 				TaskID: reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
 				Terminal: TaskTerminalAborted,
-				Compose: &agentpb.ComposeTaskResult{
+			}
+			if reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
+				result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{}
+			} else {
+				result.Compose = &agentpb.ComposeTaskResult{
 					Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-				},
-			})
+				}
+			}
+			p.complete(runCtx, reservation, result)
 		default:
 			return
 		}
@@ -337,11 +389,19 @@ func (p *WorkerPool) Abort(ctx context.Context, taskID string) error {
 		return errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if reservation := p.reservations[taskID]; reservation != nil {
 		reservation.cancel()
 	}
+	p.mu.Unlock()
+	p.materializations.Release(taskID)
 	return nil
+}
+
+func (p *WorkerPool) AcceptMaterializationTransfer(
+	ctx context.Context,
+	transfer *agentpb.MaterializationTransfer,
+) error {
+	return p.materializations.Accept(ctx, transfer)
 }
 
 // Submit reserves capacity without blocking the sole receive/control loop.
@@ -352,7 +412,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	owned, err := validateAndCopyAssignment(assignment)
+	owned, err := validateAndCopyAssignment(assignment, p.volumeRoot)
 	if err != nil {
 		return err
 	}
@@ -370,6 +430,9 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	if len(p.reservations) >= p.size {
 		return errs.New(errs.KindStateConflict, "agent: worker pool has no capacity")
 	}
+	if err := p.materializations.Register(owned); err != nil {
+		return err
+	}
 	taskCtx, cancel := context.WithTimeout(ctx, owned.Timeout)
 	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel}
 	p.reservations[owned.TaskID] = reservation
@@ -379,11 +442,12 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	default:
 		delete(p.reservations, owned.TaskID)
 		cancel()
+		p.materializations.Release(owned.TaskID)
 		return errs.New(errs.KindInternal, "agent: worker queue reservation is inconsistent")
 	}
 }
 
-func validateAndCopyAssignment(assignment Assignment) (Assignment, error) {
+func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assignment, error) {
 	if err := ids.Validate(ids.KindTask, assignment.TaskID); err != nil {
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
@@ -402,6 +466,9 @@ func validateAndCopyAssignment(assignment Assignment) (Assignment, error) {
 	if err != nil {
 		return Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
+	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
+		return Assignment{}, errs.Wrap(errs.KindInternal, err)
+	}
 	for _, step := range plan.Steps {
 		if time.Duration(step.TimeoutSeconds)*time.Second > assignment.Timeout {
 			return Assignment{}, errs.New(errs.KindInternal, "agent: step timeout exceeds its task timeout")
@@ -417,7 +484,11 @@ func validateAndCopyAssignment(assignment Assignment) (Assignment, error) {
 func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) error {
 	switch step.Payload.(type) {
 	case *agentpb.ExecutionStep_ComposeApply, *agentpb.ExecutionStep_ComposeStop,
-		*agentpb.ExecutionStep_ComposeRemove, *agentpb.ExecutionStep_WaitHealthy:
+		*agentpb.ExecutionStep_ComposeRemove, *agentpb.ExecutionStep_WaitHealthy,
+		*agentpb.ExecutionStep_EnvironmentDirectoryCreate,
+		*agentpb.ExecutionStep_EnvironmentDirectoryRemove,
+		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,
+		*agentpb.ExecutionStep_MaterializeFile:
 		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
 	default:
 		return errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
