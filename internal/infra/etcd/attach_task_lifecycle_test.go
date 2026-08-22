@@ -155,20 +155,8 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	}
 
 	detachAt := record.CreatedAt.Add(3 * time.Second)
-	detachID := ids.NewAt(ids.KindTask, detachAt, 805)
-	detaching, err := BeginAttachDetaching(ready.Record, detachID)
-	if err != nil {
-		t.Fatalf("BeginAttachDetaching() error = %v", err)
-	}
-	if _, err := attaches.ReplaceLifecycle(ctx, ready, detaching); err != nil {
-		t.Fatalf("ReplaceLifecycle(detaching) error = %v", err)
-	}
-	detachTask := validTaskRecord(detachAt)
-	detachTask.ID = detachID
-	detachTask.Type = TaskDetach
-	detachTask.Target = record.ID
-	detachTask.IdempotencyKey = "attach-detach-key-0001"
-	createLifecycleTask(t, tasks, detachTask)
+	detachTask := publishTestDetach(t, ctx, attaches, scope, ready, detachAt)
+	detachID := detachTask.ID
 	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 3, detachAt.Add(time.Second)); err != nil || !found {
 		t.Fatalf("ClaimNextTask(detach) found/error = %v/%v", found, err)
 	}

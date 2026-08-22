@@ -195,7 +195,8 @@ func RetryAttachOperation(record AttachRecord, taskID string) (AttachRecord, err
 }
 
 func BeginAttachDetaching(record AttachRecord, taskID string) (AttachRecord, error) {
-	if record.Status != core.AttachReady && record.Status != core.AttachFailed {
+	if record.Status != core.AttachReady &&
+		(record.Status != core.AttachFailed || record.Operation != AttachOperationProvision) {
 		return AttachRecord{}, attachStateError(record, "cannot begin detaching")
 	}
 	if err := validateAttachStableID(ids.KindTask, taskID, "Attach detach task"); err != nil {

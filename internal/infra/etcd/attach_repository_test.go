@@ -182,6 +182,51 @@ func TestAttachRepositoryEnforcesTransactionBudget(t *testing.T) {
 	}
 }
 
+// Rationale: detach intent, immutable plan input, Agent Task, queue membership, replay evidence,
+// and the Environment topology fence must become visible at one revision.
+func TestAttachRepositoryPublishesDetachTaskAtomically(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newAttachTestStore()
+	scope := seedAttachScope(t, ctx, store)
+	repository, err := NewAttachRepository(store)
+	if err != nil {
+		t.Fatalf("NewAttachRepository() error = %v", err)
+	}
+	record, facts := testPendingAttach(t, scope, 61, "detach-atomic", nil)
+	ready := createTestAttach(t, ctx, repository, scope, record, &facts)
+	ready, err = advanceAttachReady(ctx, repository, ready)
+	if err != nil {
+		t.Fatalf("advanceAttachReady() error = %v", err)
+	}
+
+	task := publishTestDetach(t, ctx, repository, scope, ready, record.CreatedAt.Add(time.Minute))
+	detaching, err := repository.GetAttach(ctx, record.ID)
+	if err != nil || detaching.Record.Status != core.AttachDetaching || detaching.Record.TaskID != task.ID {
+		t.Fatalf("detaching Attach = %#v, %v", detaching, err)
+	}
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	currentTask, err := tasks.GetTask(ctx, task.ID)
+	if err != nil || currentTask.Revision != detaching.Revision {
+		t.Fatalf("detach Task = %#v, %v", currentTask, err)
+	}
+	renderInput, err := repository.GetAttachTaskRenderInput(ctx, task.PlanID)
+	if err != nil || renderInput.Revision != detaching.Revision {
+		t.Fatalf("detach render input = %#v, %v", renderInput, err)
+	}
+	hierarchy, err := NewHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("NewHierarchyRepository() error = %v", err)
+	}
+	environment, err := hierarchy.GetEnvironment(ctx, record.EnvironmentID)
+	if err != nil || environment.Revision != detaching.Revision {
+		t.Fatalf("Attach topology fence = %#v, %v", environment, err)
+	}
+}
+
 var testAttachTime = time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 
 type attachTestStore struct {
@@ -467,6 +512,14 @@ func createTestAttach(
 	facts *AttachEncryptedFacts,
 ) Versioned[AttachRecord] {
 	t.Helper()
+	hierarchy, err := NewHierarchyRepository(repository.store)
+	if err != nil {
+		t.Fatalf("NewHierarchyRepository() error = %v", err)
+	}
+	scope.Environment, err = hierarchy.GetEnvironment(ctx, scope.Environment.Record.ID)
+	if err != nil {
+		t.Fatalf("GetEnvironment() error = %v", err)
+	}
 	recordDigest := sha256.Sum256([]byte(record.ID))
 	seed := int64(binary.BigEndian.Uint64(recordDigest[:8]))
 	planDigest := sha256.Sum256([]byte("attach-plan-" + record.ID))
@@ -562,4 +615,61 @@ func createTestAttach(
 		t.Fatalf("Attach Task render input = %#v, error = %v", storedRenderInput, err)
 	}
 	return created
+}
+
+func publishTestDetach(
+	t *testing.T,
+	ctx context.Context,
+	repository *AttachRepository,
+	scope AttachCreateScope,
+	current Versioned[AttachRecord],
+	createdAt time.Time,
+) TaskRecord {
+	t.Helper()
+	hierarchy, err := NewHierarchyRepository(repository.store)
+	if err != nil {
+		t.Fatalf("NewHierarchyRepository() error = %v", err)
+	}
+	scope.Environment, err = hierarchy.GetEnvironment(ctx, scope.Environment.Record.ID)
+	if err != nil {
+		t.Fatalf("GetEnvironment() error = %v", err)
+	}
+	task := validTaskRecord(createdAt)
+	task.ID = ids.NewAt(ids.KindTask, createdAt, 901)
+	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 902)
+	task.IdempotencyKey = "attach-detach-key-0001"
+	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 903)
+	task.RenderGeneration = int32(scope.ComposeProjection.Record.RenderGeneration)
+	task.Type = TaskDetach
+	task.Target = current.Record.ID
+	task.Params = map[string]string{TaskMutationEnvironmentParam: current.Record.EnvironmentID}
+	marker := pendingTaskMarker(task)
+	marker.Locator.ScopeID = current.Record.EnvironmentID
+	marker.Locator.Method = http.MethodDelete
+	marker.Locator.Route = "/attaches/{id}"
+	renderInput := AttachTaskRenderInput{
+		PlanID: task.PlanID, AttachID: current.Record.ID,
+		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
+		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
+		EnvironmentID: current.Record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
+		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir,
+		BackingServiceID:    scope.BackingService.Record.Desired.ID,
+		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
+		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
+		ArtifactID:          ids.NewAt(ids.KindConfig, createdAt, 904),
+		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
+		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
+		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
+		Volumes:             append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		NetworkJoins:        nil,
+	}
+	result, err := repository.BeginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker)
+	if err != nil {
+		t.Fatalf("BeginAttachDetachWithTask() error = %v", err)
+	}
+	outcome, _, conflict, classifyErr := result.Classify()
+	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+		t.Fatalf("BeginAttachDetachWithTask().Classify() = %v, %v, %v", outcome, conflict, classifyErr)
+	}
+	return task
 }

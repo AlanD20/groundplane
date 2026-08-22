@@ -86,6 +86,11 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(renderInputValue)
+	environmentValue, err := encodeEnvironment(scope.Environment.Record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(environmentValue)
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -141,6 +146,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Type: MutationPut, Key: attachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
@@ -186,6 +192,155 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: attachFactsKey(record.ID), Value: factValue})
 	}
 	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, classifyAttachTaskCreateConflict)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func (repository *AttachRepository) BeginAttachDetachWithTask(
+	ctx context.Context,
+	scope AttachCreateScope,
+	current Versioned[AttachRecord],
+	renderInput AttachTaskRenderInput,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateAttachDetachScope(ctx, scope, current); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	detaching, err := BeginAttachDetaching(current.Record, task.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateAttachDetachTask(current.Record, detaching, task, marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateAttachTaskRenderInputScope(scope, detaching, task, renderInput); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if attachDetachWithTaskOperationCount(detaching) > maximumTransactionOperations {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach detach combination exceeds the atomic transaction limit",
+		)
+	}
+	revision := current.ReadRevision
+	if revision == 0 {
+		revision = current.Revision
+	}
+	dependents, err := repository.store.Range(ctx, RangeRequest{
+		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if dependents == nil || dependents.ReadRevision != revision {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Attach detach grant index read returned an invalid revision",
+		)
+	}
+	if len(dependents.Values) != 0 {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindResourceInUse,
+			"Attach is referenced by another Attach grant",
+		)
+	}
+
+	task = cloneTaskRecord(task)
+	if task.IdempotencyKey == "" {
+		task.IdempotencyKey = marker.Locator.Key
+	}
+	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	if err := validateTaskRecord(task); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	attachValue, err := encodeAttachRecord(detaching)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(attachValue)
+	renderInputValue, err := encodeAttachTaskRenderInput(renderInput)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(renderInputValue)
+	environmentValue, err := encodeEnvironment(scope.Environment.Record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(environmentValue)
+	taskValue, err := encodeTaskRecord(task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskValue)
+	taskReference, err := encodeTaskReference(task.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskReference)
+
+	conditions := []Condition{
+		{Key: taskKey(task.ID)},
+		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskActiveOperationKey(task.OperationID)},
+		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: environmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
+		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
+		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
+		{Key: projectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
+		{Key: serviceKey(scope.BackingService.Record.Desired.ID), ModRevision: scope.BackingService.Revision},
+		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+		{Key: deletionTombstoneKey("environment", current.Record.EnvironmentID)},
+		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
+		{Key: deletionTombstoneKey("tenant", scope.Project.Record.TenantID)},
+		{Key: deletionTombstoneKey("environment", current.Record.BackingEnvironmentID)},
+		{Key: deletionTombstoneKey("project", current.Record.BackingProjectID)},
+		{Key: deletionTombstoneKey("service", current.Record.BackingServiceID)},
+		{Key: attachTaskRenderInputKey(task.PlanID)},
+		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
+		{
+			Key:         environmentBlueprintManifestKey(current.Record.EnvironmentID, renderInput.BlueprintRevisionID),
+			ModRevision: scope.BlueprintRevision.Revision,
+		},
+		{
+			Key:         environmentComposeProjectionKey(current.Record.EnvironmentID),
+			ModRevision: scope.ComposeProjection.Revision,
+		},
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: MutationPut, Key: attachKey(detaching.ID), Value: attachValue},
+		{Type: MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
+	}
+	for _, service := range scope.Services {
+		serviceID := service.Record.Desired.ID
+		conditions = append(conditions,
+			Condition{Key: serviceKey(serviceID), ModRevision: service.Revision},
+			Condition{Key: deletionTombstoneKey("service", serviceID)},
+		)
+	}
+	for _, grant := range scope.Grants {
+		conditions = append(conditions,
+			Condition{Key: attachKey(grant.Record.ID), ModRevision: grant.Revision},
+			Condition{Key: deletionTombstoneKey("attach", grant.Record.ID)},
+		)
+	}
+	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, classifyAttachDetachTaskConflict)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -640,12 +795,104 @@ func validateAttachCreationTask(record AttachRecord, task TaskRecord, marker Ide
 	return nil
 }
 
+func validateAttachDetachScope(
+	ctx context.Context,
+	scope AttachCreateScope,
+	current Versioned[AttachRecord],
+) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+	if err := validateAttachVersion(current); err != nil {
+		return err
+	}
+	record := current.Record
+	if record.Status != core.AttachReady &&
+		(record.Status != core.AttachFailed || record.Operation != AttachOperationProvision) {
+		return errs.New(errs.KindStateConflict, "Attach is not eligible for initial detach")
+	}
+	if scope.Tenant.Revision <= 0 || scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 ||
+		scope.BlueprintRevision.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
+		scope.BackingProject.Revision <= 0 || scope.BackingEnvironment.Revision <= 0 ||
+		scope.BackingService.Revision <= 0 {
+		return errs.New(errs.KindValidationFailed, "Attach detach scope records must be versioned")
+	}
+	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != ProjectKindTenant ||
+		scope.Project.Record.TenantID == "" || scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
+		record.EnvironmentID != scope.Environment.Record.ID {
+		return errs.New(errs.KindScopeUnauthorized, "Attach detach consumer hierarchy is invalid")
+	}
+	if scope.BackingProject.Record.Kind != ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
+		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
+		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
+		record.BackingProjectID != scope.BackingProject.Record.ID ||
+		record.BackingEnvironmentID != scope.BackingEnvironment.Record.ID ||
+		record.BackingServiceID != scope.BackingService.Record.Desired.ID {
+		return errs.New(errs.KindScopeUnauthorized, "Attach detach backing hierarchy is invalid")
+	}
+	serviceIDs := make([]string, 0, len(scope.Services))
+	for _, service := range scope.Services {
+		if service.Revision <= 0 || service.Record.EnvironmentID != record.EnvironmentID {
+			return errs.New(errs.KindScopeUnauthorized, "Attach detach Service is outside the Environment")
+		}
+		serviceIDs = append(serviceIDs, service.Record.Desired.ID)
+	}
+	slices.Sort(serviceIDs)
+	if !slices.Equal(serviceIDs, record.ServiceIDs) {
+		return errs.New(errs.KindValidationFailed, "Attach detach Services do not match the durable record")
+	}
+	grantIDs := make([]string, 0, len(scope.Grants))
+	for _, grant := range scope.Grants {
+		if grant.Revision <= 0 || grant.Record.EnvironmentID != record.EnvironmentID ||
+			grant.Record.BackingServiceID != record.BackingServiceID ||
+			grant.Record.BackingNetworkID != record.BackingNetworkID || grant.Record.Status != core.AttachReady {
+			return errs.New(
+				errs.KindScopeUnauthorized,
+				"Attach detach grant must be ready in the same Environment and backing Service",
+			)
+		}
+		grantIDs = append(grantIDs, grant.Record.ID)
+	}
+	slices.Sort(grantIDs)
+	if !slices.Equal(grantIDs, record.GrantAttachIDs) {
+		return errs.New(errs.KindValidationFailed, "Attach detach grants do not match the durable record")
+	}
+	return nil
+}
+
+func validateAttachDetachTask(
+	current AttachRecord,
+	detaching AttachRecord,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) error {
+	validOwnership := detaching.Status == core.AttachDetaching && detaching.Operation == AttachOperationDetach &&
+		detaching.TaskID == task.ID && attachImmutableEqual(current, detaching)
+	validTaskShape := task.Type == TaskDetach && task.Target == current.ID && task.Executor == TaskExecutorAgent &&
+		task.Status == TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
+		task.Params[TaskMutationEnvironmentParam] == current.EnvironmentID
+	if !validOwnership || !validTaskShape {
+		return errs.New(errs.KindValidationFailed, "Attach detach Task does not own its detaching Attach")
+	}
+	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != current.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) {
+		return errs.New(errs.KindValidationFailed, "Attach detach marker does not match its Environment-scoped Task")
+	}
+	return nil
+}
+
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 37 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	operations := 38 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
 	if hasFacts {
 		operations++
 	}
 	return operations
+}
+
+func attachDetachWithTaskOperationCount(record AttachRecord) int {
+	return 30 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
 }
 
 func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRecord) bool {
@@ -718,6 +965,18 @@ func classifyAttachTaskCreateConflict(_ int64, reads []*KeyValue) error {
 		}
 	}
 	return classifyAttachCreateConflict(reads[4:])
+}
+
+func classifyAttachDetachTaskConflict(_ int64, reads []*KeyValue) error {
+	if len(reads) < 5 {
+		return errs.New(errs.KindInternal, "Attach detach Task conflict evidence is incomplete")
+	}
+	for _, read := range reads[:4] {
+		if read != nil {
+			return errs.New(errs.KindStateConflict, "Attach detach Task operation is already active")
+		}
+	}
+	return errs.New(errs.KindStateConflict, "Attach detach scope changed concurrently")
 }
 
 func encodeAttachRecord(record AttachRecord) ([]byte, error) {

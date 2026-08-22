@@ -187,21 +187,23 @@ func validateAttachTaskRenderInputScope(
 		!slices.Equal(input.Volumes, scope.ComposeProjection.Record.Volumes) {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input does not match its pinned desired state")
 	}
-	coveredByBackingNetwork := make(map[string]struct{})
-	for _, join := range input.NetworkJoins {
-		if join.NetworkID != record.BackingNetworkID {
-			continue
+	if task.Type == TaskAttach {
+		coveredByBackingNetwork := make(map[string]struct{})
+		for _, join := range input.NetworkJoins {
+			if join.NetworkID != record.BackingNetworkID {
+				continue
+			}
+			for _, serviceID := range join.ServiceIDs {
+				coveredByBackingNetwork[serviceID] = struct{}{}
+			}
 		}
-		for _, serviceID := range join.ServiceIDs {
-			coveredByBackingNetwork[serviceID] = struct{}{}
-		}
-	}
-	for _, serviceID := range record.ServiceIDs {
-		if _, exists := coveredByBackingNetwork[serviceID]; !exists {
-			return errs.New(
-				errs.KindValidationFailed,
-				"Attach Task render input omits a consumer Service binding to the backing network",
-			)
+		for _, serviceID := range record.ServiceIDs {
+			if _, exists := coveredByBackingNetwork[serviceID]; !exists {
+				return errs.New(
+					errs.KindValidationFailed,
+					"Attach Task render input omits a consumer Service binding to the backing network",
+				)
+			}
 		}
 	}
 	return validateAttachTaskRenderInput(input)
