@@ -388,7 +388,8 @@ func TestConnectTracksReadyFreshnessAndCapacity(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 	snapshot, ok := registry.Snapshot(testAgentID)
-	if !ok || snapshot.Online || snapshot.Capacity != 3 || !snapshot.LastReady.Equal(wantTime) {
+	if !ok || snapshot.Online || snapshot.Capacity != 3 || snapshot.Version != "v0.4.2" ||
+		!snapshot.LastReady.Equal(wantTime) {
 		t.Fatalf("snapshot = %+v, found = %v", snapshot, ok)
 	}
 }
@@ -593,7 +594,7 @@ func authenticateMessage(id string, token []byte) *agentpb.AgentMessage {
 
 func readyMessage(capacity int32) *agentpb.AgentMessage {
 	return &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
-		Ready: &agentpb.Ready{Capacity: capacity},
+		Ready: &agentpb.Ready{Capacity: capacity, Version: "v0.4.2"},
 	}}
 }
 

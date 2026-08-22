@@ -65,6 +65,8 @@ type Health struct {
 	LastReady  time.Time
 	StaleAfter time.Time
 	Capacity   int32
+	InFlight   int32
+	Version    string
 }
 
 // New validates and constructs the local Agent lifecycle module.
@@ -207,6 +209,10 @@ func (manager *Manager) Health(ctx context.Context, agentID string) (Health, err
 	}
 	health.LastReady = snapshot.LastReady
 	health.Capacity = snapshot.Capacity
+	health.Version = snapshot.Version
+	if snapshot.Capacity <= stored.Record.Config.MaxConcurrentTasks {
+		health.InFlight = stored.Record.Config.MaxConcurrentTasks - snapshot.Capacity
+	}
 	if !snapshot.LastReady.IsZero() {
 		health.StaleAfter = snapshot.LastReady.Add(StaleWindow(stored.Record.Config.PullIntervalSeconds))
 	}

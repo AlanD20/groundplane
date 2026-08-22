@@ -10,7 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const maximumTaskAbortReasonBytes = 128
+const (
+	maximumTaskAbortReasonBytes = 128
+	maximumAgentVersionBytes    = 128
+)
 
 // Snapshot is the non-secret, point-in-time state of an Agent session.
 type Snapshot struct {
@@ -20,6 +23,7 @@ type Snapshot struct {
 	Revoked            bool
 	LastReady          time.Time
 	Capacity           int32
+	Version            string
 }
 
 // Registry owns the single active session for each Agent.
@@ -47,6 +51,7 @@ type sessionState struct {
 	lastReady          time.Time
 	readyReported      bool
 	capacity           int32
+	version            string
 	cancel             context.CancelFunc
 	done               <-chan struct{}
 	aborts             chan taskAbortCommand
@@ -166,10 +171,11 @@ func (s *Session) Done() <-chan struct{} {
 	return s.ctx.Done()
 }
 
-// RecordReady records the most recent reported free capacity for this session.
-func (s *Session) RecordReady(at time.Time, capacity int32) error {
-	if capacity < 0 {
-		return errs.New(errs.KindValidationFailed, "agent Ready capacity must be non-negative")
+// RecordReady records the most recent reported free capacity and binary
+// version for this session.
+func (s *Session) RecordReady(at time.Time, capacity int32, version string) error {
+	if err := validateReady(capacity, version); err != nil {
+		return err
 	}
 
 	s.registry.mu.Lock()
@@ -182,6 +188,7 @@ func (s *Session) RecordReady(at time.Time, capacity int32) error {
 	current.lastReady = at
 	current.readyReported = true
 	current.capacity = capacity
+	current.version = version
 	s.registry.notifyReadyLocked(readyKey{agentID: s.agentID, generation: current.generation})
 	return nil
 }
@@ -368,7 +375,18 @@ func (r *Registry) Snapshot(agentID string) (Snapshot, bool) {
 		Revoked:            state.revoked,
 		LastReady:          state.lastReady,
 		Capacity:           state.capacity,
+		Version:            state.version,
 	}, true
+}
+
+func validateReady(capacity int32, version string) error {
+	if capacity < 0 {
+		return errs.New(errs.KindValidationFailed, "agent Ready capacity must be non-negative")
+	}
+	if version == "" || len(version) > maximumAgentVersionBytes || !utf8.ValidString(version) {
+		return errs.New(errs.KindValidationFailed, "agent Ready version is invalid")
+	}
+	return nil
 }
 
 // StopAssignments prevents the current session from receiving new work.

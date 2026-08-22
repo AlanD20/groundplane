@@ -771,6 +771,7 @@ func (*AgentMessage_TaskAck) isAgentMessage_Payload() {}
 type Ready struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Capacity      int32                  `protobuf:"varint,1,opt,name=capacity,proto3" json:"capacity,omitempty"` // free worker-pool slots
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`    // exact Agent binary build version
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -810,6 +811,13 @@ func (x *Ready) GetCapacity() int32 {
 		return x.Capacity
 	}
 	return 0
+}
+
+func (x *Ready) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
 }
 
 type TaskEvent struct {
@@ -2818,9 +2826,10 @@ const file_proto_agent_proto_rawDesc = "" +
 	"task_event\x18\x03 \x01(\v2\x1f.groundplane.agent.v1.TaskEventH\x00R\ttaskEvent\x12L\n" +
 	"\x0eobserved_state\x18\x04 \x01(\v2#.groundplane.agent.v1.ObservedStateH\x00R\robservedState\x12:\n" +
 	"\btask_ack\x18\x05 \x01(\v2\x1d.groundplane.agent.v1.TaskAckH\x00R\ataskAckB\t\n" +
-	"\apayload\"#\n" +
+	"\apayload\"=\n" +
 	"\x05Ready\x12\x1a\n" +
-	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\"\xdb\x01\n" +
+	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\xdb\x01\n" +
 	"\tTaskEvent\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12\x17\n" +

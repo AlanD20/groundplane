@@ -180,13 +180,13 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 
 			if ready := result.message.GetReady(); ready != nil {
+				if err := validateReady(ready.Capacity, ready.Version); err != nil {
+					return status.Error(codes.InvalidArgument, "agent Ready is invalid")
+				}
 				if ready.Capacity > authorization.Config.MaxConcurrentTasks {
 					return status.Error(codes.InvalidArgument, "agent Ready capacity exceeds configuration")
 				}
-				if err := session.RecordReady(s.now(), ready.Capacity); err != nil {
-					if ready.Capacity < 0 {
-						return status.Error(codes.InvalidArgument, "agent Ready capacity must be non-negative")
-					}
+				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
 				}
 				if s.tasks == nil {

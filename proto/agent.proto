@@ -46,6 +46,7 @@ message AgentMessage {
 
 message Ready {
   int32 capacity = 1; // free worker-pool slots
+  string version = 2; // exact Agent binary build version
 }
 
 message TaskEvent {

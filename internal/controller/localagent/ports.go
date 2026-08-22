@@ -109,6 +109,7 @@ type SessionSnapshot struct {
 	Revoked    bool
 	LastReady  time.Time
 	Capacity   int32
+	Version    string
 }
 
 // Sessions owns authenticated readiness and generation fencing. Ready must be a

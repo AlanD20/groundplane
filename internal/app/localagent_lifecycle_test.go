@@ -29,7 +29,7 @@ func TestLocalAgentSessionsAdapterTranslatesSnapshotAndReady(t *testing.T) {
 	}
 	defer session.Close()
 	wantReady := time.Date(2026, time.August, 20, 15, 0, 0, 0, time.UTC)
-	if err := session.RecordReady(wantReady, 4); err != nil {
+	if err := session.RecordReady(wantReady, 4, "v0.4.2"); err != nil {
 		t.Fatalf("RecordReady() error = %v", err)
 	}
 
@@ -47,6 +47,7 @@ func TestLocalAgentSessionsAdapterTranslatesSnapshotAndReady(t *testing.T) {
 		Online:     true,
 		LastReady:  wantReady,
 		Capacity:   4,
+		Version:    "v0.4.2",
 	}
 	if got, ok := adapter.Snapshot(runtimeAdapterAgentID); !ok || !reflect.DeepEqual(got, want) {
 		t.Fatalf("Snapshot() = %#v, %t; want %#v, true", got, ok, want)

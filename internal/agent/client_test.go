@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -43,8 +44,8 @@ func TestClientSendsAuthenticationFirstAndCopiesToken(t *testing.T) {
 	if authenticate == nil || authenticate.AgentId != clientTestAgentID || !bytes.Equal(authenticate.Token, wantToken) {
 		t.Fatal("first message is not the exact Authenticate payload")
 	}
-	if ready := sent[1].GetReady(); ready == nil || ready.Capacity != 3 {
-		t.Fatalf("second message Ready = %#v, want capacity 3", ready)
+	if ready := sent[1].GetReady(); ready == nil || ready.Capacity != 3 || ready.Version != version.Value {
+		t.Fatalf("second message Ready = %#v, want capacity 3 and build version", ready)
 	}
 }
 
@@ -250,7 +251,10 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 		}}
 	}
 	if ready := message.GetReady(); ready != nil {
-		copyMessage.Payload = &agentpb.AgentMessage_Ready{Ready: &agentpb.Ready{Capacity: ready.Capacity}}
+		copyMessage.Payload = &agentpb.AgentMessage_Ready{Ready: &agentpb.Ready{
+			Capacity: ready.Capacity,
+			Version:  ready.Version,
+		}}
 		s.readyOnce.Do(func() { close(s.readySent) })
 	}
 	if acknowledgement := message.GetTaskAck(); acknowledgement != nil {

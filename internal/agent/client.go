@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc"
@@ -250,7 +251,7 @@ func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {
 
 func (c *Client) sendReady(stream agentStream) error {
 	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
-		Ready: &agentpb.Ready{Capacity: int32(c.pool.Capacity())},
+		Ready: &agentpb.Ready{Capacity: int32(c.pool.Capacity()), Version: version.Value},
 	}})
 }
 
