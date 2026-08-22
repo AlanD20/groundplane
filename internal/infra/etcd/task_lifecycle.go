@@ -1426,5 +1426,6 @@ func hydrateTerminalTaskMarker(
 	prepared.Intent = existing.Intent
 	prepared.Response = existing.Response
 	prepared.CreatedAt = existing.CreatedAt
+	prepared.ReplayTarget = cloneIdempotencyReplayTarget(existing.ReplayTarget)
 	return prepared, nil
 }

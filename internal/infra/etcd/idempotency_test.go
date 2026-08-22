@@ -29,6 +29,9 @@ func TestIdempotencyMarkerCodecIsStrictAndTupleBound(t *testing.T) {
 	t.Parallel()
 
 	marker := testDirectMarker()
+	marker.ReplayTarget = &IdempotencyReplayTarget{
+		Kind: IdempotencyReplayTargetAttach, ID: ids.NewAt(ids.KindAttach, marker.CreatedAt, 2),
+	}
 	value, err := encodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
@@ -40,15 +43,16 @@ func TestIdempotencyMarkerCodecIsStrictAndTupleBound(t *testing.T) {
 	if decoded.Kind != marker.Kind || decoded.State != marker.State ||
 		!bytes.Equal(decoded.Intent.Ciphertext, marker.Intent.Ciphertext) ||
 		!bytes.Equal(decoded.Response.Body, marker.Response.Body) ||
-		!decoded.RetainUntil.Equal(marker.RetainUntil) {
+		!decoded.RetainUntil.Equal(marker.RetainUntil) || decoded.ReplayTarget == nil ||
+		*decoded.ReplayTarget != *marker.ReplayTarget {
 		t.Fatalf("decoded marker = %#v", decoded)
 	}
 
-	duplicate := bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"schema":1`), 1)
+	duplicate := bytes.Replace(value, []byte(`"schema":2`), []byte(`"schema":2,"schema":2`), 1)
 	if _, err := decodeIdempotencyMarker(duplicate, marker.Locator); !isKind(err, errs.KindInternal) {
 		t.Fatalf("duplicate marker error = %v, want internal", err)
 	}
-	unknown := bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"extra":true`), 1)
+	unknown := bytes.Replace(value, []byte(`"schema":2`), []byte(`"schema":2,"extra":true`), 1)
 	if _, err := decodeIdempotencyMarker(unknown, marker.Locator); !isKind(err, errs.KindInternal) {
 		t.Fatalf("unknown marker error = %v, want internal", err)
 	}
@@ -274,6 +278,64 @@ func TestIdempotencyRepositoryUsesTransactionFailureEvidence(t *testing.T) {
 	}
 }
 
+// Rationale: a child-resource delete replay must recover its original owner-scoped marker from the stable
+// target id and validate both records at the replay-index read revision after the child primary is gone.
+func TestIdempotencyRepositoryResolvesReplayTargetAtFixedRevision(t *testing.T) {
+	t.Parallel()
+
+	marker := testDirectMarker()
+	marker.Locator = IdempotencyLocator{
+		ScopeKind: IdempotencyScopeEnvironment,
+		ScopeID:   ids.NewAt(ids.KindEnvironment, marker.CreatedAt, 3),
+		Method:    http.MethodDelete,
+		Route:     "/attaches/{id}",
+		Key:       "attach-detach-key-0001",
+	}
+	marker.Response = IdempotencyResponse{Status: http.StatusNoContent, ContentKind: "none"}
+	marker.ReplayTarget = &IdempotencyReplayTarget{
+		Kind: IdempotencyReplayTargetAttach,
+		ID:   ids.NewAt(ids.KindAttach, marker.CreatedAt, 4),
+	}
+	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	if err != nil {
+		t.Fatalf("idempotencyMarkerKey() error = %v", err)
+	}
+	markerValue, err := encodeIdempotencyMarker(marker)
+	if err != nil {
+		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
+	}
+	targetKey, err := idempotencyReplayTargetKey(
+		*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
+	)
+	if err != nil {
+		t.Fatalf("idempotencyReplayTargetKey() error = %v", err)
+	}
+	targetValue, err := encodeReplayTargetReference(markerKey)
+	if err != nil {
+		t.Fatalf("encodeReplayTargetReference() error = %v", err)
+	}
+	store := &replayLookupTestStore{
+		targetKey: targetKey,
+		target: GetResult{
+			Entry: &KeyValue{Key: targetKey, Value: targetValue, ModRevision: 17}, ReadRevision: 23,
+		},
+		markerKey: markerKey,
+		markers: GetManyResult{
+			Values: []*KeyValue{{Key: markerKey, Value: markerValue, ModRevision: 16}}, ReadRevision: 23,
+		},
+	}
+	repository, err := NewIdempotencyRepository(store)
+	if err != nil {
+		t.Fatalf("NewIdempotencyRepository() error = %v", err)
+	}
+	resolved, found, err := repository.ResolveReplayLocator(
+		context.Background(), *marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
+	)
+	if err != nil || !found || resolved != marker.Locator || store.markerRevision != 23 {
+		t.Fatalf("ResolveReplayLocator() = %#v, %v, %v; revision = %d", resolved, found, err, store.markerRevision)
+	}
+}
+
 // Rationale: transaction plans contain raw persistence operations and are
 // therefore opaque and single-use even under concurrent retry paths.
 func TestIdempotencyMutationPlanHasOneConcurrentConsumer(t *testing.T) {
@@ -331,6 +393,7 @@ func TestIdempotencyMutationPlanRejectsDuplicateAndReservedKeys(t *testing.T) {
 		{[]Condition{{Key: idempotencyMarkerPrefix + "owned", ModRevision: 0}},
 			[]Mutation{{Type: MutationPut, Key: "/record", Value: []byte("x")}}},
 		{nil, []Mutation{{Type: MutationPut, Key: idempotencyRetentionPrefix + "owned", Value: []byte("x")}}},
+		{nil, []Mutation{{Type: MutationPut, Key: idempotencyReplayTargetPrefix + "owned", Value: []byte("x")}}},
 	} {
 		if _, err := newIdempotencyMutationPlan(
 			test.conditions,
@@ -383,9 +446,9 @@ func TestIdempotencyRepositoryRejectsTaskMarkerBeforeConsumingPlan(t *testing.T)
 	}
 }
 
-// Rationale: pruning must validate both counterparts before writing and fit
-// exactly 24 markers into 48 compares plus 48 deletes.
-func TestIdempotencyRepositoryPrunesAtMost24ValidatedCounterparts(t *testing.T) {
+// Rationale: pruning a deletion marker must validate marker, retention, and replay-target counterparts while
+// fitting exactly 16 triples into 48 compares plus 48 deletes.
+func TestIdempotencyRepositoryPrunesAtMost16ValidatedTriples(t *testing.T) {
 	t.Parallel()
 
 	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
@@ -403,6 +466,10 @@ func TestIdempotencyRepositoryPrunesAtMost24ValidatedCounterparts(t *testing.T) 
 	for index := range candidates {
 		marker := testDirectMarker()
 		marker.Locator.Key = "01ARZ3NDEKTSV4RRFFQ69G5" + string(rune('A'+index))
+		marker.ReplayTarget = &IdempotencyReplayTarget{
+			Kind: IdempotencyReplayTargetAttach,
+			ID:   ids.NewAt(ids.KindAttach, marker.CreatedAt, int64(index+30)),
+		}
 		markerKey, keyErr := idempotencyMarkerKey(marker.Locator)
 		if keyErr != nil {
 			t.Fatalf("idempotencyMarkerKey(%d) error = %v", index, keyErr)
@@ -415,10 +482,22 @@ func TestIdempotencyRepositoryPrunesAtMost24ValidatedCounterparts(t *testing.T) 
 		if marshalErr != nil {
 			t.Fatalf("json.Marshal(retention %d) error = %v", index, marshalErr)
 		}
+		targetKey, keyErr := idempotencyReplayTargetKey(
+			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
+		)
+		if keyErr != nil {
+			t.Fatalf("idempotencyReplayTargetKey(%d) error = %v", index, keyErr)
+		}
+		targetValue, marshalErr := encodeReplayTargetReference(markerKey)
+		if marshalErr != nil {
+			t.Fatalf("encodeReplayTargetReference(%d) error = %v", index, marshalErr)
+		}
 		candidates[index] = idempotencyPruneCandidate{
 			Marker:       idempotencyEvidence{marker: marker, modRevision: int64(index + 1)},
 			RetentionKey: retentionKey, RetentionValue: retentionValue,
 			RetentionModRevision: int64(index + 101),
+			ReplayTargetKey:      targetKey, ReplayTargetValue: targetValue,
+			ReplayTargetModRevision: int64(index + 201),
 		}
 	}
 	revision, err := repository.pruneExpired(
@@ -427,7 +506,7 @@ func TestIdempotencyRepositoryPrunesAtMost24ValidatedCounterparts(t *testing.T) 
 		candidates,
 	)
 	if err != nil || revision != 80 {
-		t.Fatalf("pruneExpired(24) = %d, %v", revision, err)
+		t.Fatalf("pruneExpired(16) = %d, %v", revision, err)
 	}
 	if len(backend.transaction.conditions) != 48 || len(backend.transaction.operations) != 48 {
 		t.Fatalf(
@@ -455,7 +534,7 @@ func TestIdempotencyRepositoryPrunesAtMost24ValidatedCounterparts(t *testing.T) 
 		t.Fatalf("pruneExpired(25) error = %v, want validation", err)
 	}
 	if backend.transaction != nil {
-		t.Fatal("pruneExpired(25) reached etcd")
+		t.Fatal("pruneExpired(17) reached etcd")
 	}
 
 	backend.transaction = nil
@@ -648,6 +727,47 @@ type collectorTestStore struct {
 	getManyCalls       int
 	transactionCalls   int
 	getManyRevisions   []int64
+}
+
+type replayLookupTestStore struct {
+	Store
+	targetKey      string
+	target         GetResult
+	markerKey      string
+	markers        GetManyResult
+	markerRevision int64
+}
+
+func (store *replayLookupTestStore) Get(ctx context.Context, key string) (*GetResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if key != store.targetKey {
+		return nil, errs.New(errs.KindInternal, "unexpected replay target key")
+	}
+	result := store.target
+	if result.Entry != nil {
+		entry := *result.Entry
+		entry.Value = append([]byte(nil), result.Entry.Value...)
+		result.Entry = &entry
+	}
+	return &result, nil
+}
+
+func (store *replayLookupTestStore) GetMany(
+	ctx context.Context,
+	request GetManyRequest,
+) (*GetManyResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(request.Keys) != 1 || request.Keys[0] != store.markerKey || request.Revision != store.target.ReadRevision {
+		return nil, errs.New(errs.KindInternal, "unexpected replay marker lookup")
+	}
+	store.markerRevision = request.Revision
+	result := store.markers
+	result.Values = cloneKeyValuePointers(result.Values)
+	return &result, nil
 }
 
 func (store *collectorTestStore) Range(ctx context.Context, request RangeRequest) (*RangeResult, error) {

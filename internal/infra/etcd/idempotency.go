@@ -22,15 +22,16 @@ import (
 )
 
 const (
-	idempotencyMarkerPrefix    = "/v1/runtime/idempotency/"
-	idempotencyRetentionPrefix = "/v1/indexes/idempotency/by-retain-until/"
-	maximumMarkerKeyBytes      = 2 << 10
-	maximumIntentCiphertext    = 4 << 10
-	maximumReplayBody          = 128 << 10
-	maximumMarkerBytes         = 256 << 10
-	maximumPruneMarkers        = 24
-	maximumPruneCASAttempts    = 3
-	markerRetention            = 90 * 24 * time.Hour
+	idempotencyMarkerPrefix       = "/v1/runtime/idempotency/"
+	idempotencyRetentionPrefix    = "/v1/indexes/idempotency/by-retain-until/"
+	idempotencyReplayTargetPrefix = "/v1/indexes/idempotency/by-replay-target/"
+	maximumMarkerKeyBytes         = 2 << 10
+	maximumIntentCiphertext       = 4 << 10
+	maximumReplayBody             = 128 << 10
+	maximumMarkerBytes            = 256 << 10
+	maximumPruneMarkers           = 16
+	maximumPruneCASAttempts       = 3
+	markerRetention               = 90 * 24 * time.Hour
 )
 
 var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
@@ -50,6 +51,15 @@ type IdempotencyLocator struct {
 	Method    string               `json:"method"`
 	Route     string               `json:"route"`
 	Key       string               `json:"key"`
+}
+
+type IdempotencyReplayTargetKind string
+
+const IdempotencyReplayTargetAttach IdempotencyReplayTargetKind = "attach"
+
+type IdempotencyReplayTarget struct {
+	Kind IdempotencyReplayTargetKind `json:"kind"`
+	ID   string                      `json:"id"`
 }
 
 type ProtectedIntentRecord struct {
@@ -96,16 +106,17 @@ const (
 )
 
 type IdempotencyMarker struct {
-	Kind        IdempotencyMarkerKind
-	State       IdempotencyMarkerState
-	Locator     IdempotencyLocator
-	Intent      ProtectedIntentRecord
-	Response    IdempotencyResponse
-	TaskID      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	TerminalAt  time.Time
-	RetainUntil time.Time
+	Kind         IdempotencyMarkerKind
+	State        IdempotencyMarkerState
+	Locator      IdempotencyLocator
+	ReplayTarget *IdempotencyReplayTarget
+	Intent       ProtectedIntentRecord
+	Response     IdempotencyResponse
+	TaskID       string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	TerminalAt   time.Time
+	RetainUntil  time.Time
 }
 
 // NewCompletedDirectIdempotencyMarker fixes the lifecycle of a synchronous
@@ -159,21 +170,22 @@ type idempotencyResponseJSON struct {
 }
 
 type idempotencyMarkerJSON struct {
-	Schema         int                     `json:"schema"`
-	Kind           IdempotencyMarkerKind   `json:"kind"`
-	State          IdempotencyMarkerState  `json:"state"`
-	Method         string                  `json:"method"`
-	Route          string                  `json:"route"`
-	ScopeKind      IdempotencyScopeKind    `json:"scope_kind"`
-	ScopeID        string                  `json:"scope_id"`
-	IdempotencyKey string                  `json:"idempotency_key"`
-	Intent         idempotencyIntentJSON   `json:"intent"`
-	Response       idempotencyResponseJSON `json:"response"`
-	TaskID         string                  `json:"task_id,omitempty"`
-	CreatedAt      string                  `json:"created_at"`
-	UpdatedAt      string                  `json:"updated_at"`
-	TerminalAt     string                  `json:"terminal_at,omitempty"`
-	RetainUntil    string                  `json:"retain_until,omitempty"`
+	Schema         int                      `json:"schema"`
+	Kind           IdempotencyMarkerKind    `json:"kind"`
+	State          IdempotencyMarkerState   `json:"state"`
+	Method         string                   `json:"method"`
+	Route          string                   `json:"route"`
+	ScopeKind      IdempotencyScopeKind     `json:"scope_kind"`
+	ScopeID        string                   `json:"scope_id"`
+	IdempotencyKey string                   `json:"idempotency_key"`
+	ReplayTarget   *IdempotencyReplayTarget `json:"replay_target,omitempty"`
+	Intent         idempotencyIntentJSON    `json:"intent"`
+	Response       idempotencyResponseJSON  `json:"response"`
+	TaskID         string                   `json:"task_id,omitempty"`
+	CreatedAt      string                   `json:"created_at"`
+	UpdatedAt      string                   `json:"updated_at"`
+	TerminalAt     string                   `json:"terminal_at,omitempty"`
+	RetainUntil    string                   `json:"retain_until,omitempty"`
 }
 
 type taskReferenceJSON struct {
@@ -182,6 +194,11 @@ type taskReferenceJSON struct {
 }
 
 type retentionReferenceJSON struct {
+	Schema    int    `json:"schema"`
+	MarkerKey string `json:"marker_key"`
+}
+
+type replayTargetReferenceJSON struct {
 	Schema    int    `json:"schema"`
 	MarkerKey string `json:"marker_key"`
 }
@@ -237,6 +254,41 @@ func validateIdempotencyLocator(locator IdempotencyLocator) error {
 	return nil
 }
 
+func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
+	switch target.Kind {
+	case IdempotencyReplayTargetAttach:
+		if ids.Validate(ids.KindAttach, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "idempotency replay target kind is invalid")
+	}
+	return nil
+}
+
+func idempotencyReplayTargetKey(
+	target IdempotencyReplayTarget,
+	method string,
+	route string,
+	key string,
+) (string, error) {
+	if err := validateIdempotencyReplayTarget(target); err != nil {
+		return "", err
+	}
+	request := IdempotencyLocator{
+		ScopeKind: IdempotencyScopePlatform, ScopeID: "-", Method: method, Route: route, Key: key,
+	}
+	if err := validateIdempotencyLocator(request); err != nil {
+		return "", err
+	}
+	value := idempotencyReplayTargetPrefix + string(target.Kind) + "/" + target.ID + "/" +
+		encodeDynamicSegment(method) + "/" + encodeDynamicSegment(route) + "/" + encodeDynamicSegment(key)
+	if len(value) > maximumMarkerKeyBytes {
+		return "", errs.New(errs.KindValidationFailed, "idempotency replay target lookup exceeds key limit")
+	}
+	return value, nil
+}
+
 func validateProtectedIntent(value ProtectedIntentRecord) error {
 	if value.EnvelopeVersion != 1 || value.Cipher != "age-x25519" || value.DigestAlgorithm != "sha256" {
 		return corruptIdempotencyMarker()
@@ -261,6 +313,11 @@ func validateIdempotencyMarker(marker IdempotencyMarker) error {
 	}
 	if err := validateProtectedIntent(marker.Intent); err != nil {
 		return err
+	}
+	if marker.ReplayTarget != nil {
+		if err := validateIdempotencyReplayTarget(*marker.ReplayTarget); err != nil {
+			return corruptIdempotencyMarker()
+		}
 	}
 	if len(marker.Response.Body) > maximumReplayBody {
 		return corruptIdempotencyMarker()
@@ -339,10 +396,11 @@ func encodeIdempotencyMarker(marker IdempotencyMarker) ([]byte, error) {
 		return nil, err
 	}
 	value, err := json.Marshal(idempotencyMarkerJSON{
-		Schema: 1, Kind: marker.Kind, State: marker.State,
+		Schema: 2, Kind: marker.Kind, State: marker.State,
 		Method: marker.Locator.Method, Route: marker.Locator.Route,
 		ScopeKind: marker.Locator.ScopeKind, ScopeID: marker.Locator.ScopeID,
 		IdempotencyKey: marker.Locator.Key,
+		ReplayTarget:   cloneIdempotencyReplayTarget(marker.ReplayTarget),
 		Intent: idempotencyIntentJSON{
 			EnvelopeVersion: marker.Intent.EnvelopeVersion, Cipher: marker.Intent.Cipher,
 			DigestAlgorithm: marker.Intent.DigestAlgorithm, CiphertextDigest: marker.Intent.CiphertextDigest,
@@ -372,7 +430,7 @@ func decodeIdempotencyMarker(value []byte, locator IdempotencyLocator) (Idempote
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data idempotencyMarkerJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 1 {
+	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 2 {
 		return IdempotencyMarker{}, corruptIdempotencyMarker()
 	}
 	ciphertext, err := decodeRawBase64(data.Intent.Ciphertext)
@@ -411,6 +469,7 @@ func decodeIdempotencyMarker(value []byte, locator IdempotencyLocator) (Idempote
 		Kind: data.Kind, State: data.State,
 		Locator: IdempotencyLocator{ScopeKind: data.ScopeKind, ScopeID: data.ScopeID, Method: data.Method,
 			Route: data.Route, Key: data.IdempotencyKey},
+		ReplayTarget: cloneIdempotencyReplayTarget(data.ReplayTarget),
 		Intent: ProtectedIntentRecord{EnvelopeVersion: data.Intent.EnvelopeVersion, Cipher: data.Intent.Cipher,
 			DigestAlgorithm: data.Intent.DigestAlgorithm, CiphertextDigest: data.Intent.CiphertextDigest,
 			Ciphertext: ciphertext},
@@ -586,6 +645,27 @@ func decodeRetentionReference(value []byte, markerKey string) error {
 	return nil
 }
 
+func encodeReplayTargetReference(markerKey string) ([]byte, error) {
+	if _, err := parseIdempotencyMarkerKey(markerKey); err != nil {
+		return nil, corruptIdempotencyMarker()
+	}
+	return json.Marshal(replayTargetReferenceJSON{Schema: 1, MarkerKey: markerKey})
+}
+
+func decodeReplayTargetReference(value []byte, markerKey string) error {
+	if len(value) == 0 || rejectDuplicateJSONFields(value) != nil {
+		return corruptIdempotencyMarker()
+	}
+	decoder := json.NewDecoder(bytes.NewReader(value))
+	decoder.DisallowUnknownFields()
+	var data replayTargetReferenceJSON
+	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil ||
+		data.Schema != 1 || data.MarkerKey != markerKey {
+		return corruptIdempotencyMarker()
+	}
+	return nil
+}
+
 type idempotencyPlanClassifier func(int64, []*KeyValue) error
 
 type idempotencyMutationPlan struct {
@@ -672,7 +752,8 @@ func validateIdempotencyPlanKeys(conditions []Condition, mutations []Mutation) e
 
 func invalidIdempotencyPlanKey(key string) bool {
 	return key == "" || strings.HasPrefix(key, idempotencyMarkerPrefix) ||
-		strings.HasPrefix(key, idempotencyRetentionPrefix)
+		strings.HasPrefix(key, idempotencyRetentionPrefix) ||
+		strings.HasPrefix(key, idempotencyReplayTargetPrefix)
 }
 
 func (plan *idempotencyMutationPlan) consume() ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
@@ -768,9 +849,18 @@ func (result *IdempotencyTransactionResult) Classify() (
 }
 
 func cloneIdempotencyMarker(marker IdempotencyMarker) IdempotencyMarker {
+	marker.ReplayTarget = cloneIdempotencyReplayTarget(marker.ReplayTarget)
 	marker.Intent.Ciphertext = append([]byte(nil), marker.Intent.Ciphertext...)
 	marker.Response.Body = append([]byte(nil), marker.Response.Body...)
 	return marker
+}
+
+func cloneIdempotencyReplayTarget(target *IdempotencyReplayTarget) *IdempotencyReplayTarget {
+	if target == nil {
+		return nil
+	}
+	cloned := *target
+	return &cloned
 }
 
 type idempotencyRepositoryStore interface {
@@ -783,10 +873,13 @@ type idempotencyRepositoryStore interface {
 type IdempotencyRepository struct{ store idempotencyRepositoryStore }
 
 type idempotencyPruneCandidate struct {
-	Marker               idempotencyEvidence
-	RetentionKey         string
-	RetentionValue       []byte
-	RetentionModRevision int64
+	Marker                  idempotencyEvidence
+	RetentionKey            string
+	RetentionValue          []byte
+	RetentionModRevision    int64
+	ReplayTargetKey         string
+	ReplayTargetValue       []byte
+	ReplayTargetModRevision int64
 }
 
 func NewIdempotencyRepository(store Store) (*IdempotencyRepository, error) {
@@ -831,6 +924,21 @@ func (repository *IdempotencyRepository) Apply(
 	defer clearMutationValues(mutations)
 	conditions = append([]Condition{{Key: markerKey, ModRevision: 0}}, conditions...)
 	mutations = append(mutations, Mutation{Type: MutationPut, Key: markerKey, Value: markerValue})
+	if marker.ReplayTarget != nil {
+		targetKey, targetErr := idempotencyReplayTargetKey(
+			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
+		)
+		if targetErr != nil {
+			return IdempotencyTransactionResult{}, targetErr
+		}
+		targetValue, targetErr := encodeReplayTargetReference(markerKey)
+		if targetErr != nil {
+			return IdempotencyTransactionResult{}, targetErr
+		}
+		defer clear(targetValue)
+		conditions = append(conditions[:1], append([]Condition{{Key: targetKey, ModRevision: 0}}, conditions[1:]...)...)
+		mutations = append(mutations, Mutation{Type: MutationPut, Key: targetKey, Value: targetValue})
+	}
 	if !marker.RetainUntil.IsZero() {
 		retentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
 		if err != nil {
@@ -864,7 +972,17 @@ func (repository *IdempotencyRepository) Apply(
 			kind: idempotencyTransactionExisting, revision: result.Revision, marker: existing,
 		}, nil
 	}
-	conflict := classify(result.Revision, result.FailureReads[1:])
+	planOffset := 1
+	if marker.ReplayTarget != nil {
+		if result.FailureReads[1] != nil {
+			if err := decodeReplayTargetReference(result.FailureReads[1].Value, markerKey); err != nil {
+				return IdempotencyTransactionResult{}, err
+			}
+			return IdempotencyTransactionResult{}, corruptIdempotencyMarker()
+		}
+		planOffset++
+	}
+	conflict := classify(result.Revision, result.FailureReads[planOffset:])
 	if conflict == nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
@@ -915,6 +1033,69 @@ func (repository *IdempotencyRepository) Read(
 		return nil, corruptIdempotencyMarker()
 	}
 	return &idempotencyEvidence{marker: marker, modRevision: result.Entry.ModRevision}, nil
+}
+
+func (repository *IdempotencyRepository) ResolveReplayLocator(
+	ctx context.Context,
+	target IdempotencyReplayTarget,
+	method string,
+	route string,
+	key string,
+) (IdempotencyLocator, bool, error) {
+	if ctx == nil {
+		return IdempotencyLocator{}, false, errs.New(errs.KindInternal, "idempotency context is required")
+	}
+	targetKey, err := idempotencyReplayTargetKey(target, method, route, key)
+	if err != nil {
+		return IdempotencyLocator{}, false, err
+	}
+	result, err := repository.store.Get(ctx, targetKey)
+	if err != nil {
+		return IdempotencyLocator{}, false, err
+	}
+	if result == nil {
+		return IdempotencyLocator{}, false, errs.New(errs.KindInternal, "idempotency replay lookup result is missing")
+	}
+	if result.Entry == nil {
+		return IdempotencyLocator{}, false, nil
+	}
+	defer clear(result.Entry.Value)
+	if result.Entry.Key != targetKey || result.Entry.ModRevision <= 0 || result.ReadRevision <= 0 {
+		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+	}
+	var reference replayTargetReferenceJSON
+	decoder := json.NewDecoder(bytes.NewReader(result.Entry.Value))
+	decoder.DisallowUnknownFields()
+	if rejectDuplicateJSONFields(result.Entry.Value) != nil || decoder.Decode(&reference) != nil ||
+		requireJSONEOF(decoder) != nil || reference.Schema != 1 {
+		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+	}
+	locator, err := parseIdempotencyMarkerKey(reference.MarkerKey)
+	if err != nil || locator.Method != method || locator.Route != route || locator.Key != key {
+		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+	}
+	markers, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{reference.MarkerKey}, Revision: result.ReadRevision,
+	})
+	if err != nil {
+		return IdempotencyLocator{}, false, err
+	}
+	if markers == nil || markers.ReadRevision != result.ReadRevision || len(markers.Values) != 1 ||
+		markers.Values[0] == nil {
+		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+	}
+	defer clear(markers.Values[0].Value)
+	marker, err := decodeIdempotencyMarker(markers.Values[0].Value, locator)
+	if err != nil {
+		return IdempotencyLocator{}, false, err
+	}
+	defer clear(marker.Intent.Ciphertext)
+	defer clear(marker.Response.Body)
+	if marker.ReplayTarget == nil || *marker.ReplayTarget != target ||
+		decodeReplayTargetReference(result.Entry.Value, reference.MarkerKey) != nil {
+		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+	}
+	return locator, true, nil
 }
 
 func (evidence *idempotencyEvidence) Marker() (IdempotencyMarker, error) {
@@ -1046,6 +1227,48 @@ func (repository *IdempotencyRepository) collectExpired(
 			RetentionModRevision: retentionEntries[index].ModRevision,
 		})
 	}
+	targetKeys := make([]string, 0, len(candidates))
+	targetIndexes := make([]int, 0, len(candidates))
+	for index := range candidates {
+		marker := candidates[index].Marker.marker
+		if marker.ReplayTarget == nil {
+			continue
+		}
+		targetKey, err := idempotencyReplayTargetKey(
+			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
+		)
+		if err != nil {
+			clearPruneCandidates(candidates)
+			return nil, corruptIdempotencyMarker()
+		}
+		targetKeys = append(targetKeys, targetKey)
+		targetIndexes = append(targetIndexes, index)
+	}
+	if len(targetKeys) != 0 {
+		targets, err := repository.store.GetMany(ctx, GetManyRequest{Keys: targetKeys, Revision: page.ReadRevision})
+		if err != nil {
+			clearPruneCandidates(candidates)
+			return nil, err
+		}
+		if targets == nil || targets.ReadRevision != page.ReadRevision || len(targets.Values) != len(targetKeys) {
+			clearPruneCandidates(candidates)
+			return nil, corruptIdempotencyMarker()
+		}
+		defer clearKeyValues(targets.Values)
+		for index, targetEntry := range targets.Values {
+			candidateIndex := targetIndexes[index]
+			markerKey, keyErr := idempotencyMarkerKey(candidates[candidateIndex].Marker.marker.Locator)
+			if keyErr != nil || targetEntry == nil || targetEntry.Key != targetKeys[index] ||
+				targetEntry.ModRevision <= 0 ||
+				decodeReplayTargetReference(targetEntry.Value, markerKey) != nil {
+				clearPruneCandidates(candidates)
+				return nil, corruptIdempotencyMarker()
+			}
+			candidates[candidateIndex].ReplayTargetKey = targetEntry.Key
+			candidates[candidateIndex].ReplayTargetValue = append([]byte(nil), targetEntry.Value...)
+			candidates[candidateIndex].ReplayTargetModRevision = targetEntry.ModRevision
+		}
+	}
 	return candidates, nil
 }
 
@@ -1062,6 +1285,8 @@ func clearPruneCandidates(values []idempotencyPruneCandidate) {
 		clear(values[index].Marker.marker.Response.Body)
 		clear(values[index].RetentionValue)
 		values[index].RetentionValue = nil
+		clear(values[index].ReplayTargetValue)
+		values[index].ReplayTargetValue = nil
 	}
 }
 
@@ -1080,7 +1305,7 @@ func (repository *IdempotencyRepository) pruneExpired(
 		return 0, errs.New(errs.KindValidationFailed, "idempotency prune time must be UTC")
 	}
 	if len(candidates) == 0 || len(candidates) > maximumPruneMarkers {
-		return 0, errs.New(errs.KindValidationFailed, "idempotency prune batch must contain 1 through 24 markers")
+		return 0, errs.New(errs.KindValidationFailed, "idempotency prune batch must contain 1 through 16 markers")
 	}
 	conditions := make([]Condition, 0, len(candidates)*2)
 	mutations := make([]Mutation, 0, len(candidates)*2)
@@ -1117,6 +1342,26 @@ func (repository *IdempotencyRepository) pruneExpired(
 			Mutation{Type: MutationDelete, Key: markerKey},
 			Mutation{Type: MutationDelete, Key: candidate.RetentionKey},
 		)
+		if candidate.Marker.marker.ReplayTarget != nil {
+			targetKey, targetErr := idempotencyReplayTargetKey(
+				*candidate.Marker.marker.ReplayTarget,
+				candidate.Marker.marker.Locator.Method,
+				candidate.Marker.marker.Locator.Route,
+				candidate.Marker.marker.Locator.Key,
+			)
+			if targetErr != nil || candidate.ReplayTargetKey != targetKey ||
+				candidate.ReplayTargetModRevision <= 0 ||
+				decodeReplayTargetReference(candidate.ReplayTargetValue, markerKey) != nil {
+				return 0, corruptIdempotencyMarker()
+			}
+			conditions = append(conditions, Condition{
+				Key: candidate.ReplayTargetKey, ModRevision: candidate.ReplayTargetModRevision,
+			})
+			mutations = append(mutations, Mutation{Type: MutationDelete, Key: candidate.ReplayTargetKey})
+		} else if candidate.ReplayTargetKey != "" || candidate.ReplayTargetModRevision != 0 ||
+			len(candidate.ReplayTargetValue) != 0 {
+			return 0, corruptIdempotencyMarker()
+		}
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {

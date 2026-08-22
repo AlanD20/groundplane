@@ -787,7 +787,7 @@ func validateAttachCreationTask(record AttachRecord, task TaskRecord, marker Ide
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != record.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) {
+		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.ReplayTarget != nil {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Attach creation marker does not match its Environment-scoped Task",
@@ -879,7 +879,8 @@ func validateAttachDetachTask(
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) {
+		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.ReplayTarget == nil ||
+		marker.ReplayTarget.Kind != IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.ID {
 		return errs.New(errs.KindValidationFailed, "Attach detach marker does not match its Environment-scoped Task")
 	}
 	return nil
@@ -894,7 +895,7 @@ func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int 
 }
 
 func attachDetachWithTaskOperationCount(record AttachRecord) int {
-	return 30 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
+	return 32 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
 }
 
 func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRecord) bool {

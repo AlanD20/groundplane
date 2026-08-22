@@ -647,6 +647,7 @@ func publishTestDetach(
 	marker.Locator.ScopeID = current.Record.EnvironmentID
 	marker.Locator.Method = http.MethodDelete
 	marker.Locator.Route = "/attaches/{id}"
+	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetAttach, ID: current.Record.ID}
 	renderInput := AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: current.Record.ID,
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
