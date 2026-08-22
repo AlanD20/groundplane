@@ -1,0 +1,679 @@
+package etcd
+
+import (
+	"context"
+	"encoding/json"
+	"slices"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const attachRecordPrefix = "/v1/records/attaches/"
+
+type AttachCreateScope struct {
+	Project            Versioned[ProjectRecord]
+	Environment        Versioned[EnvironmentRecord]
+	Services           []Versioned[ServiceRecord]
+	BackingProject     Versioned[ProjectRecord]
+	BackingEnvironment Versioned[EnvironmentRecord]
+	BackingService     Versioned[ServiceRecord]
+	Grants             []Versioned[AttachRecord]
+}
+
+type AttachRepository struct {
+	store Store
+}
+
+func NewAttachRepository(store Store) (*AttachRepository, error) {
+	if store == nil {
+		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
+	}
+	return &AttachRepository{store: store}, nil
+}
+
+func (repository *AttachRepository) CreateAttach(
+	ctx context.Context,
+	scope AttachCreateScope,
+	record AttachRecord,
+	facts *AttachEncryptedFacts,
+) (Versioned[AttachRecord], error) {
+	if err := validateAttachCreateScope(ctx, scope, record, facts); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if attachCreateOperationCount(record, facts != nil) > maximumTransactionOperations {
+		return Versioned[AttachRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach consumer and grant combination exceeds the atomic transaction limit",
+		)
+	}
+	recordValue, err := encodeAttachRecord(record)
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	defer clear(recordValue)
+
+	conditions := []Condition{
+		{Key: attachKey(record.ID)},
+		{Key: attachNameKey(record.EnvironmentID, record.Name)},
+		{Key: attachOwnerKey(record.EnvironmentID, record.ID)},
+		{Key: attachBackingServiceKey(record.BackingServiceID, record.ID)},
+		{Key: attachBackingProjectKey(record.BackingProjectID, record.ID)},
+		{Key: environmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
+		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
+		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
+		{Key: projectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
+		{Key: serviceKey(scope.BackingService.Record.Desired.ID), ModRevision: scope.BackingService.Revision},
+		{Key: deletionTombstoneKey("attach", record.ID)},
+		{Key: deletionTombstoneKey("environment", record.EnvironmentID)},
+		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
+		{Key: deletionTombstoneKey("tenant", scope.Project.Record.TenantID)},
+		{Key: deletionTombstoneKey("environment", record.BackingEnvironmentID)},
+		{Key: deletionTombstoneKey("project", record.BackingProjectID)},
+		{Key: deletionTombstoneKey("service", record.BackingServiceID)},
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: attachKey(record.ID), Value: recordValue},
+		{Type: MutationPut, Key: attachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
+		{Type: MutationPut, Key: attachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
+		{Type: MutationPut, Key: attachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
+		{Type: MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
+	}
+	for _, service := range scope.Services {
+		serviceID := service.Record.Desired.ID
+		conditions = append(conditions,
+			Condition{Key: serviceKey(serviceID), ModRevision: service.Revision},
+			Condition{Key: attachServiceKey(serviceID, record.ID)},
+			Condition{Key: deletionTombstoneKey("service", serviceID)},
+		)
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: attachServiceKey(serviceID, record.ID), Value: []byte(record.ID),
+		})
+	}
+	grantValues := make([][]byte, 0, len(scope.Grants))
+	defer func() {
+		for _, value := range grantValues {
+			clear(value)
+		}
+	}()
+	for _, grant := range scope.Grants {
+		grantID := grant.Record.ID
+		grantValue, encodeErr := encodeAttachRecord(grant.Record)
+		if encodeErr != nil {
+			return Versioned[AttachRecord]{}, encodeErr
+		}
+		grantValues = append(grantValues, grantValue)
+		conditions = append(conditions,
+			Condition{Key: attachKey(grantID), ModRevision: grant.Revision},
+			Condition{Key: attachGrantedByKey(grantID, record.ID)},
+			Condition{Key: deletionTombstoneKey("attach", grantID)},
+		)
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: attachGrantedByKey(grantID, record.ID), Value: []byte(record.ID)},
+			Mutation{Type: MutationPut, Key: attachKey(grantID), Value: grantValue},
+		)
+	}
+	var factValue []byte
+	if facts != nil {
+		factValue, err = encodeAttachEncryptedFacts(*facts)
+		if err != nil {
+			return Versioned[AttachRecord]{}, err
+		}
+		defer clear(factValue)
+		mutations = append(mutations, Mutation{Type: MutationPut, Key: attachFactsKey(record.ID), Value: factValue})
+	}
+	result, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if !result.Succeeded {
+		return Versioned[AttachRecord]{}, classifyAttachCreateConflict(result.FailureReads)
+	}
+	return Versioned[AttachRecord]{
+		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
+func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (Versioned[AttachRecord], error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if err := validateID(ids.KindAttach, id); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	return getRecord(
+		ctx,
+		repository.store,
+		attachKey(id),
+		id,
+		errs.KindAttachNotFound,
+		decodeAttachRecord,
+		func(record AttachRecord) string { return record.ID },
+	)
+}
+
+func (repository *AttachRepository) ResolveAttach(
+	ctx context.Context,
+	environmentID string,
+	reference string,
+) (Versioned[AttachRecord], error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if ids.Validate(ids.KindAttach, reference) == nil {
+		current, err := repository.GetAttach(ctx, reference)
+		if err != nil {
+			return Versioned[AttachRecord]{}, err
+		}
+		if current.Record.EnvironmentID != environmentID {
+			return Versioned[AttachRecord]{}, errs.New(
+				errs.KindScopeUnauthorized,
+				"Attach is outside the Environment scope",
+			)
+		}
+		return current, nil
+	}
+	if reference == "" {
+		return Versioned[AttachRecord]{}, errs.New(errs.KindAttachNotFound, "Attach was not found")
+	}
+	index, err := repository.store.Get(ctx, attachNameKey(environmentID, reference))
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if index == nil || index.Entry == nil {
+		return Versioned[AttachRecord]{}, errs.New(errs.KindAttachNotFound, "Attach was not found")
+	}
+	id := string(index.Entry.Value)
+	if ids.Validate(ids.KindAttach, id) != nil {
+		return Versioned[AttachRecord]{}, corruptAttachRecord()
+	}
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{attachKey(id)}, Revision: index.ReadRevision,
+	})
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
+		return Versioned[AttachRecord]{}, corruptAttachRecord()
+	}
+	record, err := decodeAttachRecord(result.Values[0].Value)
+	if err != nil || record.ID != id || record.EnvironmentID != environmentID || record.Name != reference {
+		return Versioned[AttachRecord]{}, corruptAttachRecord()
+	}
+	return Versioned[AttachRecord]{
+		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
+	}, nil
+}
+
+func (repository *AttachRepository) ListAttaches(
+	ctx context.Context,
+	environmentID string,
+	request PageRequest,
+) (Page[AttachRecord], error) {
+	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+		return Page[AttachRecord]{}, err
+	}
+	return listIndexPage(
+		ctx,
+		repository.store,
+		"attaches",
+		"environment",
+		environmentID,
+		attachOwnerPrefix(environmentID),
+		attachKey,
+		ids.KindAttach,
+		request,
+		decodeAttachRecord,
+		func(record AttachRecord) string { return record.ID },
+		func(record AttachRecord) bool { return record.EnvironmentID == environmentID },
+	)
+}
+
+func (repository *AttachRepository) GetAttachFacts(
+	ctx context.Context,
+	current Versioned[AttachRecord],
+) (AttachEncryptedFacts, bool, error) {
+	if err := validateAttachVersion(current); err != nil {
+		return AttachEncryptedFacts{}, false, err
+	}
+	revision := current.ReadRevision
+	if revision == 0 {
+		revision = current.Revision
+	}
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{attachFactsKey(current.Record.ID)}, Revision: revision,
+	})
+	if err != nil {
+		return AttachEncryptedFacts{}, false, err
+	}
+	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
+		if len(current.Record.FactSets) == 0 {
+			return AttachEncryptedFacts{}, false, nil
+		}
+		return AttachEncryptedFacts{}, false, errs.New(errs.KindInternal, "Attach encrypted facts are missing")
+	}
+	facts, err := decodeAttachEncryptedFacts(result.Values[0].Value)
+	if err != nil || facts.AttachID != current.Record.ID {
+		clear(facts.Ciphertext)
+		return AttachEncryptedFacts{}, false, corruptAttachRecord()
+	}
+	return facts, true, nil
+}
+
+func (repository *AttachRepository) ReplaceLifecycle(
+	ctx context.Context,
+	current Versioned[AttachRecord],
+	replacement AttachRecord,
+) (Versioned[AttachRecord], error) {
+	if err := validateAttachVersion(current); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if err := validateAttachRecord(replacement); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if !validAttachLifecycleReplacement(current.Record, replacement) {
+		return Versioned[AttachRecord]{}, errs.New(errs.KindStateConflict, "Attach lifecycle replacement is invalid")
+	}
+	value, err := encodeAttachRecord(replacement)
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	defer clear(value)
+	result, err := repository.store.Transact(ctx, []Condition{
+		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+	}, []Mutation{{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value}})
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if !result.Succeeded {
+		return Versioned[AttachRecord]{}, errs.New(errs.KindStateConflict, "Attach changed concurrently")
+	}
+	return Versioned[AttachRecord]{
+		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
+func (repository *AttachRepository) RenameAttach(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	current Versioned[AttachRecord],
+	name string,
+) (Versioned[AttachRecord], error) {
+	if err := validateAttachVersion(current); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	replacement := current.Record
+	replacement.Name = name
+	if err := validateAttachRecord(replacement); err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if environment.Record.ID != current.Record.EnvironmentID || project.Record.ID != environment.Record.ProjectID ||
+		environment.Revision <= 0 || project.Revision <= 0 {
+		return Versioned[AttachRecord]{}, errs.New(errs.KindScopeUnauthorized, "Attach rename scope is invalid")
+	}
+	if replacement.Name == current.Record.Name {
+		return current, nil
+	}
+	value, err := encodeAttachRecord(replacement)
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	defer clear(value)
+	conditions := []Condition{
+		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: attachNameKey(current.Record.EnvironmentID, replacement.Name)},
+		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
+		{Key: deletionTombstoneKey("project", project.Record.ID)},
+	}
+	if project.Record.TenantID != "" {
+		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+	}
+	result, err := repository.store.Transact(ctx, conditions, []Mutation{
+		{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value},
+		{Type: MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
+		{
+			Type:  MutationPut,
+			Key:   attachNameKey(current.Record.EnvironmentID, replacement.Name),
+			Value: []byte(current.Record.ID),
+		},
+	})
+	if err != nil {
+		return Versioned[AttachRecord]{}, err
+	}
+	if !result.Succeeded {
+		if len(result.FailureReads) > 1 && result.FailureReads[1] != nil {
+			return Versioned[AttachRecord]{}, errs.New(errs.KindNameConflict, "Attach name already exists")
+		}
+		return Versioned[AttachRecord]{}, errs.New(errs.KindStateConflict, "Attach changed concurrently")
+	}
+	return Versioned[AttachRecord]{
+		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
+func (repository *AttachRepository) DeleteDetachedAttach(
+	ctx context.Context,
+	current Versioned[AttachRecord],
+) (int64, error) {
+	if err := validateAttachVersion(current); err != nil {
+		return 0, err
+	}
+	if current.Record.Status != core.AttachDetached {
+		return 0, errs.New(errs.KindStateConflict, "Attach must be detached before record removal")
+	}
+	dependents, err := repository.store.Range(ctx, RangeRequest{
+		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if dependents == nil {
+		return 0, errs.New(errs.KindInternal, "Attach grant index read returned no result")
+	}
+	if len(dependents.Values) != 0 {
+		return 0, errs.New(errs.KindResourceInUse, "Attach is referenced by another Attach grant")
+	}
+
+	conditions := []Condition{{Key: attachKey(current.Record.ID), ModRevision: current.Revision}}
+	mutations := []Mutation{
+		{Type: MutationDelete, Key: attachKey(current.Record.ID)},
+		{Type: MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
+		{Type: MutationDelete, Key: attachOwnerKey(current.Record.EnvironmentID, current.Record.ID)},
+		{Type: MutationDelete, Key: attachBackingServiceKey(current.Record.BackingServiceID, current.Record.ID)},
+		{Type: MutationDelete, Key: attachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID)},
+		{Type: MutationDelete, Key: attachFactsKey(current.Record.ID)},
+	}
+	for _, serviceID := range current.Record.ServiceIDs {
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationDelete, Key: attachServiceKey(serviceID, current.Record.ID)},
+		)
+	}
+	if len(current.Record.GrantAttachIDs) != 0 {
+		keys := make([]string, 0, len(current.Record.GrantAttachIDs)*2)
+		for _, grantID := range current.Record.GrantAttachIDs {
+			keys = append(keys, attachKey(grantID), attachGrantedByKey(grantID, current.Record.ID))
+		}
+		result, getErr := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+		if getErr != nil {
+			return 0, getErr
+		}
+		if result == nil || len(result.Values) != len(keys) {
+			return 0, corruptAttachRecord()
+		}
+		for index, grantID := range current.Record.GrantAttachIDs {
+			target := result.Values[index*2]
+			reverse := result.Values[index*2+1]
+			if target == nil || reverse == nil || string(reverse.Value) != current.Record.ID {
+				return 0, corruptAttachRecord()
+			}
+			targetRecord, decodeErr := decodeAttachRecord(target.Value)
+			if decodeErr != nil || targetRecord.ID != grantID {
+				return 0, corruptAttachRecord()
+			}
+			targetValue, encodeErr := encodeAttachRecord(targetRecord)
+			if encodeErr != nil {
+				return 0, encodeErr
+			}
+			defer clear(targetValue)
+			conditions = append(conditions,
+				Condition{Key: attachKey(grantID), ModRevision: target.ModRevision},
+				Condition{Key: attachGrantedByKey(grantID, current.Record.ID), ModRevision: reverse.ModRevision},
+			)
+			mutations = append(mutations,
+				Mutation{Type: MutationDelete, Key: attachGrantedByKey(grantID, current.Record.ID)},
+				Mutation{Type: MutationPut, Key: attachKey(grantID), Value: targetValue},
+			)
+		}
+	}
+	result, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return 0, err
+	}
+	if !result.Succeeded {
+		return 0, errs.New(errs.KindStateConflict, "Attach references changed concurrently")
+	}
+	return result.Revision, nil
+}
+
+func validateAttachCreateScope(
+	ctx context.Context,
+	scope AttachCreateScope,
+	record AttachRecord,
+	facts *AttachEncryptedFacts,
+) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+	if err := validateAttachRecord(record); err != nil {
+		return err
+	}
+	if scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 || scope.BackingProject.Revision <= 0 ||
+		scope.BackingEnvironment.Revision <= 0 || scope.BackingService.Revision <= 0 {
+		return errs.New(errs.KindValidationFailed, "Attach scope records must be versioned")
+	}
+	if scope.Project.Record.Kind != ProjectKindTenant || scope.Project.Record.TenantID == "" ||
+		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
+		record.EnvironmentID != scope.Environment.Record.ID {
+		return errs.New(errs.KindScopeUnauthorized, "Attach consumer hierarchy is invalid")
+	}
+	if scope.BackingProject.Record.Kind != ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
+		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
+		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
+		record.BackingProjectID != scope.BackingProject.Record.ID ||
+		record.BackingEnvironmentID != scope.BackingEnvironment.Record.ID ||
+		record.BackingServiceID != scope.BackingService.Record.Desired.ID {
+		return errs.New(errs.KindScopeUnauthorized, "Attach backing hierarchy is invalid")
+	}
+	serviceIDs := make([]string, 0, len(scope.Services))
+	for _, service := range scope.Services {
+		if service.Revision <= 0 || service.Record.EnvironmentID != record.EnvironmentID {
+			return errs.New(errs.KindScopeUnauthorized, "Attach consuming Service is outside the Environment")
+		}
+		serviceIDs = append(serviceIDs, service.Record.Desired.ID)
+	}
+	slices.Sort(serviceIDs)
+	if !slices.Equal(serviceIDs, record.ServiceIDs) {
+		return errs.New(errs.KindValidationFailed, "Attach service_ids do not match the resolved Services")
+	}
+	grantIDs := make([]string, 0, len(scope.Grants))
+	for _, grant := range scope.Grants {
+		if grant.Revision <= 0 || grant.Record.EnvironmentID != record.EnvironmentID ||
+			grant.Record.BackingServiceID != record.BackingServiceID || grant.Record.Status != core.AttachReady {
+			return errs.New(
+				errs.KindScopeUnauthorized,
+				"Attach grant must be ready in the same Environment and backing Service",
+			)
+		}
+		grantIDs = append(grantIDs, grant.Record.ID)
+	}
+	slices.Sort(grantIDs)
+	if !slices.Equal(grantIDs, record.GrantAttachIDs) {
+		return errs.New(errs.KindValidationFailed, "Attach grant ids do not match the resolved grant records")
+	}
+	manual := scope.BackingService.Record.Desired.Adapter == "manual"
+	if manual {
+		if facts != nil || len(record.FactSets) != 0 || len(record.GrantAttachIDs) != 0 {
+			return errs.New(
+				errs.KindAdapterManualOnly,
+				"Manual Attach is network-only and cannot publish facts or grants",
+			)
+		}
+		return nil
+	}
+	if scope.BackingService.Record.Desired.Adapter == "" {
+		return errs.New(errs.KindValidationFailed, "Attach backing Service requires an adapter")
+	}
+	if facts == nil || len(record.FactSets) == 0 {
+		return errs.New(errs.KindValidationFailed, "Adapter Attach requires encrypted facts and fact metadata")
+	}
+	if facts.AttachID != record.ID {
+		return errs.New(errs.KindValidationFailed, "Attach fact envelope belongs to another Attach")
+	}
+	return validateAttachEncryptedFacts(*facts)
+}
+
+func attachCreateOperationCount(record AttachRecord, hasFacts bool) int {
+	operations := 22 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	if hasFacts {
+		operations++
+	}
+	return operations
+}
+
+func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRecord) bool {
+	if !attachImmutableEqual(current, replacement) {
+		return false
+	}
+	switch {
+	case current.Status == core.AttachPending && replacement.Status == core.AttachProvisioning:
+		return current.Operation == AttachOperationProvision && replacement.Operation == current.Operation &&
+			replacement.TaskID == current.TaskID
+	case current.Status == core.AttachProvisioning &&
+		(replacement.Status == core.AttachReady || replacement.Status == core.AttachFailed):
+		return replacement.Operation == current.Operation && replacement.TaskID == current.TaskID
+	case current.Status == core.AttachFailed && current.Operation == AttachOperationProvision &&
+		replacement.Status == core.AttachPending:
+		return replacement.Operation == current.Operation && replacement.TaskID != current.TaskID
+	case (current.Status == core.AttachReady || current.Status == core.AttachFailed) &&
+		replacement.Status == core.AttachDetaching:
+		return replacement.Operation == AttachOperationDetach && replacement.TaskID != current.TaskID
+	case current.Status == core.AttachDetaching &&
+		(replacement.Status == core.AttachDetached || replacement.Status == core.AttachFailed):
+		return replacement.Operation == current.Operation && replacement.TaskID == current.TaskID
+	case current.Status == core.AttachFailed && current.Operation == AttachOperationDetach &&
+		replacement.Status == core.AttachDetaching:
+		return replacement.Operation == current.Operation && replacement.TaskID != current.TaskID
+	default:
+		return false
+	}
+}
+
+func attachImmutableEqual(left AttachRecord, right AttachRecord) bool {
+	if left.ID != right.ID || left.EnvironmentID != right.EnvironmentID || left.Name != right.Name ||
+		left.BackingProjectID != right.BackingProjectID || left.BackingEnvironmentID != right.BackingEnvironmentID ||
+		left.BackingServiceID != right.BackingServiceID || !left.CreatedAt.Equal(right.CreatedAt) ||
+		!slices.Equal(left.ServiceIDs, right.ServiceIDs) || !slices.Equal(left.GrantAttachIDs, right.GrantAttachIDs) ||
+		len(left.FactSets) != len(right.FactSets) {
+		return false
+	}
+	for index := range left.FactSets {
+		if left.FactSets[index].GrantAttachID != right.FactSets[index].GrantAttachID ||
+			!slices.Equal(left.FactSets[index].Facts, right.FactSets[index].Facts) {
+			return false
+		}
+	}
+	return true
+}
+
+func validateAttachVersion(current Versioned[AttachRecord]) error {
+	if current.Revision <= 0 {
+		return errs.New(errs.KindValidationFailed, "Attach record revision must be positive")
+	}
+	return validateAttachRecord(current.Record)
+}
+
+func classifyAttachCreateConflict(reads []*KeyValue) error {
+	if len(reads) > 1 && reads[1] != nil {
+		return errs.New(errs.KindNameConflict, "Attach name already exists")
+	}
+	return errs.New(errs.KindStateConflict, "Attach hierarchy changed concurrently")
+}
+
+func encodeAttachRecord(record AttachRecord) ([]byte, error) {
+	if err := validateAttachRecord(record); err != nil {
+		return nil, err
+	}
+	value, err := json.Marshal(record)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	return value, nil
+}
+
+func decodeAttachRecord(value []byte) (AttachRecord, error) {
+	var record AttachRecord
+	if err := json.Unmarshal(value, &record); err != nil {
+		return AttachRecord{}, corruptAttachRecord()
+	}
+	if err := validateAttachRecord(record); err != nil {
+		return AttachRecord{}, corruptAttachRecord()
+	}
+	return record, nil
+}
+
+func encodeAttachEncryptedFacts(facts AttachEncryptedFacts) ([]byte, error) {
+	if err := validateAttachEncryptedFacts(facts); err != nil {
+		return nil, err
+	}
+	value, err := json.Marshal(facts)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	return value, nil
+}
+
+func decodeAttachEncryptedFacts(value []byte) (AttachEncryptedFacts, error) {
+	var facts AttachEncryptedFacts
+	if err := json.Unmarshal(value, &facts); err != nil {
+		return AttachEncryptedFacts{}, corruptAttachRecord()
+	}
+	if err := validateAttachEncryptedFacts(facts); err != nil {
+		clear(facts.Ciphertext)
+		return AttachEncryptedFacts{}, corruptAttachRecord()
+	}
+	return facts, nil
+}
+
+func corruptAttachRecord() error {
+	return errs.New(errs.KindInternal, "Attach durable state is corrupt")
+}
+
+func attachKey(id string) string {
+	return attachRecordPrefix + id
+}
+
+func attachOwnerPrefix(environmentID string) string {
+	return "/v1/indexes/attaches/by-owner/environment/" + environmentID + "/"
+}
+
+func attachOwnerKey(environmentID string, attachID string) string {
+	return attachOwnerPrefix(environmentID) + attachID
+}
+
+func attachNameKey(environmentID string, name string) string {
+	return "/v1/indexes/attaches/by-name/environment/" + environmentID + "/" + encodeDynamicSegment(name)
+}
+
+func attachServiceKey(serviceID string, attachID string) string {
+	return "/v1/indexes/attaches/by-service/service/" + serviceID + "/" + attachID
+}
+
+func attachBackingServiceKey(serviceID string, attachID string) string {
+	return "/v1/indexes/attaches/by-backing-service/service/" + serviceID + "/" + attachID
+}
+
+func attachBackingProjectKey(projectID string, attachID string) string {
+	return "/v1/indexes/attaches/by-backing-project/project/" + projectID + "/" + attachID
+}
+
+func attachGrantedByPrefix(attachID string) string {
+	return "/v1/indexes/attaches/by-granted-attach/attach/" + attachID + "/"
+}
+
+func attachGrantedByKey(grantAttachID string, attachID string) string {
+	return attachGrantedByPrefix(grantAttachID) + attachID
+}
+
+func attachFactsKey(attachID string) string {
+	return "/v1/secret-values/attach-facts/" + attachID
+}

@@ -252,8 +252,9 @@ type EntrySource struct {
 // rotation updates every declared destination without rewriting the
 // Blueprint. See blueprint.md, "x-gp-entry": "A fact source is live".
 type FactRef struct {
-	Attach string `yaml:"attach" json:"attach"` // the attach name (or id)
-	Key    string `yaml:"key"    json:"key"`    // e.g. "pg16_URL"
+	Attach string `yaml:"attach"          json:"attach"`          // the attach name (or id)
+	Grant  string `yaml:"grant,omitempty" json:"grant,omitempty"` // optional granted attach name (or id)
+	Key    string `yaml:"key"             json:"key"`             // e.g. "pg16_URL"
 }
 
 // EnvEntry is one destination — reusing a fact under a different env
