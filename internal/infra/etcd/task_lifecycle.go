@@ -265,10 +265,10 @@ func (repository *TaskRepository) RetryTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if attachChange.applies {
-		conditions = append(conditions, attachChange.condition)
-		mutations = append(mutations, attachChange.mutation)
+		conditions = append(conditions, attachChange.conditions...)
+		mutations = append(mutations, attachChange.mutations...)
 	}
-	defer clear(attachChange.value)
+	defer clearAttachTaskChange(attachChange)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
@@ -459,16 +459,16 @@ func (repository *TaskRepository) claimNextTask(
 			return TaskAssignment{}, false, err
 		}
 		if attachChange.applies {
-			conditions = append(conditions, attachChange.condition)
+			conditions = append(conditions, attachChange.conditions...)
 			if attachChange.mutates {
-				mutations = append(mutations, attachChange.mutation)
+				mutations = append(mutations, attachChange.mutations...)
 			}
 		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(runningValue)
 		clear(assignmentValue)
 		clear(writerValue)
-		clear(attachChange.value)
+		clearAttachTaskChange(attachChange)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -1143,15 +1143,15 @@ func (repository *TaskRepository) acknowledgeTask(
 			return Versioned[TaskRecord]{}, err
 		}
 		if attachChange.applies {
-			conditions = append(conditions, attachChange.condition)
-			mutations = append(mutations, attachChange.mutation)
+			conditions = append(conditions, attachChange.conditions...)
+			mutations = append(mutations, attachChange.mutations...)
 		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
 		clear(environmentValue)
-		clear(attachChange.value)
+		clearAttachTaskChange(attachChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}

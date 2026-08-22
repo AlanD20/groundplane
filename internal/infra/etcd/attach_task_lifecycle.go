@@ -9,11 +9,11 @@ import (
 )
 
 type attachTaskChange struct {
-	applies   bool
-	mutates   bool
-	condition Condition
-	mutation  Mutation
-	value     []byte
+	applies    bool
+	mutates    bool
+	conditions []Condition
+	mutations  []Mutation
+	values     [][]byte
 }
 
 func (repository *TaskRepository) prepareAttachTaskClaim(
@@ -30,8 +30,8 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 		return attachTaskChange{}, err
 	}
 	change := attachTaskChange{
-		applies:   true,
-		condition: Condition{Key: attachKey(task.Target), ModRevision: current.Revision},
+		applies:    true,
+		conditions: []Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
 	}
 	if task.Type == TaskDetach {
 		if current.Record.Status != core.AttachDetaching ||
@@ -70,8 +70,8 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 		return attachTaskChange{}, err
 	}
 	return encodeAttachTaskChange(attachTaskChange{
-		applies:   true,
-		condition: Condition{Key: attachKey(source.Target), ModRevision: current.Revision},
+		applies:    true,
+		conditions: []Condition{{Key: attachKey(source.Target), ModRevision: current.Revision}},
 	}, retrying)
 }
 
@@ -90,19 +90,38 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 		return attachTaskChange{}, err
 	}
 	succeeded := terminalStatus == TaskStatusCompleted
-	var terminal AttachRecord
 	if task.Type == TaskAttach {
-		terminal, err = CompleteAttachProvisioning(current.Record, task.ID, succeeded)
-	} else {
-		terminal, err = CompleteAttachDetaching(current.Record, task.ID, succeeded)
+		terminal, completeErr := CompleteAttachProvisioning(current.Record, task.ID, succeeded)
+		if completeErr != nil {
+			return attachTaskChange{}, completeErr
+		}
+		return encodeAttachTaskChange(attachTaskChange{
+			applies:    true,
+			conditions: []Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+		}, terminal)
 	}
+	terminal, err := CompleteAttachDetaching(current.Record, task.ID, succeeded)
 	if err != nil {
 		return attachTaskChange{}, err
 	}
-	return encodeAttachTaskChange(attachTaskChange{
-		applies:   true,
-		condition: Condition{Key: attachKey(task.Target), ModRevision: current.Revision},
-	}, terminal)
+	if !succeeded {
+		return encodeAttachTaskChange(attachTaskChange{
+			applies:    true,
+			conditions: []Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+		}, terminal)
+	}
+	conditions, mutations, values, err := prepareAttachRemoval(
+		ctx,
+		repository.store,
+		current,
+		revision,
+	)
+	if err != nil {
+		return attachTaskChange{}, err
+	}
+	return attachTaskChange{
+		applies: true, mutates: true, conditions: conditions, mutations: mutations, values: values,
+	}, nil
 }
 
 func (repository *TaskRepository) validateAttachTaskAcknowledgementReplay(
@@ -114,6 +133,21 @@ func (repository *TaskRepository) validateAttachTaskAcknowledgementReplay(
 	applies, err := taskOwnsAttachLifecycle(task)
 	if err != nil || !applies {
 		return err
+	}
+	if task.Type == TaskDetach && terminalStatus == TaskStatusCompleted {
+		result, readErr := repository.store.GetMany(ctx, GetManyRequest{
+			Keys: []string{attachKey(task.Target)}, Revision: revision,
+		})
+		if readErr != nil {
+			return readErr
+		}
+		if result == nil || len(result.Values) != 1 {
+			return errs.New(errs.KindInternal, "Attach Task replay read is incomplete")
+		}
+		if result.Values[0] == nil {
+			return nil
+		}
+		return errs.New(errs.KindStateConflict, "completed detach still has a durable Attach")
 	}
 	current, err := repository.readTaskAttach(ctx, task, revision)
 	if err != nil {
@@ -180,7 +214,13 @@ func encodeAttachTaskChange(change attachTaskChange, record AttachRecord) (attac
 		return attachTaskChange{}, err
 	}
 	change.mutates = true
-	change.value = value
-	change.mutation = Mutation{Type: MutationPut, Key: attachKey(record.ID), Value: value}
+	change.values = append(change.values, value)
+	change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: attachKey(record.ID), Value: value})
 	return change, nil
+}
+
+func clearAttachTaskChange(change attachTaskChange) {
+	for _, value := range change.values {
+		clear(value)
+	}
 }

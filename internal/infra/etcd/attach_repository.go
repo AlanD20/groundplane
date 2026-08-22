@@ -29,6 +29,11 @@ type AttachRepository struct {
 	store Store
 }
 
+type attachRemovalStore interface {
+	Range(context.Context, RangeRequest) (*RangeResult, error)
+	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+}
+
 func NewAttachRepository(store Store) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
@@ -426,20 +431,58 @@ func (repository *AttachRepository) DeleteDetachedAttach(
 	if current.Record.Status != core.AttachDetached {
 		return 0, errs.New(errs.KindStateConflict, "Attach must be detached before record removal")
 	}
-	dependents, err := repository.store.Range(ctx, RangeRequest{
-		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1,
-	})
+	revision := current.ReadRevision
+	if revision == 0 {
+		revision = current.Revision
+	}
+	conditions, mutations, values, err := prepareAttachRemoval(ctx, repository.store, current, revision)
 	if err != nil {
 		return 0, err
 	}
-	if dependents == nil {
-		return 0, errs.New(errs.KindInternal, "Attach grant index read returned no result")
+	defer func() {
+		for _, value := range values {
+			clear(value)
+		}
+	}()
+	result, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return 0, err
+	}
+	if !result.Succeeded {
+		return 0, errs.New(errs.KindStateConflict, "Attach references changed concurrently")
+	}
+	return result.Revision, nil
+}
+
+func prepareAttachRemoval(
+	ctx context.Context,
+	store attachRemovalStore,
+	current Versioned[AttachRecord],
+	revision int64,
+) ([]Condition, []Mutation, [][]byte, error) {
+	if err := validateAttachVersion(current); err != nil {
+		return nil, nil, nil, err
+	}
+	if revision <= 0 {
+		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Attach removal revision must be positive")
+	}
+	dependents, err := store.Range(ctx, RangeRequest{
+		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if dependents == nil || dependents.ReadRevision != revision {
+		return nil, nil, nil, errs.New(errs.KindInternal, "Attach grant index read returned an invalid revision")
 	}
 	if len(dependents.Values) != 0 {
-		return 0, errs.New(errs.KindResourceInUse, "Attach is referenced by another Attach grant")
+		return nil, nil, nil, errs.New(errs.KindResourceInUse, "Attach is referenced by another Attach grant")
 	}
 
-	conditions := []Condition{{Key: attachKey(current.Record.ID), ModRevision: current.Revision}}
+	conditions := []Condition{
+		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+	}
 	mutations := []Mutation{
 		{Type: MutationDelete, Key: attachKey(current.Record.ID)},
 		{Type: MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
@@ -449,56 +492,50 @@ func (repository *AttachRepository) DeleteDetachedAttach(
 		{Type: MutationDelete, Key: attachFactsKey(current.Record.ID)},
 	}
 	for _, serviceID := range current.Record.ServiceIDs {
-		mutations = append(
-			mutations,
-			Mutation{Type: MutationDelete, Key: attachServiceKey(serviceID, current.Record.ID)},
+		mutations = append(mutations, Mutation{
+			Type: MutationDelete, Key: attachServiceKey(serviceID, current.Record.ID),
+		})
+	}
+	values := make([][]byte, 0, len(current.Record.GrantAttachIDs))
+	if len(current.Record.GrantAttachIDs) == 0 {
+		return conditions, mutations, values, nil
+	}
+	keys := make([]string, 0, len(current.Record.GrantAttachIDs)*2)
+	for _, grantID := range current.Record.GrantAttachIDs {
+		keys = append(keys, attachKey(grantID), attachGrantedByKey(grantID, current.Record.ID))
+	}
+	result, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) {
+		return nil, nil, nil, corruptAttachRecord()
+	}
+	for index, grantID := range current.Record.GrantAttachIDs {
+		target := result.Values[index*2]
+		reverse := result.Values[index*2+1]
+		if target == nil || reverse == nil || string(reverse.Value) != current.Record.ID {
+			return nil, nil, values, corruptAttachRecord()
+		}
+		targetRecord, decodeErr := decodeAttachRecord(target.Value)
+		if decodeErr != nil || targetRecord.ID != grantID {
+			return nil, nil, values, corruptAttachRecord()
+		}
+		targetValue, encodeErr := encodeAttachRecord(targetRecord)
+		if encodeErr != nil {
+			return nil, nil, values, encodeErr
+		}
+		values = append(values, targetValue)
+		conditions = append(conditions,
+			Condition{Key: attachKey(grantID), ModRevision: target.ModRevision},
+			Condition{Key: attachGrantedByKey(grantID, current.Record.ID), ModRevision: reverse.ModRevision},
+		)
+		mutations = append(mutations,
+			Mutation{Type: MutationDelete, Key: attachGrantedByKey(grantID, current.Record.ID)},
+			Mutation{Type: MutationPut, Key: attachKey(grantID), Value: targetValue},
 		)
 	}
-	if len(current.Record.GrantAttachIDs) != 0 {
-		keys := make([]string, 0, len(current.Record.GrantAttachIDs)*2)
-		for _, grantID := range current.Record.GrantAttachIDs {
-			keys = append(keys, attachKey(grantID), attachGrantedByKey(grantID, current.Record.ID))
-		}
-		result, getErr := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
-		if getErr != nil {
-			return 0, getErr
-		}
-		if result == nil || len(result.Values) != len(keys) {
-			return 0, corruptAttachRecord()
-		}
-		for index, grantID := range current.Record.GrantAttachIDs {
-			target := result.Values[index*2]
-			reverse := result.Values[index*2+1]
-			if target == nil || reverse == nil || string(reverse.Value) != current.Record.ID {
-				return 0, corruptAttachRecord()
-			}
-			targetRecord, decodeErr := decodeAttachRecord(target.Value)
-			if decodeErr != nil || targetRecord.ID != grantID {
-				return 0, corruptAttachRecord()
-			}
-			targetValue, encodeErr := encodeAttachRecord(targetRecord)
-			if encodeErr != nil {
-				return 0, encodeErr
-			}
-			defer clear(targetValue)
-			conditions = append(conditions,
-				Condition{Key: attachKey(grantID), ModRevision: target.ModRevision},
-				Condition{Key: attachGrantedByKey(grantID, current.Record.ID), ModRevision: reverse.ModRevision},
-			)
-			mutations = append(mutations,
-				Mutation{Type: MutationDelete, Key: attachGrantedByKey(grantID, current.Record.ID)},
-				Mutation{Type: MutationPut, Key: attachKey(grantID), Value: targetValue},
-			)
-		}
-	}
-	result, err := repository.store.Transact(ctx, conditions, mutations)
-	if err != nil {
-		return 0, err
-	}
-	if !result.Succeeded {
-		return 0, errs.New(errs.KindStateConflict, "Attach references changed concurrently")
-	}
-	return result.Revision, nil
+	return conditions, mutations, values, nil
 }
 
 func validateAttachCreateScope(

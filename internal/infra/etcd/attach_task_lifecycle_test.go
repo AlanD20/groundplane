@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: an Agent must never observe a running Attach Task while the durable Attach remains pending,
@@ -118,7 +119,7 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 }
 
 // Rationale: detach retries must preserve the detach operation and bind the replacement Task before a
-// terminal success can make the Attach eligible for desired-state deletion.
+// terminal success atomically removes the Attach desired state.
 func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	ctx := context.Background()
 	store := newAttachTestStore()
@@ -213,8 +214,34 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(detach retry) error = %v", err)
 	}
-	detached, err := attaches.GetAttach(ctx, record.ID)
-	if err != nil || detached.Record.Status != core.AttachDetached || detached.Revision != terminal.Revision {
-		t.Fatalf("detached Attach = %#v, %v", detached, err)
+	_, err = attaches.GetAttach(ctx, record.ID)
+	kind, _ := errs.KindOf(err)
+	if kind != errs.KindAttachNotFound {
+		t.Fatalf("GetAttach(detached) error = %v, want Attach not found", err)
+	}
+	for _, key := range []string{
+		attachNameKey(record.EnvironmentID, record.Name),
+		attachOwnerKey(record.EnvironmentID, record.ID),
+		attachServiceKey(record.ServiceIDs[0], record.ID),
+		attachBackingServiceKey(record.BackingServiceID, record.ID),
+		attachBackingProjectKey(record.BackingProjectID, record.ID),
+		attachFactsKey(record.ID),
+	} {
+		result, getErr := store.Get(ctx, key)
+		if getErr != nil || result == nil || result.Entry != nil || result.ReadRevision != terminal.Revision {
+			t.Fatalf("detached Attach companion %s = %#v, %v", key, result, getErr)
+		}
+	}
+	replay, err := tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		3,
+		retryID,
+		TaskStatusCompleted,
+		completedComposeTaskResult(),
+		retryAt.Add(3*time.Second),
+	)
+	if err != nil || replay.Revision != terminal.Revision {
+		t.Fatalf("AcknowledgeTask(detach replay) = %#v, %v", replay, err)
 	}
 }
