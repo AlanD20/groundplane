@@ -17,6 +17,7 @@ type TaskMaterializationSourceKind string
 
 const (
 	TaskMaterializationSourceBlueprintFile        TaskMaterializationSourceKind = "blueprint_file"
+	TaskMaterializationSourceComponentFile        TaskMaterializationSourceKind = "component_file"
 	TaskMaterializationSourceEntryValue           TaskMaterializationSourceKind = "entry_value"
 	TaskMaterializationSourceGeneratedEnvironment TaskMaterializationSourceKind = "generated_environment"
 )
@@ -41,6 +42,7 @@ type TaskMaterializationRecord struct {
 type TaskMaterializationSource struct {
 	Kind                 TaskMaterializationSourceKind           `json:"kind"`
 	BlueprintFile        *TaskBlueprintFileValueReference        `json:"blueprint_file,omitempty"`
+	ComponentFile        *TaskComponentFileValueReference        `json:"component_file,omitempty"`
 	EntryValue           *TaskEntryValueReference                `json:"entry_value,omitempty"`
 	GeneratedEnvironment *TaskGeneratedEnvironmentValueReference `json:"generated_environment,omitempty"`
 }
@@ -48,6 +50,15 @@ type TaskMaterializationSource struct {
 type TaskBlueprintFileValueReference struct {
 	RevisionID string `json:"revision_id"`
 	Path       string `json:"path"`
+}
+
+// TaskComponentFileValueReference names one deterministic generated file.
+// RevisionID pins the immutable Blueprint input while ComponentID prevents a
+// path collision from authorizing content rendered for another Component.
+type TaskComponentFileValueReference struct {
+	RevisionID  string `json:"revision_id"`
+	ComponentID string `json:"component_id"`
+	Path        string `json:"path"`
 }
 
 // TaskEntryValueReference names one immutable value generation. Storage is
@@ -106,6 +117,9 @@ func validateTaskMaterializationSource(source TaskMaterializationSource) error {
 	if source.BlueprintFile != nil {
 		pointers++
 	}
+	if source.ComponentFile != nil {
+		pointers++
+	}
 	if source.EntryValue != nil {
 		pointers++
 	}
@@ -117,18 +131,29 @@ func validateTaskMaterializationSource(source TaskMaterializationSource) error {
 	}
 	switch source.Kind {
 	case TaskMaterializationSourceBlueprintFile:
-		if source.BlueprintFile == nil || source.EntryValue != nil || source.GeneratedEnvironment != nil ||
+		if source.BlueprintFile == nil || source.ComponentFile != nil || source.EntryValue != nil ||
+			source.GeneratedEnvironment != nil ||
 			validateStableID(ids.KindTask, source.BlueprintFile.RevisionID) != nil ||
 			validateEnvironmentBlueprintPath(source.BlueprintFile.Path) != nil {
 			return errs.New(errs.KindValidationFailed, "Blueprint file materialization reference is invalid")
 		}
+	case TaskMaterializationSourceComponentFile:
+		if source.ComponentFile == nil || source.BlueprintFile != nil || source.EntryValue != nil ||
+			source.GeneratedEnvironment != nil ||
+			validateStableID(ids.KindTask, source.ComponentFile.RevisionID) != nil ||
+			validateStableID(ids.KindComponent, source.ComponentFile.ComponentID) != nil ||
+			validateEnvironmentBlueprintPath(source.ComponentFile.Path) != nil {
+			return errs.New(errs.KindValidationFailed, "Component file materialization reference is invalid")
+		}
 	case TaskMaterializationSourceEntryValue:
-		if source.EntryValue == nil || source.BlueprintFile != nil || source.GeneratedEnvironment != nil {
+		if source.EntryValue == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
+			source.GeneratedEnvironment != nil {
 			return errs.New(errs.KindValidationFailed, "Entry value materialization reference is invalid")
 		}
 		return validateTaskEntryValueReference(*source.EntryValue)
 	case TaskMaterializationSourceGeneratedEnvironment:
-		if source.GeneratedEnvironment == nil || source.BlueprintFile != nil || source.EntryValue != nil {
+		if source.GeneratedEnvironment == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
+			source.EntryValue != nil {
 			return errs.New(errs.KindValidationFailed, "generated Environment materialization reference is invalid")
 		}
 		return validateTaskGeneratedEnvironmentReference(*source.GeneratedEnvironment)
@@ -183,6 +208,10 @@ func cloneTaskMaterializationReferences(
 		if source.BlueprintFile != nil {
 			value := *source.BlueprintFile
 			source.BlueprintFile = &value
+		}
+		if source.ComponentFile != nil {
+			value := *source.ComponentFile
+			source.ComponentFile = &value
 		}
 		if source.EntryValue != nil {
 			value := *source.EntryValue

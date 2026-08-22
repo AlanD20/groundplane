@@ -42,9 +42,13 @@ func TestTaskMaterializationReferencesRoundTripAndClone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cloneRetryTask() error = %v", err)
 	}
-	retry.Materializations[2].Source.GeneratedEnvironment.Values[0].Name = "MUTATED"
-	if failed.Materializations[2].Source.GeneratedEnvironment.Values[0].Name != "APP_ENV" {
+	retry.Materializations[3].Source.GeneratedEnvironment.Values[0].Name = "MUTATED"
+	if failed.Materializations[3].Source.GeneratedEnvironment.Values[0].Name != "APP_ENV" {
 		t.Fatal("retry materialization references alias the source task")
+	}
+	retry.Materializations[1].Source.ComponentFile.Path = "components/mutated/config"
+	if failed.Materializations[1].Source.ComponentFile.Path != "components/caddy/Caddyfile" {
+		t.Fatal("retry Component file reference aliases the source task")
 	}
 }
 
@@ -66,11 +70,14 @@ func TestTaskMaterializationReferencesRejectConfusedShapes(t *testing.T) {
 			}
 		},
 		"unsorted generated values": func(task *TaskRecord) {
-			values := task.Materializations[2].Source.GeneratedEnvironment.Values
+			values := task.Materializations[3].Source.GeneratedEnvironment.Values
 			values[0], values[1] = values[1], values[0]
 		},
 		"untyped Entry storage": func(task *TaskRecord) {
-			task.Materializations[1].Source.EntryValue.Storage = ""
+			task.Materializations[2].Source.EntryValue.Storage = ""
+		},
+		"invalid Component identity": func(task *TaskRecord) {
+			task.Materializations[1].Source.ComponentFile.ComponentID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		},
 	}
 	for name, mutate := range tests {
@@ -92,12 +99,13 @@ func taskWithMaterializationReferences() TaskRecord {
 		taskJournalStepID(),
 		ids.NewAt(ids.KindStep, now, 6),
 		ids.NewAt(ids.KindStep, now, 7),
+		ids.NewAt(ids.KindStep, now, 8),
 	}
 	sort.Strings(stepIDs)
 	task.Type = TaskUpdate
 	task.Target = environmentID
 	task.Params = map[string]string{TaskMaterializationEnvironmentParam: environmentID}
-	task.Steps = []TaskStepRecord{{ID: stepIDs[0]}, {ID: stepIDs[1]}, {ID: stepIDs[2]}}
+	task.Steps = []TaskStepRecord{{ID: stepIDs[0]}, {ID: stepIDs[1]}, {ID: stepIDs[2]}, {ID: stepIDs[3]}}
 	plain := TaskEntryValueReference{
 		EntryID:           ids.NewAt(ids.KindEnvEntry, now, 21),
 		ValueGenerationID: ids.NewAt(ids.KindConfig, now, 22),
@@ -120,10 +128,21 @@ func taskWithMaterializationReferences() TaskRecord {
 		},
 		{
 			StepID: stepIDs[1], EnvironmentID: environmentID,
-			Source: TaskMaterializationSource{Kind: TaskMaterializationSourceEntryValue, EntryValue: &plain},
+			Source: TaskMaterializationSource{
+				Kind: TaskMaterializationSourceComponentFile,
+				ComponentFile: &TaskComponentFileValueReference{
+					RevisionID:  ids.NewAt(ids.KindTask, now, 26),
+					ComponentID: ids.NewAt(ids.KindComponent, now, 27),
+					Path:        "components/caddy/Caddyfile",
+				},
+			},
 		},
 		{
 			StepID: stepIDs[2], EnvironmentID: environmentID,
+			Source: TaskMaterializationSource{Kind: TaskMaterializationSourceEntryValue, EntryValue: &plain},
+		},
+		{
+			StepID: stepIDs[3], EnvironmentID: environmentID,
 			Source: TaskMaterializationSource{
 				Kind: TaskMaterializationSourceGeneratedEnvironment,
 				GeneratedEnvironment: &TaskGeneratedEnvironmentValueReference{
