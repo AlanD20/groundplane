@@ -400,6 +400,10 @@ type AttachRequest struct {
 	GrantAttachIDs   []string `json:"grant_attach_ids,omitempty"`
 }
 
+type AttachRenameRequest struct {
+	Name string `json:"name"`
+}
+
 type BackupRunRequest struct {
 	SourceIDs []string `json:"source_ids,omitempty"` // empty = every enabled source
 }

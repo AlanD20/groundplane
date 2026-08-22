@@ -16,6 +16,31 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Attach defines model for Attach.
+type Attach struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Attach.json
+	Schema               *string   `json:"$schema,omitempty"`
+	BackingEnvironmentId *string   `json:"backing_environment_id,omitempty"`
+	BackingNetworkId     string    `json:"backing_network_id"`
+	BackingServiceId     string    `json:"backing_service_id"`
+	GrantAttachIds       *[]string `json:"grant_attach_ids,omitempty"`
+	Id                   string    `json:"id"`
+	Name                 string    `json:"name"`
+	ServiceIds           *[]string `json:"service_ids"`
+	Status               string    `json:"status"`
+}
+
+// AttachRenameRequest defines model for AttachRenameRequest.
+type AttachRenameRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/AttachRenameRequest.json
+	Schema *string `json:"$schema,omitempty"`
+	Name   string  `json:"name"`
+}
+
 // AttachRequest defines model for AttachRequest.
 type AttachRequest struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -141,6 +166,16 @@ type HostResource struct {
 	UsedPct int64  `json:"used_pct"`
 }
 
+// PageAttach defines model for PageAttach.
+type PageAttach struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageAttach.json
+	Schema     *string   `json:"$schema,omitempty"`
+	Items      *[]Attach `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -256,6 +291,13 @@ type TenantRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// AttachListParams defines parameters for AttachList.
+type AttachListParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // AttachCreateParams defines parameters for AttachCreate.
 type AttachCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -263,6 +305,11 @@ type AttachCreateParams struct {
 
 // AttachDetachParams defines parameters for AttachDetach.
 type AttachDetachParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// AttachRenameParams defines parameters for AttachRename.
+type AttachRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -329,6 +376,9 @@ type TenantRenameParams struct {
 
 // AttachCreateJSONRequestBody defines body for AttachCreate for application/json ContentType.
 type AttachCreateJSONRequestBody = AttachRequest
+
+// AttachRenameJSONRequestBody defines body for AttachRename for application/json ContentType.
+type AttachRenameJSONRequestBody = AttachRenameRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
@@ -428,6 +478,11 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// AttachList List attaches
+	//
+	// Corresponds with GET /attaches (the `AttachList` operationId).
+	AttachList(ctx context.Context, params *AttachListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AttachCreateWithBody Attach a backing service
 	//
 	// Takes any type of body and a specified content type.
@@ -446,6 +501,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
 	AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachRenameWithBody Rename an attach
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+	AttachRenameWithBody(ctx context.Context, id string, params *AttachRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachRename Rename an attach
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+	AttachRename(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentList List environments
 	//
@@ -595,6 +664,21 @@ type ClientInterface interface {
 	TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+// AttachList List attaches
+//
+// Corresponds with GET /attaches (the `AttachList` operationId).
+func (c *Client) AttachList(ctx context.Context, params *AttachListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // AttachCreateWithBody Attach a backing service
 //
 // Takes any type of body and a specified content type.
@@ -634,6 +718,40 @@ func (c *Client) AttachCreate(ctx context.Context, params *AttachCreateParams, b
 // Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
 func (c *Client) AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAttachDetachRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachRenameWithBody Rename an attach
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+func (c *Client) AttachRenameWithBody(ctx context.Context, id string, params *AttachRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachRenameRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachRename Rename an attach
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+func (c *Client) AttachRename(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachRenameRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1021,6 +1139,80 @@ func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRena
 	return c.Client.Do(req)
 }
 
+// NewAttachListRequest constructs an http.Request for the AttachList method
+func NewAttachListRequest(server string, params *AttachListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/attaches")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAttachCreateRequest calls the generic AttachCreate builder with application/json body
 func NewAttachCreateRequest(server string, params *AttachCreateParams, body AttachCreateJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1104,6 +1296,66 @@ func NewAttachDetachRequest(server string, id string, params *AttachDetachParams
 	if err != nil {
 		return nil, err
 	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewAttachRenameRequest calls the generic AttachRename builder with application/json body
+func NewAttachRenameRequest(server string, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAttachRenameRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewAttachRenameRequestWithBody constructs an http.Request for the AttachRename method, with any body, and a specified content type
+func NewAttachRenameRequestWithBody(server string, id string, params *AttachRenameParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/attaches/%s/rename", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -1983,6 +2235,13 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// AttachListWithResponse List attaches
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /attaches (the `AttachList` operationId).
+	AttachListWithResponse(ctx context.Context, params *AttachListParams, reqEditors ...RequestEditorFn) (*AttachListResponse, error)
+
 	// AttachCreateWithBodyWithResponse Attach a backing service
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -2003,6 +2262,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
 	AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error)
+
+	// AttachRenameWithBodyWithResponse Rename an attach
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+	AttachRenameWithBodyWithResponse(ctx context.Context, id string, params *AttachRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachRenameResponse, error)
+
+	// AttachRenameWithResponse Rename an attach
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+	AttachRenameWithResponse(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachRenameResponse, error)
 
 	// EnvironmentListWithResponse List environments
 	//
@@ -2166,6 +2439,54 @@ type ClientWithResponsesInterface interface {
 	TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
 }
 
+type AttachListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageAttach
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AttachListResponse) GetJSON200() *PageAttach {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AttachListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AttachListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AttachListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AttachListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AttachListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // AttachCreateResponse202Headers the declared response headers of an HTTP 202 response for AttachCreate
 type AttachCreateResponse202Headers struct {
 	ContentType *string
@@ -2270,6 +2591,61 @@ func (r AttachDetachResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AttachDetachResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AttachRenameResponse200Headers the declared response headers of an HTTP 200 response for AttachRename
+type AttachRenameResponse200Headers struct {
+	ContentType *string
+}
+
+type AttachRenameResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Attach
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *AttachRenameResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AttachRenameResponse) GetJSON200() *Attach {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AttachRenameResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AttachRenameResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AttachRenameResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AttachRenameResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AttachRenameResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3052,6 +3428,19 @@ func (r TenantRenameResponse) ContentType() string {
 	return ""
 }
 
+// AttachListWithResponse List attaches
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /attaches (the `AttachList` operationId).
+func (c *ClientWithResponses) AttachListWithResponse(ctx context.Context, params *AttachListParams, reqEditors ...RequestEditorFn) (*AttachListResponse, error) {
+	rsp, err := c.AttachList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachListResponse(rsp)
+}
+
 // AttachCreateWithBodyWithResponse Attach a backing service
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -3089,6 +3478,32 @@ func (c *ClientWithResponses) AttachDetachWithResponse(ctx context.Context, id s
 		return nil, err
 	}
 	return ParseAttachDetachResponse(rsp)
+}
+
+// AttachRenameWithBodyWithResponse Rename an attach
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+func (c *ClientWithResponses) AttachRenameWithBodyWithResponse(ctx context.Context, id string, params *AttachRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachRenameResponse, error) {
+	rsp, err := c.AttachRenameWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachRenameResponse(rsp)
+}
+
+// AttachRenameWithResponse Rename an attach
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
+func (c *ClientWithResponses) AttachRenameWithResponse(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachRenameResponse, error) {
+	rsp, err := c.AttachRename(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachRenameResponse(rsp)
 }
 
 // EnvironmentListWithResponse List environments
@@ -3390,6 +3805,39 @@ func (c *ClientWithResponses) TenantRenameWithResponse(ctx context.Context, id s
 	return ParseTenantRenameResponse(rsp)
 }
 
+// ParseAttachListResponse parses an HTTP response from a AttachListWithResponse call
+func ParseAttachListResponse(rsp *http.Response) (*AttachListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AttachListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageAttach
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAttachCreateResponse parses an HTTP response from a AttachCreateWithResponse call
 func ParseAttachCreateResponse(rsp *http.Response) (*AttachCreateResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3477,6 +3925,52 @@ func ParseAttachDetachResponse(rsp *http.Response) (*AttachDetachResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseAttachRenameResponse parses an HTTP response from a AttachRenameWithResponse call
+func ParseAttachRenameResponse(rsp *http.Response) (*AttachRenameResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AttachRenameResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Attach
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers AttachRenameResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

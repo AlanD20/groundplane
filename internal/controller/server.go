@@ -192,11 +192,6 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
 	s.jsonRoute("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
 
-	// attach — attach provisions (joins the owned external network,
-	// publishes facts), detach deprovisions; mutations are typed Huma routes.
-	// List remains explicit until its global-versus-Environment scope is locked.
-	mux.HandleFunc("GET /api/v1/attaches", s.notImplemented)
-
 	// zone / route / volume / entry / script (?environment=) — destructive delete is a task
 	for _, res := range []string{"zones", "routes", "volumes", "entries", "scripts"} {
 		mux.HandleFunc("GET /api/v1/"+res, s.notImplemented)

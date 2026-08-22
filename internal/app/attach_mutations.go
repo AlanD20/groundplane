@@ -26,6 +26,7 @@ import (
 const (
 	attachCreationRoute        = "/attaches"
 	attachDeletionRoute        = "/attaches/{id}"
+	attachRenameRoute          = "/attaches/{id}/rename"
 	attachMutationTimeout      = int64(120)
 	maximumAttachMutationTries = 3
 )
@@ -51,6 +52,14 @@ type attachMutationRepository interface {
 	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
 	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
 	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
+	RenameAttachIdempotent(
+		context.Context,
+		etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[etcd.AttachRecord],
+		string,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 	CreateAttachWithTask(
 		context.Context,
 		etcd.AttachCreateScope,
@@ -109,6 +118,7 @@ type attachMutationEvidence struct {
 type attachMutationIdempotency interface {
 	PrepareCreate(context.Context, string, apiTypes.AttachRequest) (attachMutationEvidence, error)
 	PrepareDetach(context.Context, string, string) (attachMutationEvidence, error)
+	PrepareRename(context.Context, string, string, apiTypes.AttachRenameRequest) (attachMutationEvidence, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
@@ -188,6 +198,23 @@ func (service *durableAttachMutationIdempotency) PrepareDetach(
 		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
 		Path:  []idempotentintent.PathBinding{{Name: "id", Value: attachID}},
 		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+	})
+}
+
+func (service *durableAttachMutationIdempotency) PrepareRename(
+	ctx context.Context,
+	environmentID string,
+	attachID string,
+	request apiTypes.AttachRenameRequest,
+) (attachMutationEvidence, error) {
+	return service.protect(ctx, idempotentintent.CanonicalIntentV1{
+		Method: http.MethodPost, Route: attachRenameRoute,
+		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
+		Path:  []idempotentintent.PathBinding{{Name: "id", Value: attachID}},
+		Query: idempotentintent.Object(),
+		Body: idempotentintent.JSONBody(idempotentintent.Object(
+			idempotentintent.Field{Name: "name", Value: idempotentintent.String(request.Name)},
+		)),
 	})
 }
 
@@ -946,6 +973,17 @@ func (repository *durableAttachMutationRepository) ListAttaches(
 	request etcd.PageRequest,
 ) (etcd.Page[etcd.AttachRecord], error) {
 	return repository.attaches.ListAttaches(ctx, environmentID, request)
+}
+
+func (repository *durableAttachMutationRepository) RenameAttachIdempotent(
+	ctx context.Context,
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	current etcd.Versioned[etcd.AttachRecord],
+	name string,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.attaches.RenameAttachIdempotent(ctx, environment, project, current, name, marker)
 }
 
 func (repository *durableAttachMutationRepository) CreateAttachWithTask(

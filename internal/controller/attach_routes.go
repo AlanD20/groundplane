@@ -19,8 +19,10 @@ import (
 )
 
 type AttachMutator interface {
+	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
 	CreateAttach(context.Context, apiTypes.AttachRequest, string) (etcd.IdempotencyResponse, error)
 	DetachAttach(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	RenameAttach(context.Context, string, apiTypes.AttachRenameRequest, string) (etcd.IdempotencyResponse, error)
 }
 
 type attachCreateInput struct {
@@ -68,6 +70,8 @@ func (s *Server) registerAttaches() {
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.detachAttach)
 	s.setRoutePolicy("POST /api/v1/attaches", routePolicy{body: jsonBody})
+	s.registerAttachList()
+	s.registerAttachRename()
 }
 
 func (s *Server) attachRequestSchema() *huma.Schema {

@@ -514,36 +514,71 @@ func (repository *AttachRepository) ReplaceLifecycle(
 	}, nil
 }
 
-func (repository *AttachRepository) RenameAttach(
+func (repository *AttachRepository) RenameAttachIdempotent(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	current Versioned[AttachRecord],
 	name string,
-) (Versioned[AttachRecord], error) {
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	if err := validateAttachVersion(current); err != nil {
-		return Versioned[AttachRecord]{}, err
+		return IdempotencyTransactionResult{}, err
 	}
 	replacement := current.Record
 	replacement.Name = name
 	if err := validateAttachRecord(replacement); err != nil {
-		return Versioned[AttachRecord]{}, err
+		return IdempotencyTransactionResult{}, err
 	}
 	if environment.Record.ID != current.Record.EnvironmentID || project.Record.ID != environment.Record.ProjectID ||
 		environment.Revision <= 0 || project.Revision <= 0 {
-		return Versioned[AttachRecord]{}, errs.New(errs.KindScopeUnauthorized, "Attach rename scope is invalid")
+		return IdempotencyTransactionResult{}, errs.New(errs.KindScopeUnauthorized, "Attach rename scope is invalid")
 	}
-	if replacement.Name == current.Record.Name {
-		return current, nil
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != current.Record.EnvironmentID || marker.ReplayTarget == nil ||
+		marker.ReplayTarget.Kind != IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.Record.ID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach rename marker must be a completed Environment-scoped direct mutation",
+		)
 	}
-	value, err := encodeAttachRecord(replacement)
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{
+			attachNameKey(current.Record.EnvironmentID, current.Record.Name),
+			attachOwnerKey(current.Record.EnvironmentID, current.Record.ID),
+		},
+		Revision: current.ReadRevision,
+	})
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(value)
+	if len(secondary.Values) != 2 || secondary.Values[0] == nil ||
+		string(secondary.Values[0].Value) != current.Record.ID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Attach name index is missing or mismatched")
+	}
+	if secondary.Values[1] == nil || string(secondary.Values[1].Value) != current.Record.ID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Attach owner index is missing or mismatched",
+		)
+	}
 	conditions := []Condition{
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
-		{Key: attachNameKey(current.Record.EnvironmentID, replacement.Name)},
+		{
+			Key:         attachNameKey(current.Record.EnvironmentID, current.Record.Name),
+			ModRevision: secondary.Values[0].ModRevision,
+		},
+		{
+			Key:         attachOwnerKey(current.Record.EnvironmentID, current.Record.ID),
+			ModRevision: secondary.Values[1].ModRevision,
+		},
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
@@ -553,27 +588,58 @@ func (repository *AttachRepository) RenameAttach(
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
 	}
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value},
-		{Type: MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
-		{
-			Type:  MutationPut,
-			Key:   attachNameKey(current.Record.EnvironmentID, replacement.Name),
-			Value: []byte(current.Record.ID),
-		},
+	renaming := replacement.Name != current.Record.Name
+	newNameIndex := -1
+	mutations := []Mutation(nil)
+	if renaming {
+		newNameIndex = len(conditions)
+		conditions = append(conditions, Condition{Key: attachNameKey(current.Record.EnvironmentID, replacement.Name)})
+		value, encodeErr := encodeAttachRecord(replacement)
+		if encodeErr != nil {
+			return IdempotencyTransactionResult{}, encodeErr
+		}
+		defer clear(value)
+		mutations = []Mutation{
+			{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value},
+			{Type: MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
+			{
+				Type:  MutationPut,
+				Key:   attachNameKey(current.Record.EnvironmentID, replacement.Name),
+				Value: []byte(current.Record.ID),
+			},
+		}
+	}
+	plan, err := newIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*KeyValue) error {
+		if len(values) != len(conditions) {
+			return errs.New(errs.KindInternal, "Attach rename compare evidence is incomplete")
+		}
+		if values[0] == nil {
+			return errs.New(errs.KindAttachNotFound, "Attach was not found")
+		}
+		if newNameIndex >= 0 && values[newNameIndex] != nil {
+			return errs.New(errs.KindNameConflict, "Attach name already exists")
+		}
+		if values[5] != nil || values[6] != nil || values[7] != nil ||
+			project.Record.TenantID != "" && values[8] != nil {
+			return errs.New(errs.KindResourceInUse, "Attach ownership deletion is in progress")
+		}
+		if values[0].ModRevision != current.Revision {
+			return errs.New(errs.KindStateConflict, "Attach changed concurrently")
+		}
+		if values[1] == nil || string(values[1].Value) != current.Record.ID ||
+			values[2] == nil || string(values[2].Value) != current.Record.ID {
+			return errs.New(errs.KindInternal, "Attach indexes are missing or mismatched")
+		}
+		return errs.New(errs.KindStateConflict, "Attach rename scope changed concurrently")
 	})
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return IdempotencyTransactionResult{}, err
 	}
-	if !result.Succeeded {
-		if len(result.FailureReads) > 1 && result.FailureReads[1] != nil {
-			return Versioned[AttachRecord]{}, errs.New(errs.KindNameConflict, "Attach name already exists")
-		}
-		return Versioned[AttachRecord]{}, errs.New(errs.KindStateConflict, "Attach changed concurrently")
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
-	return Versioned[AttachRecord]{
-		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
+	return idempotency.Apply(ctx, marker, plan)
 }
 
 func (repository *AttachRepository) DeleteDetachedAttach(
