@@ -1,6 +1,11 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"strings"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/spf13/cobra"
+)
 
 // agent: list | show | join | config show | config set | update | remove.
 // The operational surface for pairing and per-instance config (distinct
@@ -56,11 +61,15 @@ func newAgentCmd() *cobra.Command {
 		Short: "Set an agent's runtime config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			parsedLabels, err := parseAgentLabels(labels)
+			if err != nil {
+				return err
+			}
 			path := "/api/v1/agents/" + target(fromContext(cmd), args[0]) + "/config"
 			return runReplaceSingleton(cmd, path, map[string]interface{}{
 				"pull_interval_seconds": pullInterval,
 				"max_concurrent_tasks":  maxConcurrent,
-				"labels":                labels,
+				"labels":                parsedLabels,
 			})
 		},
 	}
@@ -94,4 +103,19 @@ func newAgentCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func parseAgentLabels(values []string) (map[string]string, error) {
+	labels := make(map[string]string, len(values))
+	for _, value := range values {
+		key, labelValue, found := strings.Cut(value, "=")
+		if !found || strings.TrimSpace(key) == "" {
+			return nil, errs.New(errs.KindValidationFailed, "Agent labels must use key=value")
+		}
+		if _, exists := labels[key]; exists {
+			return nil, errs.Newf(errs.KindValidationFailed, "Agent label key is duplicated: %s", key)
+		}
+		labels[key] = labelValue
+	}
+	return labels, nil
 }

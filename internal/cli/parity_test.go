@@ -101,6 +101,48 @@ func TestAgentConfigShowUsesConfigSingleton(t *testing.T) {
 	}
 }
 
+func TestAgentConfigSetSendsKeyedLabels(t *testing.T) {
+	t.Parallel()
+
+	server := exactRequestServer(
+		t,
+		http.MethodPut,
+		"/api/v1/agents/agt_1/config",
+		`{"labels":{"arch":"arm64","zone":"edge"},"max_concurrent_tasks":3,"pull_interval_seconds":2}`,
+		http.StatusOK,
+		`{}`,
+	)
+	defer server.Close()
+
+	executeNoun(
+		t,
+		newAgentCmd(),
+		server.URL,
+		Scope{},
+		"config",
+		"set",
+		"agt_1",
+		"--pull-interval",
+		"2",
+		"--max-concurrent",
+		"3",
+		"--label",
+		"arch=arm64",
+		"--label",
+		"zone=edge",
+	)
+}
+
+func TestParseAgentLabelsRejectsMalformedAndDuplicateKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, values := range [][]string{{"missing-value"}, {"=empty-key"}, {"arch=arm64", "arch=amd64"}} {
+		if _, err := parseAgentLabels(values); err == nil {
+			t.Fatalf("parseAgentLabels(%q) error = nil", values)
+		}
+	}
+}
+
 func TestDedicatedRenameRoutesReturnUpdatedEntities(t *testing.T) {
 	// Rationale: rename is a synchronous POST update with one dedicated route,
 	// not a generic PATCH or a Task action.

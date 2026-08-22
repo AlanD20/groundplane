@@ -464,5 +464,5 @@ type AgentSummary struct {
 type AgentConfig struct {
 	PullIntervalSeconds int               `json:"pull_interval_seconds"`
 	MaxConcurrentTasks  int               `json:"max_concurrent_tasks"`
-	Labels              map[string]string `json:"labels,omitempty"`
+	Labels              map[string]string `json:"labels"`
 }
