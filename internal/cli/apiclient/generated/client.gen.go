@@ -696,6 +696,44 @@ type ZoneCreate struct {
 	Subnet        string  `json:"subnet"`
 }
 
+// ZoneRemovalImpact defines model for ZoneRemovalImpact.
+type ZoneRemovalImpact struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ZoneRemovalImpact.json
+	Schema      *string                      `json:"$schema,omitempty"`
+	Attaches    *[]ZoneRemovalImpactAttach   `json:"attaches"`
+	Databases   *[]ZoneRemovalImpactDatabase `json:"databases"`
+	ImpactToken string                       `json:"impact_token"`
+	Mode        string                       `json:"mode"`
+	Services    *[]ZoneRemovalImpactService  `json:"services"`
+	ZoneId      string                       `json:"zone_id"`
+	ZoneName    string                       `json:"zone_name"`
+}
+
+// ZoneRemovalImpactAttach defines model for ZoneRemovalImpactAttach.
+type ZoneRemovalImpactAttach struct {
+	Database      *string `json:"database,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	Id            string  `json:"id"`
+	Name          string  `json:"name"`
+	ServiceId     string  `json:"service_id"`
+	Status        string  `json:"status"`
+}
+
+// ZoneRemovalImpactDatabase defines model for ZoneRemovalImpactDatabase.
+type ZoneRemovalImpactDatabase struct {
+	AttachId string `json:"attach_id"`
+	Name     string `json:"name"`
+}
+
+// ZoneRemovalImpactService defines model for ZoneRemovalImpactService.
+type ZoneRemovalImpactService struct {
+	EnvironmentId string `json:"environment_id"`
+	Id            string `json:"id"`
+	Name          string `json:"name"`
+}
+
 // AgentListParams defines parameters for AgentList.
 type AgentListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -892,7 +930,8 @@ type ZoneCreateParams struct {
 
 // ZoneRemoveParams defines parameters for ZoneRemove.
 type ZoneRemoveParams struct {
-	IdempotencyKey string `json:"Idempotency-Key"`
+	ImpactToken    *string `form:"impact_token,omitempty" json:"impact_token,omitempty"`
+	IdempotencyKey string  `json:"Idempotency-Key"`
 }
 
 // AgentConfigSetJSONRequestBody defines body for AgentConfigSet for application/json ContentType.
@@ -1430,7 +1469,7 @@ type ClientInterface interface {
 	// Corresponds with POST /zones (the `ZoneCreate` operationId).
 	ZoneCreate(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ZoneRemove Remove an ordinary network zone
+	// ZoneRemove Remove a network zone
 	//
 	// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
 	ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1439,6 +1478,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /zones/{id} (the `ZoneShow` operationId).
 	ZoneShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneRemovalImpact Preview the exact impact of removing a network zone
+	//
+	// Corresponds with GET /zones/{id}/removal-impact (the `ZoneRemovalImpact` operationId).
+	ZoneRemovalImpact(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // AgentList List agents
@@ -2505,7 +2549,7 @@ func (c *Client) ZoneCreate(ctx context.Context, params *ZoneCreateParams, body 
 	return c.Client.Do(req)
 }
 
-// ZoneRemove Remove an ordinary network zone
+// ZoneRemove Remove a network zone
 //
 // Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
 func (c *Client) ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2525,6 +2569,21 @@ func (c *Client) ZoneRemove(ctx context.Context, id string, params *ZoneRemovePa
 // Corresponds with GET /zones/{id} (the `ZoneShow` operationId).
 func (c *Client) ZoneShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewZoneShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneRemovalImpact Preview the exact impact of removing a network zone
+//
+// Corresponds with GET /zones/{id}/removal-impact (the `ZoneRemovalImpact` operationId).
+func (c *Client) ZoneRemovalImpact(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneRemovalImpactRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -5099,6 +5158,33 @@ func NewZoneRemoveRequest(server string, id string, params *ZoneRemoveParams) (*
 		return nil, err
 	}
 
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.ImpactToken != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "impact_token", *params.ImpactToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
 	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
@@ -5137,6 +5223,40 @@ func NewZoneShowRequest(server string, id string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/zones/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewZoneRemovalImpactRequest constructs an http.Request for the ZoneRemovalImpact method
+func NewZoneRemovalImpactRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/zones/%s/removal-impact", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5660,7 +5780,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /zones (the `ZoneCreate` operationId).
 	ZoneCreateWithResponse(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ZoneCreateResponse, error)
 
-	// ZoneRemoveWithResponse Remove an ordinary network zone
+	// ZoneRemoveWithResponse Remove a network zone
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -5673,6 +5793,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /zones/{id} (the `ZoneShow` operationId).
 	ZoneShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ZoneShowResponse, error)
+
+	// ZoneRemovalImpactWithResponse Preview the exact impact of removing a network zone
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /zones/{id}/removal-impact (the `ZoneRemovalImpact` operationId).
+	ZoneRemovalImpactWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ZoneRemovalImpactResponse, error)
 }
 
 type AgentListResponse struct {
@@ -8243,6 +8370,54 @@ func (r ZoneShowResponse) ContentType() string {
 	return ""
 }
 
+type ZoneRemovalImpactResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ZoneRemovalImpact
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ZoneRemovalImpactResponse) GetJSON200() *ZoneRemovalImpact {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ZoneRemovalImpactResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ZoneRemovalImpactResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ZoneRemovalImpactResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ZoneRemovalImpactResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ZoneRemovalImpactResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // AgentListWithResponse List agents
 //
 // Returns a wrapper object for the known response body format(s).
@@ -9101,7 +9276,7 @@ func (c *ClientWithResponses) ZoneCreateWithResponse(ctx context.Context, params
 	return ParseZoneCreateResponse(rsp)
 }
 
-// ZoneRemoveWithResponse Remove an ordinary network zone
+// ZoneRemoveWithResponse Remove a network zone
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -9125,6 +9300,19 @@ func (c *ClientWithResponses) ZoneShowWithResponse(ctx context.Context, id strin
 		return nil, err
 	}
 	return ParseZoneShowResponse(rsp)
+}
+
+// ZoneRemovalImpactWithResponse Preview the exact impact of removing a network zone
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /zones/{id}/removal-impact (the `ZoneRemovalImpact` operationId).
+func (c *ClientWithResponses) ZoneRemovalImpactWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ZoneRemovalImpactResponse, error) {
+	rsp, err := c.ZoneRemovalImpact(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneRemovalImpactResponse(rsp)
 }
 
 // ParseAgentListResponse parses an HTTP response from a AgentListWithResponse call
@@ -11072,6 +11260,39 @@ func ParseZoneShowResponse(rsp *http.Response) (*ZoneShowResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Zone
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseZoneRemovalImpactResponse parses an HTTP response from a ZoneRemovalImpactWithResponse call
+func ParseZoneRemovalImpactResponse(rsp *http.Response) (*ZoneRemovalImpactResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ZoneRemovalImpactResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ZoneRemovalImpact
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

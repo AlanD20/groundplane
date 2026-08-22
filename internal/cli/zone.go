@@ -51,6 +51,24 @@ func newZoneCmd() *cobra.Command {
 		},
 	})
 
+	cmd.AddCommand(&cobra.Command{
+		Use:   "removal-impact <name>",
+		Short: "Show the exact services, attaches, and databases affected by zone removal",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := resolveZoneTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			impact, err := fromContext(cmd).Client.GetZoneRemovalImpact(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(zoneRemovalImpactFields(impact))
+			return fromContext(cmd).Out.RenderOne(fields, values, impact)
+		},
+	})
+
 	var subnet string
 	var internal bool
 	add := &cobra.Command{
@@ -87,7 +105,11 @@ func newZoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			accepted, err := fromContext(cmd).Client.RemoveZone(cmd.Context(), id)
+			impact, err := fromContext(cmd).Client.GetZoneRemovalImpact(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.RemoveZone(cmd.Context(), id, impact.ImpactToken)
 			if err != nil {
 				return err
 			}
@@ -130,5 +152,13 @@ func zoneFields(zone apiTypes.Zone) map[string]any {
 		"id": zone.ID, "environment_id": zone.EnvironmentID, "name": zone.Name,
 		"subnet": zone.Subnet, "internal": zone.Internal,
 		"owner_kind": zone.OwnerKind, "owner_id": zone.OwnerID,
+	}
+}
+
+func zoneRemovalImpactFields(impact apiTypes.ZoneRemovalImpact) map[string]any {
+	return map[string]any{
+		"zone_id": impact.ZoneID, "zone_name": impact.ZoneName, "mode": impact.Mode,
+		"impact_token": impact.ImpactToken, "attaches": impact.Attaches,
+		"services": impact.Services, "databases": impact.Databases,
 	}
 }

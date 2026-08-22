@@ -99,7 +99,7 @@ type zoneDeletionIdempotency interface {
 		string,
 		string,
 	) (etcd.IdempotencyLocator, bool, error)
-	Prepare(context.Context, etcd.IdempotencyLocator, string) (zoneDeletionEvidence, error)
+	Prepare(context.Context, etcd.IdempotencyLocator, string, string) (zoneDeletionEvidence, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
@@ -147,16 +147,23 @@ func (service *durableZoneDeletionIdempotency) Prepare(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	zoneID string,
+	impactToken string,
 ) (zoneDeletionEvidence, error) {
 	if locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
 		return zoneDeletionEvidence{}, errs.New(errs.KindInternal, "Zone deletion replay scope is invalid")
 	}
+	query := idempotentintent.Object()
+	if impactToken != "" {
+		query = idempotentintent.Object(idempotentintent.Field{
+			Name: "impact_token", Value: idempotentintent.String(impactToken),
+		})
+	}
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: zoneDeletionRoute,
 		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: locator.ScopeID},
 		Path:  []idempotentintent.PathBinding{{Name: "id", Value: zoneID}},
-		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+		Query: query, Body: idempotentintent.NoBody(),
 	})
 	if err != nil {
 		return zoneDeletionEvidence{}, err
@@ -206,6 +213,7 @@ type zoneDeletionService struct {
 	repository  zoneDeletionRepository
 	plans       zoneDeletionPlanResolver
 	idempotency zoneDeletionIdempotency
+	impacts     *zoneRemovalImpactService
 	now         func() time.Time
 }
 
@@ -228,13 +236,34 @@ func (service *zoneCreationService) RemoveZone(
 	if service == nil || service.deletions == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion service is not configured")
 	}
-	return service.deletions.RemoveZone(ctx, zoneID, idempotencyKey)
+	return service.RemoveZoneWithImpact(ctx, zoneID, idempotencyKey, "")
+}
+
+func (service *zoneCreationService) RemoveZoneWithImpact(
+	ctx context.Context,
+	zoneID string,
+	idempotencyKey string,
+	impactToken string,
+) (etcd.IdempotencyResponse, error) {
+	if service == nil || service.deletions == nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion service is not configured")
+	}
+	return service.deletions.RemoveZoneWithImpact(ctx, zoneID, idempotencyKey, impactToken)
 }
 
 func (service *zoneDeletionService) RemoveZone(
 	ctx context.Context,
 	zoneID string,
 	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	return service.RemoveZoneWithImpact(ctx, zoneID, idempotencyKey, "")
+}
+
+func (service *zoneDeletionService) RemoveZoneWithImpact(
+	ctx context.Context,
+	zoneID string,
+	idempotencyKey string,
+	impactToken string,
 ) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion context is required")
@@ -243,7 +272,7 @@ func (service *zoneDeletionService) RemoveZone(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Zone id is invalid")
 	}
 	for attempt := 0; attempt < maximumZoneDeletionAttempts; attempt++ {
-		response, err := service.removeZoneOnce(ctx, zoneID, idempotencyKey)
+		response, err := service.removeZoneOnce(ctx, zoneID, idempotencyKey, impactToken)
 		if err == nil {
 			return response, nil
 		}
@@ -259,6 +288,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 	ctx context.Context,
 	zoneID string,
 	idempotencyKey string,
+	impactToken string,
 ) (etcd.IdempotencyResponse, error) {
 	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetZone, ID: zoneID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
@@ -268,13 +298,26 @@ func (service *zoneDeletionService) removeZoneOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if indexed {
-		return service.replayZoneDeletion(ctx, locator, target)
+		return service.replayZoneDeletion(ctx, locator, target, impactToken)
 	}
 	zone, err := service.repository.GetZone(ctx, zoneID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	if zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject {
+		if service.impacts == nil {
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Zone removal impact service is not configured",
+			)
+		}
+		impact, impactErr := service.impacts.GetZoneRemovalImpact(ctx, zoneID)
+		if impactErr != nil {
+			return etcd.IdempotencyResponse{}, impactErr
+		}
+		if impactToken == "" || impact.ImpactToken != impactToken {
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "backing Zone removal impact changed")
+		}
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindResourceInUse,
 			"backing-owned Zone removal requires the Attach cascade",
@@ -298,7 +341,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
 		Method: http.MethodDelete, Route: zoneDeletionRoute, Key: idempotencyKey,
 	}
-	evidence, err := service.idempotency.Prepare(ctx, locator, zoneID)
+	evidence, err := service.idempotency.Prepare(ctx, locator, zoneID, impactToken)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -373,8 +416,9 @@ func (service *zoneDeletionService) replayZoneDeletion(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	target etcd.IdempotencyReplayTarget,
+	impactToken string,
 ) (etcd.IdempotencyResponse, error) {
-	evidence, err := service.idempotency.Prepare(ctx, locator, target.ID)
+	evidence, err := service.idempotency.Prepare(ctx, locator, target.ID, impactToken)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

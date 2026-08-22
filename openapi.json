@@ -2062,6 +2062,136 @@
           "internal"
         ],
         "type": "object"
+      },
+      "ZoneRemovalImpact": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ZoneRemovalImpact.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "attaches": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneRemovalImpactAttach"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "databases": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneRemovalImpactDatabase"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "impact_token": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneRemovalImpactService"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "zone_id": {
+            "type": "string"
+          },
+          "zone_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "zone_id",
+          "zone_name",
+          "mode",
+          "impact_token",
+          "attaches",
+          "services",
+          "databases"
+        ],
+        "type": "object"
+      },
+      "ZoneRemovalImpactAttach": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "environment_id",
+          "service_id",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ZoneRemovalImpactDatabase": {
+        "additionalProperties": false,
+        "properties": {
+          "attach_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attach_id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ZoneRemovalImpactService": {
+        "additionalProperties": false,
+        "properties": {
+          "environment_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "environment_id"
+        ],
+        "type": "object"
       }
     }
   },
@@ -4845,6 +4975,15 @@
               "pattern": "^[A-Za-z0-9._:-]+$",
               "type": "string"
             }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "impact_token",
+            "schema": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4876,7 +5015,7 @@
             "description": "Error"
           }
         },
-        "summary": "Remove an ordinary network zone",
+        "summary": "Remove a network zone",
         "tags": [
           "Zone"
         ]
@@ -4917,6 +5056,48 @@
           }
         },
         "summary": "Show a network zone",
+        "tags": [
+          "Zone"
+        ]
+      }
+    },
+    "/zones/{id}/removal-impact": {
+      "get": {
+        "operationId": "zone.removal-impact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneRemovalImpact"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Preview the exact impact of removing a network zone",
         "tags": [
           "Zone"
         ]

@@ -139,6 +139,43 @@ const (
 	ZoneOwnerBackingProject ZoneOwnerKind = "backing_project"
 )
 
+type ZoneRemovalImpactMode string
+
+const (
+	ZoneRemovalImpactOrdinary ZoneRemovalImpactMode = "ordinary"
+	ZoneRemovalImpactCascade  ZoneRemovalImpactMode = "backing_cascade"
+)
+
+type ZoneRemovalImpactAttach struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	EnvironmentID string `json:"environment_id"`
+	ServiceID     string `json:"service_id"`
+	Database      string `json:"database,omitempty"`
+	Status        string `json:"status"`
+}
+
+type ZoneRemovalImpactService struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	EnvironmentID string `json:"environment_id"`
+}
+
+type ZoneRemovalImpactDatabase struct {
+	AttachID string `json:"attach_id"`
+	Name     string `json:"name"`
+}
+
+type ZoneRemovalImpact struct {
+	ZoneID      string                      `json:"zone_id"`
+	ZoneName    string                      `json:"zone_name"`
+	Mode        ZoneRemovalImpactMode       `json:"mode"`
+	ImpactToken string                      `json:"impact_token"`
+	Attaches    []ZoneRemovalImpactAttach   `json:"attaches"`
+	Services    []ZoneRemovalImpactService  `json:"services"`
+	Databases   []ZoneRemovalImpactDatabase `json:"databases"`
+}
+
 type Route struct {
 	ID              string `json:"id"`
 	EnvironmentID   string `json:"environment_id"`

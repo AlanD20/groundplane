@@ -176,6 +176,7 @@ type zoneCreationService struct {
 	repository  zoneCreationRepository
 	idempotency zoneCreationIdempotency
 	deletions   *zoneDeletionService
+	impacts     *zoneRemovalImpactService
 	now         func() time.Time
 }
 

@@ -370,7 +370,19 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone deletion service: %w", err)
 	}
+	zoneImpacts, err := newZoneRemovalImpactService(
+		zoneDeletionRepository,
+		attachRecords,
+		serviceRecords,
+		attachFactValues,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone removal impact service: %w", err)
+	}
 	zoneMutations.deletions = zoneDeletions
+	zoneMutations.impacts = zoneImpacts
+	zoneDeletions.impacts = zoneImpacts
 	serviceMutationIdempotency, err := newDurableServiceMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()

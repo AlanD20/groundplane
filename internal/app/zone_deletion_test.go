@@ -72,6 +72,7 @@ func (*fakeZoneDeletionIdempotency) Prepare(
 	context.Context,
 	etcd.IdempotencyLocator,
 	string,
+	string,
 ) (zoneDeletionEvidence, error) {
 	return zoneDeletionEvidence{}, nil
 }

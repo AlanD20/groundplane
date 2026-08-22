@@ -48,6 +48,11 @@ type zoneCreateInput struct {
 type zoneRemoveInput struct {
 	ID             string `path:"id" pattern:"^net_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	ImpactToken    string `query:"impact_token" required:"false" pattern:"^[a-f0-9]{64}$"`
+}
+
+type zoneRemovalImpactMutator interface {
+	RemoveZoneWithImpact(context.Context, string, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type zoneOutput struct {
@@ -105,14 +110,15 @@ func (s *Server) registerZones() {
 		OperationID: "zone.show", Method: http.MethodGet, Path: "/zones/{id}",
 		Summary: "Show a network zone", Tags: []string{"Zone"},
 	}, s.showZone)
+	s.registerZoneRemovalImpact()
 	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
 		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
 	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "zone.remove", Method: http.MethodDelete, Path: "/zones/{id}",
-		Summary: "Remove an ordinary network zone", Tags: []string{"Zone"},
+		Summary: "Remove a network zone", Tags: []string{"Zone"},
 		DefaultStatus: http.StatusAccepted,
-		Middlewares:   huma.Middlewares{s.rejectZoneDeleteBody, s.rejectZoneQuery},
+		Middlewares:   huma.Middlewares{s.rejectZoneDeleteBody, s.validateZoneDeleteQuery},
 		Responses:     attachMutationResponses(taskAcceptedSchema),
 	}, s.removeZone)
 	s.setRoutePolicy("POST /api/v1/zones", routePolicy{body: jsonBody})
@@ -125,7 +131,20 @@ func (s *Server) removeZone(
 	if s.zoneMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Zone mutator is not configured")
 	}
-	response, err := s.zoneMutations.RemoveZone(ctx, request.ID, request.IdempotencyKey)
+	mutator, ok := s.zoneMutations.(zoneRemovalImpactMutator)
+	if !ok {
+		if request.ImpactToken != "" {
+			return nil, errs.New(errs.KindInternal, "Zone impact mutator is not configured")
+		}
+		response, err := s.zoneMutations.RemoveZone(ctx, request.ID, request.IdempotencyKey)
+		if err != nil {
+			return nil, normalizeProjectError(err)
+		}
+		return s.zoneMutationResponse(response), nil
+	}
+	response, err := mutator.RemoveZoneWithImpact(
+		ctx, request.ID, request.IdempotencyKey, request.ImpactToken,
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -343,6 +362,17 @@ func (s *Server) rejectZoneQuery(ctx huma.Context, next func(huma.Context)) {
 	if len(requestURL.Query()) != 0 {
 		s.writeZoneProblem(ctx, "Zone request query is invalid")
 		return
+	}
+	next(ctx)
+}
+
+func (s *Server) validateZoneDeleteQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	for key, values := range requestURL.Query() {
+		if key != "impact_token" || len(values) != 1 {
+			s.writeZoneProblem(ctx, "Zone deletion query is invalid")
+			return
+		}
 	}
 	next(ctx)
 }

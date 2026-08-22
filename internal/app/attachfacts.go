@@ -213,6 +213,28 @@ func (service *AttachFactService) ResolveReadyDatabase(
 	})
 }
 
+// ResolveRemovalDatabase exposes only the stable database identity required by
+// a destructive impact preview. Failed provisioning may have applied the
+// database side effect, so its sealed identity remains part of the cascade.
+func (service *AttachFactService) ResolveRemovalDatabase(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	consume func(string) error,
+) error {
+	if ctx == nil || consume == nil {
+		return errs.New(errs.KindValidationFailed, "Attach removal database context and consumer are required")
+	}
+	if len(current.Record.FactSets) == 0 {
+		return consume("")
+	}
+	if current.Record.Status != core.AttachReady && current.Record.Status != core.AttachFailed {
+		return errs.New(errs.KindStateConflict, "Attach must be terminal before backing Zone removal")
+	}
+	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
+		return consume(bundle.Identity.Database)
+	})
+}
+
 // ResolveFact resolves mutable labels on every call and exposes one verified
 // value only for the duration of consume.
 func (service *AttachFactService) ResolveFact(

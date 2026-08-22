@@ -122,17 +122,79 @@ func (c *Client) GetZone(ctx context.Context, id string) (apiTypes.Zone, error) 
 	return zoneFromGenerated(*parsed), nil
 }
 
-func (c *Client) RemoveZone(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) GetZoneRemovalImpact(ctx context.Context, id string) (apiTypes.ZoneRemovalImpact, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.ZoneRemovalImpact{}, err
+	}
+	path := "/api/v1/zones/" + id + "/removal-impact"
+	response, err := client.ZoneRemovalImpactWithResponse(ctx, id)
+	if err != nil {
+		return apiTypes.ZoneRemovalImpact{}, generatedCallError(ctx, http.MethodGet, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.ZoneRemovalImpact{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.ZoneRemovalImpact{}
+		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.ZoneRemovalImpact{}, err
+		}
+	}
+	attaches := []generated.ZoneRemovalImpactAttach{}
+	if parsed.Attaches != nil {
+		attaches = *parsed.Attaches
+	}
+	services := []generated.ZoneRemovalImpactService{}
+	if parsed.Services != nil {
+		services = *parsed.Services
+	}
+	databases := []generated.ZoneRemovalImpactDatabase{}
+	if parsed.Databases != nil {
+		databases = *parsed.Databases
+	}
+	impact := apiTypes.ZoneRemovalImpact{
+		ZoneID: parsed.ZoneId, ZoneName: parsed.ZoneName,
+		Mode: apiTypes.ZoneRemovalImpactMode(parsed.Mode), ImpactToken: parsed.ImpactToken,
+		Attaches:  make([]apiTypes.ZoneRemovalImpactAttach, len(attaches)),
+		Services:  make([]apiTypes.ZoneRemovalImpactService, len(services)),
+		Databases: make([]apiTypes.ZoneRemovalImpactDatabase, len(databases)),
+	}
+	for index, item := range attaches {
+		database := ""
+		if item.Database != nil {
+			database = *item.Database
+		}
+		impact.Attaches[index] = apiTypes.ZoneRemovalImpactAttach{
+			ID: item.Id, Name: item.Name, EnvironmentID: item.EnvironmentId,
+			ServiceID: item.ServiceId, Database: database, Status: item.Status,
+		}
+	}
+	for index, item := range services {
+		impact.Services[index] = apiTypes.ZoneRemovalImpactService{
+			ID: item.Id, Name: item.Name, EnvironmentID: item.EnvironmentId,
+		}
+	}
+	for index, item := range databases {
+		impact.Databases[index] = apiTypes.ZoneRemovalImpactDatabase{AttachID: item.AttachId, Name: item.Name}
+	}
+	return impact, nil
+}
+
+func (c *Client) RemoveZone(ctx context.Context, id string, impactToken string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/zones/" + id
-	response, err := client.ZoneRemoveWithResponse(
-		ctx,
-		id,
-		&generated.ZoneRemoveParams{IdempotencyKey: ids.NewULID()},
-	)
+	params := &generated.ZoneRemoveParams{IdempotencyKey: ids.NewULID()}
+	if impactToken != "" {
+		params.ImpactToken = &impactToken
+	}
+	response, err := client.ZoneRemoveWithResponse(ctx, id, params)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
 	}
