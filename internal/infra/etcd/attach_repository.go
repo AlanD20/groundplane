@@ -547,7 +547,8 @@ func validateAttachCreateScope(
 	grantIDs := make([]string, 0, len(scope.Grants))
 	for _, grant := range scope.Grants {
 		if grant.Revision <= 0 || grant.Record.EnvironmentID != record.EnvironmentID ||
-			grant.Record.BackingServiceID != record.BackingServiceID || grant.Record.Status != core.AttachReady {
+			grant.Record.BackingServiceID != record.BackingServiceID ||
+			grant.Record.BackingNetworkID != record.BackingNetworkID || grant.Record.Status != core.AttachReady {
 			return errs.New(
 				errs.KindScopeUnauthorized,
 				"Attach grant must be ready in the same Environment and backing Service",
@@ -641,7 +642,8 @@ func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRec
 func attachImmutableEqual(left AttachRecord, right AttachRecord) bool {
 	if left.ID != right.ID || left.EnvironmentID != right.EnvironmentID || left.Name != right.Name ||
 		left.BackingProjectID != right.BackingProjectID || left.BackingEnvironmentID != right.BackingEnvironmentID ||
-		left.BackingServiceID != right.BackingServiceID || !left.CreatedAt.Equal(right.CreatedAt) ||
+		left.BackingServiceID != right.BackingServiceID || left.BackingNetworkID != right.BackingNetworkID ||
+		!left.CreatedAt.Equal(right.CreatedAt) ||
 		!slices.Equal(left.ServiceIDs, right.ServiceIDs) || !slices.Equal(left.GrantAttachIDs, right.GrantAttachIDs) ||
 		len(left.FactSets) != len(right.FactSets) {
 		return false

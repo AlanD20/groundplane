@@ -40,6 +40,9 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	if resolved.Record.ID != record.ID || resolved.ReadRevision != created.Revision {
 		t.Fatalf("ResolveAttach() = %#v", resolved)
 	}
+	if resolved.Record.BackingNetworkID != record.BackingNetworkID {
+		t.Fatalf("ResolveAttach() lost backing network binding: %#v", resolved.Record)
+	}
 	page, err := repository.ListAttaches(ctx, record.EnvironmentID, PageRequest{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListAttaches() error = %v", err)
@@ -104,7 +107,8 @@ func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
 		t.Fatalf("RetryAttachOperation() error = %v", err)
 	}
 	if retried.ID != record.ID || retried.Name != record.Name || retried.TaskID != retryTaskID ||
-		retried.Status != core.AttachPending || len(retried.FactSets) != len(record.FactSets) ||
+		retried.Status != core.AttachPending || retried.BackingNetworkID != record.BackingNetworkID ||
+		len(retried.FactSets) != len(record.FactSets) ||
 		retried.FactSets[0].Facts[0] != record.FactSets[0].Facts[0] {
 		t.Fatalf("RetryAttachOperation() changed durable identity: %#v", retried)
 	}
@@ -417,6 +421,7 @@ func testPendingAttach(
 		scope.BackingProject.Record.ID,
 		scope.BackingEnvironment.Record.ID,
 		scope.BackingService.Record.Desired.ID,
+		ids.NewAt(ids.KindNetwork, testAttachTime, 200),
 		[]string{scope.Services[0].Record.Desired.ID},
 		grantIDs,
 		factSets,
@@ -513,7 +518,6 @@ func createTestAttach(
 		},
 		TaskID: task.ID, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
 	}
-	networkID := ids.NewAt(ids.KindNetwork, record.CreatedAt, seed+1000)
 	renderInput := AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: record.ID,
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
@@ -529,7 +533,7 @@ func createTestAttach(
 		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
 		Volumes:             append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		NetworkJoins: []AttachTaskNetworkJoin{{
-			NetworkID: networkID, ServiceIDs: append([]string(nil), record.ServiceIDs...),
+			NetworkID: record.BackingNetworkID, ServiceIDs: append([]string(nil), record.ServiceIDs...),
 		}},
 	}
 	result, err := repository.CreateAttachWithTask(ctx, scope, record, facts, renderInput, task, marker)

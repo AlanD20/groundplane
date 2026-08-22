@@ -96,6 +96,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	taskID := ids.NewAt(ids.KindTask, now, 3)
 	backingServiceID := ids.NewAt(ids.KindService, now, 4)
 	backingEnvironmentID := ids.NewAt(ids.KindEnvironment, now, 5)
+	networkID := ids.NewAt(ids.KindNetwork, now, 20)
 	consumerServiceID := reader.projection.Services[0].ID
 	grantIDs := []string(nil)
 	factSets := []etcd.AttachFactSetMetadata(nil)
@@ -108,7 +109,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	}
 	record, err := etcd.NewPendingAttachRecord(
 		attachID, reader.environment.ID, "api-db", ids.NewAt(ids.KindProject, now, 7),
-		backingEnvironmentID, backingServiceID, []string{consumerServiceID}, grantIDs, factSets, taskID, now,
+		backingEnvironmentID, backingServiceID, networkID, []string{consumerServiceID}, grantIDs, factSets, taskID, now,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
@@ -131,7 +132,6 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 			ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
 		},
 	}
-	networkID := ids.NewAt(ids.KindNetwork, now, 20)
 	input := etcd.AttachTaskRenderInput{
 		PlanID: ids.NewAt(ids.KindPlan, now, 10), AttachID: attachID,
 		TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug,

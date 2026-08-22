@@ -45,8 +45,9 @@ type AttachFactSetMetadata struct {
 	Facts         []AttachFactDefinition `json:"facts"`
 }
 
-// AttachRecord stores only stable ownership, lifecycle, and listable fact
-// schema. Rendered fact bytes live in the separately encrypted envelope.
+// AttachRecord stores only stable ownership, lifecycle, the resolved backing
+// network binding, and listable fact schema. Rendered fact bytes live in the
+// separately encrypted envelope.
 type AttachRecord struct {
 	ID                   string                  `json:"id"`
 	EnvironmentID        string                  `json:"environment_id"`
@@ -54,6 +55,7 @@ type AttachRecord struct {
 	BackingProjectID     string                  `json:"backing_project_id"`
 	BackingEnvironmentID string                  `json:"backing_environment_id"`
 	BackingServiceID     string                  `json:"backing_service_id"`
+	BackingNetworkID     string                  `json:"backing_network_id"`
 	ServiceIDs           []string                `json:"service_ids"`
 	GrantAttachIDs       []string                `json:"grant_attach_ids,omitempty"`
 	FactSets             []AttachFactSetMetadata `json:"fact_sets,omitempty"`
@@ -81,6 +83,7 @@ func NewPendingAttachRecord(
 	backingProjectID string,
 	backingEnvironmentID string,
 	backingServiceID string,
+	backingNetworkID string,
 	serviceIDs []string,
 	grantAttachIDs []string,
 	factSets []AttachFactSetMetadata,
@@ -94,6 +97,7 @@ func NewPendingAttachRecord(
 		BackingProjectID:     backingProjectID,
 		BackingEnvironmentID: backingEnvironmentID,
 		BackingServiceID:     backingServiceID,
+		BackingNetworkID:     backingNetworkID,
 		ServiceIDs:           append([]string(nil), serviceIDs...),
 		GrantAttachIDs:       append([]string(nil), grantAttachIDs...),
 		FactSets:             cloneAttachFactSets(factSets),
@@ -232,6 +236,7 @@ func validateAttachRecord(record AttachRecord) error {
 		{ids.KindProject, record.BackingProjectID, "Attach backing project"},
 		{ids.KindEnvironment, record.BackingEnvironmentID, "Attach backing environment"},
 		{ids.KindService, record.BackingServiceID, "Attach backing service"},
+		{ids.KindNetwork, record.BackingNetworkID, "Attach backing network"},
 		{ids.KindTask, record.TaskID, "Attach task"},
 	} {
 		if err := validateAttachStableID(check.kind, check.value, check.field); err != nil {

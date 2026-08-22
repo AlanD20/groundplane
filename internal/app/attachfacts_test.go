@@ -35,6 +35,7 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	backingProjectID := ids.NewAt(ids.KindProject, now, 2)
 	backingEnvironmentID := ids.NewAt(ids.KindEnvironment, now, 3)
 	backingServiceID := ids.NewAt(ids.KindService, now, 4)
+	backingNetworkID := ids.NewAt(ids.KindNetwork, now, 40)
 	serviceID := ids.NewAt(ids.KindService, now, 5)
 	ownerID := ids.NewAt(ids.KindAttach, now, 6)
 	grantID := ids.NewAt(ids.KindAttach, now, 7)
@@ -65,7 +66,7 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	taskID := ids.NewAt(ids.KindTask, now, 9)
 	pending, err := etcd.NewPendingAttachRecord(
 		ownerID, environmentID, "api-db", backingProjectID, backingEnvironmentID, backingServiceID,
-		[]string{serviceID}, []string{grantID}, metadata, taskID, now,
+		backingNetworkID, []string{serviceID}, []string{grantID}, metadata, taskID, now,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
@@ -99,6 +100,7 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		backingProjectID,
 		backingEnvironmentID,
 		backingServiceID,
+		backingNetworkID,
 		serviceID,
 		[]string{grantID},
 		metadata,
@@ -114,6 +116,7 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		backingProjectID,
 		backingEnvironmentID,
 		backingServiceID,
+		backingNetworkID,
 		serviceID,
 		nil,
 		grantMetadata,
@@ -167,6 +170,7 @@ func TestAttachFactServiceRequiresReadyAttach(t *testing.T) {
 		ids.NewAt(ids.KindProject, now, 3),
 		ids.NewAt(ids.KindEnvironment, now, 4),
 		ids.NewAt(ids.KindService, now, 5),
+		ids.NewAt(ids.KindNetwork, now, 8),
 		ids.NewAt(ids.KindService, now, 6),
 		nil,
 		[]etcd.AttachFactSetMetadata{{Facts: []etcd.AttachFactDefinition{{Key: "test_DATABASE"}}}},
@@ -271,6 +275,7 @@ func readyAttachRecord(
 	backingProjectID string,
 	backingEnvironmentID string,
 	backingServiceID string,
+	backingNetworkID string,
 	serviceID string,
 	grantIDs []string,
 	factSets []etcd.AttachFactSetMetadata,
@@ -285,6 +290,7 @@ func readyAttachRecord(
 		backingProjectID,
 		backingEnvironmentID,
 		backingServiceID,
+		backingNetworkID,
 		[]string{serviceID},
 		grantIDs,
 		factSets,
