@@ -951,6 +951,8 @@ func (repository *TaskRepository) acknowledgeTask(
 			validateStableID(ids.KindEnvironment, task.Target) == nil
 		environmentRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
 			validateStableID(ids.KindEnvironment, task.Target) == nil
+		zoneRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
+			validateStableID(ids.KindNetwork, task.Target) == nil
 		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
@@ -978,6 +980,13 @@ func (repository *TaskRepository) acknowledgeTask(
 				}
 				if environmentRemoval {
 					if err := repository.validateEnvironmentRemovalReplay(
+						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+					); err != nil {
+						return Versioned[TaskRecord]{}, err
+					}
+				}
+				if zoneRemoval {
+					if err := repository.validateZoneRemovalReplay(
 						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 					); err != nil {
 						return Versioned[TaskRecord]{}, err
@@ -1031,6 +1040,15 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if environmentRemoval && terminalStatus == TaskStatusCompleted {
 			processed, err := repository.finalizeEnvironmentBlueprintRevisionBatch(ctx, task, terminalAt)
+			if err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+			if processed {
+				continue
+			}
+		}
+		if zoneRemoval && terminalStatus == TaskStatusCompleted {
+			processed, err := repository.finalizeZoneServiceMembershipBatch(ctx, task, terminalAt)
 			if err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
@@ -1178,6 +1196,21 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			conditions = append(conditions, environmentConditions...)
 			mutations = append(mutations, environmentMutations...)
+		}
+		if zoneRemoval {
+			zoneConditions, zoneMutations, err := repository.prepareZoneRemovalAcknowledgement(
+				ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+			)
+			if err != nil {
+				clear(terminalValue)
+				clear(markerValue)
+				clear(retentionValue)
+				clear(environmentValue)
+				return Versioned[TaskRecord]{}, err
+			}
+			defer clearMutationValues(zoneMutations)
+			conditions = append(conditions, zoneConditions...)
+			mutations = append(mutations, zoneMutations...)
 		}
 		attachChange, err := repository.prepareAttachTaskAcknowledgement(
 			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,

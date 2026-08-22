@@ -890,6 +890,11 @@ type ZoneCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ZoneRemoveParams defines parameters for ZoneRemove.
+type ZoneRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // AgentConfigSetJSONRequestBody defines body for AgentConfigSet for application/json ContentType.
 type AgentConfigSetJSONRequestBody = AgentConfigReplacement
 
@@ -1424,6 +1429,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /zones (the `ZoneCreate` operationId).
 	ZoneCreate(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneRemove Remove an ordinary network zone
+	//
+	// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+	ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ZoneShow Show a network zone
 	//
@@ -2485,6 +2495,21 @@ func (c *Client) ZoneCreateWithBody(ctx context.Context, params *ZoneCreateParam
 // Corresponds with POST /zones (the `ZoneCreate` operationId).
 func (c *Client) ZoneCreate(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewZoneCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneRemove Remove an ordinary network zone
+//
+// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+func (c *Client) ZoneRemove(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5048,6 +5073,53 @@ func NewZoneCreateRequestWithBody(server string, params *ZoneCreateParams, conte
 	return req, nil
 }
 
+// NewZoneRemoveRequest constructs an http.Request for the ZoneRemove method
+func NewZoneRemoveRequest(server string, id string, params *ZoneRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/zones/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewZoneShowRequest constructs an http.Request for the ZoneShow method
 func NewZoneShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -5587,6 +5659,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /zones (the `ZoneCreate` operationId).
 	ZoneCreateWithResponse(ctx context.Context, params *ZoneCreateParams, body ZoneCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ZoneCreateResponse, error)
+
+	// ZoneRemoveWithResponse Remove an ordinary network zone
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+	ZoneRemoveWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error)
 
 	// ZoneShowWithResponse Show a network zone
 	//
@@ -8061,6 +8140,61 @@ func (r ZoneCreateResponse) ContentType() string {
 	return ""
 }
 
+// ZoneRemoveResponse202Headers the declared response headers of an HTTP 202 response for ZoneRemove
+type ZoneRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type ZoneRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ZoneRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ZoneRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ZoneRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ZoneRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ZoneRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ZoneRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ZoneRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ZoneShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8965,6 +9099,19 @@ func (c *ClientWithResponses) ZoneCreateWithResponse(ctx context.Context, params
 		return nil, err
 	}
 	return ParseZoneCreateResponse(rsp)
+}
+
+// ZoneRemoveWithResponse Remove an ordinary network zone
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /zones/{id} (the `ZoneRemove` operationId).
+func (c *ClientWithResponses) ZoneRemoveWithResponse(ctx context.Context, id string, params *ZoneRemoveParams, reqEditors ...RequestEditorFn) (*ZoneRemoveResponse, error) {
+	rsp, err := c.ZoneRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneRemoveResponse(rsp)
 }
 
 // ZoneShowWithResponse Show a network zone
@@ -10858,6 +11005,52 @@ func ParseZoneCreateResponse(rsp *http.Response) (*ZoneCreateResponse, error) {
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseZoneRemoveResponse parses an HTTP response from a ZoneRemoveWithResponse call
+func ParseZoneRemoveResponse(rsp *http.Response) (*ZoneRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ZoneRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ZoneRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

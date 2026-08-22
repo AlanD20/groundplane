@@ -252,6 +252,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone creation repositories: %w", err)
 	}
+	zoneDeletionRepository, err := newDurableZoneDeletionRepository(hierarchyRecords, zoneRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone deletion repositories: %w", err)
+	}
 	routeMutationRepository, err := newDurableRouteMutationRepository(
 		hierarchyRecords, serviceRecords, routeRecords,
 	)
@@ -351,6 +356,21 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone creation service: %w", err)
 	}
+	zoneDeletionIdempotency, err := newDurableZoneDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone deletion idempotency: %w", err)
+	}
+	zoneDeletions, err := newZoneDeletionService(
+		zoneDeletionRepository,
+		planResolver,
+		zoneDeletionIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Zone deletion service: %w", err)
+	}
+	zoneMutations.deletions = zoneDeletions
 	serviceMutationIdempotency, err := newDurableServiceMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()

@@ -79,6 +79,25 @@ func (registry zonePoolRegistry) reserve(
 	return next, nil
 }
 
+func (registry zonePoolRegistry) release(zone ZoneRecord) (zonePoolRegistry, error) {
+	if err := validateZonePoolRegistry(registry); err != nil {
+		return zonePoolRegistry{}, err
+	}
+	if err := validateZoneRecord(zone); err != nil {
+		return zonePoolRegistry{}, err
+	}
+	if registry.Reservations[zone.Desired.ID] != zone.Desired.Subnet {
+		return zonePoolRegistry{}, errs.New(errs.KindStateConflict, "Zone subnet reservation changed")
+	}
+	next := zonePoolRegistry{Reservations: make(map[string]string, len(registry.Reservations)-1)}
+	for zoneID, subnet := range registry.Reservations {
+		if zoneID != zone.Desired.ID {
+			next.Reservations[zoneID] = subnet
+		}
+	}
+	return next, nil
+}
+
 func (registry zonePoolRegistry) prefixes() ([]netip.Prefix, error) {
 	reserved := make([]netip.Prefix, 0, len(registry.Reservations))
 	for zoneID, value := range registry.Reservations {

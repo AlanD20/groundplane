@@ -233,7 +233,6 @@ func (s *Server) routes() {
 
 	// Zone reads and synchronous creation are typed Huma operations. Task-backed
 	// removal remains explicit; Zone fields are immutable and have no PATCH.
-	mux.HandleFunc("DELETE /api/v1/zones/{id}", s.acceptTask)
 
 	// Route reads and synchronous create/exposure edits are typed Huma
 	// operations. Destructive removal remains task-backed.

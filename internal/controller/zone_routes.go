@@ -27,6 +27,7 @@ type ZoneReader interface {
 
 type ZoneMutator interface {
 	CreateZone(context.Context, apiTypes.ZoneCreate, string) (etcd.IdempotencyResponse, error)
+	RemoveZone(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type zoneListInput struct {
@@ -42,6 +43,11 @@ type zoneShowInput struct {
 type zoneCreateInput struct {
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	RawBody        []byte
+}
+
+type zoneRemoveInput struct {
+	ID             string `path:"id" pattern:"^net_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type zoneOutput struct {
@@ -99,7 +105,31 @@ func (s *Server) registerZones() {
 		OperationID: "zone.show", Method: http.MethodGet, Path: "/zones/{id}",
 		Summary: "Show a network zone", Tags: []string{"Zone"},
 	}, s.showZone)
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
+	)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "zone.remove", Method: http.MethodDelete, Path: "/zones/{id}",
+		Summary: "Remove an ordinary network zone", Tags: []string{"Zone"},
+		DefaultStatus: http.StatusAccepted,
+		Middlewares:   huma.Middlewares{s.rejectZoneDeleteBody, s.rejectZoneQuery},
+		Responses:     attachMutationResponses(taskAcceptedSchema),
+	}, s.removeZone)
 	s.setRoutePolicy("POST /api/v1/zones", routePolicy{body: jsonBody})
+}
+
+func (s *Server) removeZone(
+	ctx context.Context,
+	request *zoneRemoveInput,
+) (*zoneMutationOutput, error) {
+	if s.zoneMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Zone mutator is not configured")
+	}
+	response, err := s.zoneMutations.RemoveZone(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return s.zoneMutationResponse(response), nil
 }
 
 func (s *Server) createZone(
@@ -312,6 +342,16 @@ func (s *Server) rejectZoneQuery(ctx huma.Context, next func(huma.Context)) {
 	requestURL := ctx.URL()
 	if len(requestURL.Query()) != 0 {
 		s.writeZoneProblem(ctx, "Zone request query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectZoneDeleteBody(ctx huma.Context, next func(huma.Context)) {
+	var probe [1]byte
+	count, err := ctx.BodyReader().Read(probe[:])
+	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		s.writeZoneProblem(ctx, "Zone deletion body is not allowed")
 		return
 	}
 	next(ctx)

@@ -122,6 +122,28 @@ func (c *Client) GetZone(ctx context.Context, id string) (apiTypes.Zone, error) 
 	return zoneFromGenerated(*parsed), nil
 }
 
+func (c *Client) RemoveZone(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/zones/" + id
+	response, err := client.ZoneRemoveWithResponse(
+		ctx,
+		id,
+		&generated.ZoneRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+}
+
 func zoneFromGenerated(zone generated.Zone) apiTypes.Zone {
 	return apiTypes.Zone{
 		ID: zone.Id, EnvironmentID: zone.EnvironmentId, Name: zone.Name,

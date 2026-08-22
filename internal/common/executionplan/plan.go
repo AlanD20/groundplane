@@ -187,6 +187,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH) {
 		return validateArtifactFreeAdapterPlan(plan)
 	}
+	if len(plan.Artifacts) == 0 && validateID(ids.KindNetwork, plan.TargetId) == nil {
+		return validateArtifactFreeManagedNetworkRemovePlan(plan)
+	}
 	if len(plan.Artifacts) == 0 {
 		return validateArtifactFreeEnvironmentRemovePlan(plan)
 	}
@@ -281,6 +284,22 @@ func validateArtifactFreeEnvironmentRemovePlan(plan *agentpb.ExecutionPlan) erro
 	remove := step.GetEnvironmentDirectoryRemove()
 	if remove == nil || remove.EnvironmentId != plan.TargetId {
 		return errs.New(errs.KindValidationFailed, "artifact-free Environment remove plan target is invalid")
+	}
+	return nil
+}
+
+func validateArtifactFreeManagedNetworkRemovePlan(plan *agentpb.ExecutionPlan) error {
+	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE ||
+		validateID(ids.KindNetwork, plan.TargetId) != nil || len(plan.Steps) != 1 {
+		return errs.New(errs.KindValidationFailed, "artifact-free managed network remove plan shape is invalid")
+	}
+	step := plan.Steps[0]
+	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil); err != nil {
+		return err
+	}
+	remove := step.GetManagedNetworkRemove()
+	if remove == nil || remove.NetworkId != plan.TargetId {
+		return errs.New(errs.KindValidationFailed, "managed network removal does not identify the plan target")
 	}
 	return nil
 }
@@ -559,6 +578,15 @@ func validateStep(
 		return validateMaterializeFile(renderGeneration, payload.MaterializeFile, artifacts)
 	case *agentpb.ExecutionStep_AdapterProcedure:
 		return validateAdapterProcedure(operation, payload.AdapterProcedure)
+	case *agentpb.ExecutionStep_ManagedNetworkRemove:
+		remove := payload.ManagedNetworkRemove
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil ||
+			validateID(ids.KindNetwork, remove.NetworkId) != nil ||
+			validateID(ids.KindEnvironment, remove.EnvironmentId) != nil ||
+			remove.DockerName != "gp_net_"+strings.ToLower(remove.NetworkId) {
+			return errs.New(errs.KindValidationFailed, "managed network remove payload is invalid")
+		}
+		return nil
 	default:
 		return errs.New(errs.KindValidationFailed, "execution step payload is unsupported")
 	}

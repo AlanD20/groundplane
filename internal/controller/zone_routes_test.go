@@ -20,6 +20,16 @@ type fakeZoneMutator struct {
 	response       etcd.IdempotencyResponse
 }
 
+func (fake *fakeZoneMutator) RemoveZone(
+	_ context.Context,
+	id string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	fake.input.EnvironmentID = id
+	fake.idempotencyKey = idempotencyKey
+	return fake.response, nil
+}
+
 func (fake *fakeZoneMutator) CreateZone(
 	_ context.Context,
 	input apiTypes.ZoneCreate,
@@ -115,6 +125,34 @@ func TestZoneCreateRouteForwardsStrictInputAndExactResponse(t *testing.T) {
 	}
 }
 
+// Rationale: ordinary Zone removal is one task-backed operator capability, so
+// its stable target, idempotency key, and exact 202 response must cross HTTP unchanged.
+func TestZoneRemoveRouteForwardsStableTargetAndExactResponse(t *testing.T) {
+	t.Parallel()
+	record := zoneRouteTestRecord()
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: ids.New(ids.KindTask)})
+	if err != nil {
+		t.Fatalf("marshal Task accepted: %v", err)
+	}
+	mutator := &fakeZoneMutator{response: etcd.IdempotencyResponse{
+		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
+	}}
+	server := &Server{zoneMutations: mutator}
+	output, err := server.removeZone(context.Background(), &zoneRemoveInput{
+		ID: record.Desired.ID, IdempotencyKey: "zone-remove-key-0001",
+	})
+	if err != nil || output.Status != http.StatusAccepted || output.ContentType != "application/json" ||
+		mutator.input.EnvironmentID != record.Desired.ID || mutator.idempotencyKey != "zone-remove-key-0001" {
+		t.Fatalf(
+			"removeZone() = %#v, %v; forwarded %q/%q",
+			output,
+			err,
+			mutator.input.EnvironmentID,
+			mutator.idempotencyKey,
+		)
+	}
+}
+
 func TestDecodeZoneCreateRejectsAmbiguousJSON(t *testing.T) {
 	// Rationale: idempotency protects one canonical intent, so duplicate,
 	// unknown, missing, and incorrectly typed members must fail before hashing.
@@ -155,6 +193,9 @@ func TestZoneOpenAPIContainsReadOperations(t *testing.T) {
 	}
 	if got := contract.Paths["/zones/{id}"]["get"].OperationID; got != "zone.show" {
 		t.Fatalf("GET /zones/{id} operationId = %q, want zone.show", got)
+	}
+	if got := contract.Paths["/zones/{id}"]["delete"].OperationID; got != "zone.remove" {
+		t.Fatalf("DELETE /zones/{id} operationId = %q, want zone.remove", got)
 	}
 }
 

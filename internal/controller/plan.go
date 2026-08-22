@@ -12,6 +12,7 @@ package controller
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -135,7 +136,13 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
 	}
 	if task.Type == etcd.TaskRemove {
-		return resolver.resolveEnvironmentRemovalPlan(ctx, task)
+		if ids.Validate(ids.KindEnvironment, task.Target) == nil {
+			return resolver.resolveEnvironmentRemovalPlan(ctx, task)
+		}
+		if ids.Validate(ids.KindNetwork, task.Target) == nil {
+			return resolver.resolveZoneRemovalPlan(task)
+		}
+		return nil, errs.New(errs.KindInternal, "durable removal Task target is invalid")
 	}
 	if task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskCreate ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != 1 ||
@@ -156,6 +163,35 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
 				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
 					EnvironmentId: task.Target, ExpectedVolumeDir: volumeDirectory,
+				},
+			},
+		}},
+	})
+}
+
+func (resolver *TaskPlanResolver) resolveZoneRemovalPlan(
+	task etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
+	environmentID := task.Params[etcd.TaskZoneEnvironmentParam]
+	if task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
+		ids.Validate(ids.KindNetwork, task.Target) != nil ||
+		ids.Validate(ids.KindEnvironment, environmentID) != nil || len(task.Params) != 1 ||
+		len(task.Materializations) != 0 || len(task.Steps) != 1 ||
+		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || task.TimeoutSeconds <= 0 ||
+		task.TimeoutSeconds > math.MaxUint32 {
+		return nil, errs.New(errs.KindInternal, "durable Zone removal Task shape is invalid")
+	}
+	return BuildPlan(PlanBuildInput{
+		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
+		RenderGeneration: uint64(task.RenderGeneration),
+		Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
+		TargetID:         task.Target,
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_ManagedNetworkRemove{
+				ManagedNetworkRemove: &agentpb.ManagedNetworkRemove{
+					NetworkId: task.Target, EnvironmentId: environmentID,
+					DockerName: "gp_net_" + strings.ToLower(task.Target),
 				},
 			},
 		}},

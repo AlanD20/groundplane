@@ -19,6 +19,7 @@ const (
 	DeletionTargetProject     DeletionTargetKind = "project"
 	DeletionTargetEnvironment DeletionTargetKind = "environment"
 	DeletionTargetSecret      DeletionTargetKind = "secret"
+	DeletionTargetZone        DeletionTargetKind = "zone"
 )
 
 // DeletionPhase records which authority may advance a destructive operation.
@@ -358,6 +359,8 @@ func validateDeletionTarget(kind DeletionTargetKind, id string) error {
 		expected = ids.KindEnvironment
 	case DeletionTargetSecret:
 		expected = ids.KindSecret
+	case DeletionTargetZone:
+		expected = ids.KindNetwork
 	default:
 		return errs.New(errs.KindValidationFailed, "deletion target kind is invalid")
 	}

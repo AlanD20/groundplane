@@ -150,3 +150,17 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 		t.Fatalf("persisted Route/marker = %#v/%#v", repository.record, repository.marker)
 	}
 }
+
+// Rationale: templated entity routes must bind the stable target id into the
+// protected intent or every Route edit fails before reaching persistence.
+func TestRouteEditMutationIntentBindsStableTarget(t *testing.T) {
+	routeID := ids.New(ids.KindRoute)
+	intent := routeEditMutationIntent(
+		routeID,
+		ids.New(ids.KindEnvironment),
+		apiTypes.RouteEdit{Exposure: "tunnel"},
+	)
+	if len(intent.path) != 1 || intent.path[0].Name != "id" || intent.path[0].Value != routeID {
+		t.Fatalf("route edit path bindings = %#v", intent.path)
+	}
+}

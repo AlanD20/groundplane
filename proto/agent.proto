@@ -308,6 +308,7 @@ message ExecutionStep {
     ManagedVolumeDirectoriesEnsure managed_volume_directories_ensure = 9;
     EnvironmentDirectoryRemove environment_directory_remove = 10;
     AdapterProcedure adapter_procedure = 11;
+    ManagedNetworkRemove managed_network_remove = 12;
   }
 }
 
@@ -396,6 +397,15 @@ message EnvironmentDirectoryRemove {
 // authenticated Environment Compose artifact. It never carries a host path.
 message ManagedVolumeDirectoriesEnsure {
   string artifact_id = 1;
+}
+
+// ManagedNetworkRemove is the closed Zone-removal procedure. The helper may
+// remove only the id-derived Docker network after verifying Groundplane
+// ownership labels for the declared Environment.
+message ManagedNetworkRemove {
+  string network_id = 1;
+  string environment_id = 2;
+  string docker_name = 3;
 }
 
 // EnvironmentDirectoryHelperRequest is the single length-framed stdin message

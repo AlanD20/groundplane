@@ -2724,6 +2724,7 @@ type ExecutionStep struct {
 	//	*ExecutionStep_ManagedVolumeDirectoriesEnsure
 	//	*ExecutionStep_EnvironmentDirectoryRemove
 	//	*ExecutionStep_AdapterProcedure
+	//	*ExecutionStep_ManagedNetworkRemove
 	Payload       isExecutionStep_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2861,6 +2862,15 @@ func (x *ExecutionStep) GetAdapterProcedure() *AdapterProcedure {
 	return nil
 }
 
+func (x *ExecutionStep) GetManagedNetworkRemove() *ManagedNetworkRemove {
+	if x != nil {
+		if x, ok := x.Payload.(*ExecutionStep_ManagedNetworkRemove); ok {
+			return x.ManagedNetworkRemove
+		}
+	}
+	return nil
+}
+
 type isExecutionStep_Payload interface {
 	isExecutionStep_Payload()
 }
@@ -2901,6 +2911,10 @@ type ExecutionStep_AdapterProcedure struct {
 	AdapterProcedure *AdapterProcedure `protobuf:"bytes,11,opt,name=adapter_procedure,json=adapterProcedure,proto3,oneof"`
 }
 
+type ExecutionStep_ManagedNetworkRemove struct {
+	ManagedNetworkRemove *ManagedNetworkRemove `protobuf:"bytes,12,opt,name=managed_network_remove,json=managedNetworkRemove,proto3,oneof"`
+}
+
 func (*ExecutionStep_ComposeApply) isExecutionStep_Payload() {}
 
 func (*ExecutionStep_ComposeStop) isExecutionStep_Payload() {}
@@ -2918,6 +2932,8 @@ func (*ExecutionStep_ManagedVolumeDirectoriesEnsure) isExecutionStep_Payload() {
 func (*ExecutionStep_EnvironmentDirectoryRemove) isExecutionStep_Payload() {}
 
 func (*ExecutionStep_AdapterProcedure) isExecutionStep_Payload() {}
+
+func (*ExecutionStep_ManagedNetworkRemove) isExecutionStep_Payload() {}
 
 // AdapterProcedure selects trusted, compiled Agent behavior. It deliberately
 // has no SQL, shell, executable, argument, or template field.
@@ -3540,6 +3556,69 @@ func (x *ManagedVolumeDirectoriesEnsure) GetArtifactId() string {
 	return ""
 }
 
+// ManagedNetworkRemove is the closed Zone-removal procedure. The helper may
+// remove only the id-derived Docker network after verifying Groundplane
+// ownership labels for the declared Environment.
+type ManagedNetworkRemove struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NetworkId     string                 `protobuf:"bytes,1,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	EnvironmentId string                 `protobuf:"bytes,2,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	DockerName    string                 `protobuf:"bytes,3,opt,name=docker_name,json=dockerName,proto3" json:"docker_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManagedNetworkRemove) Reset() {
+	*x = ManagedNetworkRemove{}
+	mi := &file_proto_agent_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManagedNetworkRemove) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManagedNetworkRemove) ProtoMessage() {}
+
+func (x *ManagedNetworkRemove) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_agent_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManagedNetworkRemove.ProtoReflect.Descriptor instead.
+func (*ManagedNetworkRemove) Descriptor() ([]byte, []int) {
+	return file_proto_agent_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ManagedNetworkRemove) GetNetworkId() string {
+	if x != nil {
+		return x.NetworkId
+	}
+	return ""
+}
+
+func (x *ManagedNetworkRemove) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+func (x *ManagedNetworkRemove) GetDockerName() string {
+	if x != nil {
+		return x.DockerName
+	}
+	return ""
+}
+
 // EnvironmentDirectoryHelperRequest is the single length-framed stdin message
 // accepted by the static environment-directory-helper Agent-binary mode.
 type EnvironmentDirectoryHelperRequest struct {
@@ -3556,7 +3635,7 @@ type EnvironmentDirectoryHelperRequest struct {
 
 func (x *EnvironmentDirectoryHelperRequest) Reset() {
 	*x = EnvironmentDirectoryHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[36]
+	mi := &file_proto_agent_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3568,7 +3647,7 @@ func (x *EnvironmentDirectoryHelperRequest) String() string {
 func (*EnvironmentDirectoryHelperRequest) ProtoMessage() {}
 
 func (x *EnvironmentDirectoryHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[36]
+	mi := &file_proto_agent_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3581,7 +3660,7 @@ func (x *EnvironmentDirectoryHelperRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use EnvironmentDirectoryHelperRequest.ProtoReflect.Descriptor instead.
 func (*EnvironmentDirectoryHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{36}
+	return file_proto_agent_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *EnvironmentDirectoryHelperRequest) GetSchema() uint32 {
@@ -3637,7 +3716,7 @@ type EnvironmentDirectoryHelperResponse struct {
 
 func (x *EnvironmentDirectoryHelperResponse) Reset() {
 	*x = EnvironmentDirectoryHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[37]
+	mi := &file_proto_agent_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3649,7 +3728,7 @@ func (x *EnvironmentDirectoryHelperResponse) String() string {
 func (*EnvironmentDirectoryHelperResponse) ProtoMessage() {}
 
 func (x *EnvironmentDirectoryHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[37]
+	mi := &file_proto_agent_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3662,7 +3741,7 @@ func (x *EnvironmentDirectoryHelperResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use EnvironmentDirectoryHelperResponse.ProtoReflect.Descriptor instead.
 func (*EnvironmentDirectoryHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{37}
+	return file_proto_agent_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *EnvironmentDirectoryHelperResponse) GetSchema() uint32 {
@@ -3702,7 +3781,7 @@ type ComposeHelperRequest struct {
 
 func (x *ComposeHelperRequest) Reset() {
 	*x = ComposeHelperRequest{}
-	mi := &file_proto_agent_proto_msgTypes[38]
+	mi := &file_proto_agent_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3714,7 +3793,7 @@ func (x *ComposeHelperRequest) String() string {
 func (*ComposeHelperRequest) ProtoMessage() {}
 
 func (x *ComposeHelperRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[38]
+	mi := &file_proto_agent_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3727,7 +3806,7 @@ func (x *ComposeHelperRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeHelperRequest.ProtoReflect.Descriptor instead.
 func (*ComposeHelperRequest) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{38}
+	return file_proto_agent_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ComposeHelperRequest) GetSchema() uint32 {
@@ -3784,7 +3863,7 @@ type ComposeHelperResponse struct {
 
 func (x *ComposeHelperResponse) Reset() {
 	*x = ComposeHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[39]
+	mi := &file_proto_agent_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3796,7 +3875,7 @@ func (x *ComposeHelperResponse) String() string {
 func (*ComposeHelperResponse) ProtoMessage() {}
 
 func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[39]
+	mi := &file_proto_agent_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3809,7 +3888,7 @@ func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeHelperResponse.ProtoReflect.Descriptor instead.
 func (*ComposeHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{39}
+	return file_proto_agent_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ComposeHelperResponse) GetSchema() uint32 {
@@ -3850,7 +3929,7 @@ type TaskAbort struct {
 
 func (x *TaskAbort) Reset() {
 	*x = TaskAbort{}
-	mi := &file_proto_agent_proto_msgTypes[40]
+	mi := &file_proto_agent_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3862,7 +3941,7 @@ func (x *TaskAbort) String() string {
 func (*TaskAbort) ProtoMessage() {}
 
 func (x *TaskAbort) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[40]
+	mi := &file_proto_agent_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3875,7 +3954,7 @@ func (x *TaskAbort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskAbort.ProtoReflect.Descriptor instead.
 func (*TaskAbort) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{40}
+	return file_proto_agent_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *TaskAbort) GetTaskId() string {
@@ -3901,7 +3980,7 @@ type ConfigUpdate struct {
 
 func (x *ConfigUpdate) Reset() {
 	*x = ConfigUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[41]
+	mi := &file_proto_agent_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3913,7 +3992,7 @@ func (x *ConfigUpdate) String() string {
 func (*ConfigUpdate) ProtoMessage() {}
 
 func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[41]
+	mi := &file_proto_agent_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3926,7 +4005,7 @@ func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigUpdate.ProtoReflect.Descriptor instead.
 func (*ConfigUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{41}
+	return file_proto_agent_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ConfigUpdate) GetAgentConfig() *AgentConfig {
@@ -3944,7 +4023,7 @@ type Shutdown struct {
 
 func (x *Shutdown) Reset() {
 	*x = Shutdown{}
-	mi := &file_proto_agent_proto_msgTypes[42]
+	mi := &file_proto_agent_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3956,7 +4035,7 @@ func (x *Shutdown) String() string {
 func (*Shutdown) ProtoMessage() {}
 
 func (x *Shutdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[42]
+	mi := &file_proto_agent_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3969,7 +4048,7 @@ func (x *Shutdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shutdown.ProtoReflect.Descriptor instead.
 func (*Shutdown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{42}
+	return file_proto_agent_proto_rawDescGZIP(), []int{43}
 }
 
 var File_proto_agent_proto protoreflect.FileDescriptor
@@ -4154,7 +4233,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x0fexpected_labels\x18\x04 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x0eexpectedLabels\"3\n" +
 	"\tLabelPair\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\xa0\a\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\x84\b\n" +
 	"\rExecutionStep\x12\x17\n" +
 	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12'\n" +
 	"\x0ftimeout_seconds\x18\x02 \x01(\rR\x0etimeoutSeconds\x12I\n" +
@@ -4167,7 +4246,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"!managed_volume_directories_ensure\x18\t \x01(\v24.groundplane.agent.v1.ManagedVolumeDirectoriesEnsureH\x00R\x1emanagedVolumeDirectoriesEnsure\x12t\n" +
 	"\x1cenvironment_directory_remove\x18\n" +
 	" \x01(\v20.groundplane.agent.v1.EnvironmentDirectoryRemoveH\x00R\x1aenvironmentDirectoryRemove\x12U\n" +
-	"\x11adapter_procedure\x18\v \x01(\v2&.groundplane.agent.v1.AdapterProcedureH\x00R\x10adapterProcedureB\t\n" +
+	"\x11adapter_procedure\x18\v \x01(\v2&.groundplane.agent.v1.AdapterProcedureH\x00R\x10adapterProcedure\x12b\n" +
+	"\x16managed_network_remove\x18\f \x01(\v2*.groundplane.agent.v1.ManagedNetworkRemoveH\x00R\x14managedNetworkRemoveB\t\n" +
 	"\apayload\"\xa8\x02\n" +
 	"\x10AdapterProcedure\x12\x1f\n" +
 	"\vadapter_key\x18\x01 \x01(\tR\n" +
@@ -4227,7 +4307,13 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x13expected_volume_dir\x18\x02 \x01(\tR\x11expectedVolumeDir\"A\n" +
 	"\x1eManagedVolumeDirectoriesEnsure\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
-	"artifactId\"\xf2\x01\n" +
+	"artifactId\"}\n" +
+	"\x14ManagedNetworkRemove\x12\x1d\n" +
+	"\n" +
+	"network_id\x18\x01 \x01(\tR\tnetworkId\x12%\n" +
+	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1f\n" +
+	"\vdocker_name\x18\x03 \x01(\tR\n" +
+	"dockerName\"\xf2\x01\n" +
 	"!EnvironmentDirectoryHelperRequest\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12!\n" +
@@ -4345,7 +4431,7 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_proto_agent_proto_goTypes = []any{
 	(TaskState)(0),                             // 0: groundplane.agent.v1.TaskState
 	(ObservedContainerState)(0),                // 1: groundplane.agent.v1.ObservedContainerState
@@ -4394,18 +4480,19 @@ var file_proto_agent_proto_goTypes = []any{
 	(*EnvironmentDirectoryCreate)(nil),         // 44: groundplane.agent.v1.EnvironmentDirectoryCreate
 	(*EnvironmentDirectoryRemove)(nil),         // 45: groundplane.agent.v1.EnvironmentDirectoryRemove
 	(*ManagedVolumeDirectoriesEnsure)(nil),     // 46: groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
-	(*EnvironmentDirectoryHelperRequest)(nil),  // 47: groundplane.agent.v1.EnvironmentDirectoryHelperRequest
-	(*EnvironmentDirectoryHelperResponse)(nil), // 48: groundplane.agent.v1.EnvironmentDirectoryHelperResponse
-	(*ComposeHelperRequest)(nil),               // 49: groundplane.agent.v1.ComposeHelperRequest
-	(*ComposeHelperResponse)(nil),              // 50: groundplane.agent.v1.ComposeHelperResponse
-	(*TaskAbort)(nil),                          // 51: groundplane.agent.v1.TaskAbort
-	(*ConfigUpdate)(nil),                       // 52: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),                           // 53: groundplane.agent.v1.Shutdown
-	nil,                                        // 54: groundplane.agent.v1.AgentConfig.LabelsEntry
-	(*timestamppb.Timestamp)(nil),              // 55: google.protobuf.Timestamp
+	(*ManagedNetworkRemove)(nil),               // 47: groundplane.agent.v1.ManagedNetworkRemove
+	(*EnvironmentDirectoryHelperRequest)(nil),  // 48: groundplane.agent.v1.EnvironmentDirectoryHelperRequest
+	(*EnvironmentDirectoryHelperResponse)(nil), // 49: groundplane.agent.v1.EnvironmentDirectoryHelperResponse
+	(*ComposeHelperRequest)(nil),               // 50: groundplane.agent.v1.ComposeHelperRequest
+	(*ComposeHelperResponse)(nil),              // 51: groundplane.agent.v1.ComposeHelperResponse
+	(*TaskAbort)(nil),                          // 52: groundplane.agent.v1.TaskAbort
+	(*ConfigUpdate)(nil),                       // 53: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),                           // 54: groundplane.agent.v1.Shutdown
+	nil,                                        // 55: groundplane.agent.v1.AgentConfig.LabelsEntry
+	(*timestamppb.Timestamp)(nil),              // 56: google.protobuf.Timestamp
 }
 var file_proto_agent_proto_depIdxs = []int32{
-	54, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
+	55, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
 	11, // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
 	14, // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
 	15, // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
@@ -4413,7 +4500,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	22, // 5: groundplane.agent.v1.AgentMessage.task_ack:type_name -> groundplane.agent.v1.TaskAck
 	0,  // 6: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
 	17, // 7: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
-	55, // 8: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
+	56, // 8: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
 	18, // 9: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
 	19, // 10: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
 	20, // 11: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
@@ -4430,9 +4517,9 @@ var file_proto_agent_proto_depIdxs = []int32{
 	17, // 22: groundplane.agent.v1.ComposeTaskResult.projects:type_name -> groundplane.agent.v1.ObservedProject
 	10, // 23: groundplane.agent.v1.ComposeTaskResult.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
 	30, // 24: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
-	51, // 25: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
-	52, // 26: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	53, // 27: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	52, // 25: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
+	53, // 26: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	54, // 27: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
 	26, // 28: groundplane.agent.v1.ControllerMessage.materialization_transfer:type_name -> groundplane.agent.v1.MaterializationTransfer
 	27, // 29: groundplane.agent.v1.MaterializationTransfer.header:type_name -> groundplane.agent.v1.MaterializationTransferHeader
 	28, // 30: groundplane.agent.v1.MaterializationTransfer.chunk:type_name -> groundplane.agent.v1.MaterializationTransferChunk
@@ -4458,20 +4545,21 @@ var file_proto_agent_proto_depIdxs = []int32{
 	46, // 50: groundplane.agent.v1.ExecutionStep.managed_volume_directories_ensure:type_name -> groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
 	45, // 51: groundplane.agent.v1.ExecutionStep.environment_directory_remove:type_name -> groundplane.agent.v1.EnvironmentDirectoryRemove
 	38, // 52: groundplane.agent.v1.ExecutionStep.adapter_procedure:type_name -> groundplane.agent.v1.AdapterProcedure
-	7,  // 53: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
-	8,  // 54: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
-	31, // 55: groundplane.agent.v1.EnvironmentDirectoryHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	31, // 56: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	9,  // 57: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
-	10, // 58: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	12, // 59: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	13, // 60: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	25, // 61: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	61, // [61:62] is the sub-list for method output_type
-	60, // [60:61] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	47, // 53: groundplane.agent.v1.ExecutionStep.managed_network_remove:type_name -> groundplane.agent.v1.ManagedNetworkRemove
+	7,  // 54: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
+	8,  // 55: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
+	31, // 56: groundplane.agent.v1.EnvironmentDirectoryHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	31, // 57: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	9,  // 58: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	10, // 59: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	12, // 60: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	13, // 61: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	25, // 62: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	62, // [62:63] is the sub-list for method output_type
+	61, // [61:62] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	61, // [61:61] is the sub-list for extension extendee
+	0,  // [0:61] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -4513,6 +4601,7 @@ func file_proto_agent_proto_init() {
 		(*ExecutionStep_ManagedVolumeDirectoriesEnsure)(nil),
 		(*ExecutionStep_EnvironmentDirectoryRemove)(nil),
 		(*ExecutionStep_AdapterProcedure)(nil),
+		(*ExecutionStep_ManagedNetworkRemove)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -4520,7 +4609,7 @@ func file_proto_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
 			NumEnums:      11,
-			NumMessages:   44,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

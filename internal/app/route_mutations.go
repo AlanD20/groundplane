@@ -122,6 +122,7 @@ type routeMutationIntent struct {
 	method        string
 	route         string
 	environmentID string
+	path          []idempotentintent.PathBinding
 	body          idempotentintent.Value
 }
 
@@ -171,6 +172,7 @@ func (service *durableRouteMutationIdempotency) Prepare(
 			Kind: idempotentintent.ScopeEnvironment,
 			ID:   intent.environmentID,
 		},
+		Path:  intent.path,
 		Query: idempotentintent.Object(),
 		Body:  idempotentintent.JSONBody(intent.body),
 	})
@@ -355,12 +357,7 @@ func (service *routeMutationService) editRouteOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	intent := routeMutationIntent{
-		method: http.MethodPatch, route: routeEditRoute, environmentID: current.Record.EnvironmentID,
-		body: idempotentintent.Object(
-			idempotentintent.Field{Name: "exposure", Value: idempotentintent.String(input.Exposure)},
-		),
-	}
+	intent := routeEditMutationIntent(routeID, current.Record.EnvironmentID, input)
 	evidence, err := service.idempotency.Prepare(ctx, intent)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -396,6 +393,20 @@ func (service *routeMutationService) editRouteOnce(
 		ctx, environment, project, target, current, desired, marker,
 	)
 	return service.resolveRouteMutation(ctx, locator, evidence, result, mutationErr, response)
+}
+
+func routeEditMutationIntent(
+	routeID string,
+	environmentID string,
+	input apiTypes.RouteEdit,
+) routeMutationIntent {
+	return routeMutationIntent{
+		method: http.MethodPatch, route: routeEditRoute, environmentID: environmentID,
+		path: []idempotentintent.PathBinding{{Name: "id", Value: routeID}},
+		body: idempotentintent.Object(
+			idempotentintent.Field{Name: "exposure", Value: idempotentintent.String(input.Exposure)},
+		),
+	}
 }
 
 func (service *routeMutationService) routeHierarchy(

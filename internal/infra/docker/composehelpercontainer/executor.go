@@ -226,7 +226,7 @@ func createOptions(image string, artifact *agentpb.ComposeArtifact) client.Conta
 	mounts := []mount.Mount{{
 		Type: mount.TypeBind, Source: dockerSocketPath, Target: dockerSocketPath,
 	}}
-	if artifact.AuthorizedVolumeDir != "" {
+	if artifact != nil && artifact.AuthorizedVolumeDir != "" {
 		mounts = append(mounts, mount.Mount{
 			Type: mount.TypeBind, Source: artifact.AuthorizedVolumeDir,
 			Target: artifact.AuthorizedVolumeDir, ReadOnly: true,

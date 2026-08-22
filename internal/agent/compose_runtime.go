@@ -78,11 +78,50 @@ func (runtime *ComposeRuntime) executeStep(
 				return removedServices(observed, payload.ComposeRemove.GetServiceIds())
 			},
 		)
+	case *agentpb.ExecutionStep_ManagedNetworkRemove:
+		return runtime.removeManagedNetwork(ctx, assignment, step)
 	case *agentpb.ExecutionStep_WaitHealthy:
 		return runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy)
 	default:
 		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
+}
+
+func (runtime *ComposeRuntime) removeManagedNetwork(
+	ctx context.Context,
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+) (composeStepResult, error) {
+	result := composeStepResult{MutationAttempted: true}
+	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
+		Schema: composeHelperSchema, TaskId: assignment.TaskID, OperationId: assignment.OperationID,
+		Plan: assignment.Plan, StepId: step.GetStepId(),
+		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
+	})
+	if err != nil {
+		result.ReconciliationRequired = true
+		return result, err
+	}
+	if response == nil || response.GetSchema() != composeHelperSchema {
+		result.ReconciliationRequired = true
+		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an invalid response")
+	}
+	result.ExitCode = response.GetExitCode()
+	result.Diagnostic = response.GetDiagnostic()
+	if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
+		result.ReconciliationRequired = true
+		return result, errs.Newf(
+			errs.KindRequestFailed,
+			"agent: Compose helper failed with diagnostic %s",
+			response.GetDiagnostic().String(),
+		)
+	}
+	if response.GetExitCode() != 0 ||
+		response.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
+		result.ReconciliationRequired = true
+		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an inconsistent success response")
+	}
+	return result, nil
 }
 
 func (runtime *ComposeRuntime) mutate(

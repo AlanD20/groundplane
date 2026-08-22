@@ -87,7 +87,11 @@ func newZoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/zones/"+id)
+			accepted, err := fromContext(cmd).Client.RemoveZone(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	})
 

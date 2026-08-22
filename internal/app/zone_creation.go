@@ -175,6 +175,7 @@ func (service *durableZoneCreationIdempotency) ResolveUnknown(
 type zoneCreationService struct {
 	repository  zoneCreationRepository
 	idempotency zoneCreationIdempotency
+	deletions   *zoneDeletionService
 	now         func() time.Time
 }
 
