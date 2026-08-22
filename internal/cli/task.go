@@ -34,7 +34,17 @@ func newTaskCmd() *cobra.Command {
 		Short: "Show a task (steps, current state)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runShow(cmd, "/api/v1/tasks/"+target(fromContext(cmd), args[0]))
+			app := fromContext(cmd)
+			task, err := app.Client.ShowTask(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(map[string]any{
+				"id": task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
+				"plan_hash": task.PlanHash, "type": task.Type, "target": task.Target,
+				"status": task.Status, "steps": task.Steps,
+			})
+			return app.Out.RenderOne(fields, values, task)
 		},
 	})
 

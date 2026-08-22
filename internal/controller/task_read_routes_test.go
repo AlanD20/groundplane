@@ -42,6 +42,8 @@ func (queries *fakeTaskQueries) ListTasks(
 	return queries.page, nil
 }
 
+// Rationale: Task detail must project step state from the same fixed etcd
+// revision as the durable Task record rather than mixing concurrent updates.
 func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	taskID := ids.NewAt(ids.KindTask, now, 1)
@@ -79,6 +81,8 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 	}
 }
 
+// Rationale: the generated Task-detail boundary must preserve the stable
+// task.not_found problem instead of degrading repository misses to HTTP 500.
 func TestTaskShowReturnsTaskNotFoundProblem(t *testing.T) {
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	server.tasks = &fakeTaskQueries{}
@@ -90,6 +94,8 @@ func TestTaskShowReturnsTaskNotFoundProblem(t *testing.T) {
 	}
 }
 
+// Rationale: Activity is exactly the Task journal, so both routes must expose
+// the same durable fixed-revision page and cursor.
 func TestTaskListAndActivityShareDurablePage(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	queries := &fakeTaskQueries{page: etcd.Page[etcd.TaskRecord]{
@@ -118,5 +124,33 @@ func TestTaskListAndActivityShareDurablePage(t *testing.T) {
 		if queries.request != (etcd.PageRequest{Limit: 7, Cursor: "current"}) {
 			t.Fatalf("%s request = %#v", path, queries.request)
 		}
+	}
+}
+
+// Rationale: Task detail is migrated only when the serving Huma document that
+// drives both generated clients exposes its exact stable operation identity.
+func TestTaskOpenAPIContainsServingDetailOperation(t *testing.T) {
+	t.Parallel()
+	document, err := New(nil, nil, Options{}).OpenAPIDocument()
+	if err != nil {
+		t.Fatalf("OpenAPIDocument() error = %v", err)
+	}
+	var contract struct {
+		Paths map[string]map[string]struct {
+			OperationID string `json:"operationId"`
+			Responses   map[string]struct {
+				Content map[string]json.RawMessage `json:"content"`
+			} `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(document, &contract); err != nil {
+		t.Fatalf("decode OpenAPI: %v", err)
+	}
+	operation := contract.Paths["/tasks/{id}"]["get"]
+	if operation.OperationID != "task.show" {
+		t.Fatalf("GET /tasks/{id} operationId = %q, want task.show", operation.OperationID)
+	}
+	if _, exists := operation.Responses["200"].Content["application/json"]; !exists {
+		t.Fatalf("task.show responses = %#v, want JSON 200", operation.Responses)
 	}
 }

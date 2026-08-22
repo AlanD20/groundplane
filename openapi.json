@@ -1107,6 +1107,58 @@
         ],
         "type": "object"
       },
+      "Task": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/Task.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "plan_hash": {
+            "type": "string"
+          },
+          "retry_of": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "target": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "operation_id",
+          "type",
+          "target",
+          "status"
+        ],
+        "type": "object"
+      },
       "TaskAccepted": {
         "additionalProperties": false,
         "properties": {
@@ -1125,6 +1177,22 @@
         },
         "required": [
           "task_id"
+        ],
+        "type": "object"
+      },
+      "TaskStep": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
         ],
         "type": "object"
       },
@@ -2832,6 +2900,48 @@
         "summary": "List services",
         "tags": [
           "Service"
+        ]
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "operationId": "task.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a task",
+        "tags": [
+          "Task"
         ]
       }
     },

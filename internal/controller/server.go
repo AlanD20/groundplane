@@ -146,6 +146,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerEntries()
 	s.registerSecrets()
 	s.registerAttaches()
+	s.registerTasks()
 	s.registerHost()
 	return s
 }
@@ -267,7 +268,6 @@ func (s *Server) routes() {
 
 	// task / activity
 	mux.HandleFunc("GET /api/v1/tasks", s.taskList)
-	mux.HandleFunc("GET /api/v1/tasks/{id}", s.taskShow)
 	s.streamRoute("GET /api/v1/tasks/{id}/events", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/retry", s.retryTask)
 	s.jsonRoute("POST /api/v1/tasks/{id}/abort", s.acceptTask)
@@ -312,32 +312,6 @@ func (s *Server) retryTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(response.Status)
 	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
 		s.Logger.Error("controller: write retry response", slog.Any("error", err))
-	}
-}
-
-func (s *Server) taskShow(w http.ResponseWriter, r *http.Request) {
-	if s.tasks == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Task repository is not configured"))
-		return
-	}
-	task, err := s.tasks.GetTask(r.Context(), r.PathValue("id"))
-	if err != nil {
-		s.writeTaskProblem(w, err)
-		return
-	}
-	events, err := s.tasks.ListTaskEvents(r.Context(), task.Record.ID, task.ReadRevision)
-	if err != nil {
-		s.writeTaskProblem(w, err)
-		return
-	}
-	response, err := taskResponse(task.Record, events)
-	if err != nil {
-		s.writeTaskProblem(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		s.Logger.Error("controller: write Task response", slog.Any("error", err))
 	}
 }
 

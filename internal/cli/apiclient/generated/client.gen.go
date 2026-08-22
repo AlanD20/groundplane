@@ -388,6 +388,22 @@ type Service struct {
 	Zones            *[]string `json:"zones,omitempty"`
 }
 
+// Task defines model for Task.
+type Task struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Task.json
+	Schema      *string     `json:"$schema,omitempty"`
+	Id          string      `json:"id"`
+	OperationId string      `json:"operation_id"`
+	PlanHash    *string     `json:"plan_hash,omitempty"`
+	RetryOf     *string     `json:"retry_of,omitempty"`
+	Status      string      `json:"status"`
+	Steps       *[]TaskStep `json:"steps,omitempty"`
+	Target      string      `json:"target"`
+	Type        string      `json:"type"`
+}
+
 // TaskAccepted defines model for TaskAccepted.
 type TaskAccepted struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -395,6 +411,12 @@ type TaskAccepted struct {
 	// Examples: /api/v1/TaskAccepted.json
 	Schema *string `json:"$schema,omitempty"`
 	TaskId string  `json:"task_id"`
+}
+
+// TaskStep defines model for TaskStep.
+type TaskStep struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 // Tenant defines model for Tenant.
@@ -913,6 +935,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /services (the `ServiceList` operationId).
 	ServiceList(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskShow Show a task
+	//
+	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
+	TaskShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TenantList List tenants
 	//
@@ -1535,6 +1562,21 @@ func (c *Client) SecretReveal(ctx context.Context, id string, reqEditors ...Requ
 // Corresponds with GET /services (the `ServiceList` operationId).
 func (c *Client) ServiceList(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskShow Show a task
+//
+// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
+func (c *Client) TaskShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskShowRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -3132,6 +3174,40 @@ func NewServiceListRequest(server string, params *ServiceListParams) (*http.Requ
 	return req, nil
 }
 
+// NewTaskShowRequest constructs an http.Request for the TaskShow method
+func NewTaskShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewTenantListRequest constructs an http.Request for the TenantList method
 func NewTenantListRequest(server string, params *TenantListParams) (*http.Request, error) {
 	var err error
@@ -3700,6 +3776,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /services (the `ServiceList` operationId).
 	ServiceListWithResponse(ctx context.Context, params *ServiceListParams, reqEditors ...RequestEditorFn) (*ServiceListResponse, error)
+
+	// TaskShowWithResponse Show a task
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
+	TaskShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TaskShowResponse, error)
 
 	// TenantListWithResponse List tenants
 	//
@@ -5138,6 +5221,54 @@ func (r ServiceListResponse) ContentType() string {
 	return ""
 }
 
+type TaskShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Task
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskShowResponse) GetJSON200() *Task {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TenantListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5865,6 +5996,19 @@ func (c *ClientWithResponses) ServiceListWithResponse(ctx context.Context, param
 		return nil, err
 	}
 	return ParseServiceListResponse(rsp)
+}
+
+// TaskShowWithResponse Show a task
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
+func (c *ClientWithResponses) TaskShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TaskShowResponse, error) {
+	rsp, err := c.TaskShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskShowResponse(rsp)
 }
 
 // TenantListWithResponse List tenants
@@ -7001,6 +7145,39 @@ func ParseServiceListResponse(rsp *http.Response) (*ServiceListResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest PageService
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTaskShowResponse parses an HTTP response from a TaskShowWithResponse call
+func ParseTaskShowResponse(rsp *http.Response) (*TaskShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Task
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
