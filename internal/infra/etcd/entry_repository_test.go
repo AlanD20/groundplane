@@ -161,7 +161,7 @@ func testEntryRepositoryHierarchy(
 		ID: projectID, TenantID: tenantID, Slug: "entry-project", Name: "Entry Project",
 		Kind: ProjectKindTenant,
 	}
-	environment := EnvironmentRecord{
+	environment := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID: environmentID, ProjectID: projectID, Name: "production",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
 		ProvisioningState: EnvironmentProvisioningReady,

@@ -146,7 +146,7 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 			Revision: 2,
 		},
 		Environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{
+			Record: etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 				ID: fixture.environmentID, ProjectID: fixture.projectID, Name: "prod",
 				VolumeDir: "/var/lib/groundplane/vol/acme/shop/" + fixture.environmentID,
 			},
@@ -182,7 +182,7 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 			Revision: 6,
 		},
 		BackingEnvironment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{
+			Record: etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 				ID: fixture.backingEnvID, ProjectID: fixture.backingProjectID, Name: "main",
 				VolumeDir: "/var/lib/groundplane/vol/backing/postgres/" + fixture.backingEnvID,
 			},

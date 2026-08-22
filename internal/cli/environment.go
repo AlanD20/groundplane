@@ -59,6 +59,7 @@ func newEnvironmentCmd() *cobra.Command {
 		},
 	})
 
+	var networkPool string
 	create := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create an environment",
@@ -70,7 +71,7 @@ func newEnvironmentCmd() *cobra.Command {
 				return err
 			}
 			accepted, err := app.Client.CreateEnvironment(cmd.Context(), apiTypes.EnvironmentCreate{
-				Name: args[0], ProjectID: projectID,
+				Name: args[0], ProjectID: projectID, NetworkPool: networkPool,
 			})
 			if err != nil {
 				return err
@@ -78,6 +79,8 @@ func newEnvironmentCmd() *cobra.Command {
 			return renderTaskAccepted(cmd, accepted)
 		},
 	}
+	create.Flags().StringVar(&networkPool, "network-pool", "", "reserved IPv4 CIDR for the environment")
+	_ = create.MarkFlagRequired("network-pool")
 	cmd.AddCommand(create)
 
 	var newName string
@@ -209,8 +212,9 @@ func renderEnvironment(cmd *cobra.Command, environment apiTypes.Environment) err
 func environmentFields(environment apiTypes.Environment) map[string]any {
 	return map[string]any{
 		"id": environment.ID, "project_id": environment.ProjectID, "name": environment.Name,
-		"volume_dir": environment.VolumeDir, "provisioning_state": environment.ProvisioningState,
-		"create_task_id": environment.CreateTaskID,
+		"network_pool": environment.NetworkPool, "volume_dir": environment.VolumeDir,
+		"provisioning_state": environment.ProvisioningState,
+		"create_task_id":     environment.CreateTaskID,
 	}
 }
 

@@ -41,7 +41,12 @@ func TestServiceListVerifiesOwnerAndPreservesPagination(t *testing.T) {
 	want := etcd.Page[etcd.ServiceRecord]{NextCursor: "next-cursor", Revision: 91}
 	repository := &fakeServiceReadRepository{
 		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{ID: environmentID}, Revision: 12, ReadRevision: 12,
+			Record: etcd.EnvironmentRecord{
+				NetworkPool: "10.40.0.0/16",
+				ID:          environmentID,
+			},
+			Revision:     12,
+			ReadRevision: 12,
 		},
 		page: want, wantRequest: request,
 	}

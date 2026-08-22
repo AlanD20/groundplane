@@ -35,7 +35,7 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProject(): %v", err)
 	}
-	environment, err := repository.CreateEnvironment(ctx, EnvironmentRecord{
+	environment, err := repository.CreateEnvironment(ctx, EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ProvisioningState: EnvironmentProvisioningReady,
 		CreateTaskID:      "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ID:                environmentID, ProjectID: projectID, Name: "production",
@@ -467,7 +467,7 @@ func TestHierarchyRejectsStandaloneBackingEnvironmentCreation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateProject(backing): %v", err)
 	}
-	_, err = repository.CreateEnvironment(ctx, EnvironmentRecord{
+	_, err = repository.CreateEnvironment(ctx, EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ProvisioningState: EnvironmentProvisioningReady,
 		CreateTaskID:      "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ID:                hierarchyTestID(ids.KindEnvironment, 61), ProjectID: projectID, Name: "main",

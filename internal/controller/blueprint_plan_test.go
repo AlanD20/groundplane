@@ -107,7 +107,7 @@ volumes:
 		project: etcd.ProjectRecord{
 			ID: projectID, TenantID: tenantID, Slug: "shop", Name: "Shop", Kind: etcd.ProjectKindTenant,
 		},
-		environment: etcd.EnvironmentRecord{
+		environment: etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 			ID: environmentID, ProjectID: projectID, Name: "production",
 			VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
 			ProvisioningState: etcd.EnvironmentProvisioningReady, CreatedAt: at,

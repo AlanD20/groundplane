@@ -48,9 +48,10 @@ type Project struct {
 // the Compose project identity. See blueprint.md, "Identity and rename
 // rules".
 type Environment struct {
-	ID        string `yaml:"id"         json:"id"` // env_<ulid>, generated once, never regenerated
-	ProjectID string `yaml:"project_id" json:"project_id"`
-	Name      string `yaml:"name"       json:"name"` // sole human/URL label; unique within project, freely renamable
+	ID          string `yaml:"id"           json:"id"` // env_<ulid>, generated once, never regenerated
+	ProjectID   string `yaml:"project_id"   json:"project_id"`
+	Name        string `yaml:"name"         json:"name"` // sole human/URL label; unique within project, freely renamable
+	NetworkPool string `yaml:"network_pool" json:"network_pool"`
 
 	VolumeDir string `yaml:"volume_dir" json:"volume_dir"` // ADR 0025: generated from configured root and stable owner ids
 

@@ -35,6 +35,7 @@ func TestHierarchyEnvironmentIdempotentRenameMovesOnlyScopedName(t *testing.T) {
 		project,
 		hierarchyTestID(ids.KindEnvironment, 603),
 		"production",
+		"10.30.0.0/16",
 		hierarchyTestID(ids.KindTask, 604),
 		createdAt,
 	)
@@ -85,7 +86,7 @@ func TestHierarchyEnvironmentMutationRejectsProvisioningChanges(t *testing.T) {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	createdAt := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
-	record := EnvironmentRecord{
+	record := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID:        hierarchyTestID(ids.KindEnvironment, 605),
 		ProjectID: hierarchyTestID(ids.KindProject, 606),
 		Name:      "production",

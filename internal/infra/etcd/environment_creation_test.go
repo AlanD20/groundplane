@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"net/http"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		projectRecord,
 		task.Target,
 		"production",
+		"10.200.0.0/16",
 		task.ID,
 		now,
 	)
@@ -58,11 +60,28 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
 		Method: http.MethodPost, Route: "/environments", Key: task.IdempotencyKey,
 	}
+	poolRegistry, err := repository.GetEnvironmentPoolRegistry(ctx)
+	if err != nil {
+		t.Fatalf("GetEnvironmentPoolRegistry() error = %v", err)
+	}
+	nextRegistry, _, err := poolRegistry.Record.Reserve(
+		netip.MustParsePrefix("10.0.0.0/8"),
+		record.ID,
+		record.NetworkPool,
+	)
+	if err != nil {
+		t.Fatalf("Reserve() error = %v", err)
+	}
+	poolRegistry.Record = nextRegistry
 	result, err := repository.CreateEnvironmentWithTask(
-		ctx, environmentpath.DefaultVolumeRoot, project, record, task, marker,
+		ctx, environmentpath.DefaultVolumeRoot, project, poolRegistry, record, task, marker,
 	)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("CreateEnvironmentWithTask() = %#v, %v", result, err)
+	}
+	storedRegistry, err := repository.GetEnvironmentPoolRegistry(ctx)
+	if err != nil || storedRegistry.Record.Reservations[record.ID] != record.NetworkPool {
+		t.Fatalf("stored Environment pool registry = %#v, %v", storedRegistry.Record, err)
 	}
 	storedEnvironment, err := repository.GetEnvironment(ctx, record.ID)
 	if err != nil || storedEnvironment.Record.ProvisioningState != EnvironmentProvisioningProvisioning ||

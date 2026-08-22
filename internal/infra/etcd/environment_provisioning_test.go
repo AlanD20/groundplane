@@ -12,7 +12,7 @@ func TestEnvironmentProvisioningFieldsRoundTrip(t *testing.T) {
 	createdAt := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, createdAt, 1)
 	projectID := ids.NewAt(ids.KindProject, createdAt, 2)
-	record := EnvironmentRecord{
+	record := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID:                environmentID,
 		ProjectID:         projectID,
 		Name:              "Production",
@@ -38,7 +38,7 @@ func TestEnvironmentProvisioningFieldsRoundTrip(t *testing.T) {
 func TestEnvironmentProvisioningValidationRejectsMissingStateAndWrongTaskKind(t *testing.T) {
 	t.Parallel()
 	createdAt := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
-	valid := EnvironmentRecord{
+	valid := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ProvisioningState: EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, createdAt, 4),
 	}

@@ -22,12 +22,19 @@ const (
 )
 
 type fakeEnvironmentCreationRepository struct {
-	project     etcd.Versioned[etcd.ProjectRecord]
-	volumeRoot  string
-	environment etcd.EnvironmentRecord
-	task        etcd.TaskRecord
-	marker      etcd.IdempotencyMarker
-	calls       int
+	project      etcd.Versioned[etcd.ProjectRecord]
+	poolRegistry etcd.Versioned[etcd.EnvironmentPoolRegistry]
+	volumeRoot   string
+	environment  etcd.EnvironmentRecord
+	task         etcd.TaskRecord
+	marker       etcd.IdempotencyMarker
+	calls        int
+}
+
+func (repository *fakeEnvironmentCreationRepository) GetEnvironmentPoolRegistry(
+	context.Context,
+) (etcd.Versioned[etcd.EnvironmentPoolRegistry], error) {
+	return repository.poolRegistry, nil
 }
 
 func (repository *fakeEnvironmentCreationRepository) GetProject(
@@ -41,12 +48,14 @@ func (repository *fakeEnvironmentCreationRepository) CreateEnvironmentWithTask(
 	_ context.Context,
 	volumeRoot string,
 	_ etcd.Versioned[etcd.ProjectRecord],
+	poolRegistry etcd.Versioned[etcd.EnvironmentPoolRegistry],
 	environment etcd.EnvironmentRecord,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.calls++
 	repository.volumeRoot = volumeRoot
+	repository.poolRegistry = poolRegistry
 	repository.environment = environment
 	repository.task = task
 	repository.task.Params = make(map[string]string, len(task.Params))
@@ -105,12 +114,18 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 		},
 		Revision: 7, ReadRevision: 7,
 	}
-	repository := &fakeEnvironmentCreationRepository{project: project}
+	repository := &fakeEnvironmentCreationRepository{
+		project: project,
+		poolRegistry: etcd.Versioned[etcd.EnvironmentPoolRegistry]{
+			Record: etcd.EnvironmentPoolRegistry{Reservations: map[string]string{}},
+		},
+	}
 	idempotency := &fakeEnvironmentCreationIdempotency{
 		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	}
 	service, err := newEnvironmentCreationService(
 		"/var/lib/groundplane/vol",
+		"10.0.0.0/8",
 		repository,
 		idempotency,
 	)
@@ -120,7 +135,7 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 	now := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
 	response, err := service.CreateEnvironment(context.Background(), hierarchy.CreateEnvironmentInput{
-		ProjectID: environmentCreationTestProjectID, Name: "production",
+		ProjectID: environmentCreationTestProjectID, Name: "production", NetworkPool: "10.200.0.0/16",
 	}, "environment-create-key-0001")
 	if err != nil {
 		t.Fatalf("CreateEnvironment() error = %v", err)
@@ -137,11 +152,15 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 	task := repository.task
 	if repository.calls != 1 || repository.volumeRoot != "/var/lib/groundplane/vol" ||
 		environment.ProjectID != environmentCreationTestProjectID || environment.Name != "production" ||
+		environment.NetworkPool != "10.200.0.0/16" ||
 		environment.ProvisioningState != etcd.EnvironmentProvisioningProvisioning ||
 		environment.CreateTaskID != task.ID || environment.CreatedAt != now || task.CreatedAt != now ||
 		task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskCreate || task.Target != environment.ID ||
 		task.Status != etcd.TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) != 1 {
 		t.Fatalf("atomic Environment/Task = %#v / %#v", environment, task)
+	}
+	if repository.poolRegistry.Record.Reservations[environment.ID] != environment.NetworkPool {
+		t.Fatalf("Environment pool registry = %#v", repository.poolRegistry.Record)
 	}
 	resolver, err := controllerpkg.NewTaskPlanResolver(repository.volumeRoot)
 	if err != nil {

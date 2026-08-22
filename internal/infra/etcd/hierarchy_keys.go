@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -171,6 +172,10 @@ func validateEnvironment(record EnvironmentRecord) error {
 	if err := validateLabel("environment name", record.Name); err != nil {
 		return err
 	}
+	pool, err := ipam.ParseIPv4Prefix(record.NetworkPool)
+	if err != nil || pool.String() != record.NetworkPool {
+		return errs.New(errs.KindValidationFailed, "environment network_pool must be a canonical IPv4 CIDR")
+	}
 	if err := validateLabel("environment volume directory", record.VolumeDir); err != nil {
 		return err
 	}
@@ -202,13 +207,14 @@ func encodeEnvironment(record EnvironmentRecord) ([]byte, error) {
 		ID                string                       `json:"id"`
 		ProjectID         string                       `json:"project_id"`
 		Name              string                       `json:"name"`
+		NetworkPool       string                       `json:"network_pool"`
 		VolumeDir         string                       `json:"volume_dir"`
 		ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
 		CreateTaskID      string                       `json:"create_task_id"`
 		CreatedAt         string                       `json:"created_at"`
 	}
 	return encodeEnvelope("environment", environmentData{
-		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name,
+		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, NetworkPool: record.NetworkPool,
 		VolumeDir: record.VolumeDir, ProvisioningState: record.ProvisioningState,
 		CreateTaskID: record.CreateTaskID, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
 	})
@@ -241,6 +247,7 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 		ID                string                       `json:"id"`
 		ProjectID         string                       `json:"project_id"`
 		Name              string                       `json:"name"`
+		NetworkPool       string                       `json:"network_pool"`
 		VolumeDir         string                       `json:"volume_dir"`
 		ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
 		CreateTaskID      string                       `json:"create_task_id"`
@@ -255,7 +262,7 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 		return EnvironmentRecord{}, errs.New(errs.KindInternal, "environment record has an invalid created_at")
 	}
 	record := EnvironmentRecord{
-		ID: data.ID, ProjectID: data.ProjectID, Name: data.Name,
+		ID: data.ID, ProjectID: data.ProjectID, Name: data.Name, NetworkPool: data.NetworkPool,
 		VolumeDir: data.VolumeDir, ProvisioningState: data.ProvisioningState,
 		CreateTaskID: data.CreateTaskID, CreatedAt: createdAt,
 	}

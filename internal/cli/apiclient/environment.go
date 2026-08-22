@@ -87,7 +87,9 @@ func (c *Client) CreateEnvironment(
 		return apiTypes.TaskAccepted{}, err
 	}
 	params := &generated.EnvironmentCreateParams{IdempotencyKey: ids.NewULID()}
-	body := generated.EnvironmentCreateJSONRequestBody{ProjectId: input.ProjectID, Name: input.Name}
+	body := generated.EnvironmentCreateJSONRequestBody{
+		ProjectId: input.ProjectID, Name: input.Name, NetworkPool: input.NetworkPool,
+	}
 	response, err := client.EnvironmentCreateWithResponse(ctx, params, body)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, "/api/v1/environments", err)
@@ -169,6 +171,7 @@ func environmentFromGenerated(environment generated.Environment) apiTypes.Enviro
 	}
 	return apiTypes.Environment{
 		ID: environment.Id, ProjectID: environment.ProjectId, Name: environment.Name,
+		NetworkPool:       environment.NetworkPool,
 		VolumeDir:         environment.VolumeDir,
 		ProvisioningState: apiTypes.EnvironmentProvisioningState(environment.ProvisioningState),
 		CreateTaskID:      createTaskID,

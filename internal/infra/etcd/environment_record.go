@@ -17,6 +17,7 @@ func NewProvisioningEnvironment(
 	project ProjectRecord,
 	environmentID string,
 	name string,
+	networkPool string,
 	createTaskID string,
 	createdAt time.Time,
 ) (EnvironmentRecord, error) {
@@ -36,6 +37,7 @@ func NewProvisioningEnvironment(
 		ID:                environmentID,
 		ProjectID:         project.ID,
 		Name:              name,
+		NetworkPool:       networkPool,
 		VolumeDir:         volumeDir,
 		ProvisioningState: EnvironmentProvisioningProvisioning,
 		CreateTaskID:      createTaskID,

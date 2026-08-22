@@ -41,7 +41,11 @@ func TestEnvironmentCreateReturnsExactTaskAcceptance(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/environments",
-		io.NopCloser(stringReader(`{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"production"}`)),
+		io.NopCloser(
+			stringReader(
+				`{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"production","network_pool":"10.200.0.0/16"}`,
+			),
+		),
 	)
 	request.Header.Set(idempotencyKeyHeader, "environment-create-key-0001")
 	response := httptest.NewRecorder()
@@ -51,7 +55,8 @@ func TestEnvironmentCreateReturnsExactTaskAcceptance(t *testing.T) {
 		t.Fatalf("response = %d %q %q", response.Code, response.Header().Get("Content-Type"), response.Body.String())
 	}
 	if mutator.calls != 1 || mutator.input.ProjectID != "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV" ||
-		mutator.input.Name != "production" || mutator.idempotencyKey != "environment-create-key-0001" {
+		mutator.input.Name != "production" || mutator.input.NetworkPool != "10.200.0.0/16" ||
+		mutator.idempotencyKey != "environment-create-key-0001" {
 		t.Fatalf("mutator call = %#v / %q", mutator.input, mutator.idempotencyKey)
 	}
 }
@@ -62,8 +67,8 @@ func TestEnvironmentCreateRejectsDuplicateOrUnknownMembers(t *testing.T) {
 		EnvironmentMutations: mutator,
 	})
 	for name, body := range map[string]string{
-		"duplicate": `{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"one","name":"two"}`,
-		"unknown":   `{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"one","slug":"one"}`,
+		"duplicate": `{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"one","name":"two","network_pool":"10.200.0.0/16"}`,
+		"unknown":   `{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"one","network_pool":"10.200.0.0/16","slug":"one"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/environments", stringReader(body))

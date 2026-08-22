@@ -13,6 +13,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	ctx context.Context,
 	volumeRoot string,
 	project Versioned[ProjectRecord],
+	poolRegistry Versioned[EnvironmentPoolRegistry],
 	record EnvironmentRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -31,6 +32,16 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := ValidateEnvironmentVolumeDir(volumeRoot, project.Record, record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if poolRegistry.Revision < 0 || poolRegistry.ReadRevision < poolRegistry.Revision ||
+		poolRegistry.Record.Reservations[record.ID] != record.NetworkPool {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment pool reservation does not match its provisioning record",
+		)
+	}
+	if err := validateEnvironmentPoolRegistry(poolRegistry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if record.ProvisioningState != EnvironmentProvisioningProvisioning ||
@@ -67,6 +78,11 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentValue)
+	poolRegistryValue, err := encodeEnvelope("environment_pool_registry", poolRegistry.Record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(poolRegistryValue)
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -90,6 +106,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: deletionTombstoneKey("environment", record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
 		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
+		{Key: environmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
@@ -99,11 +116,12 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Type: MutationPut, Key: environmentKey(record.ID), Value: environmentValue},
 		{Type: MutationPut, Key: environmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: environmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
+		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
-		classifyEnvironmentCreateConflict(project, task.OperationID),
+		classifyEnvironmentCreateConflict(project, poolRegistry, task.OperationID),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -117,10 +135,11 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 
 func classifyEnvironmentCreateConflict(
 	project Versioned[ProjectRecord],
+	poolRegistry Versioned[EnvironmentPoolRegistry],
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 11 {
+		if len(values) != 12 {
 			return errs.New(errs.KindInternal, "Environment creation compare evidence is incomplete")
 		}
 		if values[2] != nil {
@@ -160,6 +179,10 @@ func classifyEnvironmentCreateConflict(
 		}
 		if values[10] != nil {
 			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+		}
+		if (poolRegistry.Revision == 0 && values[11] != nil) ||
+			(poolRegistry.Revision > 0 && (values[11] == nil || values[11].ModRevision != poolRegistry.Revision)) {
+			return stateConflict("environment pool registry", "global")
 		}
 		return stateConflict("environment", "creation")
 	}

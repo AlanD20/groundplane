@@ -69,7 +69,12 @@ func TestEntryListVerifiesEnvironmentAndPreservesPagination(t *testing.T) {
 	want := etcd.Page[etcd.EntryRecord]{NextCursor: "next", Revision: 88}
 	repository := &fakeEntryReadRepository{
 		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{ID: environmentID}, Revision: 4, ReadRevision: 4,
+			Record: etcd.EnvironmentRecord{
+				NetworkPool: "10.40.0.0/16",
+				ID:          environmentID,
+			},
+			Revision:     4,
+			ReadRevision: 4,
 		},
 		page: want, wantPage: request,
 	}

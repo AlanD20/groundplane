@@ -45,6 +45,7 @@ func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing
 				test.project,
 				environmentID,
 				"production",
+				"10.35.0.0/16",
 				taskID,
 				createdAt,
 			)
@@ -68,7 +69,7 @@ func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing
 func TestEnvironmentRecordRejectsSlugOrMismatchedVolumePath(t *testing.T) {
 	t.Parallel()
 	createdAt := time.Date(2026, 8, 22, 13, 0, 0, 0, time.UTC)
-	record := EnvironmentRecord{
+	record := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID:                ids.NewAt(ids.KindEnvironment, createdAt, 5),
 		ProjectID:         ids.NewAt(ids.KindProject, createdAt, 6),
 		Name:              "Production",
@@ -93,7 +94,7 @@ func TestEnvironmentProvisioningTransitionsPreserveIdentity(t *testing.T) {
 	createdAt := time.Date(2026, 8, 22, 13, 0, 0, 0, time.UTC)
 	originalTask := ids.NewAt(ids.KindTask, createdAt, 8)
 	retryTask := ids.NewAt(ids.KindTask, createdAt, 9)
-	record := EnvironmentRecord{
+	record := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID: ids.NewAt(ids.KindEnvironment, createdAt, 10), VolumeDir: "/stable/path",
 		ProvisioningState: EnvironmentProvisioningProvisioning, CreateTaskID: originalTask,
 	}

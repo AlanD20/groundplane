@@ -102,7 +102,7 @@ func TestEnvironmentRenameRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 }
 
 func EnvironmentRecordForRouteTest(state etcd.EnvironmentProvisioningState) etcd.EnvironmentRecord {
-	return etcd.EnvironmentRecord{
+	return etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID: environmentRouteID, ProjectID: environmentRouteProjectID, Name: "production",
 		VolumeDir:         "/var/lib/groundplane/vol/platform/" + environmentRouteProjectID + "/" + environmentRouteID,
 		ProvisioningState: state, CreateTaskID: environmentRouteTaskID,

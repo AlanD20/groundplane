@@ -116,6 +116,7 @@ func seedBackingService(
 		projectRecord,
 		environmentID,
 		"main",
+		"10.31.0.0/16",
 		hierarchyTestID(ids.KindTask, offset+2),
 		time.Unix(offset, 0).UTC(),
 	)

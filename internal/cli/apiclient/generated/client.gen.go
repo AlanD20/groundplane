@@ -167,6 +167,7 @@ type Environment struct {
 	CreateTaskId      *string `json:"create_task_id"`
 	Id                string  `json:"id"`
 	Name              string  `json:"name"`
+	NetworkPool       string  `json:"network_pool"`
 	ProjectId         string  `json:"project_id"`
 	ProvisioningState string  `json:"provisioning_state"`
 	VolumeDir         string  `json:"volume_dir"`
@@ -177,9 +178,10 @@ type EnvironmentCreate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/EnvironmentCreate.json
-	Schema    *string `json:"$schema,omitempty"`
-	Name      string  `json:"name"`
-	ProjectId string  `json:"project_id"`
+	Schema      *string `json:"$schema,omitempty"`
+	Name        string  `json:"name"`
+	NetworkPool string  `json:"network_pool"`
+	ProjectId   string  `json:"project_id"`
 }
 
 // EnvironmentPage defines model for EnvironmentPage.

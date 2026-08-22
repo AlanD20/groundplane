@@ -51,7 +51,7 @@ func TestResolveArtifactFreeEnvironmentRemovalPlan(t *testing.T) {
 		directory     = root + "/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + environmentID
 	)
 	resolver, err := NewTaskPlanResolverWithBlueprints(root, environmentRemovalPlanReader{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{
+		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 			ID: environmentID, ProjectID: "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "main",
 			VolumeDir: directory, ProvisioningState: etcd.EnvironmentProvisioningReady,
 		}},

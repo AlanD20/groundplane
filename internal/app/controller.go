@@ -481,6 +481,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	environmentMutations, err := newEnvironmentCreationService(
 		cfg.Storage.VolumeRoot,
+		cfg.EnvironmentPool,
 		hierarchyRecords,
 		environmentCreationIdempotency,
 	)

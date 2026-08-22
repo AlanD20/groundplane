@@ -137,6 +137,7 @@ func serviceRepositoryTestHierarchy(
 		projectRecord,
 		hierarchyTestID(ids.KindEnvironment, 802),
 		"production",
+		"10.34.0.0/16",
 		hierarchyTestID(ids.KindTask, 803),
 		serviceRecordTestTime(),
 	)

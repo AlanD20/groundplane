@@ -46,6 +46,7 @@ type EnvironmentRecord struct {
 	ID                string                       `json:"id"`
 	ProjectID         string                       `json:"project_id"`
 	Name              string                       `json:"name"`
+	NetworkPool       string                       `json:"network_pool"`
 	VolumeDir         string                       `json:"volume_dir"`
 	ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
 	CreateTaskID      string                       `json:"create_task_id"`

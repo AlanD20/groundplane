@@ -173,7 +173,7 @@ func createEnvironmentBlueprintOwners(
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	environment, err := repository.CreateEnvironment(ctx, EnvironmentRecord{
+	environment, err := repository.CreateEnvironment(ctx, EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID: environmentID, ProjectID: projectID, Name: "production",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
 		ProvisioningState: EnvironmentProvisioningReady,

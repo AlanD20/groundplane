@@ -299,6 +299,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 		project.Record,
 		ids.NewAt(ids.KindEnvironment, testAttachTime, 4),
 		"production",
+		"10.32.0.0/16",
 		ids.NewAt(ids.KindTask, testAttachTime, 5),
 		testAttachTime,
 	)
@@ -314,6 +315,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 		backingProject.Record,
 		ids.NewAt(ids.KindEnvironment, testAttachTime, 6),
 		"main",
+		"10.33.0.0/16",
 		ids.NewAt(ids.KindTask, testAttachTime, 7),
 		testAttachTime,
 	)

@@ -222,7 +222,7 @@ func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, err
 		)
 	}
 	input := hierarchy.CreateEnvironmentInput{}
-	seen := make(map[string]struct{}, 2)
+	seen := make(map[string]struct{}, 3)
 	for decoder.More() {
 		token, err := decoder.Token()
 		if err != nil {
@@ -242,7 +242,7 @@ func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, err
 			)
 		}
 		seen[member] = struct{}{}
-		if member != "project_id" && member != "name" {
+		if member != "project_id" && member != "name" && member != "network_pool" {
 			return hierarchy.CreateEnvironmentInput{}, errs.New(
 				errs.KindMalformedRequest,
 				"Environment creation body contains an unknown member",
@@ -261,8 +261,10 @@ func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, err
 		}
 		if member == "project_id" {
 			input.ProjectID = value
-		} else {
+		} else if member == "name" {
 			input.Name = value
+		} else {
+			input.NetworkPool = value
 		}
 	}
 	closing, err := decoder.Token()
@@ -348,7 +350,8 @@ func environmentResponse(record etcd.EnvironmentRecord) apiTypes.Environment {
 		createTaskID = &value
 	}
 	return apiTypes.Environment{
-		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, VolumeDir: record.VolumeDir,
+		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name,
+		NetworkPool: record.NetworkPool, VolumeDir: record.VolumeDir,
 		ProvisioningState: apiTypes.EnvironmentProvisioningState(record.ProvisioningState),
 		CreateTaskID:      createTaskID,
 	}

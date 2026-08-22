@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/ipam"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -26,10 +28,12 @@ const (
 
 type environmentCreationRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironmentPoolRegistry(context.Context) (etcd.Versioned[etcd.EnvironmentPoolRegistry], error)
 	CreateEnvironmentWithTask(
 		context.Context,
 		string,
 		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[etcd.EnvironmentPoolRegistry],
 		etcd.EnvironmentRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -86,6 +90,7 @@ func (service *durableEnvironmentCreationIdempotency) Prepare(
 		Query: idempotentintent.Object(),
 		Body: idempotentintent.JSONBody(idempotentintent.Object(
 			idempotentintent.Field{Name: "name", Value: idempotentintent.String(input.Name)},
+			idempotentintent.Field{Name: "network_pool", Value: idempotentintent.String(input.NetworkPool)},
 			idempotentintent.Field{Name: "project_id", Value: idempotentintent.String(input.ProjectID)},
 		)),
 	})
@@ -130,14 +135,16 @@ func (service *durableEnvironmentCreationIdempotency) ResolveUnknown(
 }
 
 type environmentCreationService struct {
-	volumeRoot  string
-	repository  environmentCreationRepository
-	idempotency environmentCreationIdempotency
-	now         func() time.Time
+	volumeRoot      string
+	environmentPool netip.Prefix
+	repository      environmentCreationRepository
+	idempotency     environmentCreationIdempotency
+	now             func() time.Time
 }
 
 func newEnvironmentCreationService(
 	volumeRoot string,
+	environmentPool string,
 	repository environmentCreationRepository,
 	idempotency environmentCreationIdempotency,
 ) (*environmentCreationService, error) {
@@ -147,8 +154,13 @@ func newEnvironmentCreationService(
 	if _, err := controllerpkg.NewTaskPlanResolver(volumeRoot); err != nil {
 		return nil, err
 	}
+	root, err := ipam.ParseIPv4Prefix(environmentPool)
+	if err != nil {
+		return nil, errs.New(errs.KindValidationFailed, "Controller environment pool is invalid")
+	}
 	return &environmentCreationService{
-		volumeRoot: volumeRoot, repository: repository, idempotency: idempotency, now: time.Now,
+		volumeRoot: volumeRoot, environmentPool: root,
+		repository: repository, idempotency: idempotency, now: time.Now,
 	}, nil
 }
 
@@ -210,13 +222,28 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	if project.Record.ID != input.ProjectID || project.Record.Kind != etcd.ProjectKindTenant {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
+	poolRegistry, err := service.repository.GetEnvironmentPoolRegistry(ctx)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	now := service.now().UTC()
 	taskID := ids.New(ids.KindTask)
+	environmentID := ids.New(ids.KindEnvironment)
+	nextPoolRegistry, networkPool, err := poolRegistry.Record.Reserve(
+		service.environmentPool,
+		environmentID,
+		input.NetworkPool,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	poolRegistry.Record = nextPoolRegistry
 	environment, err := etcd.NewProvisioningEnvironment(
 		service.volumeRoot,
 		project.Record,
-		ids.New(ids.KindEnvironment),
+		environmentID,
 		input.Name,
+		networkPool,
 		taskID,
 		now,
 	)
@@ -245,6 +272,7 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		ctx,
 		service.volumeRoot,
 		project,
+		poolRegistry,
 		environment,
 		task,
 		marker,

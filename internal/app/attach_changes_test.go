@@ -112,7 +112,12 @@ func TestListAttachesRequiresAndPreservesEnvironmentScope(t *testing.T) {
 	want := etcd.Page[etcd.AttachRecord]{NextCursor: "next-cursor", Revision: 42}
 	repository := &fakeAttachListRepository{
 		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{ID: environmentID}, Revision: 10, ReadRevision: 10,
+			Record: etcd.EnvironmentRecord{
+				NetworkPool: "10.40.0.0/16",
+				ID:          environmentID,
+			},
+			Revision:     10,
+			ReadRevision: 10,
 		},
 		page: want, wantRequest: request,
 	}

@@ -485,6 +485,9 @@
           "name": {
             "type": "string"
           },
+          "network_pool": {
+            "type": "string"
+          },
           "project_id": {
             "type": "string"
           },
@@ -499,6 +502,7 @@
           "id",
           "project_id",
           "name",
+          "network_pool",
           "volume_dir",
           "provisioning_state",
           "create_task_id"
@@ -520,13 +524,17 @@
           "name": {
             "type": "string"
           },
+          "network_pool": {
+            "type": "string"
+          },
           "project_id": {
             "type": "string"
           }
         },
         "required": [
           "project_id",
-          "name"
+          "name",
+          "network_pool"
         ],
         "type": "object"
       },
