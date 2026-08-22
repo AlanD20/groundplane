@@ -486,11 +486,21 @@ const (
 	SecretKindFile   SecretKind = "file"
 )
 
+type SecretScope string
+
+const (
+	SecretScopeProject  SecretScope = "project"
+	SecretScopePlatform SecretScope = "platform"
+)
+
 type Secret struct {
-	ID        string     `yaml:"id"         json:"id"` // sec_<ulid>
-	ProjectID string     `yaml:"project_id" json:"project_id"`
-	Kind      SecretKind `yaml:"kind"       json:"kind"`
-	Ref       string     `yaml:"ref"        json:"ref"` // env file name or file path — never an inline value
+	ID        string      `yaml:"id"                   json:"id"` // sec_<ulid>
+	Scope     SecretScope `yaml:"scope"                json:"scope"`
+	ProjectID string      `yaml:"project_id,omitempty" json:"project_id,omitempty"`
+	Key       string      `yaml:"key"                  json:"key"`
+	Kind      SecretKind  `yaml:"kind"                 json:"kind"`
+	Ref       string      `yaml:"ref"                  json:"ref"` // generated env-file name or volume-relative file path
+	UpdatedAt time.Time   `yaml:"updated_at"           json:"updated_at"`
 }
 
 // Connector is a backup destination + credentials owned by exactly one

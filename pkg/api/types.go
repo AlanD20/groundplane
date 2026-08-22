@@ -277,9 +277,27 @@ type Runner struct {
 
 type Secret struct {
 	ID        string `json:"id"`
-	ProjectID string `json:"project_id"`
+	Scope     string `json:"scope"` // "project" | "platform"
+	ProjectID string `json:"project_id,omitempty"`
+	Key       string `json:"key"`
 	Kind      string `json:"kind"` // "env_var" | "file"
 	Ref       string `json:"ref"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// SecretCreateRequest keeps the value write-only. ProjectID and Platform are
+// mutually exclusive; Path is required only for file Secrets.
+type SecretCreateRequest struct {
+	ProjectID string `json:"project_id,omitempty"`
+	Platform  bool   `json:"platform,omitempty"`
+	Key       string `json:"key"`
+	Kind      string `json:"kind"`
+	Path      string `json:"path,omitempty"`
+	Value     string `json:"value"`
+}
+
+type SecretValue struct {
+	Value string `json:"value"`
 }
 
 type ConnectorCredentialKind string
