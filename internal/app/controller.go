@@ -497,6 +497,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,
 		EnvironmentDeletions:  environmentDeletions,
+		AttachMutations:       attachMutations,
 		TaskMutations:         taskMutations,
 		TenantMutations:       tenantMutations,
 		TenantChanges:         tenantChanges,

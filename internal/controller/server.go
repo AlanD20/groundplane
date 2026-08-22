@@ -47,6 +47,7 @@ type Server struct {
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
 	environmentDeletions  EnvironmentDeleter
+	attachMutations       AttachMutator
 	taskMutations         TaskRetrier
 	console               fs.FS
 	tasks                 taskQueries
@@ -68,6 +69,7 @@ type Options struct {
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
 	EnvironmentDeletions  EnvironmentDeleter
+	AttachMutations       AttachMutator
 	TaskMutations         TaskRetrier
 	Console               fs.FS
 	Tasks                 *etcd.TaskRepository
@@ -107,6 +109,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
 		environmentDeletions:  options.EnvironmentDeletions,
+		attachMutations:       options.AttachMutations,
 		taskMutations:         options.TaskMutations,
 		console:               options.Console,
 		tasks:                 options.Tasks,
@@ -116,6 +119,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerTenants()
 	s.registerProjects()
 	s.registerEnvironments()
+	s.registerAttaches()
 	s.registerHost()
 	return s
 }
@@ -189,10 +193,9 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
 
 	// attach — attach provisions (joins the owned external network,
-	// publishes facts), detach deprovisions; both tasks
+	// publishes facts), detach deprovisions; mutations are typed Huma routes.
+	// List remains explicit until its global-versus-Environment scope is locked.
 	mux.HandleFunc("GET /api/v1/attaches", s.notImplemented)
-	s.jsonRoute("POST /api/v1/attaches", s.acceptTask) // {service_ids, backing_service_id, name?, grant_attach_ids?}
-	mux.HandleFunc("DELETE /api/v1/attaches/{id}", s.acceptTask)
 
 	// zone / route / volume / entry / script (?environment=) — destructive delete is a task
 	for _, res := range []string{"zones", "routes", "volumes", "entries", "scripts"} {

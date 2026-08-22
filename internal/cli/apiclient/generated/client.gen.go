@@ -16,6 +16,18 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// AttachRequest defines model for AttachRequest.
+type AttachRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/AttachRequest.json
+	Schema           *string   `json:"$schema,omitempty"`
+	BackingServiceId string    `json:"backing_service_id"`
+	GrantAttachIds   *[]string `json:"grant_attach_ids,omitempty"`
+	Name             *string   `json:"name,omitempty"`
+	ServiceIds       []string  `json:"service_ids"`
+}
+
 // Environment defines model for Environment.
 type Environment struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -244,6 +256,16 @@ type TenantRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// AttachCreateParams defines parameters for AttachCreate.
+type AttachCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// AttachDetachParams defines parameters for AttachDetach.
+type AttachDetachParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentListParams defines parameters for EnvironmentList.
 type EnvironmentListParams struct {
 	Project string  `form:"project" json:"project"`
@@ -304,6 +326,9 @@ type TenantEditParams struct {
 type TenantRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
+
+// AttachCreateJSONRequestBody defines body for AttachCreate for application/json ContentType.
+type AttachCreateJSONRequestBody = AttachRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
@@ -402,6 +427,25 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// AttachCreateWithBody Attach a backing service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /attaches (the `AttachCreate` operationId).
+	AttachCreateWithBody(ctx context.Context, params *AttachCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachCreate Attach a backing service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /attaches (the `AttachCreate` operationId).
+	AttachCreate(ctx context.Context, params *AttachCreateParams, body AttachCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachDetach Detach a backing service
+	//
+	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+	AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentList List environments
 	//
@@ -549,6 +593,55 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// AttachCreateWithBody Attach a backing service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /attaches (the `AttachCreate` operationId).
+func (c *Client) AttachCreateWithBody(ctx context.Context, params *AttachCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachCreate Attach a backing service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /attaches (the `AttachCreate` operationId).
+func (c *Client) AttachCreate(ctx context.Context, params *AttachCreateParams, body AttachCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachDetach Detach a backing service
+//
+// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+func (c *Client) AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachDetachRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // EnvironmentList List environments
@@ -926,6 +1019,106 @@ func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRena
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewAttachCreateRequest calls the generic AttachCreate builder with application/json body
+func NewAttachCreateRequest(server string, params *AttachCreateParams, body AttachCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAttachCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewAttachCreateRequestWithBody constructs an http.Request for the AttachCreate method, with any body, and a specified content type
+func NewAttachCreateRequestWithBody(server string, params *AttachCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/attaches")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewAttachDetachRequest constructs an http.Request for the AttachDetach method
+func NewAttachDetachRequest(server string, id string, params *AttachDetachParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/attaches/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
 }
 
 // NewEnvironmentListRequest constructs an http.Request for the EnvironmentList method
@@ -1790,6 +1983,27 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// AttachCreateWithBodyWithResponse Attach a backing service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /attaches (the `AttachCreate` operationId).
+	AttachCreateWithBodyWithResponse(ctx context.Context, params *AttachCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachCreateResponse, error)
+
+	// AttachCreateWithResponse Attach a backing service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /attaches (the `AttachCreate` operationId).
+	AttachCreateWithResponse(ctx context.Context, params *AttachCreateParams, body AttachCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachCreateResponse, error)
+
+	// AttachDetachWithResponse Detach a backing service
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+	AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error)
+
 	// EnvironmentListWithResponse List environments
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -1950,6 +2164,116 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
+}
+
+// AttachCreateResponse202Headers the declared response headers of an HTTP 202 response for AttachCreate
+type AttachCreateResponse202Headers struct {
+	ContentType *string
+}
+
+type AttachCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *AttachCreateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r AttachCreateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AttachCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AttachCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AttachCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AttachCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AttachCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AttachDetachResponse202Headers the declared response headers of an HTTP 202 response for AttachDetach
+type AttachDetachResponse202Headers struct {
+	ContentType *string
+}
+
+type AttachDetachResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *AttachDetachResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r AttachDetachResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AttachDetachResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AttachDetachResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AttachDetachResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AttachDetachResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AttachDetachResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type EnvironmentListResponse struct {
@@ -2728,6 +3052,45 @@ func (r TenantRenameResponse) ContentType() string {
 	return ""
 }
 
+// AttachCreateWithBodyWithResponse Attach a backing service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /attaches (the `AttachCreate` operationId).
+func (c *ClientWithResponses) AttachCreateWithBodyWithResponse(ctx context.Context, params *AttachCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AttachCreateResponse, error) {
+	rsp, err := c.AttachCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachCreateResponse(rsp)
+}
+
+// AttachCreateWithResponse Attach a backing service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /attaches (the `AttachCreate` operationId).
+func (c *ClientWithResponses) AttachCreateWithResponse(ctx context.Context, params *AttachCreateParams, body AttachCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachCreateResponse, error) {
+	rsp, err := c.AttachCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachCreateResponse(rsp)
+}
+
+// AttachDetachWithResponse Detach a backing service
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
+func (c *ClientWithResponses) AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error) {
+	rsp, err := c.AttachDetach(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachDetachResponse(rsp)
+}
+
 // EnvironmentListWithResponse List environments
 //
 // Returns a wrapper object for the known response body format(s).
@@ -3025,6 +3388,98 @@ func (c *ClientWithResponses) TenantRenameWithResponse(ctx context.Context, id s
 		return nil, err
 	}
 	return ParseTenantRenameResponse(rsp)
+}
+
+// ParseAttachCreateResponse parses an HTTP response from a AttachCreateWithResponse call
+func ParseAttachCreateResponse(rsp *http.Response) (*AttachCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AttachCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers AttachCreateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseAttachDetachResponse parses an HTTP response from a AttachDetachWithResponse call
+func ParseAttachDetachResponse(rsp *http.Response) (*AttachDetachResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AttachDetachResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers AttachDetachResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseEnvironmentListResponse parses an HTTP response from a EnvironmentListWithResponse call
