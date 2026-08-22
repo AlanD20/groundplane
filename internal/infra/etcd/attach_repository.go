@@ -129,6 +129,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Key: deletionTombstoneKey("environment", record.BackingEnvironmentID)},
 		{Key: deletionTombstoneKey("project", record.BackingProjectID)},
 		{Key: deletionTombstoneKey("service", record.BackingServiceID)},
+		{Key: deletionTombstoneKey(string(DeletionTargetZone), record.BackingNetworkID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
 		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
@@ -967,7 +968,7 @@ func validateAttachDetachTask(
 }
 
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 40 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	operations := 41 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
 	if hasFacts {
 		operations++
 	}
@@ -1039,13 +1040,16 @@ func classifyAttachCreateConflict(reads []*KeyValue) error {
 }
 
 func classifyAttachTaskCreateConflict(_ int64, reads []*KeyValue) error {
-	if len(reads) < 4 {
+	if len(reads) < 22 {
 		return errs.New(errs.KindInternal, "Attach Task conflict evidence is incomplete")
 	}
 	for _, read := range reads[:4] {
 		if read != nil {
 			return errs.New(errs.KindStateConflict, "Attach Task operation is already active")
 		}
+	}
+	if reads[21] != nil {
+		return errs.New(errs.KindResourceInUse, "backing Zone removal is in progress")
 	}
 	return classifyAttachCreateConflict(reads[4:])
 }

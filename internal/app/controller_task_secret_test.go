@@ -11,7 +11,7 @@ import (
 // durable effect belongs to Task acknowledgement, not the execution handler.
 func TestControllerTaskHandlerAcceptsOnlyExactSecretRemoval(t *testing.T) {
 	t.Parallel()
-	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{})
+	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t))
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}

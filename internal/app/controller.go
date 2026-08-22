@@ -511,6 +511,22 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)
 	}
+	backingZoneCascades, err := newBackingZoneCascadeService(
+		&durableBackingZoneCascadeRepository{
+			hierarchy: hierarchyRecords,
+			zones:     zoneRecords,
+			attaches:  attachRecords,
+			tasks:     tasks,
+		},
+		attachMutations,
+		taskMutations,
+		planResolver,
+		zoneDeletionIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize backing Zone cascade: %w", err)
+	}
 	environmentBlueprintIdempotency, err := newDurableEnvironmentBlueprintIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
@@ -698,7 +714,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
 	}
-	controllerTaskHandler, err := newControllerTaskHandler(localAgentManager)
+	controllerTaskHandler, err := newControllerTaskHandler(localAgentManager, backingZoneCascades)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()

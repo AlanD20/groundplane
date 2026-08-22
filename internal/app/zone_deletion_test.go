@@ -22,6 +22,7 @@ type fakeZoneDeletionRepository struct {
 	project     etcd.Versioned[etcd.ProjectRecord]
 	task        etcd.TaskRecord
 	marker      etcd.IdempotencyMarker
+	tombstone   etcd.DeletionTombstoneRecord
 }
 
 func (fake *fakeZoneDeletionRepository) GetZone(context.Context, string) (etcd.Versioned[etcd.ZoneRecord], error) {
@@ -47,13 +48,25 @@ func (fake *fakeZoneDeletionRepository) BeginZoneDeletionWithTask(
 	_ etcd.Versioned[etcd.EnvironmentRecord],
 	_ etcd.Versioned[etcd.ProjectRecord],
 	_ etcd.Versioned[etcd.ZoneRecord],
-	_ etcd.DeletionTombstoneRecord,
+	tombstone etcd.DeletionTombstoneRecord,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	fake.task = task
 	fake.marker = marker
+	fake.tombstone = tombstone
 	return etcd.IdempotencyTransactionResult{}, nil
+}
+
+type fakeZoneDeletionImpacts struct {
+	impact apiTypes.ZoneRemovalImpact
+}
+
+func (fake fakeZoneDeletionImpacts) GetZoneRemovalImpact(
+	context.Context,
+	string,
+) (apiTypes.ZoneRemovalImpact, error) {
+	return fake.impact, nil
 }
 
 type fakeZoneDeletionIdempotency struct{}
@@ -152,5 +165,52 @@ func TestZoneDeletionPublishesExactTaskAndReplayTarget(t *testing.T) {
 		repository.marker.ReplayTarget.Kind != etcd.IdempotencyReplayTargetZone ||
 		repository.marker.ReplayTarget.ID != zoneID {
 		t.Fatalf("Zone deletion task/marker = %#v / %#v", repository.task, repository.marker)
+	}
+}
+
+// Rationale: backing ownership must publish one retryable Controller parent
+// with the confirmed impact token instead of attempting one oversized Agent plan.
+func TestBackingZoneDeletionPublishesCascadeParent(t *testing.T) {
+	now := time.Date(2026, time.August, 23, 13, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 11)
+	projectID := ids.NewAt(ids.KindProject, now, 12)
+	zoneID := ids.NewAt(ids.KindNetwork, now, 13)
+	impactToken := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	repository := &fakeZoneDeletionRepository{
+		zone: etcd.Versioned[etcd.ZoneRecord]{Record: etcd.ZoneRecord{
+			EnvironmentID: environmentID,
+			Desired: core.Zone{
+				ID: zoneID, Name: "backing", Subnet: "10.50.10.0/24",
+				OwnerKind: core.ZoneOwnerBackingProject, OwnerID: projectID,
+			},
+		}, Revision: 17, ReadRevision: 17},
+		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{
+			ID: environmentID, ProjectID: projectID, Name: "main", NetworkPool: "10.50.0.0/16",
+			VolumeDir:         "/var/lib/groundplane/vol/backing/" + projectID + "/environments/" + environmentID,
+			ProvisioningState: etcd.EnvironmentProvisioningReady,
+		}, Revision: 18, ReadRevision: 18},
+		project: etcd.Versioned[etcd.ProjectRecord]{Record: etcd.ProjectRecord{
+			ID: projectID, Kind: etcd.ProjectKindBacking, Slug: "postgres", Name: "Postgres",
+		}, Revision: 19, ReadRevision: 19},
+	}
+	service, err := newZoneDeletionService(repository, &fakeZoneDeletionPlans{}, &fakeZoneDeletionIdempotency{})
+	if err != nil {
+		t.Fatalf("newZoneDeletionService() error = %v", err)
+	}
+	service.impacts = fakeZoneDeletionImpacts{impact: apiTypes.ZoneRemovalImpact{ImpactToken: impactToken}}
+	service.now = func() time.Time { return now }
+	response, err := service.RemoveZoneWithImpact(
+		context.Background(), zoneID, "zone-remove-key-0002", impactToken,
+	)
+	if err != nil || response.Status != http.StatusAccepted {
+		t.Fatalf("RemoveZoneWithImpact() = %#v, %v", response, err)
+	}
+	if repository.task.Executor != etcd.TaskExecutorController ||
+		repository.task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceBackingZone ||
+		repository.task.Params[etcd.TaskZoneEnvironmentParam] != environmentID ||
+		repository.task.Params[etcd.TaskZoneImpactTokenParam] != impactToken ||
+		repository.task.TimeoutSeconds != backingZoneCascadeTimeoutSeconds ||
+		repository.tombstone.TaskID != repository.task.ID {
+		t.Fatalf("backing Zone cascade Task/tombstone = %#v / %#v", repository.task, repository.tombstone)
 	}
 }

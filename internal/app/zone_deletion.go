@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,9 +19,10 @@ import (
 )
 
 const (
-	zoneDeletionRoute           = "/zones/{id}"
-	zoneDeletionTimeoutSeconds  = int64(120)
-	maximumZoneDeletionAttempts = 3
+	zoneDeletionRoute                = "/zones/{id}"
+	zoneDeletionTimeoutSeconds       = int64(120)
+	backingZoneCascadeTimeoutSeconds = int64(24 * 60 * 60)
+	maximumZoneDeletionAttempts      = 3
 )
 
 type zoneDeletionRepository interface {
@@ -213,8 +215,12 @@ type zoneDeletionService struct {
 	repository  zoneDeletionRepository
 	plans       zoneDeletionPlanResolver
 	idempotency zoneDeletionIdempotency
-	impacts     *zoneRemovalImpactService
+	impacts     zoneDeletionImpactResolver
 	now         func() time.Time
+}
+
+type zoneDeletionImpactResolver interface {
+	GetZoneRemovalImpact(context.Context, string) (apiTypes.ZoneRemovalImpact, error)
 }
 
 func newZoneDeletionService(
@@ -304,7 +310,8 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject {
+	backing := zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject
+	if backing {
 		if service.impacts == nil {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
@@ -318,10 +325,6 @@ func (service *zoneDeletionService) removeZoneOnce(
 		if impactToken == "" || impact.ImpactToken != impactToken {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "backing Zone removal impact changed")
 		}
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindResourceInUse,
-			"backing-owned Zone removal requires the Attach cascade",
-		)
 	}
 	environment, err := service.repository.GetEnvironment(ctx, zone.Record.EnvironmentID)
 	if err != nil {
@@ -334,7 +337,11 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant || zone.Record.Desired.OwnerID != environment.Record.ID {
+	ordinaryOwnership := project.Record.Kind == etcd.ProjectKindTenant &&
+		zone.Record.Desired.OwnerKind == core.ZoneOwnerEnvironment && zone.Record.Desired.OwnerID == environment.Record.ID
+	backingOwnership := project.Record.Kind == etcd.ProjectKindBacking &&
+		zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject && zone.Record.Desired.OwnerID == project.Record.ID
+	if (!backing && !ordinaryOwnership) || (backing && !backingOwnership) {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone ownership is inconsistent")
 	}
 	locator = etcd.IdempotencyLocator{
@@ -366,11 +373,25 @@ func (service *zoneDeletionService) removeZoneOnce(
 		Steps:  []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}, TimeoutSeconds: zoneDeletionTimeoutSeconds,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
 	}
-	plan, err := service.plans.ResolveExecutionPlan(ctx, task)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+	if backing {
+		task.Executor = etcd.TaskExecutorController
+		task.Params = map[string]string{
+			etcd.TaskResourceKindParam:    etcd.TaskResourceBackingZone,
+			etcd.TaskZoneEnvironmentParam: environment.Record.ID,
+			etcd.TaskZoneImpactTokenParam: impactToken,
+		}
+		task.TimeoutSeconds = backingZoneCascadeTimeoutSeconds
+		task.PlanHash, err = backingZoneCascadePlanHash(zoneID, impactToken)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+	} else {
+		plan, planErr := service.plans.ResolveExecutionPlan(ctx, task)
+		if planErr != nil {
+			return etcd.IdempotencyResponse{}, planErr
+		}
+		task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	}
-	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -410,6 +431,21 @@ func (service *zoneDeletionService) removeZoneOnce(
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion resolution is invalid")
 	}
+}
+
+func backingZoneCascadePlanHash(zoneID string, impactToken string) (string, error) {
+	value, err := json.Marshal(struct {
+		Version     int    `json:"version"`
+		Type        string `json:"type"`
+		ZoneID      string `json:"zone_id"`
+		ImpactToken string `json:"impact_token"`
+	}{Version: 1, Type: "backing_zone_cascade", ZoneID: zoneID, ImpactToken: impactToken})
+	if err != nil {
+		return "", errs.Wrap(errs.KindInternal, err)
+	}
+	digest := sha256.Sum256(value)
+	clear(value)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func (service *zoneDeletionService) replayZoneDeletion(

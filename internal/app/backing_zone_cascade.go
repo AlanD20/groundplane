@@ -1,0 +1,478 @@
+package app
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const backingZoneCascadePollInterval = 250 * time.Millisecond
+
+type backingZoneCascadeRepository interface {
+	GetZone(context.Context, string) (etcd.Versioned[etcd.ZoneRecord], error)
+	GetDeletionTombstone(
+		context.Context,
+		etcd.DeletionTargetKind,
+		string,
+	) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error)
+	ListAttachesByBackingNetworkAtRevision(
+		context.Context,
+		string,
+		string,
+		int64,
+	) ([]etcd.Versioned[etcd.AttachRecord], error)
+	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	HandoffBackingZoneDeletion(
+		context.Context,
+		etcd.Versioned[etcd.ZoneRecord],
+		string,
+		etcd.Versioned[etcd.DeletionTombstoneRecord],
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
+type durableBackingZoneCascadeRepository struct {
+	hierarchy *etcd.HierarchyRepository
+	zones     *etcd.ZoneRepository
+	attaches  *etcd.AttachRepository
+	tasks     *etcd.TaskRepository
+}
+
+func (repository *durableBackingZoneCascadeRepository) GetZone(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ZoneRecord], error) {
+	return repository.zones.GetZone(ctx, id)
+}
+
+func (repository *durableBackingZoneCascadeRepository) GetDeletionTombstone(
+	ctx context.Context,
+	kind etcd.DeletionTargetKind,
+	id string,
+) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error) {
+	return repository.hierarchy.GetDeletionTombstone(ctx, kind, id)
+}
+
+func (repository *durableBackingZoneCascadeRepository) ListAttachesByBackingNetworkAtRevision(
+	ctx context.Context,
+	projectID string,
+	networkID string,
+	revision int64,
+) ([]etcd.Versioned[etcd.AttachRecord], error) {
+	return repository.attaches.ListAttachesByBackingNetworkAtRevision(ctx, projectID, networkID, revision)
+}
+
+func (repository *durableBackingZoneCascadeRepository) GetTask(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.TaskRecord], error) {
+	return repository.tasks.GetTask(ctx, id)
+}
+
+func (repository *durableBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
+	ctx context.Context,
+	zone etcd.Versioned[etcd.ZoneRecord],
+	parentTaskID string,
+	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.zones.HandoffBackingZoneDeletion(ctx, zone, parentTaskID, tombstone, task, marker)
+}
+
+type backingZoneCascadeDetaches interface {
+	DetachAttach(context.Context, string, string) (etcd.IdempotencyResponse, error)
+}
+
+type backingZoneCascadeRetries interface {
+	RetryTask(context.Context, string, string) (etcd.IdempotencyResponse, error)
+}
+
+type backingZoneCascadeService struct {
+	repository  backingZoneCascadeRepository
+	detaches    backingZoneCascadeDetaches
+	retries     backingZoneCascadeRetries
+	plans       zoneDeletionPlanResolver
+	idempotency zoneDeletionIdempotency
+	now         func() time.Time
+	wait        func(context.Context) error
+}
+
+func newBackingZoneCascadeService(
+	repository backingZoneCascadeRepository,
+	detaches backingZoneCascadeDetaches,
+	retries backingZoneCascadeRetries,
+	plans zoneDeletionPlanResolver,
+	idempotency zoneDeletionIdempotency,
+) (*backingZoneCascadeService, error) {
+	if repository == nil || detaches == nil || retries == nil || plans == nil || idempotency == nil {
+		return nil, errs.New(errs.KindInternal, "backing Zone cascade is not configured")
+	}
+	return &backingZoneCascadeService{
+		repository:  repository,
+		detaches:    detaches,
+		retries:     retries,
+		plans:       plans,
+		idempotency: idempotency,
+		now:         time.Now,
+		wait: func(ctx context.Context) error {
+			timer := time.NewTimer(backingZoneCascadePollInterval)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+				return nil
+			}
+		},
+	}, nil
+}
+
+func (service *backingZoneCascadeService) Execute(ctx context.Context, task etcd.TaskRecord) error {
+	if ctx == nil {
+		return errs.New(errs.KindInternal, "backing Zone cascade context is required")
+	}
+	if ok, err := isBackingZoneCascadeTask(task); err != nil || !ok {
+		if err != nil {
+			return err
+		}
+		return errs.New(errs.KindValidationFailed, "backing Zone cascade Task is invalid")
+	}
+	for {
+		zone, err := service.repository.GetZone(ctx, task.Target)
+		if err != nil {
+			if errors.Is(err, errs.New(errs.KindZoneNotFound, "")) {
+				return nil
+			}
+			return err
+		}
+		if zone.Record.Desired.OwnerKind != core.ZoneOwnerBackingProject ||
+			zone.Record.EnvironmentID != task.Params[etcd.TaskZoneEnvironmentParam] {
+			return errs.New(errs.KindStateConflict, "backing Zone cascade target changed")
+		}
+		attaches, err := service.repository.ListAttachesByBackingNetworkAtRevision(
+			ctx,
+			zone.Record.Desired.OwnerID,
+			zone.Record.Desired.ID,
+			zone.ReadRevision,
+		)
+		if err != nil {
+			return err
+		}
+		ordered, err := orderBackingZoneCascadeAttaches(attaches)
+		if err != nil {
+			return err
+		}
+		if len(ordered) == 0 {
+			return service.finish(ctx, task, zone)
+		}
+		if err := service.advanceAttach(ctx, task, ordered[0].Record); err != nil {
+			if errors.Is(err, errs.New(errs.KindAttachNotFound, "")) {
+				continue
+			}
+			return err
+		}
+	}
+}
+
+func (service *backingZoneCascadeService) advanceAttach(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	attach etcd.AttachRecord,
+) error {
+	var response etcd.IdempotencyResponse
+	var err error
+	switch {
+	case attach.Status == core.AttachReady ||
+		(attach.Status == core.AttachFailed && attach.Operation == etcd.AttachOperationProvision):
+		response, err = service.detaches.DetachAttach(
+			ctx,
+			attach.ID,
+			cascadeIdempotencyKey("detach", parent.ID, attach.ID),
+		)
+	case attach.Status == core.AttachFailed && attach.Operation == etcd.AttachOperationDetach:
+		response, err = service.retries.RetryTask(
+			ctx,
+			attach.TaskID,
+			cascadeIdempotencyKey("retry", parent.ID, attach.ID),
+		)
+	case attach.Status == core.AttachPending || attach.Status == core.AttachProvisioning:
+		_, err = service.waitForTask(ctx, attach.TaskID)
+		return err
+	case attach.Status == core.AttachDetaching:
+		terminal, waitErr := service.waitForTask(ctx, attach.TaskID)
+		if waitErr != nil {
+			return waitErr
+		}
+		return requireCascadeChildSuccess(terminal.Record)
+	default:
+		return errs.New(errs.KindStateConflict, "Attach lifecycle cannot advance during backing Zone removal")
+	}
+	if err != nil {
+		return err
+	}
+	childID, err := cascadeTaskID(response)
+	if err != nil {
+		return err
+	}
+	terminal, err := service.waitForTask(ctx, childID)
+	if err != nil {
+		return err
+	}
+	return requireCascadeChildSuccess(terminal.Record)
+}
+
+func (service *backingZoneCascadeService) finish(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	zone etcd.Versioned[etcd.ZoneRecord],
+) error {
+	tombstone, found, err := service.repository.GetDeletionTombstone(
+		ctx,
+		etcd.DeletionTargetZone,
+		parent.Target,
+	)
+	if err != nil {
+		return err
+	}
+	if !found {
+		_, readErr := service.repository.GetZone(ctx, parent.Target)
+		if errors.Is(
+			readErr,
+			errs.New(errs.KindZoneNotFound, ""),
+		) {
+			return nil
+		}
+		if readErr != nil {
+			return readErr
+		}
+		return errs.New(errs.KindStateConflict, "backing Zone cascade fence is missing")
+	}
+	childID := tombstone.Record.TaskID
+	if childID == parent.ID {
+		if deadline, ok := ctx.Deadline(); ok &&
+			time.Until(deadline) <= time.Duration(zoneDeletionTimeoutSeconds+5)*time.Second {
+			return errs.New(
+				errs.KindStateConflict,
+				"backing Zone cascade has insufficient time for final network removal",
+			)
+		}
+		childID, err = service.publishFinalRemoval(ctx, parent, zone, tombstone)
+		if err != nil {
+			return err
+		}
+	}
+	child, err := service.waitForTask(ctx, childID)
+	if err != nil {
+		return err
+	}
+	return requireCascadeChildSuccess(child.Record)
+}
+
+func (service *backingZoneCascadeService) publishFinalRemoval(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	zone etcd.Versioned[etcd.ZoneRecord],
+	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
+) (string, error) {
+	now := service.now().UTC()
+	child := etcd.TaskRecord{
+		ID:               ids.New(ids.KindTask),
+		OperationID:      ids.New(ids.KindOperation),
+		Executor:         etcd.TaskExecutorAgent,
+		PlanID:           ids.New(ids.KindPlan),
+		RenderGeneration: 1,
+		Type:             etcd.TaskRemove,
+		Target:           parent.Target,
+		Params: map[string]string{
+			etcd.TaskZoneEnvironmentParam: zone.Record.EnvironmentID,
+		},
+		Steps:             []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
+		TimeoutSeconds:    zoneDeletionTimeoutSeconds,
+		Status:            etcd.TaskStatusPending,
+		NextEventSequence: 1,
+		CreatedAt:         now,
+	}
+	plan, err := service.plans.ResolveExecutionPlan(ctx, child)
+	if err != nil {
+		return "", err
+	}
+	child.PlanHash = hex.EncodeToString(plan.PlanHash)
+	key := cascadeIdempotencyKey("finalize", parent.ID, parent.Target)
+	locator := etcd.IdempotencyLocator{
+		ScopeKind: etcd.IdempotencyScopeEnvironment,
+		ScopeID:   zone.Record.EnvironmentID,
+		Method:    http.MethodDelete,
+		Route:     zoneDeletionRoute,
+		Key:       key,
+	}
+	evidence, err := service.idempotency.Prepare(
+		ctx,
+		locator,
+		parent.Target,
+		parent.Params[etcd.TaskZoneImpactTokenParam],
+	)
+	if err != nil {
+		return "", err
+	}
+	defer clear(evidence.durable.Ciphertext)
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: child.ID})
+	if err != nil {
+		return "", errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(body)
+	response := etcd.IdempotencyResponse{
+		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
+	}
+	marker := etcd.IdempotencyMarker{
+		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+		Locator: locator, Intent: evidence.durable, Response: response,
+		TaskID: child.ID, CreatedAt: now, UpdatedAt: now,
+	}
+	result, err := service.repository.HandoffBackingZoneDeletion(ctx, zone, parent.ID, tombstone, child, marker)
+	if err != nil {
+		return "", err
+	}
+	resolution, err := service.idempotency.ResolveKnown(ctx, evidence, result)
+	if err != nil {
+		return "", err
+	}
+	switch resolution.Kind {
+	case idempotentintent.ResolutionApplied:
+		return child.ID, nil
+	case idempotentintent.ResolutionReplay:
+		return cascadeTaskID(resolution.Response)
+	default:
+		return "", errs.New(errs.KindInternal, "backing Zone final handoff resolution is invalid")
+	}
+}
+
+func (service *backingZoneCascadeService) waitForTask(
+	ctx context.Context,
+	taskID string,
+) (etcd.Versioned[etcd.TaskRecord], error) {
+	for {
+		current, err := service.repository.GetTask(ctx, taskID)
+		if err != nil {
+			return etcd.Versioned[etcd.TaskRecord]{}, err
+		}
+		switch current.Record.Status {
+		case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusAborted, etcd.TaskStatusTimedOut:
+			return current, nil
+		case etcd.TaskStatusPending, etcd.TaskStatusRunning:
+			if err := service.wait(ctx); err != nil {
+				return etcd.Versioned[etcd.TaskRecord]{}, err
+			}
+		default:
+			return etcd.Versioned[etcd.TaskRecord]{}, errs.New(
+				errs.KindInternal,
+				"cascade child Task status is invalid",
+			)
+		}
+	}
+}
+
+func orderBackingZoneCascadeAttaches(
+	attaches []etcd.Versioned[etcd.AttachRecord],
+) ([]etcd.Versioned[etcd.AttachRecord], error) {
+	byID := make(map[string]etcd.Versioned[etcd.AttachRecord], len(attaches))
+	indegree := make(map[string]int, len(attaches))
+	edges := make(map[string][]string, len(attaches))
+	for _, attach := range attaches {
+		if _, exists := byID[attach.Record.ID]; exists {
+			return nil, errs.New(errs.KindInternal, "backing Zone cascade contains duplicate Attach identity")
+		}
+		byID[attach.Record.ID] = attach
+		indegree[attach.Record.ID] = 0
+	}
+	for _, attach := range attaches {
+		for _, grantID := range attach.Record.GrantAttachIDs {
+			if _, exists := byID[grantID]; !exists {
+				return nil, errs.New(errs.KindInternal, "backing Zone cascade grant target is missing")
+			}
+			edges[attach.Record.ID] = append(edges[attach.Record.ID], grantID)
+			indegree[grantID]++
+		}
+	}
+	ready := make([]string, 0, len(attaches))
+	for id, degree := range indegree {
+		if degree == 0 {
+			ready = append(ready, id)
+		}
+	}
+	slices.Sort(ready)
+	result := make([]etcd.Versioned[etcd.AttachRecord], 0, len(attaches))
+	for len(ready) != 0 {
+		id := ready[0]
+		ready = ready[1:]
+		result = append(result, byID[id])
+		for _, target := range edges[id] {
+			indegree[target]--
+			if indegree[target] == 0 {
+				ready = append(ready, target)
+				slices.Sort(ready)
+			}
+		}
+	}
+	if len(result) != len(attaches) {
+		return nil, errs.New(errs.KindInternal, "backing Zone cascade Attach grants contain a cycle")
+	}
+	return result, nil
+}
+
+func cascadeIdempotencyKey(kind string, parentID string, targetID string) string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{"v1", kind, parentID, targetID}, "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+func cascadeTaskID(response etcd.IdempotencyResponse) (string, error) {
+	if response.Status != http.StatusAccepted {
+		return "", errs.New(errs.KindInternal, "cascade child response status is invalid")
+	}
+	var accepted apiTypes.TaskAccepted
+	if err := json.Unmarshal(
+		response.Body,
+		&accepted,
+	); err != nil ||
+		ids.Validate(ids.KindTask, accepted.TaskID) != nil {
+		return "", errs.New(errs.KindInternal, "cascade child response is invalid")
+	}
+	return accepted.TaskID, nil
+}
+
+func requireCascadeChildSuccess(task etcd.TaskRecord) error {
+	if task.Status == etcd.TaskStatusCompleted {
+		return nil
+	}
+	return errs.Newf(errs.KindStateConflict, "cascade child Task %s ended with status %s", task.ID, task.Status)
+}
+
+func isBackingZoneCascadeTask(task etcd.TaskRecord) (bool, error) {
+	if task.Executor != etcd.TaskExecutorController ||
+		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceBackingZone {
+		return false, nil
+	}
+	if task.Type != etcd.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 3 ||
+		ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskZoneEnvironmentParam]) != nil ||
+		len(task.Params[etcd.TaskZoneImpactTokenParam]) != sha256.Size*2 {
+		return false, errs.New(errs.KindValidationFailed, "backing Zone cascade Task parameters are invalid")
+	}
+	if _, err := hex.DecodeString(task.Params[etcd.TaskZoneImpactTokenParam]); err != nil {
+		return false, errs.New(errs.KindValidationFailed, "backing Zone cascade impact token is invalid")
+	}
+	return true, nil
+}

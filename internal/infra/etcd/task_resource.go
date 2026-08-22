@@ -5,5 +5,7 @@ const (
 	TaskResourceKindParam    = "resource_kind"
 	TaskResourceAgent        = "agent"
 	TaskResourceSecret       = "secret"
+	TaskResourceBackingZone  = "backing_zone"
 	TaskZoneEnvironmentParam = "zone_environment_id"
+	TaskZoneImpactTokenParam = "zone_impact_token"
 )

@@ -18,7 +18,7 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 
 	task := testAgentEnrollmentTask()
 	agents := &fakeControllerTaskLocalAgents{healthErr: errs.New(errs.KindAgentNotFound, "missing")}
-	handler, err := newControllerTaskHandler(agents)
+	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -44,7 +44,7 @@ func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	agents := &fakeControllerTaskLocalAgents{health: localagent.Health{Agent: localagent.Agent{
 		ID: task.Target, EnrollmentTaskID: task.ID, Phase: localagent.PhaseReady,
 	}}}
-	handler, err := newControllerTaskHandler(agents)
+	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestLocalAgentControllerTaskHandlerRejectsAnotherEnrollmentOwner(t *testing
 		EnrollmentTaskID: ids.NewAt(ids.KindTask, task.CreatedAt.Add(time.Second), 22),
 		Phase:            localagent.PhaseReady,
 	}}}
-	handler, err := newControllerTaskHandler(agents)
+	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -85,7 +85,7 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 
 	task := testAgentEnrollmentTask()
 	task.Params["surprise"] = "value"
-	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{})
+	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t))
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}

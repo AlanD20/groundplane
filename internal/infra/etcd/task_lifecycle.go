@@ -278,6 +278,15 @@ func (repository *TaskRepository) RetryTask(
 		mutations = append(mutations, secretChange.mutations...)
 	}
 	defer clearSecretTaskChange(secretChange)
+	backingZoneChange, err := repository.prepareBackingZoneTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if backingZoneChange.applies {
+		conditions = append(conditions, backingZoneChange.conditions...)
+		mutations = append(mutations, backingZoneChange.mutations...)
+	}
+	defer clearBackingZoneTaskChange(backingZoneChange)
 	componentChange, err := repository.prepareComponentTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -295,6 +304,7 @@ func (repository *TaskRepository) RetryTask(
 			retry.OperationID,
 			len(attachChange.conditions),
 			len(secretChange.conditions),
+			len(backingZoneChange.conditions),
 			len(componentChange.conditions),
 		),
 	)
@@ -313,10 +323,11 @@ func classifyTaskRetryConflict(
 	operationID string,
 	attachConditions int,
 	secretConditions int,
+	backingZoneConditions int,
 	componentConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expectedValues := 5 + attachConditions + secretConditions + componentConditions
+		expectedValues := 5 + attachConditions + secretConditions + backingZoneConditions + componentConditions
 		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "Task retry compare evidence is incomplete")
 		}
@@ -1002,6 +1013,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateBackingZoneTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				if err := repository.validateComponentTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
@@ -1241,6 +1257,22 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, secretChange.conditions...)
 			mutations = append(mutations, secretChange.mutations...)
 		}
+		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if backingZoneChange.applies {
+			conditions = append(conditions, backingZoneChange.conditions...)
+			mutations = append(mutations, backingZoneChange.mutations...)
+		}
 		componentChange, err := repository.prepareComponentTaskAcknowledgement(
 			ctx,
 			task,
@@ -1255,6 +1287,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
+			clearBackingZoneTaskChange(backingZoneChange)
 			return Versioned[TaskRecord]{}, err
 		}
 		if componentChange.applies {
@@ -1269,6 +1302,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		clear(environmentValue)
 		clearAttachTaskChange(attachChange)
 		clearSecretTaskChange(secretChange)
+		clearBackingZoneTaskChange(backingZoneChange)
 		clearComponentTaskChange(componentChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
@@ -1384,6 +1418,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
+			if err := repository.validateBackingZoneTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			if err := repository.validateComponentTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
@@ -1482,6 +1521,16 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(retentionValue)
 			return Versioned[TaskRecord]{}, err
 		}
+		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
 		componentChange, err := repository.prepareComponentTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
@@ -1490,6 +1539,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clearSecretTaskChange(secretChange)
+			clearBackingZoneTaskChange(backingZoneChange)
 			return Versioned[TaskRecord]{}, err
 		}
 		conditions := []Condition{
@@ -1512,6 +1562,10 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, secretChange.conditions...)
 			mutations = append(mutations, secretChange.mutations...)
 		}
+		if backingZoneChange.applies {
+			conditions = append(conditions, backingZoneChange.conditions...)
+			mutations = append(mutations, backingZoneChange.mutations...)
+		}
 		if componentChange.applies {
 			conditions = append(conditions, componentChange.conditions...)
 			mutations = append(mutations, componentChange.mutations...)
@@ -1522,6 +1576,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		clear(retentionValue)
 		clear(taskRetentionValue)
 		clearSecretTaskChange(secretChange)
+		clearBackingZoneTaskChange(backingZoneChange)
 		clearComponentTaskChange(componentChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
