@@ -228,6 +228,7 @@ func (attachFactTestAdapter) FactSchema() []adapters.FactDefinition {
 }
 func (attachFactTestAdapter) ProvisionSteps(adapters.ProvisionParams) []adapters.Step { return nil }
 func (attachFactTestAdapter) GrantSteps(adapters.ProvisionParams) []adapters.Step     { return nil }
+func (attachFactTestAdapter) RevokeSteps(adapters.ProvisionParams) []adapters.Step    { return nil }
 func (attachFactTestAdapter) DetachSteps(adapters.ProvisionParams) []adapters.Step    { return nil }
 func (attachFactTestAdapter) BackupStrategy() adapters.BackupStrategy {
 	return adapters.BackupStrategy{}

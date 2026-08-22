@@ -85,5 +85,6 @@ func (adapter factTestAdapter) ProvisionSteps(ProvisionParams) []Step {
 	return nil
 }
 func (adapter factTestAdapter) GrantSteps(ProvisionParams) []Step  { return nil }
+func (adapter factTestAdapter) RevokeSteps(ProvisionParams) []Step { return nil }
 func (adapter factTestAdapter) DetachSteps(ProvisionParams) []Step { return nil }
 func (adapter factTestAdapter) BackupStrategy() BackupStrategy     { return BackupStrategy{} }

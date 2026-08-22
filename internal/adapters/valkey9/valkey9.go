@@ -6,7 +6,7 @@ package valkey9
 import "github.com/AlanD20/groundplane/internal/adapters"
 
 // Register adds this adapter to the registry. Called once, explicitly,
-// from internal/app.NewController.
+// from internal/app.NewController and NewAgent.
 func Register() {
 	adapters.Register(&adapter{})
 }
@@ -30,9 +30,7 @@ func (a *adapter) Manual() bool { return false }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
 	return []adapters.Step{
-		{Op: adapters.StepExec, Params: map[string]string{
-			"cmd": "valkey-cli ACL SETUSER <role> on >'<generated>' ~* &* +@all",
-		}},
+		{Op: adapters.StepExec, Program: "valkey-cli", Stdin: aclSetUser(p.Role, p.Password)},
 	}
 }
 
@@ -44,12 +42,21 @@ func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step {
 	return nil
 }
 
+func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step { return nil }
+
 func (a *adapter) DetachSteps(p adapters.ProvisionParams) []adapters.Step {
 	return []adapters.Step{
-		{Op: adapters.StepExec, Params: map[string]string{
-			"cmd": "valkey-cli ACL DELUSER <role>",
-		}},
+		{Op: adapters.StepExec, Program: "valkey-cli", Stdin: []byte("ACL DELUSER " + p.Role + "\n")},
 	}
+}
+
+func aclSetUser(role string, password []byte) []byte {
+	prefix := "ACL SETUSER " + role + " on >"
+	suffix := " ~* &* +@all\n"
+	command := make([]byte, 0, len(prefix)+len(password)+len(suffix))
+	command = append(command, prefix...)
+	command = append(command, password...)
+	return append(command, suffix...)
 }
 
 func (a *adapter) BackupStrategy() adapters.BackupStrategy {

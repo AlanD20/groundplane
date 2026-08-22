@@ -64,6 +64,7 @@ type agentComposeResources struct {
 }
 
 func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
+	registerAdapters()
 	cfg := config.DefaultAgentConfig()
 	if err := config.Load(ctx, configPath, &cfg); err != nil {
 		return nil, err

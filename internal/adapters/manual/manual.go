@@ -8,7 +8,7 @@ package manual
 import "github.com/AlanD20/groundplane/internal/adapters"
 
 // Register adds this adapter to the registry. Called once, explicitly,
-// from internal/app.NewController.
+// from internal/app.NewController and NewAgent.
 func Register() {
 	adapters.Register(&adapter{})
 }
@@ -25,5 +25,6 @@ func (a *adapter) Manual() bool                          { return true }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step { return nil }
 func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step     { return nil }
+func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step    { return nil }
 func (a *adapter) DetachSteps(p adapters.ProvisionParams) []adapters.Step    { return nil }
 func (a *adapter) BackupStrategy() adapters.BackupStrategy                   { return adapters.BackupStrategy{} }

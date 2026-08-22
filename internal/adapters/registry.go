@@ -2,7 +2,7 @@
 // registers into. Adapters are declarative, typed knowledge — a fixed
 // shape to fill in, in one package — never a switch in core. Adding a
 // kind = implement Adapter + export a Register() function, called
-// explicitly from internal/app.NewController (never an init() — see
+// explicitly from internal/app.NewController and NewAgent (never an init() — see
 // standards.md's banned-patterns list, section 11). See
 // architecture.md, "The adapter seam (the contract shape)", and mvp.md,
 // "The backing-service contract".
@@ -56,22 +56,22 @@ const (
 	StepAck     StepOp = "ack"
 )
 
-// Step is one typed, parameterized operation in a provision/detach/
-// backup/restore procedure. Placeholders (<db>, <role>, <generated>) are
-// filled by the Controller before the Agent executes the concrete
-// procedure.
+// Step is one locally compiled operation in a provision/detach/backup/restore
+// procedure. Secret-bearing input stays mutable and never enters argv.
 type Step struct {
-	Op     StepOp            `json:"op"`
-	Params map[string]string `json:"params,omitempty"`
+	Op       StepOp
+	Database string
+	Program  string
+	Args     []string
+	Stdin    []byte
 }
 
-// ProvisionParams is what the Controller fills in before handing a
-// Step slice to the Agent: <db>, <role>, <generated> resolved to the
-// attach's actual names.
+// ProvisionParams contains the Controller-resolved identity transported by a
+// typed Agent procedure. The Agent passes it to the same compiled adapter.
 type ProvisionParams struct {
 	Database string // <service-name>_<first-6-of-attach-id>
 	Role     string // same as Database in the MVP (one role per attach)
-	Password string // Controller-generated, URL-safe
+	Password []byte // Controller-generated, URL-safe; caller-owned and mutable
 	GrantOn  string // set only for grant steps: the OTHER attach's database
 }
 
@@ -129,9 +129,19 @@ type Adapter interface {
 
 	ProvisionSteps(p ProvisionParams) []Step
 	GrantSteps(p ProvisionParams) []Step // p.GrantOn set — access to another attach's database
+	RevokeSteps(p ProvisionParams) []Step
 	DetachSteps(p ProvisionParams) []Step
 
 	BackupStrategy() BackupStrategy
+}
+
+// ClearSteps clears every secret-bearing input buffer compiled by an adapter.
+func ClearSteps(steps []Step) {
+	for index := range steps {
+		clear(steps[index].Stdin)
+		steps[index].Stdin = nil
+		steps[index].Args = nil
+	}
 }
 
 // BuildFacts renders one adapter-declared fact set without converting the

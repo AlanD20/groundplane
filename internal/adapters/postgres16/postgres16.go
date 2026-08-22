@@ -12,7 +12,7 @@ package postgres16
 import "github.com/AlanD20/groundplane/internal/adapters"
 
 // Register adds this adapter to the registry. Called once, explicitly,
-// from internal/app.NewController.
+// from internal/app.NewController and NewAgent.
 func Register() {
 	adapters.Register(&adapter{})
 }
@@ -38,42 +38,74 @@ func (a *adapter) Manual() bool { return false }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
 	return []adapters.Step{
-		{Op: adapters.StepSQL, Params: map[string]string{
-			"stmt": "CREATE ROLE <role> WITH LOGIN PASSWORD '<generated>'",
-		}},
-		{Op: adapters.StepSQL, Params: map[string]string{
-			"stmt": "CREATE DATABASE <db> OWNER <role>",
-		}},
-		{Op: adapters.StepSQL, Params: map[string]string{
-			"stmt": "GRANT ALL PRIVILEGES ON DATABASE <db> TO <role>",
-		}},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: passwordSQL(
+			"CREATE ROLE "+p.Role+" WITH LOGIN PASSWORD '", p.Password, "'",
+		)},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
+			"CREATE DATABASE ", p.Database, " OWNER ", p.Role,
+		)},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
+			"GRANT ALL PRIVILEGES ON DATABASE ", p.Database, " TO ", p.Role,
+		)},
 	}
 }
 
 func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step {
 	// p.GrantOn is the OTHER attach's database; the role already exists.
 	return []adapters.Step{
-		{Op: adapters.StepSQL, Params: map[string]string{
-			"stmt": "GRANT CONNECT ON DATABASE <grant_on> TO <role>",
-		}},
-		{Op: adapters.StepSQL, Params: map[string]string{
-			"stmt": "GRANT USAGE ON SCHEMA public TO <role>",
-		}},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
+			"GRANT CONNECT ON DATABASE ", p.GrantOn, " TO ", p.Role,
+		)},
+		{Op: adapters.StepSQL, Database: p.GrantOn, Stdin: sql(
+			"GRANT USAGE ON SCHEMA public TO ", p.Role,
+		)},
+	}
+}
+
+func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step {
+	return []adapters.Step{
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
+			"REVOKE CONNECT ON DATABASE ", p.GrantOn, " FROM ", p.Role,
+		)},
+		{Op: adapters.StepSQL, Database: p.GrantOn, Stdin: sql(
+			"REVOKE USAGE ON SCHEMA public FROM ", p.Role,
+		)},
 	}
 }
 
 func (a *adapter) DetachSteps(p adapters.ProvisionParams) []adapters.Step {
 	return []adapters.Step{
-		{Op: adapters.StepSQL, Params: map[string]string{
-			"stmt": "REVOKE ALL PRIVILEGES ON DATABASE <db> FROM <role>",
-		}},
-		{Op: adapters.StepSQL, Params: map[string]string{
-			"stmt": "DROP ROLE IF EXISTS <role>",
-		}},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
+			"REVOKE ALL PRIVILEGES ON DATABASE ", p.Database, " FROM ", p.Role,
+		)},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
+			"ALTER DATABASE ", p.Database, " OWNER TO postgres",
+		)},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql("DROP ROLE IF EXISTS ", p.Role)},
 		// Dropping <db> itself is a SEPARATE, explicit confirmation in the
 		// Console/CLI — detach revokes access; it does not delete data
 		// unless the operator explicitly asks for that.
 	}
+}
+
+func sql(parts ...string) []byte {
+	length := 2
+	for _, part := range parts {
+		length += len(part)
+	}
+	statement := make([]byte, 0, length)
+	for _, part := range parts {
+		statement = append(statement, part...)
+	}
+	return append(statement, ';', '\n')
+}
+
+func passwordSQL(prefix string, password []byte, suffix string) []byte {
+	statement := make([]byte, 0, len(prefix)+len(password)+len(suffix)+2)
+	statement = append(statement, prefix...)
+	statement = append(statement, password...)
+	statement = append(statement, suffix...)
+	return append(statement, ';', '\n')
 }
 
 func (a *adapter) BackupStrategy() adapters.BackupStrategy {

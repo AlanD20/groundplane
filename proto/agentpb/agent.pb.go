@@ -441,6 +441,7 @@ const (
 	AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION   AdapterProcedurePhase = 1
 	AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT       AdapterProcedurePhase = 2
 	AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH      AdapterProcedurePhase = 3
+	AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE      AdapterProcedurePhase = 4
 )
 
 // Enum value maps for AdapterProcedurePhase.
@@ -450,12 +451,14 @@ var (
 		1: "ADAPTER_PROCEDURE_PHASE_PROVISION",
 		2: "ADAPTER_PROCEDURE_PHASE_GRANT",
 		3: "ADAPTER_PROCEDURE_PHASE_DETACH",
+		4: "ADAPTER_PROCEDURE_PHASE_REVOKE",
 	}
 	AdapterProcedurePhase_value = map[string]int32{
 		"ADAPTER_PROCEDURE_PHASE_UNSPECIFIED": 0,
 		"ADAPTER_PROCEDURE_PHASE_PROVISION":   1,
 		"ADAPTER_PROCEDURE_PHASE_GRANT":       2,
 		"ADAPTER_PROCEDURE_PHASE_DETACH":      3,
+		"ADAPTER_PROCEDURE_PHASE_REVOKE":      4,
 	}
 )
 
@@ -2920,6 +2923,7 @@ type AdapterProcedure struct {
 	Password         []byte                 `protobuf:"bytes,6,opt,name=password,proto3" json:"password,omitempty"`
 	Database         string                 `protobuf:"bytes,7,opt,name=database,proto3" json:"database,omitempty"`
 	GrantOn          string                 `protobuf:"bytes,8,opt,name=grant_on,json=grantOn,proto3" json:"grant_on,omitempty"`
+	RuntimeServiceId string                 `protobuf:"bytes,9,opt,name=runtime_service_id,json=runtimeServiceId,proto3" json:"runtime_service_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -3006,6 +3010,13 @@ func (x *AdapterProcedure) GetDatabase() string {
 func (x *AdapterProcedure) GetGrantOn() string {
 	if x != nil {
 		return x.GrantOn
+	}
+	return ""
+}
+
+func (x *AdapterProcedure) GetRuntimeServiceId() string {
+	if x != nil {
+		return x.RuntimeServiceId
 	}
 	return ""
 }
@@ -4148,7 +4159,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x1cenvironment_directory_remove\x18\n" +
 	" \x01(\v20.groundplane.agent.v1.EnvironmentDirectoryRemoveH\x00R\x1aenvironmentDirectoryRemove\x12U\n" +
 	"\x11adapter_procedure\x18\v \x01(\v2&.groundplane.agent.v1.AdapterProcedureH\x00R\x10adapterProcedureB\t\n" +
-	"\apayload\"\xa8\x02\n" +
+	"\apayload\"\xd6\x02\n" +
 	"\x10AdapterProcedure\x12\x1f\n" +
 	"\vadapter_key\x18\x01 \x01(\tR\n" +
 	"adapterKey\x12A\n" +
@@ -4158,7 +4169,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04role\x18\x05 \x01(\tR\x04role\x12\x1a\n" +
 	"\bpassword\x18\x06 \x01(\fR\bpassword\x12\x1a\n" +
 	"\bdatabase\x18\a \x01(\tR\bdatabase\x12\x19\n" +
-	"\bgrant_on\x18\b \x01(\tR\agrantOn\"\x83\x03\n" +
+	"\bgrant_on\x18\b \x01(\tR\agrantOn\x12,\n" +
+	"\x12runtime_service_id\x18\t \x01(\tR\x10runtimeServiceId\"\x83\x03\n" +
 	"\x0fMaterializeFile\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12-\n" +
@@ -4287,12 +4299,13 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x10ComposeOwnerKind\x12\"\n" +
 	"\x1eCOMPOSE_OWNER_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCOMPOSE_OWNER_KIND_ENVIRONMENT\x10\x01\x12\x1f\n" +
-	"\x1bCOMPOSE_OWNER_KIND_PLATFORM\x10\x02*\xae\x01\n" +
+	"\x1bCOMPOSE_OWNER_KIND_PLATFORM\x10\x02*\xd2\x01\n" +
 	"\x15AdapterProcedurePhase\x12'\n" +
 	"#ADAPTER_PROCEDURE_PHASE_UNSPECIFIED\x10\x00\x12%\n" +
 	"!ADAPTER_PROCEDURE_PHASE_PROVISION\x10\x01\x12!\n" +
 	"\x1dADAPTER_PROCEDURE_PHASE_GRANT\x10\x02\x12\"\n" +
-	"\x1eADAPTER_PROCEDURE_PHASE_DETACH\x10\x03*\xd0\x01\n" +
+	"\x1eADAPTER_PROCEDURE_PHASE_DETACH\x10\x03\x12\"\n" +
+	"\x1eADAPTER_PROCEDURE_PHASE_REVOKE\x10\x04*\xd0\x01\n" +
 	"\x19MaterializationOutputKind\x12+\n" +
 	"'MATERIALIZATION_OUTPUT_KIND_UNSPECIFIED\x10\x00\x12-\n" +
 	")MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV\x10\x01\x12*\n" +

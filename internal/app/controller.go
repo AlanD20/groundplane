@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/adapters/manual"
 	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
@@ -471,9 +472,15 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 // extensibility seam's actual "one line" per adapter, called from here
 // instead of relying on package-import side effects.
 func registerAdapters() {
-	postgres16.Register()
-	valkey9.Register()
-	manual.Register()
+	if _, registered := adapters.Get("postgres:16"); !registered {
+		postgres16.Register()
+	}
+	if _, registered := adapters.Get("valkey:9"); !registered {
+		valkey9.Register()
+	}
+	if _, registered := adapters.Get("manual"); !registered {
+		manual.Register()
+	}
 }
 
 // registerComponents is registerAdapters' twin for the owner-aware component

@@ -543,8 +543,10 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 	if procedure == nil || !validAdapterKey(procedure.AdapterKey) ||
 		validateID(ids.KindAttach, procedure.AttachId) != nil ||
 		validateID(ids.KindBackingService, procedure.BackingServiceId) != nil ||
+		(validateID(ids.KindService, procedure.RuntimeServiceId) != nil &&
+			validateID(ids.KindComponent, procedure.RuntimeServiceId) != nil) ||
 		!validAdapterIdentity(procedure.Role, true) ||
-		len(procedure.Password) > MaximumAdapterSecretBytes {
+		!validAdapterSecret(procedure.Password) {
 		return errs.New(errs.KindValidationFailed, "adapter procedure identity is invalid")
 	}
 	switch procedure.Phase {
@@ -558,9 +560,14 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 			procedure.Database != "" || !validAdapterIdentity(procedure.GrantOn, true) {
 			return errs.New(errs.KindValidationFailed, "adapter grant procedure is invalid")
 		}
+	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_DETACH || len(procedure.Password) != 0 ||
+			procedure.Database != "" || !validAdapterIdentity(procedure.GrantOn, true) {
+			return errs.New(errs.KindValidationFailed, "adapter revoke procedure is invalid")
+		}
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_DETACH || len(procedure.Password) != 0 ||
-			procedure.Database != "" || procedure.GrantOn != "" {
+			!validAdapterIdentity(procedure.Database, true) || procedure.GrantOn != "" {
 			return errs.New(errs.KindValidationFailed, "adapter detach procedure is invalid")
 		}
 	default:
@@ -575,7 +582,21 @@ func validAdapterKey(value string) bool {
 	}
 	for index, character := range []byte(value) {
 		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
-			(index > 0 && (character == '-' || character == '_' || character == '.')) {
+			(index > 0 && (character == '-' || character == '_' || character == '.' || character == ':')) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validAdapterSecret(value []byte) bool {
+	if len(value) > MaximumAdapterSecretBytes {
+		return false
+	}
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') || character == '-' || character == '_' || character == '.' {
 			continue
 		}
 		return false

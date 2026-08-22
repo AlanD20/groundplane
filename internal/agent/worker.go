@@ -90,6 +90,7 @@ type WorkerPool struct {
 	compose                *ComposeRuntime
 	environmentDirectories *EnvironmentDirectoryRuntime
 	materializer           *MaterializationRuntime
+	adapter                *AdapterRuntime
 	materializations       *materializationInbox
 
 	mu           sync.Mutex
@@ -108,6 +109,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		outputs:          make(chan WorkerOutput, size),
 		reservations:     make(map[string]*taskReservation, size),
 		materializations: newMaterializationInbox(),
+		adapter:          NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
 	return pool
@@ -210,6 +212,12 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 				} else {
 					err = p.materializer.executeStep(stepCtx, reservation.assignment, step, payload)
 				}
+			}
+		} else if step.GetAdapterProcedure() != nil {
+			var stepResult adapterStepResult
+			stepResult, err = p.adapter.executeStep(stepCtx, step)
+			if stepResult.ExitCode != 0 {
+				exitCode = stepResult.ExitCode
 			}
 		} else if (step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
 			step.GetManagedVolumeDirectoriesEnsure() != nil) && p.environmentDirectories != nil {
@@ -492,7 +500,7 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 		*agentpb.ExecutionStep_EnvironmentDirectoryCreate,
 		*agentpb.ExecutionStep_EnvironmentDirectoryRemove,
 		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,
-		*agentpb.ExecutionStep_MaterializeFile:
+		*agentpb.ExecutionStep_MaterializeFile, *agentpb.ExecutionStep_AdapterProcedure:
 		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
 	default:
 		return errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")

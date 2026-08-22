@@ -315,6 +315,7 @@ enum AdapterProcedurePhase {
   ADAPTER_PROCEDURE_PHASE_PROVISION = 1;
   ADAPTER_PROCEDURE_PHASE_GRANT = 2;
   ADAPTER_PROCEDURE_PHASE_DETACH = 3;
+  ADAPTER_PROCEDURE_PHASE_REVOKE = 4;
 }
 
 // AdapterProcedure selects trusted, compiled Agent behavior. It deliberately
@@ -328,6 +329,7 @@ message AdapterProcedure {
   bytes password = 6;
   string database = 7;
   string grant_on = 8;
+  string runtime_service_id = 9;
 }
 
 enum MaterializationOutputKind {
