@@ -144,6 +144,7 @@ func (inbox *materializationInbox) acceptHeader(
 		Generation:    header.GetRenderGeneration(),
 		Destination:   header.GetDestination(),
 		ServiceID:     header.GetServiceId(),
+		ServiceName:   header.GetServiceName(),
 		OutputKind:    outputKind,
 		UID:           header.GetUid(),
 		GID:           header.GetGid(),
@@ -199,6 +200,7 @@ func materializationHeaderMatches(
 		header.GetMaterializationId() == expected.GetMaterializationId() &&
 		header.GetEnvironmentId() == expected.GetEnvironmentId() &&
 		header.GetDestination() == expected.GetDestination() && header.GetServiceId() == expected.GetServiceId() &&
+		header.GetServiceName() == expected.GetServiceName() &&
 		header.GetOutputKind() == expected.GetOutputKind() && header.GetUid() == expected.GetUid() &&
 		header.GetGid() == expected.GetGid() && header.GetMode() == expected.GetMode() &&
 		header.GetLength() == expected.GetLength() && bytes.Equal(header.GetSha256(), expected.GetSha256())

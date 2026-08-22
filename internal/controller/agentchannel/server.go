@@ -465,7 +465,8 @@ func (s *Server) sendMaterialization(
 		ArtifactId: materialization.GetArtifactId(), MaterializationId: materialization.GetMaterializationId(),
 		EnvironmentId: materialization.GetEnvironmentId(), RenderGeneration: plan.GetRenderGeneration(),
 		Destination: materialization.GetDestination(), ServiceId: materialization.GetServiceId(),
-		OutputKind: materialization.GetOutputKind(), Uid: materialization.GetUid(), Gid: materialization.GetGid(),
+		ServiceName: materialization.GetServiceName(),
+		OutputKind:  materialization.GetOutputKind(), Uid: materialization.GetUid(), Gid: materialization.GetGid(),
 		Mode: materialization.GetMode(), Length: materialization.GetLength(),
 		Sha256: append([]byte(nil), materialization.GetSha256()...),
 	}

@@ -47,6 +47,7 @@ type HeaderSpec struct {
 	Generation    uint64
 	Destination   string
 	ServiceID     string
+	ServiceName   string
 	OutputKind    OutputKind
 	UID           uint32
 	GID           uint32
@@ -64,6 +65,7 @@ type Header struct {
 	generation    uint64
 	destination   string
 	serviceID     string
+	serviceName   string
 	outputKind    OutputKind
 	uid           uint32
 	gid           uint32
@@ -81,6 +83,7 @@ func NewHeader(spec HeaderSpec) (Header, error) {
 		generation:    spec.Generation,
 		destination:   spec.Destination,
 		serviceID:     spec.ServiceID,
+		serviceName:   spec.ServiceName,
 		outputKind:    spec.OutputKind,
 		uid:           spec.UID,
 		gid:           spec.GID,
@@ -105,6 +108,7 @@ func (h Header) validate() error {
 		Generation:    h.generation,
 		Destination:   h.destination,
 		ServiceID:     h.serviceID,
+		ServiceName:   h.serviceName,
 		OutputKind:    h.outputKind,
 		UID:           h.uid,
 		GID:           h.gid,
@@ -146,19 +150,32 @@ func validDestination(value string) bool {
 }
 
 // GeneratedEnvDestination derives the only generated environment destination
-// shapes from stable scope ids. An empty serviceID selects environment scope.
-func GeneratedEnvDestination(environmentID, serviceID string) (string, error) {
+// shapes. The Environment scope is id-based; an optional stable service name
+// selects a service-specific file as required by mvp.md.
+func GeneratedEnvDestination(environmentID, serviceName string) (string, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return "", protocolError("invalid generated environment scope")
 	}
 	destination := "secrets/.env." + environmentID
-	if serviceID == "" {
+	if serviceName == "" {
 		return destination, nil
 	}
-	if ids.Validate(ids.KindService, serviceID) != nil {
+	if !validGeneratedServiceName(serviceName) {
 		return "", protocolError("invalid generated service scope")
 	}
-	return destination + "." + serviceID, nil
+	return destination + "." + serviceName, nil
+}
+
+func validGeneratedServiceName(value string) bool {
+	for index := range len(value) {
+		character := value[index]
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' || character == '.' || character == '_' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return value != ""
 }
 
 // DigestBytes calculates the transient payload digest without converting the
@@ -182,6 +199,7 @@ func (h Header) EnvironmentID() string  { return h.environmentID }
 func (h Header) Generation() uint64     { return h.generation }
 func (h Header) Destination() string    { return h.destination }
 func (h Header) ServiceID() string      { return h.serviceID }
+func (h Header) ServiceName() string    { return h.serviceName }
 func (h Header) OutputKind() OutputKind { return h.outputKind }
 func (h Header) UID() uint32            { return h.uid }
 func (h Header) GID() uint32            { return h.gid }

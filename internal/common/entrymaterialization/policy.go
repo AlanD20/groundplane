@@ -13,6 +13,7 @@ type MetadataSpec struct {
 	Generation    uint64
 	Destination   string
 	ServiceID     string
+	ServiceName   string
 	OutputKind    OutputKind
 	UID           uint32
 	GID           uint32
@@ -33,17 +34,18 @@ func ValidateMetadata(spec MetadataSpec) error {
 	}
 	switch spec.OutputKind {
 	case OutputGeneratedEnv:
-		destination, err := GeneratedEnvDestination(spec.EnvironmentID, spec.ServiceID)
-		if err != nil || spec.UID != 0 || spec.GID != 0 || spec.Mode != ModePrivate ||
+		destination, err := GeneratedEnvDestination(spec.EnvironmentID, spec.ServiceName)
+		if err != nil || (spec.ServiceID == "") != (spec.ServiceName == "") ||
+			spec.UID != 0 || spec.GID != 0 || spec.Mode != ModePrivate ||
 			spec.Destination != destination {
 			return protocolError("invalid generated environment output")
 		}
 	case OutputPlainFile:
-		if spec.ServiceID != "" || spec.Mode != ModeReadOnly {
+		if spec.ServiceID != "" || spec.ServiceName != "" || spec.Mode != ModeReadOnly {
 			return protocolError("invalid plain file output")
 		}
 	case OutputSecretFile:
-		if spec.ServiceID != "" || spec.Mode != ModePrivate {
+		if spec.ServiceID != "" || spec.ServiceName != "" || spec.Mode != ModePrivate {
 			return protocolError("invalid secret file output")
 		}
 	default:

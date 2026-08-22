@@ -13,6 +13,7 @@ const (
 	testStepID        = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	testEnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	testServiceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	testServiceName   = "api-name"
 )
 
 // L0 - pure function tests. See docs/standards.md, section 13.
@@ -49,7 +50,8 @@ func TestNewHeaderCopiesAndPreservesCanonicalMetadata(t *testing.T) {
 		t.Fatalf("identity metadata changed: %#v", header)
 	}
 	if header.Destination() != "config/app/settings.yaml" ||
-		header.ServiceID() != "" || header.OutputKind() != OutputPlainFile || header.UID() != 1000 ||
+		header.ServiceID() != "" || header.ServiceName() != "" || header.OutputKind() != OutputPlainFile ||
+		header.UID() != 1000 ||
 		header.GID() != 1001 || header.Mode() != ModeReadOnly || header.Length() != 6 {
 		t.Fatalf("output metadata changed: %#v", header)
 	}
@@ -66,12 +68,13 @@ func TestNewHeaderEnforcesClosedOutputTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GeneratedEnvDestination(environment): %v", err)
 	}
-	serviceDestination, err := GeneratedEnvDestination(testEnvironmentID, testServiceID)
+	serviceDestination, err := GeneratedEnvDestination(testEnvironmentID, testServiceName)
 	if err != nil {
 		t.Fatalf("GeneratedEnvDestination(service): %v", err)
 	}
 	serviceSpec := validHeaderSpec(OutputGeneratedEnv, serviceDestination, 0, 0, ModePrivate)
 	serviceSpec.ServiceID = testServiceID
+	serviceSpec.ServiceName = testServiceName
 
 	tests := []struct {
 		name string
@@ -152,12 +155,24 @@ func TestNewHeaderRejectsInvalidProcedureMetadata(t *testing.T) {
 		{name: "generated destination", mutate: func(spec *HeaderSpec) {
 			spec.OutputKind = OutputGeneratedEnv
 			spec.ServiceID = testServiceID
-			spec.Destination = "secrets/.env." + testEnvironmentID + ".human-slug"
+			spec.ServiceName = testServiceName
+			spec.Destination = "secrets/.env." + testEnvironmentID + ".other-service"
 			spec.Mode = ModePrivate
 			spec.UID = 0
 			spec.GID = 0
 		}},
-		{name: "irrelevant service scope", mutate: func(spec *HeaderSpec) { spec.ServiceID = testServiceID }},
+		{name: "irrelevant service scope", mutate: func(spec *HeaderSpec) {
+			spec.ServiceID = testServiceID
+			spec.ServiceName = testServiceName
+		}},
+		{name: "service id without name", mutate: func(spec *HeaderSpec) {
+			spec.OutputKind = OutputGeneratedEnv
+			spec.ServiceID = testServiceID
+			spec.Destination = "secrets/.env." + testEnvironmentID
+			spec.Mode = ModePrivate
+			spec.UID = 0
+			spec.GID = 0
+		}},
 		{name: "uid sentinel", mutate: func(spec *HeaderSpec) { spec.UID = math.MaxUint32 }},
 		{name: "gid sentinel", mutate: func(spec *HeaderSpec) { spec.GID = math.MaxUint32 }},
 	}
@@ -178,8 +193,8 @@ func TestNewHeaderRejectsInvalidProcedureMetadata(t *testing.T) {
 	}
 }
 
-// Rationale: generated env filenames are derived from stable scope ids in one
-// place, so renderers and protocol validators cannot drift back to names.
+// Rationale: the Environment scope remains id-based while the authoritative
+// MVP contract requires service-specific files to use the stable service name.
 func TestGeneratedEnvDestinationUsesExactStableScope(t *testing.T) {
 	t.Parallel()
 
@@ -190,15 +205,15 @@ func TestGeneratedEnvDestinationUsesExactStableScope(t *testing.T) {
 	if environment != "secrets/.env."+testEnvironmentID {
 		t.Fatalf("environment destination = %q", environment)
 	}
-	service, err := GeneratedEnvDestination(testEnvironmentID, testServiceID)
+	service, err := GeneratedEnvDestination(testEnvironmentID, testServiceName)
 	if err != nil {
 		t.Fatalf("GeneratedEnvDestination(service): %v", err)
 	}
-	if service != "secrets/.env."+testEnvironmentID+"."+testServiceID {
+	if service != "secrets/.env."+testEnvironmentID+"."+testServiceName {
 		t.Fatalf("service destination = %q", service)
 	}
-	if _, err := GeneratedEnvDestination(testEnvironmentID, "api-name"); err == nil {
-		t.Fatal("GeneratedEnvDestination accepted a service name")
+	if _, err := GeneratedEnvDestination(testEnvironmentID, "api/name"); err == nil {
+		t.Fatal("GeneratedEnvDestination accepted an unsafe service name")
 	}
 }
 

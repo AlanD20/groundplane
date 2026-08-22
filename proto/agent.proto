@@ -203,6 +203,7 @@ message MaterializationTransferHeader {
   uint32 mode = 10;
   uint64 length = 11;
   bytes sha256 = 12;
+  string service_name = 13;
 }
 
 message MaterializationTransferChunk {
@@ -352,6 +353,7 @@ message MaterializeFile {
   uint32 mode = 9;
   uint64 length = 10;
   bytes sha256 = 11;
+  string service_name = 12;
 }
 
 message ComposeApply {

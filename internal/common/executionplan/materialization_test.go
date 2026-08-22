@@ -14,6 +14,7 @@ const (
 	materializationID            = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	materializationPlanID        = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	materializationStepID        = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationServiceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
 func TestMaterializationPlanSealsMetadataWithoutPlaintext(t *testing.T) {
@@ -66,6 +67,58 @@ func TestMaterializationPlanRejectsOwnershipPolicyAndDuplicateDestinations(t *te
 			}
 		})
 	}
+}
+
+// Rationale: service-specific filenames use a stable service name, but every
+// sealed procedure must prove that name belongs to its stable Service id in the
+// exact authenticated Compose artifact.
+func TestMaterializationPlanBindsServiceIDToComposeName(t *testing.T) {
+	plan := validServiceMaterializationPlan()
+	if _, err := Seal(plan); err != nil {
+		t.Fatalf("Seal(valid service materialization) error = %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*agentpb.MaterializeFile)
+	}{
+		{name: "mismatched name", mutate: func(value *agentpb.MaterializeFile) { value.ServiceName = "worker" }},
+		{name: "unknown id", mutate: func(value *agentpb.MaterializeFile) {
+			value.ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		}},
+		{name: "missing name", mutate: func(value *agentpb.MaterializeFile) { value.ServiceName = "" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := validServiceMaterializationPlan()
+			test.mutate(candidate.Steps[0].GetMaterializeFile())
+			if _, err := Seal(candidate); err == nil {
+				t.Fatal("Seal() accepted an inconsistent service identity")
+			}
+		})
+	}
+}
+
+func validServiceMaterializationPlan() *agentpb.ExecutionPlan {
+	plan := validMaterializationPlan()
+	plan.Artifacts[0].Services = []*agentpb.ComposeService{{
+		ServiceId: materializationServiceID, ComposeName: "cloudflare-tunnel", ExpectedReplicas: 1,
+		ExpectedLabels: []*agentpb.LabelPair{
+			{Key: labelEnvironmentID, Value: materializationEnvironmentID},
+			{Key: labelKind, Value: "service"},
+			{Key: labelManaged, Value: "true"},
+			{Key: labelPlanID, Value: materializationPlanID},
+			{Key: labelRenderGen, Value: "1"},
+			{Key: labelServiceID, Value: materializationServiceID},
+		},
+	}}
+	materialization := plan.Steps[0].GetMaterializeFile()
+	materialization.ServiceId = materializationServiceID
+	materialization.ServiceName = "cloudflare-tunnel"
+	materialization.Destination = "secrets/.env." + materializationEnvironmentID + ".cloudflare-tunnel"
+	materialization.OutputKind = agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV
+	materialization.Mode = 0o600
+	return plan
 }
 
 func validMaterializationPlan() *agentpb.ExecutionPlan {

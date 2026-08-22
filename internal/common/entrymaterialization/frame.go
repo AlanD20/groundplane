@@ -9,7 +9,7 @@ import (
 
 const (
 	frameMagic   = "GPEM"
-	frameVersion = byte(1)
+	frameVersion = byte(2)
 
 	preludeBytes       = len(frameMagic) + 1
 	recordHeaderBytes  = 5
@@ -25,9 +25,12 @@ const (
 	recordContent = byte(2)
 	recordEnd     = byte(3)
 
-	// Twelve field envelopes plus every fixed-width value and the longest
-	// canonical stable ids, excluding only Destination.
-	maxHeaderNonDestinationBytes = (12 * headerFieldBytes) + 31 + 31 + 30 + 8 + 30 + 1 + 4 + 4 + 4 + 8 + 32
+	// Thirteen field envelopes plus every fixed-width value, the longest
+	// canonical stable ids, and one bounded service name, excluding only
+	// Destination.
+	maxHeaderNonDestinationBytes = uint64(
+		(13*headerFieldBytes)+31+31+30+8+30+1+4+4+4+8+32,
+	) + uint64(MaximumDestinationBytes)
 )
 
 const (
@@ -37,6 +40,7 @@ const (
 	fieldGeneration
 	fieldDestination
 	fieldServiceID
+	fieldServiceName
 	fieldOutputKind
 	fieldUID
 	fieldGID
@@ -367,13 +371,14 @@ func (reader *contentReader) destroy() {
 }
 
 func encodeHeader(header Header) []byte {
-	encoded := make([]byte, 0, maxHeaderNonDestinationBytes+len(header.destination))
+	encoded := make([]byte, 0, int(maxHeaderNonDestinationBytes)+len(header.destination))
 	encoded = appendField(encoded, fieldTaskID, []byte(header.taskID))
 	encoded = appendField(encoded, fieldStepID, []byte(header.stepID))
 	encoded = appendField(encoded, fieldEnvironmentID, []byte(header.environmentID))
 	encoded = appendUint64Field(encoded, fieldGeneration, header.generation)
 	encoded = appendField(encoded, fieldDestination, []byte(header.destination))
 	encoded = appendField(encoded, fieldServiceID, []byte(header.serviceID))
+	encoded = appendField(encoded, fieldServiceName, []byte(header.serviceName))
 	encoded = appendField(encoded, fieldOutputKind, []byte{byte(header.outputKind)})
 	encoded = appendUint32Field(encoded, fieldUID, header.uid)
 	encoded = appendUint32Field(encoded, fieldGID, header.gid)
@@ -422,6 +427,8 @@ func decodeHeader(encoded []byte) (Header, error) {
 			spec.Destination = string(value)
 		case fieldServiceID:
 			spec.ServiceID = string(value)
+		case fieldServiceName:
+			spec.ServiceName = string(value)
 		case fieldOutputKind:
 			if len(value) != 1 {
 				return Header{}, protocolError("invalid output kind field")

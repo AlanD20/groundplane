@@ -673,6 +673,20 @@ func validateMaterializeFile(
 		artifact.OwnerId != materialization.EnvironmentId {
 		return errs.New(errs.KindValidationFailed, "materialization artifact ownership is invalid")
 	}
+	serviceName := ""
+	if materialization.ServiceId != "" {
+		for _, service := range artifact.Services {
+			if service.ServiceId == materialization.ServiceId {
+				serviceName = service.ComposeName
+				break
+			}
+		}
+		if serviceName == "" || materialization.ServiceName != serviceName {
+			return errs.New(errs.KindValidationFailed, "materialization service identity is invalid")
+		}
+	} else if materialization.ServiceName != "" {
+		return errs.New(errs.KindValidationFailed, "materialization service identity is invalid")
+	}
 	outputKind, err := materializationOutputKind(materialization.OutputKind)
 	if err != nil {
 		return err
@@ -682,6 +696,7 @@ func validateMaterializeFile(
 		Generation:    renderGeneration,
 		Destination:   materialization.Destination,
 		ServiceID:     materialization.ServiceId,
+		ServiceName:   materialization.ServiceName,
 		OutputKind:    outputKind,
 		UID:           materialization.Uid,
 		GID:           materialization.Gid,

@@ -1931,6 +1931,7 @@ type MaterializationTransferHeader struct {
 	Mode              uint32                    `protobuf:"varint,10,opt,name=mode,proto3" json:"mode,omitempty"`
 	Length            uint64                    `protobuf:"varint,11,opt,name=length,proto3" json:"length,omitempty"`
 	Sha256            []byte                    `protobuf:"bytes,12,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	ServiceName       string                    `protobuf:"bytes,13,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -2047,6 +2048,13 @@ func (x *MaterializationTransferHeader) GetSha256() []byte {
 		return x.Sha256
 	}
 	return nil
+}
+
+func (x *MaterializationTransferHeader) GetServiceName() string {
+	if x != nil {
+		return x.ServiceName
+	}
+	return ""
 }
 
 type MaterializationTransferChunk struct {
@@ -3028,6 +3036,7 @@ type MaterializeFile struct {
 	Mode              uint32                    `protobuf:"varint,9,opt,name=mode,proto3" json:"mode,omitempty"`
 	Length            uint64                    `protobuf:"varint,10,opt,name=length,proto3" json:"length,omitempty"`
 	Sha256            []byte                    `protobuf:"bytes,11,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	ServiceName       string                    `protobuf:"bytes,12,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -3137,6 +3146,13 @@ func (x *MaterializeFile) GetSha256() []byte {
 		return x.Sha256
 	}
 	return nil
+}
+
+func (x *MaterializeFile) GetServiceName() string {
+	if x != nil {
+		return x.ServiceName
+	}
+	return ""
 }
 
 type ComposeApply struct {
@@ -4061,7 +4077,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x06header\x18\x04 \x01(\v23.groundplane.agent.v1.MaterializationTransferHeaderH\x00R\x06header\x12J\n" +
 	"\x05chunk\x18\x05 \x01(\v22.groundplane.agent.v1.MaterializationTransferChunkH\x00R\x05chunk\x12D\n" +
 	"\x03end\x18\x06 \x01(\v20.groundplane.agent.v1.MaterializationTransferEndH\x00R\x03endB\b\n" +
-	"\x06record\"\xbe\x03\n" +
+	"\x06record\"\xe1\x03\n" +
 	"\x1dMaterializationTransferHeader\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12-\n" +
@@ -4078,7 +4094,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04mode\x18\n" +
 	" \x01(\rR\x04mode\x12\x16\n" +
 	"\x06length\x18\v \x01(\x04R\x06length\x12\x16\n" +
-	"\x06sha256\x18\f \x01(\fR\x06sha256\"T\n" +
+	"\x06sha256\x18\f \x01(\fR\x06sha256\x12!\n" +
+	"\fservice_name\x18\r \x01(\tR\vserviceName\"T\n" +
 	"\x1cMaterializationTransferChunk\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\rR\bsequence\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\"=\n" +
@@ -4161,7 +4178,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04role\x18\x05 \x01(\tR\x04role\x12\x1a\n" +
 	"\bpassword\x18\x06 \x01(\fR\bpassword\x12\x1a\n" +
 	"\bdatabase\x18\a \x01(\tR\bdatabase\x12\x19\n" +
-	"\bgrant_on\x18\b \x01(\tR\agrantOn\"\x83\x03\n" +
+	"\bgrant_on\x18\b \x01(\tR\agrantOn\"\xa6\x03\n" +
 	"\x0fMaterializeFile\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12-\n" +
@@ -4177,7 +4194,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04mode\x18\t \x01(\rR\x04mode\x12\x16\n" +
 	"\x06length\x18\n" +
 	" \x01(\x04R\x06length\x12\x16\n" +
-	"\x06sha256\x18\v \x01(\fR\x06sha256\"w\n" +
+	"\x06sha256\x18\v \x01(\fR\x06sha256\x12!\n" +
+	"\fservice_name\x18\f \x01(\tR\vserviceName\"w\n" +
 	"\fComposeApply\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12\x1f\n" +
