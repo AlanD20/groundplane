@@ -19,7 +19,7 @@ func Register() {
 		Label:         "Cloudflare Tunnel (outbound edge)",
 		AllowedOwners: []core.ComponentOwner{core.ComponentOwnerEnvironment},
 		ApplyStrategy: components.EnvironmentRender,
-		ConfigSchema:  []string{"tunnel_id"},
+		ConfigSchema:  []string{"token_entry_id"},
 		Environment:   implementation,
 	})
 }
@@ -31,7 +31,7 @@ func (a *component) Render(
 	ad core.Component,
 ) (map[string]components.GeneratedService, map[string][]byte, error) {
 	// TODO: render the cloudflared service wired from the
-	// CLOUDFLARE_TUNNEL_TOKEN secret (secrets/.env.edge, exposed only to
+	// CLOUDFLARE_TUNNEL_TOKEN Entry, exposed only to
 	// this service) — see mvp.md's "Router" section.
 	return nil, nil, errs.New(errs.KindNotImplemented, "cloudflaretunnel: Render not implemented")
 }
