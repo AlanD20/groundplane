@@ -207,6 +207,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
+	backingServiceRecords, err := etcd.NewBackingServiceRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize backing-service repository: %w", err)
+	}
+	backingServiceReads, err := newBackingServiceReadService(backingServiceRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize backing-service reads: %w", err)
+	}
 	attachRecords, err := etcd.NewAttachRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -502,6 +512,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Projects:              hierarchyService,
 		ProjectMutations:      projectMutations,
 		ProjectChanges:        projectChanges,
+		BackingServices:       backingServiceReads,
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
 		EnvironmentMutations:  environmentMutations,

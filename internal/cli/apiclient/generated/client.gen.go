@@ -53,6 +53,17 @@ type AttachRequest struct {
 	ServiceIds       []string  `json:"service_ids"`
 }
 
+// BackingService defines model for BackingService.
+type BackingService struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackingService.json
+	Schema        *string `json:"$schema,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	ProjectId     string  `json:"project_id"`
+	ServiceId     string  `json:"service_id"`
+}
+
 // Environment defines model for Environment.
 type Environment struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -174,6 +185,16 @@ type PageAttach struct {
 	Schema     *string   `json:"$schema,omitempty"`
 	Items      *[]Attach `json:"items"`
 	NextCursor *string   `json:"next_cursor,omitempty"`
+}
+
+// PageBackingService defines model for PageBackingService.
+type PageBackingService struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageBackingService.json
+	Schema     *string           `json:"$schema,omitempty"`
+	Items      *[]BackingService `json:"items"`
+	NextCursor *string           `json:"next_cursor,omitempty"`
 }
 
 // PageService defines model for PageService.
@@ -336,6 +357,12 @@ type AttachDetachParams struct {
 // AttachRenameParams defines parameters for AttachRename.
 type AttachRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// BackingServiceListParams defines parameters for BackingServiceList.
+type BackingServiceListParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // EnvironmentListParams defines parameters for EnvironmentList.
@@ -547,6 +574,16 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
 	AttachRename(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceList List backing services
+	//
+	// Corresponds with GET /backing-services (the `BackingServiceList` operationId).
+	BackingServiceList(ctx context.Context, params *BackingServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceShow Show a backing service
+	//
+	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
+	BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentList List environments
 	//
@@ -789,6 +826,36 @@ func (c *Client) AttachRenameWithBody(ctx context.Context, id string, params *At
 // Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
 func (c *Client) AttachRename(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAttachRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceList List backing services
+//
+// Corresponds with GET /backing-services (the `BackingServiceList` operationId).
+func (c *Client) BackingServiceList(ctx context.Context, params *BackingServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceShow Show a backing service
+//
+// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
+func (c *Client) BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceShowRequest(c.Server, projectId)
 	if err != nil {
 		return nil, err
 	}
@@ -1420,6 +1487,106 @@ func NewAttachRenameRequestWithBody(server string, id string, params *AttachRena
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceListRequest constructs an http.Request for the BackingServiceList method
+func NewBackingServiceListRequest(server string, params *BackingServiceListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-services")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceShowRequest constructs an http.Request for the BackingServiceShow method
+func NewBackingServiceShowRequest(server string, projectId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "project_id", projectId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -2403,6 +2570,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /attaches/{id}/rename (the `AttachRename` operationId).
 	AttachRenameWithResponse(ctx context.Context, id string, params *AttachRenameParams, body AttachRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*AttachRenameResponse, error)
 
+	// BackingServiceListWithResponse List backing services
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /backing-services (the `BackingServiceList` operationId).
+	BackingServiceListWithResponse(ctx context.Context, params *BackingServiceListParams, reqEditors ...RequestEditorFn) (*BackingServiceListResponse, error)
+
+	// BackingServiceShowWithResponse Show a backing service
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
+	BackingServiceShowWithResponse(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*BackingServiceShowResponse, error)
+
 	// EnvironmentListWithResponse List environments
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -2779,6 +2960,102 @@ func (r AttachRenameResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AttachRenameResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BackingServiceListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageBackingService
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BackingServiceListResponse) GetJSON200() *PageBackingService {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BackingServiceShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackingService
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BackingServiceShowResponse) GetJSON200() *BackingService {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceShowResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3687,6 +3964,32 @@ func (c *ClientWithResponses) AttachRenameWithResponse(ctx context.Context, id s
 	return ParseAttachRenameResponse(rsp)
 }
 
+// BackingServiceListWithResponse List backing services
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /backing-services (the `BackingServiceList` operationId).
+func (c *ClientWithResponses) BackingServiceListWithResponse(ctx context.Context, params *BackingServiceListParams, reqEditors ...RequestEditorFn) (*BackingServiceListResponse, error) {
+	rsp, err := c.BackingServiceList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceListResponse(rsp)
+}
+
+// BackingServiceShowWithResponse Show a backing service
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
+func (c *ClientWithResponses) BackingServiceShowWithResponse(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*BackingServiceShowResponse, error) {
+	rsp, err := c.BackingServiceShow(ctx, projectId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceShowResponse(rsp)
+}
+
 // EnvironmentListWithResponse List environments
 //
 // Returns a wrapper object for the known response body format(s).
@@ -4165,6 +4468,72 @@ func ParseAttachRenameResponse(rsp *http.Response) (*AttachRenameResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceListResponse parses an HTTP response from a BackingServiceListWithResponse call
+func ParseBackingServiceListResponse(rsp *http.Response) (*BackingServiceListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageBackingService
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceShowResponse parses an HTTP response from a BackingServiceShowWithResponse call
+func ParseBackingServiceShowResponse(rsp *http.Response) (*BackingServiceShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackingService
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

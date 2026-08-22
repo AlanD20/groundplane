@@ -177,11 +177,22 @@ func newServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			backingServiceID, err := resolveBackingAdapterServiceTarget(cmd, args[1])
+			if err != nil {
+				return err
+			}
+			grantAttachIDs := make([]string, len(grants))
+			for index, grant := range grants {
+				grantAttachIDs[index], err = resolveAttachTarget(cmd, grant)
+				if err != nil {
+					return err
+				}
+			}
 			accepted, err := fromContext(cmd).Client.CreateAttach(cmd.Context(), apiTypes.AttachRequest{
 				ServiceIDs:       []string{serviceID},
-				BackingServiceID: target(fromContext(cmd), args[1]),
+				BackingServiceID: backingServiceID,
 				Name:             attachName,
-				GrantAttachIDs:   append([]string(nil), grants...),
+				GrantAttachIDs:   grantAttachIDs,
 			})
 			if err != nil {
 				return err

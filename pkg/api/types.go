@@ -73,6 +73,15 @@ type ProjectPage struct {
 	NextCursor string    `json:"next_cursor,omitempty"`
 }
 
+// BackingService is the public facade over one backing Project, its sole
+// main Environment, and its sole adapter-backed Service. ProjectID is the
+// facade's stable public identity; the other ids address shared operations.
+type BackingService struct {
+	ProjectID     string `json:"project_id"`
+	EnvironmentID string `json:"environment_id"`
+	ServiceID     string `json:"service_id"`
+}
+
 type Environment struct {
 	ID                string                       `json:"id"`
 	ProjectID         string                       `json:"project_id"`

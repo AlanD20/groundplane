@@ -1,6 +1,10 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/spf13/cobra"
+)
 
 // backing-service (bs): list | show | create | start | stop | destroy.
 // Created explicitly — never lazily. The creation form is the SAME full
@@ -18,7 +22,16 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "List backing services",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/backing-services", nil)
+			page, err := fromContext(cmd).Client.ListBackingServices(cmd.Context(), 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, backing := range page.Items {
+				items[index] = backingServiceFields(backing)
+			}
+			headers, rows := tabulateVia(fromContext(cmd), items)
+			return fromContext(cmd).Out.Render(headers, rows, page)
 		},
 	})
 
@@ -27,7 +40,15 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Show a backing service (consumers, connection info)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runShow(cmd, "/api/v1/backing-services/"+target(fromContext(cmd), args[0]))
+			projectID, err := resolveBackingProjectTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			backing, err := fromContext(cmd).Client.ShowBackingService(cmd.Context(), projectID)
+			if err != nil {
+				return err
+			}
+			return renderBackingService(cmd, backing)
 		},
 	})
 
@@ -57,7 +78,7 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Start a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/backing-services/"+target(fromContext(cmd), args[0])+"/start", nil)
+			return runBackingServiceAction(cmd, args[0], "start")
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -65,7 +86,7 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Stop a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/backing-services/"+target(fromContext(cmd), args[0])+"/stop", nil)
+			return runBackingServiceAction(cmd, args[0], "stop")
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -73,9 +94,68 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Destroy a backing service (typed confirmation in the Console; removes data)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/backing-services/"+target(fromContext(cmd), args[0])+"/destroy", nil)
+			return runBackingServiceAction(cmd, args[0], "destroy")
 		},
 	})
 
 	return cmd
+}
+
+func resolveBackingProjectTarget(cmd *cobra.Command, argument string) (string, error) {
+	app := fromContext(cmd)
+	if app.Scope.AsID {
+		return target(app, argument), nil
+	}
+	cursor := ""
+	for {
+		page, err := app.Client.ListProjects(cmd.Context(), "", "backing", 200, cursor)
+		if err != nil {
+			return "", err
+		}
+		for _, project := range page.Items {
+			if project.Slug == argument {
+				return target(app, project.ID), nil
+			}
+		}
+		if page.NextCursor == "" {
+			return "", errs.Newf(errs.KindBackingServiceNotFound, "backing-service slug %q was not found", argument)
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func resolveBackingAdapterServiceTarget(cmd *cobra.Command, argument string) (string, error) {
+	app := fromContext(cmd)
+	if app.Scope.AsID {
+		return target(app, argument), nil
+	}
+	projectID, err := resolveBackingProjectTarget(cmd, argument)
+	if err != nil {
+		return "", err
+	}
+	backing, err := app.Client.ShowBackingService(cmd.Context(), projectID)
+	if err != nil {
+		return "", err
+	}
+	return target(app, backing.ServiceID), nil
+}
+
+func runBackingServiceAction(cmd *cobra.Command, argument string, action string) error {
+	projectID, err := resolveBackingProjectTarget(cmd, argument)
+	if err != nil {
+		return err
+	}
+	return runAction(cmd, "/api/v1/backing-services/"+projectID+"/"+action, nil)
+}
+
+func renderBackingService(cmd *cobra.Command, backing apiTypes.BackingService) error {
+	fields := backingServiceFields(backing)
+	headers, values := fieldsOfVia(fields)
+	return fromContext(cmd).Out.RenderOne(headers, values, backing)
+}
+
+func backingServiceFields(backing apiTypes.BackingService) map[string]any {
+	return map[string]any{
+		"project_id": backing.ProjectID, "environment_id": backing.EnvironmentID, "service_id": backing.ServiceID,
+	}
 }

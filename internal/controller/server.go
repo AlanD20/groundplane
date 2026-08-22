@@ -42,6 +42,7 @@ type Server struct {
 	projects              ProjectReader
 	projectMutations      ProjectMutator
 	projectChanges        ProjectChanger
+	backingServices       BackingServiceReader
 	environments          EnvironmentReader
 	services              ServiceReader
 	environmentMutations  EnvironmentMutator
@@ -65,6 +66,7 @@ type Options struct {
 	Projects              ProjectReader
 	ProjectMutations      ProjectMutator
 	ProjectChanges        ProjectChanger
+	BackingServices       BackingServiceReader
 	Environments          EnvironmentReader
 	Services              ServiceReader
 	EnvironmentMutations  EnvironmentMutator
@@ -106,6 +108,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		projects:              options.Projects,
 		projectMutations:      options.ProjectMutations,
 		projectChanges:        options.ProjectChanges,
+		backingServices:       options.BackingServices,
 		environments:          options.Environments,
 		services:              options.Services,
 		environmentMutations:  options.EnvironmentMutations,
@@ -121,6 +124,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.routes()
 	s.registerTenants()
 	s.registerProjects()
+	s.registerBackingServices()
 	s.registerEnvironments()
 	s.registerServices()
 	s.registerAttaches()
@@ -216,9 +220,7 @@ func (s *Server) routes() {
 	s.jsonRoute("PUT /api/v1/components/{id}/config", s.notImplemented)
 
 	// backing-service
-	mux.HandleFunc("GET /api/v1/backing-services", s.notImplemented)
 	s.jsonRoute("POST /api/v1/backing-services", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/backing-services/{project_id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/backing-services/{project_id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/start", s.acceptTask)
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/stop", s.acceptTask)
