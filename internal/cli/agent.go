@@ -55,7 +55,12 @@ func newAgentCmd() *cobra.Command {
 		Short: "Create and start the local Agent",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runAction(cmd, "/api/v1/agents", nil)
+			app := fromContext(cmd)
+			accepted, err := app.Client.JoinAgent(cmd.Context())
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 
@@ -93,12 +98,22 @@ func newAgentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			path := "/api/v1/agents/" + target(fromContext(cmd), args[0]) + "/config"
-			return runReplaceSingleton(cmd, path, map[string]interface{}{
-				"pull_interval_seconds": pullInterval,
-				"max_concurrent_tasks":  maxConcurrent,
-				"labels":                parsedLabels,
+			app := fromContext(cmd)
+			updated, err := app.Client.SetAgentConfig(cmd.Context(), target(app, args[0]), apiTypes.AgentConfig{
+				PullIntervalSeconds: pullInterval,
+				MaxConcurrentTasks:  maxConcurrent,
+				Labels:              parsedLabels,
 			})
+			if err != nil {
+				return err
+			}
+			fields := map[string]any{
+				"pull_interval_seconds": updated.PullIntervalSeconds,
+				"max_concurrent_tasks":  updated.MaxConcurrentTasks,
+				"labels":                updated.Labels,
+			}
+			headers, rows := tabulateVia(app, []map[string]any{fields})
+			return app.Out.Render(headers, rows, updated)
 		},
 	}
 	set.Flags().IntVar(&pullInterval, "pull-interval", 0, "seconds between idle Ready heartbeats")
@@ -126,7 +141,12 @@ func newAgentCmd() *cobra.Command {
 		Short: "Remove an agent container and revoke its channel token",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDestroy(cmd, "/api/v1/agents/"+target(fromContext(cmd), args[0]))
+			app := fromContext(cmd)
+			accepted, err := app.Client.RemoveAgent(cmd.Context(), target(app, args[0]))
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 

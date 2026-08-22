@@ -12,13 +12,12 @@ import (
 type localAgentRecords interface {
 	CreateSingleton(context.Context, etcd.LocalAgentRecord) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
-	UpdateConfig(
+	UpdateConfigIdempotent(
 		context.Context,
-		string,
-		uint64,
-		int64,
+		etcd.Versioned[etcd.LocalAgentRecord],
 		etcd.LocalAgentConfig,
-	) (etcd.Versioned[etcd.LocalAgentRecord], error)
+		etcd.IdempotencyMarker,
+	) (etcd.Versioned[etcd.LocalAgentRecord], etcd.IdempotencyTransactionResult, error)
 	MarkReady(context.Context, string, uint64, int64, time.Time) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	BeginDelete(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	Delete(context.Context, string, uint64, int64) error
@@ -28,14 +27,19 @@ type localAgentRecords interface {
 // aggregate and its etcd representation. Secret-bearing byte slices and label
 // maps are copied at both boundaries so neither package shares mutable storage.
 type localAgentRepositoryAdapter struct {
-	repository localAgentRecords
+	repository  localAgentRecords
+	idempotency localAgentConfigIdempotency
+	now         func() time.Time
 }
 
-func newLocalAgentRepositoryAdapter(repository localAgentRecords) (*localAgentRepositoryAdapter, error) {
-	if repository == nil {
-		return nil, errs.New(errs.KindInternal, "local agent durable repository is required")
+func newLocalAgentRepositoryAdapter(
+	repository localAgentRecords,
+	idempotency localAgentConfigIdempotency,
+) (*localAgentRepositoryAdapter, error) {
+	if repository == nil || idempotency == nil {
+		return nil, errs.New(errs.KindInternal, "local agent durable repository and config idempotency are required")
 	}
-	return &localAgentRepositoryAdapter{repository: repository}, nil
+	return &localAgentRepositoryAdapter{repository: repository, idempotency: idempotency, now: time.Now}, nil
 }
 
 func (adapter *localAgentRepositoryAdapter) CreateSingleton(
@@ -57,24 +61,6 @@ func (adapter *localAgentRepositoryAdapter) GetSingleton(
 	ctx context.Context,
 ) (localagent.StoredRecord, error) {
 	stored, err := adapter.repository.GetSingleton(ctx)
-	if err != nil {
-		return localagent.StoredRecord{}, err
-	}
-	return localAgentRecordFromDurable(stored)
-}
-
-func (adapter *localAgentRepositoryAdapter) UpdateConfig(
-	ctx context.Context,
-	id string,
-	generation uint64,
-	revision int64,
-	config localagent.Config,
-) (localagent.StoredRecord, error) {
-	stored, err := adapter.repository.UpdateConfig(ctx, id, generation, revision, etcd.LocalAgentConfig{
-		PullIntervalSeconds: config.PullIntervalSeconds,
-		MaxConcurrentTasks:  config.MaxConcurrentTasks,
-		Labels:              cloneLocalAgentLabels(config.Labels),
-	})
 	if err != nil {
 		return localagent.StoredRecord{}, err
 	}

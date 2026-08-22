@@ -60,6 +60,15 @@ type StoredRecord struct {
 	Revision int64
 }
 
+// ConfigUpdateResult is the closed outcome of one protected desired-config
+// replacement. Applied carries the committed lifecycle record; replay carries
+// only the exact response because the target no longer needs to exist.
+type ConfigUpdateResult struct {
+	Applied      bool
+	Stored       StoredRecord
+	ResponseBody []byte
+}
+
 // Repository owns singleton CAS and the transactional credential digest lookup.
 // BeginDelete must remove the digest lookup in the same transaction that changes
 // the phase. Delete must remove the primary record, encrypted token, and indexes.
@@ -69,10 +78,9 @@ type Repository interface {
 	UpdateConfig(
 		ctx context.Context,
 		id string,
-		generation uint64,
-		revision int64,
 		config Config,
-	) (StoredRecord, error)
+		idempotencyKey string,
+	) (ConfigUpdateResult, error)
 	MarkReady(
 		ctx context.Context,
 		id string,

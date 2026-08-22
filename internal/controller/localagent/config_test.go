@@ -11,7 +11,10 @@ func TestUpdateConfigCommitsBeforeRuntimeMaterializationAndCopiesState(t *testin
 	t.Parallel()
 
 	record := configTestRecord()
-	repository := &configTestRepository{stored: StoredRecord{Record: record, Revision: 11}}
+	repository := &configTestRepository{
+		stored:       StoredRecord{Record: record, Revision: 11},
+		responseBody: []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"labels":{"zone":"edge"}}`),
+	}
 	runtime := &configTestRuntime{repository: repository}
 	manager, err := New(Dependencies{
 		Repository: repository,
@@ -25,7 +28,7 @@ func TestUpdateConfigCommitsBeforeRuntimeMaterializationAndCopiesState(t *testin
 		t.Fatalf("New() error = %v", err)
 	}
 	desired := Config{PullIntervalSeconds: 5, MaxConcurrentTasks: 2, Labels: map[string]string{"zone": "edge"}}
-	updated, err := manager.UpdateConfig(context.Background(), record.ID, desired)
+	response, err := manager.UpdateConfig(context.Background(), record.ID, desired, "agent-config-key-0001")
 	if err != nil {
 		t.Fatalf("UpdateConfig() error = %v", err)
 	}
@@ -37,10 +40,12 @@ func TestUpdateConfigCommitsBeforeRuntimeMaterializationAndCopiesState(t *testin
 			runtime.beforeCommit,
 		)
 	}
-	updated.Labels["zone"] = "changed"
 	desired.Labels["zone"] = "also-changed"
 	if repository.stored.Record.Config.Labels["zone"] != "edge" || runtime.material.Config.Labels["zone"] != "edge" {
 		t.Fatal("UpdateConfig() leaked a mutable labels map")
+	}
+	if repository.key != "agent-config-key-0001" || string(response) != string(repository.responseBody) {
+		t.Fatalf("UpdateConfig() key/response = %q/%q", repository.key, response)
 	}
 }
 
@@ -63,8 +68,10 @@ func configTestRecord() Record {
 }
 
 type configTestRepository struct {
-	stored  StoredRecord
-	updated bool
+	stored       StoredRecord
+	updated      bool
+	key          string
+	responseBody []byte
 }
 
 func (repository *configTestRepository) CreateSingleton(context.Context, Record) (StoredRecord, error) {
@@ -76,13 +83,17 @@ func (repository *configTestRepository) GetSingleton(context.Context) (StoredRec
 func (repository *configTestRepository) UpdateConfig(
 	_ context.Context,
 	_ string,
-	_ uint64,
-	_ int64,
 	config Config,
-) (StoredRecord, error) {
+	key string,
+) (ConfigUpdateResult, error) {
 	repository.updated = true
+	repository.key = key
 	repository.stored.Record.Config = cloneConfig(config)
-	return StoredRecord{Record: cloneRecord(repository.stored.Record), Revision: repository.stored.Revision}, nil
+	return ConfigUpdateResult{
+		Applied:      true,
+		Stored:       StoredRecord{Record: cloneRecord(repository.stored.Record), Revision: repository.stored.Revision},
+		ResponseBody: append([]byte(nil), repository.responseBody...),
+	}, nil
 }
 
 func (repository *configTestRepository) MarkReady(

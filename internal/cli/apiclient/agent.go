@@ -6,8 +6,29 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
+
+func (c *Client) JoinAgent(ctx context.Context) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	response, err := client.AgentJoinWithResponse(
+		ctx,
+		&generated.AgentJoinParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, "/api/v1/agents", err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, "/api/v1/agents", response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, "/api/v1/agents", response.Body, response.JSON202)
+}
 
 func (c *Client) ListAgents(ctx context.Context, limit int, cursor string) (apiTypes.Page[apiTypes.Agent], error) {
 	client, err := c.generatedHumanClient()
@@ -104,11 +125,68 @@ func (c *Client) ShowAgentConfig(ctx context.Context, id string) (apiTypes.Agent
 			return apiTypes.AgentConfig{}, err
 		}
 	}
-	return apiTypes.AgentConfig{
-		PullIntervalSeconds: int(parsed.PullIntervalSeconds),
-		MaxConcurrentTasks:  int(parsed.MaxConcurrentTasks),
-		Labels:              copyGeneratedAgentLabels(parsed.Labels),
-	}, nil
+	return agentConfigFromGenerated(*parsed), nil
+}
+
+func (c *Client) SetAgentConfig(
+	ctx context.Context,
+	id string,
+	config apiTypes.AgentConfig,
+) (apiTypes.AgentConfig, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.AgentConfig{}, err
+	}
+	path := "/api/v1/agents/" + id + "/config"
+	body := generated.AgentConfigSetJSONRequestBody{
+		PullIntervalSeconds: int64(config.PullIntervalSeconds),
+		MaxConcurrentTasks:  int64(config.MaxConcurrentTasks),
+		Labels:              copyGeneratedAgentLabels(config.Labels),
+	}
+	response, err := client.AgentConfigSetWithResponse(
+		ctx,
+		id,
+		&generated.AgentConfigSetParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
+	if err != nil {
+		return apiTypes.AgentConfig{}, generatedCallError(ctx, http.MethodPut, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPut, path, response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.AgentConfig{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.AgentConfig{}
+		if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.AgentConfig{}, err
+		}
+	}
+	return agentConfigFromGenerated(*parsed), nil
+}
+
+func (c *Client) RemoveAgent(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/agents/" + id
+	response, err := client.AgentRemoveWithResponse(
+		ctx,
+		id,
+		&generated.AgentRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
 func agentFromGenerated(agent generated.Agent) apiTypes.Agent {
@@ -131,4 +209,12 @@ func copyGeneratedAgentLabels(labels map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+func agentConfigFromGenerated(config generated.AgentConfig) apiTypes.AgentConfig {
+	return apiTypes.AgentConfig{
+		PullIntervalSeconds: int(config.PullIntervalSeconds),
+		MaxConcurrentTasks:  int(config.MaxConcurrentTasks),
+		Labels:              copyGeneratedAgentLabels(config.Labels),
+	}
 }

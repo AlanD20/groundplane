@@ -652,21 +652,24 @@ func (repository *fakeRepository) GetSingleton(ctx context.Context) (StoredRecor
 func (repository *fakeRepository) UpdateConfig(
 	ctx context.Context,
 	id string,
-	generation uint64,
-	revision int64,
 	config Config,
-) (StoredRecord, error) {
+	_ string,
+) (ConfigUpdateResult, error) {
 	if err := ctx.Err(); err != nil {
-		return StoredRecord{}, err
+		return ConfigUpdateResult{}, err
 	}
 	repository.trace.add("update_config")
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
-	if !repository.matches(id, generation, revision) || repository.record.Record.Phase == PhaseDeleting {
-		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
+	if !repository.exists || repository.record.Record.ID != id || repository.record.Record.Phase == PhaseDeleting {
+		return ConfigUpdateResult{}, errs.New(errs.KindStateConflict, "local Agent changed")
 	}
 	repository.record.Record.Config = cloneConfig(config)
-	return cloneStored(repository.record), nil
+	return ConfigUpdateResult{
+		Applied:      true,
+		Stored:       cloneStored(repository.record),
+		ResponseBody: []byte(`{"pull_interval_seconds":1,"max_concurrent_tasks":1,"labels":{}}`),
+	}, nil
 }
 
 func (repository *fakeRepository) MarkReady(

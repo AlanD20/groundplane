@@ -274,10 +274,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/activity", s.taskList) // exact JSON alias of Task list
 
 	// host / agents
-	s.registerAgentReads()
-	mux.HandleFunc("POST /api/v1/agents", s.agentEnroll)
-	mux.HandleFunc("DELETE /api/v1/agents/{id}", s.agentRemove)
-	s.jsonRoute("PUT /api/v1/agents/{id}/config", s.agentConfigUpdate)
+	s.registerAgents()
 	// The signed update transport still needs its own independent limit
 	// decision; it must never inherit the ordinary JSON or Blueprint ceiling.
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)

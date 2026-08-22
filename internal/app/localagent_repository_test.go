@@ -18,7 +18,7 @@ func TestLocalAgentRepositoryAdapterTranslatesLifecycleWithoutAliasing(t *testin
 	t.Parallel()
 
 	repository := &fakeLocalAgentRecords{}
-	adapter, err := newLocalAgentRepositoryAdapter(repository)
+	adapter, err := newLocalAgentRepositoryAdapter(repository, &fakeLocalAgentConfigIdempotency{})
 	if err != nil {
 		t.Fatalf("newLocalAgentRepositoryAdapter() error = %v", err)
 	}
@@ -86,7 +86,7 @@ func TestLocalAgentRepositoryAdapterRejectsUnknownDurablePhase(t *testing.T) {
 	repository := &fakeLocalAgentRecords{get: etcd.Versioned[etcd.LocalAgentRecord]{
 		Record: etcd.LocalAgentRecord{Phase: "future"}, Revision: 1,
 	}}
-	adapter, err := newLocalAgentRepositoryAdapter(repository)
+	adapter, err := newLocalAgentRepositoryAdapter(repository, &fakeLocalAgentConfigIdempotency{})
 	if err != nil {
 		t.Fatalf("newLocalAgentRepositoryAdapter() error = %v", err)
 	}
@@ -106,6 +106,7 @@ type fakeLocalAgentRecords struct {
 	markReadyAt      time.Time
 	deleteGeneration uint64
 	deleteRevision   int64
+	getCalls         int
 }
 
 func (repository *fakeLocalAgentRecords) CreateSingleton(
@@ -119,19 +120,18 @@ func (repository *fakeLocalAgentRecords) CreateSingleton(
 func (repository *fakeLocalAgentRecords) GetSingleton(
 	_ context.Context,
 ) (etcd.Versioned[etcd.LocalAgentRecord], error) {
+	repository.getCalls++
 	return repository.get, nil
 }
 
-func (repository *fakeLocalAgentRecords) UpdateConfig(
+func (repository *fakeLocalAgentRecords) UpdateConfigIdempotent(
 	_ context.Context,
-	_ string,
-	_ uint64,
-	_ int64,
+	current etcd.Versioned[etcd.LocalAgentRecord],
 	config etcd.LocalAgentConfig,
-) (etcd.Versioned[etcd.LocalAgentRecord], error) {
-	record := repository.created
-	record.Config = config
-	return etcd.Versioned[etcd.LocalAgentRecord]{Record: record, Revision: 11}, nil
+	_ etcd.IdempotencyMarker,
+) (etcd.Versioned[etcd.LocalAgentRecord], etcd.IdempotencyTransactionResult, error) {
+	current.Record.Config = config
+	return current, etcd.IdempotencyTransactionResult{}, nil
 }
 
 func (repository *fakeLocalAgentRecords) MarkReady(

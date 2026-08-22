@@ -13,7 +13,7 @@ import (
 type localAgentHealthReader interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 	Health(context.Context, string) (localagent.Health, error)
-	UpdateConfig(context.Context, string, localagent.Config) (localagent.Config, error)
+	UpdateConfig(context.Context, string, localagent.Config, string) ([]byte, error)
 }
 
 type localAgentAssignmentReader interface {
@@ -79,16 +79,19 @@ func (service *localAgentReadService) UpdateAgentConfig(
 	ctx context.Context,
 	id string,
 	config apiTypes.AgentConfig,
-) (apiTypes.AgentConfig, error) {
-	updated, err := service.health.UpdateConfig(ctx, id, localagent.Config{
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	body, err := service.health.UpdateConfig(ctx, id, localagent.Config{
 		PullIntervalSeconds: int32(config.PullIntervalSeconds),
 		MaxConcurrentTasks:  int32(config.MaxConcurrentTasks),
 		Labels:              copyAgentLabels(config.Labels),
-	})
+	}, idempotencyKey)
 	if err != nil {
-		return apiTypes.AgentConfig{}, err
+		return etcd.IdempotencyResponse{}, err
 	}
-	return projectAgentConfig(updated), nil
+	return etcd.IdempotencyResponse{
+		Status: 200, ContentKind: "application/json", Body: append([]byte(nil), body...),
+	}, nil
 }
 
 func (service *localAgentReadService) projectAgent(

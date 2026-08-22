@@ -27,7 +27,9 @@ func TestAgentReadRoutesAreInOpenAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal OpenAPI: %v", err)
 	}
-	for _, operationID := range []string{"agent.list", "agent.show", "agent.config.show"} {
+	for _, operationID := range []string{
+		"agent.join", "agent.list", "agent.show", "agent.config.show", "agent.config.set", "agent.remove",
+	} {
 		if !strings.Contains(string(document), `"operationId":"`+operationID+`"`) {
 			t.Fatalf("OpenAPI does not contain %s: %s", operationID, document)
 		}
@@ -90,7 +92,10 @@ func TestAgentReadRoutesExposeTheConfiguredProjection(t *testing.T) {
 func TestAgentConfigUpdateReplacesTheCompleteDocument(t *testing.T) {
 	t.Parallel()
 
-	reader := &fakeAgentReader{}
+	wantBody := []byte(`{"labels":{"zone":"edge"},"max_concurrent_tasks":2,"pull_interval_seconds":5}`)
+	reader := &fakeAgentReader{response: etcd.IdempotencyResponse{
+		Status: http.StatusOK, ContentKind: "application/json", Body: wantBody,
+	}}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{Agents: reader})
 	body := []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"labels":{"zone":"edge"}}`)
 	request := httptest.NewRequest(
@@ -99,6 +104,7 @@ func TestAgentConfigUpdateReplacesTheCompleteDocument(t *testing.T) {
 		bytes.NewReader(body),
 	)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(idempotencyKeyHeader, "agent-config-key-0001")
 	response := httptest.NewRecorder()
 	server.Mux.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
@@ -108,9 +114,8 @@ func TestAgentConfigUpdateReplacesTheCompleteDocument(t *testing.T) {
 		reader.updated.Labels["zone"] != "edge" {
 		t.Fatalf("updated config = %#v", reader.updated)
 	}
-	var returned apiTypes.AgentConfig
-	if err := json.Unmarshal(response.Body.Bytes(), &returned); err != nil || returned.Labels["zone"] != "edge" {
-		t.Fatalf("response config = %#v, %v", returned, err)
+	if reader.key != "agent-config-key-0001" || !bytes.Equal(response.Body.Bytes(), wantBody) {
+		t.Fatalf("response/key = %q/%q", response.Body.Bytes(), reader.key)
 	}
 }
 
@@ -192,8 +197,10 @@ func TestAgentMutationsRejectBodiesBeforeDispatch(t *testing.T) {
 }
 
 type fakeAgentReader struct {
-	agent   apiTypes.Agent
-	updated apiTypes.AgentConfig
+	agent    apiTypes.Agent
+	updated  apiTypes.AgentConfig
+	response etcd.IdempotencyResponse
+	key      string
 }
 
 type fakeAgentMutator struct {
@@ -236,7 +243,9 @@ func (reader *fakeAgentReader) UpdateAgentConfig(
 	_ context.Context,
 	_ string,
 	config apiTypes.AgentConfig,
-) (apiTypes.AgentConfig, error) {
+	key string,
+) (etcd.IdempotencyResponse, error) {
 	reader.updated = config
-	return config, nil
+	reader.key = key
+	return reader.response, nil
 }

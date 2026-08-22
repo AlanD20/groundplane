@@ -283,7 +283,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
 	}
-	repositoryAdapter, err := newLocalAgentRepositoryAdapter(agents)
+	intentCoordinator, err := idempotentintent.NewCoordinator(intentProtector)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	agentConfigIdempotency, err := newDurableLocalAgentConfigIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent config idempotency: %w", err)
+	}
+	repositoryAdapter, err := newLocalAgentRepositoryAdapter(agents, agentConfigIdempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent repository adapter: %w", err)
@@ -297,11 +307,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent Task adapter: %w", err)
-	}
-	intentCoordinator, err := idempotentintent.NewCoordinator(intentProtector)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
 	}
 	entryCreationRepository, err := newDurableEntryCreationRepository(
 		hierarchyRecords,

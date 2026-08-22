@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -118,22 +120,30 @@ func TestLocalAgentReadServiceReplacesConfig(t *testing.T) {
 		MaxConcurrentTasks:  2,
 		Labels:              map[string]string{"zone": "edge"},
 	}
-	updated, err := service.UpdateAgentConfig(context.Background(), runtimeAdapterAgentID, desired)
+	response, err := service.UpdateAgentConfig(
+		context.Background(),
+		runtimeAdapterAgentID,
+		desired,
+		"agent-config-key-0001",
+	)
 	if err != nil {
 		t.Fatalf("UpdateAgentConfig() error = %v", err)
 	}
-	if updated.PullIntervalSeconds != 5 || updated.MaxConcurrentTasks != 2 || updated.Labels["zone"] != "edge" {
-		t.Fatalf("UpdateAgentConfig() = %#v", updated)
+	if response.Status != http.StatusOK || response.ContentKind != "application/json" ||
+		!bytes.Equal(response.Body, reader.responseBody) {
+		t.Fatalf("UpdateAgentConfig() = %#v", response)
 	}
 	desired.Labels["zone"] = "changed"
-	if reader.updated.Labels["zone"] != "edge" {
+	if reader.updated.Labels["zone"] != "edge" || reader.key != "agent-config-key-0001" {
 		t.Fatal("UpdateAgentConfig() leaked the request labels map")
 	}
 }
 
 type fakeLocalAgentHealthReader struct {
-	health  localagent.Health
-	updated localagent.Config
+	health       localagent.Health
+	updated      localagent.Config
+	key          string
+	responseBody []byte
 }
 
 func (reader *fakeLocalAgentHealthReader) ListHealth(context.Context) ([]localagent.Health, error) {
@@ -148,13 +158,18 @@ func (reader *fakeLocalAgentHealthReader) UpdateConfig(
 	_ context.Context,
 	_ string,
 	config localagent.Config,
-) (localagent.Config, error) {
+	key string,
+) ([]byte, error) {
 	reader.updated = localagent.Config{
 		PullIntervalSeconds: config.PullIntervalSeconds,
 		MaxConcurrentTasks:  config.MaxConcurrentTasks,
 		Labels:              copyAgentLabels(config.Labels),
 	}
-	return reader.updated, nil
+	reader.key = key
+	if reader.responseBody == nil {
+		reader.responseBody = []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"labels":{"zone":"edge"}}`)
+	}
+	return append([]byte(nil), reader.responseBody...), nil
 }
 
 type fakeLocalAgentReadAssignments struct {
