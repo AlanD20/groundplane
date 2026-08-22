@@ -169,3 +169,13 @@ func (repository *durableSecretReadRepository) ListSecrets(
 ) (etcd.Page[etcd.SecretRecord], error) {
 	return repository.secrets.ListSecrets(ctx, scope, projectID, request)
 }
+
+func (repository *durableSecretReadRepository) CreateSecretIdempotent(
+	ctx context.Context,
+	owner etcd.SecretOwner,
+	record etcd.SecretRecord,
+	value etcd.SecretEncryptedValue,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)
+}

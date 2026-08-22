@@ -83,6 +83,62 @@ func (repository *SecretRepository) CreateSecret(
 	}, nil
 }
 
+// CreateSecretIdempotent atomically commits the redacted metadata, ownership
+// indexes, encrypted value, and exact completed replay marker.
+func (repository *SecretRepository) CreateSecretIdempotent(
+	ctx context.Context,
+	owner SecretOwner,
+	record SecretRecord,
+	value SecretEncryptedValue,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateSecretOwnership(ctx, owner, record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateSecretValueBinding(record, value); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Secret creation marker must be a completed direct mutation",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	primaryValue, err := encodeSecretRecord(record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(primaryValue)
+	encryptedValue, err := encodeSecretEncryptedValue(value)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(encryptedValue)
+	plan, err := newIdempotencyMutationPlan(
+		secretCreateConditions(owner, record),
+		[]Mutation{
+			{Type: MutationPut, Key: secretRecordKey(record.Secret.ID), Value: primaryValue},
+			{Type: MutationPut, Key: secretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
+			{Type: MutationPut, Key: secretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
+			{Type: MutationPut, Key: secretValueKey(record.Secret.ID), Value: encryptedValue},
+		},
+		func(_ int64, values []*KeyValue) error {
+			return classifySecretCreateConflict(values, owner, record)
+		},
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
 func (repository *SecretRepository) GetSecret(
 	ctx context.Context,
 	id string,

@@ -287,6 +287,11 @@ type Runner struct {
 	Online    bool     `json:"online"`
 }
 
+// MaximumSecretValueBytes is the decoded UTF-8 input ceiling for one reusable
+// Secret. The durable ciphertext ceiling remains 256 KiB; this leaves a full
+// KiB for the locked single-recipient age envelope.
+const MaximumSecretValueBytes = 255 << 10
+
 type Secret struct {
 	ID        string `json:"id"`
 	Scope     string `json:"scope"` // "project" | "platform"

@@ -1,10 +1,17 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
+	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -20,11 +27,24 @@ type SecretReader interface {
 	RevealSecret(context.Context, string) (string, error)
 }
 
+type SecretMutator interface {
+	CreateSecret(
+		context.Context,
+		apiTypes.SecretCreateRequest,
+		string,
+	) (etcd.IdempotencyResponse, error)
+}
+
+type secretCreateInput struct {
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
 type secretListInput struct {
-	Project  string `query:"project" required:"false" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Project  string `query:"project"  required:"false" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
 	Platform bool   `query:"platform" required:"false"`
-	Limit    int    `query:"limit" required:"false"`
-	Cursor   string `query:"cursor" required:"false"`
+	Limit    int    `query:"limit"    required:"false"`
+	Cursor   string `query:"cursor"   required:"false"`
 }
 
 type secretShowInput struct {
@@ -43,7 +63,29 @@ type secretValueOutput struct {
 	Body apiTypes.SecretValue
 }
 
+type secretMutationOutput struct {
+	Status      int
+	ContentType string `header:"Content-Type"`
+	Body        func(huma.Context)
+}
+
 func (s *Server) registerSecrets() {
+	secretSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.Secret](),
+		true,
+		"Secret",
+	)
+	registerSecretMutation[apiTypes.SecretCreateRequest](
+		s,
+		huma.Operation{
+			OperationID: "secret.create", Method: http.MethodPost, Path: "/secrets",
+			Summary: "Create a reusable secret", Tags: []string{"Secret"},
+			DefaultStatus: http.StatusCreated,
+			Middlewares:   huma.Middlewares{s.rejectSecretQuery},
+		},
+		secretSchema,
+		s.createSecret,
+	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "secret.list", Method: http.MethodGet, Path: "/secrets",
 		Summary: "List reusable secrets", Tags: []string{"Secret"},
@@ -57,6 +99,166 @@ func (s *Server) registerSecrets() {
 		OperationID: "secret.reveal", Method: http.MethodGet, Path: "/secrets/{id}/value",
 		Summary: "Reveal a reusable secret value", Tags: []string{"Secret"},
 	}, s.revealSecret)
+	s.setRoutePolicy("POST /api/v1/secrets", routePolicy{body: jsonBody})
+}
+
+func registerSecretMutation[InputBody any, Input any](
+	s *Server,
+	operation huma.Operation,
+	secretSchema *huma.Schema,
+	handler func(context.Context, *Input) (*secretMutationOutput, error),
+) {
+	operation.SkipValidateBody = true
+	operation.RequestBody = &huma.RequestBody{
+		Required: true,
+		Content: map[string]*huma.MediaType{
+			"application/json": {
+				Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[InputBody](),
+					true,
+					"SecretCreateRequest",
+				),
+			},
+		},
+	}
+	operation.Responses = map[string]*huma.Response{
+		strconv.Itoa(operation.DefaultStatus): {
+			Description: http.StatusText(operation.DefaultStatus),
+			Content: map[string]*huma.MediaType{
+				"application/json": {Schema: secretSchema},
+			},
+		},
+	}
+	huma.Register(s.API, operation, handler)
+}
+
+func (s *Server) createSecret(
+	ctx context.Context,
+	request *secretCreateInput,
+) (*secretMutationOutput, error) {
+	if s.secretMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Secret mutator is not configured")
+	}
+	defer clear(request.RawBody)
+	input, err := decodeSecretCreate(request.RawBody)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	response, err := s.secretMutations.CreateSecret(ctx, input, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &secretMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
+				s.Logger.Error("controller: write Secret creation response", slog.Any("error", writeErr))
+			}
+		},
+	}, nil
+}
+
+func decodeSecretCreate(body []byte) (apiTypes.SecretCreateRequest, error) {
+	if !utf8.Valid(body) {
+		return apiTypes.SecretCreateRequest{}, errs.New(
+			errs.KindMalformedRequest,
+			"Secret creation body is not valid UTF-8",
+		)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	opening, err := decoder.Token()
+	if err != nil {
+		return apiTypes.SecretCreateRequest{}, secretCreateJSONError(err)
+	}
+	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
+		return apiTypes.SecretCreateRequest{}, errs.New(
+			errs.KindMalformedRequest,
+			"Secret creation body must be an object",
+		)
+	}
+	input := apiTypes.SecretCreateRequest{}
+	seen := make(map[string]struct{}, 6)
+	for decoder.More() {
+		token, tokenErr := decoder.Token()
+		if tokenErr != nil {
+			return apiTypes.SecretCreateRequest{}, secretCreateJSONError(tokenErr)
+		}
+		key, ok := token.(string)
+		if !ok {
+			return apiTypes.SecretCreateRequest{}, errs.New(
+				errs.KindMalformedRequest,
+				"Secret creation member name is invalid",
+			)
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return apiTypes.SecretCreateRequest{}, errs.New(
+				errs.KindMalformedRequest,
+				"Secret creation body contains a duplicate member",
+			)
+		}
+		seen[key] = struct{}{}
+		switch key {
+		case "platform":
+			if err := decoder.Decode(&input.Platform); err != nil {
+				return apiTypes.SecretCreateRequest{}, secretCreateMemberError(err)
+			}
+		case "project_id", "key", "kind", "path", "value":
+			var value string
+			if err := decoder.Decode(&value); err != nil {
+				return apiTypes.SecretCreateRequest{}, secretCreateMemberError(err)
+			}
+			switch key {
+			case "project_id":
+				input.ProjectID = value
+			case "key":
+				input.Key = value
+			case "kind":
+				input.Kind = value
+			case "path":
+				input.Path = value
+			case "value":
+				input.Value = value
+			}
+		default:
+			return apiTypes.SecretCreateRequest{}, errs.New(
+				errs.KindMalformedRequest,
+				"Secret creation body contains an unknown member",
+			)
+		}
+	}
+	closing, err := decoder.Token()
+	if err != nil {
+		return apiTypes.SecretCreateRequest{}, secretCreateJSONError(err)
+	}
+	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
+		return apiTypes.SecretCreateRequest{}, errs.New(
+			errs.KindMalformedRequest,
+			"Secret creation body is malformed",
+		)
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			err = errors.New("trailing JSON value")
+		}
+		return apiTypes.SecretCreateRequest{}, secretCreateJSONError(err)
+	}
+	return input, nil
+}
+
+func secretCreateMemberError(err error) error {
+	var typeError *json.UnmarshalTypeError
+	if errors.As(err, &typeError) {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Secret creation member has an invalid type",
+		)
+	}
+	return secretCreateJSONError(err)
+}
+
+func secretCreateJSONError(err error) error {
+	return errs.Wrap(errs.KindMalformedRequest, err)
 }
 
 func (s *Server) listSecrets(ctx context.Context, request *secretListInput) (*secretPageOutput, error) {
@@ -164,6 +366,15 @@ func (s *Server) validateSecretListQuery(ctx huma.Context, next func(huma.Contex
 	if hasProject == hasPlatform || hasProject && projectValues[0] == "" ||
 		hasPlatform && platformValues[0] != "true" {
 		s.writeSecretProblem(ctx, "Secret list requires exactly one owner selector")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectSecretQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeSecretProblem(ctx, "Secret request query is invalid")
 		return
 	}
 	next(ctx)

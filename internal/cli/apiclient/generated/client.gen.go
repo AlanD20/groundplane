@@ -286,6 +286,20 @@ type Secret struct {
 	UpdatedAt string  `json:"updated_at"`
 }
 
+// SecretCreateRequest defines model for SecretCreateRequest.
+type SecretCreateRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/SecretCreateRequest.json
+	Schema    *string `json:"$schema,omitempty"`
+	Key       string  `json:"key"`
+	Kind      string  `json:"kind"`
+	Path      *string `json:"path,omitempty"`
+	Platform  *bool   `json:"platform,omitempty"`
+	ProjectId *string `json:"project_id,omitempty"`
+	Value     string  `json:"value"`
+}
+
 // SecretValue defines model for SecretValue.
 type SecretValue struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -447,6 +461,11 @@ type SecretListParams struct {
 	Cursor   *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// SecretCreateParams defines parameters for SecretCreate.
+type SecretCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ServiceListParams defines parameters for ServiceList.
 type ServiceListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -495,6 +514,9 @@ type ProjectEditJSONRequestBody = ProjectEdit
 
 // ProjectRenameJSONRequestBody defines body for ProjectRename for application/json ContentType.
 type ProjectRenameJSONRequestBody = ProjectRename
+
+// SecretCreateJSONRequestBody defines body for SecretCreate for application/json ContentType.
+type SecretCreateJSONRequestBody = SecretCreateRequest
 
 // TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
 type TenantCreateJSONRequestBody = TenantCreate
@@ -726,6 +748,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /secrets (the `SecretList` operationId).
 	SecretList(ctx context.Context, params *SecretListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretCreateWithBody Create a reusable secret
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /secrets (the `SecretCreate` operationId).
+	SecretCreateWithBody(ctx context.Context, params *SecretCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretCreate Create a reusable secret
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /secrets (the `SecretCreate` operationId).
+	SecretCreate(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretShow Show reusable secret metadata
 	//
@@ -1173,6 +1209,40 @@ func (c *Client) ProjectRename(ctx context.Context, id string, params *ProjectRe
 // Corresponds with GET /secrets (the `SecretList` operationId).
 func (c *Client) SecretList(ctx context.Context, params *SecretListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSecretListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretCreateWithBody Create a reusable secret
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /secrets (the `SecretCreate` operationId).
+func (c *Client) SecretCreateWithBody(ctx context.Context, params *SecretCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretCreate Create a reusable secret
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /secrets (the `SecretCreate` operationId).
+func (c *Client) SecretCreate(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretCreateRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2329,6 +2399,59 @@ func NewSecretListRequest(server string, params *SecretListParams) (*http.Reques
 	return req, nil
 }
 
+// NewSecretCreateRequest calls the generic SecretCreate builder with application/json body
+func NewSecretCreateRequest(server string, params *SecretCreateParams, body SecretCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSecretCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewSecretCreateRequestWithBody constructs an http.Request for the SecretCreate method, with any body, and a specified content type
+func NewSecretCreateRequestWithBody(server string, params *SecretCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/secrets")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewSecretShowRequest constructs an http.Request for the SecretShow method
 func NewSecretShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -2955,6 +3078,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /secrets (the `SecretList` operationId).
 	SecretListWithResponse(ctx context.Context, params *SecretListParams, reqEditors ...RequestEditorFn) (*SecretListResponse, error)
+
+	// SecretCreateWithBodyWithResponse Create a reusable secret
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /secrets (the `SecretCreate` operationId).
+	SecretCreateWithBodyWithResponse(ctx context.Context, params *SecretCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SecretCreateResponse, error)
+
+	// SecretCreateWithResponse Create a reusable secret
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /secrets (the `SecretCreate` operationId).
+	SecretCreateWithResponse(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretCreateResponse, error)
 
 	// SecretShowWithResponse Show reusable secret metadata
 	//
@@ -3906,6 +4043,61 @@ func (r SecretListResponse) ContentType() string {
 	return ""
 }
 
+// SecretCreateResponse201Headers the declared response headers of an HTTP 201 response for SecretCreate
+type SecretCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type SecretCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *SecretCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r SecretCreateResponse) GetJSON201() *Secret {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SecretCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SecretCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecretCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecretCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecretCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SecretShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4621,6 +4813,32 @@ func (c *ClientWithResponses) SecretListWithResponse(ctx context.Context, params
 		return nil, err
 	}
 	return ParseSecretListResponse(rsp)
+}
+
+// SecretCreateWithBodyWithResponse Create a reusable secret
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /secrets (the `SecretCreate` operationId).
+func (c *ClientWithResponses) SecretCreateWithBodyWithResponse(ctx context.Context, params *SecretCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SecretCreateResponse, error) {
+	rsp, err := c.SecretCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretCreateResponse(rsp)
+}
+
+// SecretCreateWithResponse Create a reusable secret
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /secrets (the `SecretCreate` operationId).
+func (c *ClientWithResponses) SecretCreateWithResponse(ctx context.Context, params *SecretCreateParams, body SecretCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretCreateResponse, error) {
+	rsp, err := c.SecretCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretCreateResponse(rsp)
 }
 
 // SecretShowWithResponse Show reusable secret metadata
@@ -5426,6 +5644,52 @@ func ParseSecretListResponse(rsp *http.Response) (*SecretListResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseSecretCreateResponse parses an HTTP response from a SecretCreateWithResponse call
+func ParseSecretCreateResponse(rsp *http.Response) (*SecretCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecretCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers SecretCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
 	}
 
 	return response, nil

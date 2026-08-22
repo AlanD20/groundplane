@@ -6,8 +6,56 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
+
+func (c *Client) CreateSecret(
+	ctx context.Context,
+	input apiTypes.SecretCreateRequest,
+) (apiTypes.Secret, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Secret{}, err
+	}
+	params := &generated.SecretCreateParams{IdempotencyKey: ids.NewULID()}
+	body := generated.SecretCreateRequest{Key: input.Key, Kind: input.Kind, Value: input.Value}
+	if input.ProjectID != "" {
+		body.ProjectId = &input.ProjectID
+	}
+	if input.Platform {
+		body.Platform = &input.Platform
+	}
+	if input.Path != "" {
+		body.Path = &input.Path
+	}
+	response, err := client.SecretCreateWithResponse(ctx, params, body)
+	if err != nil {
+		return apiTypes.Secret{}, generatedCallError(ctx, http.MethodPost, "/api/v1/secrets", err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost,
+		"/api/v1/secrets",
+		response.HTTPResponse,
+		response.Body,
+		http.StatusCreated,
+	); err != nil {
+		return apiTypes.Secret{}, err
+	}
+	parsed := response.JSON201
+	if parsed == nil {
+		parsed = &generated.Secret{}
+		if err := decodeSingleJSON(
+			http.MethodPost,
+			"/api/v1/secrets",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.Secret{}, err
+		}
+	}
+	return secretFromGenerated(*parsed), nil
+}
 
 func (c *Client) ListSecrets(
 	ctx context.Context,

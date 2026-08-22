@@ -46,6 +46,7 @@ type Server struct {
 	environments          EnvironmentReader
 	services              ServiceReader
 	secrets               SecretReader
+	secretMutations       SecretMutator
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
@@ -71,6 +72,7 @@ type Options struct {
 	Environments          EnvironmentReader
 	Services              ServiceReader
 	Secrets               SecretReader
+	SecretMutations       SecretMutator
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
@@ -114,6 +116,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environments:          options.Environments,
 		services:              options.Services,
 		secrets:               options.Secrets,
+		secretMutations:       options.SecretMutations,
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
@@ -230,9 +233,8 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/stop", s.acceptTask)
 	s.jsonRoute("POST /api/v1/backing-services/{project_id}/destroy", s.acceptTask)
 
-	// Secret reads and explicit reveal are typed Huma operations. Protected
-	// create/delete mutations remain Task-backed placeholders.
-	s.jsonRoute("POST /api/v1/secrets", s.notImplemented)
+	// Secret reads, protected create, and explicit reveal are typed Huma
+	// operations. Destructive deletion remains Task-backed.
 	mux.HandleFunc("DELETE /api/v1/secrets/{id}", s.acceptTask)
 
 	// connector (?environment= required) — environment-scoped only

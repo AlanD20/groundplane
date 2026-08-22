@@ -288,6 +288,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
 	}
+	secretCreationIdempotency, err := newDurableSecretCreationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Secret creation idempotency: %w", err)
+	}
+	secretMutations, err := newSecretCreationService(
+		secretReadRepository,
+		intentProtector,
+		secretCreationIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Secret creation service: %w", err)
+	}
 	attachMutationRecords, err := newDurableAttachMutationRepository(
 		hierarchyRecords, serviceRecords, attachRecords,
 	)
@@ -531,6 +545,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
 		Secrets:               secretReads,
+		SecretMutations:       secretMutations,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,
