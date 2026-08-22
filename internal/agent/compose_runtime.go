@@ -80,6 +80,8 @@ func (runtime *ComposeRuntime) executeStep(
 		)
 	case *agentpb.ExecutionStep_ManagedNetworkRemove:
 		return runtime.removeManagedNetwork(ctx, assignment, step)
+	case *agentpb.ExecutionStep_CaddyConfigApply:
+		return runtime.mutate(ctx, assignment, step, payload.CaddyConfigApply.GetArtifactId(), nil)
 	case *agentpb.ExecutionStep_WaitHealthy:
 		return runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy)
 	default:

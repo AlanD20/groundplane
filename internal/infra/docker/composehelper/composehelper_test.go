@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -15,12 +19,15 @@ import (
 )
 
 const (
-	helperTaskID      = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	helperOperationID = "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	helperPlanID      = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	helperArtifactID  = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	helperServiceID   = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	helperStepID      = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperTaskID        = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperOperationID   = "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperPlanID        = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperArtifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperServiceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperStepID        = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperEnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperTenantID      = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	helperProjectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
 // Rationale: helper stdin is one exact bounded frame; concatenated or trailing
@@ -117,6 +124,126 @@ func TestMarshalRequestRejectsWaitHealthy(t *testing.T) {
 	if _, err := MarshalRequest(request); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("MarshalRequest(wait healthy) error = %v, want validation.failed", err)
 	}
+}
+
+// Rationale: the helper must prove the exact generated Caddyfile and managed
+// read-only mount before invoking fixed validation and reload commands in the
+// uniquely running generated Caddy container.
+func TestExecuteCaddyConfigValidatesBeforeReload(t *testing.T) {
+	request, configPath := validCaddyRequest(t)
+	fake := caddyRunner(t, configPath, 0)
+	response, err := Execute(context.Background(), fake, request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if response.Outcome != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED ||
+		response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
+		t.Fatalf("response = %#v", response)
+	}
+	if len(fake.Calls) != 5 {
+		t.Fatalf("Runner calls = %d, want lookup, two inspections, validate, reload", len(fake.Calls))
+	}
+	if !reflect.DeepEqual(fake.Calls[3].Args, []string{
+		"container", "exec", "0123456789abcdef", "caddy", "validate",
+		"--config", caddyfileContainer, "--adapter", "caddyfile",
+	}) || !reflect.DeepEqual(fake.Calls[4].Args, []string{
+		"container", "exec", "0123456789abcdef", "caddy", "reload",
+		"--config", caddyfileContainer, "--adapter", "caddyfile",
+	}) {
+		t.Fatalf("Caddy calls = %#v", fake.Calls[3:])
+	}
+}
+
+// Rationale: a rejected Caddyfile must be reported as a bounded diagnostic
+// and must never reach the live reload command.
+func TestExecuteCaddyConfigRejectionStopsBeforeReload(t *testing.T) {
+	request, configPath := validCaddyRequest(t)
+	fake := caddyRunner(t, configPath, 15)
+	response, err := Execute(context.Background(), fake, request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(fake.Calls) != 4 || response.ExitCode != 15 ||
+		response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_CONFIG_REJECTED {
+		t.Fatalf("calls=%d response=%#v", len(fake.Calls), response)
+	}
+}
+
+func validCaddyRequest(t *testing.T) (*agentpb.ComposeHelperRequest, string) {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), helperTenantID, helperProjectID, helperEnvironmentID)
+	configPath := filepath.Join(root, filepath.FromSlash(caddyfileRelative))
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	config := []byte("http:// {\n\trespond 404\n}\n")
+	if err := os.WriteFile(configPath, config, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	digest := sha256.Sum256(config)
+	request := validRequest(t)
+	request.Plan.PlanHash = nil
+	request.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
+	request.Plan.TargetId = helperEnvironmentID
+	request.Plan.Artifacts[0].OwnerKind = agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT
+	request.Plan.Artifacts[0].OwnerId = helperEnvironmentID
+	request.Plan.Artifacts[0].ProjectName = "gp-" + strings.ToLower(helperEnvironmentID)
+	request.Plan.Artifacts[0].AuthorizedVolumeDir = root
+	request.Plan.Artifacts[0].Services[0].ComposeName = "caddy"
+	request.Plan.Artifacts[0].Services[0].ExpectedLabels = []*agentpb.LabelPair{
+		{Key: "com.groundplane.environment-id", Value: helperEnvironmentID},
+		{Key: "com.groundplane.kind", Value: "service"},
+		{Key: "com.groundplane.managed", Value: "true"},
+		{Key: "com.groundplane.plan-id", Value: helperPlanID},
+		{Key: "com.groundplane.render-generation", Value: "1"},
+		{Key: "com.groundplane.service-id", Value: helperServiceID},
+	}
+	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_CaddyConfigApply{
+		CaddyConfigApply: &agentpb.CaddyConfigApply{
+			ArtifactId: helperArtifactID, ServiceId: helperServiceID, CaddyfileSha256: digest[:],
+		},
+	}
+	sealed, err := executionplan.Seal(request.Plan)
+	if err != nil {
+		t.Fatalf("Seal() error = %v", err)
+	}
+	request.Plan = sealed
+	return request, configPath
+}
+
+func caddyRunner(t *testing.T, configPath string, validationExit int) *runner.FakeRunner {
+	t.Helper()
+	labels, err := json.Marshal(map[string]string{
+		"com.groundplane.managed": "true", "com.groundplane.kind": "service",
+		"com.groundplane.environment-id": helperEnvironmentID,
+		"com.groundplane.service-id":     helperServiceID,
+	})
+	if err != nil {
+		t.Fatalf("Marshal(labels) error = %v", err)
+	}
+	mounts, err := json.Marshal([]caddyMount{{
+		Type: "bind", Source: configPath, Destination: caddyfileContainer, RW: false,
+	}})
+	if err != nil {
+		t.Fatalf("Marshal(mounts) error = %v", err)
+	}
+	fake := runner.NewFake()
+	fake.RunFunc = func(_ context.Context, options runner.RunCmdOpts) (runner.Result, error) {
+		joined := strings.Join(options.Args, " ")
+		switch {
+		case strings.Contains(joined, "container ls"):
+			return runner.Result{Stdout: []byte("0123456789abcdef\n")}, nil
+		case strings.Contains(joined, ".Config.Labels"):
+			return runner.Result{Stdout: append(labels, '\n')}, nil
+		case strings.Contains(joined, ".Mounts"):
+			return runner.Result{Stdout: append(mounts, '\n')}, nil
+		case strings.Contains(joined, " caddy validate ") && validationExit != 0:
+			return runner.Result{ExitCode: validationExit}, errors.New("validation failed")
+		default:
+			return runner.Result{}, nil
+		}
+	}
+	return fake
 }
 
 func validRequest(t *testing.T) *agentpb.ComposeHelperRequest {

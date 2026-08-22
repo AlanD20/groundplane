@@ -587,6 +587,27 @@ func validateStep(
 			return errs.New(errs.KindValidationFailed, "managed network remove payload is invalid")
 		}
 		return nil
+	case *agentpb.ExecutionStep_CaddyConfigApply:
+		apply := payload.CaddyConfigApply
+		if apply == nil ||
+			(operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
+				operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
+				operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) ||
+			validateID(ids.KindService, apply.ServiceId) != nil ||
+			len(apply.CaddyfileSha256) != sha256.Size {
+			return errs.New(errs.KindValidationFailed, "Caddy config apply payload is invalid")
+		}
+		artifact := artifacts[apply.ArtifactId]
+		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+			artifact.AuthorizedVolumeDir == "" {
+			return errs.New(errs.KindValidationFailed, "Caddy config apply artifact is invalid")
+		}
+		for _, service := range artifact.Services {
+			if service.ServiceId == apply.ServiceId && service.ComposeName == "caddy" {
+				return nil
+			}
+		}
+		return errs.New(errs.KindValidationFailed, "Caddy config apply Service is invalid")
 	default:
 		return errs.New(errs.KindValidationFailed, "execution step payload is unsupported")
 	}

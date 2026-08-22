@@ -3,12 +3,16 @@
 package composehelper
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +33,9 @@ const (
 	maximumFramedBytes = executionplan.MaximumPlanBytes + 64*1024
 	frameHeaderBytes   = 4
 	maximumTimeout     = uint32(math.MaxInt32)
+	maximumCaddyfile   = 1024 * 1024
+	caddyfileRelative  = "components/caddy/Caddyfile"
+	caddyfileContainer = "/etc/caddy/Caddyfile"
 )
 
 var fixedEnvironment = []string{
@@ -140,6 +147,9 @@ func Execute(
 	if remove := step.GetManagedNetworkRemove(); remove != nil {
 		return executeManagedNetworkRemove(ctx, taskRunner, owned.TimeoutSeconds, remove)
 	}
+	if apply := step.GetCaddyConfigApply(); apply != nil {
+		return executeCaddyConfigApply(ctx, taskRunner, owned.TimeoutSeconds, artifact, apply)
+	}
 	commands, err := commandsFor(owned, step, artifact)
 	if err != nil {
 		return nil, err
@@ -216,6 +226,8 @@ func validateRequest(
 		artifactID = payload.ComposeRemove.ArtifactId
 	case *agentpb.ExecutionStep_ManagedNetworkRemove:
 		artifactID = ""
+	case *agentpb.ExecutionStep_CaddyConfigApply:
+		artifactID = payload.CaddyConfigApply.ArtifactId
 	default:
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}
@@ -244,6 +256,159 @@ func validateRequest(
 		}
 	}
 	return owned, selected, artifact, nil
+}
+
+type caddyMount struct {
+	Type        string `json:"Type"`
+	Source      string `json:"Source"`
+	Destination string `json:"Destination"`
+	RW          bool   `json:"RW"`
+}
+
+func executeCaddyConfigApply(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	timeoutSeconds uint32,
+	artifact *agentpb.ComposeArtifact,
+	apply *agentpb.CaddyConfigApply,
+) (*agentpb.ComposeHelperResponse, error) {
+	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
+	defer cancel()
+	fail := func(exitCode int, diagnostic agentpb.ComposeHelperDiagnostic) *agentpb.ComposeHelperResponse {
+		if exitCode <= 0 || exitCode > math.MaxInt32 {
+			exitCode = 1
+		}
+		return &agentpb.ComposeHelperResponse{
+			Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED,
+			ExitCode: int32(exitCode), Diagnostic: diagnostic,
+		}
+	}
+	run := func(
+		diagnostic agentpb.ComposeHelperDiagnostic,
+		args ...string,
+	) (runner.Result, *agentpb.ComposeHelperResponse, error) {
+		result, runErr := taskRunner.Run(executionCtx, runner.RunCmdOpts{
+			Name: DockerExecutable, Args: args, Dir: WorkDirectory,
+			Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
+		})
+		if contextErr := executionCtx.Err(); contextErr != nil {
+			return runner.Result{}, nil, contextErr
+		}
+		if result.ExitCode < 0 || result.ExitCode > math.MaxInt32 {
+			return runner.Result{}, nil, errs.New(errs.KindInternal, "Caddy command returned an invalid exit code")
+		}
+		if runErr != nil || result.ExitCode != 0 {
+			return result, fail(result.ExitCode, diagnostic), nil
+		}
+		return result, nil, nil
+	}
+	configPath := filepath.Join(artifact.AuthorizedVolumeDir, filepath.FromSlash(caddyfileRelative))
+	if !caddyfileMatches(configPath, apply.CaddyfileSha256) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	}
+	listed, failure, err := run(
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		"container", "ls",
+		"--filter", "label=com.groundplane.managed=true",
+		"--filter", "label=com.groundplane.kind=service",
+		"--filter", "label=com.groundplane.environment-id="+artifact.OwnerId,
+		"--filter", "label=com.groundplane.service-id="+apply.ServiceId,
+		"--filter", "status=running", "--format", "{{.ID}}",
+	)
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	containers := strings.Fields(string(listed.Stdout))
+	if len(containers) != 1 || !validCaddyContainerID(containers[0]) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	}
+	containerID := containers[0]
+	inspectedLabels, failure, err := run(
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		"container", "inspect", "--format", "{{json .Config.Labels}}", containerID,
+	)
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	labels := map[string]string{}
+	if json.Unmarshal([]byte(strings.TrimSpace(string(inspectedLabels.Stdout))), &labels) != nil ||
+		labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "service" ||
+		labels["com.groundplane.environment-id"] != artifact.OwnerId ||
+		labels["com.groundplane.service-id"] != apply.ServiceId {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	}
+	inspectedMounts, failure, err := run(
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		"container", "inspect", "--format", "{{json .Mounts}}", containerID,
+	)
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	mounts := []caddyMount{}
+	if json.Unmarshal([]byte(strings.TrimSpace(string(inspectedMounts.Stdout))), &mounts) != nil ||
+		!hasExactCaddyfileMount(mounts, configPath) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	}
+	_, failure, err = run(
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_CONFIG_REJECTED,
+		"container", "exec", containerID, "caddy", "validate",
+		"--config", caddyfileContainer, "--adapter", "caddyfile",
+	)
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	if !caddyfileMatches(configPath, apply.CaddyfileSha256) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	}
+	_, failure, err = run(
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		"container", "exec", containerID, "caddy", "reload",
+		"--config", caddyfileContainer, "--adapter", "caddyfile",
+	)
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	return completedResponse(), nil
+}
+
+func caddyfileMatches(path string, expected []byte) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	value, err := io.ReadAll(io.LimitReader(file, maximumCaddyfile+1))
+	if err != nil || len(value) > maximumCaddyfile {
+		return false
+	}
+	digest := sha256.Sum256(value)
+	return bytes.Equal(digest[:], expected)
+}
+
+func hasExactCaddyfileMount(mounts []caddyMount, source string) bool {
+	matches := 0
+	for _, mount := range mounts {
+		if mount.Destination != caddyfileContainer {
+			continue
+		}
+		if mount.Type != "bind" || filepath.Clean(mount.Source) != filepath.Clean(source) || mount.RW {
+			return false
+		}
+		matches++
+	}
+	return matches == 1
+}
+
+func validCaddyContainerID(value string) bool {
+	if len(value) < 12 || len(value) > 64 {
+		return false
+	}
+	for _, character := range []byte(value) {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func executeManagedNetworkRemove(

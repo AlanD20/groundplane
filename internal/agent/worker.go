@@ -498,6 +498,7 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 	case *agentpb.ExecutionStep_ComposeApply, *agentpb.ExecutionStep_ComposeStop,
 		*agentpb.ExecutionStep_ComposeRemove, *agentpb.ExecutionStep_WaitHealthy,
 		*agentpb.ExecutionStep_ManagedNetworkRemove,
+		*agentpb.ExecutionStep_CaddyConfigApply,
 		*agentpb.ExecutionStep_EnvironmentDirectoryCreate,
 		*agentpb.ExecutionStep_EnvironmentDirectoryRemove,
 		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,

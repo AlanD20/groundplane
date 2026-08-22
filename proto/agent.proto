@@ -309,6 +309,7 @@ message ExecutionStep {
     EnvironmentDirectoryRemove environment_directory_remove = 10;
     AdapterProcedure adapter_procedure = 11;
     ManagedNetworkRemove managed_network_remove = 12;
+    CaddyConfigApply caddy_config_apply = 13;
   }
 }
 
@@ -408,6 +409,16 @@ message ManagedNetworkRemove {
   string docker_name = 3;
 }
 
+// CaddyConfigApply is the closed validate-before-reload procedure for the
+// generated Environment entry router. The file path, executable, arguments,
+// and container identity are derived by the Agent from trusted policy and the
+// referenced Compose artifact; operators cannot supply them.
+message CaddyConfigApply {
+  string artifact_id = 1;
+  string service_id = 2;
+  bytes caddyfile_sha256 = 3;
+}
+
 // EnvironmentDirectoryHelperRequest is the single length-framed stdin message
 // accepted by the static environment-directory-helper Agent-binary mode.
 message EnvironmentDirectoryHelperRequest {
@@ -454,6 +465,8 @@ enum ComposeHelperDiagnostic {
   COMPOSE_HELPER_DIAGNOSTIC_NONE = 1;
   COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED = 2;
   COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED = 3;
+  COMPOSE_HELPER_DIAGNOSTIC_CADDY_CONFIG_REJECTED = 4;
+  COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED = 5;
 }
 
 message TaskAbort {
