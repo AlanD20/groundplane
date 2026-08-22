@@ -9,6 +9,7 @@
 package adapters
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 )
@@ -81,6 +82,41 @@ type BackupStrategy struct {
 	Restore string
 }
 
+type FactField string
+
+const (
+	FactURL      FactField = "URL"
+	FactHost     FactField = "HOST"
+	FactPort     FactField = "PORT"
+	FactDatabase FactField = "DATABASE"
+	FactRole     FactField = "ROLE"
+	FactPassword FactField = "PASSWORD"
+)
+
+// FactDefinition is one adapter-declared output key. Secret marks values that
+// must never enter listable Attach metadata.
+type FactDefinition struct {
+	Field  FactField
+	Secret bool
+}
+
+// FactParams is the complete resolved identity used to render one own or
+// granted Attach fact set. Password remains caller-owned mutable bytes.
+type FactParams struct {
+	Host     string
+	Port     string
+	Database string
+	Role     string
+	Password []byte
+}
+
+// Fact owns its Value. Callers must ClearFacts after encryption or consumption.
+type Fact struct {
+	Key    string
+	Value  []byte
+	Secret bool
+}
+
 // Adapter is the contract every backing-service kind implements.
 type Adapter interface {
 	Key() string          // e.g. "postgres:16" — looked up by core.Service.Adapter
@@ -88,13 +124,156 @@ type Adapter interface {
 	DefaultImage() string // e.g. "postgres:16-alpine"
 	FactsPrefix() string  // e.g. "pg16_" — empty for Manual()
 	URLScheme() string    // e.g. "pgsql://" — empty for Manual()
-	Manual() bool         // true => network-only attach, no facts, no backups (see mvp.md, "The manual adapter")
+	FactSchema() []FactDefinition
+	Manual() bool // true => network-only attach, no facts, no backups (see mvp.md, "The manual adapter")
 
 	ProvisionSteps(p ProvisionParams) []Step
 	GrantSteps(p ProvisionParams) []Step // p.GrantOn set — access to another attach's database
 	DetachSteps(p ProvisionParams) []Step
 
 	BackupStrategy() BackupStrategy
+}
+
+// BuildFacts renders one adapter-declared fact set without converting the
+// generated password or URL to immutable strings.
+func BuildFacts(adapter Adapter, params FactParams) ([]Fact, error) {
+	if adapter == nil {
+		return nil, fmt.Errorf("adapter is required")
+	}
+	schema := adapter.FactSchema()
+	if adapter.Manual() {
+		if len(schema) != 0 || adapter.FactsPrefix() != "" || adapter.URLScheme() != "" {
+			return nil, fmt.Errorf("manual adapter must not declare facts")
+		}
+		return []Fact{}, nil
+	}
+	if len(schema) == 0 || !validFactPrefix(adapter.FactsPrefix()) || len(params.Password) == 0 ||
+		!validFactAtom(params.Host) || !validFactAtom(params.Port) || !validFactAtom(params.Role) ||
+		!validFactBytes(params.Password) {
+		return nil, fmt.Errorf("adapter fact input is invalid")
+	}
+
+	facts := make([]Fact, 0, len(schema))
+	seen := make(map[FactField]struct{}, len(schema))
+	failed := true
+	defer func() {
+		if failed {
+			ClearFacts(facts)
+		}
+	}()
+	for _, definition := range schema {
+		if _, duplicate := seen[definition.Field]; duplicate {
+			return nil, fmt.Errorf("adapter fact schema contains a duplicate field")
+		}
+		seen[definition.Field] = struct{}{}
+		value, err := renderFactValue(adapter.URLScheme(), definition.Field, params)
+		if err != nil {
+			return nil, err
+		}
+		facts = append(facts, Fact{
+			Key: adapter.FactsPrefix() + string(definition.Field), Value: value, Secret: definition.Secret,
+		})
+	}
+	failed = false
+	return facts, nil
+}
+
+// ClearFacts clears and releases every fact value buffer.
+func ClearFacts(facts []Fact) {
+	for index := range facts {
+		clear(facts[index].Value)
+		facts[index].Value = nil
+	}
+}
+
+func renderFactValue(scheme string, field FactField, params FactParams) ([]byte, error) {
+	switch field {
+	case FactHost:
+		return []byte(params.Host), nil
+	case FactPort:
+		return []byte(params.Port), nil
+	case FactDatabase:
+		if !validFactAtom(params.Database) {
+			return nil, fmt.Errorf("adapter database fact is invalid")
+		}
+		return []byte(params.Database), nil
+	case FactRole:
+		return []byte(params.Role), nil
+	case FactPassword:
+		return append([]byte(nil), params.Password...), nil
+	case FactURL:
+		return renderFactURL(scheme, params)
+	default:
+		return nil, fmt.Errorf("adapter fact schema contains an unknown field")
+	}
+}
+
+func renderFactURL(scheme string, params FactParams) ([]byte, error) {
+	if scheme != "pgsql://" && scheme != "redis://" {
+		return nil, fmt.Errorf("adapter fact URL scheme is invalid")
+	}
+	var output bytes.Buffer
+	output.Grow(len(scheme) + len(params.Role) + len(params.Password) + len(params.Host) + len(params.Port) +
+		len(params.Database) + 4)
+	output.WriteString(scheme)
+	output.WriteString(params.Role)
+	output.WriteByte(':')
+	output.Write(params.Password)
+	output.WriteByte('@')
+	output.WriteString(params.Host)
+	output.WriteByte(':')
+	output.WriteString(params.Port)
+	if scheme == "pgsql://" {
+		if !validFactAtom(params.Database) {
+			return nil, fmt.Errorf("adapter database fact is invalid")
+		}
+		output.WriteByte('/')
+		output.WriteString(params.Database)
+	}
+	return output.Bytes(), nil
+}
+
+func validFactPrefix(value string) bool {
+	if len(value) < 2 || value[len(value)-1] != '_' {
+		return false
+	}
+	for index := range len(value) - 1 {
+		character := value[index]
+		if character != '_' && (character < 'A' || character > 'Z') &&
+			(character < 'a' || character > 'z') && (character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func validFactAtom(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index := range len(value) {
+		character := value[index]
+		if character != '_' && character != '-' && character != '.' &&
+			(character < 'A' || character > 'Z') && (character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func validFactBytes(value []byte) bool {
+	if len(value) == 0 {
+		return false
+	}
+	for _, character := range value {
+		if character != '_' && character != '-' && character != '.' &&
+			(character < 'A' || character > 'Z') && (character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 var registry = map[string]Adapter{}

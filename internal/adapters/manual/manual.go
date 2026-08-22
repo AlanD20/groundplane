@@ -15,12 +15,13 @@ func Register() {
 
 type adapter struct{}
 
-func (a *adapter) Key() string          { return "manual" }
-func (a *adapter) Label() string        { return "Manual (network-only)" }
-func (a *adapter) DefaultImage() string { return "" }
-func (a *adapter) FactsPrefix() string  { return "" }
-func (a *adapter) URLScheme() string    { return "" }
-func (a *adapter) Manual() bool         { return true }
+func (a *adapter) Key() string                           { return "manual" }
+func (a *adapter) Label() string                         { return "Manual (network-only)" }
+func (a *adapter) DefaultImage() string                  { return "" }
+func (a *adapter) FactsPrefix() string                   { return "" }
+func (a *adapter) URLScheme() string                     { return "" }
+func (a *adapter) FactSchema() []adapters.FactDefinition { return nil }
+func (a *adapter) Manual() bool                          { return true }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step { return nil }
 func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step     { return nil }

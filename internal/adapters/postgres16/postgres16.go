@@ -24,7 +24,17 @@ func (a *adapter) Label() string        { return "PostgreSQL 16" }
 func (a *adapter) DefaultImage() string { return "postgres:16-alpine" }
 func (a *adapter) FactsPrefix() string  { return "pg16_" }
 func (a *adapter) URLScheme() string    { return "pgsql://" }
-func (a *adapter) Manual() bool         { return false }
+func (a *adapter) FactSchema() []adapters.FactDefinition {
+	return []adapters.FactDefinition{
+		{Field: adapters.FactURL, Secret: true},
+		{Field: adapters.FactHost},
+		{Field: adapters.FactPort},
+		{Field: adapters.FactDatabase},
+		{Field: adapters.FactRole},
+		{Field: adapters.FactPassword, Secret: true},
+	}
+}
+func (a *adapter) Manual() bool { return false }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
 	return []adapters.Step{
