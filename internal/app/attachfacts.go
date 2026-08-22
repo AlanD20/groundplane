@@ -148,6 +148,7 @@ func (service *AttachFactService) ResolveFact(
 	ctx context.Context,
 	environmentID string,
 	reference core.FactRef,
+	destinationSecret bool,
 	consume secretvalue.PlaintextConsumer,
 ) error {
 	if ctx == nil || consume == nil {
@@ -176,8 +177,12 @@ func (service *AttachFactService) ResolveFact(
 		}
 		grantAttachID = grant.Record.ID
 	}
-	if !attachFactMetadataContains(current.Record.FactSets, grantAttachID, reference.Key) {
+	definition, declared := attachFactMetadataDefinition(current.Record.FactSets, grantAttachID, reference.Key)
+	if !declared {
 		return errs.New(errs.KindValidationFailed, "Attach fact key is not declared by the selected fact set")
+	}
+	if definition.Secret && !destinationSecret {
+		return errs.New(errs.KindValidationFailed, "Secret Attach fact requires a secret Entry destination")
 	}
 	stored, ok, err := service.repository.GetAttachFacts(ctx, current)
 	if err != nil {
@@ -237,16 +242,23 @@ type attachFactValue struct {
 	Value []byte `json:"value"`
 }
 
-func attachFactMetadataContains(sets []etcd.AttachFactSetMetadata, grantAttachID string, key string) bool {
+func attachFactMetadataDefinition(
+	sets []etcd.AttachFactSetMetadata,
+	grantAttachID string,
+	key string,
+) (etcd.AttachFactDefinition, bool) {
 	for _, set := range sets {
 		if set.GrantAttachID != grantAttachID {
 			continue
 		}
-		return slices.ContainsFunc(set.Facts, func(fact etcd.AttachFactDefinition) bool {
-			return fact.Key == key
-		})
+		for _, fact := range set.Facts {
+			if fact.Key == key {
+				return fact, true
+			}
+		}
+		return etcd.AttachFactDefinition{}, false
 	}
-	return false
+	return etcd.AttachFactDefinition{}, false
 }
 
 func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bool {

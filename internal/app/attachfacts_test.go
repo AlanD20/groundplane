@@ -102,7 +102,7 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	var resolved []byte
 	err = service.ResolveFact(ctx, environmentID, core.FactRef{
 		Attach: "api-db", Grant: "reporting-db", Key: "test_DATABASE",
-	}, func(value []byte) error {
+	}, false, func(value []byte) error {
 		resolved = append([]byte(nil), value...)
 		return nil
 	})
@@ -111,6 +111,13 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	}
 	if string(resolved) != "reporting" {
 		t.Fatalf("ResolveFact() value = %q, want reporting", resolved)
+	}
+	err = service.ResolveFact(ctx, environmentID, core.FactRef{
+		Attach: "api-db", Key: "test_PASSWORD",
+	}, false, func([]byte) error { return nil })
+	kind, _ := errs.KindOf(err)
+	if kind != errs.KindValidationFailed {
+		t.Fatalf("ResolveFact(non-secret destination) error = %v", err)
 	}
 }
 
@@ -151,6 +158,7 @@ func TestAttachFactServiceRequiresReadyAttach(t *testing.T) {
 		context.Background(),
 		record.EnvironmentID,
 		core.FactRef{Attach: "api-db", Key: "test_DATABASE"},
+		false,
 		func([]byte) error { return nil },
 	)
 	kind, _ := errs.KindOf(err)
