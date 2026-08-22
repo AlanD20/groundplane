@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -26,9 +27,11 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 
+	desiredProjection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+	serviceChanges := environmentBlueprintTestServiceChanges(t, repository, desiredProjection)
 	result, err := repository.ApplyEnvironmentBlueprintWithTask(
 		ctx, project, environment, 0, revision,
-		environmentBlueprintTestProjection(environment.Record.ID, task, 1), task, marker,
+		desiredProjection, serviceChanges, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("ApplyEnvironmentBlueprintWithTask() error = %v", err)
@@ -49,6 +52,15 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 	}
 	if head.Revision != stored.Revision || head.ReadRevision != stored.ReadRevision {
 		t.Fatalf("head and revision were not published at one MVCC revision: %#v / %#v", head, stored)
+	}
+	serviceRepository, err := newServiceRepository(store)
+	if err != nil {
+		t.Fatalf("newServiceRepository() error = %v", err)
+	}
+	service, err := serviceRepository.GetService(ctx, desiredProjection.Services[0].ID)
+	if err != nil || service.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning ||
+		service.Revision != head.Revision {
+		t.Fatalf("GetService() = %#v, %v", service, err)
 	}
 	projection, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil || !found || projection.Record.BlueprintRevisionID != task.ID ||
@@ -71,8 +83,9 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	firstTask := environmentBlueprintTestTask(environment.Record.ID, 30)
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {old: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
+	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
 	firstResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, 0, first, firstProjection, firstTask,
+		ctx, project, environment, 0, first, firstProjection, firstServiceChanges, firstTask,
 		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -92,8 +105,9 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	secondProjection := firstProjection
 	secondProjection.BlueprintRevisionID = secondTask.ID
 	secondProjection.RenderGeneration = 2
+	secondServiceChanges := environmentBlueprintTestServiceChanges(t, repository, secondProjection)
 	secondResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, secondProjection, secondTask,
+		ctx, project, environment, head.Revision, second, secondProjection, secondServiceChanges, secondTask,
 		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -125,9 +139,11 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	project, environment := createEnvironmentBlueprintOwners(t, repository)
 	firstTask := environmentBlueprintTestTask(environment.Record.ID, 50)
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {api: {}}\n")
+	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
+	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
 	result, err := repository.ApplyEnvironmentBlueprintWithTask(
 		ctx, project, environment, 0, first,
-		environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1), firstTask,
+		firstProjection, firstServiceChanges, firstTask,
 		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
 	)
 	if err != nil {
@@ -146,7 +162,7 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	omitted := environmentBlueprintTestProjection(environment.Record.ID, secondTask, 2)
 	omitted.Services = nil
 	_, err = repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, omitted, secondTask,
+		ctx, project, environment, head.Revision, second, omitted, nil, secondTask,
 		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
 	)
 	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
@@ -246,6 +262,41 @@ func environmentBlueprintTestMarker(task TaskRecord, environmentID string) Idemp
 		Method: http.MethodPut, Route: "/environments/{id}/blueprint", Key: task.IdempotencyKey,
 	}
 	return marker
+}
+
+func environmentBlueprintTestServiceChanges(
+	t *testing.T,
+	repository *HierarchyRepository,
+	projection EnvironmentComposeProjection,
+) []EnvironmentBlueprintServiceChange {
+	t.Helper()
+	services, err := newServiceRepository(repository.store)
+	if err != nil {
+		t.Fatalf("newServiceRepository() error = %v", err)
+	}
+	changes := make([]EnvironmentBlueprintServiceChange, len(projection.Services))
+	for index, identity := range projection.Services {
+		desired := core.Service{ID: identity.ID, Name: identity.Name, Image: "example/" + identity.Name + ":1"}
+		current, err := services.GetService(context.Background(), identity.ID)
+		if err == nil {
+			replacement, replaceErr := ReplaceServiceDesired(current.Record, desired)
+			if replaceErr != nil {
+				t.Fatalf("ReplaceServiceDesired() error = %v", replaceErr)
+			}
+			currentCopy := current
+			changes[index] = EnvironmentBlueprintServiceChange{Current: &currentCopy, Record: replacement}
+			continue
+		}
+		if !isKind(err, errs.KindServiceNotFound) {
+			t.Fatalf("GetService() error = %v", err)
+		}
+		record, recordErr := NewServiceRecord(projection.EnvironmentID, desired, "")
+		if recordErr != nil {
+			t.Fatalf("NewServiceRecord() error = %v", recordErr)
+		}
+		changes[index] = EnvironmentBlueprintServiceChange{Record: record}
+	}
+	return changes
 }
 
 func assertEnvironmentBlueprintValue(t *testing.T, store *memoryHierarchyStore, key string) {

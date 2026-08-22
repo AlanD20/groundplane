@@ -37,6 +37,7 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ApplyEnvironmentBlueprintWithTask(
 		context.Context,
 		etcd.Versioned[etcd.ProjectRecord],
@@ -44,6 +45,7 @@ type environmentBlueprintRepository interface {
 		int64,
 		etcd.EnvironmentBlueprintRevision,
 		etcd.EnvironmentComposeProjection,
+		[]etcd.EnvironmentBlueprintServiceChange,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -151,6 +153,29 @@ type environmentBlueprintService struct {
 	repository  environmentBlueprintRepository
 	idempotency environmentBlueprintIdempotency
 	now         func() time.Time
+}
+
+type durableEnvironmentBlueprintRepository struct {
+	*etcd.HierarchyRepository
+	services *etcd.ServiceRepository
+}
+
+func newDurableEnvironmentBlueprintRepository(
+	hierarchy *etcd.HierarchyRepository,
+	services *etcd.ServiceRepository,
+) (*durableEnvironmentBlueprintRepository, error) {
+	if hierarchy == nil || services == nil {
+		return nil, errs.New(errs.KindInternal, "Environment Blueprint repositories are not configured")
+	}
+	return &durableEnvironmentBlueprintRepository{HierarchyRepository: hierarchy, services: services}, nil
+}
+
+func (repository *durableEnvironmentBlueprintRepository) ListServices(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.ServiceRecord], error) {
+	return repository.services.ListServices(ctx, environmentID, request)
 }
 
 func newEnvironmentBlueprintService(
@@ -282,6 +307,22 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			"Blueprint omits an existing owned resource; remove it explicitly before apply",
 		)
 	}
+	desiredServices, err := controller.ProjectServiceProjection(parsed.Project, changes.Current)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	currentServices, err := service.listBlueprintServices(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	serviceChanges, err := prepareEnvironmentBlueprintServiceChanges(
+		environmentID,
+		desiredServices,
+		currentServices,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 
 	now := service.now().UTC()
 	taskID := ids.New(ids.KindTask)
@@ -352,7 +393,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
 	result, applyErr := service.repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, expectedHeadRevision, revision, projection, task, marker,
+		ctx, project, environment, expectedHeadRevision, revision, projection, serviceChanges, task, marker,
 	)
 	if applyErr != nil {
 		if !isUnknownEnvironmentBlueprintOutcome(applyErr) {
@@ -373,6 +414,74 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint resolution is invalid")
 	}
+}
+
+func (service *environmentBlueprintService) listBlueprintServices(
+	ctx context.Context,
+	environmentID string,
+) ([]etcd.Versioned[etcd.ServiceRecord], error) {
+	services := []etcd.Versioned[etcd.ServiceRecord](nil)
+	cursor := ""
+	for {
+		page, err := service.repository.ListServices(
+			ctx,
+			environmentID,
+			etcd.PageRequest{Limit: 200, Cursor: cursor},
+		)
+		if err != nil {
+			return nil, err
+		}
+		services = append(services, page.Items...)
+		if page.NextCursor == "" {
+			return services, nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func prepareEnvironmentBlueprintServiceChanges(
+	environmentID string,
+	desired []core.Service,
+	current []etcd.Versioned[etcd.ServiceRecord],
+) ([]etcd.EnvironmentBlueprintServiceChange, error) {
+	currentByID := make(map[string]etcd.Versioned[etcd.ServiceRecord], len(current))
+	for _, service := range current {
+		if service.Record.EnvironmentID != environmentID || service.Record.Desired.ID == "" {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Service state is inconsistent")
+		}
+		if _, duplicate := currentByID[service.Record.Desired.ID]; duplicate {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Service state repeats an id")
+		}
+		currentByID[service.Record.Desired.ID] = service
+	}
+	changes := make([]etcd.EnvironmentBlueprintServiceChange, 0, len(desired))
+	for _, next := range desired {
+		if existing, found := currentByID[next.ID]; found {
+			replacement, err := etcd.ReplaceServiceDesired(existing.Record, next)
+			if err != nil {
+				return nil, err
+			}
+			currentCopy := existing
+			changes = append(changes, etcd.EnvironmentBlueprintServiceChange{
+				Current: &currentCopy,
+				Record:  replacement,
+			})
+			delete(currentByID, next.ID)
+			continue
+		}
+		record, err := etcd.NewServiceRecord(environmentID, next, "")
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, etcd.EnvironmentBlueprintServiceChange{Record: record})
+	}
+	if len(currentByID) != 0 {
+		return nil, errs.New(
+			errs.KindResourceInUse,
+			"Blueprint omits an existing Service; remove it explicitly before apply",
+		)
+	}
+	return changes, nil
 }
 
 func environmentBlueprintIntentManifest(bundle core.BlueprintBundle) (idempotentintent.BlueprintManifestV1, error) {

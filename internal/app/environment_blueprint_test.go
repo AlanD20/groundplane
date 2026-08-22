@@ -3,9 +3,12 @@ package app
 import (
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
 // Rationale: idempotency must compare the verified logical Blueprint rather than unstable multipart framing or map order.
@@ -24,5 +27,60 @@ func TestEnvironmentBlueprintIntentManifestIsCanonical(t *testing.T) {
 			{Name: "ALPHA", Value: "1"}, {Name: "ZED", Value: "2"},
 		}) {
 		t.Fatalf("manifest = %#v", manifest)
+	}
+}
+
+func TestPrepareEnvironmentBlueprintServiceChangesPreservesRuntimeIntent(t *testing.T) {
+	// Rationale: Blueprint desired replacement must preserve a stopped Service's
+	// Controller-owned runtime intent byte-for-byte.
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	serviceID := ids.NewAt(ids.KindService, at, 2)
+	record, err := etcd.NewServiceRecord(environmentID, core.Service{
+		ID: serviceID, Name: "api", Image: "app:old",
+	}, "")
+	if err != nil {
+		t.Fatalf("NewServiceRecord() error = %v", err)
+	}
+	record, err = etcd.SetServiceRuntimeIntent(record, core.ServiceRuntimeIntentStopped)
+	if err != nil {
+		t.Fatalf("SetServiceRuntimeIntent() error = %v", err)
+	}
+	current := etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 7, ReadRevision: 9}
+
+	changes, err := prepareEnvironmentBlueprintServiceChanges(
+		environmentID,
+		[]core.Service{{ID: serviceID, Name: "api", Image: "app:new"}},
+		[]etcd.Versioned[etcd.ServiceRecord]{current},
+	)
+	if err != nil {
+		t.Fatalf("prepareEnvironmentBlueprintServiceChanges() error = %v", err)
+	}
+	if len(changes) != 1 || changes[0].Current == nil ||
+		changes[0].Record.Desired.Image != "app:new" || changes[0].Record.Runtime != record.Runtime {
+		t.Fatalf("changes = %#v", changes)
+	}
+}
+
+func TestPrepareEnvironmentBlueprintServiceChangesStartsNewServiceRunning(t *testing.T) {
+	// Rationale: a Service first introduced by Blueprint starts with the exact
+	// running runtime intent accepted by ADR 0028.
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
+	serviceID := ids.NewAt(ids.KindService, at, 4)
+
+	changes, err := prepareEnvironmentBlueprintServiceChanges(
+		environmentID,
+		[]core.Service{{ID: serviceID, Name: "worker", Image: "app:1"}},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("prepareEnvironmentBlueprintServiceChanges() error = %v", err)
+	}
+	if len(changes) != 1 || changes[0].Current != nil ||
+		changes[0].Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
+		t.Fatalf("changes = %#v", changes)
 	}
 }

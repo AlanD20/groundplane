@@ -401,9 +401,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint idempotency: %w", err)
 	}
+	environmentBlueprintRepository, err := newDurableEnvironmentBlueprintRepository(
+		hierarchyRecords,
+		serviceRecords,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment Blueprint repositories: %w", err)
+	}
 	environmentBlueprints, err := newEnvironmentBlueprintService(
 		cfg.Storage.VolumeRoot,
-		hierarchyRecords,
+		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
 	)
 	if err != nil {

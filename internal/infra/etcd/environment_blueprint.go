@@ -49,6 +49,14 @@ type EnvironmentBlueprintHead struct {
 	RevisionID    string
 }
 
+// EnvironmentBlueprintServiceChange is one desired-only Service replacement
+// committed with the Blueprint head. Current is nil only when the Blueprint
+// first introduces the stable Service id.
+type EnvironmentBlueprintServiceChange struct {
+	Current *Versioned[ServiceRecord]
+	Record  ServiceRecord
+}
+
 type environmentBlueprintManifest struct {
 	EnvironmentID  string                             `json:"environment_id"`
 	RevisionID     string                             `json:"revision_id"`
@@ -200,6 +208,7 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	expectedHeadRevision int64,
 	revision EnvironmentBlueprintRevision,
 	projection EnvironmentComposeProjection,
+	serviceChanges []EnvironmentBlueprintServiceChange,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -246,6 +255,15 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		hasPreviousProjection,
 		projection,
 	); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	preparedServices, err := repository.prepareEnvironmentBlueprintServiceChanges(
+		ctx,
+		environment,
+		projection,
+		serviceChanges,
+	)
+	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if revision.EnvironmentID != environment.Record.ID || revision.RevisionID != task.ID ||
@@ -342,11 +360,51 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			Value: projectionValue,
 		},
 	)
+	for _, service := range preparedServices {
+		primaryCondition := Condition{Key: serviceKey(service.change.Record.Desired.ID)}
+		nameCondition := Condition{
+			Key: serviceNameKey(service.change.Record.EnvironmentID, service.change.Record.Desired.Name),
+		}
+		ownerCondition := Condition{
+			Key: serviceOwnerKey(service.change.Record.EnvironmentID, service.change.Record.Desired.ID),
+		}
+		if service.change.Current != nil {
+			primaryCondition.ModRevision = service.change.Current.Revision
+			nameCondition.ModRevision = service.nameRevision
+			ownerCondition.ModRevision = service.ownerRevision
+		}
+		conditions = append(
+			conditions,
+			primaryCondition,
+			nameCondition,
+			ownerCondition,
+			Condition{Key: deletionTombstoneKey("service", service.change.Record.Desired.ID)},
+		)
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: serviceKey(service.change.Record.Desired.ID), Value: service.value,
+		})
+		if service.change.Current == nil {
+			mutations = append(
+				mutations,
+				Mutation{
+					Type:  MutationPut,
+					Key:   serviceNameKey(service.change.Record.EnvironmentID, service.change.Record.Desired.Name),
+					Value: []byte(service.change.Record.Desired.ID),
+				},
+				Mutation{
+					Type:  MutationPut,
+					Key:   serviceOwnerKey(service.change.Record.EnvironmentID, service.change.Record.Desired.ID),
+					Value: []byte(service.change.Record.Desired.ID),
+				},
+			)
+		}
+	}
+	defer clearPreparedEnvironmentBlueprintServices(preparedServices)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
 		classifyEnvironmentBlueprintApplyConflict(
-			len(revision.Files), expectedHeadRevision, project, environment, task.OperationID,
+			len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedServices,
 		),
 	)
 	if err != nil {
@@ -365,68 +423,199 @@ func classifyEnvironmentBlueprintApplyConflict(
 	project Versioned[ProjectRecord],
 	environment Versioned[EnvironmentRecord],
 	operationID string,
+	services []preparedEnvironmentBlueprintService,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 12+fileCount {
+		baseCount := 12 + fileCount
+		if len(values) != baseCount+4*len(services) {
 			return errs.New(errs.KindInternal, "Blueprint apply compare evidence is incomplete")
 		}
-		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+		if err := classifyEnvironmentBlueprintBaseConflict(
+			values[:baseCount], fileCount, expectedHeadRevision, project, environment, operationID,
+		); err != nil {
+			return err
+		}
+		for index, service := range services {
+			offset := baseCount + index*4
+			primary := values[offset]
+			name := values[offset+1]
+			owner := values[offset+2]
+			tombstone := values[offset+3]
+			serviceID := service.change.Record.Desired.ID
+			if service.change.Current == nil {
+				if primary != nil || owner != nil {
+					return errs.New(errs.KindStateConflict, "Service stable identity is already in use")
+				}
+				if name != nil {
+					return errs.New(errs.KindNameConflict, "Service name is already in use")
+				}
+			} else {
+				if primary == nil {
+					return errs.New(errs.KindServiceNotFound, "Service was not found")
+				}
+				if primary.ModRevision != service.change.Current.Revision {
+					return stateConflict("service", serviceID)
+				}
+				if name == nil || owner == nil || string(name.Value) != serviceID || string(owner.Value) != serviceID {
+					return errs.New(errs.KindInternal, "Service indexes changed or are corrupt")
+				}
+			}
+			if tombstone != nil {
+				return errs.New(errs.KindResourceInUse, "Service deletion is in progress")
+			}
+		}
+		return errs.New(errs.KindStateConflict, "Environment Blueprint Service state changed")
+	}
+}
+
+func classifyEnvironmentBlueprintBaseConflict(
+	values []*KeyValue,
+	fileCount int,
+	expectedHeadRevision int64,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	operationID string,
+) error {
+	if values[2] != nil {
+		activeTaskID, err := decodeTaskReference(values[2].Value)
+		if err != nil {
+			return err
+		}
+		return errs.Newf(
+			errs.KindStateConflict,
+			"operation %s already has active task %s",
+			operationID,
+			activeTaskID,
+		)
+	}
+	for _, index := range []int{0, 1, 3} {
+		if values[index] != nil {
+			return errs.New(errs.KindInternal, "Blueprint apply collided with durable Task state")
+		}
+	}
+	for index := 4; index < 5+fileCount; index++ {
+		if values[index] != nil {
+			return errs.New(errs.KindInternal, "Blueprint apply collided with immutable revision state")
+		}
+	}
+	headIndex := 5 + fileCount
+	if (expectedHeadRevision == 0 && values[headIndex] != nil) ||
+		(expectedHeadRevision > 0 && (values[headIndex] == nil || values[headIndex].ModRevision != expectedHeadRevision)) {
+		return errs.New(errs.KindStateConflict, "Environment desired state changed")
+	}
+	projectionIndex := headIndex + 1
+	if (expectedHeadRevision == 0 && values[projectionIndex] != nil) ||
+		(expectedHeadRevision > 0 &&
+			(values[projectionIndex] == nil || values[projectionIndex].ModRevision != expectedHeadRevision)) {
+		return errs.New(errs.KindStateConflict, "Environment Compose projection changed")
+	}
+	environmentIndex := headIndex + 2
+	projectIndex := headIndex + 3
+	if values[environmentIndex] == nil {
+		return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
+	}
+	if values[environmentIndex].ModRevision != environment.Revision {
+		return stateConflict("environment", environment.Record.ID)
+	}
+	if values[projectIndex] == nil {
+		return errs.New(errs.KindProjectNotFound, "project was not found")
+	}
+	if values[projectIndex].ModRevision != project.Revision {
+		return stateConflict("project", project.Record.ID)
+	}
+	if values[headIndex+4] != nil {
+		return errs.New(errs.KindResourceInUse, "Environment deletion is in progress")
+	}
+	if values[headIndex+5] != nil {
+		return errs.New(errs.KindResourceInUse, "Project deletion is in progress")
+	}
+	if values[headIndex+6] != nil {
+		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+	}
+	return nil
+}
+
+type preparedEnvironmentBlueprintService struct {
+	change        EnvironmentBlueprintServiceChange
+	value         []byte
+	nameRevision  int64
+	ownerRevision int64
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	projection EnvironmentComposeProjection,
+	changes []EnvironmentBlueprintServiceChange,
+) ([]preparedEnvironmentBlueprintService, error) {
+	if len(changes) != len(projection.Services) {
+		return nil, errs.New(errs.KindValidationFailed, "Blueprint Service changes do not cover the Compose projection")
+	}
+	identities := make(map[string]string, len(projection.Services))
+	for _, identity := range projection.Services {
+		identities[identity.ID] = identity.Name
+	}
+	prepared := make([]preparedEnvironmentBlueprintService, 0, len(changes))
+	for _, change := range changes {
+		if err := validateServiceRecord(change.Record); err != nil {
+			clearPreparedEnvironmentBlueprintServices(prepared)
+			return nil, err
+		}
+		serviceID := change.Record.Desired.ID
+		if change.Record.EnvironmentID != environment.Record.ID || change.Record.BackingNetworkID != "" ||
+			identities[serviceID] != change.Record.Desired.Name {
+			clearPreparedEnvironmentBlueprintServices(prepared)
+			return nil, errs.New(errs.KindValidationFailed, "Blueprint Service change does not match its projection")
+		}
+		item := preparedEnvironmentBlueprintService{change: change}
+		if change.Current != nil {
+			if err := validateServiceVersion(*change.Current); err != nil {
+				clearPreparedEnvironmentBlueprintServices(prepared)
+				return nil, err
+			}
+			if change.Current.Record.EnvironmentID != environment.Record.ID ||
+				change.Current.Record.Desired.ID != serviceID ||
+				change.Current.Record.Desired.Name != change.Record.Desired.Name ||
+				change.Current.Record.Runtime != change.Record.Runtime {
+				clearPreparedEnvironmentBlueprintServices(prepared)
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Service replacement changed runtime or identity",
+				)
+			}
+			indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+				Keys: []string{
+					serviceNameKey(environment.Record.ID, change.Record.Desired.Name),
+					serviceOwnerKey(environment.Record.ID, serviceID),
+				},
+				Revision: change.Current.ReadRevision,
+			})
 			if err != nil {
-				return err
+				clearPreparedEnvironmentBlueprintServices(prepared)
+				return nil, err
 			}
-			return errs.Newf(
-				errs.KindStateConflict,
-				"operation %s already has active task %s",
-				operationID,
-				activeTaskID,
-			)
-		}
-		for _, index := range []int{0, 1, 3} {
-			if values[index] != nil {
-				return errs.New(errs.KindInternal, "Blueprint apply collided with durable Task state")
+			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+				string(indexes.Values[0].Value) != serviceID || string(indexes.Values[1].Value) != serviceID {
+				clearPreparedEnvironmentBlueprintServices(prepared)
+				return nil, errs.New(errs.KindInternal, "Service indexes are missing or corrupt")
 			}
+			item.nameRevision = indexes.Values[0].ModRevision
+			item.ownerRevision = indexes.Values[1].ModRevision
 		}
-		for index := 4; index < 5+fileCount; index++ {
-			if values[index] != nil {
-				return errs.New(errs.KindInternal, "Blueprint apply collided with immutable revision state")
-			}
+		value, err := encodeServiceRecord(change.Record)
+		if err != nil {
+			clearPreparedEnvironmentBlueprintServices(prepared)
+			return nil, err
 		}
-		headIndex := 5 + fileCount
-		if (expectedHeadRevision == 0 && values[headIndex] != nil) ||
-			(expectedHeadRevision > 0 && (values[headIndex] == nil || values[headIndex].ModRevision != expectedHeadRevision)) {
-			return errs.New(errs.KindStateConflict, "Environment desired state changed")
-		}
-		projectionIndex := headIndex + 1
-		if (expectedHeadRevision == 0 && values[projectionIndex] != nil) ||
-			(expectedHeadRevision > 0 &&
-				(values[projectionIndex] == nil || values[projectionIndex].ModRevision != expectedHeadRevision)) {
-			return errs.New(errs.KindStateConflict, "Environment Compose projection changed")
-		}
-		environmentIndex := headIndex + 2
-		projectIndex := headIndex + 3
-		if values[environmentIndex] == nil {
-			return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
-		}
-		if values[environmentIndex].ModRevision != environment.Revision {
-			return stateConflict("environment", environment.Record.ID)
-		}
-		if values[projectIndex] == nil {
-			return errs.New(errs.KindProjectNotFound, "project was not found")
-		}
-		if values[projectIndex].ModRevision != project.Revision {
-			return stateConflict("project", project.Record.ID)
-		}
-		if values[headIndex+4] != nil {
-			return errs.New(errs.KindResourceInUse, "Environment deletion is in progress")
-		}
-		if values[headIndex+5] != nil {
-			return errs.New(errs.KindResourceInUse, "Project deletion is in progress")
-		}
-		if values[headIndex+6] != nil {
-			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
-		}
-		return errs.New(errs.KindStateConflict, "Environment Blueprint apply changed")
+		item.value = value
+		prepared = append(prepared, item)
+	}
+	return prepared, nil
+}
+
+func clearPreparedEnvironmentBlueprintServices(services []preparedEnvironmentBlueprintService) {
+	for index := range services {
+		clear(services[index].value)
 	}
 }
 
