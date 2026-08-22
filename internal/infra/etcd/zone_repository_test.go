@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -71,35 +72,26 @@ func TestZoneRepositoryEnforcesScopedNameAndAncestorFences(t *testing.T) {
 	}
 }
 
-func TestZoneRepositoryUpdatesMutableDesiredFieldsByCAS(t *testing.T) {
-	// Rationale: Blueprint and direct edits must serialize on one Zone revision
-	// without changing its identity, scoped name, or owner.
+func TestZoneRepositoryEnforcesEnvironmentPoolAndSiblingIsolation(t *testing.T) {
+	// Rationale: every Zone subnet must remain inside its Environment reservation
+	// and must not overlap any sibling Zone under concurrent-safe durable state.
 	t.Parallel()
 	ctx := context.Background()
 	repository, _, environment, project := zoneRepositoryTestHierarchy(t)
-	record := zoneRepositoryTestRecord(t, environment.Record.ID, 930, "backend")
-	current, err := repository.CreateZone(ctx, environment, project, record)
-	if err != nil {
+	first := zoneRepositoryTestRecord(t, environment.Record.ID, 930, "backend")
+	first.Desired.Subnet = "10.34.30.0/24"
+	if _, err := repository.CreateZone(ctx, environment, project, first); err != nil {
 		t.Fatalf("CreateZone() error = %v", err)
 	}
-	desired := current.Record.Desired
-	desired.Subnet = "10.200.30.0/24"
-	desired.Internal = false
-	updated, err := repository.ReplaceDesired(ctx, environment, project, current, desired)
-	if err != nil || updated.Record.Desired.Subnet != desired.Subnet || updated.Record.Desired.Internal {
-		t.Fatalf("ReplaceDesired() = %#v, %v", updated, err)
+	overlap := zoneRepositoryTestRecord(t, environment.Record.ID, 931, "frontend")
+	overlap.Desired.Subnet = "10.34.30.128/25"
+	if _, err := repository.CreateZone(ctx, environment, project, overlap); !isKind(err, errs.KindStateConflict) {
+		t.Fatalf("CreateZone(overlap) error = %v", err)
 	}
-	if _, err := repository.ReplaceDesired(
-		ctx,
-		environment,
-		project,
-		current,
-		desired,
-	); !isKind(
-		err,
-		errs.KindStateConflict,
-	) {
-		t.Fatalf("ReplaceDesired(stale) error = %v", err)
+	outside := zoneRepositoryTestRecord(t, environment.Record.ID, 932, "egress")
+	outside.Desired.Subnet = "10.99.0.0/24"
+	if _, err := repository.CreateZone(ctx, environment, project, outside); !isKind(err, errs.KindValidationFailed) {
+		t.Fatalf("CreateZone(outside pool) error = %v", err)
 	}
 }
 
@@ -124,7 +116,7 @@ func zoneRepositoryTestRecord(
 	t.Helper()
 	record, err := NewZoneRecord(environmentID, core.Zone{
 		ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), offset), Name: name,
-		Subnet: "10.200.20.0/24", Internal: true, OwnedBy: "console",
+		Subnet: fmt.Sprintf("10.34.%d.0/24", offset-900), Internal: true, OwnedBy: "console",
 	})
 	if err != nil {
 		t.Fatalf("NewZoneRecord() error = %v", err)

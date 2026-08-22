@@ -8,26 +8,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
-func TestZoneRecordPreservesStableScopeAndOwner(t *testing.T) {
-	// Rationale: durable Zone updates must not reinterpret or move the stable
-	// network while the public owner representation remains unresolved.
+func TestZoneRecordRejectsNonCanonicalSubnet(t *testing.T) {
+	// Rationale: immutable Docker bridge IPAM must have one canonical subnet
+	// representation before it enters durable desired state.
 	t.Parallel()
-	record := zoneRecordTestRecord(t, "backend", 901)
-	desired := record.Desired
-	desired.Subnet = "10.200.21.0/24"
-	desired.Internal = false
-	replacement, err := ReplaceZoneDesired(record, desired)
-	if err != nil {
-		t.Fatalf("ReplaceZoneDesired() error = %v", err)
-	}
-	if replacement.EnvironmentID != record.EnvironmentID || replacement.Desired.ID != record.Desired.ID ||
-		replacement.Desired.Name != record.Desired.Name || replacement.Desired.OwnedBy != record.Desired.OwnedBy {
-		t.Fatalf("replacement = %#v, want immutable fields from %#v", replacement, record)
-	}
-	changedOwner := desired
-	changedOwner.OwnedBy = "another-owner"
-	if _, err := ReplaceZoneDesired(record, changedOwner); err == nil {
-		t.Fatal("ReplaceZoneDesired() accepted an ownership change")
+	desired := zoneRecordTestRecord(t, "backend", 901).Desired
+	desired.Subnet = "10.200.20.9/24"
+	if _, err := NewZoneRecord(ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 900), desired); err == nil {
+		t.Fatal("NewZoneRecord() accepted a non-canonical subnet")
 	}
 }
 

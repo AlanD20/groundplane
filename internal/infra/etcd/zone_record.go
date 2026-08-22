@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -24,27 +25,6 @@ func NewZoneRecord(environmentID string, desired core.Zone) (ZoneRecord, error) 
 		return ZoneRecord{}, err
 	}
 	return record, nil
-}
-
-// ReplaceZoneDesired changes mutable desired fields while preserving the
-// stable identity, scoped name, and explicit owner selected at creation.
-func ReplaceZoneDesired(record ZoneRecord, desired core.Zone) (ZoneRecord, error) {
-	if err := validateZoneRecord(record); err != nil {
-		return ZoneRecord{}, err
-	}
-	if desired.ID != record.Desired.ID || desired.Name != record.Desired.Name ||
-		desired.OwnedBy != record.Desired.OwnedBy {
-		return ZoneRecord{}, errs.New(
-			errs.KindValidationFailed,
-			"Zone replacement changed immutable identity, name, or owner",
-		)
-	}
-	replacement := record
-	replacement.Desired = desired
-	if err := validateZoneRecord(replacement); err != nil {
-		return ZoneRecord{}, err
-	}
-	return replacement, nil
 }
 
 func zoneKey(id string) string { return zonePrefix + id }
@@ -70,6 +50,10 @@ func validateZoneRecord(record ZoneRecord) error {
 	}
 	if strings.TrimSpace(record.Desired.Name) == "" {
 		return errs.New(errs.KindValidationFailed, "Zone name is required")
+	}
+	subnet, err := ipam.ParseIPv4Prefix(record.Desired.Subnet)
+	if err != nil || subnet.String() != record.Desired.Subnet {
+		return errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
 	}
 	return nil
 }

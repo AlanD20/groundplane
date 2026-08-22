@@ -2,7 +2,7 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// zone: list | add | edit | remove. See mvp.md, "Network Zone" —
+// zone: list | add | remove. See mvp.md, "Network Zone" —
 // Groundplane's domain term for a Compose network (blueprint.md).
 func newZoneCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "zone", Short: "Network zones — named internal docker networks"}
@@ -29,25 +29,10 @@ func newZoneCmd() *cobra.Command {
 			})
 		},
 	}
-	add.Flags().StringVar(&subnet, "subnet", "", "CIDR (auto-assigned if omitted)")
+	add.Flags().StringVar(&subnet, "subnet", "", "IPv4 CIDR reserved inside the Environment pool")
+	_ = add.MarkFlagRequired("subnet")
 	add.Flags().BoolVar(&internal, "internal", false, "no route to the host's default gateway")
 	cmd.AddCommand(add)
-
-	var editSubnet string
-	edit := &cobra.Command{
-		Use:   "edit <name>",
-		Short: "Edit a zone",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPatch(
-				cmd,
-				"/api/v1/zones/"+target(fromContext(cmd), args[0]),
-				changedStringFields(cmd, map[string]string{"subnet": editSubnet}),
-			)
-		},
-	}
-	edit.Flags().StringVar(&editSubnet, "subnet", "", "new CIDR")
-	cmd.AddCommand(edit)
 
 	cmd.AddCommand(&cobra.Command{
 		Use:     "remove <name>",

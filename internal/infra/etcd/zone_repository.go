@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -34,11 +33,25 @@ func (repository *ZoneRepository) CreateZone(
 	if err := validateZoneHierarchy(ctx, environment, project, record); err != nil {
 		return Versioned[ZoneRecord]{}, err
 	}
+	poolRegistry, err := repository.getZonePoolRegistry(ctx, environment.Record.ID)
+	if err != nil {
+		return Versioned[ZoneRecord]{}, err
+	}
+	nextPoolRegistry, err := poolRegistry.Record.reserve(environment.Record, record)
+	if err != nil {
+		return Versioned[ZoneRecord]{}, err
+	}
+	poolRegistry.Record = nextPoolRegistry
 	value, err := encodeZoneRecord(record)
 	if err != nil {
 		return Versioned[ZoneRecord]{}, err
 	}
 	defer clear(value)
+	poolRegistryValue, err := encodeEnvelope("zone_pool_registry", poolRegistry.Record)
+	if err != nil {
+		return Versioned[ZoneRecord]{}, err
+	}
+	defer clear(poolRegistryValue)
 
 	conditions := []Condition{
 		{Key: zoneKey(record.Desired.ID)},
@@ -53,12 +66,16 @@ func (repository *ZoneRepository) CreateZone(
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
 	}
+	conditions = append(conditions, Condition{
+		Key: zonePoolRegistryKey(environment.Record.ID), ModRevision: poolRegistry.Revision,
+	})
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationPut, Key: zoneKey(record.Desired.ID), Value: value},
 		{
 			Type: MutationPut, Key: zoneNameKey(record.EnvironmentID, record.Desired.Name),
 			Value: []byte(record.Desired.ID),
 		},
+		{Type: MutationPut, Key: zonePoolRegistryKey(environment.Record.ID), Value: poolRegistryValue},
 		{
 			Type: MutationPut, Key: zoneOwnerKey(record.EnvironmentID, record.Desired.ID),
 			Value: []byte(record.Desired.ID),
@@ -69,7 +86,7 @@ func (repository *ZoneRepository) CreateZone(
 	}
 	if !result.Succeeded {
 		return Versioned[ZoneRecord]{}, classifyZoneWriteConflict(
-			result.FailureReads, environment, project, record, 0,
+			result.FailureReads, environment, project, poolRegistry, record,
 		)
 	}
 	return Versioned[ZoneRecord]{
@@ -119,78 +136,6 @@ func (repository *ZoneRepository) ListZones(
 	)
 }
 
-func (repository *ZoneRepository) ReplaceDesired(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	current Versioned[ZoneRecord],
-	desired core.Zone,
-) (Versioned[ZoneRecord], error) {
-	replacement, err := ReplaceZoneDesired(current.Record, desired)
-	if err != nil {
-		return Versioned[ZoneRecord]{}, err
-	}
-	if err := validateZoneHierarchy(ctx, environment, project, replacement); err != nil {
-		return Versioned[ZoneRecord]{}, err
-	}
-	if err := validateZoneVersion(current); err != nil {
-		return Versioned[ZoneRecord]{}, err
-	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{
-			zoneNameKey(current.Record.EnvironmentID, current.Record.Desired.Name),
-			zoneOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-		},
-		Revision: current.ReadRevision,
-	})
-	if err != nil {
-		return Versioned[ZoneRecord]{}, err
-	}
-	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
-		string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return Versioned[ZoneRecord]{}, errs.New(errs.KindInternal, "Zone indexes are missing or corrupt")
-	}
-	value, err := encodeZoneRecord(replacement)
-	if err != nil {
-		return Versioned[ZoneRecord]{}, err
-	}
-	defer clear(value)
-	conditions := []Condition{
-		{Key: zoneKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{
-			Key:         zoneNameKey(current.Record.EnvironmentID, current.Record.Desired.Name),
-			ModRevision: indexes.Values[0].ModRevision,
-		},
-		{
-			Key:         zoneOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-			ModRevision: indexes.Values[1].ModRevision,
-		},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("zone", current.Record.Desired.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
-	}
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: zoneKey(replacement.Desired.ID), Value: value},
-	})
-	if err != nil {
-		return Versioned[ZoneRecord]{}, err
-	}
-	if !result.Succeeded {
-		return Versioned[ZoneRecord]{}, classifyZoneWriteConflict(
-			result.FailureReads, environment, project, current.Record, current.Revision,
-		)
-	}
-	return Versioned[ZoneRecord]{
-		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
-}
-
 func validateZoneHierarchy(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
@@ -217,49 +162,26 @@ func validateZoneHierarchy(
 	return nil
 }
 
-func validateZoneVersion(current Versioned[ZoneRecord]) error {
-	if err := validateZoneRecord(current.Record); err != nil {
-		return err
-	}
-	if current.Revision <= 0 || current.ReadRevision < current.Revision {
-		return errs.New(errs.KindValidationFailed, "Zone version metadata is invalid")
-	}
-	return nil
-}
-
 func classifyZoneWriteConflict(
 	values []*KeyValue,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
+	poolRegistry Versioned[zonePoolRegistry],
 	record ZoneRecord,
-	expectedZoneRevision int64,
 ) error {
-	expected := 8
+	registryIndex := 8
 	if project.Record.TenantID != "" {
-		expected++
+		registryIndex++
 	}
+	expected := registryIndex + 1
 	if len(values) != expected {
 		return errs.New(errs.KindInternal, "Zone write compare evidence is incomplete")
 	}
-	if expectedZoneRevision == 0 {
-		if values[0] != nil || values[2] != nil {
-			return errs.New(errs.KindStateConflict, "Zone stable identity is already in use")
-		}
-		if values[1] != nil {
-			return errs.New(errs.KindNameConflict, "Zone name is already in use")
-		}
-	} else {
-		if values[0] == nil {
-			return errs.New(errs.KindZoneNotFound, "Zone was not found")
-		}
-		if values[0].ModRevision != expectedZoneRevision {
-			return stateConflict("zone", record.Desired.ID)
-		}
-		for _, index := range []int{1, 2} {
-			if values[index] == nil || string(values[index].Value) != record.Desired.ID {
-				return errs.New(errs.KindInternal, "Zone index changed or is corrupt")
-			}
-		}
+	if values[0] != nil || values[2] != nil {
+		return errs.New(errs.KindStateConflict, "Zone stable identity is already in use")
+	}
+	if values[1] != nil {
+		return errs.New(errs.KindNameConflict, "Zone name is already in use")
 	}
 	if values[3] == nil {
 		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
@@ -278,8 +200,13 @@ func classifyZoneWriteConflict(
 			return errs.New(errs.KindResourceInUse, "Zone hierarchy deletion is in progress")
 		}
 	}
-	if expected == 9 && values[8] != nil {
+	if project.Record.TenantID != "" && values[8] != nil {
 		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+	}
+	if (poolRegistry.Revision == 0 && values[registryIndex] != nil) ||
+		(poolRegistry.Revision > 0 &&
+			(values[registryIndex] == nil || values[registryIndex].ModRevision != poolRegistry.Revision)) {
+		return stateConflict("Zone pool registry", environment.Record.ID)
 	}
 	return stateConflict("zone", record.Desired.ID)
 }
