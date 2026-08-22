@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	MaximumAttachConsumers           = 15
 	MaximumAttachGrants              = 8
 	MaximumAttachFactsPerSet         = 32
 	MaximumAttachFactCiphertextBytes = 256 << 10
@@ -250,12 +249,8 @@ func validateAttachRecord(record AttachRecord) error {
 	if record.CreatedAt.IsZero() {
 		return errs.New(errs.KindValidationFailed, "Attach created_at is required")
 	}
-	if len(record.ServiceIDs) == 0 || len(record.ServiceIDs) > MaximumAttachConsumers {
-		return errs.Newf(
-			errs.KindValidationFailed,
-			"Attach must have between 1 and %d consuming Services",
-			MaximumAttachConsumers,
-		)
+	if len(record.ServiceIDs) != 1 {
+		return errs.New(errs.KindValidationFailed, "Attach must have exactly one consuming Service")
 	}
 	if len(record.GrantAttachIDs) > MaximumAttachGrants {
 		return errs.Newf(errs.KindValidationFailed, "Attach may have at most %d grants", MaximumAttachGrants)

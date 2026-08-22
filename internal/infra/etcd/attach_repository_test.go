@@ -166,16 +166,16 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 	}
 }
 
-// Rationale: the derived compare-and-mutation budget must reject combinations that cannot be committed atomically.
-func TestAttachRepositoryEnforcesTransactionBudget(t *testing.T) {
+// Rationale: the locked one-consumer/eight-grant maximum must remain within the atomic transaction ceiling.
+func TestAttachRepositoryMaximumCombinationFitsTransactionBudget(t *testing.T) {
 	t.Parallel()
 	record := AttachRecord{
-		ServiceIDs:     make([]string, MaximumAttachConsumers),
+		ServiceIDs:     make([]string, 1),
 		GrantAttachIDs: make([]string, 8),
 	}
-	if got := attachCreateWithTaskOperationCount(record, true); got <= maximumTransactionOperations {
+	if got := attachCreateWithTaskOperationCount(record, true); got > maximumTransactionOperations {
 		t.Fatalf(
-			"attachCreateWithTaskOperationCount() = %d, want greater than %d",
+			"attachCreateWithTaskOperationCount() = %d, want at most %d",
 			got,
 			maximumTransactionOperations,
 		)
