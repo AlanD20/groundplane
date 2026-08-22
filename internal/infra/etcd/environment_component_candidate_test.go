@@ -30,7 +30,6 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewZoneRecord() error = %v", err)
 	}
-	seedEnvironmentComponentCandidateValue(t, store, zoneKey(zone.Desired.ID), mustEncodeZone(t, zone))
 	components, err := newComponentRepository(store)
 	if err != nil {
 		t.Fatalf("newComponentRepository() error = %v", err)
@@ -51,6 +50,7 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 		ctx,
 		taskID,
 		environment.Record.ID,
+		[]EnvironmentBlueprintZoneChange{{Record: zone}},
 		[]EnvironmentComponentCandidateInput{{
 			Current: current,
 			Candidate: core.Component{
@@ -96,6 +96,7 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 		ctx,
 		ids.NewAt(ids.KindTask, now, 1406),
 		environment.Record.ID,
+		[]EnvironmentBlueprintZoneChange{{Record: zone}},
 		[]EnvironmentComponentCandidateInput{{Current: current, Candidate: core.Component{
 			ID: current.Record.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 			OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,

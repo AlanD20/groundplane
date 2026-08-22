@@ -225,6 +225,7 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	zoneChanges []EnvironmentBlueprintZoneChange,
 	serviceChanges []EnvironmentBlueprintServiceChange,
 	routeChanges []EnvironmentBlueprintRouteChange,
+	componentPreparation ComponentTaskPreparation,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -526,13 +527,26 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			)
 		}
 	}
+	componentPublication, err := prepareComponentTaskPublication(
+		environment,
+		task,
+		zoneChanges,
+		componentPreparation,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearPreparedComponentTaskPublication(componentPublication)
+	conditions = append(conditions, componentPublication.conditions...)
+	mutations = append(mutations, componentPublication.mutations...)
+	baseClassifier := classifyEnvironmentBlueprintApplyConflict(
+		len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedZones,
+		preparedServices, preparedRoutes,
+	)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
-		classifyEnvironmentBlueprintApplyConflict(
-			len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedZones,
-			preparedServices, preparedRoutes,
-		),
+		classifyEnvironmentBlueprintComponentPublication(baseClassifier, componentPublication),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

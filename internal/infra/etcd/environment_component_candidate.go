@@ -43,6 +43,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	ctx context.Context,
 	taskID string,
 	environmentID string,
+	zoneChanges []EnvironmentBlueprintZoneChange,
 	inputs []EnvironmentComponentCandidateInput,
 	createdAt time.Time,
 ) (ComponentTaskPreparation, error) {
@@ -111,6 +112,10 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		zones = append(zones, zoneID)
 	}
 	sort.Strings(zones)
+	preparedZones, err := componentCandidateZones(environmentID, zones, zoneChanges)
+	if err != nil {
+		return ComponentTaskPreparation{}, err
+	}
 
 	keys := make([]string, 0, 1+len(ordered)+(2*len(zones)))
 	keys = append(keys, componentTaskActiveEnvironmentKey(environmentID))
@@ -162,39 +167,55 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	registryOffset := zoneOffset + len(zones)
 	for index, zoneID := range zones {
 		zoneValue := state.Values[zoneOffset+index]
-		if zoneValue == nil {
-			return ComponentTaskPreparation{}, errs.New(
-				errs.KindStateConflict,
-				"Component candidate Zone was not found",
-			)
-		}
-		zone, decodeErr := decodeZoneRecord(zoneValue.Value)
-		if decodeErr != nil {
-			return ComponentTaskPreparation{}, decodeErr
-		}
-		if zone.EnvironmentID != environmentID || zone.Desired.ID != zoneID {
-			return ComponentTaskPreparation{}, errs.New(
-				errs.KindStateConflict,
-				"Component candidate Zone ownership changed",
-			)
+		zoneChange := preparedZones[zoneID]
+		zoneRevision := int64(0)
+		if zoneChange.Current == nil {
+			if zoneValue != nil {
+				return ComponentTaskPreparation{}, errs.New(
+					errs.KindStateConflict,
+					"new Component candidate Zone is already in use",
+				)
+			}
+		} else {
+			if zoneValue == nil || zoneValue.ModRevision != zoneChange.Current.Revision {
+				return ComponentTaskPreparation{}, errs.New(
+					errs.KindStateConflict,
+					"Component candidate Zone changed during preparation",
+				)
+			}
+			storedZone, decodeErr := decodeZoneRecord(zoneValue.Value)
+			if decodeErr != nil {
+				return ComponentTaskPreparation{}, decodeErr
+			}
+			if !reflect.DeepEqual(storedZone, zoneChange.Current.Record) {
+				return ComponentTaskPreparation{}, errs.New(
+					errs.KindStateConflict,
+					"Component candidate Zone snapshot changed",
+				)
+			}
+			zoneRevision = zoneValue.ModRevision
 		}
 		registryValue := state.Values[registryOffset+index]
 		currentRegistry := componentAddressRegistry{Reservations: map[string]string{}}
 		registryRevision := int64(0)
+		if zoneChange.Current == nil && registryValue != nil {
+			return ComponentTaskPreparation{}, corruptComponentAddressRegistry()
+		}
 		if registryValue != nil {
-			currentRegistry, decodeErr = decodeEnvelope[componentAddressRegistry](
+			decoded, decodeErr := decodeEnvelope[componentAddressRegistry](
 				registryValue.Value,
 				"component_address_registry",
 			)
-			if decodeErr != nil || validateComponentAddressRegistry(zone, currentRegistry) != nil {
+			if decodeErr != nil || validateComponentAddressRegistry(zoneChange.Record, decoded) != nil {
 				return ComponentTaskPreparation{}, corruptComponentAddressRegistry()
 			}
+			currentRegistry = decoded
 			registryRevision = registryValue.ModRevision
 		}
 		registries[zoneID] = cloneComponentAddressRegistry(currentRegistry)
 		addresses[index] = componentTaskAddressPreparation{
 			Zone: Versioned[ZoneRecord]{
-				Record: zone, Revision: zoneValue.ModRevision, ReadRevision: state.ReadRevision,
+				Record: zoneChange.Record, Revision: zoneRevision, ReadRevision: state.ReadRevision,
 			},
 			Current: Versioned[componentAddressRegistry]{
 				Record:       cloneComponentAddressRegistry(currentRegistry),
@@ -252,6 +273,38 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	return cloneComponentTaskPreparation(preparation), nil
 }
 
+func componentCandidateZones(
+	environmentID string,
+	wanted []string,
+	changes []EnvironmentBlueprintZoneChange,
+) (map[string]EnvironmentBlueprintZoneChange, error) {
+	wantedSet := make(map[string]struct{}, len(wanted))
+	for _, zoneID := range wanted {
+		wantedSet[zoneID] = struct{}{}
+	}
+	result := make(map[string]EnvironmentBlueprintZoneChange, len(wanted))
+	for _, change := range changes {
+		zoneID := change.Record.Desired.ID
+		if _, needed := wantedSet[zoneID]; !needed {
+			continue
+		}
+		if _, duplicate := result[zoneID]; duplicate || validateZoneRecord(change.Record) != nil ||
+			change.Record.EnvironmentID != environmentID {
+			return nil, errs.New(errs.KindValidationFailed, "Component candidate Zone input is invalid")
+		}
+		if change.Current != nil &&
+			(change.Current.Revision <= 0 || change.Current.ReadRevision < change.Current.Revision ||
+				change.Current.Record.EnvironmentID != environmentID || change.Current.Record.Desired.ID != zoneID) {
+			return nil, errs.New(errs.KindValidationFailed, "Component candidate Zone version is invalid")
+		}
+		result[zoneID] = change
+	}
+	if len(result) != len(wanted) {
+		return nil, errs.New(errs.KindValidationFailed, "Component candidate Zone is not in the Blueprint")
+	}
+	return result, nil
+}
+
 func projectedComponentCandidateZone(component core.Component) (string, bool, error) {
 	if component.Kind != core.ComponentKindIngressCaddy || !component.Enabled {
 		return "", false, nil
@@ -306,7 +359,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 	previousZoneID := ""
 	for _, address := range preparation.addresses {
 		zoneID := address.Zone.Record.Desired.ID
-		if zoneID <= previousZoneID || address.Zone.Revision <= 0 ||
+		if zoneID <= previousZoneID || address.Zone.Revision < 0 ||
 			address.Zone.ReadRevision < address.Zone.Revision || address.Current.Revision < 0 ||
 			address.Current.ReadRevision < address.Current.Revision ||
 			validateZoneRecord(address.Zone.Record) != nil ||

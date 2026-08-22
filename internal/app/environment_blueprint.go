@@ -50,6 +50,7 @@ type environmentBlueprintRepository interface {
 		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
+		etcd.ComponentTaskPreparation,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -476,6 +477,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		zoneChanges,
 		serviceChanges,
 		routeChanges,
+		etcd.ComponentTaskPreparation{},
 		task,
 		marker,
 	)
