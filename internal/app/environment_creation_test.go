@@ -12,6 +12,7 @@ import (
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
@@ -26,6 +27,7 @@ type fakeEnvironmentCreationRepository struct {
 	poolRegistry etcd.Versioned[etcd.EnvironmentPoolRegistry]
 	volumeRoot   string
 	environment  etcd.EnvironmentRecord
+	components   []etcd.ComponentRecord
 	task         etcd.TaskRecord
 	marker       etcd.IdempotencyMarker
 	calls        int
@@ -50,6 +52,7 @@ func (repository *fakeEnvironmentCreationRepository) CreateEnvironmentWithTask(
 	_ etcd.Versioned[etcd.ProjectRecord],
 	poolRegistry etcd.Versioned[etcd.EnvironmentPoolRegistry],
 	environment etcd.EnvironmentRecord,
+	components []etcd.ComponentRecord,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -57,6 +60,7 @@ func (repository *fakeEnvironmentCreationRepository) CreateEnvironmentWithTask(
 	repository.volumeRoot = volumeRoot
 	repository.poolRegistry = poolRegistry
 	repository.environment = environment
+	repository.components = append([]etcd.ComponentRecord(nil), components...)
 	repository.task = task
 	repository.task.Params = make(map[string]string, len(task.Params))
 	for key, value := range task.Params {
@@ -161,6 +165,24 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 	}
 	if repository.poolRegistry.Record.Reservations[environment.ID] != environment.NetworkPool {
 		t.Fatalf("Environment pool registry = %#v", repository.poolRegistry.Record)
+	}
+	if len(repository.components) != 2 {
+		t.Fatalf("component count = %d, want 2", len(repository.components))
+	}
+	wantKinds := []core.ComponentKind{
+		core.ComponentKindIngressCaddy,
+		core.ComponentKindEdgeCloudflare,
+	}
+	for index, component := range repository.components {
+		if component.Desired.Owner != core.ComponentOwnerEnvironment ||
+			component.Desired.OwnerID != environment.ID || component.Desired.Kind != wantKinds[index] {
+			t.Fatalf("component[%d] identity = %#v", index, component.Desired)
+		}
+		if component.Desired.Enabled || len(component.Desired.Config) != 0 ||
+			len(component.Runtime.GeneratedServices) != 0 || component.Runtime.PinnedIPv4 != "" ||
+			component.Runtime.Healthy {
+			t.Fatalf("component[%d] initial state = %#v", index, component)
+		}
 	}
 	resolver, err := controllerpkg.NewTaskPlanResolver(repository.volumeRoot)
 	if err != nil {

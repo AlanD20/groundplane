@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -55,6 +56,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 	}
+	components := environmentCreationTestComponents(t, record.ID, now)
 	marker := pendingTaskMarker(task)
 	marker.Locator = IdempotencyLocator{
 		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
@@ -74,7 +76,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	}
 	poolRegistry.Record = nextRegistry
 	result, err := repository.CreateEnvironmentWithTask(
-		ctx, environmentpath.DefaultVolumeRoot, project, poolRegistry, record, task, marker,
+		ctx, environmentpath.DefaultVolumeRoot, project, poolRegistry, record, components, task, marker,
 	)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("CreateEnvironmentWithTask() = %#v, %v", result, err)
@@ -96,7 +98,32 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	if err != nil || storedTask.Record.Target != record.ID || storedTask.Record.Type != TaskCreate {
 		t.Fatalf("stored Task = %#v, %v", storedTask.Record, err)
 	}
-	agentID := ids.NewAt(ids.KindAgent, now, 706)
+	componentRepository, err := newComponentRepository(store)
+	if err != nil {
+		t.Fatalf("newComponentRepository() error = %v", err)
+	}
+	storedComponents, err := componentRepository.ListEnvironmentComponents(
+		ctx,
+		record.ID,
+		PageRequest{Limit: 20},
+	)
+	if err != nil || len(storedComponents.Items) != 2 {
+		t.Fatalf("ListEnvironmentComponents() = %#v, %v", storedComponents, err)
+	}
+	for _, component := range storedComponents.Items {
+		if component.Revision != storedEnvironment.Revision || component.Revision != storedTask.Revision {
+			t.Fatalf(
+				"Component/Environment/Task revisions = %d/%d/%d, want one transaction",
+				component.Revision,
+				storedEnvironment.Revision,
+				storedTask.Revision,
+			)
+		}
+		if component.Record.Desired.OwnerID != record.ID || component.Record.Desired.Enabled {
+			t.Fatalf("stored initial Component = %#v", component.Record)
+		}
+	}
+	agentID := ids.NewAt(ids.KindAgent, now, 708)
 	assignedAt := now.Add(time.Second)
 	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 1, assignedAt); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
@@ -120,4 +147,27 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	if err != nil || ready.Record.ProvisioningState != EnvironmentProvisioningReady {
 		t.Fatalf("ready Environment = %#v, %v", ready.Record, err)
 	}
+}
+
+func environmentCreationTestComponents(t *testing.T, environmentID string, now time.Time) []ComponentRecord {
+	t.Helper()
+	kinds := []core.ComponentKind{
+		core.ComponentKindIngressCaddy,
+		core.ComponentKindEdgeCloudflare,
+	}
+	components := make([]ComponentRecord, 0, len(kinds))
+	for index, kind := range kinds {
+		component, err := NewComponentRecord(core.Component{
+			ID:      ids.NewAt(ids.KindComponent, now, int64(706+index)),
+			Owner:   core.ComponentOwnerEnvironment,
+			OwnerID: environmentID,
+			Kind:    kind,
+			Enabled: false,
+		})
+		if err != nil {
+			t.Fatalf("NewComponentRecord() error = %v", err)
+		}
+		components = append(components, component)
+	}
+	return components
 }

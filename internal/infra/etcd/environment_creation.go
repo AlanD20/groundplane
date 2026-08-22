@@ -3,18 +3,21 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // CreateEnvironmentWithTask atomically publishes the provisioning
-// Environment, its indexes, the owning Task, active-operation record, queue
-// membership, and Task idempotency marker under Project/Tenant deletion fences.
+// Environment, its indexes, initial Components, the owning Task,
+// active-operation record, queue membership, and Task idempotency marker under
+// Project/Tenant deletion fences.
 func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	ctx context.Context,
 	volumeRoot string,
 	project Versioned[ProjectRecord],
 	poolRegistry Versioned[EnvironmentPoolRegistry],
 	record EnvironmentRecord,
+	components []ComponentRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -32,6 +35,9 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := ValidateEnvironmentVolumeDir(volumeRoot, project.Record, record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateInitialEnvironmentComponents(record.ID, components); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if poolRegistry.Revision < 0 || poolRegistry.ReadRevision < poolRegistry.Revision ||
@@ -83,6 +89,14 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(poolRegistryValue)
+	componentValues := make([][]byte, len(components))
+	for index := range components {
+		componentValues[index], err = encodeComponentRecord(components[index])
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clear(componentValues[index])
+	}
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -108,6 +122,13 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
 		{Key: environmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
 	}
+	for _, component := range components {
+		conditions = append(conditions,
+			Condition{Key: componentKey(component.Desired.ID)},
+			Condition{Key: componentEnvironmentOwnerKey(record.ID, component.Desired.ID)},
+			Condition{Key: componentEnvironmentKindKey(record.ID, component.Desired.Kind)},
+		)
+	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
@@ -118,10 +139,25 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Type: MutationPut, Key: environmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 	}
+	for index, component := range components {
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
+			Mutation{
+				Type:  MutationPut,
+				Key:   componentEnvironmentOwnerKey(record.ID, component.Desired.ID),
+				Value: []byte(component.Desired.ID),
+			},
+			Mutation{
+				Type:  MutationPut,
+				Key:   componentEnvironmentKindKey(record.ID, component.Desired.Kind),
+				Value: []byte(component.Desired.ID),
+			},
+		)
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
-		classifyEnvironmentCreateConflict(project, poolRegistry, task.OperationID),
+		classifyEnvironmentCreateConflict(project, poolRegistry, components, task.OperationID),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -133,13 +169,52 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
+func validateInitialEnvironmentComponents(environmentID string, components []ComponentRecord) error {
+	if len(components) != 2 {
+		return errs.New(errs.KindValidationFailed, "Environment creation requires exactly two initial Components")
+	}
+	wantKinds := map[core.ComponentKind]bool{
+		core.ComponentKindIngressCaddy:   false,
+		core.ComponentKindEdgeCloudflare: false,
+	}
+	seenIDs := make(map[string]struct{}, len(components))
+	for _, component := range components {
+		if err := validateComponentRecord(component); err != nil {
+			return err
+		}
+		if component.Desired.Owner != core.ComponentOwnerEnvironment || component.Desired.OwnerID != environmentID {
+			return errs.New(errs.KindValidationFailed, "Initial Component owner must be the new Environment")
+		}
+		if component.Desired.Enabled || len(component.Desired.Config) != 0 {
+			return errs.New(errs.KindValidationFailed, "Initial Components must have empty disabled desired state")
+		}
+		if len(component.Runtime.GeneratedServices) != 0 || component.Runtime.PinnedIPv4 != "" ||
+			component.Runtime.Healthy {
+			return errs.New(errs.KindValidationFailed, "Initial Components must have empty runtime state")
+		}
+		if _, exists := seenIDs[component.Desired.ID]; exists {
+			return errs.New(errs.KindValidationFailed, "Initial Component IDs must be unique")
+		}
+		seenIDs[component.Desired.ID] = struct{}{}
+		if seen, exists := wantKinds[component.Desired.Kind]; !exists || seen {
+			return errs.New(
+				errs.KindValidationFailed,
+				"Initial Component kinds must be unique Caddy and Cloudflare singletons",
+			)
+		}
+		wantKinds[component.Desired.Kind] = true
+	}
+	return nil
+}
+
 func classifyEnvironmentCreateConflict(
 	project Versioned[ProjectRecord],
 	poolRegistry Versioned[EnvironmentPoolRegistry],
+	components []ComponentRecord,
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 12 {
+		if len(values) != 12+(3*len(components)) {
 			return errs.New(errs.KindInternal, "Environment creation compare evidence is incomplete")
 		}
 		if values[2] != nil {
@@ -183,6 +258,15 @@ func classifyEnvironmentCreateConflict(
 		if (poolRegistry.Revision == 0 && values[11] != nil) ||
 			(poolRegistry.Revision > 0 && (values[11] == nil || values[11].ModRevision != poolRegistry.Revision)) {
 			return stateConflict("environment pool registry", "global")
+		}
+		for index := range components {
+			offset := 12 + (index * 3)
+			if values[offset] != nil || values[offset+1] != nil {
+				return errs.New(errs.KindStateConflict, "Component stable identity is already in use")
+			}
+			if values[offset+2] != nil {
+				return errs.New(errs.KindInternal, "Environment creation collided with Component singleton state")
+			}
 		}
 		return stateConflict("environment", "creation")
 	}

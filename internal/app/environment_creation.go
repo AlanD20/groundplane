@@ -14,6 +14,7 @@ import (
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -35,6 +36,7 @@ type environmentCreationRepository interface {
 		etcd.Versioned[etcd.ProjectRecord],
 		etcd.Versioned[etcd.EnvironmentPoolRegistry],
 		etcd.EnvironmentRecord,
+		[]etcd.ComponentRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -250,6 +252,10 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	components, err := newInitialEnvironmentComponents(environment.ID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	task, err := newEnvironmentCreationTask(environment, taskID, idempotencyKey, now, service.volumeRoot)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -274,6 +280,7 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		project,
 		poolRegistry,
 		environment,
+		components,
 		task,
 		marker,
 	)
@@ -295,6 +302,27 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation resolution is invalid")
 	}
 	return cloneIdempotencyResponse(response), nil
+}
+
+func newInitialEnvironmentComponents(environmentID string) ([]etcd.ComponentRecord, error) {
+	components := make([]etcd.ComponentRecord, 0, 2)
+	for _, kind := range []core.ComponentKind{
+		core.ComponentKindIngressCaddy,
+		core.ComponentKindEdgeCloudflare,
+	} {
+		record, err := etcd.NewComponentRecord(core.Component{
+			ID:      ids.New(ids.KindComponent),
+			Owner:   core.ComponentOwnerEnvironment,
+			OwnerID: environmentID,
+			Kind:    kind,
+			Enabled: false,
+		})
+		if err != nil {
+			return nil, err
+		}
+		components = append(components, record)
+	}
+	return components, nil
 }
 
 func newEnvironmentCreationTask(
