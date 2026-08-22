@@ -77,7 +77,13 @@ func (c *Client) ShowProject(ctx context.Context, id string) (apiTypes.Project, 
 	if err != nil {
 		return apiTypes.Project{}, generatedCallError(ctx, http.MethodGet, path, err)
 	}
-	if err := generatedResponseError(http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK); err != nil {
+	if err := generatedResponseError(
+		http.MethodGet,
+		path,
+		response.HTTPResponse,
+		response.Body,
+		http.StatusOK,
+	); err != nil {
 		return apiTypes.Project{}, err
 	}
 	return generatedProjectBody(http.MethodGet, path, response.Body, response.JSON200)
@@ -116,7 +122,13 @@ func (c *Client) EditProject(ctx context.Context, id string, input apiTypes.Proj
 	if err != nil {
 		return apiTypes.Project{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
-	if err := generatedResponseError(http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusOK); err != nil {
+	if err := generatedResponseError(
+		http.MethodPatch,
+		path,
+		response.HTTPResponse,
+		response.Body,
+		http.StatusOK,
+	); err != nil {
 		return apiTypes.Project{}, err
 	}
 	return generatedProjectBody(http.MethodPatch, path, response.Body, response.JSON200)
@@ -134,7 +146,13 @@ func (c *Client) RenameProject(ctx context.Context, id, slug string) (apiTypes.P
 	if err != nil {
 		return apiTypes.Project{}, generatedCallError(ctx, http.MethodPost, path, err)
 	}
-	if err := generatedResponseError(http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusOK); err != nil {
+	if err := generatedResponseError(
+		http.MethodPost,
+		path,
+		response.HTTPResponse,
+		response.Body,
+		http.StatusOK,
+	); err != nil {
 		return apiTypes.Project{}, err
 	}
 	return generatedProjectBody(http.MethodPost, path, response.Body, response.JSON200)
