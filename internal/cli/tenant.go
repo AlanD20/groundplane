@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"net/http"
-
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
@@ -18,7 +16,17 @@ func newTenantCmd() *cobra.Command {
 		Short: "List tenants",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/tenants", nil)
+			app := fromContext(cmd)
+			page, err := app.Client.ListTenants(cmd.Context(), 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, tenant := range page.Items {
+				items[index] = tenantFields(tenant)
+			}
+			headers, rows := tabulateVia(app, items)
+			return app.Out.Render(headers, rows, page)
 		},
 	})
 
@@ -31,7 +39,11 @@ func newTenantCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runShow(cmd, "/api/v1/tenants/"+id)
+			tenant, err := fromContext(cmd).Client.ShowTenant(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderTenant(cmd, tenant)
 		},
 	})
 
@@ -41,14 +53,18 @@ func newTenantCmd() *cobra.Command {
 		Short: "Create a tenant",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body := map[string]string{"slug": args[0]}
+			body := apiTypes.TenantCreate{Slug: args[0]}
 			if name != "" {
-				body["name"] = name
+				body.Name = &name
 			}
 			if description != "" {
-				body["description"] = description
+				body.Description = &description
 			}
-			return runCreate(cmd, "/api/v1/tenants", body)
+			tenant, err := fromContext(cmd).Client.CreateTenant(cmd.Context(), body)
+			if err != nil {
+				return err
+			}
+			return renderTenant(cmd, tenant)
 		},
 	}
 	create.Flags().StringVar(&name, "name", "", "display name (defaults to the slug)")
@@ -65,13 +81,18 @@ func newTenantCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runPatch(
-				cmd,
-				"/api/v1/tenants/"+id,
-				changedStringFields(cmd, map[string]string{
-					"name": editName, "description": editDescription,
-				}),
-			)
+			body := apiTypes.TenantEdit{}
+			if cmd.Flags().Changed("name") {
+				body.Name = &editName
+			}
+			if cmd.Flags().Changed("description") {
+				body.Description = &editDescription
+			}
+			tenant, err := fromContext(cmd).Client.EditTenant(cmd.Context(), id, body)
+			if err != nil {
+				return err
+			}
+			return renderTenant(cmd, tenant)
 		},
 	}
 	edit.Flags().StringVar(&editName, "name", "", "new display name")
@@ -88,11 +109,11 @@ func newTenantCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runPostUpdate(
-				cmd,
-				"/api/v1/tenants/"+id+"/rename",
-				map[string]string{"slug": newSlug},
-			)
+			tenant, err := fromContext(cmd).Client.RenameTenant(cmd.Context(), id, newSlug)
+			if err != nil {
+				return err
+			}
+			return renderTenant(cmd, tenant)
 		},
 	}
 	rename.Flags().StringVar(&newSlug, "slug", "", "new slug (globally unique)")
@@ -123,15 +144,8 @@ func resolveTenantTarget(cmd *cobra.Command, argument string) (string, error) {
 	}
 	cursor := ""
 	for {
-		var page apiTypes.Page[apiTypes.Tenant]
-		request := app.Client.NewRequest(
-			http.MethodGet,
-			"/api/v1/tenants",
-			map[string]string{"limit": "200", "cursor": cursor},
-			nil,
-			http.StatusOK,
-		)
-		if err := app.Client.Do(cmd.Context(), request, &page); err != nil {
+		page, err := app.Client.ListTenants(cmd.Context(), 200, cursor)
+		if err != nil {
 			return "", err
 		}
 		for _, tenant := range page.Items {
@@ -143,5 +157,17 @@ func resolveTenantTarget(cmd *cobra.Command, argument string) (string, error) {
 			return "", errs.Newf(errs.KindTenantNotFound, "tenant slug %q was not found", argument)
 		}
 		cursor = page.NextCursor
+	}
+}
+
+func renderTenant(cmd *cobra.Command, tenant apiTypes.Tenant) error {
+	item := tenantFields(tenant)
+	fields, values := fieldsOfVia(item)
+	return fromContext(cmd).Out.RenderOne(fields, values, tenant)
+}
+
+func tenantFields(tenant apiTypes.Tenant) map[string]any {
+	return map[string]any{
+		"id": tenant.ID, "slug": tenant.Slug, "name": tenant.Name, "description": tenant.Description,
 	}
 }

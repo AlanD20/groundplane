@@ -113,6 +113,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		routePolicies:         make(map[string]routePolicy),
 	}
 	s.routes()
+	s.registerTenants()
 	s.registerHost()
 	return s
 }
@@ -135,12 +136,9 @@ func (s *Server) routes() {
 	// is never loaded from a generated file or maintained as a parallel route table.
 	mux.HandleFunc("GET /openapi.json", s.openAPI)
 
-	// tenant — destructive delete is a task (api-cli.md's resource map)
-	mux.HandleFunc("GET /api/v1/tenants", s.tenantList)
-	s.jsonRoute("POST /api/v1/tenants", s.tenantCreate)
-	mux.HandleFunc("GET /api/v1/tenants/{id}", s.tenantShow)
-	s.jsonRoute("PATCH /api/v1/tenants/{id}", s.tenantEdit)
-	s.jsonRoute("POST /api/v1/tenants/{id}/rename", s.tenantRename)
+	// Tenant reads and synchronous mutations are typed Huma operations.
+	// Destructive delete remains a Task route until the accepted parent-cascade
+	// contract has a durable executor.
 	mux.HandleFunc("DELETE /api/v1/tenants/{id}", s.acceptTask)
 
 	// project (?kind=tenant|backing)

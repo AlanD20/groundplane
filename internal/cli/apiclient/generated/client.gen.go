@@ -4,6 +4,7 @@
 package generated
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Error defines model for Error.
@@ -82,6 +85,88 @@ type HostResource struct {
 	Used    string `json:"used"`
 	UsedPct int64  `json:"used_pct"`
 }
+
+// Tenant defines model for Tenant.
+type Tenant struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Tenant.json
+	Schema      *string `json:"$schema,omitempty"`
+	Description string  `json:"description"`
+	Id          string  `json:"id"`
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+}
+
+// TenantCreate defines model for TenantCreate.
+type TenantCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TenantCreate.json
+	Schema      *string `json:"$schema,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Slug        string  `json:"slug"`
+}
+
+// TenantEdit defines model for TenantEdit.
+type TenantEdit struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TenantEdit.json
+	Schema      *string `json:"$schema,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+}
+
+// TenantPage defines model for TenantPage.
+type TenantPage struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TenantPage.json
+	Schema     *string   `json:"$schema,omitempty"`
+	Items      *[]Tenant `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
+}
+
+// TenantRename defines model for TenantRename.
+type TenantRename struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/TenantRename.json
+	Schema *string `json:"$schema,omitempty"`
+	Slug   string  `json:"slug"`
+}
+
+// TenantListParams defines parameters for TenantList.
+type TenantListParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// TenantCreateParams defines parameters for TenantCreate.
+type TenantCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// TenantEditParams defines parameters for TenantEdit.
+type TenantEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// TenantRenameParams defines parameters for TenantRename.
+type TenantRenameParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
+type TenantCreateJSONRequestBody = TenantCreate
+
+// TenantEditJSONRequestBody defines body for TenantEdit for application/json ContentType.
+type TenantEditJSONRequestBody = TenantEdit
+
+// TenantRenameJSONRequestBody defines body for TenantRename for application/json ContentType.
+type TenantRenameJSONRequestBody = TenantRename
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -161,6 +246,58 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantList List tenants
+	//
+	// Corresponds with GET /tenants (the `TenantList` operationId).
+	TenantList(ctx context.Context, params *TenantListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantCreateWithBody Create a tenant
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /tenants (the `TenantCreate` operationId).
+	TenantCreateWithBody(ctx context.Context, params *TenantCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantCreate Create a tenant
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /tenants (the `TenantCreate` operationId).
+	TenantCreate(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantShow Show a tenant
+	//
+	// Corresponds with GET /tenants/{id} (the `TenantShow` operationId).
+	TenantShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantEditWithBody Edit a tenant
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+	TenantEditWithBody(ctx context.Context, id string, params *TenantEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantEdit Edit a tenant
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+	TenantEdit(ctx context.Context, id string, params *TenantEditParams, body TenantEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantRenameWithBody Rename a tenant slug
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+	TenantRenameWithBody(ctx context.Context, id string, params *TenantRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantRename Rename a tenant slug
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+	TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // HostShow Show host health
@@ -168,6 +305,138 @@ type ClientInterface interface {
 // Corresponds with GET /host (the `HostShow` operationId).
 func (c *Client) HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHostShowRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantList List tenants
+//
+// Corresponds with GET /tenants (the `TenantList` operationId).
+func (c *Client) TenantList(ctx context.Context, params *TenantListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantCreateWithBody Create a tenant
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /tenants (the `TenantCreate` operationId).
+func (c *Client) TenantCreateWithBody(ctx context.Context, params *TenantCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantCreate Create a tenant
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /tenants (the `TenantCreate` operationId).
+func (c *Client) TenantCreate(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantShow Show a tenant
+//
+// Corresponds with GET /tenants/{id} (the `TenantShow` operationId).
+func (c *Client) TenantShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantEditWithBody Edit a tenant
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+func (c *Client) TenantEditWithBody(ctx context.Context, id string, params *TenantEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantEdit Edit a tenant
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+func (c *Client) TenantEdit(ctx context.Context, id string, params *TenantEditParams, body TenantEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantRenameWithBody Rename a tenant slug
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+func (c *Client) TenantRenameWithBody(ctx context.Context, id string, params *TenantRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantRenameRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantRename Rename a tenant slug
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantRenameRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +469,279 @@ func NewHostShowRequest(server string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTenantListRequest constructs an http.Request for the TenantList method
+func NewTenantListRequest(server string, params *TenantListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTenantCreateRequest calls the generic TenantCreate builder with application/json body
+func NewTenantCreateRequest(server string, params *TenantCreateParams, body TenantCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTenantCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewTenantCreateRequestWithBody constructs an http.Request for the TenantCreate method, with any body, and a specified content type
+func NewTenantCreateRequestWithBody(server string, params *TenantCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewTenantShowRequest constructs an http.Request for the TenantShow method
+func NewTenantShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTenantEditRequest calls the generic TenantEdit builder with application/json body
+func NewTenantEditRequest(server string, id string, params *TenantEditParams, body TenantEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTenantEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewTenantEditRequestWithBody constructs an http.Request for the TenantEdit method, with any body, and a specified content type
+func NewTenantEditRequestWithBody(server string, id string, params *TenantEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewTenantRenameRequest calls the generic TenantRename builder with application/json body
+func NewTenantRenameRequest(server string, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTenantRenameRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewTenantRenameRequestWithBody constructs an http.Request for the TenantRename method, with any body, and a specified content type
+func NewTenantRenameRequestWithBody(server string, id string, params *TenantRenameParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants/%s/rename", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -255,6 +797,62 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HostShowResponse, error)
+
+	// TenantListWithResponse List tenants
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tenants (the `TenantList` operationId).
+	TenantListWithResponse(ctx context.Context, params *TenantListParams, reqEditors ...RequestEditorFn) (*TenantListResponse, error)
+
+	// TenantCreateWithBodyWithResponse Create a tenant
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tenants (the `TenantCreate` operationId).
+	TenantCreateWithBodyWithResponse(ctx context.Context, params *TenantCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantCreateResponse, error)
+
+	// TenantCreateWithResponse Create a tenant
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tenants (the `TenantCreate` operationId).
+	TenantCreateWithResponse(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantCreateResponse, error)
+
+	// TenantShowWithResponse Show a tenant
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tenants/{id} (the `TenantShow` operationId).
+	TenantShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TenantShowResponse, error)
+
+	// TenantEditWithBodyWithResponse Edit a tenant
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+	TenantEditWithBodyWithResponse(ctx context.Context, id string, params *TenantEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantEditResponse, error)
+
+	// TenantEditWithResponse Edit a tenant
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+	TenantEditWithResponse(ctx context.Context, id string, params *TenantEditParams, body TenantEditJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantEditResponse, error)
+
+	// TenantRenameWithBodyWithResponse Rename a tenant slug
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+	TenantRenameWithBodyWithResponse(ctx context.Context, id string, params *TenantRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
+
+	// TenantRenameWithResponse Rename a tenant slug
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+	TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
 }
 
 type HostShowResponse struct {
@@ -305,6 +903,267 @@ func (r HostShowResponse) ContentType() string {
 	return ""
 }
 
+type TenantListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TenantPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TenantListResponse) GetJSON200() *TenantPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TenantListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TenantListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TenantListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TenantListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TenantListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// TenantCreateResponse201Headers the declared response headers of an HTTP 201 response for TenantCreate
+type TenantCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type TenantCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Tenant
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *TenantCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r TenantCreateResponse) GetJSON201() *Tenant {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TenantCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TenantCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TenantCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TenantCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TenantCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TenantShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Tenant
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TenantShowResponse) GetJSON200() *Tenant {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TenantShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TenantShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TenantShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TenantShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TenantShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// TenantEditResponse200Headers the declared response headers of an HTTP 200 response for TenantEdit
+type TenantEditResponse200Headers struct {
+	ContentType *string
+}
+
+type TenantEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Tenant
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *TenantEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TenantEditResponse) GetJSON200() *Tenant {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TenantEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TenantEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TenantEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TenantEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TenantEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// TenantRenameResponse200Headers the declared response headers of an HTTP 200 response for TenantRename
+type TenantRenameResponse200Headers struct {
+	ContentType *string
+}
+
+type TenantRenameResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Tenant
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *TenantRenameResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TenantRenameResponse) GetJSON200() *Tenant {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TenantRenameResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TenantRenameResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TenantRenameResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TenantRenameResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TenantRenameResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // HostShowWithResponse Show host health
 //
 // Returns a wrapper object for the known response body format(s).
@@ -316,6 +1175,110 @@ func (c *ClientWithResponses) HostShowWithResponse(ctx context.Context, reqEdito
 		return nil, err
 	}
 	return ParseHostShowResponse(rsp)
+}
+
+// TenantListWithResponse List tenants
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tenants (the `TenantList` operationId).
+func (c *ClientWithResponses) TenantListWithResponse(ctx context.Context, params *TenantListParams, reqEditors ...RequestEditorFn) (*TenantListResponse, error) {
+	rsp, err := c.TenantList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantListResponse(rsp)
+}
+
+// TenantCreateWithBodyWithResponse Create a tenant
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tenants (the `TenantCreate` operationId).
+func (c *ClientWithResponses) TenantCreateWithBodyWithResponse(ctx context.Context, params *TenantCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantCreateResponse, error) {
+	rsp, err := c.TenantCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantCreateResponse(rsp)
+}
+
+// TenantCreateWithResponse Create a tenant
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tenants (the `TenantCreate` operationId).
+func (c *ClientWithResponses) TenantCreateWithResponse(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantCreateResponse, error) {
+	rsp, err := c.TenantCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantCreateResponse(rsp)
+}
+
+// TenantShowWithResponse Show a tenant
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tenants/{id} (the `TenantShow` operationId).
+func (c *ClientWithResponses) TenantShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TenantShowResponse, error) {
+	rsp, err := c.TenantShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantShowResponse(rsp)
+}
+
+// TenantEditWithBodyWithResponse Edit a tenant
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+func (c *ClientWithResponses) TenantEditWithBodyWithResponse(ctx context.Context, id string, params *TenantEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantEditResponse, error) {
+	rsp, err := c.TenantEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantEditResponse(rsp)
+}
+
+// TenantEditWithResponse Edit a tenant
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /tenants/{id} (the `TenantEdit` operationId).
+func (c *ClientWithResponses) TenantEditWithResponse(ctx context.Context, id string, params *TenantEditParams, body TenantEditJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantEditResponse, error) {
+	rsp, err := c.TenantEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantEditResponse(rsp)
+}
+
+// TenantRenameWithBodyWithResponse Rename a tenant slug
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+func (c *ClientWithResponses) TenantRenameWithBodyWithResponse(ctx context.Context, id string, params *TenantRenameParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error) {
+	rsp, err := c.TenantRenameWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantRenameResponse(rsp)
+}
+
+// TenantRenameWithResponse Rename a tenant slug
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
+func (c *ClientWithResponses) TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error) {
+	rsp, err := c.TenantRename(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantRenameResponse(rsp)
 }
 
 // ParseHostShowResponse parses an HTTP response from a HostShowWithResponse call
@@ -346,6 +1309,210 @@ func ParseHostShowResponse(rsp *http.Response) (*HostShowResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseTenantListResponse parses an HTTP response from a TenantListWithResponse call
+func ParseTenantListResponse(rsp *http.Response) (*TenantListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TenantListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TenantPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTenantCreateResponse parses an HTTP response from a TenantCreateWithResponse call
+func ParseTenantCreateResponse(rsp *http.Response) (*TenantCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TenantCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Tenant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers TenantCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseTenantShowResponse parses an HTTP response from a TenantShowWithResponse call
+func ParseTenantShowResponse(rsp *http.Response) (*TenantShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TenantShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Tenant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTenantEditResponse parses an HTTP response from a TenantEditWithResponse call
+func ParseTenantEditResponse(rsp *http.Response) (*TenantEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TenantEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Tenant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers TenantEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseTenantRenameResponse parses an HTTP response from a TenantRenameWithResponse call
+func ParseTenantRenameResponse(rsp *http.Response) (*TenantRenameResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TenantRenameResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Tenant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers TenantRenameResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

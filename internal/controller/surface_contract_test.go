@@ -15,8 +15,7 @@ import (
 func TestScaffoldRoutesMatchNormalizedHumanContract(t *testing.T) {
 	t.Parallel()
 
-	server := &Server{Mux: http.NewServeMux()}
-	server.routes()
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 
 	present := []struct {
 		method  string

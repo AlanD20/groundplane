@@ -30,6 +30,20 @@ type TenantCreate struct {
 	Description *string `json:"description,omitempty"`
 }
 
+type TenantEdit struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+}
+
+type TenantRename struct {
+	Slug string `json:"slug"`
+}
+
+type TenantPage struct {
+	Items      []Tenant `json:"items"`
+	NextCursor string   `json:"next_cursor,omitempty"`
+}
+
 type Project struct {
 	ID          string `json:"id"`
 	TenantID    string `json:"tenant_id,omitempty"`

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strconv"
 	"unicode/utf8"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type TenantReader interface {
@@ -32,82 +34,251 @@ type TenantChanger interface {
 	RenameTenant(context.Context, string, hierarchy.RenameTenantInput, string) (etcd.IdempotencyResponse, error)
 }
 
-func (s *Server) tenantCreate(w http.ResponseWriter, r *http.Request) {
-	if s.tenantMutations == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Tenant mutator is not configured"))
+type tenantListInput struct {
+	Limit  int    `query:"limit" required:"false"`
+	Cursor string `query:"cursor" required:"false"`
+}
+
+type tenantShowInput struct {
+	ID string `path:"id"`
+}
+
+type tenantCreateInput struct {
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type tenantEditInput struct {
+	ID             string `path:"id"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type tenantRenameInput struct {
+	ID             string `path:"id"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type tenantOutput struct {
+	Body apiTypes.Tenant
+}
+
+type tenantPageOutput struct {
+	Body apiTypes.TenantPage
+}
+
+type tenantMutationOutput struct {
+	Status      int
+	ContentType string `header:"Content-Type"`
+	Body        func(huma.Context)
+}
+
+func (s *Server) registerTenants() {
+	tenantSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.Tenant](),
+		true,
+		"Tenant",
+	)
+	registerTenantMutation[apiTypes.TenantCreate](
+		s,
+		huma.Operation{
+			OperationID: "tenant.create", Method: http.MethodPost, Path: "/tenants",
+			Summary: "Create a tenant", Tags: []string{"Tenant"}, DefaultStatus: http.StatusCreated,
+			Middlewares: huma.Middlewares{s.rejectTenantMutationQuery},
+		},
+		tenantSchema,
+		s.createTenant,
+		"TenantCreate",
+	)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "tenant.list", Method: http.MethodGet, Path: "/tenants",
+		Summary: "List tenants", Tags: []string{"Tenant"},
+		Middlewares: huma.Middlewares{s.validateTenantListQuery},
+	}, s.listTenants)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "tenant.show", Method: http.MethodGet, Path: "/tenants/{id}",
+		Summary: "Show a tenant", Tags: []string{"Tenant"},
+		Middlewares: huma.Middlewares{s.rejectTenantMutationQuery},
+	}, s.showTenant)
+	registerTenantMutation[apiTypes.TenantEdit](
+		s,
+		huma.Operation{
+			OperationID: "tenant.edit", Method: http.MethodPatch, Path: "/tenants/{id}",
+			Summary: "Edit a tenant", Tags: []string{"Tenant"}, DefaultStatus: http.StatusOK,
+			Middlewares: huma.Middlewares{s.rejectTenantMutationQuery},
+		},
+		tenantSchema,
+		s.editTenant,
+		"TenantEdit",
+	)
+	registerTenantMutation[apiTypes.TenantRename](
+		s,
+		huma.Operation{
+			OperationID: "tenant.rename", Method: http.MethodPost, Path: "/tenants/{id}/rename",
+			Summary: "Rename a tenant slug", Tags: []string{"Tenant"}, DefaultStatus: http.StatusOK,
+			Middlewares: huma.Middlewares{s.rejectTenantMutationQuery},
+		},
+		tenantSchema,
+		s.renameTenant,
+		"TenantRename",
+	)
+
+	for _, pattern := range []string{
+		"POST /api/v1/tenants",
+		"PATCH /api/v1/tenants/{id}",
+		"POST /api/v1/tenants/{id}/rename",
+	} {
+		s.setRoutePolicy(pattern, routePolicy{body: jsonBody})
+	}
+}
+
+func registerTenantMutation[InputBody any, Input any](
+	s *Server,
+	operation huma.Operation,
+	tenantSchema *huma.Schema,
+	handler func(context.Context, *Input) (*tenantMutationOutput, error),
+	requestName string,
+) {
+	operation.SkipValidateBody = true
+	operation.RequestBody = &huma.RequestBody{
+		Required: true,
+		Content: map[string]*huma.MediaType{
+			"application/json": {
+				Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[InputBody](),
+					true,
+					requestName,
+				),
+			},
+		},
+	}
+	operation.Responses = map[string]*huma.Response{
+		strconv.Itoa(operation.DefaultStatus): {
+			Description: http.StatusText(operation.DefaultStatus),
+			Content: map[string]*huma.MediaType{
+				"application/json": {Schema: tenantSchema},
+			},
+		},
+	}
+	huma.Register(s.API, operation, handler)
+}
+
+func (s *Server) validateTenantListQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	query := requestURL.Query()
+	for key, values := range query {
+		if key != "limit" && key != "cursor" {
+			s.writeTenantHumaProblem(ctx, "Tenant pagination query is invalid")
+			return
+		}
+		if len(values) != 1 {
+			s.writeTenantHumaProblem(ctx, "Tenant pagination query is duplicated")
+			return
+		}
+	}
+	if raw := query.Get("limit"); raw != "" {
+		if _, err := strconv.Atoi(raw); err != nil {
+			s.writeTenantHumaProblem(ctx, "Tenant pagination limit is invalid")
+			return
+		}
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectTenantMutationQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeTenantHumaProblem(ctx, "Tenant request query is invalid")
 		return
 	}
-	input, err := decodeTenantCreate(r)
+	next(ctx)
+}
+
+func (s *Server) writeTenantHumaProblem(ctx huma.Context, detail string) {
+	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
+		s.Logger.Error("controller: write Tenant request problem", slog.Any("error", err))
+	}
+}
+
+func (s *Server) createTenant(ctx context.Context, request *tenantCreateInput) (*tenantMutationOutput, error) {
+	if s.tenantMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Tenant mutator is not configured")
+	}
+	defer clear(request.RawBody)
+	input, err := decodeTenantCreate(request.RawBody)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
 	response, err := s.tenantMutations.CreateTenant(
-		r.Context(),
+		ctx,
 		input,
-		r.Header.Get(idempotencyKeyHeader),
+		request.IdempotencyKey,
 	)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
-	w.Header().Set("Content-Type", response.ContentKind)
-	w.WriteHeader(response.Status)
-	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Tenant creation response", slog.Any("error", err))
-	}
+	return s.tenantMutationResponse(response, "create"), nil
 }
 
-func (s *Server) tenantEdit(w http.ResponseWriter, r *http.Request) {
+func (s *Server) editTenant(ctx context.Context, request *tenantEditInput) (*tenantMutationOutput, error) {
 	if s.tenantChanges == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Tenant changer is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Tenant changer is not configured")
 	}
-	input, err := decodeTenantEdit(r)
+	defer clear(request.RawBody)
+	input, err := decodeTenantEdit(request.RawBody)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
 	response, err := s.tenantChanges.EditTenant(
-		r.Context(), r.PathValue("id"), input, r.Header.Get(idempotencyKeyHeader),
+		ctx, request.ID, input, request.IdempotencyKey,
 	)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
-	s.writeTenantMutationResponse(w, response, "edit")
+	return s.tenantMutationResponse(response, "edit"), nil
 }
 
-func (s *Server) tenantRename(w http.ResponseWriter, r *http.Request) {
+func (s *Server) renameTenant(ctx context.Context, request *tenantRenameInput) (*tenantMutationOutput, error) {
 	if s.tenantChanges == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Tenant changer is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Tenant changer is not configured")
 	}
-	input, err := decodeTenantRename(r)
+	defer clear(request.RawBody)
+	input, err := decodeTenantRename(request.RawBody)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
 	response, err := s.tenantChanges.RenameTenant(
-		r.Context(), r.PathValue("id"), input, r.Header.Get(idempotencyKeyHeader),
+		ctx, request.ID, input, request.IdempotencyKey,
 	)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
-	s.writeTenantMutationResponse(w, response, "rename")
+	return s.tenantMutationResponse(response, "rename"), nil
 }
 
-func (s *Server) writeTenantMutationResponse(w http.ResponseWriter, response etcd.IdempotencyResponse, action string) {
-	w.Header().Set("Content-Type", response.ContentKind)
-	w.WriteHeader(response.Status)
-	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Tenant mutation response", "action", action, slog.Any("error", err))
+func (s *Server) tenantMutationResponse(
+	response etcd.IdempotencyResponse,
+	action string,
+) *tenantMutationOutput {
+	return &tenantMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, err := ctx.BodyWriter().Write(response.Body); err != nil && s.Logger != nil {
+				s.Logger.Error(
+					"controller: write Tenant mutation response",
+					"action",
+					action,
+					slog.Any("error", err),
+				)
+			}
+		},
 	}
 }
 
-func decodeTenantEdit(r *http.Request) (hierarchy.EditTenantInput, error) {
-	values, err := decodeTenantChangeBody(r, map[string]struct{}{"name": {}, "description": {}})
+func decodeTenantEdit(body []byte) (hierarchy.EditTenantInput, error) {
+	values, err := decodeTenantChangeBody(body, map[string]struct{}{"name": {}, "description": {}})
 	if err != nil {
 		return hierarchy.EditTenantInput{}, err
 	}
@@ -124,8 +295,8 @@ func decodeTenantEdit(r *http.Request) (hierarchy.EditTenantInput, error) {
 	return input, nil
 }
 
-func decodeTenantRename(r *http.Request) (hierarchy.RenameTenantInput, error) {
-	values, err := decodeTenantChangeBody(r, map[string]struct{}{"slug": {}})
+func decodeTenantRename(body []byte) (hierarchy.RenameTenantInput, error) {
+	values, err := decodeTenantChangeBody(body, map[string]struct{}{"slug": {}})
 	if err != nil {
 		return hierarchy.RenameTenantInput{}, err
 	}
@@ -136,15 +307,7 @@ func decodeTenantRename(r *http.Request) (hierarchy.RenameTenantInput, error) {
 	return input, nil
 }
 
-func decodeTenantChangeBody(r *http.Request, allowed map[string]struct{}) (map[string]string, error) {
-	if len(r.URL.Query()) != 0 {
-		return nil, errs.New(errs.KindMalformedRequest, "Tenant mutation query is invalid")
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, errs.Wrap(errs.KindMalformedRequest, err)
-	}
-	defer clear(body)
+func decodeTenantChangeBody(body []byte, allowed map[string]struct{}) (map[string]string, error) {
 	if !utf8.Valid(body) {
 		return nil, errs.New(errs.KindMalformedRequest, "Tenant mutation body is not valid UTF-8")
 	}
@@ -198,18 +361,7 @@ func decodeTenantChangeBody(r *http.Request, allowed map[string]struct{}) (map[s
 	return values, nil
 }
 
-func decodeTenantCreate(r *http.Request) (hierarchy.CreateTenantInput, error) {
-	if len(r.URL.Query()) != 0 {
-		return hierarchy.CreateTenantInput{}, errs.New(
-			errs.KindMalformedRequest,
-			"Tenant creation query is invalid",
-		)
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return hierarchy.CreateTenantInput{}, errs.Wrap(errs.KindMalformedRequest, err)
-	}
-	defer clear(body)
+func decodeTenantCreate(body []byte) (hierarchy.CreateTenantInput, error) {
 	if !utf8.Valid(body) {
 		return hierarchy.CreateTenantInput{}, errs.New(
 			errs.KindMalformedRequest,
@@ -297,66 +449,38 @@ func tenantCreateJSONError(err error) error {
 	return errs.Wrap(errs.KindMalformedRequest, err)
 }
 
-func (s *Server) tenantList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listTenants(
+	ctx context.Context,
+	request *tenantListInput,
+) (*tenantPageOutput, error) {
 	if s.tenants == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Tenant reader is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Tenant reader is not configured")
 	}
-	request, err := tenantPageRequest(r)
+	page, err := s.tenants.ListTenants(
+		ctx,
+		hierarchy.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
+	)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
-	page, err := s.tenants.ListTenants(r.Context(), request)
-	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
-	}
-	response := apiTypes.Page[apiTypes.Tenant]{
+	response := apiTypes.TenantPage{
 		Items: make([]apiTypes.Tenant, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, stored := range page.Items {
 		response.Items[index] = tenantAPI(stored.Record)
 	}
-	s.writeTenantJSON(w, response)
+	return &tenantPageOutput{Body: response}, nil
 }
 
-func (s *Server) tenantShow(w http.ResponseWriter, r *http.Request) {
+func (s *Server) showTenant(ctx context.Context, request *tenantShowInput) (*tenantOutput, error) {
 	if s.tenants == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Tenant reader is not configured"))
-		return
+		return nil, errs.New(errs.KindInternal, "Tenant reader is not configured")
 	}
-	if len(r.URL.Query()) != 0 {
-		s.writeTenantProblem(w, errs.New(errs.KindMalformedRequest, "Tenant detail query is invalid"))
-		return
-	}
-	stored, err := s.tenants.GetTenant(r.Context(), r.PathValue("id"))
+	stored, err := s.tenants.GetTenant(ctx, request.ID)
 	if err != nil {
-		s.writeTenantProblem(w, err)
-		return
+		return nil, normalizeTenantError(err)
 	}
-	s.writeTenantJSON(w, tenantAPI(stored.Record))
-}
-
-func tenantPageRequest(r *http.Request) (hierarchy.PageRequest, error) {
-	query := r.URL.Query()
-	for key, values := range query {
-		if key != "limit" && key != "cursor" {
-			return hierarchy.PageRequest{}, errs.New(errs.KindMalformedRequest, "Tenant pagination query is invalid")
-		}
-		if len(values) != 1 {
-			return hierarchy.PageRequest{}, errs.New(errs.KindMalformedRequest, "Tenant pagination query is duplicated")
-		}
-	}
-	request := hierarchy.PageRequest{Cursor: query.Get("cursor")}
-	if raw := query.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil {
-			return hierarchy.PageRequest{}, errs.New(errs.KindMalformedRequest, "Tenant pagination limit is invalid")
-		}
-		request.Limit = limit
-	}
-	return request, nil
+	return &tenantOutput{Body: tenantAPI(stored.Record)}, nil
 }
 
 func tenantAPI(record core.Tenant) apiTypes.Tenant {
@@ -365,18 +489,10 @@ func tenantAPI(record core.Tenant) apiTypes.Tenant {
 	}
 }
 
-func (s *Server) writeTenantJSON(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(value); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write Tenant response", slog.Any("error", err))
-	}
-}
-
-func (s *Server) writeTenantProblem(w http.ResponseWriter, err error) {
+func normalizeTenantError(err error) error {
 	var domainError *errs.Error
 	if errors.As(err, &domainError) {
-		s.writeProblem(w, domainError)
-		return
+		return domainError
 	}
-	s.writeProblem(w, errs.Wrap(errs.KindInternal, err))
+	return errs.Wrap(errs.KindInternal, err)
 }
