@@ -27,6 +27,7 @@ const (
 	// --- conflict / in-flight ---
 	CodeDeployInFlight        Code = "deploy.in_flight"
 	CodeTaskNotRetryable      Code = "task.not_retryable"
+	CodeTaskNotAbortable      Code = "task.not_abortable"
 	CodeTaskRetryInFlight     Code = "task.retry_in_flight"
 	CodeSlugConflict          Code = "slug.conflict"
 	CodeNameConflict          Code = "name.conflict"
@@ -97,6 +98,7 @@ const (
 	KindRecoveryPointNotFound
 	KindDeployInFlight
 	KindTaskNotRetryable
+	KindTaskNotAbortable
 	KindTaskRetryInFlight
 	KindSlugConflict
 	KindNameConflict
@@ -156,6 +158,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindRecoveryPointNotFound:       {CodeRecoveryPointNotFound, ClassNotFound, 404},
 	KindDeployInFlight:              {CodeDeployInFlight, ClassConflict, 409},
 	KindTaskNotRetryable:            {CodeTaskNotRetryable, ClassConflict, 409},
+	KindTaskNotAbortable:            {CodeTaskNotAbortable, ClassConflict, 409},
 	KindTaskRetryInFlight:           {CodeTaskRetryInFlight, ClassConflict, 409},
 	KindSlugConflict:                {CodeSlugConflict, ClassConflict, 409},
 	KindNameConflict:                {CodeNameConflict, ClassConflict, 409},

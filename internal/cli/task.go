@@ -79,7 +79,12 @@ func newTaskCmd() *cobra.Command {
 		Short: "Retry a failed task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/tasks/"+target(fromContext(cmd), args[0])+"/retry", nil)
+			app := fromContext(cmd)
+			accepted, err := app.Client.RetryTask(cmd.Context(), target(app, args[0]))
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 
@@ -88,7 +93,12 @@ func newTaskCmd() *cobra.Command {
 		Short: "Abort an in-flight task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/tasks/"+target(fromContext(cmd), args[0])+"/abort", nil)
+			app := fromContext(cmd)
+			accepted, err := app.Client.AbortTask(cmd.Context(), target(app, args[0]))
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 

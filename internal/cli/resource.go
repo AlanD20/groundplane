@@ -152,6 +152,9 @@ func runActionMethod(cmd *cobra.Command, method, path string, body any) error {
 }
 
 func renderDispatchedTask(cmd *cobra.Command, accepted apiTypes.TaskAccepted) error {
+	if fromContext(cmd).Out.Format != clicommon.FormatTable {
+		return renderTaskAccepted(cmd, accepted)
+	}
 	_, err := fmt.Fprintf(
 		cmd.OutOrStdout(),
 		"task %s dispatched — `groundplane task show %s` to follow\n",

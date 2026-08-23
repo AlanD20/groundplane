@@ -57,6 +57,40 @@ func TestAttachTaskClaimAndAcknowledgementAdvanceProvisioningAtomically(t *testi
 	}
 }
 
+// Rationale: an Attach Task aborted before assignment must not leave its
+// owned Attach pending behind a terminal Task journal.
+func TestAttachTaskPendingAbortAtomicallyFailsProvisioning(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := newAttachTestStore()
+	scope := seedAttachScope(t, ctx, store)
+	attaches, err := NewAttachRepository(store)
+	if err != nil {
+		t.Fatalf("NewAttachRepository() error = %v", err)
+	}
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	record, facts := testPendingAttach(t, scope, 87, "abort-db", nil)
+	createTestAttach(t, ctx, attaches, scope, record, &facts)
+
+	aborted, err := tasks.AbortPendingTask(ctx, record.TaskID, record.CreatedAt.Add(time.Second))
+	if err != nil || aborted.Record.Status != TaskStatusAborted {
+		t.Fatalf("AbortPendingTask() = %#v, %v", aborted.Record, err)
+	}
+	failed, err := attaches.GetAttach(ctx, record.ID)
+	if err != nil || failed.Record.Status != core.AttachFailed || failed.Record.Operation != AttachOperationProvision ||
+		failed.Record.TaskID != record.TaskID || failed.Revision != aborted.Revision {
+		t.Fatalf("failed Attach/aborted Task = %#v/%#v, %v", failed, aborted, err)
+	}
+	replay, err := tasks.AbortPendingTask(ctx, record.TaskID, record.CreatedAt.Add(2*time.Second))
+	if err != nil || replay.Revision != aborted.Revision {
+		t.Fatalf("AbortPendingTask(replay) = %#v, %v", replay, err)
+	}
+}
+
 // Rationale: retry publication must replace the failed provisioning Task ownership atomically so the
 // sealed retry plan can reveal the same private Attach identity without an orphaned intermediate state.
 func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {

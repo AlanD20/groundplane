@@ -47,7 +47,7 @@ func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 	defer server.Close()
 
 	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "remove", "agt_1")
-	want := "task task_2 dispatched — `groundplane task show task_2` to follow\n"
+	want := "{\n  \"task_id\": \"task_2\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
 	}
@@ -67,7 +67,7 @@ func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
 	defer server.Close()
 
 	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "join")
-	want := "task task_join dispatched — `groundplane task show task_join` to follow\n"
+	want := "{\n  \"task_id\": \"task_join\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
 	}
@@ -325,7 +325,7 @@ func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
 	defer server.Close()
 
 	output := executeNoun(t, newServiceCmd(), server.URL, Scope{AsID: true}, "attach", "svc_1", "bks_1")
-	want := "task task_attach dispatched — `groundplane task show task_attach` to follow\n"
+	want := "{\n  \"task_id\": \"task_attach\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
 	}
@@ -345,7 +345,7 @@ func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
 	defer server.Close()
 
 	output := executeNoun(t, newTaskCmd(), server.URL, Scope{}, "retry", "task_1")
-	want := "task task_2 dispatched — `groundplane task show task_2` to follow\n"
+	want := "{\n  \"task_id\": \"task_2\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
 	}

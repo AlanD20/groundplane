@@ -178,3 +178,112 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 		t.Fatalf("ready Environment/completed Task = %#v/%#v, %v", ready, completed, err)
 	}
 }
+
+// Rationale: aborting before assignment must terminalize the Task and its
+// owned Environment together so the failed provisioning remains retryable.
+func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := newMemoryHierarchyStore()
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 718), Slug: "abort", Name: "Abort"}
+	if _, err := hierarchy.CreateTenant(ctx, tenant); err != nil {
+		t.Fatalf("CreateTenant() error = %v", err)
+	}
+	projectRecord := ProjectRecord{
+		ID: hierarchyTestID(ids.KindProject, 719), TenantID: tenant.ID,
+		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+	}
+	if _, err := hierarchy.CreateProject(ctx, projectRecord); err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	project, err := hierarchy.GetProject(ctx, projectRecord.ID)
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+
+	now := time.Date(2026, 8, 22, 18, 0, 0, 0, time.UTC)
+	task := validTaskRecord(now)
+	task.ID = ids.NewAt(ids.KindTask, now, 720)
+	task.OperationID = ids.NewAt(ids.KindOperation, now, 721)
+	task.Type = TaskCreate
+	task.Target = ids.NewAt(ids.KindEnvironment, now, 722)
+	task.IdempotencyKey = "environment-abort-source-key-0001"
+	task.Executor = TaskExecutorAgent
+	environment, err := NewProvisioningEnvironment(
+		environmentpath.DefaultVolumeRoot,
+		projectRecord,
+		task.Target,
+		"production",
+		"10.30.0.0/16",
+		task.ID,
+		now,
+	)
+	if err != nil {
+		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
+	}
+	marker := pendingTaskMarker(task)
+	marker.Locator = IdempotencyLocator{
+		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
+		Method: http.MethodPost, Route: "/environments", Key: task.IdempotencyKey,
+	}
+	poolRegistry, err := hierarchy.GetEnvironmentPoolRegistry(ctx)
+	if err != nil {
+		t.Fatalf("GetEnvironmentPoolRegistry() error = %v", err)
+	}
+	nextRegistry, _, err := poolRegistry.Record.Reserve(
+		netip.MustParsePrefix("10.0.0.0/8"), environment.ID, environment.NetworkPool,
+	)
+	if err != nil {
+		t.Fatalf("Reserve() error = %v", err)
+	}
+	poolRegistry.Record = nextRegistry
+	creation, err := hierarchy.CreateEnvironmentWithTask(
+		ctx,
+		environmentpath.DefaultVolumeRoot,
+		project,
+		poolRegistry,
+		environment,
+		environmentCreationTestComponents(t, environment.ID, now),
+		task,
+		marker,
+	)
+	if err != nil || creation.kind != idempotencyTransactionApplied {
+		t.Fatalf("CreateEnvironmentWithTask() = %#v, %v", creation, err)
+	}
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+
+	terminalAt := now.Add(time.Second)
+	aborted, err := tasks.AbortPendingTask(ctx, task.ID, terminalAt)
+	if err != nil || aborted.Record.Status != TaskStatusAborted {
+		t.Fatalf("AbortPendingTask() = %#v, %v", aborted.Record, err)
+	}
+	failed, err := hierarchy.GetEnvironment(ctx, environment.ID)
+	if err != nil || failed.Record.ProvisioningState != EnvironmentProvisioningFailed ||
+		failed.Record.CreateTaskID != task.ID || failed.Revision != aborted.Revision {
+		t.Fatalf("failed Environment/aborted Task = %#v/%#v, %v", failed, aborted, err)
+	}
+	replay, err := tasks.AbortPendingTask(ctx, task.ID, terminalAt.Add(time.Second))
+	if err != nil || replay.Revision != aborted.Revision {
+		t.Fatalf("AbortPendingTask(replay) = %#v, %v", replay, err)
+	}
+
+	retryAt := terminalAt.Add(2 * time.Second)
+	retryID := ids.NewAt(ids.KindTask, retryAt, 723)
+	retryMarker := pendingRetryMarker(aborted.Record, retryID, retryAt, "environment-abort-retry-key-0001")
+	if _, err := tasks.RetryTask(ctx, task.ID, retryID, retryMarker); err != nil {
+		t.Fatalf("RetryTask(aborted Environment) error = %v", err)
+	}
+	retrying, err := hierarchy.GetEnvironment(ctx, environment.ID)
+	if err != nil || retrying.Record.ProvisioningState != EnvironmentProvisioningProvisioning ||
+		retrying.Record.CreateTaskID != retryID {
+		t.Fatalf("retrying Environment = %#v, %v", retrying, err)
+	}
+}

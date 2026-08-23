@@ -833,6 +833,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
+	taskAborts, err := newTaskAbortService(tasks, agentRuntime.registry, controllerTaskRunner)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
+	}
 	hostname, err := os.Hostname()
 	if err != nil {
 		_ = containerManager.Close()
@@ -873,6 +879,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		AttachMutations:       attachMutations,
 		AttachFacts:           attachFactReads,
 		TaskMutations:         taskMutations,
+		TaskAborts:            taskAborts,
 		TenantMutations:       tenantMutations,
 		TenantChanges:         tenantChanges,
 		Console:               consoleAssets, Tasks: tasks,

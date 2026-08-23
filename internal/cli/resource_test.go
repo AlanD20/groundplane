@@ -1,29 +1,31 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func TestChangedStringFieldsIncludesOnlyExplicitFlags(t *testing.T) {
+// Rationale: asynchronous actions keep the concise follow-up hint for the
+// default TABLE format while JSON and YAML remain machine-readable.
+func TestRenderDispatchedTaskTableOutput(t *testing.T) {
 	t.Parallel()
 
-	command := &cobra.Command{Use: "edit"}
-	command.Flags().String("name", "", "")
-	command.Flags().String("description", "default", "")
-	if err := command.Flags().Set("name", ""); err != nil {
-		t.Fatalf("set name: %v", err)
-	}
+	var output bytes.Buffer
+	command := &cobra.Command{}
+	command.SetOut(&output)
+	command.SetContext(context.WithValue(context.Background(), appKey{}, &App{
+		Out: clicommon.NewWriter(clicommon.FormatTable, true, &output),
+	}))
 
-	fields := changedStringFields(command, map[string]string{
-		"name":        "",
-		"description": "default",
-	})
-	if len(fields) != 1 {
-		t.Fatalf("fields = %#v, want only explicitly changed name", fields)
-	}
-	if name, ok := fields["name"]; !ok || name != "" {
-		t.Fatalf("name = %q, present = %t; want an explicitly empty field", name, ok)
+	err := renderDispatchedTask(command, apiTypes.TaskAccepted{TaskID: "task_1"})
+	want := "task task_1 dispatched — `groundplane task show task_1` to follow\n"
+	if err != nil || output.String() != want {
+		t.Fatalf("render dispatched Task = %q, %v; want %q", output.String(), err, want)
 	}
 }

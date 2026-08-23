@@ -29,6 +29,7 @@ func TestKindCatalogIsCompleteAndExact(t *testing.T) {
 		KindRecoveryPointNotFound:       {CodeRecoveryPointNotFound, ClassNotFound, 404},
 		KindDeployInFlight:              {CodeDeployInFlight, ClassConflict, 409},
 		KindTaskNotRetryable:            {CodeTaskNotRetryable, ClassConflict, 409},
+		KindTaskNotAbortable:            {CodeTaskNotAbortable, ClassConflict, 409},
 		KindTaskRetryInFlight:           {CodeTaskRetryInFlight, ClassConflict, 409},
 		KindSlugConflict:                {CodeSlugConflict, ClassConflict, 409},
 		KindNameConflict:                {CodeNameConflict, ClassConflict, 409},

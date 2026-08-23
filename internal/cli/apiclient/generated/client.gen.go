@@ -1081,10 +1081,20 @@ type TaskListParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// TaskAbortParams defines parameters for TaskAbort.
+type TaskAbortParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // TaskEventsParams defines parameters for TaskEvents.
 type TaskEventsParams struct {
 	// LastEventID Canonical decimal Task-event sequence; absent or 0 replays the complete journal.
 	LastEventID *string `json:"Last-Event-ID,omitempty"`
+}
+
+// TaskRetryParams defines parameters for TaskRetry.
+type TaskRetryParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
 // TenantListParams defines parameters for TenantList.
@@ -1681,12 +1691,22 @@ type ClientInterface interface {
 	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
 	TaskShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// TaskAbort Abort an in-flight task
+	//
+	// Corresponds with POST /tasks/{id}/abort (the `TaskAbort` operationId).
+	TaskAbort(ctx context.Context, id string, params *TaskAbortParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// TaskEvents Stream durable Task events
 	//
 	// Replays and follows Task events using sequence-based Last-Event-ID resume.
 	//
 	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
 	TaskEvents(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskRetry Retry a failed task
+	//
+	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+	TaskRetry(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TenantList List tenants
 	//
@@ -2880,6 +2900,21 @@ func (c *Client) TaskShow(ctx context.Context, id string, reqEditors ...RequestE
 	return c.Client.Do(req)
 }
 
+// TaskAbort Abort an in-flight task
+//
+// Corresponds with POST /tasks/{id}/abort (the `TaskAbort` operationId).
+func (c *Client) TaskAbort(ctx context.Context, id string, params *TaskAbortParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskAbortRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // TaskEvents Stream durable Task events
 //
 // Replays and follows Task events using sequence-based Last-Event-ID resume.
@@ -2887,6 +2922,21 @@ func (c *Client) TaskShow(ctx context.Context, id string, reqEditors ...RequestE
 // Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
 func (c *Client) TaskEvents(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTaskEventsRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskRetry Retry a failed task
+//
+// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+func (c *Client) TaskRetry(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskRetryRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5883,6 +5933,53 @@ func NewTaskShowRequest(server string, id string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewTaskAbortRequest constructs an http.Request for the TaskAbort method
+func NewTaskAbortRequest(server string, id string, params *TaskAbortParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s/abort", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewTaskEventsRequest constructs an http.Request for the TaskEvents method
 func NewTaskEventsRequest(server string, id string, params *TaskEventsParams) (*http.Request, error) {
 	var err error
@@ -5926,6 +6023,53 @@ func NewTaskEventsRequest(server string, id string, params *TaskEventsParams) (*
 
 			req.Header.Set("Last-Event-ID", headerParam0)
 		}
+
+	}
+
+	return req, nil
+}
+
+// NewTaskRetryRequest constructs an http.Request for the TaskRetry method
+func NewTaskRetryRequest(server string, id string, params *TaskRetryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s/retry", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
 
 	}
 
@@ -7001,6 +7145,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
 	TaskShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TaskShowResponse, error)
 
+	// TaskAbortWithResponse Abort an in-flight task
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tasks/{id}/abort (the `TaskAbort` operationId).
+	TaskAbortWithResponse(ctx context.Context, id string, params *TaskAbortParams, reqEditors ...RequestEditorFn) (*TaskAbortResponse, error)
+
 	// TaskEventsWithResponse Stream durable Task events
 	//
 	// Replays and follows Task events using sequence-based Last-Event-ID resume.
@@ -7009,6 +7160,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
 	TaskEventsWithResponse(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*TaskEventsResponse, error)
+
+	// TaskRetryWithResponse Retry a failed task
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+	TaskRetryWithResponse(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error)
 
 	// TenantListWithResponse List tenants
 	//
@@ -9780,6 +9938,61 @@ func (r TaskShowResponse) ContentType() string {
 	return ""
 }
 
+// TaskAbortResponse202Headers the declared response headers of an HTTP 202 response for TaskAbort
+type TaskAbortResponse202Headers struct {
+	ContentType *string
+}
+
+type TaskAbortResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *TaskAbortResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r TaskAbortResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskAbortResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskAbortResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskAbortResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskAbortResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskAbortResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TaskEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9815,6 +10028,61 @@ func (r TaskEventsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r TaskEventsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// TaskRetryResponse202Headers the declared response headers of an HTTP 202 response for TaskRetry
+type TaskRetryResponse202Headers struct {
+	ContentType *string
+}
+
+type TaskRetryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *TaskRetryResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r TaskRetryResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskRetryResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskRetryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskRetryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskRetryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskRetryResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -11233,6 +11501,19 @@ func (c *ClientWithResponses) TaskShowWithResponse(ctx context.Context, id strin
 	return ParseTaskShowResponse(rsp)
 }
 
+// TaskAbortWithResponse Abort an in-flight task
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tasks/{id}/abort (the `TaskAbort` operationId).
+func (c *ClientWithResponses) TaskAbortWithResponse(ctx context.Context, id string, params *TaskAbortParams, reqEditors ...RequestEditorFn) (*TaskAbortResponse, error) {
+	rsp, err := c.TaskAbort(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskAbortResponse(rsp)
+}
+
 // TaskEventsWithResponse Stream durable Task events
 //
 // Replays and follows Task events using sequence-based Last-Event-ID resume.
@@ -11246,6 +11527,19 @@ func (c *ClientWithResponses) TaskEventsWithResponse(ctx context.Context, id str
 		return nil, err
 	}
 	return ParseTaskEventsResponse(rsp)
+}
+
+// TaskRetryWithResponse Retry a failed task
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tasks/{id}/retry (the `TaskRetry` operationId).
+func (c *ClientWithResponses) TaskRetryWithResponse(ctx context.Context, id string, params *TaskRetryParams, reqEditors ...RequestEditorFn) (*TaskRetryResponse, error) {
+	rsp, err := c.TaskRetry(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskRetryResponse(rsp)
 }
 
 // TenantListWithResponse List tenants
@@ -13471,6 +13765,52 @@ func ParseTaskShowResponse(rsp *http.Response) (*TaskShowResponse, error) {
 	return response, nil
 }
 
+// ParseTaskAbortResponse parses an HTTP response from a TaskAbortWithResponse call
+func ParseTaskAbortResponse(rsp *http.Response) (*TaskAbortResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskAbortResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers TaskAbortResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseTaskEventsResponse parses an HTTP response from a TaskEventsWithResponse call
 func ParseTaskEventsResponse(rsp *http.Response) (*TaskEventsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -13492,6 +13832,52 @@ func ParseTaskEventsResponse(rsp *http.Response) (*TaskEventsResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseTaskRetryResponse parses an HTTP response from a TaskRetryWithResponse call
+func ParseTaskRetryResponse(rsp *http.Response) (*TaskRetryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskRetryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers TaskRetryResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

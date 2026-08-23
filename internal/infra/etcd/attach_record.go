@@ -159,6 +159,17 @@ func MarkAttachProvisioning(record AttachRecord, taskID string) (AttachRecord, e
 	return record, nil
 }
 
+func AbortPendingAttachProvisioning(record AttachRecord, taskID string) (AttachRecord, error) {
+	if record.Status != core.AttachPending || record.Operation != AttachOperationProvision || record.TaskID != taskID {
+		return AttachRecord{}, attachStateError(record, "cannot abort pending provisioning")
+	}
+	record.Status = core.AttachFailed
+	if err := validateAttachRecord(record); err != nil {
+		return AttachRecord{}, err
+	}
+	return record, nil
+}
+
 func CompleteAttachProvisioning(record AttachRecord, taskID string, succeeded bool) (AttachRecord, error) {
 	if record.Status != core.AttachProvisioning || record.Operation != AttachOperationProvision ||
 		record.TaskID != taskID {

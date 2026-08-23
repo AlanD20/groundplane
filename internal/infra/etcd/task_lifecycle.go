@@ -1496,7 +1496,39 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
+		environmentCreation := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskCreate &&
+			validateStableID(ids.KindEnvironment, current.Record.Target) == nil
+		environmentRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
+			validateStableID(ids.KindEnvironment, current.Record.Target) == nil
+		zoneRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
+			validateStableID(ids.KindNetwork, current.Record.Target) == nil
 		if current.Record.Status == TaskStatusAborted {
+			if environmentCreation {
+				if err := repository.validateEnvironmentCreationReplay(
+					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
+			}
+			if environmentRemoval {
+				if err := repository.validateEnvironmentRemovalReplay(
+					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
+			}
+			if zoneRemoval {
+				if err := repository.validateZoneRemovalReplay(
+					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
+			}
+			if err := repository.validateAttachTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			if err := repository.validateSecretTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
@@ -1606,58 +1638,6 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(retentionValue)
 			return Versioned[TaskRecord]{}, err
 		}
-		secretChange, err := repository.prepareSecretTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			return Versioned[TaskRecord]{}, err
-		}
-		scriptChange, err := repository.prepareScriptTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clearSecretTaskChange(secretChange)
-			return Versioned[TaskRecord]{}, err
-		}
-		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clearSecretTaskChange(secretChange)
-			return Versioned[TaskRecord]{}, err
-		}
-		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			return Versioned[TaskRecord]{}, err
-		}
-		componentChange, err := repository.prepareComponentTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
-		)
-		if err != nil {
-			clear(terminalValue)
-			clear(markerValue)
-			clear(retentionValue)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearBackingZoneTaskChange(backingZoneChange)
-			return Versioned[TaskRecord]{}, err
-		}
 		conditions := []Condition{
 			{Key: taskKey(taskID), ModRevision: current.Revision},
 			{Key: taskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
@@ -1673,6 +1653,147 @@ func (repository *TaskRepository) AbortPendingTask(
 			{Type: MutationPut, Key: markerKey, Value: markerValue},
 			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
 			{Type: MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
+		}
+		var environmentValue []byte
+		if environmentCreation {
+			environmentCondition, environmentMutation, value, prepareErr :=
+				repository.prepareEnvironmentCreationAcknowledgement(
+					ctx,
+					current.Record,
+					TaskStatusAborted,
+					current.ReadRevision,
+				)
+			if prepareErr != nil {
+				clear(terminalValue)
+				clear(markerValue)
+				clear(retentionValue)
+				clear(taskRetentionValue)
+				return Versioned[TaskRecord]{}, prepareErr
+			}
+			environmentValue = value
+			conditions = append(conditions, environmentCondition)
+			mutations = append(mutations, environmentMutation)
+		}
+		if environmentRemoval {
+			environmentConditions, environmentMutations, prepareErr :=
+				repository.prepareEnvironmentRemovalAcknowledgement(
+					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+				)
+			if prepareErr != nil {
+				clear(terminalValue)
+				clear(markerValue)
+				clear(retentionValue)
+				clear(taskRetentionValue)
+				clear(environmentValue)
+				return Versioned[TaskRecord]{}, prepareErr
+			}
+			conditions = append(conditions, environmentConditions...)
+			mutations = append(mutations, environmentMutations...)
+		}
+		var zoneMutations []Mutation
+		if zoneRemoval {
+			zoneConditions, preparedZoneMutations, prepareErr := repository.prepareZoneRemovalAcknowledgement(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			)
+			if prepareErr != nil {
+				clear(terminalValue)
+				clear(markerValue)
+				clear(retentionValue)
+				clear(taskRetentionValue)
+				clear(environmentValue)
+				return Versioned[TaskRecord]{}, prepareErr
+			}
+			zoneMutations = preparedZoneMutations
+			conditions = append(conditions, zoneConditions...)
+			mutations = append(mutations, zoneMutations...)
+		}
+		attachChange, err := repository.prepareAttachTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			return Versioned[TaskRecord]{}, err
+		}
+		if attachChange.applies {
+			conditions = append(conditions, attachChange.conditions...)
+			mutations = append(mutations, attachChange.mutations...)
+		}
+		secretChange, err := repository.prepareSecretTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		scriptChange, err := repository.prepareScriptTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		componentChange, err := repository.prepareComponentTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			return Versioned[TaskRecord]{}, err
 		}
 		if secretChange.applies {
 			conditions = append(conditions, secretChange.conditions...)
@@ -1699,6 +1820,9 @@ func (repository *TaskRepository) AbortPendingTask(
 		clear(markerValue)
 		clear(retentionValue)
 		clear(taskRetentionValue)
+		clear(environmentValue)
+		clearMutationValues(zoneMutations)
+		clearAttachTaskChange(attachChange)
 		clearSecretTaskChange(secretChange)
 		clearRouteTaskChange(routeChange)
 		clearBackingZoneTaskChange(backingZoneChange)

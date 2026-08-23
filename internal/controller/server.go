@@ -9,12 +9,10 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -63,6 +61,7 @@ type Server struct {
 	attachMutations       AttachMutator
 	attachFacts           AttachFactReader
 	taskMutations         TaskRetrier
+	taskAborts            TaskAborter
 	console               fs.FS
 	tasks                 taskQueries
 	taskEventStreams      taskEventStreamOpener
@@ -101,6 +100,7 @@ type Options struct {
 	AttachMutations       AttachMutator
 	AttachFacts           AttachFactReader
 	TaskMutations         TaskRetrier
+	TaskAborts            TaskAborter
 	Console               fs.FS
 	Tasks                 *etcd.TaskRepository
 }
@@ -156,6 +156,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		attachMutations:       options.AttachMutations,
 		attachFacts:           options.AttachFacts,
 		taskMutations:         options.TaskMutations,
+		taskAborts:            options.TaskAborts,
 		console:               options.Console,
 		tasks:                 options.Tasks,
 		routePolicies:         make(map[string]routePolicy),
@@ -293,54 +294,11 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/runners/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.acceptTask)
 
-	// task / activity
-	mux.HandleFunc("POST /api/v1/tasks/{id}/retry", s.retryTask)
-	s.jsonRoute("POST /api/v1/tasks/{id}/abort", s.acceptTask)
-
 	// host / agents
 	s.registerAgents()
 	// The signed update transport still needs its own independent limit
 	// decision; it must never inherit the ordinary JSON or Blueprint ceiling.
 	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)
-}
-
-func (s *Server) retryTask(w http.ResponseWriter, r *http.Request) {
-	if s.taskMutations == nil {
-		s.writeProblem(w, errs.New(errs.KindInternal, "Task retrier is not configured"))
-		return
-	}
-	taskID := r.PathValue("id")
-	if ids.Validate(ids.KindTask, taskID) != nil {
-		s.writeTaskProblem(w, errs.New(errs.KindMalformedRequest, "Task id is invalid"))
-		return
-	}
-	if len(r.URL.Query()) != 0 {
-		s.writeTaskProblem(w, errs.New(errs.KindMalformedRequest, "Task retry query is invalid"))
-		return
-	}
-	if err := validateBodylessAgentMutation(r); err != nil {
-		s.writeTaskProblem(w, errs.New(errs.KindMalformedRequest, "Task retry body is not allowed"))
-		return
-	}
-	response, err := s.taskMutations.RetryTask(r.Context(), taskID, r.Header.Get(idempotencyKeyHeader))
-	if err != nil {
-		s.writeTaskProblem(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", response.ContentKind)
-	w.WriteHeader(response.Status)
-	if _, err := w.Write(response.Body); err != nil && s.Logger != nil {
-		s.Logger.Error("controller: write retry response", slog.Any("error", err))
-	}
-}
-
-func (s *Server) writeTaskProblem(w http.ResponseWriter, err error) {
-	var domainError *errs.Error
-	if errors.As(err, &domainError) {
-		s.writeProblem(w, domainError)
-		return
-	}
-	s.writeProblem(w, errs.Wrap(errs.KindInternal, err))
 }
 
 func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiTypes.Task, error) {

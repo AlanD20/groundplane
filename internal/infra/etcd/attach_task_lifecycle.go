@@ -105,7 +105,13 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 	}
 	succeeded := terminalStatus == TaskStatusCompleted
 	if task.Type == TaskAttach {
-		terminal, completeErr := CompleteAttachProvisioning(current.Record, task.ID, succeeded)
+		var terminal AttachRecord
+		var completeErr error
+		if terminalStatus == TaskStatusAborted && current.Record.Status == core.AttachPending {
+			terminal, completeErr = AbortPendingAttachProvisioning(current.Record, task.ID)
+		} else {
+			terminal, completeErr = CompleteAttachProvisioning(current.Record, task.ID, succeeded)
+		}
 		if completeErr != nil {
 			return attachTaskChange{}, completeErr
 		}

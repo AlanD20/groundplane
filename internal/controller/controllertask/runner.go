@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -34,6 +36,17 @@ type Runner struct {
 	interval time.Duration
 	logger   *slog.Logger
 	now      func() time.Time
+
+	mu     sync.Mutex
+	active *activeExecution
+}
+
+type activeExecution struct {
+	taskID        string
+	cancel        context.CancelFunc
+	done          chan struct{}
+	operatorAbort bool
+	result        error
 }
 
 func New(store Store, handler Handler, interval time.Duration, logger *slog.Logger) (*Runner, error) {
@@ -98,7 +111,7 @@ func (runner *Runner) runOne(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) error {
+func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (result error) {
 	if claim.Assignment.Record.Executor != etcd.TaskExecutorController ||
 		claim.Task.Record.Executor != etcd.TaskExecutorController ||
 		claim.Assignment.Record.TaskID != claim.Task.Record.ID {
@@ -113,6 +126,24 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) er
 		return err
 	}
 	executionContext, cancel := context.WithDeadline(ctx, deadline)
+	active := &activeExecution{taskID: claim.Task.Record.ID, cancel: cancel, done: make(chan struct{})}
+	runner.mu.Lock()
+	if runner.active != nil {
+		runner.mu.Unlock()
+		cancel()
+		return errs.New(errs.KindInternal, "Controller Task runner already has an active execution")
+	}
+	runner.active = active
+	runner.mu.Unlock()
+	defer func() {
+		runner.mu.Lock()
+		active.result = result
+		if runner.active == active {
+			runner.active = nil
+		}
+		close(active.done)
+		runner.mu.Unlock()
+	}()
 	executionErr := runner.handler.Execute(executionContext, claim.Task.Record)
 	cancel()
 	if ctx.Err() != nil {
@@ -122,12 +153,44 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) er
 	status := etcd.TaskStatusCompleted
 	if executionErr != nil {
 		status = etcd.TaskStatusFailed
-		if errors.Is(executionContext.Err(), context.DeadlineExceeded) || !terminalAt.Before(deadline) {
+		runner.mu.Lock()
+		operatorAbort := active.operatorAbort
+		runner.mu.Unlock()
+		if operatorAbort && errors.Is(executionErr, context.Canceled) {
+			status = etcd.TaskStatusAborted
+		} else if errors.Is(executionContext.Err(), context.DeadlineExceeded) || !terminalAt.Before(deadline) {
 			status = etcd.TaskStatusTimedOut
 		}
 	}
 	_, err := runner.store.AcknowledgeControllerTask(ctx, claim.Task.Record.ID, status, terminalAt)
 	return err
+}
+
+// AbortTask cancels only the exact active native Controller Task and returns
+// after its terminal acknowledgement has committed.
+func (runner *Runner) AbortTask(ctx context.Context, taskID string) error {
+	if ctx == nil || ids.Validate(ids.KindTask, taskID) != nil {
+		return errs.New(errs.KindValidationFailed, "Controller Task abort target is invalid")
+	}
+	runner.mu.Lock()
+	active := runner.active
+	if active == nil || active.taskID != taskID {
+		runner.mu.Unlock()
+		return errs.New(errs.KindStateConflict, "Controller Task is not executing in this process")
+	}
+	active.operatorAbort = true
+	active.cancel()
+	done := active.done
+	runner.mu.Unlock()
+	select {
+	case <-done:
+		runner.mu.Lock()
+		result := active.result
+		runner.mu.Unlock()
+		return result
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func errorCode(err error) string {
