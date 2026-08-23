@@ -45,8 +45,15 @@ func projectPinnedEnvironmentComponents(
 	if err != nil {
 		return EnvironmentComponentComposeProjection{}, err
 	}
-	previousRoutes := make([]RouteIdentity, len(projection.Routes))
-	for index, route := range projection.Routes {
+	pinnedRoutes := append([]etcd.EnvironmentRouteIdentity(nil), projection.Routes...)
+	pinnedRoutes = append(pinnedRoutes, projection.SuppressedRoutes...)
+	sort.Slice(pinnedRoutes, func(left int, right int) bool {
+		leftMatch := pinnedRoutes[left].Host + "\x00" + pinnedRoutes[left].Path
+		rightMatch := pinnedRoutes[right].Host + "\x00" + pinnedRoutes[right].Path
+		return leftMatch < rightMatch
+	})
+	previousRoutes := make([]RouteIdentity, len(pinnedRoutes))
+	for index, route := range pinnedRoutes {
 		previousRoutes[index] = RouteIdentity{ID: route.ID, Host: route.Host, Path: route.Path}
 	}
 	allocated := false
@@ -58,6 +65,22 @@ func projectPinnedEnvironmentComponents(
 		return EnvironmentComponentComposeProjection{}, errs.New(
 			errs.KindInternal,
 			"Blueprint Task Route projection cannot be reproduced exactly",
+		)
+	}
+	suppressed := make(map[string]struct{}, len(projection.SuppressedRoutes))
+	for _, route := range projection.SuppressedRoutes {
+		suppressed[route.ID] = struct{}{}
+	}
+	effectiveRoutes := make([]core.Route, 0, len(projection.Routes))
+	for _, route := range routes.Current {
+		if _, omitted := suppressed[route.ID]; !omitted {
+			effectiveRoutes = append(effectiveRoutes, route)
+		}
+	}
+	if !samePinnedRouteIdentities(effectiveRoutes, projection.Routes) {
+		return EnvironmentComponentComposeProjection{}, errs.New(
+			errs.KindInternal,
+			"Blueprint Task effective Route projection cannot be reproduced exactly",
 		)
 	}
 	componentRecords := make([]core.Component, len(projection.Components))
@@ -83,7 +106,7 @@ func projectPinnedEnvironmentComponents(
 		VolumeDir: identity.AuthorizedVolumeDir,
 		Zones:     make(map[string]core.Zone, len(zones)),
 		Services:  make(map[string]core.Service, len(services)),
-		Routes:    routes.Current, Components: components.Effective,
+		Routes:    effectiveRoutes, Components: components.Effective,
 		Entries: append([]core.EnvEntry(nil), entries...),
 	}
 	for _, zone := range zones {
@@ -103,6 +126,23 @@ func projectPinnedEnvironmentComponents(
 		)
 	}
 	return result, nil
+}
+
+func samePinnedRouteIdentities(routes []core.Route, identities []etcd.EnvironmentRouteIdentity) bool {
+	if len(routes) != len(identities) {
+		return false
+	}
+	byID := make(map[string]etcd.EnvironmentRouteIdentity, len(identities))
+	for _, identity := range identities {
+		byID[identity.ID] = identity
+	}
+	for _, route := range routes {
+		identity, found := byID[route.ID]
+		if !found || identity.Host != route.Host || identity.Path != route.Path {
+			return false
+		}
+	}
+	return true
 }
 
 func splitPinnedServiceIdentities(

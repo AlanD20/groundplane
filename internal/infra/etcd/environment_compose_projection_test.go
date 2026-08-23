@@ -42,6 +42,34 @@ func TestEnvironmentComposeProjectionPinsSortedRouteIdentities(t *testing.T) {
 	}
 }
 
+// Rationale: Route removal must advance the applied render exactly once while
+// retaining the old Blueprint match for deterministic Component regeneration.
+func TestSuppressEnvironmentRouteMovesIdentityOutOfEffectiveSet(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
+	routeID := ids.NewAt(ids.KindRoute, now, 3)
+	projection := EnvironmentComposeProjection{
+		EnvironmentID:       ids.NewAt(ids.KindEnvironment, now, 1),
+		BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 2), RenderGeneration: 7,
+		Routes: []EnvironmentRouteIdentity{{ID: routeID, Host: "app.example.com", Path: "/app/*"}},
+	}
+	next, changed, err := SuppressEnvironmentRoute(projection, routeID)
+	if err != nil {
+		t.Fatalf("SuppressEnvironmentRoute() error = %v", err)
+	}
+	if !changed || next.RenderGeneration != 8 || len(next.Routes) != 0 ||
+		len(next.SuppressedRoutes) != 1 || next.SuppressedRoutes[0].ID != routeID {
+		t.Fatalf("SuppressEnvironmentRoute() = %#v, changed=%t", next, changed)
+	}
+	if len(projection.Routes) != 1 || len(projection.SuppressedRoutes) != 0 {
+		t.Fatalf("SuppressEnvironmentRoute() mutated input = %#v", projection)
+	}
+	replayed, changed, err := SuppressEnvironmentRoute(next, routeID)
+	if err != nil || changed || len(replayed.SuppressedRoutes) != 1 {
+		t.Fatalf("SuppressEnvironmentRoute(replay) = %#v, %t, %v", replayed, changed, err)
+	}
+}
+
 // Rationale: a queued Blueprint task must retain the exact effective
 // Component graph instead of re-reading mutable active Component records.
 func TestEnvironmentComposeProjectionPinsSortedComponentSnapshots(t *testing.T) {

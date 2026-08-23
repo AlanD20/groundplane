@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -32,6 +33,7 @@ type EnvironmentComposeProjection struct {
 	Networks            []EnvironmentComposeIdentity `json:"networks,omitempty"`
 	Volumes             []EnvironmentComposeIdentity `json:"volumes,omitempty"`
 	Routes              []EnvironmentRouteIdentity   `json:"routes,omitempty"`
+	SuppressedRoutes    []EnvironmentRouteIdentity   `json:"suppressed_routes,omitempty"`
 	Components          []ComponentRecord            `json:"components,omitempty"`
 	Entries             []EntryRecord                `json:"entries,omitempty"`
 }
@@ -107,10 +109,56 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.Routes); err != nil {
 		return err
 	}
+	if err := validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.SuppressedRoutes); err != nil {
+		return err
+	}
+	if err := validateEnvironmentRouteIdentitySets(projection.Routes, projection.SuppressedRoutes); err != nil {
+		return err
+	}
 	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
 		return err
 	}
 	return validateEnvironmentEntryProjection(projection.EnvironmentID, projection.Entries)
+}
+
+// SuppressEnvironmentRoute prepares the exact next applied projection for an
+// explicit Route removal. The old match remains pinned as reproduction
+// history while the effective Route set and render generation advance once.
+func SuppressEnvironmentRoute(
+	current EnvironmentComposeProjection,
+	routeID string,
+) (EnvironmentComposeProjection, bool, error) {
+	if err := validateEnvironmentComposeProjection(current); err != nil {
+		return EnvironmentComposeProjection{}, false, err
+	}
+	if validateStableID(ids.KindRoute, routeID) != nil {
+		return EnvironmentComposeProjection{}, false, errs.New(
+			errs.KindValidationFailed,
+			"suppressed Environment Route id is invalid",
+		)
+	}
+	index := -1
+	for candidate := range current.Routes {
+		if current.Routes[candidate].ID == routeID {
+			index = candidate
+			break
+		}
+	}
+	if index < 0 {
+		return cloneEnvironmentComposeProjection(current), false, nil
+	}
+	next := cloneEnvironmentComposeProjection(current)
+	removed := next.Routes[index]
+	next.Routes = append(next.Routes[:index], next.Routes[index+1:]...)
+	next.SuppressedRoutes = append(next.SuppressedRoutes, removed)
+	sort.Slice(next.SuppressedRoutes, func(left int, right int) bool {
+		return environmentRouteMatch(next.SuppressedRoutes[left]) < environmentRouteMatch(next.SuppressedRoutes[right])
+	})
+	next.RenderGeneration++
+	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
+		return EnvironmentComposeProjection{}, false, err
+	}
+	return next, true, nil
 }
 
 func validateEnvironmentEntryProjection(environmentID string, values []EntryRecord) error {
@@ -153,7 +201,7 @@ func validateEnvironmentRouteIdentities(environmentID string, values []Environme
 	previousMatch := ""
 	idsSeen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		match := value.Host + "\x00" + value.Path
+		match := environmentRouteMatch(value)
 		record := RouteRecord{EnvironmentID: environmentID, Desired: core.Route{
 			ID: value.ID, Host: value.Host, Path: value.Path,
 			TargetServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", TargetPort: 1, Exposure: "internal",
@@ -168,6 +216,46 @@ func validateEnvironmentRouteIdentities(environmentID string, values []Environme
 		previousMatch = match
 	}
 	return nil
+}
+
+func validateEnvironmentRouteIdentitySets(
+	active []EnvironmentRouteIdentity,
+	suppressed []EnvironmentRouteIdentity,
+) error {
+	idsSeen := make(map[string]struct{}, len(active))
+	matches := make(map[string]struct{}, len(active))
+	for _, value := range active {
+		idsSeen[value.ID] = struct{}{}
+		matches[environmentRouteMatch(value)] = struct{}{}
+	}
+	for _, value := range suppressed {
+		if _, duplicate := idsSeen[value.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment Route identity sets repeat an id")
+		}
+		if _, duplicate := matches[environmentRouteMatch(value)]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment Route identity sets repeat a match")
+		}
+	}
+	return nil
+}
+
+func environmentRouteMatch(value EnvironmentRouteIdentity) string {
+	return value.Host + "\x00" + value.Path
+}
+
+func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
+	clone := source
+	clone.Services = append([]EnvironmentComposeIdentity(nil), source.Services...)
+	clone.Networks = append([]EnvironmentComposeIdentity(nil), source.Networks...)
+	clone.Volumes = append([]EnvironmentComposeIdentity(nil), source.Volumes...)
+	clone.Routes = append([]EnvironmentRouteIdentity(nil), source.Routes...)
+	clone.SuppressedRoutes = append([]EnvironmentRouteIdentity(nil), source.SuppressedRoutes...)
+	clone.Components = make([]ComponentRecord, len(source.Components))
+	for index, component := range source.Components {
+		clone.Components[index] = cloneComponentTaskRecord(component)
+	}
+	clone.Entries = append([]EntryRecord(nil), source.Entries...)
+	return clone
 }
 
 func validateEnvironmentComposeIdentities(kind ids.Kind, values []EnvironmentComposeIdentity) error {

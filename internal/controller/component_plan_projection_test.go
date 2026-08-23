@@ -37,9 +37,11 @@ func (renderer componentPlanProjectionRenderer) Render(
 			}},
 		},
 	}
-	files := map[string][]byte{
-		"components/router/config": []byte(environment.Routes[0].ID + "\n"),
+	routeID := "none"
+	if len(environment.Routes) != 0 {
+		routeID = environment.Routes[0].ID
 	}
+	files := map[string][]byte{"components/router/config": []byte(routeID + "\n")}
 	return services, files, nil
 }
 
@@ -89,6 +91,32 @@ func TestProjectPinnedEnvironmentComponentsRejectsUnpinnedRoute(t *testing.T) {
 	)
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("projectPinnedEnvironmentComponents() error = %v, want internal", err)
+	}
+}
+
+// Rationale: an explicit Route removal candidate must retain enough immutable
+// match history to replay the Blueprint while omitting that Route from the
+// effective Component renderer input.
+func TestProjectPinnedEnvironmentComponentsOmitsSuppressedRoute(t *testing.T) {
+	project, identity, projection, routeSpecs, catalog := componentPlanProjectionInput(t)
+	next, changed, err := etcd.SuppressEnvironmentRoute(projection, projection.Routes[0].ID)
+	if err != nil || !changed {
+		t.Fatalf("SuppressEnvironmentRoute() = %#v, %t, %v", next, changed, err)
+	}
+	result, err := projectPinnedEnvironmentComponents(
+		project,
+		identity,
+		next,
+		routeSpecs,
+		map[string]core.ComponentSpec{"caddy": {Kind: core.ComponentKindIngressCaddy, Enabled: true}},
+		nil,
+		catalog,
+	)
+	if err != nil {
+		t.Fatalf("projectPinnedEnvironmentComponents() error = %v", err)
+	}
+	if len(result.PlainFiles) != 1 || string(result.PlainFiles[0].Content) != "none\n" {
+		t.Fatalf("suppressed Component projection = %#v", result)
 	}
 }
 
