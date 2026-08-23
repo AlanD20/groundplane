@@ -293,9 +293,6 @@ func (s *Server) routes() {
 
 	// host / agents
 	s.registerAgents()
-	// The signed update transport still needs its own independent limit
-	// decision; it must never inherit the ordinary JSON or Blueprint ceiling.
-	mux.HandleFunc("POST /api/v1/agents/{id}/update", s.acceptTask)
 }
 
 func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiTypes.Task, error) {

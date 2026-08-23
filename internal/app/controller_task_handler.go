@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,6 +23,7 @@ const (
 type controllerTaskLocalAgents interface {
 	Enroll(context.Context, localagent.EnrollRequest) (localagent.Agent, error)
 	Reconcile(context.Context) error
+	Update(context.Context, localagent.UpdateRequest) error
 	Health(context.Context, string) (localagent.Health, error)
 	Remove(context.Context, string) error
 }
@@ -103,9 +105,49 @@ func (handler *controllerTaskHandler) Execute(
 		return handler.executeEnrollment(ctx, task)
 	case etcd.TaskRemove:
 		return handler.executeRemoval(ctx, task)
+	case etcd.TaskUpdate:
+		return handler.executeUpdate(ctx, task)
 	default:
 		return errs.New(errs.KindValidationFailed, "Controller Task Agent mutation type is invalid")
 	}
+}
+
+func (handler *controllerTaskHandler) executeUpdate(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) error {
+	request, err := decodeAgentUpdateTask(task)
+	if err != nil {
+		return err
+	}
+	return handler.agents.Update(ctx, request)
+}
+
+func decodeAgentUpdateTask(task etcd.TaskRecord) (localagent.UpdateRequest, error) {
+	if len(task.Params) != 4 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceAgent {
+		return localagent.UpdateRequest{}, invalidAgentUpdateTask()
+	}
+	previousImage, hasPrevious := task.Params[agentTaskPreviousImageKey]
+	desiredImage, hasDesired := task.Params[agentTaskImageKey]
+	generationText, hasGeneration := task.Params[agentTaskStartingGenerationKey]
+	if !hasPrevious || !hasDesired || !hasGeneration ||
+		!imageref.IsDigestPinned(previousImage) || !imageref.IsDigestPinned(desiredImage) ||
+		previousImage == desiredImage {
+		return localagent.UpdateRequest{}, invalidAgentUpdateTask()
+	}
+	generation, err := strconv.ParseUint(generationText, 10, 64)
+	if err != nil || generation == 0 || generation == ^uint64(0) ||
+		strconv.FormatUint(generation, 10) != generationText {
+		return localagent.UpdateRequest{}, invalidAgentUpdateTask()
+	}
+	return localagent.UpdateRequest{
+		AgentID: task.Target, PreviousImage: previousImage, DesiredImage: desiredImage,
+		StartingGeneration: generation,
+	}, nil
+}
+
+func invalidAgentUpdateTask() error {
+	return errs.New(errs.KindValidationFailed, "Agent update Task parameters are invalid")
 }
 
 func (handler *controllerTaskHandler) executeEnrollment(

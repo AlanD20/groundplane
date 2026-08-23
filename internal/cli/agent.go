@@ -123,18 +123,49 @@ func newAgentCmd() *cobra.Command {
 	config.AddCommand(set)
 	cmd.AddCommand(config)
 
-	cmd.AddCommand(&cobra.Command{
-		Use:   "update <id>",
+	var updateAll bool
+	update := &cobra.Command{
+		Use:   "update [id]",
 		Short: "Update an agent through the Controller-owned container lifecycle",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(
-				cmd,
-				"/api/v1/agents/"+target(fromContext(cmd), args[0])+"/update",
-				nil,
-			)
+		Args: func(_ *cobra.Command, args []string) error {
+			if updateAll {
+				if len(args) != 0 {
+					return errs.New(errs.KindValidationFailed, "agent update accepts either one id or --all, not both")
+				}
+				return nil
+			}
+			if len(args) != 1 {
+				return errs.New(errs.KindValidationFailed, "agent update requires one id or explicit --all")
+			}
+			return nil
 		},
-	})
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app := fromContext(cmd)
+			agentID := ""
+			if updateAll {
+				page, err := app.Client.ListAgents(cmd.Context(), 2, "")
+				if err != nil {
+					return err
+				}
+				if len(page.Items) == 0 {
+					return errs.New(errs.KindAgentNotFound, "local Agent was not found")
+				}
+				if len(page.Items) != 1 {
+					return errs.New(errs.KindInternal, "local Agent singleton invariant is violated")
+				}
+				agentID = page.Items[0].ID
+			} else {
+				agentID = target(app, args[0])
+			}
+			accepted, err := app.Client.UpdateAgent(cmd.Context(), agentID)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
+		},
+	}
+	update.Flags().BoolVar(&updateAll, "all", false, "update the singleton local Agent")
+	cmd.AddCommand(update)
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "remove <id>",

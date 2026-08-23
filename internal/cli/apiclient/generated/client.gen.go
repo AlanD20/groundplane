@@ -893,6 +893,11 @@ type AgentConfigSetParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// AgentUpdateParams defines parameters for AgentUpdate.
+type AgentUpdateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // AttachListParams defines parameters for AttachList.
 type AttachListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -1334,6 +1339,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /agents/{id}/config (the `AgentConfigSet` operationId).
 	AgentConfigSet(ctx context.Context, id string, params *AgentConfigSetParams, body AgentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AgentUpdate Update the local Agent
+	//
+	// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+	AgentUpdate(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AttachList List attaches
 	//
@@ -1939,6 +1949,21 @@ func (c *Client) AgentConfigSetWithBody(ctx context.Context, id string, params *
 // Corresponds with PUT /agents/{id}/config (the `AgentConfigSet` operationId).
 func (c *Client) AgentConfigSet(ctx context.Context, id string, params *AgentConfigSetParams, body AgentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAgentConfigSetRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AgentUpdate Update the local Agent
+//
+// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+func (c *Client) AgentUpdate(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentUpdateRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3578,6 +3603,53 @@ func NewAgentConfigSetRequestWithBody(server string, id string, params *AgentCon
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewAgentUpdateRequest constructs an http.Request for the AgentUpdate method
+func NewAgentUpdateRequest(server string, id string, params *AgentUpdateParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/agents/%s/update", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -6934,6 +7006,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /agents/{id}/config (the `AgentConfigSet` operationId).
 	AgentConfigSetWithResponse(ctx context.Context, id string, params *AgentConfigSetParams, body AgentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentConfigSetResponse, error)
 
+	// AgentUpdateWithResponse Update the local Agent
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+	AgentUpdateWithResponse(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error)
+
 	// AttachListWithResponse List attaches
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -7855,6 +7934,61 @@ func (r AgentConfigSetResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AgentConfigSetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AgentUpdateResponse202Headers the declared response headers of an HTTP 202 response for AgentUpdate
+type AgentUpdateResponse202Headers struct {
+	ContentType *string
+}
+
+type AgentUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *AgentUpdateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r AgentUpdateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AgentUpdateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AgentUpdateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AgentUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AgentUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AgentUpdateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -11110,6 +11244,19 @@ func (c *ClientWithResponses) AgentConfigSetWithResponse(ctx context.Context, id
 	return ParseAgentConfigSetResponse(rsp)
 }
 
+// AgentUpdateWithResponse Update the local Agent
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+func (c *ClientWithResponses) AgentUpdateWithResponse(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error) {
+	rsp, err := c.AgentUpdate(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentUpdateResponse(rsp)
+}
+
 // AttachListWithResponse List attaches
 //
 // Returns a wrapper object for the known response body format(s).
@@ -12430,6 +12577,52 @@ func ParseAgentConfigSetResponse(rsp *http.Response) (*AgentConfigSetResponse, e
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseAgentUpdateResponse parses an HTTP response from a AgentUpdateWithResponse call
+func ParseAgentUpdateResponse(rsp *http.Response) (*AgentUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AgentUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers AgentUpdateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

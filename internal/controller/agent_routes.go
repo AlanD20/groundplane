@@ -26,6 +26,7 @@ type AgentReader interface {
 
 type AgentMutator interface {
 	EnrollAgent(context.Context, string) (etcd.IdempotencyResponse, error)
+	UpdateAgent(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	RemoveAgent(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
@@ -47,6 +48,11 @@ type agentEnrollInput struct {
 }
 
 type agentRemoveInput struct {
+	ID             string `path:"id" pattern:"^agt_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+}
+
+type agentUpdateInput struct {
 	ID             string `path:"id" pattern:"^agt_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
@@ -121,6 +127,12 @@ func (s *Server) registerAgents() {
 		},
 	}, s.replaceAgentConfig)
 	huma.Register(s.API, huma.Operation{
+		OperationID: "agent.update", Method: http.MethodPost, Path: "/agents/{id}/update",
+		Summary: "Update the local Agent", Tags: []string{"Agent"}, DefaultStatus: http.StatusAccepted,
+		Middlewares: huma.Middlewares{s.rejectAgentMutationBody, s.rejectAgentQuery},
+		Responses:   attachMutationResponses(taskAcceptedSchema),
+	}, s.updateAgent)
+	huma.Register(s.API, huma.Operation{
 		OperationID: "agent.remove", Method: http.MethodDelete, Path: "/agents/{id}",
 		Summary: "Remove the local Agent", Tags: []string{"Agent"}, DefaultStatus: http.StatusAccepted,
 		Middlewares: huma.Middlewares{s.rejectAgentMutationBody, s.rejectAgentQuery},
@@ -192,6 +204,17 @@ func (s *Server) removeAgent(ctx context.Context, request *agentRemoveInput) (*a
 		return nil, normalizeProjectError(err)
 	}
 	return s.agentMutationResponse(response, "removal"), nil
+}
+
+func (s *Server) updateAgent(ctx context.Context, request *agentUpdateInput) (*agentMutationOutput, error) {
+	if s.agentMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Agent mutation service is not configured")
+	}
+	response, err := s.agentMutations.UpdateAgent(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return s.agentMutationResponse(response, "update"), nil
 }
 
 func (s *Server) replaceAgentConfig(

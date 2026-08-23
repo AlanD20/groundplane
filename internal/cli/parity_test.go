@@ -53,6 +53,76 @@ func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 	}
 }
 
+func TestAgentUpdateDispatchesSelectedAgentTask(t *testing.T) {
+	t.Parallel()
+
+	server := exactRequestServer(
+		t,
+		http.MethodPost,
+		"/api/v1/agents/agt_1/update",
+		"",
+		http.StatusAccepted,
+		`{"task_id":"task_update"}`,
+	)
+	defer server.Close()
+
+	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "update", "agt_1")
+	want := "{\n  \"task_id\": \"task_update\"\n}\n"
+	if output != want {
+		t.Fatalf("output = %q, want %q", output, want)
+	}
+}
+
+func TestAgentUpdateAllResolvesSingletonThenUsesPerIDEndpoint(t *testing.T) {
+	t.Parallel()
+
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		switch requests {
+		case 1:
+			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/agents" {
+				t.Fatalf("list request = %s %s", request.Method, request.URL.Path)
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(writer, `{"items":[{"id":"agt_1","enrollment_task_id":"task_1","host":"host","status":"healthy","version":null,"labels":{},"ready_at":null,"last_report_at":null,"in_flight":0}]}`)
+		case 2:
+			if request.Method != http.MethodPost || request.URL.Path != "/api/v1/agents/agt_1/update" {
+				t.Fatalf("update request = %s %s", request.Method, request.URL.Path)
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(writer, `{"task_id":"task_update_all"}`)
+		default:
+			t.Fatalf("unexpected request %d", requests)
+		}
+	}))
+	defer server.Close()
+
+	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "update", "--all")
+	want := "{\n  \"task_id\": \"task_update_all\"\n}\n"
+	if output != want || requests != 2 {
+		t.Fatalf("output/requests = %q/%d", output, requests)
+	}
+}
+
+func TestAgentUpdateRequiresExactlyIDOrAll(t *testing.T) {
+	t.Parallel()
+
+	for name, args := range map[string][]string{
+		"neither": {"update"},
+		"both":    {"update", "agt_1", "--all"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			command := newAgentCmd()
+			command.SetArgs(args)
+			if err := command.Execute(); err == nil {
+				t.Fatalf("agent %v error = nil", args)
+			}
+		})
+	}
+}
+
 func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
 	t.Parallel()
 

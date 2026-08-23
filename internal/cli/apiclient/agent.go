@@ -189,6 +189,28 @@ func (c *Client) RemoveAgent(ctx context.Context, id string) (apiTypes.TaskAccep
 	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
+func (c *Client) UpdateAgent(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/agents/" + id + "/update"
+	response, err := client.AgentUpdateWithResponse(
+		ctx,
+		id,
+		&generated.AgentUpdateParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
 func agentFromGenerated(agent generated.Agent) apiTypes.Agent {
 	return apiTypes.Agent{
 		ID:               agent.Id,

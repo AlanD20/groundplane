@@ -88,6 +88,10 @@ func (agents *removalTaskAgents) Reconcile(context.Context) error {
 	return errs.New(errs.KindInternal, "unexpected reconciliation")
 }
 
+func (agents *removalTaskAgents) Update(context.Context, localagent.UpdateRequest) error {
+	return errs.New(errs.KindInternal, "unexpected update")
+}
+
 func (agents *removalTaskAgents) Health(context.Context, string) (localagent.Health, error) {
 	return localagent.Health{}, errs.New(errs.KindInternal, "unexpected health lookup")
 }

@@ -778,6 +778,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Agent removal idempotency: %w", err)
 	}
+	agentUpdateIdempotency, err := newDurableAgentUpdateIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent update idempotency: %w", err)
+	}
 	credentialCipher, err := newCredentialCipher(controllerKey)
 	if err != nil {
 		_ = store.Close()
@@ -823,7 +828,18 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Agent removal service: %w", err)
 	}
-	agentMutations, err := newAgentMutationService(agentEnrollments, agentRemovals)
+	agentUpdates, err := newAgentUpdateService(
+		cfg.Agent.Image,
+		localAgentManager,
+		tasks,
+		agentUpdateIdempotency,
+	)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Agent update service: %w", err)
+	}
+	agentMutations, err := newAgentMutationService(agentEnrollments, agentUpdates, agentRemovals)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()

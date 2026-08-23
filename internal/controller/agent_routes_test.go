@@ -28,7 +28,7 @@ func TestAgentReadRoutesAreInOpenAPI(t *testing.T) {
 		t.Fatalf("marshal OpenAPI: %v", err)
 	}
 	for _, operationID := range []string{
-		"agent.join", "agent.list", "agent.show", "agent.config.show", "agent.config.set", "agent.remove",
+		"agent.join", "agent.list", "agent.show", "agent.config.show", "agent.config.set", "agent.update", "agent.remove",
 	} {
 		if !strings.Contains(string(document), `"operationId":"`+operationID+`"`) {
 			t.Fatalf("OpenAPI does not contain %s: %s", operationID, document)
@@ -171,11 +171,38 @@ func TestAgentRemoveReturnsExactTaskResponse(t *testing.T) {
 	}
 }
 
+func TestAgentUpdateReturnsExactTaskResponse(t *testing.T) {
+	t.Parallel()
+
+	want := etcd.IdempotencyResponse{
+		Status: http.StatusAccepted, ContentKind: "application/json",
+		Body: []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`),
+	}
+	mutator := &fakeAgentMutator{response: want}
+	server := New(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Options{AgentMutations: mutator},
+	)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+testAgentReadID+"/update", nil)
+	request.Header.Set(idempotencyKeyHeader, "agent-update-key-0001")
+	response := httptest.NewRecorder()
+	server.requestHandler().ServeHTTP(response, request)
+	if response.Code != want.Status || response.Header().Get("Content-Type") != want.ContentKind ||
+		!bytes.Equal(response.Body.Bytes(), want.Body) {
+		t.Fatalf("response = %d/%q/%q", response.Code, response.Header().Get("Content-Type"), response.Body.Bytes())
+	}
+	if mutator.updatedAgentID != testAgentReadID || mutator.key != "agent-update-key-0001" {
+		t.Fatalf("UpdateAgent() input = %q/%q", mutator.updatedAgentID, mutator.key)
+	}
+}
+
 func TestAgentMutationsRejectBodiesBeforeDispatch(t *testing.T) {
 	t.Parallel()
 
 	for name, test := range map[string][2]string{
 		"enroll": {http.MethodPost, "/api/v1/agents"},
+		"update": {http.MethodPost, "/api/v1/agents/" + testAgentReadID + "/update"},
 		"remove": {http.MethodDelete, "/api/v1/agents/" + testAgentReadID},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -189,8 +216,13 @@ func TestAgentMutationsRejectBodiesBeforeDispatch(t *testing.T) {
 			if response.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 			}
-			if mutator.key != "" || mutator.removedAgentID != "" {
-				t.Fatalf("mutation dispatched with input = %q/%q", mutator.removedAgentID, mutator.key)
+			if mutator.key != "" || mutator.updatedAgentID != "" || mutator.removedAgentID != "" {
+				t.Fatalf(
+					"mutation dispatched with input = %q/%q/%q",
+					mutator.updatedAgentID,
+					mutator.removedAgentID,
+					mutator.key,
+				)
 			}
 		})
 	}
@@ -206,6 +238,7 @@ type fakeAgentReader struct {
 type fakeAgentMutator struct {
 	response       etcd.IdempotencyResponse
 	key            string
+	updatedAgentID string
 	removedAgentID string
 }
 
@@ -223,6 +256,16 @@ func (mutator *fakeAgentMutator) RemoveAgent(
 	key string,
 ) (etcd.IdempotencyResponse, error) {
 	mutator.removedAgentID = agentID
+	mutator.key = key
+	return mutator.response, nil
+}
+
+func (mutator *fakeAgentMutator) UpdateAgent(
+	_ context.Context,
+	agentID string,
+	key string,
+) (etcd.IdempotencyResponse, error) {
+	mutator.updatedAgentID = agentID
 	mutator.key = key
 	return mutator.response, nil
 }
