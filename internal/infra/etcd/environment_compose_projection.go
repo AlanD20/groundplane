@@ -161,6 +161,41 @@ func SuppressEnvironmentRoute(
 	return next, true, nil
 }
 
+// RemoveEnvironmentEntry prepares the exact next applied projection for an
+// explicit Entry removal. The removed immutable generation remains available
+// through the deletion intent until terminal acknowledgement promotes next.
+func RemoveEnvironmentEntry(
+	current EnvironmentComposeProjection,
+	entryID string,
+) (EnvironmentComposeProjection, bool, error) {
+	if err := validateEnvironmentComposeProjection(current); err != nil {
+		return EnvironmentComposeProjection{}, false, err
+	}
+	if validateStableID(ids.KindEnvEntry, entryID) != nil {
+		return EnvironmentComposeProjection{}, false, errs.New(
+			errs.KindValidationFailed,
+			"removed Environment Entry id is invalid",
+		)
+	}
+	index := -1
+	for candidate := range current.Entries {
+		if current.Entries[candidate].Entry.ID == entryID {
+			index = candidate
+			break
+		}
+	}
+	if index < 0 {
+		return cloneEnvironmentComposeProjection(current), false, nil
+	}
+	next := cloneEnvironmentComposeProjection(current)
+	next.Entries = append(next.Entries[:index], next.Entries[index+1:]...)
+	next.RenderGeneration++
+	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
+		return EnvironmentComposeProjection{}, false, err
+	}
+	return next, true, nil
+}
+
 func validateEnvironmentEntryProjection(environmentID string, values []EntryRecord) error {
 	previousID := ""
 	for _, value := range values {
@@ -254,7 +289,10 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	for index, component := range source.Components {
 		clone.Components[index] = cloneComponentTaskRecord(component)
 	}
-	clone.Entries = append([]EntryRecord(nil), source.Entries...)
+	clone.Entries = make([]EntryRecord, len(source.Entries))
+	for index, entry := range source.Entries {
+		clone.Entries[index] = cloneEntryRecord(entry)
+	}
 	return clone
 }
 

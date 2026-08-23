@@ -118,6 +118,24 @@ func equalOptionalUint32(left *uint32, right *uint32) bool {
 	return *left == *right
 }
 
+func cloneEntryRecord(source EntryRecord) EntryRecord {
+	clone := source
+	clone.Entry.Exposure = append([]string(nil), source.Entry.Exposure...)
+	if source.Entry.UID != nil {
+		value := *source.Entry.UID
+		clone.Entry.UID = &value
+	}
+	if source.Entry.GID != nil {
+		value := *source.Entry.GID
+		clone.Entry.GID = &value
+	}
+	if source.Entry.Source.Fact != nil {
+		value := *source.Entry.Source.Fact
+		clone.Entry.Source.Fact = &value
+	}
+	return clone
+}
+
 func corruptEntryRecord() error {
 	return errs.New(errs.KindInternal, "Entry record is corrupt")
 }

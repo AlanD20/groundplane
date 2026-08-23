@@ -155,6 +155,41 @@ func TestEnvironmentComposeProjectionPinsSortedEntrySnapshots(t *testing.T) {
 	}
 }
 
+// Rationale: Entry removal must advance the applied render exactly once while
+// dropping only the immutable Entry generation selected by stable id.
+func TestRemoveEnvironmentEntryDropsPinnedGeneration(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	entryID := ids.NewAt(ids.KindEnvEntry, now, 3)
+	record, err := NewEntryRecord(environmentID, core.EnvEntry{
+		ID: entryID, Kind: core.EntryKindEnv, Key: "APP_ENV",
+		Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: "production"},
+		Exposure: []string{"all"},
+	}, ids.NewAt(ids.KindConfig, now, 4))
+	if err != nil {
+		t.Fatalf("NewEntryRecord() error = %v", err)
+	}
+	projection := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 2),
+		RenderGeneration: 7, Entries: []EntryRecord{record},
+	}
+	next, changed, err := RemoveEnvironmentEntry(projection, entryID)
+	if err != nil {
+		t.Fatalf("RemoveEnvironmentEntry() error = %v", err)
+	}
+	if !changed || next.RenderGeneration != 8 || len(next.Entries) != 0 {
+		t.Fatalf("RemoveEnvironmentEntry() = %#v, changed=%t", next, changed)
+	}
+	if len(projection.Entries) != 1 || projection.RenderGeneration != 7 {
+		t.Fatalf("RemoveEnvironmentEntry() mutated input = %#v", projection)
+	}
+	replayed, changed, err := RemoveEnvironmentEntry(next, entryID)
+	if err != nil || changed || replayed.RenderGeneration != 8 {
+		t.Fatalf("RemoveEnvironmentEntry(replay) = %#v, %t, %v", replayed, changed, err)
+	}
+}
+
 // Rationale: explicit Component disable may remove only its generated Service;
 // authored Service omission must remain blocked by the same projection CAS.
 func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemoval(t *testing.T) {
