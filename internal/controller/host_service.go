@@ -150,7 +150,7 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 			Status:        agent.Status,
 			PullInterval:  agent.PullInterval,
 			MaxConcurrent: agent.MaxConcurrent,
-			Labels:        append([]string(nil), agent.Labels...),
+			Labels:        append(make([]string, 0, len(agent.Labels)), agent.Labels...),
 		},
 	}, nil
 }

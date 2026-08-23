@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
+	"github.com/AlanD20/groundplane/internal/common/version"
 	agentcomponent "github.com/AlanD20/groundplane/internal/components/agent"
 	"github.com/AlanD20/groundplane/internal/components/caddy"
 	"github.com/AlanD20/groundplane/internal/components/cloudflaretunnel"
@@ -30,6 +31,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -881,9 +883,31 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent reads: %w", err)
 	}
+	hostReads, err := controller.NewHostService(controller.HostDependencies{
+		System: &hostSystemSnapshotSource{system: hoststats.New(), docker: containerManager},
+		Etcd: &hostEtcdSnapshotSource{
+			endpoints: append([]string(nil), cfg.Etcd.Endpoints...),
+			probe:     etcd.ProbeEndpoints,
+		},
+		Agent: &hostAgentSnapshotSource{
+			health: localAgentManager,
+			fallback: localagent.Config{
+				PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
+				MaxConcurrentTasks:  cfg.Agent.Runtime.MaxConcurrentTasks,
+				Labels:              cfg.Agent.Runtime.Labels,
+			},
+		},
+		ControllerService: hostControllerUnit,
+		ControllerVersion: version.Value,
+	})
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Host reads: %w", err)
+	}
 
 	srv := controller.New(store, logger, controller.Options{
-		Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
+		Host: hostReads, Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
 		Projects:              hierarchyService,
 		ProjectMutations:      projectMutations,
 		ProjectChanges:        projectChanges,

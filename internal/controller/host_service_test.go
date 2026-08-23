@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/pkg/api"
@@ -50,6 +51,30 @@ func TestHostServiceProjectsAcceptedHealthyShape(t *testing.T) {
 	got.Agent.Labels[0] = "mutated"
 	if want.Agent.Labels[0] == "mutated" {
 		t.Fatal("Show() returned the Agent source's label slice")
+	}
+}
+
+func TestHostServicePreservesEmptyAgentLabelsAsArray(t *testing.T) {
+	// Rationale: the Host API has one stable array contract for Agent labels;
+	// an empty durable label map must not become JSON null.
+	t.Parallel()
+
+	want := acceptedHostFixture(api.HealthHealthy, api.HealthHealthy)
+	want.Agent.Labels = []string{}
+	service := hostServiceFor(t, want, nil, nil, nil)
+	got, err := service.Show(context.Background())
+	if err != nil {
+		t.Fatalf("Show() error = %v", err)
+	}
+	if got.Agent.Labels == nil || len(got.Agent.Labels) != 0 {
+		t.Fatalf("Show() Agent labels = %#v, want non-nil empty array", got.Agent.Labels)
+	}
+	encoded, err := json.Marshal(got.Agent)
+	if err != nil {
+		t.Fatalf("marshal Host Agent: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"labels":[]`) {
+		t.Fatalf("Host Agent JSON = %s, want empty labels array", encoded)
 	}
 }
 

@@ -136,7 +136,7 @@ func (service *localAgentReadService) projectAgent(
 
 func projectAgentStatus(health localagent.Health) (apiTypes.AgentStatus, error) {
 	switch health.Agent.Phase {
-	case localagent.PhaseProvisioning:
+	case localagent.PhaseProvisioning, localagent.PhaseUpdating:
 		return apiTypes.AgentPending, nil
 	case localagent.PhaseReady:
 		if health.Healthy {

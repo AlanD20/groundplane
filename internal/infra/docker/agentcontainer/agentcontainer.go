@@ -98,6 +98,10 @@ type engineClient interface {
 	Close() error
 }
 
+type engineVersionClient interface {
+	ServerVersion(context.Context, client.ServerVersionOptions) (client.ServerVersionResult, error)
+}
+
 type Manager struct {
 	client engineClient
 }
@@ -120,6 +124,29 @@ func (m *Manager) Close() error {
 		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: close Docker client: %w", err))
 	}
 	return nil
+}
+
+// DockerVersion reports the daemon version through the Engine client already
+// owned by the Controller. Host health treats an unavailable daemon as data.
+func (m *Manager) DockerVersion(ctx context.Context) (string, error) {
+	if ctx == nil {
+		return "", errs.New(errs.KindInternal, "agent container: Docker version context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	versionClient, ok := m.client.(engineVersionClient)
+	if !ok {
+		return "", errs.New(errs.KindInternal, "agent container: Docker client does not support version inspection")
+	}
+	result, err := versionClient.ServerVersion(ctx, client.ServerVersionOptions{})
+	if err != nil {
+		return "", errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: inspect Docker version: %w", err))
+	}
+	if strings.TrimSpace(result.Version) == "" {
+		return "", errs.New(errs.KindInternal, "agent container: Docker returned an empty version")
+	}
+	return result.Version, nil
 }
 
 func RuntimePathsForAgent(agentID string) (RuntimePaths, error) {
