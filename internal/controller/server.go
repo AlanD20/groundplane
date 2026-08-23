@@ -244,9 +244,7 @@ func (s *Server) routes() {
 		s.jsonRoute("PATCH /api/v1/"+res+"/{id}", s.notImplemented)
 		mux.HandleFunc("DELETE /api/v1/"+res+"/{id}", s.acceptTask)
 	}
-	// Entry reads, protected create/edit, and explicit reveal are typed Huma operations.
-	// Destructive deletion remains a placeholder until its finalizer is wired.
-	mux.HandleFunc("DELETE /api/v1/entries/{id}", s.acceptTask)
+	// Entry reads, protected mutations, and explicit reveal are typed Huma operations.
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
 	// component (?environment= or ?platform=true) — one resource across both owners

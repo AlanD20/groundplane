@@ -805,6 +805,11 @@ type EntryCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// EntryRemoveParams defines parameters for EntryRemove.
+type EntryRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EntryEditParams defines parameters for EntryEdit.
 type EntryEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1193,6 +1198,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /entries (the `EntryCreate` operationId).
 	EntryCreate(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryRemove Remove an environment Entry
+	//
+	// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+	EntryRemove(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EntryShow Show environment Entry metadata
 	//
@@ -1803,6 +1813,21 @@ func (c *Client) EntryCreateWithBody(ctx context.Context, params *EntryCreatePar
 // Corresponds with POST /entries (the `EntryCreate` operationId).
 func (c *Client) EntryCreate(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEntryCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryRemove Remove an environment Entry
+//
+// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+func (c *Client) EntryRemove(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3410,6 +3435,53 @@ func NewEntryCreateRequestWithBody(server string, params *EntryCreateParams, con
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewEntryRemoveRequest constructs an http.Request for the EntryRemove method
+func NewEntryRemoveRequest(server string, id string, params *EntryRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/entries/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -5642,6 +5714,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /entries (the `EntryCreate` operationId).
 	EntryCreateWithResponse(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryCreateResponse, error)
 
+	// EntryRemoveWithResponse Remove an environment Entry
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+	EntryRemoveWithResponse(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error)
+
 	// EntryShowWithResponse Show environment Entry metadata
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6736,6 +6815,61 @@ func (r EntryCreateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EntryCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EntryRemoveResponse202Headers the declared response headers of an HTTP 202 response for EntryRemove
+type EntryRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type EntryRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *EntryRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EntryRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EntryRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EntryRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EntryRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EntryRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EntryRemoveResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -8981,6 +9115,19 @@ func (c *ClientWithResponses) EntryCreateWithResponse(ctx context.Context, param
 	return ParseEntryCreateResponse(rsp)
 }
 
+// EntryRemoveWithResponse Remove an environment Entry
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
+func (c *ClientWithResponses) EntryRemoveWithResponse(ctx context.Context, id string, params *EntryRemoveParams, reqEditors ...RequestEditorFn) (*EntryRemoveResponse, error) {
+	rsp, err := c.EntryRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryRemoveResponse(rsp)
+}
+
 // EntryShowWithResponse Show environment Entry metadata
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10231,6 +10378,52 @@ func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) 
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEntryRemoveResponse parses an HTTP response from a EntryRemoveWithResponse call
+func ParseEntryRemoveResponse(rsp *http.Response) (*EntryRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EntryRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers EntryRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

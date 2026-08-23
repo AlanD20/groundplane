@@ -60,7 +60,13 @@ func newEntryCmd() *cobra.Command {
 		Short:   "Remove an entry (dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDestroy(cmd, "/api/v1/entries/"+target(fromContext(cmd), args[0]))
+			accepted, err := fromContext(cmd).Client.RemoveEntry(
+				cmd.Context(), target(fromContext(cmd), args[0]),
+			)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	})
 

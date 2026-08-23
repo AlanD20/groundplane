@@ -36,6 +36,9 @@ type fakeEntryMutator struct {
 	editInput  apiTypes.EntryEditRequest
 	editKey    string
 	editCalled bool
+	removeID   string
+	removeKey  string
+	removeCall bool
 }
 
 func (mutator *fakeEntryMutator) CreateEntry(
@@ -59,6 +62,17 @@ func (mutator *fakeEntryMutator) EditEntry(
 	mutator.editID = id
 	mutator.editInput = input
 	mutator.editKey = key
+	return mutator.response, nil
+}
+
+func (mutator *fakeEntryMutator) RemoveEntry(
+	_ context.Context,
+	id string,
+	key string,
+) (etcd.IdempotencyResponse, error) {
+	mutator.removeCall = true
+	mutator.removeID = id
+	mutator.removeKey = key
 	return mutator.response, nil
 }
 
@@ -237,6 +251,66 @@ func TestEntryEditRoutePreservesProtectedMutationResponse(t *testing.T) {
 			"EditEntry() id/input/key = %q/%#v/%q",
 			mutator.editID, mutator.editInput, mutator.editKey,
 		)
+	}
+}
+
+// Rationale: Entry removal must expose the exact protected asynchronous operation rather than the old generic task placeholder.
+func TestEntryRemoveRouteUsesProtectedMutation(t *testing.T) {
+	entryID := "ev_" + ids.NewULID()
+	taskID := "tsk_" + ids.NewULID()
+	mutator := &fakeEntryMutator{response: etcd.IdempotencyResponse{
+		Status: http.StatusAccepted, ContentKind: "application/json",
+		Body: []byte(`{"task_id":"` + taskID + `"}`),
+	}}
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{EntryMutations: mutator})
+	request := httptest.NewRequest(http.MethodDelete, "/api/v1/entries/"+entryID, nil)
+	request.Header.Set("Idempotency-Key", "entry-remove-key-0001")
+	response := httptest.NewRecorder()
+
+	server.Mux.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted || response.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf(
+			"response status/content-type/body = %d/%q/%q",
+			response.Code, response.Header().Get("Content-Type"), response.Body.Bytes(),
+		)
+	}
+	if !mutator.removeCall || mutator.removeID != entryID || mutator.removeKey != "entry-remove-key-0001" {
+		t.Fatalf("RemoveEntry() id/key = %q/%q", mutator.removeID, mutator.removeKey)
+	}
+	var accepted apiTypes.TaskAccepted
+	if err := json.Unmarshal(response.Body.Bytes(), &accepted); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if accepted.TaskID != taskID {
+		t.Fatalf("task_id = %q, want %q", accepted.TaskID, taskID)
+	}
+}
+
+// Rationale: unprotected body or query inputs would be absent from Entry-removal replay evidence and must fail at the HTTP boundary.
+func TestEntryRemoveRouteRejectsBodyAndQuery(t *testing.T) {
+	entryID := "ev_" + ids.NewULID()
+	for name, test := range map[string]struct {
+		path string
+		body io.Reader
+	}{
+		"body":  {path: "/api/v1/entries/" + entryID, body: strings.NewReader(`{}`)},
+		"query": {path: "/api/v1/entries/" + entryID + "?force=true"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := New(
+				nil,
+				slog.New(slog.NewTextHandler(io.Discard, nil)),
+				Options{EntryMutations: &fakeEntryMutator{}},
+			)
+			request := httptest.NewRequest(http.MethodDelete, test.path, test.body)
+			request.Header.Set("Idempotency-Key", "entry-remove-key-0002")
+			response := httptest.NewRecorder()
+			server.Mux.ServeHTTP(response, request)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
+			}
+		})
 	}
 }
 

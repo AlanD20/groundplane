@@ -109,6 +109,28 @@ func (c *Client) EditEntry(
 	return entryFromGenerated(*parsed)
 }
 
+func (c *Client) RemoveEntry(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/entries/" + id
+	response, err := client.EntryRemoveWithResponse(
+		ctx,
+		id,
+		&generated.EntryRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+}
+
 func (c *Client) ListEntries(
 	ctx context.Context,
 	environmentID string,

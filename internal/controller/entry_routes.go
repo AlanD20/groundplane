@@ -36,6 +36,7 @@ type EntryMutator interface {
 		apiTypes.EntryEditRequest,
 		string,
 	) (etcd.IdempotencyResponse, error)
+	RemoveEntry(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type entryCreateInput struct {
@@ -47,6 +48,11 @@ type entryEditInput struct {
 	ID             string `path:"id" pattern:"^ev_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	RawBody        []byte
+}
+
+type entryRemoveInput struct {
+	ID             string `path:"id" pattern:"^ev_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type entryListInput struct {
@@ -82,6 +88,11 @@ func (s *Server) registerEntries() {
 		reflect.TypeFor[apiTypes.Entry](),
 		true,
 		"Entry",
+	)
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](),
+		true,
+		"TaskAccepted",
 	)
 	operation := huma.Operation{
 		OperationID: "entry.create", Method: http.MethodPost, Path: "/entries",
@@ -135,6 +146,13 @@ func (s *Server) registerEntries() {
 		},
 	}
 	huma.Register(s.API, editOperation, s.editEntry)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "entry.remove", Method: http.MethodDelete, Path: "/entries/{id}",
+		Summary: "Remove an environment Entry", Tags: []string{"Entry"},
+		DefaultStatus: http.StatusAccepted,
+		Middlewares:   huma.Middlewares{s.rejectEntryDeleteBody, s.rejectEntryQuery},
+		Responses:     attachMutationResponses(taskAcceptedSchema),
+	}, s.removeEntry)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "entry.list", Method: http.MethodGet, Path: "/entries",
 		Summary: "List environment entries", Tags: []string{"Entry"},
@@ -201,6 +219,28 @@ func (s *Server) editEntry(
 			ctx.SetStatus(response.Status)
 			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
 				s.Logger.Error("controller: write Entry edit response", slog.Any("error", writeErr))
+			}
+		},
+	}, nil
+}
+
+func (s *Server) removeEntry(
+	ctx context.Context,
+	request *entryRemoveInput,
+) (*entryMutationOutput, error) {
+	if s.entryMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Entry mutator is not configured")
+	}
+	response, err := s.entryMutations.RemoveEntry(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &entryMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
+				s.Logger.Error("controller: write Entry removal response", slog.Any("error", writeErr))
 			}
 		},
 	}, nil
@@ -476,6 +516,16 @@ func (s *Server) rejectEntryQuery(ctx huma.Context, next func(huma.Context)) {
 	requestURL := ctx.URL()
 	if len(requestURL.Query()) != 0 {
 		s.writeEntryProblem(ctx, "Entry request query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectEntryDeleteBody(ctx huma.Context, next func(huma.Context)) {
+	var probe [1]byte
+	count, err := ctx.BodyReader().Read(probe[:])
+	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		s.writeEntryProblem(ctx, "Entry removal body is not allowed")
 		return
 	}
 	next(ctx)
