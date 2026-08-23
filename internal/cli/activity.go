@@ -17,7 +17,14 @@ func newActivityCmd() *cobra.Command {
 			if workspace != "" {
 				q["workspace"] = workspace
 			}
-			return runList(cmd, "/api/v1/activity", q)
+			if len(q) != 0 {
+				return runList(cmd, "/api/v1/activity", q)
+			}
+			page, err := fromContext(cmd).Client.ListActivity(cmd.Context(), 0, "")
+			if err != nil {
+				return err
+			}
+			return renderTaskPage(cmd, page)
 		},
 	}
 	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")

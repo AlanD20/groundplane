@@ -20,6 +20,102 @@ import (
 
 const taskEventReconnectDelay = time.Second
 
+func (c *Client) ListTasks(
+	ctx context.Context,
+	limit int,
+	cursor string,
+) (apiTypes.Page[apiTypes.Task], error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
+	params := taskListParams(limit, cursor)
+	response, err := client.TaskListWithResponse(ctx, params)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/tasks", err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet, "/api/v1/tasks", response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.PageTask{}
+		if err := decodeSingleJSON(
+			http.MethodGet,
+			"/api/v1/tasks",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.Page[apiTypes.Task]{}, err
+		}
+	}
+	return taskPageFromGenerated(*parsed), nil
+}
+
+func (c *Client) ListActivity(
+	ctx context.Context,
+	limit int,
+	cursor string,
+) (apiTypes.Page[apiTypes.Task], error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
+	base := taskListParams(limit, cursor)
+	params := &generated.ActivityListParams{Limit: base.Limit, Cursor: base.Cursor}
+	response, err := client.ActivityListWithResponse(ctx, params)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/activity", err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet, "/api/v1/activity", response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.PageTask{}
+		if err := decodeSingleJSON(
+			http.MethodGet,
+			"/api/v1/activity",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.Page[apiTypes.Task]{}, err
+		}
+	}
+	return taskPageFromGenerated(*parsed), nil
+}
+
+func taskListParams(limit int, cursor string) *generated.TaskListParams {
+	params := &generated.TaskListParams{}
+	if limit != 0 {
+		value := int64(limit)
+		params.Limit = &value
+	}
+	if cursor != "" {
+		params.Cursor = &cursor
+	}
+	return params
+}
+
+func taskPageFromGenerated(parsed generated.PageTask) apiTypes.Page[apiTypes.Task] {
+	items := []generated.Task(nil)
+	if parsed.Items != nil {
+		items = *parsed.Items
+	}
+	page := apiTypes.Page[apiTypes.Task]{Items: make([]apiTypes.Task, len(items))}
+	if parsed.NextCursor != nil {
+		page.NextCursor = *parsed.NextCursor
+	}
+	for index, item := range items {
+		page.Items[index] = taskFromGenerated(item)
+	}
+	return page
+}
+
 func (c *Client) ShowTask(ctx context.Context, id string) (apiTypes.Task, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {

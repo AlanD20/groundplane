@@ -127,9 +127,22 @@ func TestTaskListAndActivityShareDurablePage(t *testing.T) {
 	}
 }
 
-// Rationale: Task detail is migrated only when the serving Huma document that
-// drives both generated clients exposes its exact stable operation identity.
-func TestTaskOpenAPIContainsServingDetailOperation(t *testing.T) {
+// Rationale: scope flags are part of the documented journal surface but must
+// fail explicitly until immutable Task ownership can be projected and indexed.
+func TestTaskListRejectsUnsupportedScope(t *testing.T) {
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	server.tasks = &fakeTaskQueries{}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?workspace=platform", nil)
+	response := httptest.NewRecorder()
+	server.Mux.ServeHTTP(response, request)
+	if response.Code != http.StatusNotImplemented {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+// Rationale: Task reads are migrated only when the serving Huma document that
+// drives both generated clients exposes every stable operation identity.
+func TestTaskOpenAPIContainsServingReadOperations(t *testing.T) {
 	t.Parallel()
 	document, err := New(nil, nil, Options{}).OpenAPIDocument()
 	if err != nil {
@@ -152,5 +165,14 @@ func TestTaskOpenAPIContainsServingDetailOperation(t *testing.T) {
 	}
 	if _, exists := operation.Responses["200"].Content["application/json"]; !exists {
 		t.Fatalf("task.show responses = %#v, want JSON 200", operation.Responses)
+	}
+	for path, operationID := range map[string]string{"/tasks": "task.list", "/activity": "activity.list"} {
+		operation := contract.Paths[path]["get"]
+		if operation.OperationID != operationID {
+			t.Fatalf("GET %s operationId = %q, want %s", path, operation.OperationID, operationID)
+		}
+		if _, exists := operation.Responses["200"].Content["application/json"]; !exists {
+			t.Fatalf("%s responses = %#v, want JSON 200", operationID, operation.Responses)
+		}
 	}
 }

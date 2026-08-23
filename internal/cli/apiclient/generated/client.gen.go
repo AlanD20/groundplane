@@ -406,6 +406,16 @@ type PageService struct {
 	NextCursor *string    `json:"next_cursor,omitempty"`
 }
 
+// PageTask defines model for PageTask.
+type PageTask struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageTask.json
+	Schema     *string `json:"$schema,omitempty"`
+	Items      *[]Task `json:"items"`
+	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
 // PageZone defines model for PageZone.
 type PageZone struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -810,6 +820,12 @@ type ZoneRemovalImpactService struct {
 	Name          string `json:"name"`
 }
 
+// ActivityListParams defines parameters for ActivityList.
+type ActivityListParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // AgentListParams defines parameters for AgentList.
 type AgentListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -991,6 +1007,12 @@ type ServiceEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// TaskListParams defines parameters for TaskList.
+type TaskListParams struct {
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // TaskEventsParams defines parameters for TaskEvents.
 type TaskEventsParams struct {
 	// LastEventID Canonical decimal Task-event sequence; absent or 0 replays the complete journal.
@@ -1169,6 +1191,11 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// ActivityList List activity
+	//
+	// Corresponds with GET /activity (the `ActivityList` operationId).
+	ActivityList(ctx context.Context, params *ActivityListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AgentList List agents
 	//
@@ -1527,6 +1554,11 @@ type ClientInterface interface {
 	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
 	ServiceEdit(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// TaskList List tasks
+	//
+	// Corresponds with GET /tasks (the `TaskList` operationId).
+	TaskList(ctx context.Context, params *TaskListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// TaskShow Show a task
 	//
 	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
@@ -1624,6 +1656,21 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /zones/{id}/removal-impact (the `ZoneRemovalImpact` operationId).
 	ZoneRemovalImpact(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// ActivityList List activity
+//
+// Corresponds with GET /activity (the `ActivityList` operationId).
+func (c *Client) ActivityList(ctx context.Context, params *ActivityListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActivityListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // AgentList List agents
@@ -2573,6 +2620,21 @@ func (c *Client) ServiceEdit(ctx context.Context, id string, params *ServiceEdit
 	return c.Client.Do(req)
 }
 
+// TaskList List tasks
+//
+// Corresponds with GET /tasks (the `TaskList` operationId).
+func (c *Client) TaskList(ctx context.Context, params *TaskListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // TaskShow Show a task
 //
 // Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
@@ -2829,6 +2891,72 @@ func (c *Client) ZoneRemovalImpact(ctx context.Context, id string, reqEditors ..
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewActivityListRequest constructs an http.Request for the ActivityList method
+func NewActivityListRequest(server string, params *ActivityListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/activity")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewAgentListRequest constructs an http.Request for the AgentList method
@@ -5157,6 +5285,72 @@ func NewServiceEditRequestWithBody(server string, id string, params *ServiceEdit
 	return req, nil
 }
 
+// NewTaskListRequest constructs an http.Request for the TaskList method
+func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewTaskShowRequest constructs an http.Request for the TaskShow method
 func NewTaskShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -5826,6 +6020,13 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// ActivityListWithResponse List activity
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /activity (the `ActivityList` operationId).
+	ActivityListWithResponse(ctx context.Context, params *ActivityListParams, reqEditors ...RequestEditorFn) (*ActivityListResponse, error)
+
 	// AgentListWithResponse List agents
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6239,6 +6440,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
 	ServiceEditWithResponse(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceEditResponse, error)
 
+	// TaskListWithResponse List tasks
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tasks (the `TaskList` operationId).
+	TaskListWithResponse(ctx context.Context, params *TaskListParams, reqEditors ...RequestEditorFn) (*TaskListResponse, error)
+
 	// TaskShowWithResponse Show a task
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6352,6 +6560,54 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /zones/{id}/removal-impact (the `ZoneRemovalImpact` operationId).
 	ZoneRemovalImpactWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ZoneRemovalImpactResponse, error)
+}
+
+type ActivityListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageTask
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActivityListResponse) GetJSON200() *PageTask {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ActivityListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ActivityListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActivityListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActivityListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActivityListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type AgentListResponse struct {
@@ -8620,6 +8876,54 @@ func (r ServiceEditResponse) ContentType() string {
 	return ""
 }
 
+type TaskListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageTask
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TaskListResponse) GetJSON200() *PageTask {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TaskShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9222,6 +9526,19 @@ func (r ZoneRemovalImpactResponse) ContentType() string {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
+}
+
+// ActivityListWithResponse List activity
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /activity (the `ActivityList` operationId).
+func (c *ClientWithResponses) ActivityListWithResponse(ctx context.Context, params *ActivityListParams, reqEditors ...RequestEditorFn) (*ActivityListResponse, error) {
+	rsp, err := c.ActivityList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActivityListResponse(rsp)
 }
 
 // AgentListWithResponse List agents
@@ -9991,6 +10308,19 @@ func (c *ClientWithResponses) ServiceEditWithResponse(ctx context.Context, id st
 	return ParseServiceEditResponse(rsp)
 }
 
+// TaskListWithResponse List tasks
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tasks (the `TaskList` operationId).
+func (c *ClientWithResponses) TaskListWithResponse(ctx context.Context, params *TaskListParams, reqEditors ...RequestEditorFn) (*TaskListResponse, error) {
+	rsp, err := c.TaskList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskListResponse(rsp)
+}
+
 // TaskShowWithResponse Show a task
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10199,6 +10529,39 @@ func (c *ClientWithResponses) ZoneRemovalImpactWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseZoneRemovalImpactResponse(rsp)
+}
+
+// ParseActivityListResponse parses an HTTP response from a ActivityListWithResponse call
+func ParseActivityListResponse(rsp *http.Response) (*ActivityListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActivityListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageTask
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseAgentListResponse parses an HTTP response from a AgentListWithResponse call
@@ -11934,6 +12297,39 @@ func ParseServiceEditResponse(rsp *http.Response) (*ServiceEditResponse, error) 
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseTaskListResponse parses an HTTP response from a TaskListWithResponse call
+func ParseTaskListResponse(rsp *http.Response) (*TaskListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageTask
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

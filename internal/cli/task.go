@@ -25,7 +25,14 @@ func newTaskCmd() *cobra.Command {
 			if workspace != "" {
 				q["workspace"] = workspace
 			}
-			return runList(cmd, "/api/v1/tasks", q)
+			if len(q) != 0 {
+				return runList(cmd, "/api/v1/tasks", q)
+			}
+			page, err := app.Client.ListTasks(cmd.Context(), 0, "")
+			if err != nil {
+				return err
+			}
+			return renderTaskPage(cmd, page)
 		},
 	}
 	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")
@@ -41,11 +48,7 @@ func newTaskCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fields, values := fieldsOfVia(map[string]any{
-				"id": task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
-				"plan_hash": task.PlanHash, "type": task.Type, "target": task.Target,
-				"status": task.Status, "steps": task.Steps,
-			})
+			fields, values := fieldsOfVia(taskFields(task))
 			return app.Out.RenderOne(fields, values, task)
 		},
 	})
@@ -90,4 +93,21 @@ func newTaskCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func renderTaskPage(cmd *cobra.Command, page apiTypes.Page[apiTypes.Task]) error {
+	items := make([]map[string]any, len(page.Items))
+	for index, task := range page.Items {
+		items[index] = taskFields(task)
+	}
+	headers, rows := tabulateVia(fromContext(cmd), items)
+	return fromContext(cmd).Out.Render(headers, rows, page)
+}
+
+func taskFields(task apiTypes.Task) map[string]any {
+	return map[string]any{
+		"id": task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
+		"plan_hash": task.PlanHash, "type": task.Type, "target": task.Target,
+		"status": task.Status, "steps": task.Steps,
+	}
 }
