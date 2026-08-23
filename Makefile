@@ -1,8 +1,11 @@
-.PHONY: build cli controller controller-dev agent proto api generate console console-toolchain console-verify console-release-smoke clean test tidy ci
+.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke proto api generate console console-toolchain console-verify console-release-smoke clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
 NPM_VERSION := 11.17.0
+AGENT_IMAGE ?= groundplane-agent:dev
+AGENT_VERSION ?= dev
+DOCKER ?= docker
 
 build: cli controller agent
 
@@ -20,6 +23,20 @@ controller-dev: | $(BIN_DIR)
 
 agent: | $(BIN_DIR)
 	go build -o $(BIN_DIR)/agent ./cmd/agent
+
+agent-image:
+	$(DOCKER) build --pull --file Dockerfile.agent --build-arg AGENT_VERSION="$(AGENT_VERSION)" --tag "$(AGENT_IMAGE)" .
+
+agent-image-smoke: agent-image
+	@set -eu; \
+		image="$(AGENT_IMAGE)"; \
+		test "$$($(DOCKER) image inspect "$$image" --format '{{json .Config.Entrypoint}}')" = '["/usr/local/bin/groundplane-agent"]'; \
+		test "$$($(DOCKER) image inspect "$$image" --format '{{json .Config.Cmd}}')" = 'null'; \
+		test "$$($(DOCKER) image inspect "$$image" --format '{{.Config.User}}')" = '0:0'; \
+		docker_version="$$($(DOCKER) run --rm --entrypoint docker "$$image" --version | awk '{gsub(/,/, "", $$3); print $$3}')"; \
+		compose_version="$$($(DOCKER) run --rm --entrypoint docker "$$image" compose version --short)"; \
+		test "$$docker_version" = '29.1.3'; \
+		test "$$compose_version" = '2.40.3'
 
 proto:
 	protoc \
@@ -100,6 +117,7 @@ ci: console | $(BIN_DIR)
 	go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
 	go build -tags groundplane_console -o $(BIN_DIR)/controller ./cmd/controller
 	$(MAKE) console-release-smoke
+	$(MAKE) agent-image-smoke
 
 clean:
 	rm -rf $(BIN_DIR) console/dist

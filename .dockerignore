@@ -1,0 +1,15 @@
+*
+!.dockerignore
+!Dockerfile.agent
+!go.mod
+!go.sum
+!cmd/
+!cmd/**
+!console/
+!console/*.go
+!internal/
+!internal/**
+!pkg/
+!pkg/**
+!proto/
+!proto/**
