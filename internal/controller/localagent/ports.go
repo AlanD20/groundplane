@@ -14,6 +14,7 @@ type Phase string
 const (
 	PhaseProvisioning Phase = "provisioning"
 	PhaseReady        Phase = "ready"
+	PhaseUpdating     Phase = "updating"
 	PhaseDeleting     Phase = "deleting"
 )
 
@@ -88,6 +89,19 @@ type Repository interface {
 		revision int64,
 		readyAt time.Time,
 	) (StoredRecord, error)
+	BeginReplacement(
+		ctx context.Context,
+		current StoredRecord,
+		image string,
+		credential Credential,
+		updatedAt time.Time,
+	) (StoredRecord, error)
+	MarkReplacementReady(
+		ctx context.Context,
+		id string,
+		generation uint64,
+		revision int64,
+	) (StoredRecord, error)
 	BeginDelete(ctx context.Context, id string, generation uint64, revision int64) (StoredRecord, error)
 	Delete(ctx context.Context, id string, generation uint64, revision int64) error
 }
@@ -151,6 +165,7 @@ type Sessions interface {
 // maximum is the durable configured concurrency bound; success means every
 // observed assignment has committed a terminal acknowledgement.
 type Tasks interface {
+	RequireIdle(ctx context.Context, agentID string, generation uint64, maximum int32) error
 	AbortActive(ctx context.Context, agentID string, generation uint64, maximum int32, reason string) error
 }
 

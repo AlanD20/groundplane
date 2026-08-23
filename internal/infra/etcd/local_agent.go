@@ -30,6 +30,7 @@ type LocalAgentPhase string
 const (
 	LocalAgentPhaseProvisioning LocalAgentPhase = "provisioning"
 	LocalAgentPhaseReady        LocalAgentPhase = "ready"
+	LocalAgentPhaseUpdating     LocalAgentPhase = "updating"
 	LocalAgentPhaseDeleting     LocalAgentPhase = "deleting"
 )
 
@@ -213,6 +214,123 @@ func (repository *LocalAgentRepository) MarkReady(
 		LocalAgentPhaseReady,
 		false,
 		readyAt,
+	)
+}
+
+// ReplaceGeneration atomically rotates the complete authenticated runtime
+// identity while retaining the stable Agent aggregate and first Ready time.
+func (repository *LocalAgentRepository) ReplaceGeneration(
+	ctx context.Context,
+	current Versioned[LocalAgentRecord],
+	image string,
+	encryptedToken []byte,
+	tokenDigest string,
+	updatedAt time.Time,
+) (Versioned[LocalAgentRecord], error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
+		current.Record.ID == "" || !imageref.IsDigestPinned(image) ||
+		len(encryptedToken) == 0 || !validLocalAgentDigest(tokenDigest) ||
+		current.Record.Generation == ^uint64(0) {
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"local Agent replacement identity is invalid",
+		)
+	}
+	if err := validateTimestamp("local Agent token updated_at", updatedAt); err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	evidence, err := repository.readSingleton(ctx)
+	if err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	if evidence.record.ID != current.Record.ID ||
+		evidence.record.Generation != current.Record.Generation ||
+		evidence.record.Image != current.Record.Image ||
+		evidence.record.Phase != current.Record.Phase ||
+		evidence.primaryRevision != current.Revision {
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent generation or revision changed",
+		)
+	}
+	if evidence.record.Phase != LocalAgentPhaseReady &&
+		evidence.record.Phase != LocalAgentPhaseUpdating {
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent is not replaceable",
+		)
+	}
+	if evidence.digest == nil || tokenDigest == evidence.record.TokenDigest ||
+		updatedAt.Before(evidence.record.TokenUpdatedAt) {
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent replacement token is not a new generation",
+		)
+	}
+
+	replacement := cloneLocalAgentRecord(evidence.record)
+	replacement.Image = image
+	replacement.Generation++
+	replacement.Phase = LocalAgentPhaseUpdating
+	replacement.EncryptedToken = append([]byte(nil), encryptedToken...)
+	replacement.TokenDigest = tokenDigest
+	replacement.TokenUpdatedAt = updatedAt
+	primaryValue, configValue, tokenValue, reference, err := encodeLocalAgentValues(replacement)
+	if err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	defer clear(primaryValue)
+	defer clear(configValue)
+	defer clear(tokenValue)
+	defer clear(reference)
+	newDigestKey := localAgentDigestKey(tokenDigest)
+	result, err := repository.store.Transact(ctx, []Condition{
+		{Key: localAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
+		{Key: localAgentPrimaryKey(replacement.ID), ModRevision: evidence.primary.ModRevision},
+		{Key: localAgentConfigKey(replacement.ID), ModRevision: evidence.config.ModRevision},
+		{Key: localAgentTokenKey(replacement.ID), ModRevision: evidence.token.ModRevision},
+		{Key: evidence.digest.Key, ModRevision: evidence.digest.ModRevision},
+		{Key: newDigestKey},
+	}, []Mutation{
+		{Type: MutationPut, Key: localAgentPrimaryKey(replacement.ID), Value: primaryValue},
+		{Type: MutationPut, Key: localAgentConfigKey(replacement.ID), Value: configValue},
+		{Type: MutationPut, Key: localAgentTokenKey(replacement.ID), Value: tokenValue},
+		{Type: MutationDelete, Key: evidence.digest.Key},
+		{Type: MutationPut, Key: newDigestKey, Value: reference},
+	})
+	if err != nil {
+		return Versioned[LocalAgentRecord]{}, err
+	}
+	clearKeyValues(result.FailureReads)
+	if !result.Succeeded {
+		return Versioned[LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent replacement state changed",
+		)
+	}
+	return Versioned[LocalAgentRecord]{
+		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
+func (repository *LocalAgentRepository) MarkReplacementReady(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	revision int64,
+) (Versioned[LocalAgentRecord], error) {
+	return repository.transitionPhase(
+		ctx,
+		agentID,
+		generation,
+		revision,
+		LocalAgentPhaseUpdating,
+		LocalAgentPhaseReady,
+		true,
+		time.Time{},
 	)
 }
 
@@ -517,7 +635,9 @@ func (repository *LocalAgentRepository) transitionPhase(
 	}
 	replacement := cloneLocalAgentRecord(evidence.record)
 	replacement.Phase = next
-	replacement.ReadyAt = readyAt
+	if expected != LocalAgentPhaseUpdating {
+		replacement.ReadyAt = readyAt
+	}
 	primaryValue, err := encodeLocalAgentPrimary(replacement)
 	if err != nil {
 		return Versioned[LocalAgentRecord]{}, err
@@ -836,7 +956,7 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 		if !record.ReadyAt.IsZero() {
 			return errs.New(errs.KindValidationFailed, "provisioning local Agent ready_at must be empty")
 		}
-	case LocalAgentPhaseReady, LocalAgentPhaseDeleting:
+	case LocalAgentPhaseReady, LocalAgentPhaseUpdating, LocalAgentPhaseDeleting:
 		if err := validateTimestamp("local Agent ready_at", record.ReadyAt); err != nil {
 			return err
 		}

@@ -98,6 +98,57 @@ func TestLocalAgentRepositoryAdapterRejectsUnknownDurablePhase(t *testing.T) {
 	}
 }
 
+func TestLocalAgentRepositoryAdapterTranslatesReplacementWithoutAliasing(t *testing.T) {
+	// Rationale: replacement credentials cross the app/etcd seam once and must
+	// not share secret-bearing buffers with either side.
+	t.Parallel()
+
+	repository := &fakeLocalAgentRecords{}
+	adapter, err := newLocalAgentRepositoryAdapter(repository, &fakeLocalAgentConfigIdempotency{})
+	if err != nil {
+		t.Fatalf("newLocalAgentRepositoryAdapter() error = %v", err)
+	}
+	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
+	current := localagent.StoredRecord{Record: localagent.Record{
+		ID: runtimeAdapterAgentID, EnrollmentTaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Image: testAppAgentImage, Generation: 7, Phase: localagent.PhaseReady,
+		Config: localagent.Config{
+			PullIntervalSeconds: 5, MaxConcurrentTasks: 4,
+			Labels: map[string]string{"role": "local"},
+		},
+		Credential: localagent.Credential{EncryptedToken: []byte("old-encrypted"), Digest: "old-digest"},
+		CreatedAt:  now, ReadyAt: now,
+	}, Revision: 11}
+	credential := localagent.Credential{EncryptedToken: []byte("new-encrypted"), Digest: "new-digest"}
+	replacement, err := adapter.BeginReplacement(
+		context.Background(),
+		current,
+		"ghcr.io/aland20/groundplane-agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		credential,
+		now.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatalf("BeginReplacement() error = %v", err)
+	}
+	credential.EncryptedToken[0] = 'X'
+	if string(repository.replacement.EncryptedToken) != "new-encrypted" ||
+		string(replacement.Record.Credential.EncryptedToken) != "new-encrypted" ||
+		replacement.Record.Generation != 8 || replacement.Record.Phase != localagent.PhaseUpdating {
+		t.Fatalf("replacement = %#v, durable = %#v", replacement, repository.replacement)
+	}
+	repository.replacement.EncryptedToken[0] = 'Y'
+	if string(replacement.Record.Credential.EncryptedToken) != "new-encrypted" {
+		t.Fatal("replacement result aliases durable encrypted token")
+	}
+	ready, err := adapter.MarkReplacementReady(context.Background(), runtimeAdapterAgentID, 8, 12)
+	if err != nil {
+		t.Fatalf("MarkReplacementReady() error = %v", err)
+	}
+	if ready.Record.Phase != localagent.PhaseReady || !ready.Record.ReadyAt.Equal(now) {
+		t.Fatalf("replacement Ready = %#v", ready)
+	}
+}
+
 type fakeLocalAgentRecords struct {
 	created          etcd.LocalAgentRecord
 	get              etcd.Versioned[etcd.LocalAgentRecord]
@@ -107,6 +158,7 @@ type fakeLocalAgentRecords struct {
 	deleteGeneration uint64
 	deleteRevision   int64
 	getCalls         int
+	replacement      etcd.LocalAgentRecord
 }
 
 func (repository *fakeLocalAgentRecords) CreateSingleton(
@@ -148,6 +200,36 @@ func (repository *fakeLocalAgentRecords) MarkReady(
 	record.Phase = etcd.LocalAgentPhaseReady
 	record.ReadyAt = readyAt
 	return etcd.Versioned[etcd.LocalAgentRecord]{Record: record, Revision: 12}, nil
+}
+
+func (repository *fakeLocalAgentRecords) ReplaceGeneration(
+	_ context.Context,
+	current etcd.Versioned[etcd.LocalAgentRecord],
+	image string,
+	encryptedToken []byte,
+	tokenDigest string,
+	updatedAt time.Time,
+) (etcd.Versioned[etcd.LocalAgentRecord], error) {
+	record := current.Record
+	record.Image = image
+	record.Generation++
+	record.Phase = etcd.LocalAgentPhaseUpdating
+	record.EncryptedToken = append([]byte(nil), encryptedToken...)
+	record.TokenDigest = tokenDigest
+	record.TokenUpdatedAt = updatedAt
+	repository.replacement = record
+	return etcd.Versioned[etcd.LocalAgentRecord]{Record: record, Revision: 12}, nil
+}
+
+func (repository *fakeLocalAgentRecords) MarkReplacementReady(
+	_ context.Context,
+	_ string,
+	_ uint64,
+	_ int64,
+) (etcd.Versioned[etcd.LocalAgentRecord], error) {
+	record := repository.replacement
+	record.Phase = etcd.LocalAgentPhaseReady
+	return etcd.Versioned[etcd.LocalAgentRecord]{Record: record, Revision: 13}, nil
 }
 
 func (repository *fakeLocalAgentRecords) BeginDelete(

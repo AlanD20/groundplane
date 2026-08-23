@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	testAgentID      = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	testOtherAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	testImage        = "ghcr.io/aland20/groundplane-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	testAgentID          = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	testOtherAgentID     = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	testImage            = "ghcr.io/aland20/groundplane-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	replacementTestImage = "ghcr.io/aland20/groundplane-agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
 var testNow = time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
@@ -364,6 +365,134 @@ func TestCancellationStopsProvisioningBeforeReadyTransition(t *testing.T) {
 	}
 }
 
+func TestUpdateRejectsBusyAgentBeforeCredentialOrDurableMutation(t *testing.T) {
+	// Rationale: update must never abort operator work or rotate authority while
+	// the fenced generation still owns an active Task assignment.
+	t.Parallel()
+
+	trace := &traceLog{}
+	repository := seededRepository(trace, PhaseReady)
+	harness := newTestManager(t, repository, trace)
+	harness.tasks.idleError = errs.New(errs.KindResourceInUse, "active Task assignment")
+
+	err := harness.manager.Update(context.Background(), UpdateRequest{
+		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
+		StartingGeneration: initialGeneration,
+	})
+	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("Update() error = %v, want resource.in_use", err)
+	}
+	if repository.record.Record.Image != testImage ||
+		repository.record.Record.Generation != initialGeneration ||
+		repository.record.Record.Phase != PhaseReady {
+		t.Fatalf("record mutated for busy Agent = %#v", repository.record.Record)
+	}
+	if harness.runtime.generateCalls != 0 || harness.runtime.materializeCalls != 0 ||
+		harness.container.convergeCalls != 0 {
+		t.Fatalf(
+			"busy update side effects = generate %d, materialize %d, converge %d",
+			harness.runtime.generateCalls,
+			harness.runtime.materializeCalls,
+			harness.container.convergeCalls,
+		)
+	}
+}
+
+func TestUpdateRotatesIdleAgentAndPreservesStableMetadata(t *testing.T) {
+	// Rationale: successful replacement changes only runtime identity while the
+	// operator-facing Agent identity, config, enrollment, and first Ready remain.
+	t.Parallel()
+
+	trace := &traceLog{}
+	repository := seededRepository(trace, PhaseReady)
+	wantConfig := cloneConfig(repository.record.Record.Config)
+	wantReadyAt := repository.record.Record.ReadyAt
+	harness := newTestManager(t, repository, trace)
+
+	err := harness.manager.Update(context.Background(), UpdateRequest{
+		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
+		StartingGeneration: initialGeneration,
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	got := repository.record.Record
+	if got.ID != testAgentID || got.EnrollmentTaskID != testRequest(testAgentID).EnrollmentTaskID ||
+		got.Image != replacementTestImage || got.Generation != initialGeneration+1 ||
+		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) || !equalConfig(got.Config, wantConfig) {
+		t.Fatalf("updated record = %#v", got)
+	}
+	if got.Credential.Digest == testCredential().Digest {
+		t.Fatal("successful update retained the previous token digest")
+	}
+	wantOrder := []string{
+		"stop_assignments", "require_idle", "generate", "begin_replacement",
+		"revoke", "wait_offline", "materialize", "converge", "mark_replacement_ready",
+	}
+	if gotTrace := trace.values(); !containsOrdered(gotTrace, wantOrder...) {
+		t.Fatalf("update order = %v, want subsequence %v", gotTrace, wantOrder)
+	}
+}
+
+func TestUpdateRollsBackPreviousDigestAfterReplacementReadinessTimeout(t *testing.T) {
+	// Rationale: a replacement that cannot authenticate must not strand the
+	// singleton or report success; rollback uses another generation and token.
+	t.Parallel()
+
+	trace := &traceLog{}
+	repository := seededRepository(trace, PhaseReady)
+	wantReadyAt := repository.record.Record.ReadyAt
+	harness := newTestManager(t, repository, trace)
+	harness.sessions.readySequence = []<-chan struct{}{make(chan struct{}), closedSignal()}
+
+	result := make(chan error, 1)
+	go func() {
+		result <- harness.manager.Update(context.Background(), UpdateRequest{
+			AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
+			StartingGeneration: initialGeneration,
+		})
+	}()
+	harness.clock.awaitTimer(t).fire(testNow.Add(ReadyTimeout))
+	err := <-result
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Update() error = %v, want failed update after rollback", err)
+	}
+	got := repository.record.Record
+	if got.Image != testImage || got.Generation != initialGeneration+2 ||
+		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) {
+		t.Fatalf("rolled-back record = %#v", got)
+	}
+	if harness.runtime.generateCalls != 2 || harness.container.convergeCalls != 2 {
+		t.Fatalf(
+			"rollback rotations = credentials %d, convergences %d",
+			harness.runtime.generateCalls,
+			harness.container.convergeCalls,
+		)
+	}
+}
+
+func TestUpdateReplayRecognizesCompletedRollback(t *testing.T) {
+	// Rationale: Controller restart after rollback Ready but before Task failure
+	// acknowledgement must reproduce failure without rotating a third time.
+	t.Parallel()
+
+	trace := &traceLog{}
+	repository := seededRepository(trace, PhaseReady)
+	repository.record.Record.Generation = initialGeneration + 2
+	harness := newTestManager(t, repository, trace)
+
+	err := harness.manager.Update(context.Background(), UpdateRequest{
+		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
+		StartingGeneration: initialGeneration,
+	})
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Update(replayed rollback) error = %v, want failed update", err)
+	}
+	if harness.runtime.generateCalls != 0 || harness.container.convergeCalls != 0 {
+		t.Fatal("completed rollback replay mutated runtime")
+	}
+}
+
 func TestHealthRejectsNilContext(t *testing.T) {
 	// Rationale: public lifecycle methods must fail canonically rather than panic
 	// when application wiring violates the required context contract.
@@ -619,6 +748,51 @@ type fakeRepository struct {
 	record StoredRecord
 }
 
+func (repository *fakeRepository) BeginReplacement(
+	ctx context.Context,
+	current StoredRecord,
+	image string,
+	credential Credential,
+	_ time.Time,
+) (StoredRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredRecord{}, err
+	}
+	repository.trace.add("begin_replacement")
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if !repository.matches(current.Record.ID, current.Record.Generation, current.Revision) ||
+		repository.record.Record.Phase != current.Record.Phase {
+		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
+	}
+	repository.record.Record.Image = image
+	repository.record.Record.Generation++
+	repository.record.Record.Phase = PhaseUpdating
+	repository.record.Record.Credential = cloneCredential(credential)
+	repository.record.Revision++
+	return cloneStored(repository.record), nil
+}
+
+func (repository *fakeRepository) MarkReplacementReady(
+	ctx context.Context,
+	id string,
+	generation uint64,
+	revision int64,
+) (StoredRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return StoredRecord{}, err
+	}
+	repository.trace.add("mark_replacement_ready")
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if !repository.matches(id, generation, revision) || repository.record.Record.Phase != PhaseUpdating {
+		return StoredRecord{}, errs.New(errs.KindStateConflict, "local Agent changed")
+	}
+	repository.record.Record.Phase = PhaseReady
+	repository.record.Revision++
+	return cloneStored(repository.record), nil
+}
+
 func (repository *fakeRepository) CreateSingleton(
 	ctx context.Context,
 	record Record,
@@ -762,7 +936,11 @@ func (runtime *fakeRuntime) GenerateCredential(ctx context.Context, _ string) (C
 	}
 	runtime.trace.add("generate")
 	runtime.generateCalls++
-	return testCredential(), nil
+	credential := testCredential()
+	digest, _ := base64.RawURLEncoding.DecodeString(credential.Digest)
+	digest[len(digest)-1] += byte(runtime.generateCalls)
+	credential.Digest = base64.RawURLEncoding.EncodeToString(digest)
+	return credential, nil
 }
 
 func (runtime *fakeRuntime) Materialize(ctx context.Context, _ RuntimeMaterial) error {
@@ -815,14 +993,15 @@ func (container *fakeContainer) Remove(ctx context.Context, _ string, _ uint64) 
 }
 
 type fakeSessions struct {
-	trace        *traceLog
-	ready        <-chan struct{}
-	readyContext context.Context
-	snapshot     SessionSnapshot
-	hasSnapshot  bool
-	stopError    error
-	revokeError  error
-	offlineError error
+	trace         *traceLog
+	ready         <-chan struct{}
+	readySequence []<-chan struct{}
+	readyContext  context.Context
+	snapshot      SessionSnapshot
+	hasSnapshot   bool
+	stopError     error
+	revokeError   error
+	offlineError  error
 }
 
 func (sessions *fakeSessions) Ready(
@@ -834,6 +1013,11 @@ func (sessions *fakeSessions) Ready(
 		return nil, err
 	}
 	sessions.readyContext = ctx
+	if len(sessions.readySequence) != 0 {
+		ready := sessions.readySequence[0]
+		sessions.readySequence = sessions.readySequence[1:]
+		return ready, nil
+	}
 	return sessions.ready, nil
 }
 
@@ -868,6 +1052,15 @@ func (sessions *fakeSessions) WaitOffline(ctx context.Context, _ string, _ uint6
 type fakeTasks struct {
 	trace      *traceLog
 	abortError error
+	idleError  error
+}
+
+func (tasks *fakeTasks) RequireIdle(ctx context.Context, _ string, _ uint64, _ int32) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	tasks.trace.add("require_idle")
+	return tasks.idleError
 }
 
 func (tasks *fakeTasks) AbortActive(

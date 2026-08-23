@@ -19,6 +19,20 @@ type localAgentRecords interface {
 		etcd.IdempotencyMarker,
 	) (etcd.Versioned[etcd.LocalAgentRecord], etcd.IdempotencyTransactionResult, error)
 	MarkReady(context.Context, string, uint64, int64, time.Time) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	ReplaceGeneration(
+		context.Context,
+		etcd.Versioned[etcd.LocalAgentRecord],
+		string,
+		[]byte,
+		string,
+		time.Time,
+	) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	MarkReplacementReady(
+		context.Context,
+		string,
+		uint64,
+		int64,
+	) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	BeginDelete(context.Context, string, uint64, int64) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	Delete(context.Context, string, uint64, int64) error
 }
@@ -75,6 +89,46 @@ func (adapter *localAgentRepositoryAdapter) MarkReady(
 	readyAt time.Time,
 ) (localagent.StoredRecord, error) {
 	stored, err := adapter.repository.MarkReady(ctx, id, generation, revision, readyAt)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) BeginReplacement(
+	ctx context.Context,
+	current localagent.StoredRecord,
+	image string,
+	credential localagent.Credential,
+	updatedAt time.Time,
+) (localagent.StoredRecord, error) {
+	durable, err := localAgentRecordToDurable(current.Record)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	stored, err := adapter.repository.ReplaceGeneration(
+		ctx,
+		etcd.Versioned[etcd.LocalAgentRecord]{
+			Record: durable, Revision: current.Revision, ReadRevision: current.Revision,
+		},
+		image,
+		append([]byte(nil), credential.EncryptedToken...),
+		credential.Digest,
+		updatedAt,
+	)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) MarkReplacementReady(
+	ctx context.Context,
+	id string,
+	generation uint64,
+	revision int64,
+) (localagent.StoredRecord, error) {
+	stored, err := adapter.repository.MarkReplacementReady(ctx, id, generation, revision)
 	if err != nil {
 		return localagent.StoredRecord{}, err
 	}
@@ -158,6 +212,8 @@ func localAgentPhaseToDurable(phase localagent.Phase) (etcd.LocalAgentPhase, err
 		return etcd.LocalAgentPhaseProvisioning, nil
 	case localagent.PhaseReady:
 		return etcd.LocalAgentPhaseReady, nil
+	case localagent.PhaseUpdating:
+		return etcd.LocalAgentPhaseUpdating, nil
 	case localagent.PhaseDeleting:
 		return etcd.LocalAgentPhaseDeleting, nil
 	default:
@@ -171,6 +227,8 @@ func localAgentPhaseFromDurable(phase etcd.LocalAgentPhase) (localagent.Phase, e
 		return localagent.PhaseProvisioning, nil
 	case etcd.LocalAgentPhaseReady:
 		return localagent.PhaseReady, nil
+	case etcd.LocalAgentPhaseUpdating:
+		return localagent.PhaseUpdating, nil
 	case etcd.LocalAgentPhaseDeleting:
 		return localagent.PhaseDeleting, nil
 	default:

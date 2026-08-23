@@ -87,6 +87,28 @@ func TestLocalAgentTasksAdapterReturnsTerminalFailure(t *testing.T) {
 	}
 }
 
+func TestLocalAgentTasksAdapterRejectsNonIdleGenerationWithoutAbort(t *testing.T) {
+	// Rationale: update is non-destructive and must report resource.in_use
+	// without subscribing to or aborting the active assignment.
+	t.Parallel()
+
+	assignments := &fakeLocalAgentTaskAssignments{snapshots: [][]etcd.TaskAssignment{{
+		testLocalAgentAssignment(testLocalAgentTaskOne),
+	}}}
+	channel := newFakeLocalAgentTaskChannel()
+	adapter, err := newLocalAgentTasksAdapter(assignments, channel)
+	if err != nil {
+		t.Fatalf("newLocalAgentTasksAdapter() error = %v", err)
+	}
+	err = adapter.RequireIdle(context.Background(), runtimeAdapterAgentID, 7, 4)
+	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("RequireIdle() error = %v, want resource.in_use", err)
+	}
+	if len(channel.aborted) != 0 || len(channel.terminals) != 0 {
+		t.Fatalf("RequireIdle() touched Task channel: %#v", channel)
+	}
+}
+
 func testLocalAgentAssignment(taskID string) etcd.TaskAssignment {
 	return etcd.TaskAssignment{
 		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{TaskID: taskID}},

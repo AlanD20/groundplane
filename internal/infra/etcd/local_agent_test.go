@@ -95,6 +95,76 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 	}
 }
 
+func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T) {
+	// Rationale: a restart must observe either the complete old generation or
+	// the complete replacement generation, never split image/config/token state.
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newLocalAgentRepository(store)
+	if err != nil {
+		t.Fatalf("newLocalAgentRepository() error = %v", err)
+	}
+	oldToken := localAgentTestToken(31)
+	record := localAgentTestRecord(oldToken, taskJournalTime())
+	created, err := repository.CreateSingleton(ctx, record)
+	if err != nil {
+		t.Fatalf("CreateSingleton() error = %v", err)
+	}
+	firstReadyAt := record.CreatedAt.Add(time.Second)
+	ready, err := repository.MarkReady(ctx, record.ID, record.Generation, created.Revision, firstReadyAt)
+	if err != nil {
+		t.Fatalf("MarkReady() error = %v", err)
+	}
+
+	newToken := localAgentTestToken(32)
+	newDigestBytes := sha256.Sum256(newToken[:])
+	newDigest := base64.RawURLEncoding.EncodeToString(newDigestBytes[:])
+	newImage := "ghcr.io/groundplane/agent@sha256:" + strings.Repeat("b", 64)
+	replaced, err := repository.ReplaceGeneration(
+		ctx,
+		ready,
+		newImage,
+		[]byte("new-age-encrypted-token"),
+		newDigest,
+		firstReadyAt.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatalf("ReplaceGeneration() error = %v", err)
+	}
+	if replaced.Record.Image != newImage || replaced.Record.Generation != record.Generation+1 ||
+		replaced.Record.Phase != LocalAgentPhaseUpdating ||
+		!replaced.Record.ReadyAt.Equal(firstReadyAt) ||
+		replaced.Record.Config.MaxConcurrentTasks != record.Config.MaxConcurrentTasks {
+		t.Fatalf("ReplaceGeneration() = %#v", replaced)
+	}
+	assertTaskLifecycleValue(t, store, localAgentDigestKey(record.TokenDigest), false)
+	assertTaskLifecycleValue(t, store, localAgentDigestKey(newDigest), true)
+	if _, err := repository.ResolveAgentChannel(ctx, record.ID, oldToken); !errors.Is(
+		err,
+		errs.New(errs.KindAgentNotFound, ""),
+	) {
+		t.Fatalf("ResolveAgentChannel(old token) error = %v, want agent.not_found", err)
+	}
+	authorization, err := repository.ResolveAgentChannel(ctx, record.ID, newToken)
+	if err != nil || authorization.Generation != record.Generation+1 {
+		t.Fatalf("ResolveAgentChannel(new token) = %#v, %v", authorization, err)
+	}
+
+	completed, err := repository.MarkReplacementReady(
+		ctx,
+		record.ID,
+		replaced.Record.Generation,
+		replaced.Revision,
+	)
+	if err != nil {
+		t.Fatalf("MarkReplacementReady() error = %v", err)
+	}
+	if completed.Record.Phase != LocalAgentPhaseReady ||
+		!completed.Record.ReadyAt.Equal(firstReadyAt) {
+		t.Fatalf("MarkReplacementReady() = %#v", completed)
+	}
+}
+
 func TestLocalAgentRepositoryEnforcesOneAtomicSingleton(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()

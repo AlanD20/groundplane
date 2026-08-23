@@ -105,6 +105,23 @@ func (repository *configTestRepository) MarkReady(
 ) (StoredRecord, error) {
 	return StoredRecord{}, nil
 }
+func (repository *configTestRepository) BeginReplacement(
+	context.Context,
+	StoredRecord,
+	string,
+	Credential,
+	time.Time,
+) (StoredRecord, error) {
+	return StoredRecord{}, nil
+}
+func (repository *configTestRepository) MarkReplacementReady(
+	context.Context,
+	string,
+	uint64,
+	int64,
+) (StoredRecord, error) {
+	return StoredRecord{}, nil
+}
 func (repository *configTestRepository) BeginDelete(context.Context, string, uint64, int64) (StoredRecord, error) {
 	return StoredRecord{}, nil
 }
@@ -147,4 +164,5 @@ func (configTestSessions) WaitOffline(context.Context, string, uint64) error    
 
 type configTestTasks struct{}
 
+func (configTestTasks) RequireIdle(context.Context, string, uint64, int32) error         { return nil }
 func (configTestTasks) AbortActive(context.Context, string, uint64, int32, string) error { return nil }

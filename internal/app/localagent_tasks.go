@@ -44,6 +44,22 @@ func newLocalAgentTasksAdapter(
 	return &localAgentTasksAdapter{assignments: assignments, channel: channel}, nil
 }
 
+func (adapter *localAgentTasksAdapter) RequireIdle(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	maximum int32,
+) error {
+	assignments, err := adapter.assignments.ListAgentAssignments(ctx, agentID, generation, maximum)
+	if err != nil {
+		return err
+	}
+	if len(assignments) != 0 {
+		return errs.New(errs.KindResourceInUse, "local Agent has active Task assignments")
+	}
+	return nil
+}
+
 func (adapter *localAgentTasksAdapter) AbortActive(
 	ctx context.Context,
 	agentID string,
