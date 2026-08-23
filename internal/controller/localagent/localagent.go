@@ -408,7 +408,10 @@ func (manager *Manager) resumeReplacement(ctx context.Context, stored StoredReco
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C():
-		return errs.New(errs.KindTaskTimedOut, "agent replacement did not report authenticated Ready within 120 seconds")
+		return errs.New(
+			errs.KindTaskTimedOut,
+			"agent replacement did not report authenticated Ready within 120 seconds",
+		)
 	case <-ready:
 	}
 	if err := ctx.Err(); err != nil {

@@ -85,7 +85,10 @@ func TestAgentUpdateAllResolvesSingletonThenUsesPerIDEndpoint(t *testing.T) {
 				t.Fatalf("list request = %s %s", request.Method, request.URL.Path)
 			}
 			writer.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(writer, `{"items":[{"id":"agt_1","enrollment_task_id":"task_1","host":"host","status":"healthy","version":null,"labels":{},"ready_at":null,"last_report_at":null,"in_flight":0}]}`)
+			_, _ = io.WriteString(
+				writer,
+				`{"items":[{"id":"agt_1","enrollment_task_id":"task_1","host":"host","status":"healthy","version":null,"labels":{},"ready_at":null,"last_report_at":null,"in_flight":0}]}`,
+			)
 		case 2:
 			if request.Method != http.MethodPost || request.URL.Path != "/api/v1/agents/agt_1/update" {
 				t.Fatalf("update request = %s %s", request.Method, request.URL.Path)
