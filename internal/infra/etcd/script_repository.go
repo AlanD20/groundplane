@@ -20,6 +20,30 @@ func newScriptRepository(store hierarchyStore) (*ScriptRepository, error) {
 	return &ScriptRepository{store: store}, nil
 }
 
+func (repository *ScriptRepository) CreateScript(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	target Versioned[ServiceRecord],
+	record ScriptRecord,
+) (Versioned[ScriptRecord], error) {
+	conditions, mutations, classify, err := repository.prepareScriptCreation(ctx, environment, project, target, record)
+	if err != nil {
+		return Versioned[ScriptRecord]{}, err
+	}
+	defer clearMutationValues(mutations)
+	result, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return Versioned[ScriptRecord]{}, err
+	}
+	if !result.Succeeded {
+		return Versioned[ScriptRecord]{}, classify(result.Revision, result.FailureReads)
+	}
+	return Versioned[ScriptRecord]{
+		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
 func (repository *ScriptRepository) CreateScriptIdempotent(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],

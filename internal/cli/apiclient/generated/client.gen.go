@@ -1030,6 +1030,11 @@ type ScriptCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ScriptRemoveParams defines parameters for ScriptRemove.
+type ScriptRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ScriptEditParams defines parameters for ScriptEdit.
 type ScriptEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1569,6 +1574,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
 	ScriptCreate(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptRemove Remove a script
+	//
+	// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+	ScriptRemove(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ScriptShow Show a script
 	//
@@ -2574,6 +2584,21 @@ func (c *Client) ScriptCreateWithBody(ctx context.Context, params *ScriptCreateP
 // Corresponds with POST /scripts (the `ScriptCreate` operationId).
 func (c *Client) ScriptCreate(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewScriptCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptRemove Remove a script
+//
+// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+func (c *Client) ScriptRemove(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5138,6 +5163,53 @@ func NewScriptCreateRequestWithBody(server string, params *ScriptCreateParams, c
 	return req, nil
 }
 
+// NewScriptRemoveRequest constructs an http.Request for the ScriptRemove method
+func NewScriptRemoveRequest(server string, id string, params *ScriptRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scripts/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewScriptShowRequest constructs an http.Request for the ScriptShow method
 func NewScriptShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -6802,6 +6874,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
 	ScriptCreateWithResponse(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptCreateResponse, error)
+
+	// ScriptRemoveWithResponse Remove a script
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+	ScriptRemoveWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error)
 
 	// ScriptShowWithResponse Show a script
 	//
@@ -8987,6 +9066,61 @@ func (r ScriptCreateResponse) ContentType() string {
 	return ""
 }
 
+// ScriptRemoveResponse202Headers the declared response headers of an HTTP 202 response for ScriptRemove
+type ScriptRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type ScriptRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ScriptRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ScriptRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ScriptRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ScriptRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScriptRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScriptRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScriptRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ScriptShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -10863,6 +10997,19 @@ func (c *ClientWithResponses) ScriptCreateWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseScriptCreateResponse(rsp)
+}
+
+// ScriptRemoveWithResponse Remove a script
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /scripts/{id} (the `ScriptRemove` operationId).
+func (c *ClientWithResponses) ScriptRemoveWithResponse(ctx context.Context, id string, params *ScriptRemoveParams, reqEditors ...RequestEditorFn) (*ScriptRemoveResponse, error) {
+	rsp, err := c.ScriptRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptRemoveResponse(rsp)
 }
 
 // ScriptShowWithResponse Show a script
@@ -12779,6 +12926,52 @@ func ParseScriptCreateResponse(rsp *http.Response) (*ScriptCreateResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseScriptRemoveResponse parses an HTTP response from a ScriptRemoveWithResponse call
+func ParseScriptRemoveResponse(rsp *http.Response) (*ScriptRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScriptRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ScriptRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

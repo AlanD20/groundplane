@@ -440,6 +440,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script mutation service: %w", err)
 	}
+	scriptDeletionIdempotency, err := newDurableScriptDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script deletion idempotency: %w", err)
+	}
+	scriptDeletions, err := newScriptDeletionService(scriptMutationRepository, scriptDeletionIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script deletion service: %w", err)
+	}
+	scriptMutations.deletions = scriptDeletions
 	routeDeletionIdempotency, err := newDurableRouteDeletionIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()

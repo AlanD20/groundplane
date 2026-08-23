@@ -20,6 +20,7 @@ const (
 	DeletionTargetEnvironment DeletionTargetKind = "environment"
 	DeletionTargetEntry       DeletionTargetKind = "entry"
 	DeletionTargetRoute       DeletionTargetKind = "route"
+	DeletionTargetScript      DeletionTargetKind = "script"
 	DeletionTargetSecret      DeletionTargetKind = "secret"
 	DeletionTargetZone        DeletionTargetKind = "zone"
 )
@@ -363,6 +364,8 @@ func validateDeletionTarget(kind DeletionTargetKind, id string) error {
 		expected = ids.KindEnvEntry
 	case DeletionTargetRoute:
 		expected = ids.KindRoute
+	case DeletionTargetScript:
+		expected = ids.KindScript
 	case DeletionTargetSecret:
 		expected = ids.KindSecret
 	case DeletionTargetZone:

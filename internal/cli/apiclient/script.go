@@ -157,6 +157,26 @@ func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.Scrip
 	return scriptFromGenerated(*parsed), nil
 }
 
+func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/scripts/" + id
+	response, err := client.ScriptRemoveWithResponse(
+		ctx, id, &generated.ScriptRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+}
+
 func scriptFromGenerated(script generated.Script) apiTypes.Script {
 	return apiTypes.Script{
 		ID: script.Id, Name: script.Name, ServiceName: script.Service,

@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -21,6 +23,7 @@ type ScriptReader interface {
 type ScriptMutator interface {
 	CreateScript(context.Context, apiTypes.ScriptCreate, string) (etcd.IdempotencyResponse, error)
 	EditScript(context.Context, string, apiTypes.ScriptEdit, string) (etcd.IdempotencyResponse, error)
+	RemoveScript(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type scriptListInput struct {
@@ -42,6 +45,11 @@ type scriptEditInput struct {
 	ID             string `path:"id" pattern:"^scr_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	Body           apiTypes.ScriptEdit
+}
+
+type scriptRemoveInput struct {
+	ID             string `path:"id" pattern:"^scr_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type scriptOutput struct{ Body apiTypes.Script }
@@ -82,6 +90,15 @@ func (s *Server) registerScripts() {
 			}},
 		},
 	}, s.editScript)
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
+	)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "script.remove", Method: http.MethodDelete, Path: "/scripts/{id}",
+		Summary: "Remove a script", Tags: []string{"Script"}, DefaultStatus: http.StatusAccepted,
+		Middlewares: huma.Middlewares{s.rejectScriptDeleteBody, s.rejectScriptDeleteQuery},
+		Responses:   attachMutationResponses(taskAcceptedSchema),
+	}, s.removeScript)
 	s.setRoutePolicy("POST /api/v1/scripts", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/scripts/{id}", routePolicy{body: jsonBody})
 }
@@ -139,6 +156,42 @@ func (s *Server) editScript(ctx context.Context, request *scriptEditInput) (*scr
 		return nil, normalizeProjectError(err)
 	}
 	return s.scriptMutationResponse(response), nil
+}
+
+func (s *Server) removeScript(ctx context.Context, request *scriptRemoveInput) (*scriptMutationOutput, error) {
+	if s.scriptMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Script mutator is not configured")
+	}
+	response, err := s.scriptMutations.RemoveScript(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return s.scriptMutationResponse(response), nil
+}
+
+func (s *Server) rejectScriptDeleteBody(ctx huma.Context, next func(huma.Context)) {
+	var probe [1]byte
+	count, err := ctx.BodyReader().Read(probe[:])
+	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		s.writeScriptProblem(ctx, "Script deletion body is not allowed")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectScriptDeleteQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeScriptProblem(ctx, "Script deletion query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) writeScriptProblem(ctx huma.Context, detail string) {
+	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
+		s.Logger.Error("controller: write Script request problem", slog.Any("error", err))
+	}
 }
 
 func (s *Server) scriptMutationResponse(response etcd.IdempotencyResponse) *scriptMutationOutput {

@@ -61,6 +61,11 @@ func (handler *controllerTaskHandler) Execute(
 			return errs.New(errs.KindValidationFailed, "Controller Task Secret removal is invalid")
 		}
 		return nil
+	case etcd.TaskResourceScript:
+		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindScript, task.Target) != nil || len(task.Params) != 1 {
+			return errs.New(errs.KindValidationFailed, "Controller Task Script removal is invalid")
+		}
+		return nil
 	case etcd.TaskResourceEntry:
 		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
 			len(task.Params) != 2 ||

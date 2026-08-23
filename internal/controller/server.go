@@ -256,7 +256,6 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/volumes/{id}", s.notImplemented)
 	s.jsonRoute("PATCH /api/v1/volumes/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/volumes/{id}", s.acceptTask)
-	mux.HandleFunc("DELETE /api/v1/scripts/{id}", s.acceptTask)
 	// Entry reads, protected mutations, and explicit reveal are typed Huma operations.
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 

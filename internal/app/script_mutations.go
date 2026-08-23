@@ -203,6 +203,7 @@ func (service *durableScriptMutationIdempotency) ResolveUnknown(
 type scriptMutationService struct {
 	repository  scriptMutationRepository
 	idempotency scriptMutationIdempotency
+	deletions   *scriptDeletionService
 	now         func() time.Time
 }
 
@@ -214,6 +215,17 @@ func newScriptMutationService(
 		return nil, errs.New(errs.KindInternal, "Script mutation service is not configured")
 	}
 	return &scriptMutationService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+}
+
+func (service *scriptMutationService) RemoveScript(
+	ctx context.Context,
+	scriptID string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	if service == nil || service.deletions == nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script deletion service is not configured")
+	}
+	return service.deletions.RemoveScript(ctx, scriptID, idempotencyKey)
 }
 
 func (service *scriptMutationService) CreateScript(

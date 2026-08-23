@@ -133,7 +133,11 @@ func newScriptCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/scripts/"+scriptID)
+			accepted, err := fromContext(cmd).Client.RemoveScript(cmd.Context(), scriptID)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	})
 

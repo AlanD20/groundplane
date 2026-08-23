@@ -278,6 +278,15 @@ func (repository *TaskRepository) RetryTask(
 		mutations = append(mutations, secretChange.mutations...)
 	}
 	defer clearSecretTaskChange(secretChange)
+	scriptChange, err := repository.prepareScriptTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if scriptChange.applies {
+		conditions = append(conditions, scriptChange.conditions...)
+		mutations = append(mutations, scriptChange.mutations...)
+	}
+	defer clearScriptTaskChange(scriptChange)
 	routeChange, err := repository.prepareRemovalTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -1025,6 +1034,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateScriptTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				if err := repository.validateRemovalTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
@@ -1274,6 +1288,22 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, secretChange.conditions...)
 			mutations = append(mutations, secretChange.mutations...)
 		}
+		scriptChange, err := repository.prepareScriptTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if scriptChange.applies {
+			conditions = append(conditions, scriptChange.conditions...)
+			mutations = append(mutations, scriptChange.mutations...)
+		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
 		)
@@ -1454,6 +1484,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
+			if err := repository.validateScriptTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			if err := repository.validateRemovalTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
@@ -1562,6 +1597,16 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(retentionValue)
 			return Versioned[TaskRecord]{}, err
 		}
+		scriptChange, err := repository.prepareScriptTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clearSecretTaskChange(secretChange)
+			return Versioned[TaskRecord]{}, err
+		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
@@ -1614,6 +1659,10 @@ func (repository *TaskRepository) AbortPendingTask(
 		if secretChange.applies {
 			conditions = append(conditions, secretChange.conditions...)
 			mutations = append(mutations, secretChange.mutations...)
+		}
+		if scriptChange.applies {
+			conditions = append(conditions, scriptChange.conditions...)
+			mutations = append(mutations, scriptChange.mutations...)
 		}
 		if routeChange.applies {
 			conditions = append(conditions, routeChange.conditions...)
