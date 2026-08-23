@@ -40,9 +40,7 @@ type BackupSourceRecord struct {
 	EnvironmentID string                `json:"environment_id"`
 	Kind          core.BackupSourceKind `json:"kind"`
 	TargetID      string                `json:"target_id"`
-	Active        bool                  `json:"active"`
 	CreatedAt     time.Time             `json:"created_at"`
-	UpdatedAt     time.Time             `json:"updated_at"`
 }
 
 // BackupKeyRecord is safe public metadata for the current Environment key era.
@@ -164,9 +162,8 @@ func validateBackupSourceRecord(record BackupSourceRecord) error {
 	default:
 		return errs.New(errs.KindValidationFailed, "Backup source kind is invalid")
 	}
-	if !validUTCInstant(record.CreatedAt) || !validUTCInstant(record.UpdatedAt) ||
-		record.UpdatedAt.Before(record.CreatedAt) {
-		return errs.New(errs.KindValidationFailed, "Backup source timestamps are invalid")
+	if !validUTCInstant(record.CreatedAt) {
+		return errs.New(errs.KindValidationFailed, "Backup source creation time is invalid")
 	}
 	return nil
 }

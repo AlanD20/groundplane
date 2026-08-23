@@ -67,7 +67,7 @@ func TestBackupSourceRecordEnforcesKindSpecificStableTarget(t *testing.T) {
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	base := BackupSourceRecord{
 		ID: "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV", EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		CreatedAt: at, UpdatedAt: at,
+		CreatedAt: at,
 	}
 	for name, source := range map[string]BackupSourceRecord{
 		"attach": func() BackupSourceRecord {
