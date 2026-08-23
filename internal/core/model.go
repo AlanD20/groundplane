@@ -515,14 +515,40 @@ type Secret struct {
 	UpdatedAt time.Time   `yaml:"updated_at"           json:"updated_at"`
 }
 
-// Connector is a backup destination + credentials owned by exactly one
-// environment. There are no project or platform connectors.
+type ConnectorKind string
+
+const ConnectorKindS3Compatible ConnectorKind = "s3-compatible"
+
+type ConnectorCredentialKind string
+
+const (
+	ConnectorCredentialSecretRef ConnectorCredentialKind = "secret_ref"
+	ConnectorCredentialDirect    ConnectorCredentialKind = "direct"
+
+	ConnectorCredentialAccessKey = "access_key"
+	ConnectorCredentialSecretKey = "secret_key"
+)
+
+// ConnectorCredential is listable source metadata. Direct plaintext lives
+// only in the Connector's encrypted subordinate value record.
+type ConnectorCredential struct {
+	Kind      ConnectorCredentialKind `yaml:"kind"                 json:"kind"`
+	SecretRef string                  `yaml:"secret_ref,omitempty" json:"secret_ref,omitempty"`
+}
+
+// Connector is a complete backup-destination decision owned by exactly one
+// Environment. There are no Project or platform Connectors.
 type Connector struct {
-	ID            string            `yaml:"id"                    json:"id"` // con_<ulid>
-	EnvironmentID string            `yaml:"environment_id"        json:"environment_id"`
-	Kind          string            `yaml:"kind"                  json:"kind"` // "s3-compatible", later s3/minio/b2
-	PathStyle     bool              `yaml:"path_style"            json:"path_style"`
-	Credentials   map[string]string `yaml:"credentials,omitempty" json:"credentials,omitempty"` // secret-store ref or opaque encrypted-value record reference
+	ID            string                         `yaml:"id"                    json:"id"` // con_<ulid>
+	EnvironmentID string                         `yaml:"environment_id"        json:"environment_id"`
+	Name          string                         `yaml:"name"                  json:"name"`
+	Kind          ConnectorKind                  `yaml:"kind"                  json:"kind"`
+	Endpoint      string                         `yaml:"endpoint"              json:"endpoint"`
+	Bucket        string                         `yaml:"bucket"                json:"bucket"`
+	Prefix        string                         `yaml:"prefix,omitempty"      json:"prefix,omitempty"`
+	Region        string                         `yaml:"region"                json:"region"`
+	PathStyle     bool                           `yaml:"path_style"            json:"path_style"`
+	Credentials   map[string]ConnectorCredential `yaml:"credentials"           json:"credentials"`
 }
 
 // DeployStatus is the release ledger's task-driven state machine. See
