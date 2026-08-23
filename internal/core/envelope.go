@@ -170,7 +170,7 @@ type ComponentSpec struct {
 // "x-gp-backup".
 type BackupSpec struct {
 	Enabled    bool               `yaml:"enabled"`
-	Schedule   string             `yaml:"schedule,omitempty"`
+	Frequency  string             `yaml:"frequency,omitempty"`
 	Keep       int                `yaml:"keep,omitempty"`
 	Encryption string             `yaml:"encryption,omitempty"`
 	Connector  string             `yaml:"connector,omitempty"`

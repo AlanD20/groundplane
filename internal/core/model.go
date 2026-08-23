@@ -432,7 +432,7 @@ type BackupSource struct {
 }
 
 // BackupPolicy is per-environment, toggleable off, with fully selectable
-// sources under one schedule/retention/encryption. Removing a source
+// sources under one frequency/retention/encryption. Removing a source
 // from the active policy stops new points but existing recovery points
 // remain addressable until explicit deletion or retention pruning (see
 // blueprint.md, "x-gp-backup").
