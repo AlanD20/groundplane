@@ -35,6 +35,7 @@ func TestConnectorResponseOmitsDirectCredentialValue(t *testing.T) {
 		EnvironmentID: "env_x",
 		Name:          "backups",
 		Kind:          "s3-compatible",
+		PathStyle:     true,
 		Credentials: map[string]ConnectorCredential{
 			"secret_key": {Kind: ConnectorCredentialDirect},
 		},
@@ -44,6 +45,29 @@ func TestConnectorResponseOmitsDirectCredentialValue(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "plaintext") || strings.Contains(string(encoded), `"value"`) {
 		t.Fatalf("Connector response leaked a write-only credential field: %s", encoded)
+	}
+	if !strings.Contains(string(encoded), `"path_style":true`) {
+		t.Fatalf("Connector response omitted the addressing decision: %s", encoded)
+	}
+}
+
+func TestConnectorCreateRequestIncludesPathStyleDecision(t *testing.T) {
+	// Rationale: S3-compatible endpoints do not expose portable addressing
+	// behavior, so desired state must carry the operator's explicit decision.
+	encoded, err := json.Marshal(ConnectorCreateRequest{
+		Name:      "backups",
+		Kind:      "s3-compatible",
+		Endpoint:  "https://objects.example.test",
+		Bucket:    "groundplane-backups",
+		Prefix:    "production/",
+		Region:    "auto",
+		PathStyle: true,
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"path_style":true`) {
+		t.Fatalf("Connector create request omitted the addressing decision: %s", encoded)
 	}
 }
 

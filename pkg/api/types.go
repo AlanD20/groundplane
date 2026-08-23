@@ -539,21 +539,23 @@ type Connector struct {
 	EnvironmentID string                         `json:"environment_id"`
 	Name          string                         `json:"name"`
 	Kind          string                         `json:"kind"`
-	Endpoint      string                         `json:"endpoint,omitempty"`
-	Bucket        string                         `json:"bucket,omitempty"`
+	Endpoint      string                         `json:"endpoint"`
+	Bucket        string                         `json:"bucket"`
 	Prefix        string                         `json:"prefix,omitempty"`
-	Region        string                         `json:"region,omitempty"`
-	Credentials   map[string]ConnectorCredential `json:"credentials,omitempty"`
+	Region        string                         `json:"region"`
+	PathStyle     bool                           `json:"path_style"`
+	Credentials   map[string]ConnectorCredential `json:"credentials"`
 }
 
 type ConnectorCreateRequest struct {
 	Name        string                              `json:"name"`
 	Kind        string                              `json:"kind"`
-	Endpoint    string                              `json:"endpoint,omitempty"`
-	Bucket      string                              `json:"bucket,omitempty"`
+	Endpoint    string                              `json:"endpoint"`
+	Bucket      string                              `json:"bucket"`
 	Prefix      string                              `json:"prefix,omitempty"`
-	Region      string                              `json:"region,omitempty"`
-	Credentials map[string]ConnectorCredentialInput `json:"credentials,omitempty"`
+	Region      string                              `json:"region"`
+	PathStyle   bool                                `json:"path_style"`
+	Credentials map[string]ConnectorCredentialInput `json:"credentials"`
 }
 
 // ReleaseRecord is one per-service deploy/rollback ledger entry — see
