@@ -328,6 +328,21 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret reads: %w", err)
 	}
+	connectorRecords, err := etcd.NewConnectorRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Connector repository: %w", err)
+	}
+	connectorReadRepository, err := newDurableConnectorReadRepository(hierarchyRecords, connectorRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Connector read repositories: %w", err)
+	}
+	connectorReads, err := newConnectorReadService(connectorReadRepository)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Connector reads: %w", err)
+	}
 	attachRecords, err := etcd.NewAttachRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -587,6 +602,29 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret creation service: %w", err)
+	}
+	connectorCreationRepository, err := newDurableConnectorCreationRepository(
+		hierarchyRecords,
+		secretRecords,
+		connectorRecords,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Connector creation repositories: %w", err)
+	}
+	connectorCreationIdempotency, err := newDurableConnectorCreationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Connector creation idempotency: %w", err)
+	}
+	connectorMutations, err := newConnectorCreationService(
+		connectorCreationRepository,
+		intentProtector,
+		connectorCreationIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Connector creation service: %w", err)
 	}
 	secretDeletionIdempotency, err := newDurableSecretDeletionIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -926,6 +964,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Secrets:               secretReads,
 		SecretMutations:       secretMutations,
 		SecretDeletions:       secretDeletions,
+		Connectors:            connectorReads,
+		ConnectorMutations:    connectorMutations,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,

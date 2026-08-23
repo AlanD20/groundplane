@@ -142,7 +142,7 @@ func TestConnectorCreationResolvesReferencesAndSealsOnlyDirectValues(t *testing.
 		t.Fatalf("newConnectorCreationService() error = %v", err)
 	}
 	pathStyle := true
-	resolution, err := service.CreateConnector(
+	response, err := service.CreateConnector(
 		context.Background(), environmentID, apiTypes.ConnectorCreateRequest{
 			Name: "primary-backups", Kind: "s3-compatible",
 			Endpoint: "https://objects.example.test", Bucket: "groundplane-backups",
@@ -156,13 +156,13 @@ func TestConnectorCreationResolvesReferencesAndSealsOnlyDirectValues(t *testing.
 	if err != nil {
 		t.Fatalf("CreateConnector() error = %v", err)
 	}
-	defer clear(resolution.Response.Body)
+	defer clear(response.Body)
 	defer clear(repository.credentials.Ciphertext)
 	defer clear(repository.marker.Intent.Ciphertext)
 	defer clear(repository.marker.Response.Body)
-	if resolution.Kind != idempotentintent.ResolutionApplied || repository.resolveCalls != 1 ||
+	if response.Status != 201 || repository.resolveCalls != 1 ||
 		repository.createCalls != 1 || repository.marker.Response.Status != 201 {
-		t.Fatalf("CreateConnector() resolution/repository = %#v/%#v", resolution, repository)
+		t.Fatalf("CreateConnector() response/repository = %#v/%#v", response, repository)
 	}
 	if !bytes.Contains(repository.credentials.Ciphertext, []byte(`"secret_key":"direct-secret"`)) ||
 		bytes.Contains(repository.credentials.Ciphertext, []byte("S3_ACCESS_KEY")) {
@@ -172,12 +172,12 @@ func TestConnectorCreationResolvesReferencesAndSealsOnlyDirectValues(t *testing.
 		repository.record.Connector.Credentials[core.ConnectorCredentialAccessKey].SecretRef != "S3_ACCESS_KEY" {
 		t.Fatalf("durable Connector credentials = %#v", repository.record.Connector.Credentials)
 	}
-	var response apiTypes.Connector
-	if err := json.Unmarshal(resolution.Response.Body, &response); err != nil {
+	var shown apiTypes.Connector
+	if err := json.Unmarshal(response.Body, &shown); err != nil {
 		t.Fatalf("json.Unmarshal(response) error = %v", err)
 	}
-	if response.ID == "" || bytes.Contains(resolution.Response.Body, []byte("direct-secret")) {
-		t.Fatalf("CreateConnector() response = %s", resolution.Response.Body)
+	if shown.ID == "" || bytes.Contains(response.Body, []byte("direct-secret")) {
+		t.Fatalf("CreateConnector() response = %s", response.Body)
 	}
 }
 

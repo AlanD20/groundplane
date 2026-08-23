@@ -371,6 +371,146 @@
         ],
         "type": "object"
       },
+      "Connector": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/Connector.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "credentials": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ConnectorCredential"
+            },
+            "type": "object"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path_style": {
+            "type": "boolean"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "environment_id",
+          "name",
+          "kind",
+          "endpoint",
+          "bucket",
+          "region",
+          "path_style",
+          "credentials"
+        ],
+        "type": "object"
+      },
+      "ConnectorCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ConnectorCreateRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "credentials": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ConnectorCredentialInput"
+            },
+            "type": "object"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path_style": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "endpoint",
+          "bucket",
+          "region",
+          "path_style",
+          "credentials"
+        ],
+        "type": "object"
+      },
+      "ConnectorCredential": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "secret_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ConnectorCredentialInput": {
+        "additionalProperties": false,
+        "properties": {
+          "secret_ref": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Entry": {
         "additionalProperties": false,
         "properties": {
@@ -988,6 +1128,36 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/BackingService"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageConnector": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageConnector.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Connector"
             },
             "type": [
               "array",
@@ -3335,6 +3505,184 @@
         "summary": "Show a backing service",
         "tags": [
           "Backing service"
+        ]
+      }
+    },
+    "/connectors": {
+      "get": {
+        "operationId": "connector.list",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageConnector"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List Environment connectors",
+        "tags": [
+          "Connector"
+        ]
+      },
+      "post": {
+        "operationId": "connector.create",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorCreateRequest"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connector"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create an Environment connector",
+        "tags": [
+          "Connector"
+        ]
+      }
+    },
+    "/connectors/{id}": {
+      "get": {
+        "operationId": "connector.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^con_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connector"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show connector metadata",
+        "tags": [
+          "Connector"
         ]
       }
     },

@@ -166,6 +166,16 @@ func (service *connectorCreationService) CreateConnector(
 	environmentID string,
 	input apiTypes.ConnectorCreateRequest,
 	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	resolution, err := service.resolveConnectorCreation(ctx, environmentID, input, idempotencyKey)
+	return resolution.Response, err
+}
+
+func (service *connectorCreationService) resolveConnectorCreation(
+	ctx context.Context,
+	environmentID string,
+	input apiTypes.ConnectorCreateRequest,
+	idempotencyKey string,
 ) (idempotentintent.Resolution, error) {
 	evidence, err := service.idempotency.Prepare(ctx, environmentID, input)
 	if err != nil {

@@ -54,6 +54,8 @@ type Server struct {
 	secrets               SecretReader
 	secretMutations       SecretMutator
 	secretDeletions       SecretDeleter
+	connectors            ConnectorReader
+	connectorMutations    ConnectorMutator
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
@@ -93,6 +95,8 @@ type Options struct {
 	Secrets               SecretReader
 	SecretMutations       SecretMutator
 	SecretDeletions       SecretDeleter
+	Connectors            ConnectorReader
+	ConnectorMutations    ConnectorMutator
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
@@ -149,6 +153,8 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		secrets:               options.Secrets,
 		secretMutations:       options.SecretMutations,
 		secretDeletions:       options.SecretDeletions,
+		connectors:            options.Connectors,
+		connectorMutations:    options.ConnectorMutations,
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
@@ -176,6 +182,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerScripts()
 	s.registerEntries()
 	s.registerSecrets()
+	s.registerConnectors()
 	s.registerAttaches()
 	s.registerTasks()
 	s.registerHost()
@@ -276,10 +283,7 @@ func (s *Server) routes() {
 	// Secret reads, protected create/delete, and explicit reveal are typed
 	// Huma operations.
 
-	// connector (?environment= required) — environment-scoped only
-	mux.HandleFunc("GET /api/v1/connectors", s.notImplemented)
-	s.jsonRoute("POST /api/v1/connectors", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/connectors/{id}", s.notImplemented)
+	// Connector deletion is registered when its Controller finalizer Task is implemented.
 	mux.HandleFunc("DELETE /api/v1/connectors/{id}", s.acceptTask)
 
 	// runner (?tenant= or ?project=) — org-scoped or repo-scoped
