@@ -134,7 +134,10 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	if task.Params[etcd.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[etcd.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
 		revisionID != candidate.BlueprintRevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
-		ids.Validate(ids.KindConfig, artifactID) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration ||
+		ids.Validate(
+			ids.KindConfig,
+			artifactID,
+		) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration ||
 		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || ids.Validate(ids.KindStep, task.Steps[1].ID) != nil {
 		return nil, errs.New(errs.KindInternal, "durable Route removal Task parameters are invalid")
 	}

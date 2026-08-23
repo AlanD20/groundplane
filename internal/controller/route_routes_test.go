@@ -64,6 +64,15 @@ func (fake *fakeRouteMutator) EditRoute(
 	return fake.response, nil
 }
 
+func (fake *fakeRouteMutator) RemoveRoute(
+	_ context.Context,
+	routeID string,
+	key string,
+) (etcd.IdempotencyResponse, error) {
+	fake.routeID, fake.key = routeID, key
+	return fake.response, nil
+}
+
 func TestRouteHTTPBoundaryPreservesExactReadAndMutationContracts(t *testing.T) {
 	// Rationale: Route list/show/create/edit are one operator capability across
 	// Console, CLI, and API, so the HTTP boundary must preserve every field.
@@ -125,6 +134,20 @@ func TestRouteHTTPBoundaryPreservesExactReadAndMutationContracts(t *testing.T) {
 			mutator.key,
 		)
 	}
+	mutator.response.Status = http.StatusAccepted
+	removed, err := server.removeRoute(context.Background(), &routeRemoveInput{
+		ID: record.Desired.ID, IdempotencyKey: "route-remove-key-0001",
+	})
+	if err != nil || removed.Status != http.StatusAccepted || mutator.routeID != record.Desired.ID ||
+		mutator.key != "route-remove-key-0001" {
+		t.Fatalf(
+			"removeRoute() = %#v, %v, forwarded %q/%q",
+			removed,
+			err,
+			mutator.routeID,
+			mutator.key,
+		)
+	}
 }
 
 func TestRouteOpenAPIContainsCanonicalOperations(t *testing.T) {
@@ -152,6 +175,7 @@ func TestRouteOpenAPIContainsCanonicalOperations(t *testing.T) {
 		{method: "post", path: "/routes", operationID: "route.create"},
 		{method: "get", path: "/routes/{id}", operationID: "route.show"},
 		{method: "patch", path: "/routes/{id}", operationID: "route.edit"},
+		{method: "delete", path: "/routes/{id}", operationID: "route.remove"},
 	}
 	for _, operation := range want {
 		if got := contract.Paths[operation.path][operation.method].OperationID; got != operation.operationID {

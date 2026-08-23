@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -21,6 +23,7 @@ type RouteReader interface {
 type RouteMutator interface {
 	CreateRoute(context.Context, apiTypes.RouteCreate, string) (etcd.IdempotencyResponse, error)
 	EditRoute(context.Context, string, apiTypes.RouteEdit, string) (etcd.IdempotencyResponse, error)
+	RemoveRoute(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type routeListInput struct {
@@ -42,6 +45,11 @@ type routeEditInput struct {
 	ID             string `path:"id" pattern:"^rte_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	Body           apiTypes.RouteEdit
+}
+
+type routeRemoveInput struct {
+	ID             string `path:"id" pattern:"^rte_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type routeOutput struct {
@@ -92,6 +100,15 @@ func (s *Server) registerRoutes() {
 			},
 		},
 	}, s.editRoute)
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
+	)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "route.remove", Method: http.MethodDelete, Path: "/routes/{id}",
+		Summary: "Remove a route", Tags: []string{"Route"}, DefaultStatus: http.StatusAccepted,
+		Middlewares: huma.Middlewares{s.rejectRouteDeleteBody, s.rejectRouteDeleteQuery},
+		Responses:   attachMutationResponses(taskAcceptedSchema),
+	}, s.removeRoute)
 	s.setRoutePolicy("POST /api/v1/routes", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/routes/{id}", routePolicy{body: jsonBody})
 }
@@ -160,6 +177,45 @@ func (s *Server) editRoute(
 		return nil, normalizeProjectError(err)
 	}
 	return s.routeMutationResponse(response), nil
+}
+
+func (s *Server) removeRoute(
+	ctx context.Context,
+	request *routeRemoveInput,
+) (*routeMutationOutput, error) {
+	if s.routeMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Route mutator is not configured")
+	}
+	response, err := s.routeMutations.RemoveRoute(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return s.routeMutationResponse(response), nil
+}
+
+func (s *Server) rejectRouteDeleteBody(ctx huma.Context, next func(huma.Context)) {
+	var probe [1]byte
+	count, err := ctx.BodyReader().Read(probe[:])
+	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		s.writeRouteProblem(ctx, "Route deletion body is not allowed")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectRouteDeleteQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeRouteProblem(ctx, "Route deletion query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) writeRouteProblem(ctx huma.Context, detail string) {
+	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
+		s.Logger.Error("controller: write Route request problem", slog.Any("error", err))
+	}
 }
 
 func (s *Server) routeMutationResponse(response etcd.IdempotencyResponse) *routeMutationOutput {

@@ -168,6 +168,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		taskOperationIndexKey(task.OperationID, task.ID),
 		taskPruneIntentKey(task.ID),
 		componentTaskIntentKey(task.ID),
+		routeRemovalIntentKey(task.ID),
 	}
 	planReferenceIndex := -1
 	if task.Type == TaskAttach || task.Type == TaskDetach {
@@ -206,6 +207,14 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateComponentTaskOwner(task, componentIntent) != nil ||
 			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.TerminalAt == nil ||
 			!componentIntent.TerminalAt.Equal(*task.TerminalAt) {
+			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		}
+	}
+	if companions.Values[5] != nil {
+		routeIntent, decodeErr := decodeRouteRemovalIntent(companions.Values[5].Value)
+		if decodeErr != nil || validateRouteRemovalTaskOwner(task, routeIntent) != nil ||
+			routeIntent.Status != task.Status || routeIntent.TerminalAt == nil || task.TerminalAt == nil ||
+			!routeIntent.TerminalAt.Equal(*task.TerminalAt) {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
@@ -252,6 +261,12 @@ func (repository *TaskRepository) beginTaskPrune(
 		mutations = append(mutations, Mutation{Type: MutationDelete, Key: componentTaskIntentKey(task.ID)})
 	}
 	conditions = append(conditions, componentCondition)
+	routeCondition := Condition{Key: routeRemovalIntentKey(task.ID)}
+	if companions.Values[5] != nil {
+		routeCondition.ModRevision = companions.Values[5].ModRevision
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: routeRemovalIntentKey(task.ID)})
+	}
+	conditions = append(conditions, routeCondition)
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
 		conditions = append(conditions, Condition{

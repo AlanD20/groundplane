@@ -855,6 +855,11 @@ type RouteCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// RouteRemoveParams defines parameters for RouteRemove.
+type RouteRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // RouteEditParams defines parameters for RouteEdit.
 type RouteEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1301,6 +1306,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /routes (the `RouteCreate` operationId).
 	RouteCreate(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouteRemove Remove a route
+	//
+	// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+	RouteRemove(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RouteShow Show a route
 	//
@@ -2102,6 +2112,21 @@ func (c *Client) RouteCreateWithBody(ctx context.Context, params *RouteCreatePar
 // Corresponds with POST /routes (the `RouteCreate` operationId).
 func (c *Client) RouteCreate(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRouteCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouteRemove Remove a route
+//
+// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+func (c *Client) RouteRemove(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouteRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4125,6 +4150,53 @@ func NewRouteCreateRequestWithBody(server string, params *RouteCreateParams, con
 	return req, nil
 }
 
+// NewRouteRemoveRequest constructs an http.Request for the RouteRemove method
+func NewRouteRemoveRequest(server string, id string, params *RouteRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/routes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewRouteShowRequest constructs an http.Request for the RouteShow method
 func NewRouteShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -5590,6 +5662,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /routes (the `RouteCreate` operationId).
 	RouteCreateWithResponse(ctx context.Context, params *RouteCreateParams, body RouteCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteCreateResponse, error)
+
+	// RouteRemoveWithResponse Remove a route
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+	RouteRemoveWithResponse(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error)
 
 	// RouteShowWithResponse Show a route
 	//
@@ -7292,6 +7371,61 @@ func (r RouteCreateResponse) ContentType() string {
 	return ""
 }
 
+// RouteRemoveResponse202Headers the declared response headers of an HTTP 202 response for RouteRemove
+type RouteRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type RouteRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RouteRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RouteRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouteRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouteRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouteRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouteRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouteRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type RouteShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8925,6 +9059,19 @@ func (c *ClientWithResponses) RouteCreateWithResponse(ctx context.Context, param
 	return ParseRouteCreateResponse(rsp)
 }
 
+// RouteRemoveWithResponse Remove a route
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /routes/{id} (the `RouteRemove` operationId).
+func (c *ClientWithResponses) RouteRemoveWithResponse(ctx context.Context, id string, params *RouteRemoveParams, reqEditors ...RequestEditorFn) (*RouteRemoveResponse, error) {
+	rsp, err := c.RouteRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouteRemoveResponse(rsp)
+}
+
 // RouteShowWithResponse Show a route
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10449,6 +10596,52 @@ func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) 
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRouteRemoveResponse parses an HTTP response from a RouteRemoveWithResponse call
+func ParseRouteRemoveResponse(rsp *http.Response) (*RouteRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouteRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RouteRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

@@ -114,7 +114,13 @@ func newRouteCmd() *cobra.Command {
 		Short:   "Remove a route (dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDestroy(cmd, "/api/v1/routes/"+target(fromContext(cmd), args[0]))
+			accepted, err := fromContext(cmd).Client.RemoveRoute(
+				cmd.Context(), target(fromContext(cmd), args[0]),
+			)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	})
 

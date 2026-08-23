@@ -403,6 +403,21 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Route mutation service: %w", err)
 	}
+	routeDeletionIdempotency, err := newDurableRouteDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route deletion idempotency: %w", err)
+	}
+	routeDeletions, err := newRouteDeletionService(
+		routeMutationRepository,
+		planResolver,
+		routeDeletionIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Route deletion service: %w", err)
+	}
+	routeMutations.deletions = routeDeletions
 	agentConfigIdempotency, err := newDurableLocalAgentConfigIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()

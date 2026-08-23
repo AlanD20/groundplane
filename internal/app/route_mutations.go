@@ -219,6 +219,7 @@ func (service *durableRouteMutationIdempotency) ResolveUnknown(
 type routeMutationService struct {
 	repository  routeMutationRepository
 	idempotency routeMutationIdempotency
+	deletions   *routeDeletionService
 	now         func() time.Time
 }
 
@@ -230,6 +231,17 @@ func newRouteMutationService(
 		return nil, errs.New(errs.KindInternal, "Route mutation service is not configured")
 	}
 	return &routeMutationService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+}
+
+func (service *routeMutationService) RemoveRoute(
+	ctx context.Context,
+	routeID string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	if service == nil || service.deletions == nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route deletion service is not configured")
+	}
+	return service.deletions.RemoveRoute(ctx, routeID, idempotencyKey)
 }
 
 func (service *routeMutationService) CreateRoute(
