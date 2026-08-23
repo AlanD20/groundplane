@@ -18,11 +18,48 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 	if ctx == nil || resolver == nil || resolver.blueprints == nil ||
 		ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		ids.Validate(ids.KindTask, reference.RevisionID) != nil ||
-		ids.Validate(ids.KindComponent, reference.ComponentID) != nil {
+		ids.Validate(ids.KindComponent, reference.ComponentID) != nil ||
+		(reference.RouteRemovalTaskID != "" && ids.Validate(ids.KindTask, reference.RouteRemovalTaskID) != nil) {
 		return nil, errs.New(errs.KindInternal, "Component file resolver input is invalid")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if reference.RouteRemovalTaskID != "" {
+		reader, ok := resolver.blueprints.(routeRemovalPlanStateReader)
+		if !ok {
+			return nil, errs.New(errs.KindInternal, "Route removal plan state reader is unavailable")
+		}
+		stored, found, err := reader.GetRouteRemovalIntent(ctx, reference.RouteRemovalTaskID)
+		if err != nil {
+			return nil, err
+		}
+		intent := stored.Record
+		if !found || intent.TaskID != reference.RouteRemovalTaskID || intent.EnvironmentID != environmentID ||
+			intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
+			intent.CandidateProjection.BlueprintRevisionID != reference.RevisionID {
+			return nil, corruptMaterializationSource()
+		}
+		return resolver.resolveComponentFileFromProjection(ctx, environmentID, reference, *intent.CandidateProjection)
+	}
+	projection, found, err := resolver.blueprints.GetEnvironmentComposeProjection(ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	if !found || projection.Record.BlueprintRevisionID != reference.RevisionID {
+		return nil, corruptMaterializationSource()
+	}
+	return resolver.resolveComponentFileFromProjection(ctx, environmentID, reference, projection.Record)
+}
+
+func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
+	ctx context.Context,
+	environmentID string,
+	reference etcd.TaskComponentFileValueReference,
+	projection etcd.EnvironmentComposeProjection,
+) ([]byte, error) {
+	if projection.EnvironmentID != environmentID || projection.BlueprintRevisionID != reference.RevisionID {
+		return nil, corruptMaterializationSource()
 	}
 	environment, err := resolver.blueprints.GetEnvironment(ctx, environmentID)
 	if err != nil {
@@ -36,12 +73,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 	if err != nil {
 		return nil, err
 	}
-	projection, found, err := resolver.blueprints.GetEnvironmentComposeProjection(ctx, environmentID)
-	if err != nil {
-		return nil, err
-	}
-	if !found || projection.Record.BlueprintRevisionID != reference.RevisionID ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
 		project.Record.Kind != etcd.ProjectKindTenant {
 		return nil, corruptMaterializationSource()
 	}
@@ -58,10 +90,10 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 	componentProjection, err := projectPinnedEnvironmentComponents(
 		parsed.Project,
 		identity,
-		projection.Record,
+		projection,
 		parsed.Extensions.Routes,
 		parsed.Extensions.Components,
-		projectedEnvironmentEntries(projection.Record.Entries),
+		projectedEnvironmentEntries(projection.Entries),
 		resolver.componentCatalog,
 	)
 	if err != nil {

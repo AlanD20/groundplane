@@ -61,6 +61,12 @@ func (handler *controllerTaskHandler) Execute(
 			return errs.New(errs.KindValidationFailed, "Controller Task Secret removal is invalid")
 		}
 		return nil
+	case etcd.TaskResourceRoute:
+		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindRoute, task.Target) != nil || len(task.Params) != 2 ||
+			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskRouteEnvironmentParam]) != nil {
+			return errs.New(errs.KindValidationFailed, "Controller Task Route removal is invalid")
+		}
+		return nil
 	case etcd.TaskResourceBackingZone:
 		valid, err := isBackingZoneCascadeTask(task)
 		if err != nil || !valid {

@@ -142,6 +142,9 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 		if ids.Validate(ids.KindNetwork, task.Target) == nil {
 			return resolver.resolveZoneRemovalPlan(task)
 		}
+		if ids.Validate(ids.KindRoute, task.Target) == nil {
+			return resolver.resolveRouteRemovalPlan(ctx, task)
+		}
 		return nil, errs.New(errs.KindInternal, "durable removal Task target is invalid")
 	}
 	if task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskCreate ||
