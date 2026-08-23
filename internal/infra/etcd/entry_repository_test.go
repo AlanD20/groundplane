@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/http"
 	"testing"
 	"time"
 
@@ -71,6 +72,72 @@ func TestEntryRepositoryPersistsAndReplacesPlainGenerationAtomically(t *testing.
 	)
 	if err != nil || len(page.Items) != 1 || page.Items[0].Record.Entry.ID != entryID {
 		t.Fatalf("ListEntries() = %#v, %v", page, err)
+	}
+}
+
+// Rationale: an Entry edit must publish its replacement primary, immutable
+// value generation, and exact replay evidence in one transaction so neither
+// a retry nor a crash can select bytes without the matching desired metadata.
+func TestEntryRepositoryReplacesGenerationIdempotently(t *testing.T) {
+	t.Parallel()
+	store, environment, project := testEntryRepositoryHierarchy(t)
+	repository, err := newEntryRepository(store)
+	if err != nil {
+		t.Fatalf("newEntryRepository() error = %v", err)
+	}
+	now := time.Date(2026, 8, 23, 4, 10, 0, 0, time.UTC)
+	entryID := ids.NewAt(ids.KindEnvEntry, now, 40)
+	firstID := ids.NewAt(ids.KindConfig, now, 41)
+	entry := core.EnvEntry{
+		ID: entryID, Kind: core.EntryKindEnv, Key: "APP_ENV",
+		Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: "staging"},
+		Exposure: []string{"all"},
+	}
+	record, err := NewEntryRecord(environment.Record.ID, entry, firstID)
+	if err != nil {
+		t.Fatalf("NewEntryRecord() error = %v", err)
+	}
+	first := testPlainGeneration(environment.Record.ID, entryID, firstID, "staging", now)
+	created, err := repository.CreateEntry(
+		context.Background(), environment, project, record, EntryValueGeneration{Plain: &first},
+	)
+	if err != nil {
+		t.Fatalf("CreateEntry() error = %v", err)
+	}
+	secondID := ids.NewAt(ids.KindConfig, now.Add(time.Second), 42)
+	desired := entry
+	desired.Source.Literal = "production"
+	second := testPlainGeneration(
+		environment.Record.ID, entryID, secondID, "production", now.Add(time.Second),
+	)
+	marker := testDirectMarker()
+	marker.Locator = IdempotencyLocator{
+		ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+		Method: http.MethodPatch, Route: "/entries/{id}", Key: "entry-edit-key-0001",
+	}
+	marker.Response = IdempotencyResponse{
+		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"id":"` + entryID + `"}`),
+	}
+	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetEntry, ID: entryID}
+	result, err := repository.ReplaceEntryIdempotent(
+		context.Background(), environment, project, created, desired, secondID,
+		EntryValueGeneration{Plain: &second}, marker,
+	)
+	if err != nil || result.kind != idempotencyTransactionApplied {
+		t.Fatalf("ReplaceEntryIdempotent() = %#v, %v", result, err)
+	}
+	replayed, err := repository.ReplaceEntryIdempotent(
+		context.Background(), environment, project, created, desired, secondID,
+		EntryValueGeneration{Plain: &second}, marker,
+	)
+	if err != nil || replayed.kind != idempotencyTransactionExisting ||
+		string(replayed.marker.Response.Body) != string(marker.Response.Body) {
+		t.Fatalf("ReplaceEntryIdempotent(replay) = %#v, %v", replayed, err)
+	}
+	current, err := repository.GetEntry(context.Background(), entryID)
+	if err != nil || current.Record.CurrentValueGenerationID != secondID ||
+		current.Record.Entry.Source.Literal != "production" {
+		t.Fatalf("GetEntry() = %#v, %v", current.Record, err)
 	}
 }
 

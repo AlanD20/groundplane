@@ -172,7 +172,8 @@ func newEntryAddCmd() *cobra.Command {
 
 func newEntryEditCmd() *cobra.Command {
 	var (
-		literal, secretRef  string
+		literal, valueFile  string
+		secretRef           string
 		factAttach, factKey string
 		factGrantAttach     string
 		services            []string
@@ -184,35 +185,57 @@ func newEntryEditCmd() *cobra.Command {
 		Short: "Edit an entry",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body := map[string]interface{}{}
+			app := fromContext(cmd)
+			entry, err := app.Client.ShowEntry(cmd.Context(), target(app, args[0]))
+			if err != nil {
+				return err
+			}
 			literalSet := cmd.Flags().Changed("literal")
-			secretRefSet := cmd.Flags().Changed("secret-ref")
-			factSet := cmd.Flags().Changed("fact-attach") || cmd.Flags().Changed("fact-grant-attach") ||
-				cmd.Flags().Changed("fact-key")
-			if literalSet || secretRefSet || factSet {
-				source, err := buildEntrySource(entrySourceOptions{
-					literal:      literal,
-					literalSet:   literalSet,
-					secretRef:    secretRef,
-					secretRefSet: secretRefSet,
-					factAttach:   factAttach,
-					factGrant:    factGrantAttach,
-					factKey:      factKey,
-					factSet:      factSet,
-				})
+			valueFileSet := cmd.Flags().Changed("value-file")
+			if literalSet && valueFileSet {
+				return fmt.Errorf("--literal and --value-file are mutually exclusive")
+			}
+			if entry.Secret && literalSet {
+				return fmt.Errorf("a secret literal must use --value-file so plaintext is not placed in argv")
+			}
+			if valueFileSet {
+				literal, err = readEntryValue(valueFile, cmd.InOrStdin())
 				if err != nil {
 					return err
 				}
-				body["source"] = source
 			}
-			if len(services) > 0 || all {
-				body["exposure"] = entryExposure(services, all)
+			secretRefSet := cmd.Flags().Changed("secret-ref")
+			factSet := cmd.Flags().Changed("fact-attach") || cmd.Flags().Changed("fact-grant-attach") ||
+				cmd.Flags().Changed("fact-key")
+			source, err := buildEntrySource(entrySourceOptions{
+				literal: literal, literalSet: literalSet || valueFileSet,
+				secretRef: secretRef, secretRefSet: secretRefSet,
+				factAttach: factAttach, factGrant: factGrantAttach, factKey: factKey, factSet: factSet,
+			})
+			if err != nil {
+				return err
 			}
-			return runPatch(cmd, "/api/v1/entries/"+target(fromContext(cmd), args[0]), body)
+			if all && len(services) > 0 {
+				return fmt.Errorf("--all and --service are mutually exclusive")
+			}
+			exposure := entryExposure(services, all)
+			if len(exposure) == 0 {
+				return fmt.Errorf("exactly one of --all or --service is required")
+			}
+			updated, err := app.Client.EditEntry(cmd.Context(), entry.ID, apiTypes.EntryEditRequest{
+				Source: source, Exposure: exposure,
+			})
+			if err != nil {
+				return err
+			}
+			return renderEntry(cmd, updated)
 		},
 	}
 
 	cmd.Flags().StringVar(&literal, "literal", "", "replace the source with a literal value")
+	cmd.Flags().StringVar(
+		&valueFile, "value-file", "", "read a replacement literal from PATH, or - for stdin; required for secrets",
+	)
 	cmd.Flags().StringVar(&secretRef, "secret-ref", "", "replace the source with a secret-store reference")
 	cmd.Flags().
 		StringVar(&factAttach, "fact-attach", "", "replace the source with a live fact reference: attach name/id")

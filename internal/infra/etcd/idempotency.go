@@ -57,6 +57,7 @@ type IdempotencyReplayTargetKind string
 
 const (
 	IdempotencyReplayTargetAttach IdempotencyReplayTargetKind = "attach"
+	IdempotencyReplayTargetEntry  IdempotencyReplayTargetKind = "entry"
 	IdempotencyReplayTargetRoute  IdempotencyReplayTargetKind = "route"
 	IdempotencyReplayTargetSecret IdempotencyReplayTargetKind = "secret"
 	IdempotencyReplayTargetZone   IdempotencyReplayTargetKind = "zone"
@@ -263,6 +264,10 @@ func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
 	switch target.Kind {
 	case IdempotencyReplayTargetAttach:
 		if ids.Validate(ids.KindAttach, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetEntry:
+		if ids.Validate(ids.KindEnvEntry, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
 	case IdempotencyReplayTargetRoute:

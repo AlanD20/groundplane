@@ -457,7 +457,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry creation idempotency: %w", err)
 	}
-	entryMutations, err := newEntryCreationService(
+	entryCreationMutations, err := newEntryCreationService(
 		entryCreationRepository,
 		entryGeneration,
 		entryCreationIdempotency,
@@ -465,6 +465,30 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry creation service: %w", err)
+	}
+	entryEditRepository, err := newDurableEntryEditRepository(entryCreationRepository)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry edit repositories: %w", err)
+	}
+	entryEditIdempotency, err := newDurableEntryEditIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry edit idempotency: %w", err)
+	}
+	entryEditMutations, err := newEntryEditService(
+		entryEditRepository,
+		entryGeneration,
+		entryEditIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry edit service: %w", err)
+	}
+	entryMutations, err := newEntryMutationService(entryCreationMutations, entryEditMutations)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry mutation service: %w", err)
 	}
 	secretCreationIdempotency, err := newDurableSecretCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {

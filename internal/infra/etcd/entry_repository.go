@@ -230,6 +230,79 @@ func (repository *EntryRepository) ReplaceEntry(
 	}, nil
 }
 
+// ReplaceEntryIdempotent atomically commits replacement desired metadata, one
+// immutable value generation, and the exact completed replay marker.
+func (repository *EntryRepository) ReplaceEntryIdempotent(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	current Versioned[EntryRecord],
+	desired core.EnvEntry,
+	valueGenerationID string,
+	generation EntryValueGeneration,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	replacement, err := ReplaceEntryDesired(current.Record, desired, valueGenerationID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateEntryHierarchy(ctx, environment, project, replacement); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateEntryVersion(current); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != current.Record.EnvironmentID ||
+		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != IdempotencyReplayTargetEntry ||
+		marker.ReplayTarget.ID != current.Record.Entry.ID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry edit marker must be a completed Environment-scoped direct mutation for the target Entry",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	owner, err := repository.entryOwnerAtCurrentRevision(ctx, current)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	primaryValue, err := encodeEntryRecord(replacement)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(primaryValue)
+	generationKey, generationValue, err := prepareEntryGeneration(replacement, generation)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(generationValue)
+	plan, err := newIdempotencyMutationPlan(
+		entryWriteConditions(
+			environment, project, current.Record, generationKey, current.Revision, owner.ModRevision,
+		),
+		[]Mutation{
+			{Type: MutationPut, Key: entryRecordKey(current.Record.Entry.ID), Value: primaryValue},
+			{Type: MutationPut, Key: generationKey, Value: generationValue},
+		},
+		func(_ int64, values []*KeyValue) error {
+			return classifyEntryWriteConflict(
+				values, environment, project, current.Record, current.Revision,
+			)
+		},
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
 func (repository *EntryRepository) DeleteEntry(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],

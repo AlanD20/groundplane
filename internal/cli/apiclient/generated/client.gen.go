@@ -139,6 +139,16 @@ type EntryCreateRequest struct {
 	Uid           *int64      `json:"uid,omitempty"`
 }
 
+// EntryEditRequest defines model for EntryEditRequest.
+type EntryEditRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EntryEditRequest.json
+	Schema   *string     `json:"$schema,omitempty"`
+	Exposure *[]string   `json:"exposure"`
+	Source   EntrySource `json:"source"`
+}
+
 // EntrySource defines model for EntrySource.
 type EntrySource struct {
 	AttachId      *string `json:"attach_id,omitempty"`
@@ -795,6 +805,11 @@ type EntryCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// EntryEditParams defines parameters for EntryEdit.
+type EntryEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentListParams defines parameters for EnvironmentList.
 type EnvironmentListParams struct {
 	Project string  `form:"project" json:"project"`
@@ -950,6 +965,9 @@ type AttachRenameJSONRequestBody = AttachRenameRequest
 
 // EntryCreateJSONRequestBody defines body for EntryCreate for application/json ContentType.
 type EntryCreateJSONRequestBody = EntryCreateRequest
+
+// EntryEditJSONRequestBody defines body for EntryEdit for application/json ContentType.
+type EntryEditJSONRequestBody = EntryEditRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
@@ -1180,6 +1198,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /entries/{id} (the `EntryShow` operationId).
 	EntryShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryEditWithBody Edit an environment Entry's source and exposure
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+	EntryEditWithBody(ctx context.Context, id string, params *EntryEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryEdit Edit an environment Entry's source and exposure
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+	EntryEdit(ctx context.Context, id string, params *EntryEditParams, body EntryEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EntryReveal Reveal an encrypted Entry value
 	//
@@ -1786,6 +1818,40 @@ func (c *Client) EntryCreate(ctx context.Context, params *EntryCreateParams, bod
 // Corresponds with GET /entries/{id} (the `EntryShow` operationId).
 func (c *Client) EntryShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEntryShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryEditWithBody Edit an environment Entry's source and exposure
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+func (c *Client) EntryEditWithBody(ctx context.Context, id string, params *EntryEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryEdit Edit an environment Entry's source and exposure
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+func (c *Client) EntryEdit(ctx context.Context, id string, params *EntryEditParams, body EntryEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3390,6 +3456,66 @@ func NewEntryShowRequest(server string, id string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEntryEditRequest calls the generic EntryEdit builder with application/json body
+func NewEntryEditRequest(server string, id string, params *EntryEditParams, body EntryEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEntryEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewEntryEditRequestWithBody constructs an http.Request for the EntryEdit method, with any body, and a specified content type
+func NewEntryEditRequestWithBody(server string, id string, params *EntryEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/entries/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -5523,6 +5649,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /entries/{id} (the `EntryShow` operationId).
 	EntryShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EntryShowResponse, error)
 
+	// EntryEditWithBodyWithResponse Edit an environment Entry's source and exposure
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+	EntryEditWithBodyWithResponse(ctx context.Context, id string, params *EntryEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryEditResponse, error)
+
+	// EntryEditWithResponse Edit an environment Entry's source and exposure
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+	EntryEditWithResponse(ctx context.Context, id string, params *EntryEditParams, body EntryEditJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryEditResponse, error)
+
 	// EntryRevealWithResponse Reveal an encrypted Entry value
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6644,6 +6784,61 @@ func (r EntryShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EntryShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EntryEditResponse200Headers the declared response headers of an HTTP 200 response for EntryEdit
+type EntryEditResponse200Headers struct {
+	ContentType *string
+}
+
+type EntryEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Entry
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EntryEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EntryEditResponse) GetJSON200() *Entry {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EntryEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EntryEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EntryEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EntryEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EntryEditResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -8799,6 +8994,32 @@ func (c *ClientWithResponses) EntryShowWithResponse(ctx context.Context, id stri
 	return ParseEntryShowResponse(rsp)
 }
 
+// EntryEditWithBodyWithResponse Edit an environment Entry's source and exposure
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+func (c *ClientWithResponses) EntryEditWithBodyWithResponse(ctx context.Context, id string, params *EntryEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryEditResponse, error) {
+	rsp, err := c.EntryEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryEditResponse(rsp)
+}
+
+// EntryEditWithResponse Edit an environment Entry's source and exposure
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /entries/{id} (the `EntryEdit` operationId).
+func (c *ClientWithResponses) EntryEditWithResponse(ctx context.Context, id string, params *EntryEditParams, body EntryEditJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryEditResponse, error) {
+	rsp, err := c.EntryEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryEditResponse(rsp)
+}
+
 // EntryRevealWithResponse Reveal an encrypted Entry value
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10043,6 +10264,52 @@ func ParseEntryShowResponse(rsp *http.Response) (*EntryShowResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseEntryEditResponse parses an HTTP response from a EntryEditWithResponse call
+func ParseEntryEditResponse(rsp *http.Response) (*EntryEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EntryEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Entry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EntryEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

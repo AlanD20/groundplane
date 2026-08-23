@@ -73,6 +73,42 @@ func (c *Client) CreateEntry(
 	return entryFromGenerated(*parsed)
 }
 
+func (c *Client) EditEntry(
+	ctx context.Context,
+	id string,
+	input apiTypes.EntryEditRequest,
+) (apiTypes.Entry, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Entry{}, err
+	}
+	exposure := append([]string(nil), input.Exposure...)
+	body := generated.EntryEditRequest{
+		Source:   entrySourceToGenerated(input.Source),
+		Exposure: &exposure,
+	}
+	path := "/api/v1/entries/" + id
+	response, err := client.EntryEditWithResponse(
+		ctx, id, &generated.EntryEditParams{IdempotencyKey: ids.NewULID()}, body,
+	)
+	if err != nil {
+		return apiTypes.Entry{}, generatedCallError(ctx, http.MethodPatch, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.Entry{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.Entry{}
+		if err := decodeSingleJSON(http.MethodPatch, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.Entry{}, err
+		}
+	}
+	return entryFromGenerated(*parsed)
+}
+
 func (c *Client) ListEntries(
 	ctx context.Context,
 	environmentID string,

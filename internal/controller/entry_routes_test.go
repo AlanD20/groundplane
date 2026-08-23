@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -27,10 +28,14 @@ type fakeEntryReader struct {
 }
 
 type fakeEntryMutator struct {
-	input    apiTypes.EntryCreateRequest
-	key      string
-	response etcd.IdempotencyResponse
-	called   bool
+	input      apiTypes.EntryCreateRequest
+	key        string
+	response   etcd.IdempotencyResponse
+	called     bool
+	editID     string
+	editInput  apiTypes.EntryEditRequest
+	editKey    string
+	editCalled bool
 }
 
 func (mutator *fakeEntryMutator) CreateEntry(
@@ -41,6 +46,19 @@ func (mutator *fakeEntryMutator) CreateEntry(
 	mutator.called = true
 	mutator.input = input
 	mutator.key = key
+	return mutator.response, nil
+}
+
+func (mutator *fakeEntryMutator) EditEntry(
+	_ context.Context,
+	id string,
+	input apiTypes.EntryEditRequest,
+	key string,
+) (etcd.IdempotencyResponse, error) {
+	mutator.editCalled = true
+	mutator.editID = id
+	mutator.editInput = input
+	mutator.editKey = key
 	return mutator.response, nil
 }
 
@@ -180,6 +198,45 @@ func TestEntryCreateRoutePreservesProtectedMutationResponse(t *testing.T) {
 	if !mutator.called || mutator.input.EnvironmentID != environmentID || mutator.input.Source.Literal != "private" ||
 		!mutator.input.Secret || mutator.key != "entry-create-key-0002" {
 		t.Fatalf("CreateEntry() input/key = %#v/%q", mutator.input, mutator.key)
+	}
+}
+
+// Rationale: Entry edit is one strict protected PATCH carrying the complete
+// mutable desired state and returning the exact application replay bytes.
+func TestEntryEditRoutePreservesProtectedMutationResponse(t *testing.T) {
+	t.Parallel()
+	entryID := ids.NewAt(ids.KindEnvEntry, secretRouteTestTime(), 35)
+	want := etcd.IdempotencyResponse{
+		Status: http.StatusOK, ContentKind: "application/json",
+		Body: []byte(
+			`{"id":"` + entryID + `","type":"env","key":"TOKEN","source":{"kind":"literal"},"exposure":["api"],"secret":true}`,
+		),
+	}
+	mutator := &fakeEntryMutator{response: want}
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{EntryMutations: mutator})
+	request := httptest.NewRequest(
+		http.MethodPatch, "/api/v1/entries/"+entryID,
+		bytes.NewBufferString(`{"source":{"kind":"literal","literal":"private"},"exposure":["api"]}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(idempotencyKeyHeader, "entry-edit-key-0002")
+	response := httptest.NewRecorder()
+	server.Mux.ServeHTTP(response, request)
+	if response.Code != want.Status || response.Header().Get("Content-Type") != want.ContentKind ||
+		!bytes.Equal(response.Body.Bytes(), want.Body) {
+		t.Fatalf(
+			"PATCH /entries/{id} = %d/%q/%q",
+			response.Code, response.Header().Get("Content-Type"), response.Body.Bytes(),
+		)
+	}
+	if !mutator.editCalled || mutator.editID != entryID ||
+		mutator.editInput.Source.Literal != "private" ||
+		!reflect.DeepEqual(mutator.editInput.Exposure, []string{"api"}) ||
+		mutator.editKey != "entry-edit-key-0002" {
+		t.Fatalf(
+			"EditEntry() id/input/key = %q/%#v/%q",
+			mutator.editID, mutator.editInput, mutator.editKey,
+		)
 	}
 }
 

@@ -57,3 +57,25 @@ func TestEntryCreateIdempotentCommitsMetadataGenerationAndMarker(t *testing.T) {
 		t.Fatalf("GetEntry() = %#v, %v", stored, err)
 	}
 }
+
+// Rationale: an Entry edit replay must recover its Environment-scoped marker
+// from the stable Entry id even after the target primary has been deleted.
+func TestEntryReplayTargetAcceptsOnlyStableEntryIdentity(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 23, 4, 0, 0, 0, time.UTC)
+	target := IdempotencyReplayTarget{
+		Kind: IdempotencyReplayTargetEntry,
+		ID:   ids.NewAt(ids.KindEnvEntry, now, 1),
+	}
+	if _, err := idempotencyReplayTargetKey(
+		target, http.MethodPatch, "/entries/{id}", "entry-edit-key-0001",
+	); err != nil {
+		t.Fatalf("idempotencyReplayTargetKey() error = %v", err)
+	}
+	target.ID = ids.NewAt(ids.KindSecret, now, 2)
+	if _, err := idempotencyReplayTargetKey(
+		target, http.MethodPatch, "/entries/{id}", "entry-edit-key-0001",
+	); err == nil {
+		t.Fatal("idempotencyReplayTargetKey() accepted a non-Entry id")
+	}
+}

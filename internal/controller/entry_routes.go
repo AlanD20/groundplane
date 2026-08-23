@@ -30,9 +30,21 @@ type EntryMutator interface {
 		apiTypes.EntryCreateRequest,
 		string,
 	) (etcd.IdempotencyResponse, error)
+	EditEntry(
+		context.Context,
+		string,
+		apiTypes.EntryEditRequest,
+		string,
+	) (etcd.IdempotencyResponse, error)
 }
 
 type entryCreateInput struct {
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type entryEditInput struct {
+	ID             string `path:"id" pattern:"^ev_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	RawBody        []byte
 }
@@ -98,6 +110,31 @@ func (s *Server) registerEntries() {
 		},
 	}
 	huma.Register(s.API, operation, s.createEntry)
+	editOperation := huma.Operation{
+		OperationID: "entry.edit", Method: http.MethodPatch, Path: "/entries/{id}",
+		Summary: "Edit an environment Entry's source and exposure", Tags: []string{"Entry"},
+		DefaultStatus: http.StatusOK, SkipValidateBody: true,
+		Middlewares: huma.Middlewares{s.rejectEntryQuery},
+	}
+	editOperation.RequestBody = &huma.RequestBody{
+		Required: true,
+		Content: map[string]*huma.MediaType{
+			"application/json": {
+				Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[apiTypes.EntryEditRequest](), true, "EntryEditRequest",
+				),
+			},
+		},
+	}
+	editOperation.Responses = map[string]*huma.Response{
+		strconv.Itoa(http.StatusOK): {
+			Description: http.StatusText(http.StatusOK),
+			Content: map[string]*huma.MediaType{
+				"application/json": {Schema: entrySchema},
+			},
+		},
+	}
+	huma.Register(s.API, editOperation, s.editEntry)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "entry.list", Method: http.MethodGet, Path: "/entries",
 		Summary: "List environment entries", Tags: []string{"Entry"},
@@ -112,6 +149,7 @@ func (s *Server) registerEntries() {
 		Summary: "Reveal an encrypted Entry value", Tags: []string{"Entry"},
 	}, s.revealEntry)
 	s.setRoutePolicy("POST /api/v1/entries", routePolicy{body: jsonBody})
+	s.setRoutePolicy("PATCH /api/v1/entries/{id}", routePolicy{body: jsonBody})
 }
 
 func (s *Server) createEntry(
@@ -139,6 +177,64 @@ func (s *Server) createEntry(
 			}
 		},
 	}, nil
+}
+
+func (s *Server) editEntry(
+	ctx context.Context,
+	request *entryEditInput,
+) (*entryMutationOutput, error) {
+	if s.entryMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Entry mutator is not configured")
+	}
+	defer clear(request.RawBody)
+	input, err := decodeEntryEdit(request.RawBody)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	response, err := s.entryMutations.EditEntry(ctx, request.ID, input, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &entryMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
+				s.Logger.Error("controller: write Entry edit response", slog.Any("error", writeErr))
+			}
+		},
+	}, nil
+}
+
+func decodeEntryEdit(body []byte) (apiTypes.EntryEditRequest, error) {
+	members, err := decodeEntryJSONObject(body, "Entry edit")
+	if err != nil {
+		return apiTypes.EntryEditRequest{}, err
+	}
+	defer clearEntryJSONMembers(members)
+	for name := range members {
+		if name != "source" && name != "exposure" {
+			return apiTypes.EntryEditRequest{}, errs.New(
+				errs.KindMalformedRequest, "Entry edit body contains an unknown member",
+			)
+		}
+	}
+	for _, required := range []string{"source", "exposure"} {
+		if _, present := members[required]; !present {
+			return apiTypes.EntryEditRequest{}, errs.Newf(
+				errs.KindValidationFailed, "Entry edit requires %s", required,
+			)
+		}
+	}
+	input := apiTypes.EntryEditRequest{}
+	input.Source, err = decodeEntrySource(members["source"])
+	if err != nil {
+		return apiTypes.EntryEditRequest{}, err
+	}
+	if err := decodeEntryJSONMember(members["exposure"], &input.Exposure); err != nil {
+		return apiTypes.EntryEditRequest{}, err
+	}
+	return input, nil
 }
 
 func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
@@ -291,12 +387,12 @@ func decodeEntryJSONObject(body []byte, label string) (map[string]json.RawMessag
 
 func decodeEntryJSONMember[T any](raw json.RawMessage, target *T) error {
 	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return errs.New(errs.KindValidationFailed, "Entry creation member must not be null")
+		return errs.New(errs.KindValidationFailed, "Entry request member must not be null")
 	}
 	if err := json.Unmarshal(raw, target); err != nil {
 		var typeError *json.UnmarshalTypeError
 		if errors.As(err, &typeError) {
-			return errs.New(errs.KindValidationFailed, "Entry creation member has an invalid type")
+			return errs.New(errs.KindValidationFailed, "Entry request member has an invalid type")
 		}
 		return errs.Wrap(errs.KindMalformedRequest, err)
 	}
