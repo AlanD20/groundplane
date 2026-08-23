@@ -22,6 +22,7 @@ const (
 	DeletionTargetRoute       DeletionTargetKind = "route"
 	DeletionTargetScript      DeletionTargetKind = "script"
 	DeletionTargetSecret      DeletionTargetKind = "secret"
+	DeletionTargetConnector   DeletionTargetKind = "connector"
 	DeletionTargetZone        DeletionTargetKind = "zone"
 )
 
@@ -368,6 +369,8 @@ func validateDeletionTarget(kind DeletionTargetKind, id string) error {
 		expected = ids.KindScript
 	case DeletionTargetSecret:
 		expected = ids.KindSecret
+	case DeletionTargetConnector:
+		expected = ids.KindConnector
 	case DeletionTargetZone:
 		expected = ids.KindNetwork
 	default:

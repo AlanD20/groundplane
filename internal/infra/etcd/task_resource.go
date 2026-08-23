@@ -8,6 +8,7 @@ const (
 	TaskResourceRoute           = "route"
 	TaskResourceScript          = "script"
 	TaskResourceSecret          = "secret"
+	TaskResourceConnector       = "connector"
 	TaskResourceBackingZone     = "backing_zone"
 	TaskResourceService         = "service"
 	TaskComposeArtifactParam    = "compose_artifact_id"

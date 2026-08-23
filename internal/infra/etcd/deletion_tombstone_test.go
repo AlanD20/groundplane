@@ -47,6 +47,20 @@ func TestDeletionTombstoneRejectsAmbiguousIdentity(t *testing.T) {
 	}
 }
 
+// Rationale: Connector finalization participates in the closed deletion catalog and must retain a Connector stable id.
+func TestDeletionTombstoneAcceptsConnectorTarget(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
+	record := DeletionTombstoneRecord{
+		TargetKind: DeletionTargetConnector, TargetID: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		TargetRevision: 1, TaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Phase: DeletionPhaseFinalizing, CreatedAt: at, UpdatedAt: at,
+	}
+	if err := validateDeletionTombstone(record); err != nil {
+		t.Fatalf("validateDeletionTombstone() error = %v", err)
+	}
+}
+
 // Rationale: restart-safe Blueprint finalization must derive its checkpoint only from the closed Environment revision key grammar.
 func TestEnvironmentBlueprintRevisionIDFromKey(t *testing.T) {
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
