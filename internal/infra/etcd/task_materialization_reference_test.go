@@ -1,10 +1,13 @@
 package etcd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -183,4 +186,39 @@ func taskWithMaterializationReferences() TaskRecord {
 		},
 	}
 	return task
+}
+
+// Rationale: durable removal intent must authorize only an empty typed source
+// bound to one of the three corresponding removal output policies.
+func TestTaskMaterializationRemovalReferenceIsClosed(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	stepID := ids.NewAt(ids.KindStep, now, 2)
+	emptyDigest := sha256.Sum256(nil)
+	reference := TaskMaterializationRecord{
+		StepID:            stepID,
+		MaterializationID: ids.NewAt(ids.KindConfig, now, 3),
+		EnvironmentID:     environmentID,
+		Destination:       "config/app.yaml",
+		OutputKind:        TaskMaterializationOutputRemovePlainFile,
+		UID:               1000,
+		GID:               1000,
+		Mode:              0o444,
+		SHA256: hex.EncodeToString(
+			emptyDigest[:],
+		),
+		Source: TaskMaterializationSource{Kind: TaskMaterializationSourceRemoval},
+	}
+	if err := validateTaskMaterializationReferences(
+		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{ID: stepID}}, environmentID, true, 7,
+	); err != nil {
+		t.Fatalf("validateTaskMaterializationReferences(removal) error = %v", err)
+	}
+	reference.Source.EntryValue = &TaskEntryValueReference{}
+	if err := validateTaskMaterializationReferences(
+		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{ID: stepID}}, environmentID, true, 7,
+	); err == nil {
+		t.Fatal("validateTaskMaterializationReferences accepted removal with a value source")
+	}
 }

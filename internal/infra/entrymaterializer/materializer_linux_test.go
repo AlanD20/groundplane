@@ -863,6 +863,58 @@ func TestMaterializeDestroysEveryPlaintextHasher(t *testing.T) {
 	})
 }
 
+// Rationale: typed removal must unlink only a regular file with the exact
+// sealed metadata, remain idempotent when absent, and refuse changed metadata.
+func TestMaterializeRemovalIsExactAndIdempotent(t *testing.T) {
+	t.Parallel()
+	materializer, root := testMaterializer(t)
+	directory := filepath.Join(root, "files")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("create directory: %v", err)
+	}
+	destination := filepath.Join(directory, "config")
+	if err := os.WriteFile(destination, []byte("retired"), 0o444); err != nil {
+		t.Fatalf("write destination: %v", err)
+	}
+	if err := os.Chown(destination, int(testUID()), int(testGID())); err != nil {
+		t.Fatalf("set destination ownership: %v", err)
+	}
+	header := testHeader(t, "files/config", entrymaterialization.OutputRemovePlainFile, nil)
+	if err := materializer.materialize(context.Background(), header, bytes.NewReader(nil)); err != nil {
+		t.Fatalf("materialize(removal) error = %v", err)
+	}
+	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removed destination stat error = %v", err)
+	}
+	if err := materializer.materialize(context.Background(), header, bytes.NewReader(nil)); err != nil {
+		t.Fatalf("materialize(removal replay) error = %v", err)
+	}
+	if err := materializer.materialize(
+		context.Background(),
+		testHeader(t, "missing/parent/config", entrymaterialization.OutputRemovePlainFile, nil),
+		bytes.NewReader(nil),
+	); err != nil {
+		t.Fatalf("materialize(missing parent removal) error = %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "missing")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removal created a missing parent: %v", err)
+	}
+	if err := os.WriteFile(destination, []byte("changed-mode"), 0o600); err != nil {
+		t.Fatalf("write mismatched destination: %v", err)
+	}
+	if err := os.Chown(destination, int(testUID()), int(testGID())); err != nil {
+		t.Fatalf("set mismatched destination ownership: %v", err)
+	}
+	if err := materializer.materialize(
+		context.Background(), header, bytes.NewReader(nil),
+	); !isInternal(err) {
+		t.Fatalf("materialize(mismatched removal) error = %v", err)
+	}
+	if _, err := os.Lstat(destination); err != nil {
+		t.Fatalf("mismatched destination was removed: %v", err)
+	}
+}
+
 // Rationale: cleanup precedence changes classification, not causality; every
 // operation and cleanup failure must remain discoverable through errors.Is.
 func TestCleanupPrecedenceRetainsEveryFailure(t *testing.T) {
@@ -1017,11 +1069,12 @@ func testHeaderSpec(
 	mode := entrymaterialization.ModeReadOnly
 	uid := testUID()
 	gid := testGID()
-	if kind == entrymaterialization.OutputSecretFile ||
-		kind == entrymaterialization.OutputGeneratedEnv {
+	if kind == entrymaterialization.OutputSecretFile || kind == entrymaterialization.OutputGeneratedEnv ||
+		kind == entrymaterialization.OutputRemoveSecretFile ||
+		kind == entrymaterialization.OutputRemoveGeneratedEnv {
 		mode = entrymaterialization.ModePrivate
 	}
-	if kind == entrymaterialization.OutputGeneratedEnv {
+	if kind == entrymaterialization.OutputGeneratedEnv || kind == entrymaterialization.OutputRemoveGeneratedEnv {
 		uid = 0
 		gid = 0
 	}

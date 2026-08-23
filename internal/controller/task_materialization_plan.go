@@ -46,6 +46,12 @@ func taskMaterializationOutputKind(
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE, nil
 	case etcd.TaskMaterializationOutputSecretFile:
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_SECRET_FILE, nil
+	case etcd.TaskMaterializationOutputRemoveGeneratedEnv:
+		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_GENERATED_ENV, nil
+	case etcd.TaskMaterializationOutputRemovePlainFile:
+		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_PLAIN_FILE, nil
+	case etcd.TaskMaterializationOutputRemoveSecretFile:
+		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_SECRET_FILE, nil
 	default:
 		return 0, errs.New(errs.KindInternal, "durable materialization output kind is corrupt")
 	}

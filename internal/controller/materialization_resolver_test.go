@@ -116,6 +116,21 @@ func TestTaskMaterializationResolverRendersGeneratedEnvironmentBytes(t *testing.
 	}
 }
 
+// Rationale: a removal step must resolve to owned zero bytes and never consult
+// a value repository or decrypt unrelated Entry content.
+func TestTaskMaterializationResolverResolvesRemovalToEmptySource(t *testing.T) {
+	t.Parallel()
+	resolver := testTaskMaterializationResolver(t, []byte("unused-secret"))
+	content, err := resolver.resolveSource(
+		context.Background(),
+		resolverEnvironmentID,
+		etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
+	)
+	if err != nil || len(content) != 0 {
+		t.Fatalf("resolveSource(removal) = %q/%v", content, err)
+	}
+}
+
 // Rationale: immutable Blueprint file references must resolve one exact
 // revision path and still pass the authenticated output digest.
 func TestTaskMaterializationResolverReadsPinnedBlueprintFile(t *testing.T) {

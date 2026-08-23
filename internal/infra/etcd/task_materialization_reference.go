@@ -23,6 +23,7 @@ const (
 	TaskMaterializationSourceComponentFile        TaskMaterializationSourceKind = "component_file"
 	TaskMaterializationSourceEntryValue           TaskMaterializationSourceKind = "entry_value"
 	TaskMaterializationSourceGeneratedEnvironment TaskMaterializationSourceKind = "generated_environment"
+	TaskMaterializationSourceRemoval              TaskMaterializationSourceKind = "removal"
 )
 
 type TaskEntryValueStorage string
@@ -38,6 +39,9 @@ const (
 	TaskMaterializationOutputGeneratedEnvironment TaskMaterializationOutputKind = "generated_env"
 	TaskMaterializationOutputPlainFile            TaskMaterializationOutputKind = "plain_file"
 	TaskMaterializationOutputSecretFile           TaskMaterializationOutputKind = "secret_file"
+	TaskMaterializationOutputRemoveGeneratedEnv   TaskMaterializationOutputKind = "remove_generated_env"
+	TaskMaterializationOutputRemovePlainFile      TaskMaterializationOutputKind = "remove_plain_file"
+	TaskMaterializationOutputRemoveSecretFile     TaskMaterializationOutputKind = "remove_secret_file"
 )
 
 // TaskMaterializationRecord is the durable Controller-only source ledger for
@@ -163,6 +167,10 @@ func validateTaskMaterializationBinding(reference TaskMaterializationRecord) err
 		}
 	case TaskMaterializationSourceGeneratedEnvironment:
 		valid = reference.OutputKind == TaskMaterializationOutputGeneratedEnvironment
+	case TaskMaterializationSourceRemoval:
+		valid = reference.OutputKind == TaskMaterializationOutputRemoveGeneratedEnv ||
+			reference.OutputKind == TaskMaterializationOutputRemovePlainFile ||
+			reference.OutputKind == TaskMaterializationOutputRemoveSecretFile
 	}
 	if !valid {
 		return errs.New(errs.KindValidationFailed, "task materialization source and output kind are inconsistent")
@@ -191,6 +199,12 @@ func validateTaskMaterializationMetadata(reference TaskMaterializationRecord, re
 		outputKind = entrymaterialization.OutputPlainFile
 	case TaskMaterializationOutputSecretFile:
 		outputKind = entrymaterialization.OutputSecretFile
+	case TaskMaterializationOutputRemoveGeneratedEnv:
+		outputKind = entrymaterialization.OutputRemoveGeneratedEnv
+	case TaskMaterializationOutputRemovePlainFile:
+		outputKind = entrymaterialization.OutputRemovePlainFile
+	case TaskMaterializationOutputRemoveSecretFile:
+		outputKind = entrymaterialization.OutputRemoveSecretFile
 	default:
 		return errs.New(errs.KindValidationFailed, "task materialization output kind is invalid")
 	}
@@ -223,6 +237,12 @@ func validateTaskMaterializationSource(source TaskMaterializationSource) error {
 	}
 	if source.GeneratedEnvironment != nil {
 		pointers++
+	}
+	if source.Kind == TaskMaterializationSourceRemoval {
+		if pointers != 0 {
+			return errs.New(errs.KindValidationFailed, "removal materialization source union is invalid")
+		}
+		return nil
 	}
 	if pointers != 1 {
 		return errs.New(errs.KindValidationFailed, "task materialization source union is invalid")

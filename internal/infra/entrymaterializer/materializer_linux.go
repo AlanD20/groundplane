@@ -265,6 +265,41 @@ func (materializer *materializer) prepare(
 	}
 
 	components := strings.Split(header.Destination(), "/")
+	if header.OutputKind().Removes() {
+		if err := verifyRemovalContent(ctx, materializer.ops, header, content); err != nil {
+			return nil, closeBeforeReturn(
+				context.WithoutCancel(ctx), materializer.ops, rootFD, err, "close rejected removal root",
+			)
+		}
+		parentFD, missing, err := materializer.openExistingParents(ctx, rootFD, components[:len(components)-1])
+		if err != nil {
+			return nil, closeBeforeReturn(
+				context.WithoutCancel(ctx), materializer.ops, rootFD, err, "close removal root after traversal failure",
+			)
+		}
+		if missing {
+			return &publication{
+				rootFD: rootFD, parentFD: -1, destination: components[len(components)-1],
+				remove: true, missing: true, ops: materializer.ops,
+			}, nil
+		}
+		if err := materializer.reconcileOrphans(ctx, parentFD); err != nil {
+			return nil, closeOperationDescriptors(
+				context.WithoutCancel(ctx), materializer.ops, rootFD, parentFD, err,
+			)
+		}
+		if err := inspectDestination(
+			ctx, materializer.ops, parentFD, components[len(components)-1], header,
+		); err != nil {
+			return nil, closeOperationDescriptors(
+				context.WithoutCancel(ctx), materializer.ops, rootFD, parentFD, err,
+			)
+		}
+		return &publication{
+			rootFD: rootFD, parentFD: parentFD, destination: components[len(components)-1],
+			remove: true, ops: materializer.ops,
+		}, nil
+	}
 	parentFD, err := materializer.ensureParents(ctx, rootFD, components[:len(components)-1])
 	if err != nil {
 		return nil, closeBeforeReturn(
@@ -316,6 +351,48 @@ func (materializer *materializer) prepare(
 		destination: components[len(components)-1],
 		ops:         materializer.ops,
 	}, nil
+}
+
+func (materializer *materializer) openExistingParents(
+	ctx context.Context,
+	rootFD int,
+	components []string,
+) (int, bool, error) {
+	if err := contextError(ctx); err != nil {
+		return -1, false, err
+	}
+	currentFD, err := unix.Dup(rootFD)
+	if err != nil {
+		return -1, false, wrapSystemError("duplicate removal parent root", err)
+	}
+	unix.CloseOnExec(currentFD)
+	for _, component := range components {
+		childFD, openErr := openDirectoryAt(ctx, materializer.ops, currentFD, component)
+		if errors.Is(openErr, unix.ENOENT) {
+			return -1, true, closeBeforeReturn(
+				context.WithoutCancel(ctx), materializer.ops, currentFD, nil, "close missing removal parent",
+			)
+		}
+		if openErr != nil {
+			return -1, false, closeBeforeReturn(
+				context.WithoutCancel(ctx), materializer.ops, currentFD,
+				wrapSystemError("open removal parent", openErr), "close rejected removal parent",
+			)
+		}
+		if err := verifyDirectory(ctx, childFD, materializer.helperUID, materializer.helperGID); err != nil {
+			return -1, false, closePairBeforeReturn(
+				context.WithoutCancel(ctx), materializer.ops, currentFD, childFD, err,
+			)
+		}
+		if err := materializer.ops.close(currentFD); err != nil {
+			return -1, false, closeBeforeReturn(
+				context.WithoutCancel(ctx), materializer.ops, childFD,
+				wrapSystemError("close traversed removal parent", err), "close removal child",
+			)
+		}
+		currentFD = childFD
+	}
+	return currentFD, false, nil
 }
 
 func (materializer *materializer) duplicateRoot(ctx context.Context) (int, error) {
@@ -576,12 +653,17 @@ type publication struct {
 	parentFD    int
 	temporary   *temporary
 	destination string
+	remove      bool
+	missing     bool
 	ops         linuxOps
 }
 
 func (publication *publication) publish(ctx context.Context) error {
 	if err := contextError(ctx); err != nil {
 		return publication.abort(context.WithoutCancel(ctx), err)
+	}
+	if publication.remove {
+		return publication.publishRemoval(ctx)
 	}
 	if err := publication.ops.renameat(
 		publication.parentFD,
@@ -610,11 +692,41 @@ func (publication *publication) publish(ctx context.Context) error {
 	)
 }
 
-func (publication *publication) abort(ctx context.Context, operationErr error) error {
-	result := preferCleanupError(
-		operationErr,
-		cleanupTemporary(ctx, publication.ops, publication.parentFD, publication.temporary),
+func (publication *publication) publishRemoval(ctx context.Context) error {
+	if publication.missing {
+		return closeBeforeReturn(
+			context.WithoutCancel(ctx), publication.ops, publication.rootFD, ctx.Err(), "close removal root",
+		)
+	}
+	removed := false
+	err := publication.ops.unlinkat(publication.parentFD, publication.destination, 0)
+	if errors.Is(err, unix.ENOENT) {
+		err = nil
+	} else if err != nil {
+		err = wrapSystemError("remove destination", err)
+	} else {
+		removed = true
+	}
+	result := finishDirectoryMutation(
+		context.WithoutCancel(ctx), publication.ops, publication.parentFD, removed, err,
 	)
+	result = preferCleanupError(result, ctx.Err())
+	return closeOperationDescriptors(
+		context.WithoutCancel(ctx), publication.ops, publication.rootFD, publication.parentFD, result,
+	)
+}
+
+func (publication *publication) abort(ctx context.Context, operationErr error) error {
+	result := operationErr
+	if publication.temporary != nil {
+		result = preferCleanupError(
+			operationErr,
+			cleanupTemporary(ctx, publication.ops, publication.parentFD, publication.temporary),
+		)
+	}
+	if publication.parentFD < 0 {
+		return closeBeforeReturn(ctx, publication.ops, publication.rootFD, result, "close removal root")
+	}
 	return closeOperationDescriptors(
 		ctx,
 		publication.ops,
@@ -622,6 +734,29 @@ func (publication *publication) abort(ctx context.Context, operationErr error) e
 		publication.parentFD,
 		result,
 	)
+}
+
+func verifyRemovalContent(
+	ctx context.Context,
+	ops linuxOps,
+	header entrymaterialization.Header,
+	content io.Reader,
+) error {
+	if header.Length() != 0 || !header.OutputKind().Removes() {
+		return internalError("removal content metadata is invalid")
+	}
+	if err := requireStreamEnd(ctx, content); err != nil {
+		return err
+	}
+	hasher := ops.newHasher()
+	if hasher == nil {
+		return internalError("content hasher is required")
+	}
+	defer hasher.Destroy()
+	if !hasher.Verify(header.Digest()) {
+		return internalError("content digest mismatch")
+	}
+	return nil
 }
 
 type temporary struct {

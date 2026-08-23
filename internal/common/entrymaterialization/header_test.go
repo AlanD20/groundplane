@@ -108,6 +108,37 @@ func TestNewHeaderEnforcesClosedOutputTable(t *testing.T) {
 	}
 }
 
+// Rationale: a removal frame must authenticate the same destination policy as
+// replacement while carrying exactly the SHA-256 digest of zero content.
+func TestNewHeaderEnforcesClosedRemovalOutputTable(t *testing.T) {
+	t.Parallel()
+	environmentDestination, err := GeneratedEnvDestination(testEnvironmentID, "")
+	if err != nil {
+		t.Fatalf("GeneratedEnvDestination(environment): %v", err)
+	}
+	tests := []HeaderSpec{
+		validHeaderSpec(OutputRemoveGeneratedEnv, environmentDestination, 0, 0, ModePrivate),
+		validHeaderSpec(OutputRemovePlainFile, "config/app/settings.yaml", 1000, 1001, ModeReadOnly),
+		validHeaderSpec(OutputRemoveSecretFile, "secrets/api-token", 1000, 1001, ModePrivate),
+	}
+	for index := range tests {
+		tests[index].Length = 0
+		tests[index].Digest = DigestBytes(nil)
+		header, headerErr := NewHeader(tests[index])
+		if headerErr != nil || !header.OutputKind().Removes() {
+			t.Fatalf("NewHeader(removal %d) = %#v/%v", index, header, headerErr)
+		}
+		parsed, parseErr := ParseOutputKind(header.OutputKind().String())
+		if parseErr != nil || parsed != header.OutputKind() {
+			t.Fatalf("ParseOutputKind(removal %d) = %v/%v", index, parsed, parseErr)
+		}
+	}
+	tests[0].Length = 1
+	if _, err := NewHeader(tests[0]); err == nil {
+		t.Fatal("NewHeader accepted removal content")
+	}
+}
+
 // Rationale: malformed dispatch metadata is an impossible internal procedure,
 // never operator validation at the helper boundary.
 func TestNewHeaderRejectsInvalidProcedureMetadata(t *testing.T) {

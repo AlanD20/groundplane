@@ -183,6 +183,12 @@ func (resolver *TaskMaterializationResolver) resolveSource(
 			return nil, corruptMaterializationSource()
 		}
 		return resolver.resolveGeneratedEnvironment(ctx, environmentID, *source.GeneratedEnvironment)
+	case etcd.TaskMaterializationSourceRemoval:
+		if source.BlueprintFile != nil || source.ComponentFile != nil || source.EntryValue != nil ||
+			source.GeneratedEnvironment != nil {
+			return nil, corruptMaterializationSource()
+		}
+		return []byte{}, nil
 	default:
 		return nil, corruptMaterializationSource()
 	}

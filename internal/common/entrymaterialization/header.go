@@ -24,6 +24,9 @@ const (
 	OutputGeneratedEnv
 	OutputPlainFile
 	OutputSecretFile
+	OutputRemoveGeneratedEnv
+	OutputRemovePlainFile
+	OutputRemoveSecretFile
 )
 
 // Mode is the complete permission value accepted by the helper. File-type and
@@ -102,6 +105,9 @@ func (h Header) validate() error {
 		ids.Validate(ids.KindStep, h.stepID) != nil ||
 		ids.Validate(ids.KindEnvironment, h.environmentID) != nil {
 		return protocolError("invalid stable identity")
+	}
+	if h.outputKind.Removes() && (h.length != 0 || h.digest != DigestBytes(nil)) {
+		return protocolError("removal output carries content")
 	}
 	return ValidateMetadata(MetadataSpec{
 		EnvironmentID: h.environmentID,
@@ -214,6 +220,12 @@ func (k OutputKind) String() string {
 		return "plain_file"
 	case OutputSecretFile:
 		return "secret_file"
+	case OutputRemoveGeneratedEnv:
+		return "remove_generated_env"
+	case OutputRemovePlainFile:
+		return "remove_plain_file"
+	case OutputRemoveSecretFile:
+		return "remove_secret_file"
 	default:
 		return ""
 	}
@@ -228,8 +240,25 @@ func ParseOutputKind(value string) (OutputKind, error) {
 		return OutputPlainFile, nil
 	case "secret_file":
 		return OutputSecretFile, nil
+	case "remove_generated_env":
+		return OutputRemoveGeneratedEnv, nil
+	case "remove_plain_file":
+		return OutputRemovePlainFile, nil
+	case "remove_secret_file":
+		return OutputRemoveSecretFile, nil
 	default:
 		return outputInvalid, protocolError("unknown output kind")
+	}
+}
+
+// Removes reports whether the output authorizes unlinking an existing file
+// instead of replacing it with the framed content.
+func (k OutputKind) Removes() bool {
+	switch k {
+	case OutputRemoveGeneratedEnv, OutputRemovePlainFile, OutputRemoveSecretFile:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -764,6 +764,12 @@ func materializationOutputKind(value agentpb.MaterializationOutputKind) (entryma
 		return entrymaterialization.OutputPlainFile, nil
 	case agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_SECRET_FILE:
 		return entrymaterialization.OutputSecretFile, nil
+	case agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_GENERATED_ENV:
+		return entrymaterialization.OutputRemoveGeneratedEnv, nil
+	case agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_PLAIN_FILE:
+		return entrymaterialization.OutputRemovePlainFile, nil
+	case agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_SECRET_FILE:
+		return entrymaterialization.OutputRemoveSecretFile, nil
 	default:
 		return 0, errs.New(errs.KindValidationFailed, "materialization output kind is invalid")
 	}
