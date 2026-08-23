@@ -1,0 +1,106 @@
+package etcd
+
+import (
+	"context"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const connectorRemovalIntentPrefix = "/v1/records/connector-removal-intents/"
+
+// ConnectorRemovalIntent pins the immutable Connector revision owned by one
+// Controller cleanup Task. Terminal transitions delete the intent atomically.
+type ConnectorRemovalIntent struct {
+	TaskID            string    `json:"task_id"`
+	EnvironmentID     string    `json:"environment_id"`
+	ConnectorID       string    `json:"connector_id"`
+	ConnectorRevision int64     `json:"connector_revision"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+func NewConnectorRemovalIntent(
+	taskID string,
+	environmentID string,
+	connectorID string,
+	connectorRevision int64,
+	createdAt time.Time,
+) (ConnectorRemovalIntent, error) {
+	intent := ConnectorRemovalIntent{
+		TaskID: taskID, EnvironmentID: environmentID, ConnectorID: connectorID,
+		ConnectorRevision: connectorRevision, CreatedAt: createdAt,
+	}
+	if err := validateConnectorRemovalIntent(intent); err != nil {
+		return ConnectorRemovalIntent{}, err
+	}
+	return intent, nil
+}
+
+func connectorRemovalIntentKey(taskID string) string {
+	return connectorRemovalIntentPrefix + taskID
+}
+
+func (repository *ConnectorRepository) GetConnectorRemovalIntent(
+	ctx context.Context,
+	taskID string,
+) (Versioned[ConnectorRemovalIntent], bool, error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[ConnectorRemovalIntent]{}, false, err
+	}
+	if validateStableID(ids.KindTask, taskID) != nil {
+		return Versioned[ConnectorRemovalIntent]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"connector removal intent task id is invalid",
+		)
+	}
+	result, err := repository.store.Get(ctx, connectorRemovalIntentKey(taskID))
+	if err != nil {
+		return Versioned[ConnectorRemovalIntent]{}, false, err
+	}
+	if result == nil {
+		return Versioned[ConnectorRemovalIntent]{}, false, errs.New(
+			errs.KindInternal,
+			"connector removal intent read is empty",
+		)
+	}
+	if result.Entry == nil {
+		return Versioned[ConnectorRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
+	}
+	intent, err := decodeConnectorRemovalIntent(result.Entry.Value)
+	if err != nil || intent.TaskID != taskID {
+		return Versioned[ConnectorRemovalIntent]{}, false, corruptConnectorRemovalIntent()
+	}
+	return Versioned[ConnectorRemovalIntent]{
+		Record: intent, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
+	}, true, nil
+}
+
+func encodeConnectorRemovalIntent(intent ConnectorRemovalIntent) ([]byte, error) {
+	if err := validateConnectorRemovalIntent(intent); err != nil {
+		return nil, err
+	}
+	return encodeEnvelope("connector_removal_intent", intent)
+}
+
+func decodeConnectorRemovalIntent(value []byte) (ConnectorRemovalIntent, error) {
+	intent, err := decodeEnvelope[ConnectorRemovalIntent](value, "connector_removal_intent")
+	if err != nil || validateConnectorRemovalIntent(intent) != nil {
+		return ConnectorRemovalIntent{}, corruptConnectorRemovalIntent()
+	}
+	return intent, nil
+}
+
+func validateConnectorRemovalIntent(intent ConnectorRemovalIntent) error {
+	if validateStableID(ids.KindTask, intent.TaskID) != nil ||
+		validateStableID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		validateStableID(ids.KindConnector, intent.ConnectorID) != nil ||
+		intent.ConnectorRevision <= 0 {
+		return errs.New(errs.KindValidationFailed, "connector removal intent identity is invalid")
+	}
+	return validateTimestamp("connector removal intent created_at", intent.CreatedAt)
+}
+
+func corruptConnectorRemovalIntent() error {
+	return errs.New(errs.KindInternal, "connector removal intent is corrupt")
+}

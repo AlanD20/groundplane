@@ -56,13 +56,15 @@ type IdempotencyLocator struct {
 type IdempotencyReplayTargetKind string
 
 const (
-	IdempotencyReplayTargetAttach  IdempotencyReplayTargetKind = "attach"
-	IdempotencyReplayTargetEntry   IdempotencyReplayTargetKind = "entry"
-	IdempotencyReplayTargetRoute   IdempotencyReplayTargetKind = "route"
-	IdempotencyReplayTargetScript  IdempotencyReplayTargetKind = "script"
-	IdempotencyReplayTargetSecret  IdempotencyReplayTargetKind = "secret"
-	IdempotencyReplayTargetZone    IdempotencyReplayTargetKind = "zone"
-	IdempotencyReplayTargetService IdempotencyReplayTargetKind = "service"
+	IdempotencyReplayTargetAttach    IdempotencyReplayTargetKind = "attach"
+	IdempotencyReplayTargetConnector IdempotencyReplayTargetKind = "connector"
+	IdempotencyReplayTargetEntry     IdempotencyReplayTargetKind = "entry"
+	IdempotencyReplayTargetRoute     IdempotencyReplayTargetKind = "route"
+	IdempotencyReplayTargetRunner    IdempotencyReplayTargetKind = "runner"
+	IdempotencyReplayTargetScript    IdempotencyReplayTargetKind = "script"
+	IdempotencyReplayTargetSecret    IdempotencyReplayTargetKind = "secret"
+	IdempotencyReplayTargetZone      IdempotencyReplayTargetKind = "zone"
+	IdempotencyReplayTargetService   IdempotencyReplayTargetKind = "service"
 )
 
 type IdempotencyReplayTarget struct {
@@ -268,12 +270,20 @@ func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
 		if ids.Validate(ids.KindAttach, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
+	case IdempotencyReplayTargetConnector:
+		if ids.Validate(ids.KindConnector, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
 	case IdempotencyReplayTargetEntry:
 		if ids.Validate(ids.KindEnvEntry, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
 	case IdempotencyReplayTargetRoute:
 		if ids.Validate(ids.KindRoute, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetRunner:
+		if ids.Validate(ids.KindRunner, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
 	case IdempotencyReplayTargetScript:

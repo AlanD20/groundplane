@@ -339,6 +339,28 @@ func (repository *TaskRepository) RetryTask(
 		mutations = append(mutations, componentChange.mutations...)
 	}
 	defer clearComponentTaskChange(componentChange)
+	connectorChange, err := repository.prepareConnectorTaskRetry(
+		ctx, source.Record, retry, source.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if connectorChange.applies {
+		conditions = append(conditions, connectorChange.conditions...)
+		mutations = append(mutations, connectorChange.mutations...)
+	}
+	defer clearConnectorTaskChange(connectorChange)
+	runnerChange, err := repository.prepareRunnerTaskRetry(
+		ctx, source.Record, retry, source.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if runnerChange.applies {
+		conditions = append(conditions, runnerChange.conditions...)
+		mutations = append(mutations, runnerChange.mutations...)
+	}
+	defer clearRunnerTaskChange(runnerChange)
 	plan, err := newTaskIdempotencyMutationPlan(
 		conditions,
 		mutations,
@@ -353,6 +375,8 @@ func (repository *TaskRepository) RetryTask(
 			len(serviceChange.conditions),
 			len(backingZoneChange.conditions),
 			len(componentChange.conditions),
+			len(connectorChange.conditions),
+			len(runnerChange.conditions),
 		),
 	)
 	if err != nil {
@@ -376,10 +400,13 @@ func classifyTaskRetryConflict(
 	serviceConditions int,
 	backingZoneConditions int,
 	componentConditions int,
+	connectorConditions int,
+	runnerConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		expectedValues := 5 + attachConditions + environmentConditions + secretConditions +
-			scriptConditions + routeConditions + serviceConditions + backingZoneConditions + componentConditions
+			scriptConditions + routeConditions + serviceConditions + backingZoneConditions + componentConditions +
+			connectorConditions + runnerConditions
 		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "Task retry compare evidence is incomplete")
 		}
@@ -1065,6 +1092,16 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateConnectorTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
+				if err := repository.validateRunnerTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				if err := repository.validateScriptTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
@@ -1409,6 +1446,47 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, componentChange.conditions...)
 			mutations = append(mutations, componentChange.mutations...)
 		}
+		connectorChange, err := repository.prepareConnectorTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if connectorChange.applies {
+			conditions = append(conditions, connectorChange.conditions...)
+			mutations = append(mutations, connectorChange.mutations...)
+		}
+		runnerChange, err := repository.prepareRunnerTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearConnectorTaskChange(connectorChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if runnerChange.applies {
+			conditions = append(conditions, runnerChange.conditions...)
+			mutations = append(mutations, runnerChange.mutations...)
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
@@ -1421,6 +1499,8 @@ func (repository *TaskRepository) acknowledgeTask(
 		clearServiceTaskChange(serviceChange)
 		clearBackingZoneTaskChange(backingZoneChange)
 		clearComponentTaskChange(componentChange)
+		clearConnectorTaskChange(connectorChange)
+		clearRunnerTaskChange(runnerChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -1563,6 +1643,16 @@ func (repository *TaskRepository) AbortPendingTask(
 				return Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateSecretTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+			if err := repository.validateConnectorTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+			if err := repository.validateRunnerTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
@@ -1869,6 +1959,51 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, componentChange.conditions...)
 			mutations = append(mutations, componentChange.mutations...)
 		}
+		connectorChange, err := repository.prepareConnectorTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if connectorChange.applies {
+			conditions = append(conditions, connectorChange.conditions...)
+			mutations = append(mutations, connectorChange.mutations...)
+		}
+		runnerChange, err := repository.prepareRunnerTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearConnectorTaskChange(connectorChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if runnerChange.applies {
+			conditions = append(conditions, runnerChange.conditions...)
+			mutations = append(mutations, runnerChange.mutations...)
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
@@ -1882,6 +2017,8 @@ func (repository *TaskRepository) AbortPendingTask(
 		clearServiceTaskChange(serviceChange)
 		clearBackingZoneTaskChange(backingZoneChange)
 		clearComponentTaskChange(componentChange)
+		clearConnectorTaskChange(connectorChange)
+		clearRunnerTaskChange(runnerChange)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
