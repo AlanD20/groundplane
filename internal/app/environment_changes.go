@@ -244,7 +244,8 @@ func environmentAPI(record etcd.EnvironmentRecord) apiTypes.Environment {
 		createTaskID = &value
 	}
 	return apiTypes.Environment{
-		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, VolumeDir: record.VolumeDir,
+		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name,
+		NetworkPool: record.NetworkPool, VolumeDir: record.VolumeDir,
 		ProvisioningState: apiTypes.EnvironmentProvisioningState(record.ProvisioningState),
 		CreateTaskID:      createTaskID,
 	}
