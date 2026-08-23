@@ -18,6 +18,7 @@ const (
 	DeletionTargetTenant      DeletionTargetKind = "tenant"
 	DeletionTargetProject     DeletionTargetKind = "project"
 	DeletionTargetEnvironment DeletionTargetKind = "environment"
+	DeletionTargetRoute       DeletionTargetKind = "route"
 	DeletionTargetSecret      DeletionTargetKind = "secret"
 	DeletionTargetZone        DeletionTargetKind = "zone"
 )
@@ -357,6 +358,8 @@ func validateDeletionTarget(kind DeletionTargetKind, id string) error {
 		expected = ids.KindProject
 	case DeletionTargetEnvironment:
 		expected = ids.KindEnvironment
+	case DeletionTargetRoute:
+		expected = ids.KindRoute
 	case DeletionTargetSecret:
 		expected = ids.KindSecret
 	case DeletionTargetZone:
