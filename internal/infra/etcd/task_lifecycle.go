@@ -269,6 +269,20 @@ func (repository *TaskRepository) RetryTask(
 		mutations = append(mutations, attachChange.mutations...)
 	}
 	defer clearAttachTaskChange(attachChange)
+	environmentChange, err := repository.prepareEnvironmentTaskRetry(
+		ctx,
+		source.Record,
+		retry,
+		source.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if environmentChange.applies {
+		conditions = append(conditions, environmentChange.conditions...)
+		mutations = append(mutations, environmentChange.mutations...)
+	}
+	defer clearEnvironmentTaskChange(environmentChange)
 	secretChange, err := repository.prepareSecretTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -321,7 +335,9 @@ func (repository *TaskRepository) RetryTask(
 			sourceTaskID,
 			retry.OperationID,
 			len(attachChange.conditions),
+			len(environmentChange.conditions),
 			len(secretChange.conditions),
+			len(scriptChange.conditions),
 			len(routeChange.conditions),
 			len(backingZoneChange.conditions),
 			len(componentChange.conditions),
@@ -341,14 +357,16 @@ func classifyTaskRetryConflict(
 	sourceTaskID string,
 	operationID string,
 	attachConditions int,
+	environmentConditions int,
 	secretConditions int,
+	scriptConditions int,
 	routeConditions int,
 	backingZoneConditions int,
 	componentConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expectedValues := 5 + attachConditions + secretConditions + routeConditions +
-			backingZoneConditions + componentConditions
+		expectedValues := 5 + attachConditions + environmentConditions + secretConditions +
+			scriptConditions + routeConditions + backingZoneConditions + componentConditions
 		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "Task retry compare evidence is incomplete")
 		}
