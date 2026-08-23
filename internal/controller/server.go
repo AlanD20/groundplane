@@ -63,6 +63,7 @@ type Server struct {
 	taskMutations         TaskRetrier
 	console               fs.FS
 	tasks                 taskQueries
+	taskEventStreams      taskEventStreamOpener
 	routePolicies         map[string]routePolicy
 }
 
@@ -150,6 +151,9 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		console:               options.Console,
 		tasks:                 options.Tasks,
 		routePolicies:         make(map[string]routePolicy),
+	}
+	if options.Tasks != nil {
+		s.taskEventStreams = repositoryTaskEventStreamOpener{repository: options.Tasks}
 	}
 	s.routes()
 	s.registerTenants()
@@ -283,7 +287,6 @@ func (s *Server) routes() {
 
 	// task / activity
 	mux.HandleFunc("GET /api/v1/tasks", s.taskList)
-	s.streamRoute("GET /api/v1/tasks/{id}/events", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/retry", s.retryTask)
 	s.jsonRoute("POST /api/v1/tasks/{id}/abort", s.acceptTask)
 	mux.HandleFunc("GET /api/v1/activity", s.taskList) // exact JSON alias of Task list

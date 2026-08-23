@@ -18,6 +18,36 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for TaskEventState.
+const (
+	Aborted   TaskEventState = "aborted"
+	Completed TaskEventState = "completed"
+	Failed    TaskEventState = "failed"
+	Pending   TaskEventState = "pending"
+	Running   TaskEventState = "running"
+	TimedOut  TaskEventState = "timed_out"
+)
+
+// Valid indicates whether the value is a known member of the TaskEventState enum.
+func (e TaskEventState) Valid() bool {
+	switch e {
+	case Aborted:
+		return true
+	case Completed:
+		return true
+	case Failed:
+		return true
+	case Pending:
+		return true
+	case Running:
+		return true
+	case TimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
 // Agent defines model for Agent.
 type Agent struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -621,6 +651,19 @@ type TaskAccepted struct {
 	TaskId string  `json:"task_id"`
 }
 
+// TaskEvent defines model for TaskEvent.
+type TaskEvent struct {
+	Attempt    int32          `json:"attempt"`
+	Ordinal    int64          `json:"ordinal"`
+	ReceivedAt time.Time      `json:"received_at"`
+	Sequence   int64          `json:"sequence"`
+	State      TaskEventState `json:"state"`
+	StepId     string         `json:"step_id"`
+}
+
+// TaskEventState defines model for TaskEvent.State.
+type TaskEventState string
+
 // TaskStep defines model for TaskStep.
 type TaskStep struct {
 	Name   string `json:"name"`
@@ -918,6 +961,12 @@ type ServiceCreateParams struct {
 // ServiceEditParams defines parameters for ServiceEdit.
 type ServiceEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// TaskEventsParams defines parameters for TaskEvents.
+type TaskEventsParams struct {
+	// LastEventID Canonical decimal Task-event sequence; absent or 0 replays the complete journal.
+	LastEventID *string `json:"Last-Event-ID,omitempty"`
 }
 
 // TenantListParams defines parameters for TenantList.
@@ -1449,6 +1498,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
 	TaskShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TaskEvents Stream durable Task events
+	//
+	// Replays and follows Task events using sequence-based Last-Event-ID resume.
+	//
+	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
+	TaskEvents(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TenantList List tenants
 	//
@@ -2474,6 +2530,23 @@ func (c *Client) ServiceEdit(ctx context.Context, id string, params *ServiceEdit
 // Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
 func (c *Client) TaskShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTaskShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TaskEvents Stream durable Task events
+//
+// Replays and follows Task events using sequence-based Last-Event-ID resume.
+//
+// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
+func (c *Client) TaskEvents(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTaskEventsRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5002,6 +5075,55 @@ func NewTaskShowRequest(server string, id string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewTaskEventsRequest constructs an http.Request for the TaskEvents method
+func NewTaskEventsRequest(server string, id string, params *TaskEventsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tasks/%s/events", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.LastEventID != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Last-Event-ID", *params.LastEventID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Last-Event-ID", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewTenantListRequest constructs an http.Request for the TenantList method
 func NewTenantListRequest(server string, params *TenantListParams) (*http.Request, error) {
 	var err error
@@ -6000,6 +6122,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /tasks/{id} (the `TaskShow` operationId).
 	TaskShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*TaskShowResponse, error)
+
+	// TaskEventsWithResponse Stream durable Task events
+	//
+	// Replays and follows Task events using sequence-based Last-Event-ID resume.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
+	TaskEventsWithResponse(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*TaskEventsResponse, error)
 
 	// TenantListWithResponse List tenants
 	//
@@ -8366,6 +8497,47 @@ func (r TaskShowResponse) ContentType() string {
 	return ""
 }
 
+type TaskEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TaskEventsResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TaskEventsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TaskEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TaskEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TaskEventsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TenantListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9646,6 +9818,21 @@ func (c *ClientWithResponses) TaskShowWithResponse(ctx context.Context, id strin
 		return nil, err
 	}
 	return ParseTaskShowResponse(rsp)
+}
+
+// TaskEventsWithResponse Stream durable Task events
+//
+// Replays and follows Task events using sequence-based Last-Event-ID resume.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tasks/{id}/events (the `TaskEvents` operationId).
+func (c *ClientWithResponses) TaskEventsWithResponse(ctx context.Context, id string, params *TaskEventsParams, reqEditors ...RequestEditorFn) (*TaskEventsResponse, error) {
+	rsp, err := c.TaskEvents(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTaskEventsResponse(rsp)
 }
 
 // TenantListWithResponse List tenants
@@ -11556,6 +11743,32 @@ func ParseTaskShowResponse(rsp *http.Response) (*TaskShowResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTaskEventsResponse parses an HTTP response from a TaskEventsWithResponse call
+func ParseTaskEventsResponse(rsp *http.Response) (*TaskEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TaskEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

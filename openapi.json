@@ -1866,6 +1866,50 @@
         ],
         "type": "object"
       },
+      "TaskEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "ordinal": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "received_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sequence": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed",
+              "aborted",
+              "timed_out"
+            ],
+            "type": "string"
+          },
+          "step_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "step_id",
+          "state",
+          "attempt",
+          "ordinal",
+          "received_at"
+        ],
+        "type": "object"
+      },
       "TaskStep": {
         "additionalProperties": false,
         "properties": {
@@ -4736,6 +4780,77 @@
           }
         },
         "summary": "Show a task",
+        "tags": [
+          "Task"
+        ]
+      }
+    },
+    "/tasks/{id}/events": {
+      "get": {
+        "description": "Replays and follows Task events using sequence-based Last-Event-ID resume.",
+        "operationId": "task.events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Canonical decimal Task-event sequence; absent or 0 replays the complete journal.",
+            "in": "header",
+            "name": "Last-Event-ID",
+            "schema": {
+              "pattern": "^(0|[1-9][0-9]{0,19})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "Each item describes one SSE message serialized as UTF-8 text.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "data": {
+                        "$ref": "#/components/schemas/TaskEvent"
+                      },
+                      "id": {
+                        "pattern": "^[1-9][0-9]{0,19}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "data"
+                    ],
+                    "type": "object"
+                  },
+                  "title": "Task event stream",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Durable Task event stream"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Stream durable Task events",
         "tags": [
           "Task"
         ]

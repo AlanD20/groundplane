@@ -475,6 +475,21 @@ type memoryTaskStore struct {
 	history             map[string][]memoryTaskVersion
 	failAfterCommitOnce error
 	conflictsRemaining  int
+	nextWatcherID       int
+	watchers            map[int]*memoryTaskWatcher
+	watchStarts         []memoryTaskWatchStart
+}
+
+type memoryTaskWatcher struct {
+	prefix        string
+	startRevision int64
+	events        chan Event
+	errors        chan error
+}
+
+type memoryTaskWatchStart struct {
+	prefix   string
+	revision int64
 }
 
 func newMemoryTaskStore() *memoryTaskStore {
@@ -565,6 +580,71 @@ func (store *memoryTaskStore) Range(
 	}, nil
 }
 
+func (store *memoryTaskStore) Watch(
+	ctx context.Context,
+	prefix string,
+	startRevision int64,
+) (*WatchStream, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	store.mu.Lock()
+	if startRevision == 0 {
+		startRevision = store.revision + 1
+	}
+	events := make(chan Event, 4096)
+	errorsFound := make(chan error, 1)
+	history := make([]Event, 0)
+	for key, versions := range store.history {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		for _, version := range versions {
+			if version.revision < startRevision {
+				continue
+			}
+			event := Event{Key: key, ModRevision: version.revision, Type: EventDelete}
+			if version.present {
+				event.Type = EventPut
+				event.Value = append([]byte(nil), version.value...)
+			}
+			history = append(history, event)
+		}
+	}
+	sort.Slice(history, func(left int, right int) bool {
+		if history[left].ModRevision != history[right].ModRevision {
+			return history[left].ModRevision < history[right].ModRevision
+		}
+		return history[left].Key < history[right].Key
+	})
+	for _, event := range history {
+		events <- event
+	}
+	store.nextWatcherID++
+	id := store.nextWatcherID
+	if store.watchers == nil {
+		store.watchers = make(map[int]*memoryTaskWatcher)
+	}
+	store.watchers[id] = &memoryTaskWatcher{
+		prefix: prefix, startRevision: startRevision, events: events, errors: errorsFound,
+	}
+	store.watchStarts = append(store.watchStarts, memoryTaskWatchStart{prefix: prefix, revision: startRevision})
+	store.mu.Unlock()
+
+	go func() {
+		<-ctx.Done()
+		store.mu.Lock()
+		watcher, exists := store.watchers[id]
+		if exists {
+			delete(store.watchers, id)
+			close(watcher.errors)
+			close(watcher.events)
+		}
+		store.mu.Unlock()
+	}()
+	return &WatchStream{Events: events, Errors: errorsFound}, nil
+}
+
 func (store *memoryTaskStore) Transact(
 	ctx context.Context,
 	conditions []Condition,
@@ -596,15 +676,23 @@ func (store *memoryTaskStore) Transact(
 	store.revision++
 	for _, mutation := range mutations {
 		version := memoryTaskVersion{revision: store.revision}
+		event := Event{Key: mutation.Key, ModRevision: store.revision, Type: EventDelete}
 		switch mutation.Type {
 		case MutationPut:
 			version.present = true
 			version.value = append([]byte(nil), mutation.Value...)
+			event.Type = EventPut
+			event.Value = append([]byte(nil), mutation.Value...)
 		case MutationDelete:
 		default:
 			return TransactionResult{}, errs.New(errs.KindInternal, "fake task store received invalid mutation")
 		}
 		store.history[mutation.Key] = append(store.history[mutation.Key], version)
+		for _, watcher := range store.watchers {
+			if store.revision >= watcher.startRevision && strings.HasPrefix(mutation.Key, watcher.prefix) {
+				watcher.events <- event
+			}
+		}
 	}
 	if store.failAfterCommitOnce != nil {
 		err := store.failAfterCommitOnce
@@ -612,6 +700,32 @@ func (store *memoryTaskStore) Transact(
 		return TransactionResult{}, err
 	}
 	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
+}
+
+func (store *memoryTaskStore) failWatch(prefix string, err error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	for id, watcher := range store.watchers {
+		if watcher.prefix != prefix {
+			continue
+		}
+		delete(store.watchers, id)
+		watcher.errors <- err
+		close(watcher.errors)
+		close(watcher.events)
+	}
+}
+
+func (store *memoryTaskStore) watcherCount() int {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return len(store.watchers)
+}
+
+func (store *memoryTaskStore) watchStartCount() int {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return len(store.watchStarts)
 }
 
 func (store *memoryTaskStore) valueAtLocked(key string, revision int64) *KeyValue {

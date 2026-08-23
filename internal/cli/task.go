@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
 )
 
@@ -54,11 +56,18 @@ func newTaskCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			path := "/api/v1/tasks/" + target(app, args[0]) + "/events"
-			return app.Client.Stream(cmd.Context(), path, nil, func(event string) error {
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), event)
-				return err
-			})
+			return app.Client.StreamTaskEvents(
+				cmd.Context(),
+				target(app, args[0]),
+				func(event apiTypes.TaskEvent) error {
+					encoded, err := json.Marshal(event)
+					if err != nil {
+						return err
+					}
+					_, err = fmt.Fprintln(cmd.OutOrStdout(), string(encoded))
+					return err
+				},
+			)
 		},
 	})
 

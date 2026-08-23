@@ -33,6 +33,7 @@ type TaskEventAppend struct {
 // a hard limit of MaximumTaskEvents, so the repository never needs an
 // unbounded read or a second revision to return the complete journal.
 type TaskEventSnapshot struct {
+	Task     TaskRecord
 	Events   []TaskEventRecord
 	Revision int64
 }
@@ -393,7 +394,7 @@ func (repository *TaskRepository) ListTaskEvents(
 	if len(events) != int(task.EventCount) || task.NextEventSequence != uint64(len(events))+1 {
 		return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot does not match its task summary")
 	}
-	return TaskEventSnapshot{Events: events, Revision: eventsResult.ReadRevision}, nil
+	return TaskEventSnapshot{Task: task, Events: events, Revision: eventsResult.ReadRevision}, nil
 }
 
 func (repository *TaskRepository) verifyDuplicateEvent(

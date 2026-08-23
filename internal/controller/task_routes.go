@@ -23,6 +23,7 @@ func (s *Server) registerTasks() {
 		OperationID: "task.show", Method: http.MethodGet, Path: "/tasks/{id}",
 		Summary: "Show a task", Tags: []string{"Task"},
 	}, s.showTask)
+	s.registerTaskEventStream()
 }
 
 func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOutput, error) {

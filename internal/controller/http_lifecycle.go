@@ -357,6 +357,7 @@ func (l *httpLifecycle) serveSSE(w http.ResponseWriter, r *http.Request, events 
 	w.Header().Set("Cache-Control", "no-cache")
 	controller := http.NewResponseController(w)
 	if !flushSSEHeaders(controller, w, l.policy.sseWriteTimeout, l.policy.now) {
+		l.logSSETransportFailure(r)
 		return
 	}
 
@@ -369,7 +370,11 @@ func (l *httpLifecycle) serveSSE(w http.ResponseWriter, r *http.Request, events 
 		case <-l.drain:
 			return
 		case frame, ok := <-events:
-			if !ok || !writeSSEFrame(controller, w, frame, l.policy.sseWriteTimeout, l.policy.now) {
+			if !ok {
+				return
+			}
+			if !writeSSEFrame(controller, w, frame, l.policy.sseWriteTimeout, l.policy.now) {
+				l.logSSETransportFailure(r)
 				return
 			}
 		case <-ticker.C:
@@ -380,10 +385,18 @@ func (l *httpLifecycle) serveSSE(w http.ResponseWriter, r *http.Request, events 
 				l.policy.sseWriteTimeout,
 				l.policy.now,
 			) {
+				l.logSSETransportFailure(r)
 				return
 			}
 		}
 	}
+}
+
+func (l *httpLifecycle) logSSETransportFailure(r *http.Request) {
+	if r.Context().Err() != nil || l.server.Logger == nil {
+		return
+	}
+	l.server.Logger.Warn("controller: SSE stream disconnected", slog.String("kind", "transport"))
 }
 
 func flushSSEHeaders(

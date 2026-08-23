@@ -273,22 +273,38 @@ func TestTaskEventsStreamsCanonicalEndpoint(t *testing.T) {
 
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if request.Method != http.MethodGet ||
-				request.URL.RequestURI() != "/api/v1/tasks/task_1/events" {
+			if request.Method != http.MethodGet {
 				t.Errorf("request = %s %s", request.Method, request.URL.RequestURI())
 			}
-			if accept := request.Header.Get("Accept"); accept != "text/event-stream" {
-				t.Errorf("Accept = %q, want text/event-stream", accept)
+			switch request.URL.RequestURI() {
+			case "/api/v1/tasks/task_1/events":
+				if accept := request.Header.Get("Accept"); accept != "text/event-stream" {
+					t.Errorf("Accept = %q, want text/event-stream", accept)
+				}
+				writer.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(
+					writer,
+					"id: 1\ndata: {\"sequence\":1,\"step_id\":\"step_1\",\"state\":\"completed\","+
+						"\"attempt\":1,\"ordinal\":1,\"received_at\":\"2026-08-23T04:30:00Z\"}\n\n",
+				)
+			case "/api/v1/tasks/task_1":
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(
+					writer,
+					`{"id":"task_1","operation_id":"op_1","type":"run","target":"svc_1","status":"completed"}`,
+				)
+			default:
+				t.Errorf("request = %s %s", request.Method, request.URL.RequestURI())
 			}
-			writer.Header().Set("Content-Type", "text/event-stream")
-			_, _ = io.WriteString(writer, "data: ready\n\n")
 		}),
 	)
 	defer server.Close()
 
 	output := executeNoun(t, newTaskCmd(), server.URL, Scope{}, "events", "task_1")
-	if output != "ready\n" {
-		t.Fatalf("output = %q, want %q", output, "ready\n")
+	want := "{\"sequence\":1,\"step_id\":\"step_1\",\"state\":\"completed\"," +
+		"\"attempt\":1,\"ordinal\":1,\"received_at\":\"2026-08-23T04:30:00Z\"}\n"
+	if output != want {
+		t.Fatalf("output = %q, want %q", output, want)
 	}
 }
 
