@@ -278,7 +278,7 @@ func (repository *TaskRepository) RetryTask(
 		mutations = append(mutations, secretChange.mutations...)
 	}
 	defer clearSecretTaskChange(secretChange)
-	routeChange, err := repository.prepareRouteTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	routeChange, err := repository.prepareRemovalTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -1025,7 +1025,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
-				if err := repository.validateRouteTaskAcknowledgementReplay(
+				if err := repository.validateRemovalTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
@@ -1274,7 +1274,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, secretChange.conditions...)
 			mutations = append(mutations, secretChange.mutations...)
 		}
-		routeChange, err := repository.prepareRouteTaskAcknowledgement(
+		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {
@@ -1454,7 +1454,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
-			if err := repository.validateRouteTaskAcknowledgementReplay(
+			if err := repository.validateRemovalTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
@@ -1562,7 +1562,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(retentionValue)
 			return Versioned[TaskRecord]{}, err
 		}
-		routeChange, err := repository.prepareRouteTaskAcknowledgement(
+		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {

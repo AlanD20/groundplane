@@ -26,8 +26,10 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 	if !declared {
 		return "", false, nil
 	}
+	resourceRemoval := record.Type == TaskRemove &&
+		(validateStableID(ids.KindRoute, record.Target) == nil || validateStableID(ids.KindEnvEntry, record.Target) == nil)
 	if record.Executor != TaskExecutorAgent || validateStableID(ids.KindEnvironment, environmentID) != nil ||
-		record.Target != environmentID {
+		(record.Target != environmentID && !resourceRemoval) {
 		return "", false, errs.New(errs.KindValidationFailed, "task materialization Environment is invalid")
 	}
 	return environmentID, true, nil
