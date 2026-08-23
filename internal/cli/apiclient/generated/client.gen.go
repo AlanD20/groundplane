@@ -386,6 +386,16 @@ type PageRoute struct {
 	NextCursor *string  `json:"next_cursor,omitempty"`
 }
 
+// PageScript defines model for PageScript.
+type PageScript struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageScript.json
+	Schema     *string   `json:"$schema,omitempty"`
+	Items      *[]Script `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
+}
+
 // PageSecret defines model for PageSecret.
 type PageSecret struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -516,6 +526,42 @@ type RouteEdit struct {
 	// Examples: /api/v1/RouteEdit.json
 	Schema   *string `json:"$schema,omitempty"`
 	Exposure string  `json:"exposure"`
+}
+
+// Script defines model for Script.
+type Script struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Script.json
+	Schema  *string `json:"$schema,omitempty"`
+	Id      string  `json:"id"`
+	Name    string  `json:"name"`
+	Script  string  `json:"script"`
+	Service string  `json:"service"`
+	When    string  `json:"when"`
+}
+
+// ScriptCreate defines model for ScriptCreate.
+type ScriptCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ScriptCreate.json
+	Schema        *string `json:"$schema,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	Name          string  `json:"name"`
+	Script        string  `json:"script"`
+	ServiceId     string  `json:"service_id"`
+	When          string  `json:"when"`
+}
+
+// ScriptEdit defines model for ScriptEdit.
+type ScriptEdit struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ScriptEdit.json
+	Schema *string `json:"$schema,omitempty"`
+	Script *string `json:"script,omitempty"`
+	When   *string `json:"when,omitempty"`
 }
 
 // Secret defines model for Secret.
@@ -972,6 +1018,23 @@ type RouteEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ScriptListParams defines parameters for ScriptList.
+type ScriptListParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ScriptCreateParams defines parameters for ScriptCreate.
+type ScriptCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ScriptEditParams defines parameters for ScriptEdit.
+type ScriptEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // SecretListParams defines parameters for SecretList.
 type SecretListParams struct {
 	Project  *string `form:"project,omitempty" json:"project,omitempty"`
@@ -1096,6 +1159,12 @@ type RouteCreateJSONRequestBody = RouteCreate
 
 // RouteEditJSONRequestBody defines body for RouteEdit for application/json ContentType.
 type RouteEditJSONRequestBody = RouteEdit
+
+// ScriptCreateJSONRequestBody defines body for ScriptCreate for application/json ContentType.
+type ScriptCreateJSONRequestBody = ScriptCreate
+
+// ScriptEditJSONRequestBody defines body for ScriptEdit for application/json ContentType.
+type ScriptEditJSONRequestBody = ScriptEdit
 
 // SecretCreateJSONRequestBody defines body for SecretCreate for application/json ContentType.
 type SecretCreateJSONRequestBody = SecretCreateRequest
@@ -1481,6 +1550,44 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
 	RouteEdit(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptList List scripts
+	//
+	// Corresponds with GET /scripts (the `ScriptList` operationId).
+	ScriptList(ctx context.Context, params *ScriptListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptCreateWithBody Create a script
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+	ScriptCreateWithBody(ctx context.Context, params *ScriptCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptCreate Create a script
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+	ScriptCreate(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptShow Show a script
+	//
+	// Corresponds with GET /scripts/{id} (the `ScriptShow` operationId).
+	ScriptShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptEditWithBody Edit a script
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+	ScriptEditWithBody(ctx context.Context, id string, params *ScriptEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScriptEdit Edit a script
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+	ScriptEdit(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretList List reusable secrets
 	//
@@ -2418,6 +2525,104 @@ func (c *Client) RouteEditWithBody(ctx context.Context, id string, params *Route
 // Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
 func (c *Client) RouteEdit(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRouteEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptList List scripts
+//
+// Corresponds with GET /scripts (the `ScriptList` operationId).
+func (c *Client) ScriptList(ctx context.Context, params *ScriptListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptCreateWithBody Create a script
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+func (c *Client) ScriptCreateWithBody(ctx context.Context, params *ScriptCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptCreate Create a script
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+func (c *Client) ScriptCreate(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptShow Show a script
+//
+// Corresponds with GET /scripts/{id} (the `ScriptShow` operationId).
+func (c *Client) ScriptShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptEditWithBody Edit a script
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+func (c *Client) ScriptEditWithBody(ctx context.Context, id string, params *ScriptEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScriptEdit Edit a script
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+func (c *Client) ScriptEdit(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4806,6 +5011,227 @@ func NewRouteEditRequestWithBody(server string, id string, params *RouteEditPara
 	return req, nil
 }
 
+// NewScriptListRequest constructs an http.Request for the ScriptList method
+func NewScriptListRequest(server string, params *ScriptListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scripts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewScriptCreateRequest calls the generic ScriptCreate builder with application/json body
+func NewScriptCreateRequest(server string, params *ScriptCreateParams, body ScriptCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewScriptCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewScriptCreateRequestWithBody constructs an http.Request for the ScriptCreate method, with any body, and a specified content type
+func NewScriptCreateRequestWithBody(server string, params *ScriptCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scripts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewScriptShowRequest constructs an http.Request for the ScriptShow method
+func NewScriptShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scripts/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewScriptEditRequest calls the generic ScriptEdit builder with application/json body
+func NewScriptEditRequest(server string, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewScriptEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewScriptEditRequestWithBody constructs an http.Request for the ScriptEdit method, with any body, and a specified content type
+func NewScriptEditRequestWithBody(server string, id string, params *ScriptEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scripts/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewSecretListRequest constructs an http.Request for the SecretList method
 func NewSecretListRequest(server string, params *SecretListParams) (*http.Request, error) {
 	var err error
@@ -6355,6 +6781,48 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
 	RouteEditWithResponse(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteEditResponse, error)
+
+	// ScriptListWithResponse List scripts
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /scripts (the `ScriptList` operationId).
+	ScriptListWithResponse(ctx context.Context, params *ScriptListParams, reqEditors ...RequestEditorFn) (*ScriptListResponse, error)
+
+	// ScriptCreateWithBodyWithResponse Create a script
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+	ScriptCreateWithBodyWithResponse(ctx context.Context, params *ScriptCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptCreateResponse, error)
+
+	// ScriptCreateWithResponse Create a script
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+	ScriptCreateWithResponse(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptCreateResponse, error)
+
+	// ScriptShowWithResponse Show a script
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /scripts/{id} (the `ScriptShow` operationId).
+	ScriptShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ScriptShowResponse, error)
+
+	// ScriptEditWithBodyWithResponse Edit a script
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+	ScriptEditWithBodyWithResponse(ctx context.Context, id string, params *ScriptEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptEditResponse, error)
+
+	// ScriptEditWithResponse Edit a script
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+	ScriptEditWithResponse(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptEditResponse, error)
 
 	// SecretListWithResponse List reusable secrets
 	//
@@ -8416,6 +8884,212 @@ func (r RouteEditResponse) ContentType() string {
 	return ""
 }
 
+type ScriptListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageScript
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ScriptListResponse) GetJSON200() *PageScript {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ScriptListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ScriptListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScriptListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScriptListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScriptListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ScriptCreateResponse201Headers the declared response headers of an HTTP 201 response for ScriptCreate
+type ScriptCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type ScriptCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Script
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ScriptCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ScriptCreateResponse) GetJSON201() *Script {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ScriptCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ScriptCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScriptCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScriptCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScriptCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ScriptShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Script
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ScriptShowResponse) GetJSON200() *Script {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ScriptShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ScriptShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScriptShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScriptShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScriptShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ScriptEditResponse200Headers the declared response headers of an HTTP 200 response for ScriptEdit
+type ScriptEditResponse200Headers struct {
+	ContentType *string
+}
+
+type ScriptEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Script
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ScriptEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ScriptEditResponse) GetJSON200() *Script {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ScriptEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ScriptEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScriptEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScriptEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScriptEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SecretListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -10150,6 +10824,84 @@ func (c *ClientWithResponses) RouteEditWithResponse(ctx context.Context, id stri
 		return nil, err
 	}
 	return ParseRouteEditResponse(rsp)
+}
+
+// ScriptListWithResponse List scripts
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /scripts (the `ScriptList` operationId).
+func (c *ClientWithResponses) ScriptListWithResponse(ctx context.Context, params *ScriptListParams, reqEditors ...RequestEditorFn) (*ScriptListResponse, error) {
+	rsp, err := c.ScriptList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptListResponse(rsp)
+}
+
+// ScriptCreateWithBodyWithResponse Create a script
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+func (c *ClientWithResponses) ScriptCreateWithBodyWithResponse(ctx context.Context, params *ScriptCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptCreateResponse, error) {
+	rsp, err := c.ScriptCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptCreateResponse(rsp)
+}
+
+// ScriptCreateWithResponse Create a script
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /scripts (the `ScriptCreate` operationId).
+func (c *ClientWithResponses) ScriptCreateWithResponse(ctx context.Context, params *ScriptCreateParams, body ScriptCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptCreateResponse, error) {
+	rsp, err := c.ScriptCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptCreateResponse(rsp)
+}
+
+// ScriptShowWithResponse Show a script
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /scripts/{id} (the `ScriptShow` operationId).
+func (c *ClientWithResponses) ScriptShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ScriptShowResponse, error) {
+	rsp, err := c.ScriptShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptShowResponse(rsp)
+}
+
+// ScriptEditWithBodyWithResponse Edit a script
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+func (c *ClientWithResponses) ScriptEditWithBodyWithResponse(ctx context.Context, id string, params *ScriptEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScriptEditResponse, error) {
+	rsp, err := c.ScriptEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptEditResponse(rsp)
+}
+
+// ScriptEditWithResponse Edit a script
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
+func (c *ClientWithResponses) ScriptEditWithResponse(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptEditResponse, error) {
+	rsp, err := c.ScriptEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptEditResponse(rsp)
 }
 
 // SecretListWithResponse List reusable secrets
@@ -11940,6 +12692,164 @@ func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
 	switch {
 	case rsp.StatusCode == 200:
 		var headers RouteEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseScriptListResponse parses an HTTP response from a ScriptListWithResponse call
+func ParseScriptListResponse(rsp *http.Response) (*ScriptListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScriptListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageScript
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseScriptCreateResponse parses an HTTP response from a ScriptCreateWithResponse call
+func ParseScriptCreateResponse(rsp *http.Response) (*ScriptCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScriptCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Script
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ScriptCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseScriptShowResponse parses an HTTP response from a ScriptShowWithResponse call
+func ParseScriptShowResponse(rsp *http.Response) (*ScriptShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScriptShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Script
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseScriptEditResponse parses an HTTP response from a ScriptEditWithResponse call
+func ParseScriptEditResponse(rsp *http.Response) (*ScriptEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScriptEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Script
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ScriptEditResponse200Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

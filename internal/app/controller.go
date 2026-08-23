@@ -217,6 +217,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Route repository: %w", err)
 	}
+	scriptRecords, err := etcd.NewScriptRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script repository: %w", err)
+	}
 	routeReadRepository, err := newDurableRouteReadRepository(hierarchyRecords, routeRecords)
 	if err != nil {
 		_ = store.Close()
@@ -226,6 +231,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Route reads: %w", err)
+	}
+	scriptReadRepository, err := newDurableScriptReadRepository(hierarchyRecords, serviceRecords, scriptRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script read repositories: %w", err)
+	}
+	scriptReads, err := newScriptReadService(scriptReadRepository)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script reads: %w", err)
 	}
 	zoneRecords, err := etcd.NewZoneRepository(store)
 	if err != nil {
@@ -263,6 +278,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Route mutation repositories: %w", err)
+	}
+	scriptMutationRepository, err := newDurableScriptMutationRepository(
+		hierarchyRecords, serviceRecords, scriptRecords,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script mutation repositories: %w", err)
 	}
 	componentRecords, err := etcd.NewComponentRepository(store)
 	if err != nil {
@@ -407,6 +429,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Route mutation service: %w", err)
+	}
+	scriptMutationIdempotency, err := newDurableScriptMutationIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script mutation idempotency: %w", err)
+	}
+	scriptMutations, err := newScriptMutationService(scriptMutationRepository, scriptMutationIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script mutation service: %w", err)
 	}
 	routeDeletionIdempotency, err := newDurableRouteDeletionIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -816,6 +848,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ZoneMutations:         zoneMutations,
 		Routes:                routeReads,
 		RouteMutations:        routeMutations,
+		Scripts:               scriptReads,
+		ScriptMutations:       scriptMutations,
 		Entries:               entryReads,
 		EntryMutations:        entryMutations,
 		Secrets:               secretReads,

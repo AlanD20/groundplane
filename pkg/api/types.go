@@ -389,6 +389,21 @@ type Script struct {
 	When        string `json:"when"`
 }
 
+// ScriptCreate is the complete operator-authored durable Script input.
+type ScriptCreate struct {
+	EnvironmentID string `json:"environment_id"`
+	Name          string `json:"name"`
+	ServiceID     string `json:"service_id"`
+	Body          string `json:"script"`
+	When          string `json:"when"`
+}
+
+// ScriptEdit contains the mutable Script desired-state fields.
+type ScriptEdit struct {
+	Body *string `json:"script,omitempty"`
+	When *string `json:"when,omitempty"`
+}
+
 // Component is the generic environment-component record. Caddy and Cloudflare
 // Tunnel are component KINDS ("caddy", "cloudflare-tunnel"),
 // not bespoke resources — see blueprint.md, "x-gp-components".

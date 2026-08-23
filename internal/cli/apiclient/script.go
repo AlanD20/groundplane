@@ -1,0 +1,165 @@
+package apiclient
+
+import (
+	"bytes"
+	"context"
+	"net/http"
+
+	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+)
+
+func (c *Client) CreateScript(ctx context.Context, input apiTypes.ScriptCreate) (apiTypes.Script, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Script{}, err
+	}
+	response, err := client.ScriptCreateWithResponse(ctx, &generated.ScriptCreateParams{
+		IdempotencyKey: ids.NewULID(),
+	}, generated.ScriptCreateJSONRequestBody{
+		EnvironmentId: input.EnvironmentID, Name: input.Name, ServiceId: input.ServiceID,
+		Script: input.Body, When: input.When,
+	})
+	if err != nil {
+		return apiTypes.Script{}, generatedCallError(ctx, http.MethodPost, "/api/v1/scripts", err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, "/api/v1/scripts", response.HTTPResponse, response.Body, http.StatusCreated,
+	); err != nil {
+		return apiTypes.Script{}, err
+	}
+	parsed := response.JSON201
+	if parsed == nil {
+		parsed = &generated.Script{}
+		if err := decodeSingleJSON(
+			http.MethodPost,
+			"/api/v1/scripts",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.Script{}, err
+		}
+	}
+	return scriptFromGenerated(*parsed), nil
+}
+
+func (c *Client) ListScripts(
+	ctx context.Context,
+	environmentID string,
+	limit int,
+	cursor string,
+) (apiTypes.Page[apiTypes.Script], error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Page[apiTypes.Script]{}, err
+	}
+	params := &generated.ScriptListParams{Environment: environmentID}
+	if limit != 0 {
+		value := int64(limit)
+		params.Limit = &value
+	}
+	if cursor != "" {
+		params.Cursor = &cursor
+	}
+	response, err := client.ScriptListWithResponse(ctx, params)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Script]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/scripts", err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet, "/api/v1/scripts", response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.Page[apiTypes.Script]{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.PageScript{}
+		if err := decodeSingleJSON(
+			http.MethodGet,
+			"/api/v1/scripts",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.Page[apiTypes.Script]{}, err
+		}
+	}
+	items := []generated.Script(nil)
+	if parsed.Items != nil {
+		items = *parsed.Items
+	}
+	page := apiTypes.Page[apiTypes.Script]{Items: make([]apiTypes.Script, len(items))}
+	if parsed.NextCursor != nil {
+		page.NextCursor = *parsed.NextCursor
+	}
+	for index, item := range items {
+		page.Items[index] = scriptFromGenerated(item)
+	}
+	return page, nil
+}
+
+func (c *Client) GetScript(ctx context.Context, id string) (apiTypes.Script, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Script{}, err
+	}
+	path := "/api/v1/scripts/" + id
+	response, err := client.ScriptShowWithResponse(ctx, id)
+	if err != nil {
+		return apiTypes.Script{}, generatedCallError(ctx, http.MethodGet, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet,
+		path,
+		response.HTTPResponse,
+		response.Body,
+		http.StatusOK,
+	); err != nil {
+		return apiTypes.Script{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.Script{}
+		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.Script{}, err
+		}
+	}
+	return scriptFromGenerated(*parsed), nil
+}
+
+func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.ScriptEdit) (apiTypes.Script, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Script{}, err
+	}
+	path := "/api/v1/scripts/" + id
+	response, err := client.ScriptEditWithResponse(ctx, id, &generated.ScriptEditParams{
+		IdempotencyKey: ids.NewULID(),
+	}, generated.ScriptEditJSONRequestBody{Script: input.Body, When: input.When})
+	if err != nil {
+		return apiTypes.Script{}, generatedCallError(ctx, http.MethodPatch, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPatch,
+		path,
+		response.HTTPResponse,
+		response.Body,
+		http.StatusOK,
+	); err != nil {
+		return apiTypes.Script{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.Script{}
+		if err := decodeSingleJSON(http.MethodPatch, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.Script{}, err
+		}
+	}
+	return scriptFromGenerated(*parsed), nil
+}
+
+func scriptFromGenerated(script generated.Script) apiTypes.Script {
+	return apiTypes.Script{
+		ID: script.Id, Name: script.Name, ServiceName: script.Service,
+		Body: script.Script, When: script.When,
+	}
+}

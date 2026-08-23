@@ -49,6 +49,8 @@ type Server struct {
 	zoneMutations         ZoneMutator
 	routeReads            RouteReader
 	routeMutations        RouteMutator
+	scriptReads           ScriptReader
+	scriptMutations       ScriptMutator
 	entries               EntryReader
 	entryMutations        EntryMutator
 	secrets               SecretReader
@@ -85,6 +87,8 @@ type Options struct {
 	ZoneMutations         ZoneMutator
 	Routes                RouteReader
 	RouteMutations        RouteMutator
+	Scripts               ScriptReader
+	ScriptMutations       ScriptMutator
 	Entries               EntryReader
 	EntryMutations        EntryMutator
 	Secrets               SecretReader
@@ -138,6 +142,8 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		zoneMutations:         options.ZoneMutations,
 		routeReads:            options.Routes,
 		routeMutations:        options.RouteMutations,
+		scriptReads:           options.Scripts,
+		scriptMutations:       options.ScriptMutations,
 		entries:               options.Entries,
 		entryMutations:        options.EntryMutations,
 		secrets:               options.Secrets,
@@ -166,6 +172,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerServices()
 	s.registerZones()
 	s.registerRoutes()
+	s.registerScripts()
 	s.registerEntries()
 	s.registerSecrets()
 	s.registerAttaches()
@@ -242,14 +249,14 @@ func (s *Server) routes() {
 
 	// Route reads, mutations, and task-backed removal are typed Huma operations.
 
-	// volume / script (?environment=) — destructive delete is a task
-	for _, res := range []string{"volumes", "scripts"} {
-		mux.HandleFunc("GET /api/v1/"+res, s.notImplemented)
-		s.jsonRoute("POST /api/v1/"+res, s.notImplemented)
-		mux.HandleFunc("GET /api/v1/"+res+"/{id}", s.notImplemented)
-		s.jsonRoute("PATCH /api/v1/"+res+"/{id}", s.notImplemented)
-		mux.HandleFunc("DELETE /api/v1/"+res+"/{id}", s.acceptTask)
-	}
+	// Volume metadata remains explicit. Script reads and protected metadata
+	// mutations are typed Huma operations; run and removal remain task placeholders.
+	mux.HandleFunc("GET /api/v1/volumes", s.notImplemented)
+	s.jsonRoute("POST /api/v1/volumes", s.notImplemented)
+	mux.HandleFunc("GET /api/v1/volumes/{id}", s.notImplemented)
+	s.jsonRoute("PATCH /api/v1/volumes/{id}", s.notImplemented)
+	mux.HandleFunc("DELETE /api/v1/volumes/{id}", s.acceptTask)
+	mux.HandleFunc("DELETE /api/v1/scripts/{id}", s.acceptTask)
 	// Entry reads, protected mutations, and explicit reveal are typed Huma operations.
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
