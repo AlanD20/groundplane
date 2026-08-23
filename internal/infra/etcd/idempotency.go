@@ -56,12 +56,13 @@ type IdempotencyLocator struct {
 type IdempotencyReplayTargetKind string
 
 const (
-	IdempotencyReplayTargetAttach IdempotencyReplayTargetKind = "attach"
-	IdempotencyReplayTargetEntry  IdempotencyReplayTargetKind = "entry"
-	IdempotencyReplayTargetRoute  IdempotencyReplayTargetKind = "route"
-	IdempotencyReplayTargetScript IdempotencyReplayTargetKind = "script"
-	IdempotencyReplayTargetSecret IdempotencyReplayTargetKind = "secret"
-	IdempotencyReplayTargetZone   IdempotencyReplayTargetKind = "zone"
+	IdempotencyReplayTargetAttach  IdempotencyReplayTargetKind = "attach"
+	IdempotencyReplayTargetEntry   IdempotencyReplayTargetKind = "entry"
+	IdempotencyReplayTargetRoute   IdempotencyReplayTargetKind = "route"
+	IdempotencyReplayTargetScript  IdempotencyReplayTargetKind = "script"
+	IdempotencyReplayTargetSecret  IdempotencyReplayTargetKind = "secret"
+	IdempotencyReplayTargetZone    IdempotencyReplayTargetKind = "zone"
+	IdempotencyReplayTargetService IdempotencyReplayTargetKind = "service"
 )
 
 type IdempotencyReplayTarget struct {
@@ -285,6 +286,10 @@ func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
 		}
 	case IdempotencyReplayTargetZone:
 		if ids.Validate(ids.KindNetwork, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetService:
+		if ids.Validate(ids.KindService, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
 	default:

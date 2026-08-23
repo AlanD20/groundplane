@@ -231,9 +231,6 @@ func (s *Server) routes() {
 	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
 	s.jsonRoute("POST /api/v1/services/{id}/deploy", s.acceptTask) // {tag?, strategy?, on_failure?}
 	s.jsonRoute("POST /api/v1/services/{id}/rollback", s.acceptTask)
-	s.jsonRoute("POST /api/v1/services/{id}/start", s.acceptTask)
-	s.jsonRoute("POST /api/v1/services/{id}/stop", s.acceptTask)
-	s.jsonRoute("POST /api/v1/services/{id}/destroy", s.acceptTask)
 	s.streamRoute("GET /api/v1/services/{id}/logs", s.notImplemented)
 
 	// release-group (?environment=)

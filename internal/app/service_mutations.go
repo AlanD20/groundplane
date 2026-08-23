@@ -229,6 +229,7 @@ func (service *durableServiceMutationIdempotency) ResolveUnknown(
 type serviceMutationService struct {
 	repository  serviceMutationRepository
 	idempotency serviceMutationIdempotency
+	lifecycle   *serviceLifecycleService
 	now         func() time.Time
 }
 

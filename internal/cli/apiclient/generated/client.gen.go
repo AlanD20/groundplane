@@ -1075,6 +1075,21 @@ type ServiceEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ServiceDestroyParams defines parameters for ServiceDestroy.
+type ServiceDestroyParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ServiceStartParams defines parameters for ServiceStart.
+type ServiceStartParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ServiceStopParams defines parameters for ServiceStop.
+type ServiceStopParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // TaskListParams defines parameters for TaskList.
 type TaskListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1680,6 +1695,21 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
 	ServiceEdit(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceDestroy Destroy service runtime
+	//
+	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+	ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceStart Start a service
+	//
+	// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+	ServiceStart(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceStop Stop a service
+	//
+	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+	ServiceStop(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TaskList List tasks
 	//
@@ -2860,6 +2890,51 @@ func (c *Client) ServiceEditWithBody(ctx context.Context, id string, params *Ser
 // Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
 func (c *Client) ServiceEdit(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceDestroy Destroy service runtime
+//
+// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+func (c *Client) ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceDestroyRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceStart Start a service
+//
+// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+func (c *Client) ServiceStart(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceStartRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceStop Stop a service
+//
+// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+func (c *Client) ServiceStop(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceStopRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5833,6 +5908,147 @@ func NewServiceEditRequestWithBody(server string, id string, params *ServiceEdit
 	return req, nil
 }
 
+// NewServiceDestroyRequest constructs an http.Request for the ServiceDestroy method
+func NewServiceDestroyRequest(server string, id string, params *ServiceDestroyParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/destroy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewServiceStartRequest constructs an http.Request for the ServiceStart method
+func NewServiceStartRequest(server string, id string, params *ServiceStartParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/start", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewServiceStopRequest constructs an http.Request for the ServiceStop method
+func NewServiceStopRequest(server string, id string, params *ServiceStopParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/stop", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewTaskListRequest constructs an http.Request for the TaskList method
 func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, error) {
 	var err error
@@ -7130,6 +7346,27 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
 	ServiceEditWithResponse(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceEditResponse, error)
+
+	// ServiceDestroyWithResponse Destroy service runtime
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+	ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
+
+	// ServiceStartWithResponse Start a service
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+	ServiceStartWithResponse(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error)
+
+	// ServiceStopWithResponse Stop a service
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+	ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error)
 
 	// TaskListWithResponse List tasks
 	//
@@ -9842,6 +10079,171 @@ func (r ServiceEditResponse) ContentType() string {
 	return ""
 }
 
+// ServiceDestroyResponse202Headers the declared response headers of an HTTP 202 response for ServiceDestroy
+type ServiceDestroyResponse202Headers struct {
+	ContentType *string
+}
+
+type ServiceDestroyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ServiceDestroyResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ServiceDestroyResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceDestroyResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceDestroyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceDestroyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceDestroyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceDestroyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ServiceStartResponse202Headers the declared response headers of an HTTP 202 response for ServiceStart
+type ServiceStartResponse202Headers struct {
+	ContentType *string
+}
+
+type ServiceStartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ServiceStartResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ServiceStartResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceStartResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceStartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceStartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceStartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceStartResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ServiceStopResponse202Headers the declared response headers of an HTTP 202 response for ServiceStop
+type ServiceStopResponse202Headers struct {
+	ContentType *string
+}
+
+type ServiceStopResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ServiceStopResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ServiceStopResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceStopResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceStopResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceStopResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceStopResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceStopResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TaskListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -11473,6 +11875,45 @@ func (c *ClientWithResponses) ServiceEditWithResponse(ctx context.Context, id st
 		return nil, err
 	}
 	return ParseServiceEditResponse(rsp)
+}
+
+// ServiceDestroyWithResponse Destroy service runtime
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
+func (c *ClientWithResponses) ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error) {
+	rsp, err := c.ServiceDestroy(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceDestroyResponse(rsp)
+}
+
+// ServiceStartWithResponse Start a service
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/start (the `ServiceStart` operationId).
+func (c *ClientWithResponses) ServiceStartWithResponse(ctx context.Context, id string, params *ServiceStartParams, reqEditors ...RequestEditorFn) (*ServiceStartResponse, error) {
+	rsp, err := c.ServiceStart(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceStartResponse(rsp)
+}
+
+// ServiceStopWithResponse Stop a service
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/stop (the `ServiceStop` operationId).
+func (c *ClientWithResponses) ServiceStopWithResponse(ctx context.Context, id string, params *ServiceStopParams, reqEditors ...RequestEditorFn) (*ServiceStopResponse, error) {
+	rsp, err := c.ServiceStop(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceStopResponse(rsp)
 }
 
 // TaskListWithResponse List tasks
@@ -13694,6 +14135,144 @@ func ParseServiceEditResponse(rsp *http.Response) (*ServiceEditResponse, error) 
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceDestroyResponse parses an HTTP response from a ServiceDestroyWithResponse call
+func ParseServiceDestroyResponse(rsp *http.Response) (*ServiceDestroyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceDestroyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ServiceDestroyResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceStartResponse parses an HTTP response from a ServiceStartWithResponse call
+func ParseServiceStartResponse(rsp *http.Response) (*ServiceStartResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceStartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ServiceStartResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceStopResponse parses an HTTP response from a ServiceStopWithResponse call
+func ParseServiceStopResponse(rsp *http.Response) (*ServiceStopResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceStopResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ServiceStopResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

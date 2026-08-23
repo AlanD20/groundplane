@@ -125,7 +125,7 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 		)
 		return err
 	}
-	executionContext, cancel := context.WithDeadline(ctx, deadline)
+	executionContext, cancel := context.WithTimeout(ctx, deadline.Sub(now))
 	active := &activeExecution{taskID: claim.Task.Record.ID, cancel: cancel, done: make(chan struct{})}
 	runner.mu.Lock()
 	if runner.active != nil {

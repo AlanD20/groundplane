@@ -79,6 +79,13 @@ func (handler *controllerTaskHandler) Execute(
 			return errs.New(errs.KindValidationFailed, "Controller Task Route removal is invalid")
 		}
 		return nil
+	case etcd.TaskResourceService:
+		if (task.Type != etcd.TaskStart && task.Type != etcd.TaskStop && task.Type != etcd.TaskDestroy) ||
+			ids.Validate(ids.KindService, task.Target) != nil || len(task.Params) != 2 ||
+			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskServiceEnvironmentParam]) != nil {
+			return errs.New(errs.KindValidationFailed, "Controller Task Service lifecycle is invalid")
+		}
+		return nil
 	case etcd.TaskResourceBackingZone:
 		valid, err := isBackingZoneCascadeTask(task)
 		if err != nil || !valid {

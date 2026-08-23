@@ -120,6 +120,9 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
+	if task.Type == etcd.TaskStart || task.Type == etcd.TaskStop || task.Type == etcd.TaskDestroy {
+		return resolver.resolveServiceLifecyclePlan(ctx, task)
+	}
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "execution plan resolution context is required")
 	}

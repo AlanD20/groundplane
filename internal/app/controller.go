@@ -420,6 +420,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service mutation service: %w", err)
 	}
+	serviceLifecycleIdempotency, err := newDurableServiceLifecycleIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service lifecycle idempotency: %w", err)
+	}
+	serviceMutations.lifecycle, err = newServiceLifecycleService(
+		serviceMutationRepository,
+		planResolver,
+		serviceLifecycleIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service lifecycle service: %w", err)
+	}
 	routeMutationIdempotency, err := newDurableRouteMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()

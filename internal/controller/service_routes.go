@@ -22,6 +22,9 @@ type ServiceReader interface {
 type ServiceMutator interface {
 	CreateService(context.Context, apiTypes.ServiceCreate, string) (etcd.IdempotencyResponse, error)
 	EditService(context.Context, string, apiTypes.ServiceEdit, string) (etcd.IdempotencyResponse, error)
+	StartService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	StopService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DestroyService(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type serviceListInput struct {
@@ -58,6 +61,7 @@ type serviceMutationOutput struct {
 }
 
 func (s *Server) registerServices() {
+	s.registerServiceLifecycleRoutes()
 	serviceSchema := s.API.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[apiTypes.Service](), true, "Service")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "service.list", Method: http.MethodGet, Path: "/services",
