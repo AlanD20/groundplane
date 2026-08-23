@@ -79,6 +79,73 @@ func (repository *ConnectorRepository) CreateConnector(
 	}, nil
 }
 
+func (repository *ConnectorRepository) CreateConnectorIdempotent(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	record ConnectorRecord,
+	credentials ConnectorEncryptedCredentials,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateConnectorHierarchy(ctx, environment, project, record); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if credentials.ConnectorID != record.Connector.ID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Connector encrypted credentials do not match the Connector",
+		)
+	}
+	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != record.Connector.EnvironmentID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Connector creation marker must be a completed Environment-scoped direct mutation",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	primaryValue, err := encodeConnectorRecord(record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	credentialValue, err := encodeConnectorEncryptedCredentials(credentials)
+	if err != nil {
+		clear(primaryValue)
+		return IdempotencyTransactionResult{}, err
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
+		{
+			Type: MutationPut, Key: connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
+			Value: []byte(record.Connector.ID),
+		},
+		{
+			Type: MutationPut, Key: connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
+			Value: []byte(record.Connector.ID),
+		},
+		{Type: MutationPut, Key: connectorCredentialValueKey(record.Connector.ID), Value: credentialValue},
+	}
+	defer clearMutationValues(mutations)
+	plan, err := newIdempotencyMutationPlan(
+		connectorCreateConditions(environment, project, record),
+		mutations,
+		func(_ int64, values []*KeyValue) error {
+			return classifyConnectorCreateConflict(values, environment, project)
+		},
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
 func (repository *ConnectorRepository) GetConnector(
 	ctx context.Context,
 	id string,
