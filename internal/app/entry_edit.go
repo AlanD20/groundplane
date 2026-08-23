@@ -173,16 +173,26 @@ type entryEditService struct {
 type entryMutationService struct {
 	creation *entryCreationService
 	edit     *entryEditService
+	deletion *entryDeletionService
 }
 
 func newEntryMutationService(
 	creation *entryCreationService,
 	edit *entryEditService,
+	deletion *entryDeletionService,
 ) (*entryMutationService, error) {
-	if creation == nil || edit == nil {
+	if creation == nil || edit == nil || deletion == nil {
 		return nil, errs.New(errs.KindInternal, "Entry mutation service is not configured")
 	}
-	return &entryMutationService{creation: creation, edit: edit}, nil
+	return &entryMutationService{creation: creation, edit: edit, deletion: deletion}, nil
+}
+
+func (service *entryMutationService) RemoveEntry(
+	ctx context.Context,
+	entryID string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	return service.deletion.RemoveEntry(ctx, entryID, idempotencyKey)
 }
 
 func (service *entryMutationService) CreateEntry(

@@ -485,7 +485,27 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry edit service: %w", err)
 	}
-	entryMutations, err := newEntryMutationService(entryCreationMutations, entryEditMutations)
+	entryDeletionRepository, err := newDurableEntryDeletionRepository(entryCreationRepository, componentRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry deletion repositories: %w", err)
+	}
+	entryDeletionIdempotency, err := newDurableEntryDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry deletion idempotency: %w", err)
+	}
+	entryDeletions, err := newEntryDeletionService(
+		entryDeletionRepository,
+		planResolver,
+		materializationResolver,
+		entryDeletionIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry deletion service: %w", err)
+	}
+	entryMutations, err := newEntryMutationService(entryCreationMutations, entryEditMutations, entryDeletions)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry mutation service: %w", err)

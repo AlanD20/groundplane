@@ -19,7 +19,7 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
 	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, nil)
 	result, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, tombstone, intent, task, marker,
+		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
@@ -79,7 +79,7 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
 	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, nil)
 	if _, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, tombstone, intent, task, marker,
+		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
 	); err != nil {
 		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
 	}
@@ -133,7 +133,7 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 	projection := entryDeletionTestProjection(t, store, current)
 	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, &projection)
 	result, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, &projection, tombstone, intent, task, marker,
+		ctx, environment, project, current, &projection, nil, tombstone, intent, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
@@ -188,6 +188,64 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 		if getErr != nil || stored.Entry != nil {
 			t.Fatalf("finalized key %s = %#v/%v", key, stored, getErr)
 		}
+	}
+}
+
+// Rationale: an enabled Cloudflare Tunnel token is a live stable-id reference,
+// and even a disabled singleton must remain revision-fenced so a concurrent
+// enable or retarget cannot race Entry deletion publication.
+func TestEntryDeletionFencesCloudflareTokenReference(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repository, store, environment, project, current, _ := entryDeletionTestState(t)
+	components, err := newComponentRepository(store)
+	if err != nil {
+		t.Fatalf("newComponentRepository() error = %v", err)
+	}
+	at := serviceRecordTestTime().Add(7 * time.Hour)
+	record, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, at, 1), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environment.Record.ID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
+		Config:            map[string]any{"token_entry_id": current.Record.Entry.ID},
+		GeneratedServices: []string{ids.NewAt(ids.KindService, at, 2)},
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord(enabled Cloudflare) error = %v", err)
+	}
+	cloudflare, err := components.CreateEnvironmentComponent(ctx, environment, project, record)
+	if err != nil {
+		t.Fatalf("CreateEnvironmentComponent() error = %v", err)
+	}
+	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, nil)
+	if _, err := repository.BeginEntryDeletionWithTask(
+		ctx, environment, project, current, nil, &cloudflare, tombstone, intent, task, marker,
+	); !isKind(err, errs.KindResourceInUse) {
+		t.Fatalf("BeginEntryDeletionWithTask(enabled token) error = %v", err)
+	}
+
+	desired, err := ProjectComponentRecord(cloudflare.Record)
+	if err != nil {
+		t.Fatalf("ProjectComponentRecord() error = %v", err)
+	}
+	desired.Enabled = false
+	desired.Config = map[string]any{"token_entry_id": ids.NewAt(ids.KindEnvEntry, at, 3)}
+	disabled, err := components.ReplaceDesired(ctx, environment, project, cloudflare, desired)
+	if err != nil {
+		t.Fatalf("ReplaceDesired(disable) error = %v", err)
+	}
+	desired.Config = map[string]any{"token_entry_id": ids.NewAt(ids.KindEnvEntry, at, 4)}
+	if _, err := components.ReplaceDesired(ctx, environment, project, disabled, desired); err != nil {
+		t.Fatalf("ReplaceDesired(retarget) error = %v", err)
+	}
+	result, err := repository.BeginEntryDeletionWithTask(
+		ctx, environment, project, current, nil, &disabled, tombstone, intent, task, marker,
+	)
+	if err != nil {
+		t.Fatalf("BeginEntryDeletionWithTask(stale Component) error = %v", err)
+	}
+	_, _, conflict, classifyErr := result.Classify()
+	if classifyErr != nil || !isKind(conflict, errs.KindStateConflict) {
+		t.Fatalf("stale Component conflict/error = %v/%v", conflict, classifyErr)
 	}
 }
 
