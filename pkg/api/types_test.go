@@ -54,6 +54,7 @@ func TestConnectorResponseOmitsDirectCredentialValue(t *testing.T) {
 func TestConnectorCreateRequestIncludesPathStyleDecision(t *testing.T) {
 	// Rationale: S3-compatible endpoints do not expose portable addressing
 	// behavior, so desired state must carry the operator's explicit decision.
+	pathStyle := true
 	encoded, err := json.Marshal(ConnectorCreateRequest{
 		Name:      "backups",
 		Kind:      "s3-compatible",
@@ -61,13 +62,32 @@ func TestConnectorCreateRequestIncludesPathStyleDecision(t *testing.T) {
 		Bucket:    "groundplane-backups",
 		Prefix:    "production/",
 		Region:    "auto",
-		PathStyle: true,
+		PathStyle: &pathStyle,
 	})
 	if err != nil {
 		t.Fatalf("Marshal() error: %v", err)
 	}
 	if !strings.Contains(string(encoded), `"path_style":true`) {
 		t.Fatalf("Connector create request omitted the addressing decision: %s", encoded)
+	}
+}
+
+func TestConnectorCreateRequestDistinguishesMissingPathStyle(t *testing.T) {
+	// Rationale: explicit false selects virtual-hosted addressing; omission is
+	// not an alias for false and must remain detectable by request validation.
+	var request ConnectorCreateRequest
+	if err := json.Unmarshal([]byte(`{"path_style":false}`), &request); err != nil {
+		t.Fatalf("Unmarshal(explicit false) error: %v", err)
+	}
+	if request.PathStyle == nil || *request.PathStyle {
+		t.Fatalf("Unmarshal(explicit false) path_style = %#v", request.PathStyle)
+	}
+	request = ConnectorCreateRequest{}
+	if err := json.Unmarshal([]byte(`{}`), &request); err != nil {
+		t.Fatalf("Unmarshal(missing) error: %v", err)
+	}
+	if request.PathStyle != nil {
+		t.Fatalf("Unmarshal(missing) path_style = %#v, want nil", request.PathStyle)
 	}
 }
 

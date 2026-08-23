@@ -66,7 +66,7 @@ type EnvelopeMetadata struct {
 // ConnectorDocument is a `kind: connector` Blueprint document — see
 // blueprint.md's envelope example. It compiles to model.go's Connector.
 type ConnectorDocument struct {
-	Envelope
+	Envelope  `yaml:",inline"`
 	Connector ConnectorBody `yaml:"connector"`
 }
 
@@ -76,6 +76,7 @@ type ConnectorBody struct {
 	Bucket      string                   `yaml:"bucket,omitempty"`
 	Prefix      string                   `yaml:"prefix,omitempty"`
 	Region      string                   `yaml:"region,omitempty"`
+	PathStyle   *bool                    `yaml:"path_style"`
 	Credentials map[string]CredentialRef `yaml:"credentials,omitempty"`
 }
 
@@ -269,6 +270,9 @@ func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
 	}
 	if doc.Connector.Kind == "" {
 		return ConnectorDocument{}, fmt.Errorf("connector document: connector.kind is required")
+	}
+	if doc.Connector.PathStyle == nil {
+		return ConnectorDocument{}, fmt.Errorf("connector document: connector.path_style is required")
 	}
 	credentialNames := make([]string, 0, len(doc.Connector.Credentials))
 	for name := range doc.Connector.Credentials {

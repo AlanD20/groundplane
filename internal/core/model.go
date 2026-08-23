@@ -520,7 +520,8 @@ type Secret struct {
 type Connector struct {
 	ID            string            `yaml:"id"                    json:"id"` // con_<ulid>
 	EnvironmentID string            `yaml:"environment_id"        json:"environment_id"`
-	Kind          string            `yaml:"kind"                  json:"kind"`                  // "s3-compatible", later s3/minio/b2
+	Kind          string            `yaml:"kind"                  json:"kind"` // "s3-compatible", later s3/minio/b2
+	PathStyle     bool              `yaml:"path_style"            json:"path_style"`
 	Credentials   map[string]string `yaml:"credentials,omitempty" json:"credentials,omitempty"` // secret-store ref or opaque encrypted-value record reference
 }
 
