@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// attach: list | rename. Attach creation and detach remain Service actions
+// attach: list | rename | fact. Attach creation and detach remain Service actions
 // because the consumer is exactly one Service; this noun owns the flat
 // Environment-scoped collection and stable Attach identity operations.
 func newAttachCmd() *cobra.Command {
@@ -55,6 +55,34 @@ func newAttachCmd() *cobra.Command {
 	rename.Flags().StringVar(&name, "name", "", "new attach name (unique within the environment)")
 	_ = rename.MarkFlagRequired("name")
 	cmd.AddCommand(rename)
+
+	var grant string
+	fact := &cobra.Command{
+		Use:   "fact <attach> <key>",
+		Short: "Reveal one ready Attach fact",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := resolveAttachTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			grantID := ""
+			if grant != "" {
+				grantID, err = resolveAttachTarget(cmd, grant)
+				if err != nil {
+					return err
+				}
+			}
+			value, err := fromContext(cmd).Client.RevealAttachFact(cmd.Context(), id, args[1], grantID)
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(map[string]any{"value": value.Value})
+			return fromContext(cmd).Out.RenderOne(fields, values, value)
+		},
+	}
+	fact.Flags().StringVar(&grant, "grant", "", "select another Attach granted to the owning Attach")
+	cmd.AddCommand(fact)
 	return cmd
 }
 
@@ -98,7 +126,8 @@ func attachFields(attach apiTypes.Attach) map[string]any {
 	return map[string]any{
 		"id": attach.ID, "name": attach.Name, "service_ids": attach.ServiceIDs,
 		"backing_service_id": attach.BackingServiceID, "backing_environment_id": attach.BackingEnvironmentID,
-		"backing_network_id": attach.BackingNetworkID, "grant_attach_ids": attach.GrantAttachIDs,
+		"backing_project_id": attach.BackingProjectID, "backing_network_id": attach.BackingNetworkID,
+		"grant_attach_ids": attach.GrantAttachIDs, "fact_sets": attach.FactSets,
 		"status": attach.Status,
 	}
 }

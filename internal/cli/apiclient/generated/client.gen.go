@@ -92,15 +92,38 @@ type Attach struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Attach.json
-	Schema               *string   `json:"$schema,omitempty"`
-	BackingEnvironmentId *string   `json:"backing_environment_id,omitempty"`
-	BackingNetworkId     string    `json:"backing_network_id"`
-	BackingServiceId     string    `json:"backing_service_id"`
-	GrantAttachIds       *[]string `json:"grant_attach_ids,omitempty"`
-	Id                   string    `json:"id"`
-	Name                 string    `json:"name"`
-	ServiceIds           *[]string `json:"service_ids"`
-	Status               string    `json:"status"`
+	Schema               *string          `json:"$schema,omitempty"`
+	BackingEnvironmentId *string          `json:"backing_environment_id,omitempty"`
+	BackingNetworkId     string           `json:"backing_network_id"`
+	BackingProjectId     string           `json:"backing_project_id"`
+	BackingServiceId     string           `json:"backing_service_id"`
+	FactSets             *[]AttachFactSet `json:"fact_sets"`
+	GrantAttachIds       *[]string        `json:"grant_attach_ids,omitempty"`
+	Id                   string           `json:"id"`
+	Name                 string           `json:"name"`
+	ServiceIds           *[]string        `json:"service_ids"`
+	Status               string           `json:"status"`
+}
+
+// AttachFact defines model for AttachFact.
+type AttachFact struct {
+	Key    string `json:"key"`
+	Secret bool   `json:"secret"`
+}
+
+// AttachFactSet defines model for AttachFactSet.
+type AttachFactSet struct {
+	Facts         *[]AttachFact `json:"facts"`
+	GrantAttachId *string       `json:"grant_attach_id,omitempty"`
+}
+
+// AttachFactValue defines model for AttachFactValue.
+type AttachFactValue struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/AttachFactValue.json
+	Schema *string `json:"$schema,omitempty"`
+	Value  string  `json:"value"`
 }
 
 // AttachRenameRequest defines model for AttachRenameRequest.
@@ -825,6 +848,11 @@ type AttachDetachParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// AttachFactRevealParams defines parameters for AttachFactReveal.
+type AttachFactRevealParams struct {
+	GrantAttachId *string `form:"grant_attach_id,omitempty" json:"grant_attach_id,omitempty"`
+}
+
 // AttachRenameParams defines parameters for AttachRename.
 type AttachRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1204,6 +1232,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
 	AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AttachFactReveal Reveal one ready Attach fact
+	//
+	// Corresponds with GET /attaches/{id}/facts/{key} (the `AttachFactReveal` operationId).
+	AttachFactReveal(ctx context.Context, id string, key string, params *AttachFactRevealParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AttachRenameWithBody Rename an attach
 	//
@@ -1756,6 +1789,21 @@ func (c *Client) AttachCreate(ctx context.Context, params *AttachCreateParams, b
 // Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
 func (c *Client) AttachDetach(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAttachDetachRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AttachFactReveal Reveal one ready Attach fact
+//
+// Corresponds with GET /attaches/{id}/facts/{key} (the `AttachFactReveal` operationId).
+func (c *Client) AttachFactReveal(ctx context.Context, id string, key string, params *AttachFactRevealParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAttachFactRevealRequest(c.Server, id, key, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3233,6 +3281,74 @@ func NewAttachDetachRequest(server string, id string, params *AttachDetachParams
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewAttachFactRevealRequest constructs an http.Request for the AttachFactReveal method
+func NewAttachFactRevealRequest(server string, id string, key string, params *AttachFactRevealParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "key", key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/attaches/%s/facts/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.GrantAttachId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "grant_attach_id", *params.GrantAttachId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -5787,6 +5903,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with DELETE /attaches/{id} (the `AttachDetach` operationId).
 	AttachDetachWithResponse(ctx context.Context, id string, params *AttachDetachParams, reqEditors ...RequestEditorFn) (*AttachDetachResponse, error)
 
+	// AttachFactRevealWithResponse Reveal one ready Attach fact
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /attaches/{id}/facts/{key} (the `AttachFactReveal` operationId).
+	AttachFactRevealWithResponse(ctx context.Context, id string, key string, params *AttachFactRevealParams, reqEditors ...RequestEditorFn) (*AttachFactRevealResponse, error)
+
 	// AttachRenameWithBodyWithResponse Rename an attach
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -6692,6 +6815,54 @@ func (r AttachDetachResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AttachDetachResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AttachFactRevealResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AttachFactValue
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AttachFactRevealResponse) GetJSON200() *AttachFactValue {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AttachFactRevealResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AttachFactRevealResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AttachFactRevealResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AttachFactRevealResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AttachFactRevealResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -9196,6 +9367,19 @@ func (c *ClientWithResponses) AttachDetachWithResponse(ctx context.Context, id s
 	return ParseAttachDetachResponse(rsp)
 }
 
+// AttachFactRevealWithResponse Reveal one ready Attach fact
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /attaches/{id}/facts/{key} (the `AttachFactReveal` operationId).
+func (c *ClientWithResponses) AttachFactRevealWithResponse(ctx context.Context, id string, key string, params *AttachFactRevealParams, reqEditors ...RequestEditorFn) (*AttachFactRevealResponse, error) {
+	rsp, err := c.AttachFactReveal(ctx, id, key, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAttachFactRevealResponse(rsp)
+}
+
 // AttachRenameWithBodyWithResponse Rename an attach
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -10374,6 +10558,39 @@ func ParseAttachDetachResponse(rsp *http.Response) (*AttachDetachResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseAttachFactRevealResponse parses an HTTP response from a AttachFactRevealWithResponse call
+func ParseAttachFactRevealResponse(rsp *http.Response) (*AttachFactRevealResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AttachFactRevealResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AttachFactValue
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

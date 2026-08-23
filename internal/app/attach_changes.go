@@ -179,7 +179,21 @@ func attachAPI(record etcd.AttachRecord) apiTypes.Attach {
 	return apiTypes.Attach{
 		ID: record.ID, Name: record.Name,
 		ServiceIDs: append([]string(nil), record.ServiceIDs...), BackingServiceID: record.BackingServiceID,
+		BackingProjectID:     record.BackingProjectID,
 		BackingEnvironmentID: record.BackingEnvironmentID, BackingNetworkID: record.BackingNetworkID,
-		GrantAttachIDs: append([]string(nil), record.GrantAttachIDs...), Status: string(record.Status),
+		GrantAttachIDs: append([]string(nil), record.GrantAttachIDs...),
+		FactSets:       attachAPIFactSets(record.FactSets), Status: string(record.Status),
 	}
+}
+
+func attachAPIFactSets(factSets []etcd.AttachFactSetMetadata) []apiTypes.AttachFactSet {
+	response := make([]apiTypes.AttachFactSet, len(factSets))
+	for setIndex, set := range factSets {
+		facts := make([]apiTypes.AttachFact, len(set.Facts))
+		for factIndex, fact := range set.Facts {
+			facts[factIndex] = apiTypes.AttachFact{Key: fact.Key, Secret: fact.Secret}
+		}
+		response[setIndex] = apiTypes.AttachFactSet{GrantAttachID: set.GrantAttachID, Facts: facts}
+	}
+	return response
 }

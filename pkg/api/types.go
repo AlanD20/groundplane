@@ -346,18 +346,34 @@ type EntryValue struct {
 	Value string `json:"value"`
 }
 
+type AttachFact struct {
+	Key    string `json:"key"`
+	Secret bool   `json:"secret"`
+}
+
+type AttachFactSet struct {
+	GrantAttachID string       `json:"grant_attach_id,omitempty"`
+	Facts         []AttachFact `json:"facts"`
+}
+
+type AttachFactValue struct {
+	Value string `json:"value"`
+}
+
 // AttachStatus values mirror internal/core's lifecycle exactly:
 // pending -> provisioning -> ready, with terminal failed and
 // detaching -> detached paths.
 type Attach struct {
-	ID                   string   `json:"id"`
-	Name                 string   `json:"name"`
-	ServiceIDs           []string `json:"service_ids"`
-	BackingServiceID     string   `json:"backing_service_id"`
-	BackingEnvironmentID string   `json:"backing_environment_id,omitempty"`
-	BackingNetworkID     string   `json:"backing_network_id"`
-	GrantAttachIDs       []string `json:"grant_attach_ids,omitempty"`
-	Status               string   `json:"status"`
+	ID                   string          `json:"id"`
+	Name                 string          `json:"name"`
+	ServiceIDs           []string        `json:"service_ids"`
+	BackingProjectID     string          `json:"backing_project_id"`
+	BackingServiceID     string          `json:"backing_service_id"`
+	BackingEnvironmentID string          `json:"backing_environment_id,omitempty"`
+	BackingNetworkID     string          `json:"backing_network_id"`
+	GrantAttachIDs       []string        `json:"grant_attach_ids,omitempty"`
+	FactSets             []AttachFactSet `json:"fact_sets"`
+	Status               string          `json:"status"`
 }
 
 type Volume struct {

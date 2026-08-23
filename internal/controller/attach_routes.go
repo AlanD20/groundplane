@@ -71,6 +71,7 @@ func (s *Server) registerAttaches() {
 	}, s.detachAttach)
 	s.setRoutePolicy("POST /api/v1/attaches", routePolicy{body: jsonBody})
 	s.registerAttachList()
+	s.registerAttachFactReveal()
 	s.registerAttachRename()
 }
 

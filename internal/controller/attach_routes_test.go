@@ -28,6 +28,22 @@ type fakeAttachMutator struct {
 	detachHit bool
 }
 
+type fakeAttachFactReader struct {
+	attachID string
+	grantID  string
+	key      string
+}
+
+func (reader *fakeAttachFactReader) RevealAttachFact(
+	_ context.Context,
+	attachID string,
+	grantID string,
+	key string,
+) (string, error) {
+	reader.attachID, reader.grantID, reader.key = attachID, grantID, key
+	return "postgres://ready", nil
+}
+
 func (mutator *fakeAttachMutator) CreateAttach(
 	_ context.Context,
 	request apiTypes.AttachRequest,
@@ -99,6 +115,27 @@ func TestAttachDetachRouteUsesStableTargetAndIdempotencyKey(t *testing.T) {
 	if response.Code != want.Status || !bytes.Equal(response.Body.Bytes(), want.Body) || !mutator.detachHit ||
 		mutator.attachID != testAttachRouteID || mutator.key != "attach-detach-key-0001" {
 		t.Fatalf("DELETE /attaches/{id} = %d %s / %#v", response.Code, response.Body.Bytes(), mutator)
+	}
+}
+
+// Rationale: fact plaintext must cross only the explicit read route and must retain the stable
+// owning Attach, optional grant Attach, and declared fact key selected by the operator.
+func TestAttachFactRevealPreservesExactReference(t *testing.T) {
+	t.Parallel()
+	reader := &fakeAttachFactReader{}
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{AttachFacts: reader})
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/attaches/"+testAttachRouteID+"/facts/pg16_URL?grant_attach_id=att_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		nil,
+	)
+	response := httptest.NewRecorder()
+	server.Mux.ServeHTTP(response, request)
+	if response.Code != http.StatusOK ||
+		response.Body.String() != "{\"$schema\":\"https://example.com/api/v1/AttachFactValue.json\",\"value\":\"postgres://ready\"}\n" ||
+		reader.attachID != testAttachRouteID || reader.grantID != "att_01ARZ3NDEKTSV4RRFFQ69G5FAW" ||
+		reader.key != "pg16_URL" {
+		t.Fatalf("GET Attach fact = %d %s / %#v", response.Code, response.Body.Bytes(), reader)
 	}
 }
 

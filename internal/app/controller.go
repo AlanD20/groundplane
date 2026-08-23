@@ -314,6 +314,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach fact service: %w", err)
 	}
+	attachFactReads, err := newAttachFactReadService(attachRecords, attachFactValues)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Attach fact reads: %w", err)
+	}
 	planResolver, err := controller.NewTaskPlanResolverWithAttachments(
 		cfg.Storage.VolumeRoot,
 		hierarchyRecords,
@@ -821,6 +826,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		EnvironmentBlueprints: environmentBlueprints,
 		EnvironmentDeletions:  environmentDeletions,
 		AttachMutations:       attachMutations,
+		AttachFacts:           attachFactReads,
 		TaskMutations:         taskMutations,
 		TenantMutations:       tenantMutations,
 		TenantChanges:         tenantChanges,

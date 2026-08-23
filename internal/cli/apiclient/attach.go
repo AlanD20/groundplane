@@ -147,6 +147,40 @@ func (c *Client) RenameAttach(ctx context.Context, id, name string) (apiTypes.At
 	return attachFromGenerated(*parsed), nil
 }
 
+func (c *Client) RevealAttachFact(
+	ctx context.Context,
+	id string,
+	key string,
+	grantAttachID string,
+) (apiTypes.AttachFactValue, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.AttachFactValue{}, err
+	}
+	path := "/api/v1/attaches/" + id + "/facts/" + key
+	params := &generated.AttachFactRevealParams{}
+	if grantAttachID != "" {
+		params.GrantAttachId = &grantAttachID
+	}
+	response, err := client.AttachFactRevealWithResponse(ctx, id, key, params)
+	if err != nil {
+		return apiTypes.AttachFactValue{}, generatedCallError(ctx, http.MethodGet, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.AttachFactValue{}, err
+	}
+	parsed := response.JSON200
+	if parsed == nil {
+		parsed = &generated.AttachFactValue{}
+		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.AttachFactValue{}, err
+		}
+	}
+	return apiTypes.AttachFactValue{Value: parsed.Value}, nil
+}
+
 func attachFromGenerated(attach generated.Attach) apiTypes.Attach {
 	serviceIDs := []string(nil)
 	if attach.ServiceIds != nil {
@@ -160,10 +194,29 @@ func attachFromGenerated(attach generated.Attach) apiTypes.Attach {
 	if attach.BackingEnvironmentId != nil {
 		backingEnvironmentID = *attach.BackingEnvironmentId
 	}
+	factSets := []apiTypes.AttachFactSet(nil)
+	if attach.FactSets != nil {
+		factSets = make([]apiTypes.AttachFactSet, len(*attach.FactSets))
+		for setIndex, set := range *attach.FactSets {
+			facts := []apiTypes.AttachFact(nil)
+			if set.Facts != nil {
+				facts = make([]apiTypes.AttachFact, len(*set.Facts))
+				for factIndex, fact := range *set.Facts {
+					facts[factIndex] = apiTypes.AttachFact{Key: fact.Key, Secret: fact.Secret}
+				}
+			}
+			grantAttachID := ""
+			if set.GrantAttachId != nil {
+				grantAttachID = *set.GrantAttachId
+			}
+			factSets[setIndex] = apiTypes.AttachFactSet{GrantAttachID: grantAttachID, Facts: facts}
+		}
+	}
 	return apiTypes.Attach{
 		ID: attach.Id, Name: attach.Name, ServiceIDs: serviceIDs,
+		BackingProjectID: attach.BackingProjectId,
 		BackingServiceID: attach.BackingServiceId, BackingEnvironmentID: backingEnvironmentID,
-		BackingNetworkID: attach.BackingNetworkId, GrantAttachIDs: grantIDs, Status: attach.Status,
+		BackingNetworkID: attach.BackingNetworkId, GrantAttachIDs: grantIDs, FactSets: factSets, Status: attach.Status,
 	}
 }
 

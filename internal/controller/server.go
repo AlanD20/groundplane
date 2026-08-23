@@ -60,6 +60,7 @@ type Server struct {
 	environmentBlueprints EnvironmentBlueprintMutator
 	environmentDeletions  EnvironmentDeleter
 	attachMutations       AttachMutator
+	attachFacts           AttachFactReader
 	taskMutations         TaskRetrier
 	console               fs.FS
 	tasks                 taskQueries
@@ -95,6 +96,7 @@ type Options struct {
 	EnvironmentBlueprints EnvironmentBlueprintMutator
 	EnvironmentDeletions  EnvironmentDeleter
 	AttachMutations       AttachMutator
+	AttachFacts           AttachFactReader
 	TaskMutations         TaskRetrier
 	Console               fs.FS
 	Tasks                 *etcd.TaskRepository
@@ -147,6 +149,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environmentBlueprints: options.EnvironmentBlueprints,
 		environmentDeletions:  options.EnvironmentDeletions,
 		attachMutations:       options.AttachMutations,
+		attachFacts:           options.AttachFacts,
 		taskMutations:         options.TaskMutations,
 		console:               options.Console,
 		tasks:                 options.Tasks,
