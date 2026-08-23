@@ -303,6 +303,23 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		}
 	})
 
+	t.Run("disabled config still requires age", func(t *testing.T) {
+		fixture := newBackupPolicyReplacementFixture(t, false)
+		candidate := fixture.candidate(t, true, "age")
+		candidate.Replacement.Enabled = false
+		candidate.Replacement.Encryption = "none"
+		candidate.Connector = nil
+		candidate.ConnectorOwnerIndex = nil
+		candidate.ConnectorReferences = nil
+		candidate.InitialKey = nil
+		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+			context.Background(), candidate,
+			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-disabled-config-0001"),
+		); !isKind(err, errs.KindValidationFailed) {
+			t.Fatalf("ReplaceBackupPolicyProtected(disabled config) error = %v", err)
+		}
+	})
+
 	t.Run("duplicate source identity", func(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, false)
 		candidate := fixture.candidate(t, true, "age")

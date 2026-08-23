@@ -224,7 +224,7 @@ func validateBackupPolicyReplacementCandidate(
 			return err
 		}
 	}
-	if candidate.Replacement.Enabled && candidate.Replacement.Encryption != "age" {
+	if candidate.Replacement.Encryption != "age" {
 		for _, source := range candidate.Sources {
 			if string(source.Source.Record.Kind) == "config" {
 				return errs.New(errs.KindValidationFailed, "config backup source requires age encryption")
