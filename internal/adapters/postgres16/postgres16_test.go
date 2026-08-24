@@ -53,3 +53,16 @@ func TestPostgreSQLStepsQuoteServiceDerivedIdentifiers(t *testing.T) {
 		t.Fatalf("ProvisionSteps() did not safely delimit identity: %#v", steps)
 	}
 }
+
+// Rationale: registry metadata is operator-visible capability advice and must
+// mirror ADR 0047's exact capture and restore procedures without stale flags.
+func TestBackupStrategyMatchesPostgres16ArtifactContract(t *testing.T) {
+	strategy := (&adapter{}).BackupStrategy()
+	wantDump := "pg_dump --format=custom --compress=0 --no-owner --no-acl " +
+		"--host=/var/run/postgresql --username=postgres --no-password --role=<role> --dbname=<db>"
+	wantRestore := "pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error --single-transaction " +
+		"--host=/var/run/postgresql --username=postgres --no-password --role=<role> --dbname=<db>"
+	if strategy.Dump != wantDump || strategy.Restore != wantRestore {
+		t.Fatalf("BackupStrategy() = %#v, want dump %q restore %q", strategy, wantDump, wantRestore)
+	}
+}

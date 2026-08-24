@@ -127,7 +127,9 @@ func quoteIdentifier(value string) string {
 
 func (a *adapter) BackupStrategy() adapters.BackupStrategy {
 	return adapters.BackupStrategy{
-		Dump:    "pg_dump --format=custom --dbname=<db>",
-		Restore: "pg_restore --clean --if-exists -d <db>",
+		Dump: "pg_dump --format=custom --compress=0 --no-owner --no-acl " +
+			"--host=/var/run/postgresql --username=postgres --no-password --role=<role> --dbname=<db>",
+		Restore: "pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error --single-transaction " +
+			"--host=/var/run/postgresql --username=postgres --no-password --role=<role> --dbname=<db>",
 	}
 }
