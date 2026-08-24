@@ -57,6 +57,9 @@ type Server struct {
 	connectors            ConnectorReader
 	connectorMutations    ConnectorMutator
 	connectorDeletions    ConnectorDeleter
+	backupPolicies        BackupPolicyReader
+	backupPolicyMutations BackupPolicyMutator
+	volumes               VolumeReader
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
@@ -99,6 +102,9 @@ type Options struct {
 	Connectors            ConnectorReader
 	ConnectorMutations    ConnectorMutator
 	ConnectorDeletions    ConnectorDeleter
+	BackupPolicies        BackupPolicyReader
+	BackupPolicyMutations BackupPolicyMutator
+	Volumes               VolumeReader
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
@@ -158,6 +164,9 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		connectors:            options.Connectors,
 		connectorMutations:    options.ConnectorMutations,
 		connectorDeletions:    options.ConnectorDeletions,
+		backupPolicies:        options.BackupPolicies,
+		backupPolicyMutations: options.BackupPolicyMutations,
+		volumes:               options.Volumes,
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
@@ -186,6 +195,8 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerEntries()
 	s.registerSecrets()
 	s.registerConnectors()
+	s.registerBackupPolicies()
+	s.registerVolumes()
 	s.registerAttaches()
 	s.registerTasks()
 	s.registerHost()
@@ -226,8 +237,6 @@ func (s *Server) routes() {
 	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.environmentDelete)
 
 	// environment singleton sub-resources
-	mux.HandleFunc("GET /api/v1/environments/{id}/backup-policy", s.notImplemented)
-	s.jsonRoute("PUT /api/v1/environments/{id}/backup-policy", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
@@ -259,7 +268,6 @@ func (s *Server) routes() {
 
 	// Volume metadata remains explicit. Script reads and protected metadata
 	// mutations are typed Huma operations; run and removal remain task placeholders.
-	mux.HandleFunc("GET /api/v1/volumes", s.notImplemented)
 	s.jsonRoute("POST /api/v1/volumes", s.notImplemented)
 	mux.HandleFunc("GET /api/v1/volumes/{id}", s.notImplemented)
 	s.jsonRoute("PATCH /api/v1/volumes/{id}", s.notImplemented)

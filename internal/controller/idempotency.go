@@ -21,6 +21,12 @@ func (s *Server) serveAPIRequest(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
+	policy := s.policyFor(r)
+	if policy.validateJSON != nil && !s.prepareJSONBody(
+		w, r, productionJSONBodyLimit, policy.validateJSON,
+	) {
+		return
+	}
 	s.Mux.ServeHTTP(w, r)
 }
 

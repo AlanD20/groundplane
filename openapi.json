@@ -371,6 +371,162 @@
         ],
         "type": "object"
       },
+      "BackupPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/BackupPolicy.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "age_recipient": {
+            "type": "string"
+          },
+          "connector_id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
+          },
+          "frequency": {
+            "pattern": "^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$",
+            "type": "string"
+          },
+          "keep": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "key_created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "key_era": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "key_rotated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/BackupSource"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "BackupPolicyReplacementRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/BackupPolicyReplacementRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "connector_id": {
+            "pattern": "^con_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "encryption": {
+            "enum": [
+              "age",
+              "none"
+            ],
+            "type": "string"
+          },
+          "frequency": {
+            "pattern": "^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$",
+            "type": "string"
+          },
+          "keep": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/BackupSourceInput"
+            },
+            "maxItems": 12,
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "BackupSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "attach",
+              "volume",
+              "config"
+            ],
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "target_id"
+        ],
+        "type": "object"
+      },
+      "BackupSourceInput": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "attach",
+              "volume",
+              "config"
+            ],
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_id"
+        ],
+        "type": "object"
+      },
       "Connector": {
         "additionalProperties": false,
         "properties": {
@@ -1338,6 +1494,36 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/Task"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageVolume": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageVolume.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Volume"
             },
             "type": [
               "array",
@@ -2503,6 +2689,22 @@
         },
         "required": [
           "slug"
+        ],
+        "type": "object"
+      },
+      "Volume": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
         ],
         "type": "object"
       },
@@ -4321,6 +4523,116 @@
         "summary": "Show an environment",
         "tags": [
           "Environment"
+        ]
+      }
+    },
+    "/environments/{id}/backup-policy": {
+      "get": {
+        "operationId": "backup.policy.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show the effective Backup Policy",
+        "tags": [
+          "Backup"
+        ]
+      },
+      "put": {
+        "operationId": "backup.policy.set",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupPolicyReplacementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupPolicy"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the Backup Policy",
+        "tags": [
+          "Backup"
         ]
       }
     },
@@ -6685,6 +6997,66 @@
         "summary": "Rename a tenant slug",
         "tags": [
           "Tenant"
+        ]
+      }
+    },
+    "/volumes": {
+      "get": {
+        "operationId": "volume.list",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageVolume"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List Environment volumes",
+        "tags": [
+          "Volume"
         ]
       }
     },

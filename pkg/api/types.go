@@ -434,15 +434,46 @@ type ComponentProjection struct {
 	PinnedIPv4  string `json:"pinned_ipv4,omitempty"`
 }
 
+// MaximumBackupPolicySources is the public replacement bound. It mirrors the
+// persistence transaction budget and is intentionally available to clients.
+const MaximumBackupPolicySources = 12
+
+// BackupPolicyReplacementRequest is one complete desired policy document.
+type BackupPolicyReplacementRequest struct {
+	Enabled     bool                `json:"enabled"`
+	Frequency   string              `json:"frequency,omitempty" pattern:"^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"`
+	Keep        int                 `json:"keep,omitempty" minimum:"1"`
+	Encryption  BackupEncryption    `json:"encryption,omitempty" enum:"age,none"`
+	ConnectorID string              `json:"connector_id,omitempty" pattern:"^con_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Sources     []BackupSourceInput `json:"sources" maxItems:"12" nullable:"false"`
+}
+
+type BackupEncryption string
+
+const (
+	BackupEncryptionAge  BackupEncryption = "age"
+	BackupEncryptionNone BackupEncryption = "none"
+)
+
+// BackupPolicy is the effective Environment policy projection.
 type BackupPolicy struct {
-	Enabled      bool           `json:"enabled"`
-	Frequency    string         `json:"frequency,omitempty"`
-	Keep         int            `json:"keep,omitempty"`
-	Encryption   string         `json:"encryption,omitempty"`
-	ConnectorID  string         `json:"connector_id,omitempty"`
-	Sources      []BackupSource `json:"sources,omitempty"`
-	AgeRecipient string         `json:"age_recipient,omitempty"`
-	KeyEra       int            `json:"key_era,omitempty"`
+	Enabled      bool             `json:"enabled"`
+	Frequency    string           `json:"frequency,omitempty" pattern:"^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"`
+	Keep         int              `json:"keep,omitempty"`
+	Encryption   BackupEncryption `json:"encryption,omitempty" enum:"age,none"`
+	ConnectorID  string           `json:"connector_id,omitempty"`
+	Sources      []BackupSource   `json:"sources" nullable:"false"`
+	AgeRecipient string           `json:"age_recipient,omitempty"`
+	KeyEra       int              `json:"key_era,omitempty"`
+	KeyCreatedAt string           `json:"key_created_at,omitempty" format:"date-time"`
+	KeyRotatedAt string           `json:"key_rotated_at,omitempty" format:"date-time"`
+}
+
+// BackupPolicyMutationResult carries the typed public value and the exact
+// protected JSON representation committed for semantic replay.
+type BackupPolicyMutationResult struct {
+	Policy         BackupPolicy
+	Representation []byte
 }
 
 type BackupSourceKind string
@@ -453,10 +484,15 @@ const (
 	BackupSourceConfig BackupSourceKind = "config"
 )
 
+type BackupSourceInput struct {
+	Kind     BackupSourceKind `json:"kind" enum:"attach,volume,config"`
+	TargetID string           `json:"target_id"`
+}
+
 type BackupSource struct {
-	ID   string           `json:"id"`
-	Kind BackupSourceKind `json:"kind"`
-	Ref  string           `json:"ref,omitempty"`
+	ID       string           `json:"id"`
+	Kind     BackupSourceKind `json:"kind" enum:"attach,volume,config"`
+	TargetID string           `json:"target_id"`
 }
 
 type RecoveryPointStatus string

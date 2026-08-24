@@ -1,0 +1,382 @@
+package app
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"time"
+
+	"filippo.io/age"
+	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const backupPolicyReplacementRoute = "/environments/{id}/backup-policy"
+
+type backupPolicyRepository interface {
+	GetBackupPolicyProjection(context.Context, string) (etcd.BackupPolicyProjection, error)
+	PrepareBackupPolicyReplacement(
+		context.Context,
+		etcd.BackupPolicyReplacementInput,
+	) (etcd.PreparedBackupPolicyReplacement, bool, error)
+	SupplyBackupPolicyInitialKey(
+		context.Context,
+		etcd.PreparedBackupPolicyReplacement,
+		etcd.BackupPolicyInitialKeyMaterial,
+	) (etcd.PreparedBackupPolicyReplacement, error)
+	ReplaceBackupPolicyProtected(
+		context.Context,
+		etcd.PreparedBackupPolicyReplacement,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
+type backupPolicyEvidence struct {
+	candidate idempotentintent.ProtectedEvidence
+}
+
+type backupPolicyIdempotency interface {
+	Prepare(context.Context, string, apiTypes.BackupPolicyReplacementRequest) (backupPolicyEvidence, error)
+	ResolveExisting(
+		context.Context, etcd.IdempotencyLocator, backupPolicyEvidence,
+	) (idempotentintent.Resolution, bool, error)
+	NewMarker(
+		backupPolicyEvidence, etcd.IdempotencyLocator, etcd.IdempotencyResponse, time.Time,
+	) (etcd.IdempotencyMarker, error)
+	ResolveKnown(
+		context.Context, backupPolicyEvidence, etcd.IdempotencyTransactionResult,
+	) (idempotentintent.Resolution, error)
+	ResolveUnknown(
+		context.Context, etcd.IdempotencyLocator, backupPolicyEvidence, error,
+	) (idempotentintent.Resolution, error)
+}
+
+type durableBackupPolicyIdempotency struct {
+	coordinator *idempotentintent.Coordinator
+	repository  *etcd.IdempotencyRepository
+}
+
+func newDurableBackupPolicyIdempotency(
+	coordinator *idempotentintent.Coordinator,
+	repository *etcd.IdempotencyRepository,
+) (*durableBackupPolicyIdempotency, error) {
+	if coordinator == nil || repository == nil {
+		return nil, errs.New(errs.KindInternal, "backup policy idempotency dependencies are required")
+	}
+	return &durableBackupPolicyIdempotency{coordinator: coordinator, repository: repository}, nil
+}
+
+func (service *durableBackupPolicyIdempotency) Prepare(
+	ctx context.Context,
+	environmentID string,
+	input apiTypes.BackupPolicyReplacementRequest,
+) (backupPolicyEvidence, error) {
+	version, digest, err := idempotentintent.Canonicalize(ctx, backupPolicyIntent(environmentID, input))
+	if err != nil {
+		return backupPolicyEvidence{}, err
+	}
+	defer digest.Destroy()
+	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
+	if err != nil {
+		return backupPolicyEvidence{}, err
+	}
+	return backupPolicyEvidence{candidate: candidate}, nil
+}
+
+func (service *durableBackupPolicyIdempotency) ResolveExisting(
+	ctx context.Context,
+	locator etcd.IdempotencyLocator,
+	evidence backupPolicyEvidence,
+) (idempotentintent.Resolution, bool, error) {
+	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
+}
+
+func (*durableBackupPolicyIdempotency) NewMarker(
+	evidence backupPolicyEvidence,
+	locator etcd.IdempotencyLocator,
+	response etcd.IdempotencyResponse,
+	now time.Time,
+) (etcd.IdempotencyMarker, error) {
+	intent, err := evidence.candidate.DurableRecord()
+	if err != nil {
+		return etcd.IdempotencyMarker{}, err
+	}
+	defer clear(intent.Ciphertext)
+	return etcd.NewCompletedDirectIdempotencyMarker(locator, intent, response, now)
+}
+
+func (service *durableBackupPolicyIdempotency) ResolveKnown(
+	ctx context.Context,
+	evidence backupPolicyEvidence,
+	result etcd.IdempotencyTransactionResult,
+) (idempotentintent.Resolution, error) {
+	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
+}
+
+func (service *durableBackupPolicyIdempotency) ResolveUnknown(
+	ctx context.Context,
+	locator etcd.IdempotencyLocator,
+	evidence backupPolicyEvidence,
+	original error,
+) (idempotentintent.Resolution, error) {
+	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
+}
+
+type backupPolicyKeyFactory interface {
+	Create(context.Context) (etcd.BackupPolicyInitialKeyMaterial, error)
+}
+
+type ageBackupPolicyKeyFactory struct {
+	protector *secretvalue.Protector
+}
+
+func newAgeBackupPolicyKeyFactory(protector *secretvalue.Protector) (*ageBackupPolicyKeyFactory, error) {
+	if protector == nil {
+		return nil, errs.New(errs.KindInternal, "backup policy key protector is required")
+	}
+	return &ageBackupPolicyKeyFactory{protector: protector}, nil
+}
+
+func (factory *ageBackupPolicyKeyFactory) Create(
+	ctx context.Context,
+) (etcd.BackupPolicyInitialKeyMaterial, error) {
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		return etcd.BackupPolicyInitialKeyMaterial{}, errs.Wrap(errs.KindInternal, err)
+	}
+	plaintext := []byte(identity.String())
+	defer clear(plaintext)
+	envelope, err := factory.protector.Seal(ctx, plaintext)
+	if err != nil {
+		return etcd.BackupPolicyInitialKeyMaterial{}, err
+	}
+	return etcd.BackupPolicyInitialKeyMaterial{
+		Recipient: identity.Recipient().String(), Ciphertext: envelope.Ciphertext(),
+	}, nil
+}
+
+type backupPolicyService struct {
+	repository  backupPolicyRepository
+	keys        backupPolicyKeyFactory
+	idempotency backupPolicyIdempotency
+	now         func() time.Time
+}
+
+func newBackupPolicyService(
+	repository backupPolicyRepository,
+	keys backupPolicyKeyFactory,
+	idempotency backupPolicyIdempotency,
+) (*backupPolicyService, error) {
+	if repository == nil || keys == nil || idempotency == nil {
+		return nil, errs.New(errs.KindInternal, "backup policy service dependencies are required")
+	}
+	return &backupPolicyService{
+		repository: repository, keys: keys, idempotency: idempotency,
+		now: func() time.Time { return time.Now().UTC() },
+	}, nil
+}
+
+func (service *backupPolicyService) GetBackupPolicy(
+	ctx context.Context,
+	environmentID string,
+) (apiTypes.BackupPolicy, error) {
+	projection, err := service.repository.GetBackupPolicyProjection(ctx, environmentID)
+	if err != nil {
+		return apiTypes.BackupPolicy{}, err
+	}
+	return backupPolicyAPI(projection), nil
+}
+
+func (service *backupPolicyService) SetBackupPolicy(
+	ctx context.Context,
+	environmentID string,
+	input apiTypes.BackupPolicyReplacementRequest,
+	idempotencyKey string,
+) (apiTypes.BackupPolicyMutationResult, error) {
+	if ctx == nil {
+		return apiTypes.BackupPolicyMutationResult{}, errs.New(
+			errs.KindInternal, "backup policy context is required",
+		)
+	}
+	if len(input.Sources) > apiTypes.MaximumBackupPolicySources {
+		return apiTypes.BackupPolicyMutationResult{}, errs.New(
+			errs.KindValidationFailed,
+			"backup policy may select at most 12 sources",
+		)
+	}
+	evidence, err := service.idempotency.Prepare(ctx, environmentID, input)
+	if err != nil {
+		return apiTypes.BackupPolicyMutationResult{}, err
+	}
+	locator := backupPolicyLocator(environmentID, idempotencyKey)
+	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return apiTypes.BackupPolicyMutationResult{}, err
+	}
+	if existing {
+		return decodeBackupPolicyResponse(resolution.Response)
+	}
+	prepared, needsInitialKey, err := service.repository.PrepareBackupPolicyReplacement(
+		ctx,
+		backupPolicyReplacementInput(environmentID, input),
+	)
+	if err != nil {
+		return apiTypes.BackupPolicyMutationResult{}, err
+	}
+	defer prepared.Destroy()
+	if needsInitialKey {
+		material, createErr := service.keys.Create(ctx)
+		if createErr != nil {
+			return apiTypes.BackupPolicyMutationResult{}, createErr
+		}
+		defer clear(material.Ciphertext)
+		prepared, err = service.repository.SupplyBackupPolicyInitialKey(ctx, prepared, material)
+		if err != nil {
+			return apiTypes.BackupPolicyMutationResult{}, err
+		}
+	}
+	policy := backupPolicyAPI(prepared.Projection())
+	responseBody, err := json.Marshal(policy)
+	if err != nil {
+		return apiTypes.BackupPolicyMutationResult{}, errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(responseBody)
+	response := etcd.IdempotencyResponse{
+		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
+	}
+	defer clear(response.Body)
+	marker, err := service.idempotency.NewMarker(evidence, locator, response, service.now())
+	if err != nil {
+		return apiTypes.BackupPolicyMutationResult{}, err
+	}
+	defer clear(marker.Intent.Ciphertext)
+	defer clear(marker.Response.Body)
+	result, replaceErr := service.repository.ReplaceBackupPolicyProtected(ctx, prepared, marker)
+	if replaceErr != nil {
+		if isUnknownBackupPolicyOutcome(replaceErr) {
+			resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, replaceErr)
+			if err != nil {
+				return apiTypes.BackupPolicyMutationResult{}, err
+			}
+			return decodeBackupPolicyResponse(resolution.Response)
+		}
+		return apiTypes.BackupPolicyMutationResult{}, replaceErr
+	}
+	resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
+	if err != nil {
+		return apiTypes.BackupPolicyMutationResult{}, err
+	}
+	if resolution.Kind == idempotentintent.ResolutionApplied {
+		resolution.Response = etcd.IdempotencyResponse{
+			Status: response.Status, ContentKind: response.ContentKind,
+			Body: append([]byte(nil), response.Body...),
+		}
+	}
+	return decodeBackupPolicyResponse(resolution.Response)
+}
+
+func backupPolicyReplacementInput(
+	environmentID string,
+	input apiTypes.BackupPolicyReplacementRequest,
+) etcd.BackupPolicyReplacementInput {
+	sources := make([]etcd.BackupPolicySourceSelection, len(input.Sources))
+	for index, source := range input.Sources {
+		sources[index] = etcd.BackupPolicySourceSelection{
+			Kind: core.BackupSourceKind(source.Kind), TargetID: source.TargetID,
+		}
+	}
+	return etcd.BackupPolicyReplacementInput{
+		EnvironmentID: environmentID, Enabled: input.Enabled, Frequency: input.Frequency,
+		Keep: input.Keep, Encryption: string(input.Encryption), ConnectorID: input.ConnectorID,
+		Sources: sources,
+	}
+}
+
+func backupPolicyAPI(projection etcd.BackupPolicyProjection) apiTypes.BackupPolicy {
+	sources := make([]apiTypes.BackupSource, len(projection.Sources))
+	for index, source := range projection.Sources {
+		sources[index] = apiTypes.BackupSource{
+			ID: source.ID, Kind: apiTypes.BackupSourceKind(source.Kind), TargetID: source.TargetID,
+		}
+	}
+	return apiTypes.BackupPolicy{
+		Enabled: projection.Enabled, Frequency: projection.Frequency, Keep: projection.Keep,
+		Encryption: apiTypes.BackupEncryption(projection.Encryption), ConnectorID: projection.ConnectorID, Sources: sources,
+		AgeRecipient: projection.AgeRecipient, KeyEra: projection.KeyEra,
+		KeyCreatedAt: backupPolicyTimestamp(projection.KeyCreatedAt),
+		KeyRotatedAt: backupPolicyTimestamp(projection.KeyRotatedAt),
+	}
+}
+
+func backupPolicyTimestamp(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
+func backupPolicyLocator(environmentID string, key string) etcd.IdempotencyLocator {
+	return etcd.IdempotencyLocator{
+		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+		Method: http.MethodPut, Route: backupPolicyReplacementRoute, Key: key,
+	}
+}
+
+func backupPolicyIntent(
+	environmentID string,
+	input apiTypes.BackupPolicyReplacementRequest,
+) idempotentintent.CanonicalIntentV1 {
+	sources := make([]idempotentintent.Value, len(input.Sources))
+	for index, source := range input.Sources {
+		sources[index] = idempotentintent.Object(
+			idempotentintent.Field{Name: "kind", Value: idempotentintent.String(string(source.Kind))},
+			idempotentintent.Field{Name: "target_id", Value: idempotentintent.String(source.TargetID)},
+		)
+	}
+	return idempotentintent.CanonicalIntentV1{
+		Method: http.MethodPut, Route: backupPolicyReplacementRoute,
+		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
+		Path:  []idempotentintent.PathBinding{{Name: "id", Value: environmentID}},
+		Query: idempotentintent.Object(),
+		Body: idempotentintent.JSONBody(idempotentintent.Object(
+			idempotentintent.Field{Name: "enabled", Value: idempotentintent.Bool(input.Enabled)},
+			idempotentintent.Field{Name: "frequency", Value: idempotentintent.String(input.Frequency)},
+			idempotentintent.Field{Name: "keep", Value: idempotentintent.Integer(int64(input.Keep))},
+			idempotentintent.Field{Name: "encryption", Value: idempotentintent.String(string(input.Encryption))},
+			idempotentintent.Field{Name: "connector_id", Value: idempotentintent.String(input.ConnectorID)},
+			idempotentintent.Field{Name: "sources", Value: idempotentintent.List(sources...)},
+		)),
+	}
+}
+
+func decodeBackupPolicyResponse(
+	response etcd.IdempotencyResponse,
+) (apiTypes.BackupPolicyMutationResult, error) {
+	if response.Status != http.StatusOK || response.ContentKind != "application/json" {
+		return apiTypes.BackupPolicyMutationResult{}, errs.New(
+			errs.KindInternal, "backup policy replay response is invalid",
+		)
+	}
+	var policy apiTypes.BackupPolicy
+	if err := json.Unmarshal(response.Body, &policy); err != nil || policy.Sources == nil {
+		return apiTypes.BackupPolicyMutationResult{}, errs.New(
+			errs.KindInternal, "backup policy replay body is invalid",
+		)
+	}
+	return apiTypes.BackupPolicyMutationResult{
+		Policy: policy, Representation: append([]byte(nil), response.Body...),
+	}, nil
+}
+
+func isUnknownBackupPolicyOutcome(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
+}

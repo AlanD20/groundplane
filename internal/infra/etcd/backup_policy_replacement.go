@@ -8,16 +8,16 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// BackupPolicyInitialKey is an application-sealed era-1 age identity. The
+// backupPolicyInitialKey is an application-sealed era-1 age identity. The
 // repository treats the ciphertext as opaque and never receives plaintext.
-type BackupPolicyInitialKey struct {
+type backupPolicyInitialKey struct {
 	Record    BackupKeyRecord
 	Encrypted BackupKeyEncryptedValue
 }
 
-// BackupPolicySourceEvidence binds one ordered policy source to the exact
+// backupPolicySourceEvidence binds one ordered policy source to the exact
 // durable target revision that was validated by the application.
-type BackupPolicySourceEvidence struct {
+type backupPolicySourceEvidence struct {
 	Source           Versioned[BackupSourceRecord]
 	EnvironmentIndex *KeyValue
 	IdentityIndex    *KeyValue
@@ -26,26 +26,26 @@ type BackupPolicySourceEvidence struct {
 	TargetOwnerIndex *KeyValue
 }
 
-// BackupPolicyConnectorReferenceEvidence proves either the exact existing
+// backupPolicyConnectorReferenceEvidence proves either the exact existing
 // reverse reference or its absence before the replacement transaction.
-type BackupPolicyConnectorReferenceEvidence struct {
+type backupPolicyConnectorReferenceEvidence struct {
 	ConnectorID string
 	Entry       *KeyValue
 }
 
-// BackupPolicyReplacementCandidate contains the fully resolved, prevalidated
+// backupPolicyReplacementCandidate contains the fully resolved, prevalidated
 // durable evidence for one protected Environment-scoped replacement.
-type BackupPolicyReplacementCandidate struct {
+type backupPolicyReplacementCandidate struct {
 	Environment         Versioned[EnvironmentRecord]
 	Project             Versioned[ProjectRecord]
 	Current             *Versioned[BackupPolicyRecord]
 	Replacement         BackupPolicyRecord
-	Sources             []BackupPolicySourceEvidence
+	Sources             []backupPolicySourceEvidence
 	Connector           *Versioned[ConnectorRecord]
 	ConnectorOwnerIndex *KeyValue
-	ConnectorReferences []BackupPolicyConnectorReferenceEvidence
+	ConnectorReferences []backupPolicyConnectorReferenceEvidence
 	ExistingKey         *VersionedBackupKey
-	InitialKey          *BackupPolicyInitialKey
+	InitialKey          *backupPolicyInitialKey
 }
 
 type backupPolicyReplacementCompareKind uint8
@@ -95,15 +95,15 @@ func (plan *backupPolicyReplacementPlan) compare(
 	})
 }
 
-// ReplaceBackupPolicyProtected atomically replaces the Environment singleton,
+// replaceBackupPolicyProtected atomically replaces the Environment singleton,
 // swaps Connector reverse references, creates an optional sealed era-1 key,
 // and commits exact completed-direct replay evidence.
-func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
+func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 	ctx context.Context,
-	candidate BackupPolicyReplacementCandidate,
+	candidate backupPolicyReplacementCandidate,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateBackupPolicyReplacementCandidate(ctx, candidate, marker); err != nil {
+	if err := validateBackupPolicyReplacement(ctx, candidate, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := prepareBackupPolicyReplacement(candidate)
@@ -134,14 +134,21 @@ func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
 	return idempotency.Apply(ctx, marker, mutationPlan)
 }
 
-func validateBackupPolicyReplacementCandidate(
+func validateBackupPolicyReplacement(
 	ctx context.Context,
-	candidate BackupPolicyReplacementCandidate,
+	candidate backupPolicyReplacementCandidate,
 	marker IdempotencyMarker,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := validatebackupPolicyReplacementCandidate(ctx, candidate); err != nil {
 		return err
 	}
+	return validateBackupPolicyReplacementMarker(candidate, marker)
+}
+
+func validateBackupPolicyReplacementMarker(
+	candidate backupPolicyReplacementCandidate,
+	marker IdempotencyMarker,
+) error {
 	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != candidate.Replacement.EnvironmentID ||
@@ -155,7 +162,14 @@ func validateBackupPolicyReplacementCandidate(
 			"backup policy marker must be the retained completed response for its exact put operation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	return validateIdempotencyMarker(marker)
+}
+
+func validatebackupPolicyReplacementCandidate(
+	ctx context.Context,
+	candidate backupPolicyReplacementCandidate,
+) error {
+	if err := validateContext(ctx); err != nil {
 		return err
 	}
 	if err := validateEnvironment(candidate.Environment.Record); err != nil {
@@ -216,7 +230,7 @@ func validateBackupPolicyReplacementCandidate(
 		identities[identity] = struct{}{}
 	}
 	for index := range candidate.Sources {
-		if err := validateBackupPolicySourceEvidence(
+		if err := validatebackupPolicySourceEvidence(
 			candidate.Replacement.EnvironmentID,
 			candidate.Replacement.SourceIDs[index],
 			candidate.Sources[index],
@@ -303,10 +317,10 @@ func validReplacementRevision(revision int64, readRevision int64) bool {
 	return revision > 0 && readRevision >= revision
 }
 
-func validateBackupPolicySourceEvidence(
+func validatebackupPolicySourceEvidence(
 	environmentID string,
 	wantSourceID string,
-	evidence BackupPolicySourceEvidence,
+	evidence backupPolicySourceEvidence,
 ) error {
 	if err := validateBackupSourceRecord(evidence.Source.Record); err != nil {
 		return err
@@ -368,7 +382,7 @@ func validBackupPolicyIndex(entry *KeyValue, key string, value string) bool {
 	return entry != nil && entry.Key == key && entry.ModRevision > 0 && string(entry.Value) == value
 }
 
-func validateBackupPolicyKeyEvidence(candidate BackupPolicyReplacementCandidate) error {
+func validateBackupPolicyKeyEvidence(candidate backupPolicyReplacementCandidate) error {
 	if candidate.ExistingKey != nil {
 		if err := validateVersionedBackupKey(*candidate.ExistingKey); err != nil {
 			return err
@@ -400,7 +414,7 @@ func validateBackupPolicyKeyEvidence(candidate BackupPolicyReplacementCandidate)
 	return nil
 }
 
-func validateBackupPolicyConnectorReferences(candidate BackupPolicyReplacementCandidate) error {
+func validateBackupPolicyConnectorReferences(candidate backupPolicyReplacementCandidate) error {
 	environmentID := candidate.Replacement.EnvironmentID
 	oldConnectorID := ""
 	if candidate.Current != nil && candidate.Current.Record.Enabled {
@@ -449,7 +463,7 @@ func validateBackupPolicyConnectorReferences(candidate BackupPolicyReplacementCa
 }
 
 func prepareBackupPolicyReplacement(
-	candidate BackupPolicyReplacementCandidate,
+	candidate backupPolicyReplacementCandidate,
 ) (backupPolicyReplacementPlan, error) {
 	policyValue, err := encodeBackupPolicyRecord(candidate.Replacement)
 	if err != nil {
@@ -457,8 +471,10 @@ func prepareBackupPolicyReplacement(
 	}
 	plan := backupPolicyReplacementPlan{
 		conditions: make([]Condition, 0, 16+len(candidate.Sources)*3),
-		mutations:  []Mutation{{Type: MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue}},
-		evidence:   make([]backupPolicyReplacementCompare, 0, 16+len(candidate.Sources)*3),
+		mutations: []Mutation{{
+			Type: MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
+		}},
+		evidence: make([]backupPolicyReplacementCompare, 0, 16+len(candidate.Sources)*3),
 	}
 	policyRevision := int64(0)
 	if candidate.Current != nil {
@@ -630,7 +646,7 @@ func prepareBackupPolicyReplacement(
 		keyValueRevision,
 	)
 	if candidate.InitialKey != nil {
-		initial := BackupPolicyInitialKey{Record: candidate.InitialKey.Record, Encrypted: candidate.InitialKey.Encrypted}
+		initial := backupPolicyInitialKey{Record: candidate.InitialKey.Record, Encrypted: candidate.InitialKey.Encrypted}
 		initial.Encrypted.Ciphertext = append([]byte(nil), candidate.InitialKey.Encrypted.Ciphertext...)
 		defer clear(initial.Encrypted.Ciphertext)
 		recordValue, encodeErr := encodeBackupKeyRecord(initial.Record)

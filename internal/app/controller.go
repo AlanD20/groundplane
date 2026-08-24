@@ -350,6 +350,46 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector reads: %w", err)
 	}
+	volumeRecords, err := etcd.NewVolumeRepository(store)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize volume repository", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	volumeReadRepository, err := newDurableVolumeReadRepository(volumeRecords)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize volume read repository", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	volumeReads, err := newVolumeReadService(volumeReadRepository)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize volume reads", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	backupPolicyRecords, err := etcd.NewBackupPolicyRepository(store)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize backup policy repository", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	backupPolicyRepository, err := newDurableBackupPolicyRepository(backupPolicyRecords)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize backup policy repository adapter", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
 	attachRecords, err := etcd.NewAttachRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -396,6 +436,30 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	backupPolicyIdempotency, err := newDurableBackupPolicyIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize backup policy idempotency", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	backupPolicyKeys, err := newAgeBackupPolicyKeyFactory(intentProtector)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize backup policy key factory", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	backupPolicies, err := newBackupPolicyService(backupPolicyRepository, backupPolicyKeys, backupPolicyIdempotency)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize backup policy service", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
 	}
 	zoneCreationIdempotency, err := newDurableZoneCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -1001,6 +1065,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Connectors:            connectorReads,
 		ConnectorMutations:    connectorMutations,
 		ConnectorDeletions:    connectorDeletions,
+		BackupPolicies:        backupPolicies,
+		BackupPolicyMutations: backupPolicies,
+		Volumes:               volumeReads,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,

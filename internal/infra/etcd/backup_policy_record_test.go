@@ -1,8 +1,9 @@
 package etcd
 
 import (
+	"bytes"
 	"errors"
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Rationale: persistence round trips must preserve every configured policy
+// field and the source order used by public projections.
 func TestBackupPolicyRecordRoundTripsCompleteEnabledState(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
@@ -33,11 +36,16 @@ func TestBackupPolicyRecordRoundTripsCompleteEnabledState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeBackupPolicyRecord() error = %v", err)
 	}
-	if !reflect.DeepEqual(decoded, record) {
+	if decoded.EnvironmentID != record.EnvironmentID || decoded.Enabled != record.Enabled ||
+		decoded.Frequency != record.Frequency || decoded.Keep != record.Keep ||
+		decoded.Encryption != record.Encryption || decoded.ConnectorID != record.ConnectorID ||
+		!slices.Equal(decoded.SourceIDs, record.SourceIDs) || !decoded.UpdatedAt.Equal(record.UpdatedAt) {
 		t.Fatalf("decoded = %#v, want %#v", decoded, record)
 	}
 }
 
+// Rationale: invalid enabled records and duplicate source identities must never
+// become durable policy state.
 func TestBackupPolicyRecordRejectsIncompleteEnabledAndDuplicateSources(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
@@ -62,6 +70,8 @@ func TestBackupPolicyRecordRejectsIncompleteEnabledAndDuplicateSources(t *testin
 	}
 }
 
+// Rationale: each persisted source kind must retain its exact stable target
+// identity grammar, including Environment identity for config.
 func TestBackupSourceRecordEnforcesKindSpecificStableTarget(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
@@ -104,6 +114,8 @@ func TestBackupSourceRecordEnforcesKindSpecificStableTarget(t *testing.T) {
 	}
 }
 
+// Rationale: public key metadata and encrypted private material must remain
+// separate records with lossless ciphertext encoding.
 func TestBackupKeyRecordsSeparatePublicMetadataFromCiphertext(t *testing.T) {
 	t.Parallel()
 	identity, err := age.GenerateX25519Identity()
@@ -131,7 +143,8 @@ func TestBackupKeyRecordsSeparatePublicMetadataFromCiphertext(t *testing.T) {
 		t.Fatalf("decodeBackupKeyEncryptedValue() error = %v", err)
 	}
 	defer clear(decoded.Ciphertext)
-	if !reflect.DeepEqual(decoded, value) {
+	if decoded.EnvironmentID != value.EnvironmentID || decoded.KeyEra != value.KeyEra ||
+		!bytes.Equal(decoded.Ciphertext, value.Ciphertext) {
 		t.Fatalf("decoded = %#v, want %#v", decoded, value)
 	}
 }

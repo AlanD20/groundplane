@@ -18,6 +18,84 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for BackupPolicyEncryption.
+const (
+	BackupPolicyEncryptionAge  BackupPolicyEncryption = "age"
+	BackupPolicyEncryptionNone BackupPolicyEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the BackupPolicyEncryption enum.
+func (e BackupPolicyEncryption) Valid() bool {
+	switch e {
+	case BackupPolicyEncryptionAge:
+		return true
+	case BackupPolicyEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackupPolicyReplacementRequestEncryption.
+const (
+	BackupPolicyReplacementRequestEncryptionAge  BackupPolicyReplacementRequestEncryption = "age"
+	BackupPolicyReplacementRequestEncryptionNone BackupPolicyReplacementRequestEncryption = "none"
+)
+
+// Valid indicates whether the value is a known member of the BackupPolicyReplacementRequestEncryption enum.
+func (e BackupPolicyReplacementRequestEncryption) Valid() bool {
+	switch e {
+	case BackupPolicyReplacementRequestEncryptionAge:
+		return true
+	case BackupPolicyReplacementRequestEncryptionNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackupSourceKind.
+const (
+	BackupSourceKindAttach BackupSourceKind = "attach"
+	BackupSourceKindConfig BackupSourceKind = "config"
+	BackupSourceKindVolume BackupSourceKind = "volume"
+)
+
+// Valid indicates whether the value is a known member of the BackupSourceKind enum.
+func (e BackupSourceKind) Valid() bool {
+	switch e {
+	case BackupSourceKindAttach:
+		return true
+	case BackupSourceKindConfig:
+		return true
+	case BackupSourceKindVolume:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackupSourceInputKind.
+const (
+	BackupSourceInputKindAttach BackupSourceInputKind = "attach"
+	BackupSourceInputKindConfig BackupSourceInputKind = "config"
+	BackupSourceInputKindVolume BackupSourceInputKind = "volume"
+)
+
+// Valid indicates whether the value is a known member of the BackupSourceInputKind enum.
+func (e BackupSourceInputKind) Valid() bool {
+	switch e {
+	case BackupSourceInputKindAttach:
+		return true
+	case BackupSourceInputKindConfig:
+		return true
+	case BackupSourceInputKindVolume:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskActor.
 const (
 	Operator TaskActor = "operator"
@@ -193,6 +271,63 @@ type BackingService struct {
 	ProjectId     string  `json:"project_id"`
 	ServiceId     string  `json:"service_id"`
 }
+
+// BackupPolicy defines model for BackupPolicy.
+type BackupPolicy struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackupPolicy.json
+	Schema       *string                 `json:"$schema,omitempty"`
+	AgeRecipient *string                 `json:"age_recipient,omitempty"`
+	ConnectorId  *string                 `json:"connector_id,omitempty"`
+	Enabled      bool                    `json:"enabled"`
+	Encryption   *BackupPolicyEncryption `json:"encryption,omitempty"`
+	Frequency    *string                 `json:"frequency,omitempty"`
+	Keep         *int64                  `json:"keep,omitempty"`
+	KeyCreatedAt *time.Time              `json:"key_created_at,omitempty"`
+	KeyEra       *int64                  `json:"key_era,omitempty"`
+	KeyRotatedAt *time.Time              `json:"key_rotated_at,omitempty"`
+	Sources      []BackupSource          `json:"sources"`
+}
+
+// BackupPolicyEncryption defines model for BackupPolicy.Encryption.
+type BackupPolicyEncryption string
+
+// BackupPolicyReplacementRequest defines model for BackupPolicyReplacementRequest.
+type BackupPolicyReplacementRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackupPolicyReplacementRequest.json
+	Schema      *string                                   `json:"$schema,omitempty"`
+	ConnectorId *string                                   `json:"connector_id,omitempty"`
+	Enabled     bool                                      `json:"enabled"`
+	Encryption  *BackupPolicyReplacementRequestEncryption `json:"encryption,omitempty"`
+	Frequency   *string                                   `json:"frequency,omitempty"`
+	Keep        *int64                                    `json:"keep,omitempty"`
+	Sources     []BackupSourceInput                       `json:"sources"`
+}
+
+// BackupPolicyReplacementRequestEncryption defines model for BackupPolicyReplacementRequest.Encryption.
+type BackupPolicyReplacementRequestEncryption string
+
+// BackupSource defines model for BackupSource.
+type BackupSource struct {
+	Id       string           `json:"id"`
+	Kind     BackupSourceKind `json:"kind"`
+	TargetId string           `json:"target_id"`
+}
+
+// BackupSourceKind defines model for BackupSource.Kind.
+type BackupSourceKind string
+
+// BackupSourceInput defines model for BackupSourceInput.
+type BackupSourceInput struct {
+	Kind     BackupSourceInputKind `json:"kind"`
+	TargetId string                `json:"target_id"`
+}
+
+// BackupSourceInputKind defines model for BackupSourceInput.Kind.
+type BackupSourceInputKind string
 
 // Connector defines model for Connector.
 type Connector struct {
@@ -516,6 +651,16 @@ type PageTask struct {
 	Schema     *string `json:"$schema,omitempty"`
 	Items      *[]Task `json:"items"`
 	NextCursor *string `json:"next_cursor,omitempty"`
+}
+
+// PageVolume defines model for PageVolume.
+type PageVolume struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageVolume.json
+	Schema     *string   `json:"$schema,omitempty"`
+	Items      *[]Volume `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
 }
 
 // PageZone defines model for PageZone.
@@ -908,6 +1053,12 @@ type TenantRename struct {
 	Slug   string  `json:"slug"`
 }
 
+// Volume defines model for Volume.
+type Volume struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // Zone defines model for Zone.
 type Zone struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1092,6 +1243,11 @@ type EnvironmentCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// BackupPolicySetParams defines parameters for BackupPolicySet.
+type BackupPolicySetParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentApplyMultipartBody defines parameters for EnvironmentApply.
 type EnvironmentApplyMultipartBody = openapi_types.File
 
@@ -1267,6 +1423,13 @@ type TenantRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// VolumeListParams defines parameters for VolumeList.
+type VolumeListParams struct {
+	Environment string  `form:"environment" json:"environment"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ZoneListParams defines parameters for ZoneList.
 type ZoneListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -1305,6 +1468,9 @@ type EntryEditJSONRequestBody = EntryEditRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
+
+// BackupPolicySetJSONRequestBody defines body for BackupPolicySet for application/json ContentType.
+type BackupPolicySetJSONRequestBody = BackupPolicyReplacementRequest
 
 // EnvironmentApplyMultipartRequestBody defines body for EnvironmentApply for multipart/form-data ContentType.
 type EnvironmentApplyMultipartRequestBody = EnvironmentApplyMultipartBody
@@ -1630,6 +1796,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 	EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupPolicyShow Show the effective Backup Policy
+	//
+	// Corresponds with GET /environments/{id}/backup-policy (the `BackupPolicyShow` operationId).
+	BackupPolicyShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupPolicySetWithBody Replace the Backup Policy
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+	BackupPolicySetWithBody(ctx context.Context, id string, params *BackupPolicySetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupPolicySet Replace the Backup Policy
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+	BackupPolicySet(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentApplyWithBody Apply an environment Blueprint
 	//
@@ -1960,6 +2145,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeList List Environment volumes
+	//
+	// Corresponds with GET /volumes (the `VolumeList` operationId).
+	VolumeList(ctx context.Context, params *VolumeListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ZoneList List network zones
 	//
@@ -2539,6 +2729,55 @@ func (c *Client) EnvironmentCreate(ctx context.Context, params *EnvironmentCreat
 // Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 func (c *Client) EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnvironmentShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupPolicyShow Show the effective Backup Policy
+//
+// Corresponds with GET /environments/{id}/backup-policy (the `BackupPolicyShow` operationId).
+func (c *Client) BackupPolicyShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupPolicyShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupPolicySetWithBody Replace the Backup Policy
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+func (c *Client) BackupPolicySetWithBody(ctx context.Context, id string, params *BackupPolicySetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupPolicySetRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupPolicySet Replace the Backup Policy
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+func (c *Client) BackupPolicySet(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupPolicySetRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3409,6 +3648,21 @@ func (c *Client) TenantRenameWithBody(ctx context.Context, id string, params *Te
 // Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTenantRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeList List Environment volumes
+//
+// Corresponds with GET /volumes (the `VolumeList` operationId).
+func (c *Client) VolumeList(ctx context.Context, params *VolumeListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeListRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5022,6 +5276,100 @@ func NewEnvironmentShowRequest(server string, id string) (*http.Request, error) 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBackupPolicyShowRequest constructs an http.Request for the BackupPolicyShow method
+func NewBackupPolicyShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/backup-policy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBackupPolicySetRequest calls the generic BackupPolicySet builder with application/json body
+func NewBackupPolicySetRequest(server string, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackupPolicySetRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewBackupPolicySetRequestWithBody constructs an http.Request for the BackupPolicySet method, with any body, and a specified content type
+func NewBackupPolicySetRequestWithBody(server string, id string, params *BackupPolicySetParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/backup-policy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -7156,6 +7504,80 @@ func NewTenantRenameRequestWithBody(server string, id string, params *TenantRena
 	return req, nil
 }
 
+// NewVolumeListRequest constructs an http.Request for the VolumeList method
+func NewVolumeListRequest(server string, params *VolumeListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/volumes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewZoneListRequest constructs an http.Request for the ZoneList method
 func NewZoneListRequest(server string, params *ZoneListParams) (*http.Request, error) {
 	var err error
@@ -7714,6 +8136,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 	EnvironmentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EnvironmentShowResponse, error)
 
+	// BackupPolicyShowWithResponse Show the effective Backup Policy
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments/{id}/backup-policy (the `BackupPolicyShow` operationId).
+	BackupPolicyShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BackupPolicyShowResponse, error)
+
+	// BackupPolicySetWithBodyWithResponse Replace the Backup Policy
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+	BackupPolicySetWithBodyWithResponse(ctx context.Context, id string, params *BackupPolicySetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupPolicySetResponse, error)
+
+	// BackupPolicySetWithResponse Replace the Backup Policy
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+	BackupPolicySetWithResponse(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupPolicySetResponse, error)
+
 	// EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -8093,6 +8536,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /tenants/{id}/rename (the `TenantRename` operationId).
 	TenantRenameWithResponse(ctx context.Context, id string, params *TenantRenameParams, body TenantRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantRenameResponse, error)
+
+	// VolumeListWithResponse List Environment volumes
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /volumes (the `VolumeList` operationId).
+	VolumeListWithResponse(ctx context.Context, params *VolumeListParams, reqEditors ...RequestEditorFn) (*VolumeListResponse, error)
 
 	// ZoneListWithResponse List network zones
 	//
@@ -9566,6 +10016,109 @@ func (r EnvironmentShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EnvironmentShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BackupPolicyShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackupPolicy
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BackupPolicyShowResponse) GetJSON200() *BackupPolicy {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupPolicyShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupPolicyShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupPolicyShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupPolicyShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupPolicyShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackupPolicySetResponse200Headers the declared response headers of an HTTP 200 response for BackupPolicySet
+type BackupPolicySetResponse200Headers struct {
+	ContentType *string
+}
+
+type BackupPolicySetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BackupPolicy
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *BackupPolicySetResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BackupPolicySetResponse) GetJSON200() *BackupPolicy {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupPolicySetResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupPolicySetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupPolicySetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupPolicySetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupPolicySetResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -11646,6 +12199,54 @@ func (r TenantRenameResponse) ContentType() string {
 	return ""
 }
 
+type VolumeListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageVolume
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r VolumeListResponse) GetJSON200() *PageVolume {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r VolumeListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r VolumeListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VolumeListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VolumeListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VolumeListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ZoneListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -12355,6 +12956,45 @@ func (c *ClientWithResponses) EnvironmentShowWithResponse(ctx context.Context, i
 	return ParseEnvironmentShowResponse(rsp)
 }
 
+// BackupPolicyShowWithResponse Show the effective Backup Policy
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /environments/{id}/backup-policy (the `BackupPolicyShow` operationId).
+func (c *ClientWithResponses) BackupPolicyShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BackupPolicyShowResponse, error) {
+	rsp, err := c.BackupPolicyShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupPolicyShowResponse(rsp)
+}
+
+// BackupPolicySetWithBodyWithResponse Replace the Backup Policy
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+func (c *ClientWithResponses) BackupPolicySetWithBodyWithResponse(ctx context.Context, id string, params *BackupPolicySetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackupPolicySetResponse, error) {
+	rsp, err := c.BackupPolicySetWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupPolicySetResponse(rsp)
+}
+
+// BackupPolicySetWithResponse Replace the Backup Policy
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
+func (c *ClientWithResponses) BackupPolicySetWithResponse(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupPolicySetResponse, error) {
+	rsp, err := c.BackupPolicySet(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupPolicySetResponse(rsp)
+}
+
 // EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -13057,6 +13697,19 @@ func (c *ClientWithResponses) TenantRenameWithResponse(ctx context.Context, id s
 		return nil, err
 	}
 	return ParseTenantRenameResponse(rsp)
+}
+
+// VolumeListWithResponse List Environment volumes
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /volumes (the `VolumeList` operationId).
+func (c *ClientWithResponses) VolumeListWithResponse(ctx context.Context, params *VolumeListParams, reqEditors ...RequestEditorFn) (*VolumeListResponse, error) {
+	rsp, err := c.VolumeList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeListResponse(rsp)
 }
 
 // ZoneListWithResponse List network zones
@@ -14225,6 +14878,85 @@ func ParseEnvironmentShowResponse(rsp *http.Response) (*EnvironmentShowResponse,
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseBackupPolicyShowResponse parses an HTTP response from a BackupPolicyShowWithResponse call
+func ParseBackupPolicyShowResponse(rsp *http.Response) (*BackupPolicyShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupPolicyShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackupPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseBackupPolicySetResponse parses an HTTP response from a BackupPolicySetWithResponse call
+func ParseBackupPolicySetResponse(rsp *http.Response) (*BackupPolicySetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupPolicySetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BackupPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers BackupPolicySetResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
@@ -15837,6 +16569,39 @@ func ParseTenantRenameResponse(rsp *http.Response) (*TenantRenameResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseVolumeListResponse parses an HTTP response from a VolumeListWithResponse call
+func ParseVolumeListResponse(rsp *http.Response) (*VolumeListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VolumeListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageVolume
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

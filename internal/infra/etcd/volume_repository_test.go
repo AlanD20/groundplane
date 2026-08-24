@@ -150,6 +150,65 @@ func TestVolumeRepositoryIdempotentCreateKeepsExactStableIdentity(t *testing.T) 
 	}
 }
 
+// Rationale: Environment visibility and Volume owner membership must come
+// from one revision even when deletion commits between the range and proof.
+func TestVolumeEnvironmentProjectionFencesDeletionRace(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repository, store, environment, project := volumeRepositoryTestHierarchy(t)
+	record := volumeRepositoryTestRecord(t, environment.Record.ID, 981, "uploads")
+	if _, err := repository.CreateVolume(ctx, environment, project, record); err != nil {
+		t.Fatalf("CreateVolume() error = %v", err)
+	}
+	raced := false
+	racing := &volumeProjectionRaceStore{hierarchyStore: store}
+	racing.afterRange = func() {
+		raced = true
+		result, err := store.Transact(ctx, nil, []Mutation{
+			{Type: MutationDelete, Key: environmentKey(environment.Record.ID)},
+			{
+				Type:  MutationPut,
+				Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID),
+				Value: []byte("deleting"),
+			},
+		})
+		if err != nil || !result.Succeeded {
+			t.Fatalf("delete Environment during Volume projection = %#v, %v", result, err)
+		}
+	}
+	projection, err := newVolumeRepository(racing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := projection.ListEnvironmentVolumes(ctx, environment.Record.ID, PageRequest{})
+	if err != nil || !raced || len(page.Items) != 1 || page.Items[0].Record != record {
+		t.Fatalf("ListEnvironmentVolumes(raced) = %#v, %v; raced=%v", page, err, raced)
+	}
+	if _, err := projection.ListEnvironmentVolumes(
+		ctx, environment.Record.ID, PageRequest{},
+	); !isKind(err, errs.KindEnvironmentNotFound) {
+		t.Fatalf("ListEnvironmentVolumes(after deletion) error = %v", err)
+	}
+}
+
+type volumeProjectionRaceStore struct {
+	hierarchyStore
+	afterRange func()
+}
+
+func (store *volumeProjectionRaceStore) Range(
+	ctx context.Context,
+	request RangeRequest,
+) (*RangeResult, error) {
+	result, err := store.hierarchyStore.Range(ctx, request)
+	if err == nil && store.afterRange != nil {
+		after := store.afterRange
+		store.afterRange = nil
+		after()
+	}
+	return result, err
+}
+
 func volumeRepositoryTestHierarchy(
 	t *testing.T,
 ) (*VolumeRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {

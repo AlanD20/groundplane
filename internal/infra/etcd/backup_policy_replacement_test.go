@@ -21,18 +21,18 @@ func TestBackupPolicyProtectedReplacementCommitsAgeStateAndReplays(t *testing.T)
 	fixture := newBackupPolicyReplacementFixture(t, true)
 	candidate := fixture.candidate(t, true, "age")
 	marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-age-0001")
-	result, err := fixture.repository.ReplaceBackupPolicyProtected(
+	result, err := fixture.repository.replaceBackupPolicyProtected(
 		context.Background(), candidate, marker,
 	)
 	if err != nil || result.kind != idempotencyTransactionApplied {
-		t.Fatalf("ReplaceBackupPolicyProtected() = %#v, %v", result, err)
+		t.Fatalf("replaceBackupPolicyProtected() = %#v, %v", result, err)
 	}
-	replayed, err := fixture.repository.ReplaceBackupPolicyProtected(
+	replayed, err := fixture.repository.replaceBackupPolicyProtected(
 		context.Background(), candidate, marker,
 	)
 	if err != nil || replayed.kind != idempotencyTransactionExisting ||
 		string(replayed.marker.Response.Body) != string(marker.Response.Body) {
-		t.Fatalf("ReplaceBackupPolicyProtected(replay) = %#v, %v", replayed, err)
+		t.Fatalf("replaceBackupPolicyProtected(replay) = %#v, %v", replayed, err)
 	}
 	stored, found, err := fixture.repository.GetBackupPolicy(context.Background(), fixture.environment.Record.ID)
 	if err != nil || !found || len(stored.Record.SourceIDs) != len(candidate.Sources) {
@@ -61,10 +61,10 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, true)
 		candidate := fixture.candidate(t, true, "none")
 		marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-none-0001")
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), candidate, marker,
 		); err != nil {
-			t.Fatalf("ReplaceBackupPolicyProtected(none) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(none) error = %v", err)
 		}
 		if _, found, err := fixture.repository.GetBackupKey(
 			context.Background(), fixture.environment.Record.ID,
@@ -76,11 +76,11 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 	t.Run("move and disable retain", func(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, true)
 		first := fixture.candidate(t, true, "age")
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), first,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-move-0001"),
 		); err != nil {
-			t.Fatalf("ReplaceBackupPolicyProtected(first) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(first) error = %v", err)
 		}
 		current := mustBackupPolicy(t, fixture.repository, fixture.environment.Record.ID)
 		existingKey := mustBackupKey(t, fixture.repository, fixture.environment.Record.ID)
@@ -93,7 +93,7 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 		move.Current = &current
 		move.Replacement.ConnectorID = secondConnector.Record.Connector.ID
 		move.Replacement.Encryption = "none"
-		move.Sources = append([]BackupPolicySourceEvidence(nil), first.Sources[:1]...)
+		move.Sources = append([]backupPolicySourceEvidence(nil), first.Sources[:1]...)
 		move.Replacement.SourceIDs = []string{move.Sources[0].Source.Record.ID}
 		move.Replacement.UpdatedAt = move.Replacement.UpdatedAt.Add(time.Second)
 		move.Connector = &secondConnector
@@ -102,17 +102,17 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 			fixture.store,
 			connectorEnvironmentKey(fixture.environment.Record.ID, secondConnector.Record.Connector.ID),
 		)
-		move.ConnectorReferences = []BackupPolicyConnectorReferenceEvidence{
+		move.ConnectorReferences = []backupPolicyConnectorReferenceEvidence{
 			{ConnectorID: fixture.connector.Record.Connector.ID, Entry: oldReference},
 			{ConnectorID: secondConnector.Record.Connector.ID},
 		}
 		move.ExistingKey = &existingKey
 		move.InitialKey = nil
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), move,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-move-0002"),
 		); err != nil {
-			t.Fatalf("ReplaceBackupPolicyProtected(move) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(move) error = %v", err)
 		}
 		assertBackupPolicyReference(t, fixture.store, fixture.connector.Record.Connector.ID,
 			fixture.environment.Record.ID, false)
@@ -128,7 +128,7 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 		newReference := mustBackupPolicyReference(
 			t, fixture.store, secondConnector.Record.Connector.ID, fixture.environment.Record.ID,
 		)
-		disabled := BackupPolicyReplacementCandidate{
+		disabled := backupPolicyReplacementCandidate{
 			Environment: fixture.environment,
 			Project:     fixture.project,
 			Current:     &moved,
@@ -136,16 +136,16 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 				EnvironmentID: fixture.environment.Record.ID,
 				UpdatedAt:     move.Replacement.UpdatedAt.Add(time.Second),
 			},
-			ConnectorReferences: []BackupPolicyConnectorReferenceEvidence{{
+			ConnectorReferences: []backupPolicyConnectorReferenceEvidence{{
 				ConnectorID: secondConnector.Record.Connector.ID, Entry: newReference,
 			}},
 			ExistingKey: &retained,
 		}
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), disabled,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-disable-0001"),
 		); err != nil {
-			t.Fatalf("ReplaceBackupPolicyProtected(disabled) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(disabled) error = %v", err)
 		}
 		assertBackupPolicyReference(t, fixture.store, secondConnector.Record.Connector.ID,
 			fixture.environment.Record.ID, false)
@@ -167,10 +167,10 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		candidate := fixture.candidate(t, true, "none")
 		marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-scope-0001")
 		marker.Locator.ScopeID = ids.NewAt(ids.KindEnvironment, marker.CreatedAt, 2500)
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), candidate, marker,
 		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("ReplaceBackupPolicyProtected(scope) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(scope) error = %v", err)
 		}
 	})
 
@@ -186,10 +186,10 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 			candidate := fixture.candidate(t, true, "none")
 			marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-marker-0001")
 			mutate(&marker)
-			if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+			if _, err := fixture.repository.replaceBackupPolicyProtected(
 				context.Background(), candidate, marker,
 			); !isKind(err, errs.KindValidationFailed) {
-				t.Fatalf("ReplaceBackupPolicyProtected(marker) error = %v", err)
+				t.Fatalf("replaceBackupPolicyProtected(marker) error = %v", err)
 			}
 		}
 	})
@@ -198,11 +198,11 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		fixture := newBackupPolicyReplacementFixture(t, true)
 		candidate := fixture.candidate(t, true, "none")
 		candidate.Environment.Record.ProvisioningState = EnvironmentProvisioningProvisioning
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), candidate,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-not-ready-0001"),
 		); !isKind(err, errs.KindStateConflict) {
-			t.Fatalf("ReplaceBackupPolicyProtected(not ready) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(not ready) error = %v", err)
 		}
 	})
 
@@ -230,13 +230,13 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 			if err != nil || !transaction.Succeeded {
 				t.Fatalf("seed deletion fence = %#v, %v", transaction, err)
 			}
-			result, err := fixture.repository.ReplaceBackupPolicyProtected(
+			result, err := fixture.repository.replaceBackupPolicyProtected(
 				context.Background(), candidate,
 				backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-fence-0001"),
 			)
 			if err != nil || result.kind != idempotencyTransactionConflict ||
 				!isKind(result.conflict, errs.KindResourceInUse) {
-				t.Fatalf("ReplaceBackupPolicyProtected(fenced) = %#v, %v", result, err)
+				t.Fatalf("replaceBackupPolicyProtected(fenced) = %#v, %v", result, err)
 			}
 		})
 	}
@@ -245,29 +245,29 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		fixture := newBackupPolicyReplacementFixture(t, true)
 		candidate := fixture.candidate(t, true, "age")
 		candidate.Sources[0], candidate.Sources[1] = candidate.Sources[1], candidate.Sources[0]
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), candidate,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-order-0001"),
 		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("ReplaceBackupPolicyProtected(order) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(order) error = %v", err)
 		}
 	})
 
 	t.Run("corrupt reverse reference", func(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, true)
 		first := fixture.candidate(t, true, "none")
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), first,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-corrupt-0001"),
 		); err != nil {
-			t.Fatalf("ReplaceBackupPolicyProtected(first) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(first) error = %v", err)
 		}
 		current := mustBackupPolicy(t, fixture.repository, fixture.environment.Record.ID)
 		reference := mustBackupPolicyReference(
 			t, fixture.store, fixture.connector.Record.Connector.ID, fixture.environment.Record.ID,
 		)
 		reference.Value = []byte("wrong-environment")
-		disabled := BackupPolicyReplacementCandidate{
+		disabled := backupPolicyReplacementCandidate{
 			Environment: fixture.environment,
 			Project:     fixture.project,
 			Current:     &current,
@@ -275,31 +275,31 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 				EnvironmentID: fixture.environment.Record.ID,
 				UpdatedAt:     first.Replacement.UpdatedAt.Add(time.Second),
 			},
-			ConnectorReferences: []BackupPolicyConnectorReferenceEvidence{{
+			ConnectorReferences: []backupPolicyConnectorReferenceEvidence{{
 				ConnectorID: fixture.connector.Record.Connector.ID, Entry: reference,
 			}},
 		}
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), disabled,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-corrupt-0002"),
 		); !isKind(err, errs.KindInternal) {
-			t.Fatalf("ReplaceBackupPolicyProtected(corrupt ref) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(corrupt ref) error = %v", err)
 		}
 	})
 
 	t.Run("config with none", func(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, true)
 		candidate := fixture.candidate(t, true, "none")
-		candidate.Sources = append([]BackupPolicySourceEvidence(nil), fixture.sources...)
+		candidate.Sources = append([]backupPolicySourceEvidence(nil), fixture.sources...)
 		candidate.Replacement.SourceIDs = make([]string, len(candidate.Sources))
 		for index := range candidate.Sources {
 			candidate.Replacement.SourceIDs[index] = candidate.Sources[index].Source.Record.ID
 		}
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), candidate,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-config-none-0001"),
 		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("ReplaceBackupPolicyProtected(config none) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(config none) error = %v", err)
 		}
 	})
 
@@ -312,11 +312,11 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		candidate.ConnectorOwnerIndex = nil
 		candidate.ConnectorReferences = nil
 		candidate.InitialKey = nil
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), candidate,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-disabled-config-0001"),
 		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("ReplaceBackupPolicyProtected(disabled config) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(disabled config) error = %v", err)
 		}
 	})
 
@@ -329,28 +329,28 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		duplicate.Source.ReadRevision++
 		candidate.Sources = append(candidate.Sources, duplicate)
 		candidate.Replacement.SourceIDs = append(candidate.Replacement.SourceIDs, duplicate.Source.Record.ID)
-		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), candidate,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-duplicate-0001"),
 		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("ReplaceBackupPolicyProtected(duplicate) error = %v", err)
+			t.Fatalf("replaceBackupPolicyProtected(duplicate) error = %v", err)
 		}
 	})
 
 	for _, test := range []struct {
 		name string
-		key  func(BackupPolicyReplacementCandidate) string
+		key  func(backupPolicyReplacementCandidate) string
 	}{
-		{name: "source environment index", key: func(candidate BackupPolicyReplacementCandidate) string {
+		{name: "source environment index", key: func(candidate backupPolicyReplacementCandidate) string {
 			return candidate.Sources[0].EnvironmentIndex.Key
 		}},
-		{name: "source identity index", key: func(candidate BackupPolicyReplacementCandidate) string {
+		{name: "source identity index", key: func(candidate backupPolicyReplacementCandidate) string {
 			return candidate.Sources[0].IdentityIndex.Key
 		}},
-		{name: "target owner index", key: func(candidate BackupPolicyReplacementCandidate) string {
+		{name: "target owner index", key: func(candidate backupPolicyReplacementCandidate) string {
 			return candidate.Sources[0].TargetOwnerIndex.Key
 		}},
-		{name: "connector owner index", key: func(candidate BackupPolicyReplacementCandidate) string {
+		{name: "connector owner index", key: func(candidate backupPolicyReplacementCandidate) string {
 			return candidate.ConnectorOwnerIndex.Key
 		}},
 	} {
@@ -364,13 +364,13 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 			if err != nil || !transaction.Succeeded {
 				t.Fatalf("delete index = %#v, %v", transaction, err)
 			}
-			result, err := fixture.repository.ReplaceBackupPolicyProtected(
+			result, err := fixture.repository.replaceBackupPolicyProtected(
 				context.Background(), candidate,
 				backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-index-race-0001"),
 			)
 			if err != nil || result.kind != idempotencyTransactionConflict ||
 				!isKind(result.conflict, errs.KindInternal) {
-				t.Fatalf("ReplaceBackupPolicyProtected(index corruption) = %#v, %v", result, err)
+				t.Fatalf("replaceBackupPolicyProtected(index corruption) = %#v, %v", result, err)
 			}
 		})
 	}
@@ -411,22 +411,22 @@ func TestBackupPolicyProtectedReplacementPreservesUnknownOutcomeAndConflicts(t *
 		t.Fatalf("newBackupPolicyRepository() error = %v", err)
 	}
 	marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-unknown-0001")
-	if _, err := repository.ReplaceBackupPolicyProtected(
+	if _, err := repository.replaceBackupPolicyProtected(
 		context.Background(), candidate, marker,
 	); !errors.Is(err, unknown) {
-		t.Fatalf("ReplaceBackupPolicyProtected(unknown) error = %v", err)
+		t.Fatalf("replaceBackupPolicyProtected(unknown) error = %v", err)
 	}
-	replayed, err := repository.ReplaceBackupPolicyProtected(context.Background(), candidate, marker)
+	replayed, err := repository.replaceBackupPolicyProtected(context.Background(), candidate, marker)
 	if err != nil || replayed.kind != idempotencyTransactionExisting {
-		t.Fatalf("ReplaceBackupPolicyProtected(after unknown) = %#v, %v", replayed, err)
+		t.Fatalf("replaceBackupPolicyProtected(after unknown) = %#v, %v", replayed, err)
 	}
-	conflict, err := repository.ReplaceBackupPolicyProtected(
+	conflict, err := repository.replaceBackupPolicyProtected(
 		context.Background(), candidate,
 		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-conflict-0001"),
 	)
 	if err != nil || conflict.kind != idempotencyTransactionConflict ||
 		!isKind(conflict.conflict, errs.KindStateConflict) {
-		t.Fatalf("ReplaceBackupPolicyProtected(stale) = %#v, %v", conflict, err)
+		t.Fatalf("replaceBackupPolicyProtected(stale) = %#v, %v", conflict, err)
 	}
 }
 
@@ -436,7 +436,7 @@ func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) 
 	t.Parallel()
 	fixture := newBackupPolicyReplacementFixture(t, false)
 	candidate := fixture.candidate(t, true, "age")
-	candidate.Sources = make([]BackupPolicySourceEvidence, 90)
+	candidate.Sources = make([]backupPolicySourceEvidence, 90)
 	candidate.Replacement.SourceIDs = make([]string, len(candidate.Sources))
 	for index := range candidate.Sources {
 		sourceID := ids.NewAt(ids.KindBackupSource, candidate.Replacement.UpdatedAt, int64(2600+index))
@@ -451,7 +451,7 @@ func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) 
 			CreatedAt: candidate.Replacement.UpdatedAt,
 		}
 		candidate.Replacement.SourceIDs[index] = sourceID
-		candidate.Sources[index] = BackupPolicySourceEvidence{Source: Versioned[BackupSourceRecord]{
+		candidate.Sources[index] = backupPolicySourceEvidence{Source: Versioned[BackupSourceRecord]{
 			Record: record, Revision: 1, ReadRevision: 1,
 		}, EnvironmentIndex: &KeyValue{
 			Key:   backupSourceEnvironmentKey(fixture.environment.Record.ID, sourceID),
@@ -466,11 +466,11 @@ func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) 
 			Value: []byte(volumeID), ModRevision: 1,
 		}}
 	}
-	if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+	if _, err := fixture.repository.replaceBackupPolicyProtected(
 		context.Background(), candidate,
 		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-bound-0001"),
 	); !isKind(err, errs.KindValidationFailed) {
-		t.Fatalf("ReplaceBackupPolicyProtected(bound) error = %v", err)
+		t.Fatalf("replaceBackupPolicyProtected(bound) error = %v", err)
 	}
 }
 
@@ -479,7 +479,7 @@ type backupPolicyReplacementFixture struct {
 	store       *memoryHierarchyStore
 	environment Versioned[EnvironmentRecord]
 	project     Versioned[ProjectRecord]
-	sources     []BackupPolicySourceEvidence
+	sources     []backupPolicySourceEvidence
 	connector   Versioned[ConnectorRecord]
 	now         time.Time
 }
@@ -527,7 +527,7 @@ func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backup
 	if err != nil {
 		t.Fatalf("EnsureBackupSource(config) error = %v", err)
 	}
-	sources := []BackupPolicySourceEvidence{backupPolicyReplacementSourceEvidence(
+	sources := []backupPolicySourceEvidence{backupPolicyReplacementSourceEvidence(
 		t, store, configSource, nil, nil,
 	)}
 	if includeVolume {
@@ -564,7 +564,7 @@ func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backup
 		if err != nil {
 			t.Fatalf("EnsureBackupSource(volume) error = %v", err)
 		}
-		sources = []BackupPolicySourceEvidence{
+		sources = []backupPolicySourceEvidence{
 			backupPolicyReplacementSourceEvidence(t, store, volumeSource, nil, &createdVolume),
 			backupPolicyReplacementSourceEvidence(t, store, configSource, nil, nil),
 		}
@@ -605,14 +605,14 @@ func (fixture *backupPolicyReplacementFixture) candidate(
 	t *testing.T,
 	enabled bool,
 	encryption string,
-) BackupPolicyReplacementCandidate {
+) backupPolicyReplacementCandidate {
 	t.Helper()
 	policy := BackupPolicyRecord{
 		EnvironmentID: fixture.environment.Record.ID,
 		Enabled:       enabled,
 		UpdatedAt:     fixture.now,
 	}
-	candidate := BackupPolicyReplacementCandidate{
+	candidate := backupPolicyReplacementCandidate{
 		Environment: fixture.environment,
 		Project:     fixture.project,
 		Replacement: policy,
@@ -641,7 +641,7 @@ func (fixture *backupPolicyReplacementFixture) candidate(
 		policy.SourceIDs[index] = selectedSources[index].Source.Record.ID
 	}
 	candidate.Replacement = policy
-	candidate.Sources = append([]BackupPolicySourceEvidence(nil), selectedSources...)
+	candidate.Sources = append([]backupPolicySourceEvidence(nil), selectedSources...)
 	connector := fixture.connector
 	candidate.Connector = &connector
 	candidate.ConnectorOwnerIndex = mustBackupPolicyIndex(
@@ -649,7 +649,7 @@ func (fixture *backupPolicyReplacementFixture) candidate(
 		fixture.store,
 		connectorEnvironmentKey(fixture.environment.Record.ID, fixture.connector.Record.Connector.ID),
 	)
-	candidate.ConnectorReferences = []BackupPolicyConnectorReferenceEvidence{{
+	candidate.ConnectorReferences = []backupPolicyConnectorReferenceEvidence{{
 		ConnectorID: fixture.connector.Record.Connector.ID,
 	}}
 	if encryption == "age" {
@@ -657,7 +657,7 @@ func (fixture *backupPolicyReplacementFixture) candidate(
 		if err != nil {
 			t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 		}
-		candidate.InitialKey = &BackupPolicyInitialKey{
+		candidate.InitialKey = &backupPolicyInitialKey{
 			Record: BackupKeyRecord{
 				EnvironmentID: fixture.environment.Record.ID,
 				Recipient:     identity.Recipient().String(), KeyEra: 1,
@@ -693,9 +693,9 @@ func backupPolicyReplacementSourceEvidence(
 	source Versioned[BackupSourceRecord],
 	attach *Versioned[AttachRecord],
 	volume *Versioned[VolumeRecord],
-) BackupPolicySourceEvidence {
+) backupPolicySourceEvidence {
 	t.Helper()
-	evidence := BackupPolicySourceEvidence{
+	evidence := backupPolicySourceEvidence{
 		Source: source,
 		EnvironmentIndex: mustBackupPolicyIndex(
 			t, store, backupSourceEnvironmentKey(source.Record.EnvironmentID, source.Record.ID),

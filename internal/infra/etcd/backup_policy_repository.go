@@ -25,7 +25,7 @@ func NewBackupPolicyRepository(store Store) (*BackupPolicyRepository, error) {
 
 func newBackupPolicyRepository(store hierarchyStore) (*BackupPolicyRepository, error) {
 	if store == nil {
-		return nil, errs.New(errs.KindInternal, "Backup Policy store is required")
+		return nil, errs.New(errs.KindInternal, "backup policy store is required")
 	}
 	return &BackupPolicyRepository{store: store, now: time.Now}, nil
 }
@@ -68,7 +68,7 @@ func (repository *BackupPolicyRepository) EnsureBackupSource(
 	}
 	return Versioned[BackupSourceRecord]{}, errs.New(
 		errs.KindInternal,
-		"Backup source ensure retry bound was not enforced",
+		"backup source ensure retry bound was not enforced",
 	)
 }
 
@@ -134,7 +134,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicy(
 	if result == nil {
 		return Versioned[BackupPolicyRecord]{}, false, errs.New(
 			errs.KindInternal,
-			"Backup Policy read is empty",
+			"backup policy read is empty",
 		)
 	}
 	if result.Entry == nil {
@@ -208,7 +208,7 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 	if index == nil {
 		return Versioned[BackupSourceRecord]{}, false, errs.New(
 			errs.KindInternal,
-			"Backup source identity read is empty",
+			"backup source identity read is empty",
 		)
 	}
 	if index.Entry == nil {
@@ -269,7 +269,7 @@ func validateBackupSourceHierarchy(
 		project.Revision <= 0 || project.ReadRevision < project.Revision ||
 		environment.Record.ProjectID != project.Record.ID || project.Record.Kind != ProjectKindTenant ||
 		project.Record.TenantID == "" {
-		return errs.New(errs.KindValidationFailed, "Backup source hierarchy is invalid")
+		return errs.New(errs.KindValidationFailed, "backup source hierarchy is invalid")
 	}
 	return nil
 }
@@ -280,16 +280,16 @@ func classifyBackupSourceCreateConflict(
 	project Versioned[ProjectRecord],
 ) error {
 	if len(values) != 8 {
-		return errs.New(errs.KindInternal, "Backup source create compare evidence is incomplete")
+		return errs.New(errs.KindInternal, "backup source create compare evidence is incomplete")
 	}
 	if values[2] != nil {
-		return errs.New(errs.KindStateConflict, "Backup source identity was created concurrently")
+		return errs.New(errs.KindStateConflict, "backup source identity was created concurrently")
 	}
 	if values[0] != nil || values[1] != nil {
-		return errs.New(errs.KindStateConflict, "Backup source stable identity collided")
+		return errs.New(errs.KindStateConflict, "backup source stable identity collided")
 	}
 	if values[3] == nil {
-		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
+		return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
 	if values[3].ModRevision != environment.Revision {
 		return stateConflict("environment", environment.Record.ID)
@@ -302,8 +302,8 @@ func classifyBackupSourceCreateConflict(
 	}
 	for _, index := range []int{5, 6, 7} {
 		if values[index] != nil {
-			return errs.New(errs.KindResourceInUse, "Backup source hierarchy deletion is in progress")
+			return errs.New(errs.KindResourceInUse, "backup source hierarchy deletion is in progress")
 		}
 	}
-	return errs.New(errs.KindStateConflict, "Backup source state changed")
+	return errs.New(errs.KindStateConflict, "backup source state changed")
 }

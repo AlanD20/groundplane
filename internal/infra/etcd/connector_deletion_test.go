@@ -210,7 +210,7 @@ func TestConnectorDeletionRacesBackupPolicyEnableWithExactlyOneWinner(t *testing
 	go func() {
 		ready.Done()
 		<-start
-		result, runErr := policies.ReplaceBackupPolicyProtected(ctx, candidate, policyMarker)
+		result, runErr := policies.replaceBackupPolicyProtected(ctx, candidate, policyMarker)
 		policyAttempt <- attempt{result: result, err: runErr}
 	}()
 	ready.Wait()
@@ -738,13 +738,13 @@ func newConnectorDeletionFixture(t *testing.T) *connectorDeletionFixture {
 func connectorDeletionPolicyCandidate(
 	t *testing.T,
 	fixture *connectorDeletionFixture,
-) BackupPolicyReplacementCandidate {
+) backupPolicyReplacementCandidate {
 	t.Helper()
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
 		t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 	}
-	return BackupPolicyReplacementCandidate{
+	return backupPolicyReplacementCandidate{
 		Environment: fixture.environment,
 		Project:     fixture.project,
 		Replacement: BackupPolicyRecord{
@@ -757,7 +757,7 @@ func connectorDeletionPolicyCandidate(
 			SourceIDs:     []string{fixture.source.Record.ID},
 			UpdatedAt:     fixture.now,
 		},
-		Sources: []BackupPolicySourceEvidence{{
+		Sources: []backupPolicySourceEvidence{{
 			Source: fixture.source,
 			EnvironmentIndex: connectorDeletionRequiredKey(
 				t,
@@ -780,10 +780,10 @@ func connectorDeletionPolicyCandidate(
 				fixture.environment.Record.ID, fixture.connector.Record.Connector.ID,
 			),
 		),
-		ConnectorReferences: []BackupPolicyConnectorReferenceEvidence{{
+		ConnectorReferences: []backupPolicyConnectorReferenceEvidence{{
 			ConnectorID: fixture.connector.Record.Connector.ID,
 		}},
-		InitialKey: &BackupPolicyInitialKey{
+		InitialKey: &backupPolicyInitialKey{
 			Record: BackupKeyRecord{
 				EnvironmentID: fixture.environment.Record.ID,
 				Recipient:     identity.Recipient().String(), KeyEra: 1,

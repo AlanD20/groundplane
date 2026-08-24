@@ -106,16 +106,16 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 		return err
 	}
 	if !validUTCInstant(record.UpdatedAt) {
-		return errs.New(errs.KindValidationFailed, "Backup Policy update time is invalid")
+		return errs.New(errs.KindValidationFailed, "backup policy update time is invalid")
 	}
 	if !utf8.ValidString(record.Frequency) || strings.TrimSpace(record.Frequency) != record.Frequency {
-		return errs.New(errs.KindValidationFailed, "Backup Policy frequency is invalid")
+		return errs.New(errs.KindValidationFailed, "backup policy frequency is invalid")
 	}
 	if record.Keep < 0 {
-		return errs.New(errs.KindValidationFailed, "Backup Policy retention cannot be negative")
+		return errs.New(errs.KindValidationFailed, "backup policy retention cannot be negative")
 	}
 	if record.Encryption != "" && record.Encryption != "age" && record.Encryption != "none" {
-		return errs.New(errs.KindValidationFailed, "Backup Policy encryption is invalid")
+		return errs.New(errs.KindValidationFailed, "backup policy encryption is invalid")
 	}
 	if record.ConnectorID != "" {
 		if err := validateID(ids.KindConnector, record.ConnectorID); err != nil {
@@ -128,7 +128,7 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 			return err
 		}
 		if _, duplicate := seen[sourceID]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Backup Policy source ids must be unique")
+			return errs.New(errs.KindValidationFailed, "backup policy source ids must be unique")
 		}
 		seen[sourceID] = struct{}{}
 	}
@@ -160,10 +160,10 @@ func validateBackupSourceRecord(record BackupSourceRecord) error {
 			return errs.New(errs.KindValidationFailed, "config Backup source must target its Environment")
 		}
 	default:
-		return errs.New(errs.KindValidationFailed, "Backup source kind is invalid")
+		return errs.New(errs.KindValidationFailed, "backup source kind is invalid")
 	}
 	if !validUTCInstant(record.CreatedAt) {
-		return errs.New(errs.KindValidationFailed, "Backup source creation time is invalid")
+		return errs.New(errs.KindValidationFailed, "backup source creation time is invalid")
 	}
 	return nil
 }
@@ -174,11 +174,11 @@ func validateBackupKeyRecord(record BackupKeyRecord) error {
 	}
 	recipient, err := age.ParseX25519Recipient(record.Recipient)
 	if err != nil || recipient.String() != record.Recipient {
-		return errs.New(errs.KindValidationFailed, "Backup key recipient is invalid")
+		return errs.New(errs.KindValidationFailed, "backup key recipient is invalid")
 	}
 	if record.KeyEra <= 0 || !validUTCInstant(record.CreatedAt) || !validUTCInstant(record.RotatedAt) ||
 		record.RotatedAt.Before(record.CreatedAt) {
-		return errs.New(errs.KindValidationFailed, "Backup key lifecycle is invalid")
+		return errs.New(errs.KindValidationFailed, "backup key lifecycle is invalid")
 	}
 	return nil
 }

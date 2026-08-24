@@ -84,8 +84,9 @@ const (
 )
 
 type routePolicy struct {
-	body      bodyClass
-	streaming bool
+	body         bodyClass
+	streaming    bool
+	validateJSON func([]byte) error
 }
 
 func (s *Server) jsonRoute(pattern string, handler http.HandlerFunc) {
@@ -195,7 +196,7 @@ func (l *httpLifecycle) serveOrdinary(
 
 	switch route.body {
 	case jsonBody:
-		if !l.server.prepareJSONBody(writer, r, l.policy.jsonBodyLimit) {
+		if !l.server.prepareJSONBody(writer, r, l.policy.jsonBodyLimit, nil) {
 			return
 		}
 	case blueprintBody:
@@ -269,16 +270,27 @@ func clearReadDeadline(controller *http.ResponseController, logger *slog.Logger)
 	}
 }
 
-func (s *Server) prepareJSONBody(w http.ResponseWriter, r *http.Request, limit int64) bool {
+func (s *Server) prepareJSONBody(
+	w http.ResponseWriter,
+	r *http.Request,
+	limit int64,
+	validate func([]byte) error,
+) bool {
 	if !s.limitRequestBody(w, r, limit) {
 		return false
 	}
-	if r.Body == nil || r.Body == http.NoBody {
-		return true
+	if validate != nil && !hasApplicationJSONContentType(r) {
+		s.writeRequestProblem(w, http.StatusBadRequest, "malformed request body")
+		return false
 	}
 
-	body, err := io.ReadAll(r.Body)
-	closeErr := r.Body.Close()
+	body := []byte(nil)
+	var err error
+	var closeErr error
+	if r.Body != nil && r.Body != http.NoBody {
+		body, err = io.ReadAll(r.Body)
+		closeErr = r.Body.Close()
+	}
 	if err != nil {
 		s.writeBodyReadProblem(w, err)
 		return false
@@ -287,9 +299,22 @@ func (s *Server) prepareJSONBody(w http.ResponseWriter, r *http.Request, limit i
 		s.writeRequestProblem(w, http.StatusBadRequest, "malformed request body")
 		return false
 	}
+	if validate != nil && validate(body) != nil {
+		s.writeRequestProblem(w, http.StatusBadRequest, "malformed request body")
+		return false
+	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
 	return true
+}
+
+func hasApplicationJSONContentType(r *http.Request) bool {
+	values := r.Header.Values("Content-Type")
+	if len(values) != 1 {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(values[0])
+	return err == nil && mediaType == "application/json"
 }
 
 // limitRequestBody performs the transport check shared by JSON and Blueprint

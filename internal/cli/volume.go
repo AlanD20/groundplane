@@ -1,10 +1,21 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/spf13/cobra"
+)
 
 // volume: list | add | edit | remove. Bind mounts cannot traverse
 // outside the environment's volume folder. See mvp.md,
 // "Environment-scoped volumes".
+func volumeEnvironmentID(cmd *cobra.Command) (string, error) {
+	argument := fromContext(cmd).Scope.Environment
+	if argument == "" {
+		return "", errs.New(errs.KindValidationFailed, "volume command requires --environment")
+	}
+	return resolveEnvironmentTarget(cmd, argument)
+}
+
 func newVolumeCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "volume", Short: "Volumes — persistent storage owned by an environment"}
 
@@ -12,8 +23,21 @@ func newVolumeCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List volumes",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, "/api/v1/volumes", scopeQuery(fromContext(cmd), "environment"))
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			environmentID, err := volumeEnvironmentID(cmd)
+			if err != nil {
+				return err
+			}
+			page, err := fromContext(cmd).Client.ListVolumes(cmd.Context(), environmentID, 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, volume := range page.Items {
+				items[index] = map[string]any{"id": volume.ID, "name": volume.Name}
+			}
+			headers, rows := tabulateVia(fromContext(cmd), items)
+			return fromContext(cmd).Out.Render(headers, rows, page)
 		},
 	})
 
