@@ -2,6 +2,8 @@ package executionplan
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"testing"
 
 	"filippo.io/age"
@@ -127,6 +129,39 @@ func TestValidateBackupCheckpointRequestAndAck(t *testing.T) {
 	}
 }
 
+// Rationale: the durable deduplication digest must remain independent of
+// protobuf wire serialization and assignment-envelope changes.
+func TestComputeBackupCheckpointPayloadDigestUsesVersionOneGrammar(t *testing.T) {
+	request := validBackupCheckpointRequest()
+	digest, err := ComputeBackupCheckpointPayloadDigest(request)
+	if err != nil {
+		t.Fatalf("ComputeBackupCheckpointPayloadDigest() error = %v", err)
+	}
+	var encoded bytes.Buffer
+	encoded.WriteString("groundplane.backup.checkpoint.v1")
+	encoded.WriteByte(0)
+	if err := binary.Write(
+		&encoded,
+		binary.BigEndian,
+		uint32(agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED),
+	); err != nil {
+		t.Fatalf("encode kind: %v", err)
+	}
+	pointID := request.GetArtifactPrepared().PointId
+	if err := binary.Write(&encoded, binary.BigEndian, uint32(len(pointID))); err != nil {
+		t.Fatalf("encode point length: %v", err)
+	}
+	encoded.WriteString(pointID)
+	if err := binary.Write(&encoded, binary.BigEndian, request.GetArtifactPrepared().StoredSizeBytes); err != nil {
+		t.Fatalf("encode stored size: %v", err)
+	}
+	encoded.Write(request.GetArtifactPrepared().StoredSha256)
+	want := sha256.Sum256(encoded.Bytes())
+	if !bytes.Equal(digest, want[:]) {
+		t.Fatalf("checkpoint digest = %x, want %x", digest, want)
+	}
+}
+
 // Rationale: no stale sequence, malformed digest, or kind/payload mismatch may
 // reach the future checkpoint transaction classifier.
 func TestValidateBackupCheckpointRequestRejectsMalformedDelivery(t *testing.T) {
@@ -232,11 +267,10 @@ func validBackupPlan(t *testing.T) *agentpb.ExecutionPlan {
 }
 
 func validBackupCheckpointRequest() *agentpb.BackupCheckpointRequest {
-	return &agentpb.BackupCheckpointRequest{
+	request := &agentpb.BackupCheckpointRequest{
 		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", Sequence: 1,
-		Kind:                 agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED,
-		ControlPayloadSha256: bytes.Repeat([]byte{1}, 32),
+		Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED,
 		Payload: &agentpb.BackupCheckpointRequest_ArtifactPrepared{
 			ArtifactPrepared: &agentpb.BackupArtifactPreparedCheckpoint{
 				PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", StoredSizeBytes: 4096,
@@ -244,6 +278,12 @@ func validBackupCheckpointRequest() *agentpb.BackupCheckpointRequest {
 			},
 		},
 	}
+	digest, err := ComputeBackupCheckpointPayloadDigest(request)
+	if err != nil {
+		panic(err)
+	}
+	request.ControlPayloadSha256 = digest
+	return request
 }
 
 func backupStep(stepID string, capture *agentpb.BackupSourceCapture) *agentpb.ExecutionStep {

@@ -177,6 +177,7 @@ message ControllerMessage {
     Shutdown shutdown = 4;
     MaterializationTransfer materialization_transfer = 5; // transient bytes; never durable Task or plan state
     BackupCheckpointAck backup_checkpoint_ack = 6;
+    BackupSecretSlotTransfer backup_secret_slot_transfer = 7;
   }
 }
 
@@ -421,6 +422,43 @@ message BackupCheckpointAck {
   string assignment_id = 2;
   string step_id = 3;
   uint32 sequence = 4;
+}
+
+// BackupSecretSlotTransfer is transient Controller-to-Agent traffic. Every
+// record repeats the complete assignment/purpose fence. Config Entry content
+// uses its own typed transfer and is never a secret-slot purpose.
+message BackupSecretSlotTransfer {
+  string task_id = 1;
+  string assignment_id = 2;
+  string step_id = 3;
+  BackupSecretSlotPurpose purpose = 4;
+  oneof record {
+    BackupSecretSlotHeader header = 5;
+    BackupSecretSlotChunk chunk = 6;
+    BackupSecretSlotEnd end = 7;
+  }
+}
+
+enum BackupSecretSlotPurpose {
+  BACKUP_SECRET_SLOT_PURPOSE_UNSPECIFIED = 0;
+  BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY = 1;
+  BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY = 2;
+  BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY = 3;
+  BACKUP_SECRET_SLOT_PURPOSE_OPERATOR_OLD_AGE_IDENTITY = 4;
+}
+
+message BackupSecretSlotHeader {
+  uint64 total_bytes = 1;
+  uint32 chunk_count = 2;
+}
+
+message BackupSecretSlotChunk {
+  uint32 sequence = 1; // one-based and contiguous within the exact slot fence
+  bytes content = 2;   // at most 32 KiB; transient and cleared after consumption
+}
+
+message BackupSecretSlotEnd {
+  uint32 chunk_count = 1;
 }
 
 enum BackupCheckpointKind {

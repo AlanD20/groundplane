@@ -1,7 +1,10 @@
 package executionplan
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/binary"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -29,10 +32,89 @@ func ValidateBackupCheckpointRequest(
 		len(owned.ControlPayloadSha256) != sha256.Size {
 		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint delivery identity is invalid")
 	}
-	if err := validateBackupCheckpointPayload(owned); err != nil {
+	digest, err := ComputeBackupCheckpointPayloadDigest(owned)
+	if err != nil {
 		return nil, err
 	}
+	if subtle.ConstantTimeCompare(digest, owned.ControlPayloadSha256) != 1 {
+		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint control payload digest does not match")
+	}
 	return owned, nil
+}
+
+// ComputeBackupCheckpointPayloadDigest implements the ADR 0024 version-one
+// protobuf-independent byte grammar. Assignment identity and the outer digest
+// are deliberately outside this Controller-protected control-payload digest.
+func ComputeBackupCheckpointPayloadDigest(request *agentpb.BackupCheckpointRequest) ([]byte, error) {
+	if request == nil {
+		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint request is required")
+	}
+	if err := RejectUnknown(request); err != nil {
+		return nil, err
+	}
+	if err := validateBackupCheckpointPayload(request); err != nil {
+		return nil, err
+	}
+	var encoded bytes.Buffer
+	encoded.WriteString("groundplane.backup.checkpoint.v1")
+	encoded.WriteByte(0)
+	writeCheckpointUint32(&encoded, uint32(request.Kind))
+	writePoint := func(pointID string) { writeCheckpointString(&encoded, pointID) }
+	switch payload := request.Payload.(type) {
+	case *agentpb.BackupCheckpointRequest_ArtifactPrepared:
+		writePoint(payload.ArtifactPrepared.PointId)
+		writeCheckpointUint64(&encoded, payload.ArtifactPrepared.StoredSizeBytes)
+		encoded.Write(payload.ArtifactPrepared.StoredSha256)
+	case *agentpb.BackupCheckpointRequest_UploadVerified:
+		writePoint(payload.UploadVerified.PointId)
+		writeCheckpointUint64(&encoded, payload.UploadVerified.StoredSizeBytes)
+		encoded.Write(payload.UploadVerified.StoredSha256)
+	case *agentpb.BackupCheckpointRequest_SourceCleanupCompleted:
+		writePoint(payload.SourceCleanupCompleted.PointId)
+	case *agentpb.BackupCheckpointRequest_RestoreArtifactValidated:
+		writePoint(payload.RestoreArtifactValidated.PointId)
+		encoded.Write(payload.RestoreArtifactValidated.StoredSha256)
+		encoded.Write(payload.RestoreArtifactValidated.DecodedSha256)
+	case *agentpb.BackupCheckpointRequest_VolumeTreeStaged:
+		writePoint(payload.VolumeTreeStaged.PointId)
+		encoded.Write(payload.VolumeTreeStaged.StagedTreeManifestSha256)
+	case *agentpb.BackupCheckpointRequest_VolumeTreeExchanged:
+		writePoint(payload.VolumeTreeExchanged.PointId)
+		encoded.Write(payload.VolumeTreeExchanged.LiveTreeManifestSha256)
+	case *agentpb.BackupCheckpointRequest_VolumeReplacedTreeCleaned:
+		writePoint(payload.VolumeReplacedTreeCleaned.PointId)
+	case *agentpb.BackupCheckpointRequest_ConfigGenerationStaged:
+		writePoint(payload.ConfigGenerationStaged.PointId)
+		writeCheckpointString(&encoded, payload.ConfigGenerationStaged.RestoreGenerationId)
+		encoded.Write(payload.ConfigGenerationStaged.EntryGenerationManifestSha256)
+	case *agentpb.BackupCheckpointRequest_ConfigGenerationActivated:
+		writePoint(payload.ConfigGenerationActivated.PointId)
+		writeCheckpointString(&encoded, payload.ConfigGenerationActivated.RestoreGenerationId)
+		writeCheckpointUint64(&encoded, payload.ConfigGenerationActivated.RenderGeneration)
+	case *agentpb.BackupCheckpointRequest_PostgresRestoreVerified:
+		writePoint(payload.PostgresRestoreVerified.PointId)
+	case *agentpb.BackupCheckpointRequest_RemoteObjectAbsent:
+		writePoint(payload.RemoteObjectAbsent.PointId)
+	}
+	digest := sha256.Sum256(encoded.Bytes())
+	return append([]byte(nil), digest[:]...), nil
+}
+
+func writeCheckpointString(target *bytes.Buffer, value string) {
+	writeCheckpointUint32(target, uint32(len(value)))
+	target.WriteString(value)
+}
+
+func writeCheckpointUint32(target *bytes.Buffer, value uint32) {
+	var encoded [4]byte
+	binary.BigEndian.PutUint32(encoded[:], value)
+	target.Write(encoded[:])
+}
+
+func writeCheckpointUint64(target *bytes.Buffer, value uint64) {
+	var encoded [8]byte
+	binary.BigEndian.PutUint64(encoded[:], value)
+	target.Write(encoded[:])
 }
 
 // ValidateBackupCheckpointAck validates the identity-only acknowledgement and
