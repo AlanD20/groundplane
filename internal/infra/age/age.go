@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,18 @@ import (
 
 const maxIdentitySize = 4096
 const encryptionStreamBufferSize = 32 << 10
+
+// These sizes are fixed by the age v1 binary format and the pinned
+// filippo.io/age v1.3.1 implementation for exactly one X25519 recipient.
+// Source: https://age-encryption.org/v1
+// Source: https://github.com/FiloSottile/age/tree/v1.3.1
+const (
+	x25519HeaderSize int64 = 168
+	streamNonceSize  int64 = 16
+	streamChunkSize  int64 = 64 << 10
+	streamTagSize    int64 = 16
+	storedFixedSize        = x25519HeaderSize + streamNonceSize
+)
 
 // Keypair is a per-environment backup-encryption identity, generated
 // LAZILY the first time backups are enabled for that environment (a
@@ -179,6 +192,27 @@ func Encrypt(recipient string, plaintext []byte) ([]byte, error) {
 		return nil, err
 	}
 	return encrypt(parsed, plaintext)
+}
+
+// StoredSizeUpperBound returns the exact binary age ciphertext size produced
+// for plaintext by Groundplane's one-X25519-recipient streaming path.
+func StoredSizeUpperBound(plaintext int64) (int64, error) {
+	if plaintext < 0 {
+		return 0, errs.New(errs.KindValidationFailed, "age: plaintext size must be non-negative")
+	}
+
+	chunks := int64(1)
+	if plaintext > 0 {
+		chunks += (plaintext - 1) / streamChunkSize
+	}
+	if plaintext > math.MaxInt64-storedFixedSize {
+		return 0, errs.New(errs.KindValidationFailed, "age: plaintext size exceeds representable stored-size bound")
+	}
+	remaining := int64(math.MaxInt64) - storedFixedSize - plaintext
+	if chunks > remaining/streamTagSize {
+		return 0, errs.New(errs.KindValidationFailed, "age: plaintext size exceeds representable stored-size bound")
+	}
+	return plaintext + storedFixedSize + chunks*streamTagSize, nil
 }
 
 // InterruptFunc must promptly interrupt any in-flight input Read or output
