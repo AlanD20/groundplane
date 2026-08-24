@@ -104,7 +104,13 @@ func environmentBlueprintManifestKey(environmentID string, revisionID string) st
 }
 
 func environmentBlueprintFileKey(environmentID string, revisionID string, index int) string {
-	return environmentBlueprintRevisionPrefix(environmentID, revisionID) + fmt.Sprintf("files/%06d", index+1)
+	return environmentBlueprintRevisionPrefix(
+		environmentID,
+		revisionID,
+	) + fmt.Sprintf(
+		"files/%06d",
+		index+1,
+	)
 }
 
 // GetEnvironmentBlueprintHead returns the current immutable revision pointer.
@@ -153,12 +159,17 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	if err := validateID(ids.KindTask, revisionID); err != nil {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
-	manifestResult, err := repository.store.Get(ctx, environmentBlueprintManifestKey(environmentID, revisionID))
+	manifestResult, err := repository.store.Get(
+		ctx,
+		environmentBlueprintManifestKey(environmentID, revisionID),
+	)
 	if err != nil {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	if manifestResult.Entry == nil {
-		return Versioned[EnvironmentBlueprintRevision]{ReadRevision: manifestResult.ReadRevision}, false, nil
+		return Versioned[EnvironmentBlueprintRevision]{
+			ReadRevision: manifestResult.ReadRevision,
+		}, false, nil
 	}
 	manifest, err := decodeEnvironmentBlueprintManifest(manifestResult.Entry.Value)
 	if err != nil {
@@ -181,7 +192,8 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	if err != nil {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
-	if len(fileResult.Values) != len(keys) || fileResult.ReadRevision != manifestResult.ReadRevision {
+	if len(fileResult.Values) != len(keys) ||
+		fileResult.ReadRevision != manifestResult.ReadRevision {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, corruptEnvironmentBlueprint()
 	}
 	revision := EnvironmentBlueprintRevision{
@@ -238,10 +250,13 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	if err := validateEnvironment(environment.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 || environment.Revision <= 0 ||
-		project.ReadRevision < project.Revision || environment.ReadRevision < environment.Revision ||
+	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 ||
+		environment.Revision <= 0 ||
+		project.ReadRevision < project.Revision ||
+		environment.ReadRevision < environment.Revision ||
 		environment.Record.ProjectID != project.Record.ID ||
-		environment.Record.ProvisioningState != EnvironmentProvisioningReady || expectedHeadRevision < 0 {
+		environment.Record.ProvisioningState != EnvironmentProvisioningReady ||
+		expectedHeadRevision < 0 {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
 			"Environment is not ready for Blueprint apply",
@@ -250,60 +265,6 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	if err := validateEnvironmentBlueprintRevision(revision); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	previousProjection, hasPreviousProjection, err := repository.GetEnvironmentComposeProjection(
-		ctx,
-		environment.Record.ID,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if (expectedHeadRevision == 0 && hasPreviousProjection) ||
-		(expectedHeadRevision > 0 && (!hasPreviousProjection || previousProjection.Revision != expectedHeadRevision)) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment desired state changed")
-	}
-	if projection.EnvironmentID != environment.Record.ID || projection.BlueprintRevisionID != revision.RevisionID {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"Environment Compose projection does not identify its Blueprint revision",
-		)
-	}
-	if err := validateEnvironmentComposeProjectionAdvance(
-		previousProjection.Record,
-		hasPreviousProjection,
-		projection,
-	); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	preparedZones, err := repository.prepareEnvironmentBlueprintZoneChanges(
-		ctx,
-		environment,
-		projection,
-		zoneChanges,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clearPreparedEnvironmentBlueprintZones(preparedZones)
-	preparedServices, err := repository.prepareEnvironmentBlueprintServiceChanges(
-		ctx,
-		environment,
-		projection,
-		serviceChanges,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clearPreparedEnvironmentBlueprintServices(preparedServices)
-	preparedRoutes, err := repository.prepareEnvironmentBlueprintRouteChanges(
-		ctx,
-		environment,
-		serviceChanges,
-		routeChanges,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clearPreparedEnvironmentBlueprintRoutes(preparedRoutes)
 	if revision.EnvironmentID != environment.Record.ID || revision.RevisionID != task.ID ||
 		!revision.CreatedAt.Equal(task.CreatedAt) || task.Type != TaskUpdate ||
 		task.Target != environment.Record.ID || task.Status != TaskStatusPending ||
@@ -318,7 +279,8 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		marker.Locator.ScopeID != environment.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed, "Blueprint apply marker does not match its Environment-scoped Task",
+			errs.KindValidationFailed,
+			"Blueprint apply marker does not match its Environment-scoped Task",
 		)
 	}
 	task = cloneTaskRecord(task)
@@ -332,7 +294,82 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-
+	if existing, found, err := existingIdempotencyTransaction(
+		ctx,
+		repository.store,
+		marker,
+	); err != nil ||
+		found {
+		return existing, err
+	}
+	fence, err := repository.loadEnvironmentBlueprintMutationFence(
+		ctx, project, environment,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	previousProjection, hasPreviousProjection, err := repository.getEnvironmentBlueprintProjectionAtRevision(
+		ctx,
+		environment.Record.ID,
+		fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if (expectedHeadRevision == 0 && hasPreviousProjection) ||
+		(expectedHeadRevision > 0 && (!hasPreviousProjection || previousProjection.Revision != expectedHeadRevision)) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Environment desired state changed",
+		)
+	}
+	if projection.EnvironmentID != environment.Record.ID ||
+		projection.BlueprintRevisionID != revision.RevisionID {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment Compose projection does not identify its Blueprint revision",
+		)
+	}
+	if err := validateEnvironmentComposeProjectionAdvance(
+		previousProjection.Record,
+		hasPreviousProjection,
+		projection,
+	); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	preparedZones, err := repository.prepareEnvironmentBlueprintZoneChangesAtRevision(
+		ctx,
+		environment,
+		projection,
+		zoneChanges,
+		fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearPreparedEnvironmentBlueprintZones(preparedZones)
+	preparedServices, err := repository.prepareEnvironmentBlueprintServiceChangesAtRevision(
+		ctx,
+		environment,
+		projection,
+		serviceChanges,
+		fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearPreparedEnvironmentBlueprintServices(preparedServices)
+	preparedRoutes, err := repository.prepareEnvironmentBlueprintRouteChangesAtRevision(
+		ctx,
+		environment,
+		serviceChanges,
+		routeChanges,
+		fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearPreparedEnvironmentBlueprintRoutes(preparedRoutes)
 	manifestValue, err := encodeEnvironmentBlueprintManifest(revision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -363,7 +400,11 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  MutationPut,
+			Key:   taskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
@@ -380,18 +421,24 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			Mutation{Type: MutationPut, Key: key, Value: append([]byte(nil), file.Content...)},
 		)
 	}
-	conditions = append(conditions,
-		Condition{Key: environmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
-		Condition{Key: environmentComposeProjectionKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
-		Condition{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		Condition{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		Condition{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		Condition{Key: deletionTombstoneKey("project", project.Record.ID)},
-		Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
+	conditions = append(
+		conditions,
+		Condition{
+			Key:         environmentBlueprintHeadKey(revision.EnvironmentID),
+			ModRevision: expectedHeadRevision,
+		},
+		Condition{
+			Key:         environmentComposeProjectionKey(revision.EnvironmentID),
+			ModRevision: expectedHeadRevision,
+		},
 	)
 	mutations = append(
 		mutations,
-		Mutation{Type: MutationPut, Key: environmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
+		Mutation{
+			Type:  MutationPut,
+			Key:   environmentBlueprintHeadKey(revision.EnvironmentID),
+			Value: reference,
+		},
 		Mutation{
 			Type:  MutationPut,
 			Key:   environmentComposeProjectionKey(revision.EnvironmentID),
@@ -421,35 +468,56 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		if zone.change.Current == nil {
 			mutations = append(
 				mutations,
-				Mutation{Type: MutationPut, Key: zoneKey(zone.change.Record.Desired.ID), Value: zone.value},
 				Mutation{
 					Type:  MutationPut,
-					Key:   zoneNameKey(zone.change.Record.EnvironmentID, zone.change.Record.Desired.Name),
+					Key:   zoneKey(zone.change.Record.Desired.ID),
+					Value: zone.value,
+				},
+				Mutation{
+					Type: MutationPut,
+					Key: zoneNameKey(
+						zone.change.Record.EnvironmentID,
+						zone.change.Record.Desired.Name,
+					),
 					Value: []byte(zone.change.Record.Desired.ID),
 				},
 				Mutation{
-					Type:  MutationPut,
-					Key:   zoneOwnerKey(zone.change.Record.EnvironmentID, zone.change.Record.Desired.ID),
+					Type: MutationPut,
+					Key: zoneOwnerKey(
+						zone.change.Record.EnvironmentID,
+						zone.change.Record.Desired.ID,
+					),
 					Value: []byte(zone.change.Record.Desired.ID),
 				},
 			)
 		}
 	}
 	conditions = append(conditions, Condition{
-		Key: zonePoolRegistryKey(environment.Record.ID), ModRevision: preparedZones.registry.Revision,
+		Key: zonePoolRegistryKey(
+			environment.Record.ID,
+		),
+		ModRevision: preparedZones.registry.Revision,
 	})
 	if len(preparedZones.registryValue) != 0 {
 		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: zonePoolRegistryKey(environment.Record.ID), Value: preparedZones.registryValue,
+			Type:  MutationPut,
+			Key:   zonePoolRegistryKey(environment.Record.ID),
+			Value: preparedZones.registryValue,
 		})
 	}
 	for _, service := range preparedServices {
 		primaryCondition := Condition{Key: serviceKey(service.change.Record.Desired.ID)}
 		nameCondition := Condition{
-			Key: serviceNameKey(service.change.Record.EnvironmentID, service.change.Record.Desired.Name),
+			Key: serviceNameKey(
+				service.change.Record.EnvironmentID,
+				service.change.Record.Desired.Name,
+			),
 		}
 		ownerCondition := Condition{
-			Key: serviceOwnerKey(service.change.Record.EnvironmentID, service.change.Record.Desired.ID),
+			Key: serviceOwnerKey(
+				service.change.Record.EnvironmentID,
+				service.change.Record.Desired.ID,
+			),
 		}
 		if service.change.Current != nil {
 			primaryCondition.ModRevision = service.change.Current.Revision
@@ -464,19 +532,27 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			Condition{Key: deletionTombstoneKey("service", service.change.Record.Desired.ID)},
 		)
 		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: serviceKey(service.change.Record.Desired.ID), Value: service.value,
+			Type:  MutationPut,
+			Key:   serviceKey(service.change.Record.Desired.ID),
+			Value: service.value,
 		})
 		if service.change.Current == nil {
 			mutations = append(
 				mutations,
 				Mutation{
-					Type:  MutationPut,
-					Key:   serviceNameKey(service.change.Record.EnvironmentID, service.change.Record.Desired.Name),
+					Type: MutationPut,
+					Key: serviceNameKey(
+						service.change.Record.EnvironmentID,
+						service.change.Record.Desired.Name,
+					),
 					Value: []byte(service.change.Record.Desired.ID),
 				},
 				Mutation{
-					Type:  MutationPut,
-					Key:   serviceOwnerKey(service.change.Record.EnvironmentID, service.change.Record.Desired.ID),
+					Type: MutationPut,
+					Key: serviceOwnerKey(
+						service.change.Record.EnvironmentID,
+						service.change.Record.Desired.ID,
+					),
 					Value: []byte(service.change.Record.Desired.ID),
 				},
 			)
@@ -511,8 +587,11 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			mutations = append(
 				mutations,
 				Mutation{
-					Type:  MutationPut,
-					Key:   routeOwnerKey(route.change.Record.EnvironmentID, route.change.Record.Desired.ID),
+					Type: MutationPut,
+					Key: routeOwnerKey(
+						route.change.Record.EnvironmentID,
+						route.change.Record.Desired.ID,
+					),
 					Value: []byte(route.change.Record.Desired.ID),
 				},
 				Mutation{
@@ -527,6 +606,13 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 			)
 		}
 	}
+	conditions = append(conditions, fence.transactionConditions()...)
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(epochMutation.Value)
+	mutations = append(mutations, epochMutation)
 	componentPublication, err := prepareComponentTaskPublication(
 		environment,
 		task,
@@ -540,14 +626,21 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	conditions = append(conditions, componentPublication.conditions...)
 	mutations = append(mutations, componentPublication.mutations...)
 	baseClassifier := classifyEnvironmentBlueprintApplyConflict(
-		len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedZones,
-		preparedServices, preparedRoutes,
+		len(revision.Files), expectedHeadRevision, environment, task.OperationID, preparedZones,
+		preparedServices, preparedRoutes, fence,
 	)
-	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	taskTenant, err := loadConnectorTaskInitiationTenantAtRevision(
+		ctx, repository.store, project, fence.readAtRevision(),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(
+		taskTenant,
+		project,
+		environment,
+		TaskActorOperator,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -561,6 +654,12 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if environmentBlueprintTransactionOperationCount(plan, marker) > maximumTransactionOperations {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint apply exceeds the 96 compare-and-mutation limit",
+		)
+	}
 	idempotency, err := newIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -571,21 +670,22 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 func classifyEnvironmentBlueprintApplyConflict(
 	fileCount int,
 	expectedHeadRevision int64,
-	project Versioned[ProjectRecord],
 	environment Versioned[EnvironmentRecord],
 	operationID string,
 	zones preparedEnvironmentBlueprintZones,
 	services []preparedEnvironmentBlueprintService,
 	routes []preparedEnvironmentBlueprintRoute,
+	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		baseCount := 12 + fileCount
+		baseCount := 7 + fileCount
 		zoneRegistryIndex := baseCount + 4*len(zones.changes)
-		if len(values) != zoneRegistryIndex+1+4*len(services)+4*len(routes) {
+		domainCount := zoneRegistryIndex + 1 + 4*len(services) + 4*len(routes)
+		if len(values) != domainCount+len(fence.conditions) {
 			return errs.New(errs.KindInternal, "Blueprint apply compare evidence is incomplete")
 		}
 		if err := classifyEnvironmentBlueprintBaseConflict(
-			values[:baseCount], fileCount, expectedHeadRevision, project, environment, operationID,
+			values[:baseCount], fileCount, expectedHeadRevision, operationID,
 		); err != nil {
 			return err
 		}
@@ -598,7 +698,10 @@ func classifyEnvironmentBlueprintApplyConflict(
 			zoneID := zone.change.Record.Desired.ID
 			if zone.change.Current == nil {
 				if primary != nil || owner != nil {
-					return errs.New(errs.KindStateConflict, "Zone stable identity is already in use")
+					return errs.New(
+						errs.KindStateConflict,
+						"Zone stable identity is already in use",
+					)
 				}
 				if name != nil {
 					return errs.New(errs.KindNameConflict, "Zone name is already in use")
@@ -610,7 +713,8 @@ func classifyEnvironmentBlueprintApplyConflict(
 				if primary.ModRevision != zone.change.Current.Revision {
 					return stateConflict("zone", zoneID)
 				}
-				if name == nil || owner == nil || string(name.Value) != zoneID || string(owner.Value) != zoneID {
+				if name == nil || owner == nil || string(name.Value) != zoneID ||
+					string(owner.Value) != zoneID {
 					return errs.New(errs.KindInternal, "Zone indexes changed or are corrupt")
 				}
 			}
@@ -634,7 +738,10 @@ func classifyEnvironmentBlueprintApplyConflict(
 			serviceID := service.change.Record.Desired.ID
 			if service.change.Current == nil {
 				if primary != nil || owner != nil {
-					return errs.New(errs.KindStateConflict, "Service stable identity is already in use")
+					return errs.New(
+						errs.KindStateConflict,
+						"Service stable identity is already in use",
+					)
 				}
 				if name != nil {
 					return errs.New(errs.KindNameConflict, "Service name is already in use")
@@ -646,7 +753,8 @@ func classifyEnvironmentBlueprintApplyConflict(
 				if primary.ModRevision != service.change.Current.Revision {
 					return stateConflict("service", serviceID)
 				}
-				if name == nil || owner == nil || string(name.Value) != serviceID || string(owner.Value) != serviceID {
+				if name == nil || owner == nil || string(name.Value) != serviceID ||
+					string(owner.Value) != serviceID {
 					return errs.New(errs.KindInternal, "Service indexes changed or are corrupt")
 				}
 			}
@@ -664,7 +772,10 @@ func classifyEnvironmentBlueprintApplyConflict(
 			routeID := route.change.Record.Desired.ID
 			if route.change.Current == nil {
 				if primary != nil || owner != nil {
-					return errs.New(errs.KindStateConflict, "Route stable identity is already in use")
+					return errs.New(
+						errs.KindStateConflict,
+						"Route stable identity is already in use",
+					)
 				}
 				if match != nil {
 					return errs.New(errs.KindNameConflict, "Route host and path are already in use")
@@ -676,13 +787,17 @@ func classifyEnvironmentBlueprintApplyConflict(
 				if primary.ModRevision != route.change.Current.Revision {
 					return stateConflict("route", routeID)
 				}
-				if owner == nil || match == nil || string(owner.Value) != routeID || string(match.Value) != routeID {
+				if owner == nil || match == nil || string(owner.Value) != routeID ||
+					string(match.Value) != routeID {
 					return errs.New(errs.KindInternal, "Route indexes changed or are corrupt")
 				}
 			}
 			if tombstone != nil {
 				return errs.New(errs.KindResourceInUse, "Route deletion is in progress")
 			}
+		}
+		if conflict := fence.classifyCAS(values[domainCount:]); conflict != nil {
+			return conflict
 		}
 		return errs.New(errs.KindStateConflict, "Environment Blueprint resource state changed")
 	}
@@ -692,8 +807,6 @@ func classifyEnvironmentBlueprintBaseConflict(
 	values []*KeyValue,
 	fileCount int,
 	expectedHeadRevision int64,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
 	operationID string,
 ) error {
 	if values[2] != nil {
@@ -715,7 +828,10 @@ func classifyEnvironmentBlueprintBaseConflict(
 	}
 	for index := 4; index < 5+fileCount; index++ {
 		if values[index] != nil {
-			return errs.New(errs.KindInternal, "Blueprint apply collided with immutable revision state")
+			return errs.New(
+				errs.KindInternal,
+				"Blueprint apply collided with immutable revision state",
+			)
 		}
 	}
 	headIndex := 5 + fileCount
@@ -729,30 +845,86 @@ func classifyEnvironmentBlueprintBaseConflict(
 			(values[projectionIndex] == nil || values[projectionIndex].ModRevision != expectedHeadRevision)) {
 		return errs.New(errs.KindStateConflict, "Environment Compose projection changed")
 	}
-	environmentIndex := headIndex + 2
-	projectIndex := headIndex + 3
-	if values[environmentIndex] == nil {
-		return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
-	}
-	if values[environmentIndex].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
-	}
-	if values[projectIndex] == nil {
-		return errs.New(errs.KindProjectNotFound, "project was not found")
-	}
-	if values[projectIndex].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
-	}
-	if values[headIndex+4] != nil {
-		return errs.New(errs.KindResourceInUse, "Environment deletion is in progress")
-	}
-	if values[headIndex+5] != nil {
-		return errs.New(errs.KindResourceInUse, "Project deletion is in progress")
-	}
-	if values[headIndex+6] != nil {
-		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
-	}
 	return nil
+}
+
+func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
+	ctx context.Context,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+) (environmentMutationFenceEvidence, error) {
+	keys := []string{environmentKey(environment.Record.ID), projectKey(project.Record.ID)}
+	anchor, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	if err != nil {
+		return environmentMutationFenceEvidence{}, err
+	}
+	if anchor == nil || anchor.ReadRevision <= 0 || len(anchor.Values) != len(keys) ||
+		anchor.Values[0] == nil || anchor.Values[1] == nil {
+		return environmentMutationFenceEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Environment Blueprint hierarchy is unavailable",
+		)
+	}
+	defer clearKeyValues(anchor.Values)
+	if anchor.Values[0].ModRevision != environment.Revision ||
+		anchor.Values[1].ModRevision != project.Revision {
+		return environmentMutationFenceEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Environment Blueprint hierarchy changed",
+		)
+	}
+	return loadOrdinaryEnvironmentMutationFence(
+		ctx, repository.store, environment.Record.ID, anchor.ReadRevision,
+	)
+}
+
+func (repository *HierarchyRepository) getEnvironmentBlueprintProjectionAtRevision(
+	ctx context.Context,
+	environmentID string,
+	readRevision int64,
+) (Versioned[EnvironmentComposeProjection], bool, error) {
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{environmentComposeProjectionKey(environmentID)}, Revision: readRevision,
+	})
+	if err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if result == nil || result.ReadRevision != readRevision || len(result.Values) != 1 {
+		return Versioned[EnvironmentComposeProjection]{}, false, errs.New(
+			errs.KindInternal,
+			"Environment Compose projection fixed-revision read is incomplete",
+		)
+	}
+	defer clearKeyValues(result.Values)
+	if result.Values[0] == nil {
+		return Versioned[EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
+	}
+	projection, err := decodeEnvironmentComposeProjection(result.Values[0].Value)
+	if err != nil || projection.EnvironmentID != environmentID {
+		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	return Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: result.Values[0].ModRevision, ReadRevision: readRevision,
+	}, true, nil
+}
+
+func environmentBlueprintTransactionOperationCount(
+	plan *idempotencyMutationPlan,
+	marker IdempotencyMarker,
+) int {
+	if plan == nil {
+		return maximumTransactionOperations + 1
+	}
+	conditions := len(plan.conditions) + 1
+	mutations := len(plan.mutations) + 1
+	if marker.ReplayTarget != nil {
+		conditions++
+		mutations++
+	}
+	if !marker.RetainUntil.IsZero() {
+		mutations++
+	}
+	return conditions + mutations
 }
 
 type preparedEnvironmentBlueprintService struct {
@@ -781,6 +953,22 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZoneChanges(
 	projection EnvironmentComposeProjection,
 	changes []EnvironmentBlueprintZoneChange,
 ) (preparedEnvironmentBlueprintZones, error) {
+	return repository.prepareEnvironmentBlueprintZoneChangesAtRevision(
+		ctx,
+		environment,
+		projection,
+		changes,
+		0,
+	)
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintZoneChangesAtRevision(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	projection EnvironmentComposeProjection,
+	changes []EnvironmentBlueprintZoneChange,
+	readRevision int64,
+) (preparedEnvironmentBlueprintZones, error) {
 	if len(changes) != len(projection.Networks) {
 		return preparedEnvironmentBlueprintZones{}, errs.New(
 			errs.KindValidationFailed,
@@ -795,7 +983,9 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZoneChanges(
 	if err != nil {
 		return preparedEnvironmentBlueprintZones{}, err
 	}
-	registry, err := zoneRepository.getZonePoolRegistry(ctx, environment.Record.ID)
+	registry, err := repository.getEnvironmentBlueprintZoneRegistryAtRevision(
+		ctx, zoneRepository, environment.Record.ID, readRevision,
+	)
 	if err != nil {
 		return preparedEnvironmentBlueprintZones{}, err
 	}
@@ -820,8 +1010,11 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZoneChanges(
 		}
 		item := preparedEnvironmentBlueprintZone{change: change}
 		if change.Current != nil {
-			if err := validateZoneRecord(change.Current.Record); err != nil || change.Current.Revision <= 0 ||
-				change.Current.ReadRevision < change.Current.Revision || change.Current.Record != change.Record {
+			if err := validateZoneRecord(
+				change.Current.Record,
+			); err != nil || change.Current.Revision <= 0 ||
+				change.Current.ReadRevision < change.Current.Revision ||
+				change.Current.Record != change.Record {
 				clearPreparedEnvironmentBlueprintZones(result)
 				return preparedEnvironmentBlueprintZones{}, errs.New(
 					errs.KindValidationFailed,
@@ -840,14 +1033,16 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZoneChanges(
 					zoneNameKey(environment.Record.ID, change.Record.Desired.Name),
 					zoneOwnerKey(environment.Record.ID, zoneID),
 				},
-				Revision: change.Current.ReadRevision,
+				Revision: readRevision,
 			})
 			if err != nil {
 				clearPreparedEnvironmentBlueprintZones(result)
 				return preparedEnvironmentBlueprintZones{}, err
 			}
-			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-				string(indexes.Values[0].Value) != zoneID || string(indexes.Values[1].Value) != zoneID {
+			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil ||
+				indexes.Values[1] == nil ||
+				string(indexes.Values[0].Value) != zoneID ||
+				string(indexes.Values[1].Value) != zoneID {
 				clearPreparedEnvironmentBlueprintZones(result)
 				return preparedEnvironmentBlueprintZones{}, errs.New(
 					errs.KindInternal,
@@ -881,6 +1076,42 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZoneChanges(
 	return result, nil
 }
 
+func (repository *HierarchyRepository) getEnvironmentBlueprintZoneRegistryAtRevision(
+	ctx context.Context,
+	zones *ZoneRepository,
+	environmentID string,
+	readRevision int64,
+) (Versioned[zonePoolRegistry], error) {
+	if readRevision == 0 {
+		return zones.getZonePoolRegistry(ctx, environmentID)
+	}
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{zonePoolRegistryKey(environmentID)}, Revision: readRevision,
+	})
+	if err != nil {
+		return Versioned[zonePoolRegistry]{}, err
+	}
+	if result == nil || result.ReadRevision != readRevision || len(result.Values) != 1 {
+		return Versioned[zonePoolRegistry]{}, errs.New(
+			errs.KindInternal,
+			"Zone pool registry read is incomplete",
+		)
+	}
+	defer clearKeyValues(result.Values)
+	if result.Values[0] == nil {
+		return Versioned[zonePoolRegistry]{
+			Record: zonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: readRevision,
+		}, nil
+	}
+	registry, err := decodeEnvelope[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
+	if err != nil || validateZonePoolRegistry(registry) != nil {
+		return Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
+	}
+	return Versioned[zonePoolRegistry]{
+		Record: registry, Revision: result.Values[0].ModRevision, ReadRevision: readRevision,
+	}, nil
+}
+
 func clearPreparedEnvironmentBlueprintZones(zones preparedEnvironmentBlueprintZones) {
 	for index := range zones.changes {
 		clear(zones.changes[index].value)
@@ -894,8 +1125,27 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges
 	projection EnvironmentComposeProjection,
 	changes []EnvironmentBlueprintServiceChange,
 ) ([]preparedEnvironmentBlueprintService, error) {
+	return repository.prepareEnvironmentBlueprintServiceChangesAtRevision(
+		ctx,
+		environment,
+		projection,
+		changes,
+		0,
+	)
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChangesAtRevision(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	projection EnvironmentComposeProjection,
+	changes []EnvironmentBlueprintServiceChange,
+	readRevision int64,
+) ([]preparedEnvironmentBlueprintService, error) {
 	if len(changes) != len(projection.Services) {
-		return nil, errs.New(errs.KindValidationFailed, "Blueprint Service changes do not cover the Compose projection")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Service changes do not cover the Compose projection",
+		)
 	}
 	identities := make(map[string]string, len(projection.Services))
 	for _, identity := range projection.Services {
@@ -908,10 +1158,14 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges
 			return nil, err
 		}
 		serviceID := change.Record.Desired.ID
-		if change.Record.EnvironmentID != environment.Record.ID || change.Record.BackingNetworkID != "" ||
+		if change.Record.EnvironmentID != environment.Record.ID ||
+			change.Record.BackingNetworkID != "" ||
 			identities[serviceID] != change.Record.Desired.Name {
 			clearPreparedEnvironmentBlueprintServices(prepared)
-			return nil, errs.New(errs.KindValidationFailed, "Blueprint Service change does not match its projection")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Service change does not match its projection",
+			)
 		}
 		item := preparedEnvironmentBlueprintService{change: change}
 		if change.Current != nil {
@@ -934,14 +1188,16 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges
 					serviceNameKey(environment.Record.ID, change.Record.Desired.Name),
 					serviceOwnerKey(environment.Record.ID, serviceID),
 				},
-				Revision: change.Current.ReadRevision,
+				Revision: readRevision,
 			})
 			if err != nil {
 				clearPreparedEnvironmentBlueprintServices(prepared)
 				return nil, err
 			}
-			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-				string(indexes.Values[0].Value) != serviceID || string(indexes.Values[1].Value) != serviceID {
+			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil ||
+				indexes.Values[1] == nil ||
+				string(indexes.Values[0].Value) != serviceID ||
+				string(indexes.Values[1].Value) != serviceID {
 				clearPreparedEnvironmentBlueprintServices(prepared)
 				return nil, errs.New(errs.KindInternal, "Service indexes are missing or corrupt")
 			}
@@ -978,6 +1234,22 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 	services []EnvironmentBlueprintServiceChange,
 	changes []EnvironmentBlueprintRouteChange,
 ) ([]preparedEnvironmentBlueprintRoute, error) {
+	return repository.prepareEnvironmentBlueprintRouteChangesAtRevision(
+		ctx,
+		environment,
+		services,
+		changes,
+		0,
+	)
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChangesAtRevision(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	services []EnvironmentBlueprintServiceChange,
+	changes []EnvironmentBlueprintRouteChange,
+	readRevision int64,
+) ([]preparedEnvironmentBlueprintRoute, error) {
 	targets := make(map[string]struct{}, len(services))
 	for _, service := range services {
 		targets[service.Record.Desired.ID] = struct{}{}
@@ -999,7 +1271,8 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 		_, targetExists := targets[change.Record.Desired.TargetServiceID]
 		_, duplicateID := seenIDs[routeID]
 		_, duplicateMatch := seenMatches[matchKey]
-		if change.Record.EnvironmentID != environment.Record.ID || !targetExists || duplicateID || duplicateMatch {
+		if change.Record.EnvironmentID != environment.Record.ID || !targetExists || duplicateID ||
+			duplicateMatch {
 			clearPreparedEnvironmentBlueprintRoutes(prepared)
 			return nil, errs.New(
 				errs.KindValidationFailed,
@@ -1027,14 +1300,16 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 					routeOwnerKey(environment.Record.ID, routeID),
 					matchKey,
 				},
-				Revision: change.Current.ReadRevision,
+				Revision: readRevision,
 			})
 			if err != nil {
 				clearPreparedEnvironmentBlueprintRoutes(prepared)
 				return nil, err
 			}
-			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-				string(indexes.Values[0].Value) != routeID || string(indexes.Values[1].Value) != routeID {
+			if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil ||
+				indexes.Values[1] == nil ||
+				string(indexes.Values[0].Value) != routeID ||
+				string(indexes.Values[1].Value) != routeID {
 				clearPreparedEnvironmentBlueprintRoutes(prepared)
 				return nil, errs.New(errs.KindInternal, "Route indexes are missing or corrupt")
 			}
@@ -1063,11 +1338,13 @@ func encodeEnvironmentBlueprintManifest(revision EnvironmentBlueprintRevision) (
 		return nil, err
 	}
 	manifest := environmentBlueprintManifest{
-		EnvironmentID: revision.EnvironmentID, RevisionID: revision.RevisionID,
-		RootPath: revision.RootPath, ComposeSources: append([]string(nil), revision.ComposeSources...),
-		Interpolation: cloneEnvironmentBlueprintInterpolation(revision.Interpolation),
-		Files:         make([]environmentBlueprintManifestFile, len(revision.Files)),
-		CreatedAt:     revision.CreatedAt.Format(time.RFC3339Nano),
+		EnvironmentID:  revision.EnvironmentID,
+		RevisionID:     revision.RevisionID,
+		RootPath:       revision.RootPath,
+		ComposeSources: append([]string(nil), revision.ComposeSources...),
+		Interpolation:  cloneEnvironmentBlueprintInterpolation(revision.Interpolation),
+		Files:          make([]environmentBlueprintManifestFile, len(revision.Files)),
+		CreatedAt:      revision.CreatedAt.Format(time.RFC3339Nano),
 	}
 	for index, file := range revision.Files {
 		digest := sha256.Sum256(file.Content)
@@ -1079,7 +1356,10 @@ func encodeEnvironmentBlueprintManifest(revision EnvironmentBlueprintRevision) (
 }
 
 func decodeEnvironmentBlueprintManifest(value []byte) (environmentBlueprintManifest, error) {
-	manifest, err := decodeEnvelope[environmentBlueprintManifest](value, "environment-blueprint-revision")
+	manifest, err := decodeEnvelope[environmentBlueprintManifest](
+		value,
+		"environment-blueprint-revision",
+	)
 	if err != nil {
 		return environmentBlueprintManifest{}, err
 	}
@@ -1105,10 +1385,13 @@ func validateEnvironmentBlueprintRevision(revision EnvironmentBlueprintRevision)
 		return err
 	}
 	manifest := environmentBlueprintManifest{
-		EnvironmentID: revision.EnvironmentID, RevisionID: revision.RevisionID,
-		RootPath: revision.RootPath, ComposeSources: revision.ComposeSources,
-		Interpolation: revision.Interpolation, CreatedAt: revision.CreatedAt.Format(time.RFC3339Nano),
-		Files: make([]environmentBlueprintManifestFile, len(revision.Files)),
+		EnvironmentID:  revision.EnvironmentID,
+		RevisionID:     revision.RevisionID,
+		RootPath:       revision.RootPath,
+		ComposeSources: revision.ComposeSources,
+		Interpolation:  revision.Interpolation,
+		CreatedAt:      revision.CreatedAt.Format(time.RFC3339Nano),
+		Files:          make([]environmentBlueprintManifestFile, len(revision.Files)),
 	}
 	for index, file := range revision.Files {
 		digest := sha256.Sum256(file.Content)
@@ -1135,10 +1418,15 @@ func validateEnvironmentBlueprintManifest(manifest environmentBlueprintManifest)
 	totalBytes := 0
 	previous := ""
 	for index, file := range manifest.Files {
-		if validateEnvironmentBlueprintPath(file.Path) != nil || (index > 0 && file.Path <= previous) ||
-			file.Size < 0 || file.Size > environmentBlueprintMaxFileBytes ||
+		if validateEnvironmentBlueprintPath(file.Path) != nil ||
+			(index > 0 && file.Path <= previous) ||
+			file.Size < 0 ||
+			file.Size > environmentBlueprintMaxFileBytes ||
 			len(file.SHA256) != sha256.Size*2 {
-			return errs.New(errs.KindValidationFailed, "Blueprint revision file metadata is invalid")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Blueprint revision file metadata is invalid",
+			)
 		}
 		decoded, err := hex.DecodeString(file.SHA256)
 		if err != nil || len(decoded) != sha256.Size || hex.EncodeToString(decoded) != file.SHA256 {
@@ -1146,7 +1434,10 @@ func validateEnvironmentBlueprintManifest(manifest environmentBlueprintManifest)
 		}
 		totalBytes += file.Size
 		if totalBytes > environmentBlueprintMaxTotalBytes {
-			return errs.New(errs.KindValidationFailed, "Blueprint revision exceeds its total size limit")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Blueprint revision exceeds its total size limit",
+			)
 		}
 		declared[file.Path] = struct{}{}
 		previous = file.Path
@@ -1154,20 +1445,32 @@ func validateEnvironmentBlueprintManifest(manifest environmentBlueprintManifest)
 	seenSources := make(map[string]struct{}, len(manifest.ComposeSources))
 	for _, source := range manifest.ComposeSources {
 		if validateEnvironmentBlueprintPath(source) != nil {
-			return errs.New(errs.KindValidationFailed, "Blueprint revision Compose source is invalid")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Blueprint revision Compose source is invalid",
+			)
 		}
 		if _, exists := declared[source]; !exists {
-			return errs.New(errs.KindValidationFailed, "Blueprint revision Compose source is undeclared")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Blueprint revision Compose source is undeclared",
+			)
 		}
 		if _, duplicate := seenSources[source]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Blueprint revision Compose sources are duplicated")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Blueprint revision Compose sources are duplicated",
+			)
 		}
 		seenSources[source] = struct{}{}
 	}
 	for key, value := range manifest.Interpolation {
 		if !environmentBlueprintInterpolationKey.MatchString(key) || !utf8.ValidString(value) ||
 			strings.ContainsRune(value, 0) {
-			return errs.New(errs.KindValidationFailed, "Blueprint revision interpolation is invalid")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Blueprint revision interpolation is invalid",
+			)
 		}
 	}
 	return nil
@@ -1175,7 +1478,9 @@ func validateEnvironmentBlueprintManifest(manifest environmentBlueprintManifest)
 
 func validateEnvironmentBlueprintPath(value string) error {
 	if value == "" || !utf8.ValidString(value) || strings.ContainsRune(value, 0) ||
-		len(value) > environmentBlueprintMaxPathBytes || strings.Contains(value, `\`) || path.IsAbs(value) {
+		len(
+			value,
+		) > environmentBlueprintMaxPathBytes || strings.Contains(value, `\`) || path.IsAbs(value) {
 		return errs.New(errs.KindValidationFailed, "Blueprint revision path is invalid")
 	}
 	cleaned := path.Clean(value)

@@ -53,25 +53,55 @@ func (repository *ConnectorRepository) CreateConnector(
 		return Versioned[ConnectorRecord]{}, err
 	}
 	defer clear(credentialValue)
-	conditions := connectorCreateConditions(environment, project, record)
+	connector := record.Connector
+	fence, evidence, err := repository.loadConnectorMutationFence(
+		ctx,
+		environment,
+		project,
+		[]string{
+			connectorRecordKey(connector.ID),
+			connectorNameKey(connector.EnvironmentID, connector.Name),
+			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+			connectorCredentialValueKey(connector.ID),
+			deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
+		},
+	)
+	if err != nil {
+		return Versioned[ConnectorRecord]{}, err
+	}
+	clearKeyValues(evidence.Values)
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return Versioned[ConnectorRecord]{}, err
+	}
+	defer clear(epochMutation.Value)
+	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
 		{
-			Type: MutationPut, Key: connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
+			Type:  MutationPut,
+			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
 			Value: []byte(record.Connector.ID),
 		},
 		{
-			Type: MutationPut, Key: connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
+			Type:  MutationPut,
+			Key:   connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
 			Value: []byte(record.Connector.ID),
 		},
-		{Type: MutationPut, Key: connectorCredentialValueKey(record.Connector.ID), Value: credentialValue},
+		{
+			Type:  MutationPut,
+			Key:   connectorCredentialValueKey(record.Connector.ID),
+			Value: credentialValue,
+		},
+		epochMutation,
 	})
 	if err != nil {
 		return Versioned[ConnectorRecord]{}, err
 	}
 	if !result.Succeeded {
+		defer clearKeyValues(result.FailureReads)
 		return Versioned[ConnectorRecord]{}, classifyConnectorCreateConflict(
-			result.FailureReads, environment, project,
+			result.FailureReads, fence,
 		)
 	}
 	return Versioned[ConnectorRecord]{
@@ -107,6 +137,14 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if existing, found, err := existingIdempotencyTransaction(
+		ctx,
+		repository.store,
+		marker,
+	); err != nil ||
+		found {
+		return existing, err
+	}
 	primaryValue, err := encodeConnectorRecord(record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -119,21 +157,51 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	mutations := []Mutation{
 		{Type: MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
 		{
-			Type: MutationPut, Key: connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
+			Type:  MutationPut,
+			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
 			Value: []byte(record.Connector.ID),
 		},
 		{
-			Type: MutationPut, Key: connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
+			Type:  MutationPut,
+			Key:   connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
 			Value: []byte(record.Connector.ID),
 		},
-		{Type: MutationPut, Key: connectorCredentialValueKey(record.Connector.ID), Value: credentialValue},
+		{
+			Type:  MutationPut,
+			Key:   connectorCredentialValueKey(record.Connector.ID),
+			Value: credentialValue,
+		},
 	}
+	connector := record.Connector
+	fence, evidence, err := repository.loadConnectorMutationFence(
+		ctx,
+		environment,
+		project,
+		[]string{
+			connectorRecordKey(connector.ID),
+			connectorNameKey(connector.EnvironmentID, connector.Name),
+			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+			connectorCredentialValueKey(connector.ID),
+			deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
+		},
+	)
+	if err != nil {
+		clearMutationValues(mutations)
+		return IdempotencyTransactionResult{}, err
+	}
+	clearKeyValues(evidence.Values)
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		clearMutationValues(mutations)
+		return IdempotencyTransactionResult{}, err
+	}
+	mutations = append(mutations, epochMutation)
 	defer clearMutationValues(mutations)
 	plan, err := newIdempotencyMutationPlan(
-		connectorCreateConditions(environment, project, record),
+		append(connectorCreateConditions(record), fence.transactionConditions()...),
 		mutations,
 		func(_ int64, values []*KeyValue) error {
-			return classifyConnectorCreateConflict(values, environment, project)
+			return classifyConnectorCreateConflict(values, fence)
 		},
 	)
 	if err != nil {
@@ -232,8 +300,6 @@ func connectorNameKey(environmentID string, name string) string {
 }
 
 func connectorCreateConditions(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	record ConnectorRecord,
 ) []Condition {
 	connector := record.Connector
@@ -242,16 +308,80 @@ func connectorCreateConditions(
 		{Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
 		{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
 		{Key: connectorCredentialValueKey(connector.ID)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("connector", connector.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 	}
 	return conditions
+}
+
+func (repository *ConnectorRepository) loadConnectorMutationFence(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	domainKeys []string,
+) (environmentMutationFenceEvidence, *GetManyResult, error) {
+	keys := append([]string(nil), domainKeys...)
+	environmentIndex := len(keys)
+	keys = append(keys, environmentKey(environment.Record.ID))
+	projectIndex := len(keys)
+	keys = append(keys, projectKey(project.Record.ID))
+	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	if err != nil {
+		return environmentMutationFenceEvidence{}, nil, err
+	}
+	if result == nil || result.ReadRevision <= 0 || len(result.Values) != len(keys) {
+		return environmentMutationFenceEvidence{}, nil, errs.New(
+			errs.KindInternal,
+			"Connector mutation fixed-revision evidence is incomplete",
+		)
+	}
+	for index, value := range result.Values {
+		if value != nil && value.Key != keys[index] {
+			clearKeyValues(result.Values)
+			return environmentMutationFenceEvidence{}, nil, errs.New(
+				errs.KindInternal,
+				"Connector mutation fixed-revision evidence is corrupt",
+			)
+		}
+	}
+	if result.Values[environmentIndex] == nil {
+		clearKeyValues(result.Values)
+		return environmentMutationFenceEvidence{}, nil, errs.New(
+			errs.KindEnvironmentNotFound,
+			"Connector Environment was not found",
+		)
+	}
+	if result.Values[environmentIndex].ModRevision != environment.Revision {
+		clearKeyValues(result.Values)
+		return environmentMutationFenceEvidence{}, nil, stateConflict(
+			"Connector Environment",
+			environment.Record.ID,
+		)
+	}
+	if result.Values[projectIndex] == nil {
+		clearKeyValues(result.Values)
+		return environmentMutationFenceEvidence{}, nil, errs.New(
+			errs.KindProjectNotFound,
+			"Connector Project was not found",
+		)
+	}
+	if result.Values[projectIndex].ModRevision != project.Revision {
+		clearKeyValues(result.Values)
+		return environmentMutationFenceEvidence{}, nil, stateConflict(
+			"Connector Project",
+			project.Record.ID,
+		)
+	}
+	fence, err := loadOrdinaryEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		environment.Record.ID,
+		result.ReadRevision,
+	)
+	if err != nil {
+		clearKeyValues(result.Values)
+		return environmentMutationFenceEvidence{}, nil, err
+	}
+	return fence, result, nil
 }
 
 func validateConnectorHierarchy(
@@ -278,7 +408,10 @@ func validateConnectorHierarchy(
 	}
 	if record.Connector.EnvironmentID != environment.Record.ID ||
 		environment.Record.ProjectID != project.Record.ID {
-		return errs.New(errs.KindConnectorScopeInvalid, "Connector must have exactly one Environment owner")
+		return errs.New(
+			errs.KindConnectorScopeInvalid,
+			"Connector must have exactly one Environment owner",
+		)
 	}
 	return nil
 }
@@ -295,13 +428,9 @@ func validateConnectorVersion(current Versioned[ConnectorRecord]) error {
 
 func classifyConnectorCreateConflict(
 	reads []*KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	fence environmentMutationFenceEvidence,
 ) error {
-	want := 9
-	if project.Record.TenantID != "" {
-		want++
-	}
+	want := 5 + len(fence.conditions)
 	if len(reads) != want {
 		return errs.New(errs.KindInternal, "Connector create conflict read is incomplete")
 	}
@@ -311,11 +440,11 @@ func classifyConnectorCreateConflict(
 	if reads[1] != nil {
 		return errs.New(errs.KindStateConflict, "Connector name already exists in the Environment")
 	}
-	if reads[4] == nil {
-		return errs.New(errs.KindEnvironmentNotFound, "Connector Environment was not found")
+	if reads[4] != nil {
+		return errs.New(errs.KindResourceInUse, "Connector deletion is in progress")
 	}
-	if reads[5] == nil {
-		return errs.New(errs.KindProjectNotFound, "Connector Project was not found")
+	if conflict := fence.classifyCAS(reads[5:]); conflict != nil {
+		return conflict
 	}
 	return errs.New(errs.KindStateConflict, "Connector owner changed or is being deleted")
 }

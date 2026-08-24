@@ -14,15 +14,23 @@ func TestConnectorRecordNormalizesCompleteS3Decision(t *testing.T) {
 	// Rationale: persistence must not leave endpoint addressing or object-key
 	// prefix behavior to an SDK default.
 	record, err := NewConnectorRecord(core.Connector{
-		ID:            ids.NewAt(ids.KindConnector, time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC), 1),
-		EnvironmentID: ids.NewAt(ids.KindEnvironment, time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC), 2),
-		Name:          "primary-backups",
-		Kind:          core.ConnectorKindS3Compatible,
-		Endpoint:      "https://objects.example.test/",
-		Bucket:        "groundplane-backups",
-		Prefix:        "production/daily",
-		Region:        "auto",
-		PathStyle:     true,
+		ID: ids.NewAt(
+			ids.KindConnector,
+			time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC),
+			1,
+		),
+		EnvironmentID: ids.NewAt(
+			ids.KindEnvironment,
+			time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC),
+			2,
+		),
+		Name:      "primary-backups",
+		Kind:      core.ConnectorKindS3Compatible,
+		Endpoint:  "https://objects.example.test/",
+		Bucket:    "groundplane-backups",
+		Prefix:    "production/daily",
+		Region:    "auto",
+		PathStyle: true,
 		Credentials: map[string]core.ConnectorCredential{
 			core.ConnectorCredentialAccessKey: {
 				Kind: core.ConnectorCredentialSecretRef, SecretRef: "S3_ACCESS_KEY",
@@ -59,7 +67,10 @@ func TestConnectorRepositoryCreatesListsAndReadsEncryptedCredentialsAtomically(t
 	}
 	now := time.Date(2026, 8, 23, 14, 0, 0, 0, time.UTC)
 	record := testConnectorRecord(t, environment.Record.ID, now, 10, "primary-backups")
-	credentials, err := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("age-ciphertext"))
+	credentials, err := NewConnectorEncryptedCredentials(
+		record.Connector.ID,
+		[]byte("age-ciphertext"),
+	)
 	if err != nil {
 		t.Fatalf("NewConnectorEncryptedCredentials() error = %v", err)
 	}
@@ -85,11 +96,18 @@ func TestConnectorRepositoryCreatesListsAndReadsEncryptedCredentialsAtomically(t
 	page, err := repository.ListConnectors(
 		context.Background(), environment.Record.ID, PageRequest{Limit: 10},
 	)
-	if err != nil || len(page.Items) != 1 || page.Items[0].Record.Connector.ID != record.Connector.ID {
+	if err != nil || len(page.Items) != 1 ||
+		page.Items[0].Record.Connector.ID != record.Connector.ID {
 		t.Fatalf("ListConnectors() = %#v, %v", page, err)
 	}
 
-	duplicate := testConnectorRecord(t, environment.Record.ID, now.Add(time.Second), 11, "primary-backups")
+	duplicate := testConnectorRecord(
+		t,
+		environment.Record.ID,
+		now.Add(time.Second),
+		11,
+		"primary-backups",
+	)
 	duplicateCredentials, err := NewConnectorEncryptedCredentials(
 		duplicate.Connector.ID, []byte("other-ciphertext"),
 	)
@@ -142,40 +160,8 @@ func testConnectorHierarchy(
 	t *testing.T,
 ) (*memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
 	t.Helper()
-	now := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	tenantID := ids.NewAt(ids.KindTenant, now, 1)
-	project := ProjectRecord{
-		ID: ids.NewAt(ids.KindProject, now, 2), TenantID: tenantID,
-		Slug: "sample-project", Name: "Sample Project", Kind: ProjectKindTenant,
-	}
-	environment, err := NewProvisioningEnvironment(
-		"/var/lib/groundplane/volumes",
-		project,
-		ids.NewAt(ids.KindEnvironment, now, 3),
-		"production",
-		"10.40.0.0/24",
-		ids.NewAt(ids.KindTask, now, 4),
-		now,
-	)
-	if err != nil {
-		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
-	}
-	store := newMemoryHierarchyStore()
-	result, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: tenantKey(tenantID), Value: []byte("tenant")},
-		{Type: MutationPut, Key: projectKey(project.ID), Value: []byte("project")},
-		{Type: MutationPut, Key: environmentKey(environment.ID), Value: []byte("environment")},
-	})
-	if err != nil || !result.Succeeded {
-		t.Fatalf("seed hierarchy = %#v, %v", result, err)
-	}
-	return store,
-		Versioned[EnvironmentRecord]{
-			Record: environment, Revision: result.Revision, ReadRevision: result.Revision,
-		},
-		Versioned[ProjectRecord]{
-			Record: project, Revision: result.Revision, ReadRevision: result.Revision,
-		}
+	_, store, environment, project, _ := routeRepositoryTestHierarchy(t)
+	return store, environment, project
 }
 
 func testConnectorRecord(

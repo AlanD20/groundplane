@@ -32,7 +32,14 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 		fixture.connector, fixture.project, fixture.environment, fixture.now.Add(time.Minute), 2500,
 	)
 	result, err := connectors.BeginConnectorDeletionWithTask(
-		ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		ctx,
+		fixture.environment,
+		fixture.project,
+		fixture.connector,
+		tombstone,
+		intent,
+		task,
+		marker,
 	)
 	if err != nil {
 		t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
@@ -41,19 +48,43 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("deletion outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
+	epochAfterBegin := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	)
 	storedIntent, found, err := connectors.GetConnectorRemovalIntent(ctx, task.ID)
 	if err != nil || !found || storedIntent.Record != intent {
 		t.Fatalf("GetConnectorRemovalIntent() = %#v/%v/%v", storedIntent, found, err)
 	}
 	replayed, err := connectors.BeginConnectorDeletionWithTask(
-		ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		ctx,
+		fixture.environment,
+		fixture.project,
+		fixture.connector,
+		tombstone,
+		intent,
+		task,
+		marker,
 	)
 	if err != nil {
 		t.Fatalf("BeginConnectorDeletionWithTask(replay) error = %v", err)
 	}
 	outcome, _, conflict, classifyErr = replayed.Classify()
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting {
-		t.Fatalf("deletion replay outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+		t.Fatalf(
+			"deletion replay outcome/conflict/error = %v/%v/%v",
+			outcome,
+			conflict,
+			classifyErr,
+		)
+	}
+	if epochAfterReplay := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	); epochAfterReplay != epochAfterBegin {
+		t.Fatalf("deletion replay epoch = %d, want %d", epochAfterReplay, epochAfterBegin)
 	}
 	assertConnectorDeletionVisible(t, connectors, fixture.connector.Record.Connector.ID)
 	page, err := connectors.ListConnectors(
@@ -64,7 +95,11 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 	}
 	assertConnectorDeletionKeyState(t, fixture, task, true, true)
 	assertConnectorCredentialPresence(t, fixture.store, fixture.connector.Record.Connector.ID, true)
-	if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextControllerTask(
+		ctx,
+		task.CreatedAt.Add(time.Second),
+	); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	terminal, err := tasks.AcknowledgeControllerTask(
@@ -108,15 +143,31 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	task, marker, tombstone, intent := connectorDeletionTestTask(t,
-		fixture.connector, fixture.project, fixture.environment, fixture.now.Add(2*time.Minute), 2510,
+	task, marker, tombstone, intent := connectorDeletionTestTask(
+		t,
+		fixture.connector,
+		fixture.project,
+		fixture.environment,
+		fixture.now.Add(2*time.Minute),
+		2510,
 	)
 	if _, err := connectors.BeginConnectorDeletionWithTask(
-		ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		ctx,
+		fixture.environment,
+		fixture.project,
+		fixture.connector,
+		tombstone,
+		intent,
+		task,
+		marker,
 	); err != nil {
 		t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
 	}
-	if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextControllerTask(
+		ctx,
+		task.CreatedAt.Add(time.Second),
+	); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
@@ -130,8 +181,19 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 	assertConnectorDeletionKeyState(t, fixture, task, true, false)
 
 	retryID := ids.NewAt(ids.KindTask, task.CreatedAt.Add(3*time.Second), 2520)
-	retryMarker := pendingRetryMarker(task, retryID, task.CreatedAt.Add(3*time.Second), "connector-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker); err != nil {
+	retryMarker := pendingRetryMarker(
+		task,
+		retryID,
+		task.CreatedAt.Add(3*time.Second),
+		"connector-retry-key-0001",
+	)
+	if _, err := tasks.RetryTask(
+		ctx,
+		task.ID,
+		retryID,
+		TaskActorOperator,
+		retryMarker,
+	); err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
 	assertConnectorDeletionVisible(t, connectors, task.Target)
@@ -139,7 +201,10 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 	if err != nil || !found || claim.Task.Record.ID != retryID {
 		t.Fatalf("ClaimNextControllerTask(retry) = %#v/%v/%v", claim, found, err)
 	}
-	expired, err := tasks.ExpireTimedOutTasks(ctx, claim.Assignment.Record.Deadline.Add(time.Second))
+	expired, err := tasks.ExpireTimedOutTasks(
+		ctx,
+		claim.Assignment.Record.Deadline.Add(time.Second),
+	)
 	if err != nil || expired != 1 {
 		t.Fatalf("ExpireTimedOutTasks() = %d/%v", expired, err)
 	}
@@ -155,11 +220,21 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 	abortMarker := pendingRetryMarker(
 		timedOut.Record, abortID, task.CreatedAt.Add(5*time.Second), "connector-retry-key-0002",
 	)
-	if _, err := tasks.RetryTask(ctx, retryID, abortID, TaskActorOperator, abortMarker); err != nil {
+	if _, err := tasks.RetryTask(
+		ctx,
+		retryID,
+		abortID,
+		TaskActorOperator,
+		abortMarker,
+	); err != nil {
 		t.Fatalf("RetryTask(after timeout) error = %v", err)
 	}
 	assertConnectorDeletionVisible(t, connectors, task.Target)
-	if _, err := tasks.AbortPendingTask(ctx, abortID, task.CreatedAt.Add(6*time.Second)); err != nil {
+	if _, err := tasks.AbortPendingTask(
+		ctx,
+		abortID,
+		task.CreatedAt.Add(6*time.Second),
+	); err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
 	assertConnectorDeletionVisible(t, connectors, task.Target)
@@ -181,8 +256,13 @@ func TestConnectorDeletionRacesBackupPolicyEnableWithExactlyOneWinner(t *testing
 	if err != nil {
 		t.Fatalf("newBackupPolicyRepository() error = %v", err)
 	}
-	task, deleteMarker, tombstone, intent := connectorDeletionTestTask(t,
-		fixture.connector, fixture.project, fixture.environment, fixture.now.Add(3*time.Minute), 2540,
+	task, deleteMarker, tombstone, intent := connectorDeletionTestTask(
+		t,
+		fixture.connector,
+		fixture.project,
+		fixture.environment,
+		fixture.now.Add(3*time.Minute),
+		2540,
 	)
 	candidate := connectorDeletionPolicyCandidate(t, fixture)
 	policyMarker := backupPolicyReplacementMarker(
@@ -241,7 +321,11 @@ func TestConnectorDeletionRacesBackupPolicyEnableWithExactlyOneWinner(t *testing
 		string(DeletionTargetConnector), fixture.connector.Record.Connector.ID,
 	))
 	if (reference != nil) == (tombstoneEntry != nil) {
-		t.Fatalf("reference/tombstone outcome mismatch: reference=%#v tombstone=%#v", reference, tombstoneEntry)
+		t.Fatalf(
+			"reference/tombstone outcome mismatch: reference=%#v tombstone=%#v",
+			reference,
+			tombstoneEntry,
+		)
 	}
 	assertConnectorDeletionVisible(t, connectors, fixture.connector.Record.Connector.ID)
 }
@@ -299,8 +383,13 @@ func TestConnectorDeletionRejectsMalformedTaskAndMarker(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newConnectorRepository() error = %v", err)
 			}
-			task, marker, tombstone, intent := connectorDeletionTestTask(t,
-				fixture.connector, fixture.project, fixture.environment, fixture.now.Add(7*time.Minute), 2700,
+			task, marker, tombstone, intent := connectorDeletionTestTask(
+				t,
+				fixture.connector,
+				fixture.project,
+				fixture.environment,
+				fixture.now.Add(7*time.Minute),
+				2700,
 			)
 			task.Params = cloneStringMap(task.Params)
 			mutate(&task, &marker)
@@ -330,16 +419,35 @@ func TestConnectorDeletionPreservesUnknownOutcomeForExactReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newConnectorRepository() error = %v", err)
 	}
-	task, marker, tombstone, intent := connectorDeletionTestTask(t,
-		fixture.connector, fixture.project, fixture.environment, fixture.now.Add(8*time.Minute), 2710,
+	task, marker, tombstone, intent := connectorDeletionTestTask(
+		t,
+		fixture.connector,
+		fixture.project,
+		fixture.environment,
+		fixture.now.Add(8*time.Minute),
+		2710,
 	)
 	if _, err := connectors.BeginConnectorDeletionWithTask(
-		ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		ctx,
+		fixture.environment,
+		fixture.project,
+		fixture.connector,
+		tombstone,
+		intent,
+		task,
+		marker,
 	); !errors.Is(err, unknown) {
 		t.Fatalf("BeginConnectorDeletionWithTask(unknown) error = %v", err)
 	}
 	replay, err := connectors.BeginConnectorDeletionWithTask(
-		ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		ctx,
+		fixture.environment,
+		fixture.project,
+		fixture.connector,
+		tombstone,
+		intent,
+		task,
+		marker,
 	)
 	if err != nil {
 		t.Fatalf("BeginConnectorDeletionWithTask(replay) error = %v", err)
@@ -349,7 +457,13 @@ func TestConnectorDeletionPreservesUnknownOutcomeForExactReplay(t *testing.T) {
 		response.Response.Status != marker.Response.Status ||
 		response.Response.ContentKind != marker.Response.ContentKind ||
 		!bytes.Equal(response.Response.Body, marker.Response.Body) {
-		t.Fatalf("replay outcome/response/conflict/error = %v/%#v/%v/%v", outcome, response, conflict, classifyErr)
+		t.Fatalf(
+			"replay outcome/response/conflict/error = %v/%#v/%v/%v",
+			outcome,
+			response,
+			conflict,
+			classifyErr,
+		)
 	}
 	assertConnectorDeletionKeyState(t, fixture, task, true, true)
 }
@@ -388,7 +502,11 @@ func TestConnectorDeletionClassifiesCorruptionAndReferences(t *testing.T) {
 		},
 		"missing environment owner": {
 			mutate: func(t *testing.T, fixture *connectorDeletionFixture) {
-				connectorDeletionDeleteKey(t, fixture.store, environmentKey(fixture.environment.Record.ID))
+				connectorDeletionDeleteKey(
+					t,
+					fixture.store,
+					environmentKey(fixture.environment.Record.ID),
+				)
 			},
 			kind: errs.KindEnvironmentNotFound,
 		},
@@ -425,8 +543,13 @@ func TestConnectorDeletionClassifiesCorruptionAndReferences(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetConnector() error = %v", err)
 			}
-			task, marker, tombstone, intent := connectorDeletionTestTask(t,
-				fixture.connector, fixture.project, fixture.environment, fixture.now.Add(9*time.Minute), 2720,
+			task, marker, tombstone, intent := connectorDeletionTestTask(
+				t,
+				fixture.connector,
+				fixture.project,
+				fixture.environment,
+				fixture.now.Add(9*time.Minute),
+				2720,
 			)
 			result, err := connectors.BeginConnectorDeletionWithTask(
 				context.Background(), fixture.environment, fixture.project, fixture.connector,
@@ -474,8 +597,13 @@ func TestConnectorDeletionTerminalReplayRejectsCorruptEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newTaskRepository() error = %v", err)
 			}
-			task, marker, tombstone, intent := connectorDeletionTestTask(t,
-				fixture.connector, fixture.project, fixture.environment, fixture.now.Add(10*time.Minute), 2730,
+			task, marker, tombstone, intent := connectorDeletionTestTask(
+				t,
+				fixture.connector,
+				fixture.project,
+				fixture.environment,
+				fixture.now.Add(10*time.Minute),
+				2730,
 			)
 			if _, err := connectors.BeginConnectorDeletionWithTask(
 				ctx, fixture.environment, fixture.project, fixture.connector,
@@ -491,7 +619,12 @@ func TestConnectorDeletionTerminalReplayRejectsCorruptEvidence(t *testing.T) {
 				t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 			}
 			terminalAt := task.CreatedAt.Add(2 * time.Second)
-			if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); err != nil {
+			if _, err := tasks.AcknowledgeControllerTask(
+				ctx,
+				task.ID,
+				TaskStatusCompleted,
+				terminalAt,
+			); err != nil {
 				t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 			}
 			corrupt(t, fixture, task)
@@ -518,8 +651,13 @@ func TestConnectorDeletionLateRetryReplaysAfterOriginalTargetPruned(t *testing.T
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	original, marker, tombstone, intent := connectorDeletionTestTask(t,
-		fixture.connector, fixture.project, fixture.environment, fixture.now.Add(11*time.Minute), 2740,
+	original, marker, tombstone, intent := connectorDeletionTestTask(
+		t,
+		fixture.connector,
+		fixture.project,
+		fixture.environment,
+		fixture.now.Add(11*time.Minute),
+		2740,
 	)
 	if _, err := connectors.BeginConnectorDeletionWithTask(
 		ctx, fixture.environment, fixture.project, fixture.connector,
@@ -541,8 +679,19 @@ func TestConnectorDeletionLateRetryReplaysAfterOriginalTargetPruned(t *testing.T
 
 	retryAt := original.CreatedAt.Add(89 * 24 * time.Hour)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 2743)
-	retryMarker := pendingRetryMarker(failed.Record, retryID, retryAt, "connector-late-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, original.ID, retryID, TaskActorOperator, retryMarker); err != nil {
+	retryMarker := pendingRetryMarker(
+		failed.Record,
+		retryID,
+		retryAt,
+		"connector-late-retry-key-0001",
+	)
+	if _, err := tasks.RetryTask(
+		ctx,
+		original.ID,
+		retryID,
+		TaskActorOperator,
+		retryMarker,
+	); err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
 	claim, found, err := tasks.ClaimNextControllerTask(ctx, retryAt.Add(time.Second))
@@ -623,7 +772,10 @@ type connectorDeletionLockedStore struct {
 	mutex sync.Mutex
 }
 
-func (store *connectorDeletionLockedStore) Get(ctx context.Context, key string) (*GetResult, error) {
+func (store *connectorDeletionLockedStore) Get(
+	ctx context.Context,
+	key string,
+) (*GetResult, error) {
 	store.mutex.Lock()
 	defer store.mutex.Unlock()
 	return store.store.Get(ctx, key)
@@ -691,11 +843,14 @@ func newConnectorDeletionFixture(t *testing.T) *connectorDeletionFixture {
 	}
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 2602)
 	environment, err := hierarchy.CreateEnvironment(ctx, EnvironmentRecord{
-		ID: environmentID, ProjectID: project.Record.ID, Name: "production",
+		ID:                environmentID,
+		ProjectID:         project.Record.ID,
+		Name:              "production",
 		NetworkPool:       "10.242.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + project.Record.ID + "/" + environmentID,
 		ProvisioningState: EnvironmentProvisioningReady,
-		CreateTaskID:      ids.NewAt(ids.KindTask, now, 2603), CreatedAt: now,
+		CreateTaskID:      ids.NewAt(ids.KindTask, now, 2603),
+		CreatedAt:         now,
 	})
 	if err != nil {
 		t.Fatalf("CreateEnvironment() error = %v", err)
@@ -749,9 +904,13 @@ func connectorDeletionPolicyCandidate(
 		t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 	}
 	return backupPolicyReplacementCandidate{
-		Environment:   fixture.environment,
-		Project:       fixture.project,
-		MutationEpoch: mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID),
+		Environment: fixture.environment,
+		Project:     fixture.project,
+		MutationEpoch: mustBackupPolicyMutationEpoch(
+			t,
+			fixture.store,
+			fixture.environment.Record.ID,
+		),
 		Replacement: BackupPolicyRecord{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,
@@ -773,7 +932,9 @@ func connectorDeletionPolicyCandidate(
 				t,
 				fixture.store,
 				backupSourceIdentityKey(
-					fixture.environment.Record.ID, fixture.source.Record.Kind, fixture.source.Record.TargetID,
+					fixture.environment.Record.ID,
+					fixture.source.Record.Kind,
+					fixture.source.Record.TargetID,
 				),
 			),
 		}},
