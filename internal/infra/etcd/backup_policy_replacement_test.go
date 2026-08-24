@@ -441,8 +441,8 @@ func TestBackupPolicyProtectedReplacementRejectsHeldEnvironmentOperationLockWith
 	fixture := newBackupPolicyReplacementFixture(t, false)
 	candidate := fixture.candidate(t, true, "age")
 	transaction, err := fixture.store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut,
-		Key:  environmentOperationLockKey(fixture.environment.Record.ID),
+		Type:  MutationPut,
+		Key:   environmentOperationLockKey(fixture.environment.Record.ID),
 		Value: []byte("held"),
 	}})
 	if err != nil || !transaction.Succeeded {
