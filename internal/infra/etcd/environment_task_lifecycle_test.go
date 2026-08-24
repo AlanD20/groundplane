@@ -110,12 +110,15 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 		ctx,
 		agentID,
 		1,
-		source.ID,
+		source.ID, taskAssignmentIDForTest(t, tasks,
+
+			source.ID),
+
 		environment.ID,
 		TaskStatusFailed,
 		failedResult,
-		terminalAt,
-	)
+		terminalAt)
+
 	if err != nil || failed.Record.Status != TaskStatusFailed {
 		t.Fatalf("AcknowledgeEnvironmentCreation(failed) = %#v, %v", failed.Record, err)
 	}
@@ -196,12 +199,14 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 		ctx,
 		agentID,
 		1,
-		retryID,
+		retryID, taskAssignmentIDForTest(t, tasks,
+
+			retryID),
+
 		environment.ID,
 		TaskStatusCompleted,
 		completedResult,
-		retryAssignedAt.Add(time.Second),
-	); !isKind(err, errs.KindStateConflict) {
+		retryAssignedAt.Add(time.Second)); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("AcknowledgeEnvironmentCreation(held lock) error = %v", err)
 	}
 	unchangedRetrying, err := hierarchy.GetEnvironment(ctx, environment.ID)
@@ -223,12 +228,15 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 		ctx,
 		agentID,
 		1,
-		retryID,
+		retryID, taskAssignmentIDForTest(t, tasks,
+
+			retryID),
+
 		environment.ID,
 		TaskStatusCompleted,
 		completedResult,
-		retryAssignedAt.Add(time.Second),
-	)
+		retryAssignedAt.Add(time.Second))
+
 	if err != nil || completed.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeEnvironmentCreation(retry) = %#v, %v", completed.Record, err)
 	}

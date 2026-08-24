@@ -16,6 +16,7 @@ func TestEnvironmentDirectoryAcknowledgementUsesAtomicProvisioningPath(t *testin
 		taskID        = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		agentID       = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		assignmentID  = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	)
 	planHash := make([]byte, 32)
 	for index := range planHash {
@@ -28,7 +29,7 @@ func TestEnvironmentDirectoryAcknowledgementUsesAtomicProvisioningPath(t *testin
 		return time.Date(2026, 8, 22, 17, 0, 0, 0, time.UTC)
 	}}
 	acknowledgement := &agentpb.TaskAck{
-		TaskId: taskID, PlanHash: planHash,
+		TaskId: taskID, AssignmentId: assignmentID, PlanHash: planHash,
 		Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
 		Result: &agentpb.TaskAck_EnvironmentDirectoryResult{
 			EnvironmentDirectoryResult: &agentpb.EnvironmentDirectoryTaskResult{},
@@ -81,6 +82,7 @@ func (store *environmentAcknowledgementStore) AcknowledgeTask(
 	string,
 	uint64,
 	string,
+	string,
 	etcd.TaskStatus,
 	etcd.TaskResultRecord,
 	time.Time,
@@ -93,6 +95,7 @@ func (store *environmentAcknowledgementStore) AcknowledgeEnvironmentCreation(
 	_ context.Context,
 	_ string,
 	_ uint64,
+	_ string,
 	_ string,
 	environmentID string,
 	_ etcd.TaskStatus,

@@ -53,6 +53,7 @@ func (channel *fakeTaskAbortAgentChannel) TaskTerminal(
 	string,
 	uint64,
 	string,
+	string,
 ) (<-chan error, error) {
 	channel.subscribed = true
 	return channel.terminal, nil
@@ -62,6 +63,7 @@ func (channel *fakeTaskAbortAgentChannel) AbortTask(
 	_ context.Context,
 	_ string,
 	_ uint64,
+	_ string,
 	_ string,
 	reason string,
 ) error {
@@ -111,7 +113,8 @@ func TestTaskAbortServiceSubscribesBeforeFencedAgentDelivery(t *testing.T) {
 	taskID := ids.NewAt(ids.KindTask, now, 2)
 	agentID := ids.NewAt(ids.KindAgent, now, 3)
 	record := etcd.TaskAssignmentRecord{
-		TaskID: taskID, Executor: etcd.TaskExecutorAgent, AgentID: agentID, AgentGeneration: 4,
+		AssignmentID: ids.NewAt(ids.KindAssignment, now, 5),
+		TaskID:       taskID, Executor: etcd.TaskExecutorAgent, AgentID: agentID, AgentGeneration: 4,
 		ClaimedTaskRevision: 1, AssignedAt: now, Deadline: now.Add(time.Minute),
 	}
 	repository := &fakeTaskAbortRepository{

@@ -71,13 +71,15 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 		t.Fatalf("unrelated ClaimNextTask() = %#v, %v, %v", unrelatedClaim, found, err)
 	}
 	if _, err := repository.AcknowledgeTask(
-		ctx, agentID, 4, unrelated.ID, TaskStatusCompleted, completedComposeTaskResult(), at.Add(5*time.Second),
-	); err != nil {
+		ctx, agentID, 4, unrelated.ID, taskAssignmentIDForTest(t, repository,
+			unrelated.ID),
+		TaskStatusCompleted, completedComposeTaskResult(), at.Add(5*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeTask(unrelated) error = %v", err)
 	}
 	if _, err := repository.AcknowledgeTask(
-		ctx, agentID, 4, first.ID, TaskStatusCompleted, completedComposeTaskResult(), at.Add(6*time.Second),
-	); err != nil {
+		ctx, agentID, 4, first.ID, taskAssignmentIDForTest(t, repository,
+			first.ID),
+		TaskStatusCompleted, completedComposeTaskResult(), at.Add(6*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeTask(first) error = %v", err)
 	}
 	assertTaskLifecycleValue(t, store, taskMaterializationWriterKey(environmentID), false)

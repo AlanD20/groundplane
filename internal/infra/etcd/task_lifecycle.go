@@ -1010,6 +1010,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 			agentID,
 			agentGeneration,
 			assignment.Task.Record.ID,
+			assignment.Assignment.Record.AssignmentID,
 			TaskStatusTimedOut,
 			TaskResultRecord{
 				Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
@@ -1037,12 +1038,14 @@ func (repository *TaskRepository) AcknowledgeTask(
 	agentID string,
 	agentGeneration uint64,
 	taskID string,
+	assignmentID string,
 	terminalStatus TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
 ) (Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
-		ctx, TaskExecutorAgent, agentID, agentGeneration, taskID, terminalStatus, &result, terminalAt, "",
+		ctx, TaskExecutorAgent, agentID, agentGeneration, taskID, assignmentID,
+		terminalStatus, &result, terminalAt, "",
 	)
 }
 
@@ -1053,6 +1056,7 @@ func (repository *TaskRepository) AcknowledgeEnvironmentCreation(
 	agentID string,
 	agentGeneration uint64,
 	taskID string,
+	assignmentID string,
 	environmentID string,
 	terminalStatus TaskStatus,
 	result TaskResultRecord,
@@ -1064,6 +1068,7 @@ func (repository *TaskRepository) AcknowledgeEnvironmentCreation(
 		agentID,
 		agentGeneration,
 		taskID,
+		assignmentID,
 		terminalStatus,
 		&result,
 		terminalAt,
@@ -1080,7 +1085,7 @@ func (repository *TaskRepository) AcknowledgeControllerTask(
 	terminalAt time.Time,
 ) (Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
-		ctx, TaskExecutorController, "", 0, taskID, terminalStatus, nil, terminalAt, "",
+		ctx, TaskExecutorController, "", 0, taskID, "", terminalStatus, nil, terminalAt, "",
 	)
 }
 
@@ -1090,6 +1095,7 @@ func (repository *TaskRepository) acknowledgeTask(
 	agentID string,
 	agentGeneration uint64,
 	taskID string,
+	assignmentID string,
 	terminalStatus TaskStatus,
 	result *TaskResultRecord,
 	terminalAt time.Time,
@@ -1100,8 +1106,10 @@ func (repository *TaskRepository) acknowledgeTask(
 	}
 	if !validTaskExecutor(executor) || validateStableID(ids.KindTask, taskID) != nil ||
 		!isTerminalTaskStatus(terminalStatus) ||
-		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || result == nil)) ||
-		(executor == TaskExecutorController && (agentID != "" || agentGeneration != 0 || result != nil)) {
+		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 ||
+			validateStableID(ids.KindAssignment, assignmentID) != nil || result == nil)) ||
+		(executor == TaskExecutorController &&
+			(agentID != "" || agentGeneration != 0 || assignmentID != "" || result != nil)) {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task acknowledgement is invalid")
 	}
 	if err := validateTimestamp("task terminal_at", terminalAt); err != nil {
@@ -1160,6 +1168,17 @@ func (repository *TaskRepository) acknowledgeTask(
 			if task.Status == terminalStatus &&
 				((result == nil && task.Result == nil) ||
 					(result != nil && task.Result != nil && taskResultsEqual(*task.Result, *result))) {
+				if executor == TaskExecutorAgent {
+					expected := TaskTerminalAssignmentRecord{
+						AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
+					}
+					if task.TerminalAssignment == nil || *task.TerminalAssignment != expected {
+						return Versioned[TaskRecord]{}, errs.New(
+							errs.KindStateConflict,
+							"task terminal assignment identity does not match",
+						)
+					}
+				}
 				if environmentID != "" {
 					if err := repository.validateEnvironmentCreationReplay(
 						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
@@ -1244,7 +1263,9 @@ func (repository *TaskRepository) acknowledgeTask(
 				"task assignment index does not match assignment",
 			)
 		}
-		if assignment.TaskID != task.ID || assignment.Executor != executor || assignment.AgentID != agentID ||
+		if assignment.TaskID != task.ID || assignment.Executor != executor ||
+			(executor == TaskExecutorAgent && assignment.AssignmentID != assignmentID) ||
+			assignment.AgentID != agentID ||
 			assignment.AgentGeneration != agentGeneration ||
 			assignment.ClaimedTaskRevision >= assignmentValue.ModRevision || task.StartedAt == nil ||
 			!assignment.AssignedAt.Equal(*task.StartedAt) {
@@ -1280,6 +1301,11 @@ func (repository *TaskRepository) acknowledgeTask(
 			return Versioned[TaskRecord]{}, err
 		}
 		terminal.Result = cloneTaskResult(result)
+		if executor == TaskExecutorAgent {
+			terminal.TerminalAssignment = &TaskTerminalAssignmentRecord{
+				AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
+			}
+		}
 		if err := validateTaskRecord(terminal); err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -1657,6 +1683,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 				assignment.AgentID,
 				assignment.AgentGeneration,
 				taskID,
+				assignment.AssignmentID,
 				TaskStatusTimedOut,
 				TaskResultRecord{
 					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,

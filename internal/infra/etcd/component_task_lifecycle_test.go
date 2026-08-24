@@ -89,15 +89,18 @@ func TestTaskAcknowledgementPromotesComponentCandidateAndMovesReservation(t *tes
 	}
 	terminalAt := now.Add(2 * time.Second)
 	terminal, err := repository.AcknowledgeTask(
-		ctx, agentID, 3, task.ID, TaskStatusCompleted, completedComposeTaskResult(), terminalAt,
-	)
+		ctx, agentID, 3, task.ID, taskAssignmentIDForTest(t, repository,
+			task.ID),
+		TaskStatusCompleted, completedComposeTaskResult(), terminalAt)
+
 	if err != nil || terminal.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask() = %#v, %v", terminal, err)
 	}
 	assertComponentTaskTerminalState(t, store, task, records, TaskStatusCompleted, true)
 	if _, err := repository.AcknowledgeTask(
-		ctx, agentID, 3, task.ID, TaskStatusCompleted, completedComposeTaskResult(), terminalAt,
-	); err != nil {
+		ctx, agentID, 3, task.ID, taskAssignmentIDForTest(t, repository,
+			task.ID),
+		TaskStatusCompleted, completedComposeTaskResult(), terminalAt); err != nil {
 		t.Fatalf("AcknowledgeTask(replay) error = %v", err)
 	}
 }

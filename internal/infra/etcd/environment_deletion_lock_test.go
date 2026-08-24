@@ -147,9 +147,11 @@ func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.
 					result.ExitCode = 1
 				}
 				terminal, err = fixture.tasks.AcknowledgeTask(
-					context.Background(), agentID, 1, fixture.task.ID, terminalStatus, result,
-					fixture.now.Add(2*time.Second),
-				)
+					context.Background(), agentID, 1, fixture.task.ID, taskAssignmentIDForTest(t, fixture.tasks,
+						fixture.task.ID),
+					terminalStatus, result,
+					fixture.now.Add(2*time.Second))
+
 			}
 			if err != nil {
 				t.Fatalf("terminalize Environment deletion error = %v", err)
@@ -184,9 +186,11 @@ func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.
 				)
 			} else {
 				replay, err = fixture.tasks.AcknowledgeTask(
-					context.Background(), agentID, 1, fixture.task.ID,
-					terminalStatus, *terminal.Record.Result, fixture.now.Add(2*time.Second),
-				)
+					context.Background(), agentID, 1, fixture.task.ID, taskAssignmentIDForTest(t, fixture.tasks,
+						fixture.task.ID),
+
+					terminalStatus, *terminal.Record.Result, fixture.now.Add(2*time.Second))
+
 			}
 			if err != nil || replay.Revision != terminal.Revision {
 				t.Fatalf("terminal replay = %#v, %v", replay, err)
@@ -216,13 +220,16 @@ func TestEnvironmentDeletionTerminalUnknownOutcomeReplaysCommittedCleanup(t *tes
 	result := TaskResultRecord{Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone}
 	terminalAt := fixture.now.Add(2 * time.Second)
 	if _, err := failingTasks.AcknowledgeTask(
-		context.Background(), agentID, 1, fixture.task.ID, TaskStatusCompleted, result, terminalAt,
-	); !errors.Is(err, unknown) {
+		context.Background(), agentID, 1, fixture.task.ID, taskAssignmentIDForTest(t, failingTasks,
+			fixture.task.ID),
+		TaskStatusCompleted, result, terminalAt); !errors.Is(err, unknown) {
 		t.Fatalf("AcknowledgeTask(unknown) error = %v", err)
 	}
 	replay, err := fixture.tasks.AcknowledgeTask(
-		context.Background(), agentID, 1, fixture.task.ID, TaskStatusCompleted, result, terminalAt,
-	)
+		context.Background(), agentID, 1, fixture.task.ID, taskAssignmentIDForTest(t, fixture.tasks,
+			fixture.task.ID),
+		TaskStatusCompleted, result, terminalAt)
+
 	if err != nil || replay.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask(after unknown) = %#v, %v", replay, err)
 	}

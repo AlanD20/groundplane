@@ -124,7 +124,8 @@ func environmentDirectoryAssignment(t *testing.T) Assignment {
 		t.Fatalf("Seal() error = %v", err)
 	}
 	return Assignment{
-		TaskID: workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		AssignmentID: workerTestAssignmentID,
+		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: plan, Timeout: time.Minute,
 	}
 }

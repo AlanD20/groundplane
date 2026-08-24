@@ -60,9 +60,10 @@ type sessionState struct {
 }
 
 type taskAbortCommand struct {
-	taskID string
-	reason string
-	result chan error
+	taskID       string
+	assignmentID string
+	reason       string
+	result       chan error
 }
 
 type readyKey struct {
@@ -76,9 +77,10 @@ type readySubscription struct {
 }
 
 type taskTerminalKey struct {
-	agentID    string
-	generation uint64
-	taskID     string
+	agentID      string
+	generation   uint64
+	taskID       string
+	assignmentID string
 }
 
 type taskTerminalSubscription struct {
@@ -196,8 +198,8 @@ func (s *Session) RecordReady(at time.Time, capacity int32, version string) erro
 // RecordTaskTerminal publishes completion only after the caller has committed
 // the durable Task acknowledgement. A fenced session cannot satisfy a waiter
 // belonging to its replacement.
-func (s *Session) RecordTaskTerminal(taskID string) error {
-	if ids.Validate(ids.KindTask, taskID) != nil {
+func (s *Session) RecordTaskTerminal(taskID string, assignmentID string) error {
+	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindAssignment, assignmentID) != nil {
 		return errs.New(errs.KindValidationFailed, "terminal Task id is invalid")
 	}
 	s.registry.mu.Lock()
@@ -207,7 +209,7 @@ func (s *Session) RecordTaskTerminal(taskID string) error {
 		return errs.New(errs.KindStateConflict, "agent session is fenced")
 	}
 	s.registry.notifyTaskTerminalLocked(taskTerminalKey{
-		agentID: s.agentID, generation: current.generation, taskID: taskID,
+		agentID: s.agentID, generation: current.generation, taskID: taskID, assignmentID: assignmentID,
 	})
 	return nil
 }
@@ -235,6 +237,7 @@ func (r *Registry) AbortTask(
 	agentID string,
 	generation uint64,
 	taskID string,
+	assignmentID string,
 	reason string,
 ) error {
 	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
@@ -242,6 +245,9 @@ func (r *Registry) AbortTask(
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return errs.New(errs.KindValidationFailed, "Task abort id is invalid")
+	}
+	if ids.Validate(ids.KindAssignment, assignmentID) != nil {
+		return errs.New(errs.KindValidationFailed, "Task abort assignment id is invalid")
 	}
 	if reason == "" || len(reason) > maximumTaskAbortReasonBytes || !utf8.ValidString(reason) {
 		return errs.New(errs.KindValidationFailed, "Task abort reason is invalid")
@@ -253,7 +259,9 @@ func (r *Registry) AbortTask(
 		r.mu.Unlock()
 		return errs.New(errs.KindStateConflict, "Agent session is not online at the requested generation")
 	}
-	command := taskAbortCommand{taskID: taskID, reason: reason, result: make(chan error, 1)}
+	command := taskAbortCommand{
+		taskID: taskID, assignmentID: assignmentID, reason: reason, result: make(chan error, 1),
+	}
 	aborts := state.aborts
 	done := state.done
 	r.mu.Unlock()
@@ -312,6 +320,7 @@ func (r *Registry) TaskTerminal(
 	agentID string,
 	generation uint64,
 	taskID string,
+	assignmentID string,
 ) (<-chan error, error) {
 	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
 		return nil, err
@@ -319,13 +328,18 @@ func (r *Registry) TaskTerminal(
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "terminal Task id is invalid")
 	}
+	if ids.Validate(ids.KindAssignment, assignmentID) != nil {
+		return nil, errs.New(errs.KindValidationFailed, "terminal Task assignment id is invalid")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	state := r.agents[agentID]
 	if state == nil || state.generation != generation || !state.online || state.revoked {
 		return nil, errs.New(errs.KindStateConflict, "Agent session is not online at the requested generation")
 	}
-	key := taskTerminalKey{agentID: agentID, generation: generation, taskID: taskID}
+	key := taskTerminalKey{
+		agentID: agentID, generation: generation, taskID: taskID, assignmentID: assignmentID,
+	}
 	r.nextSubscription++
 	id := r.nextSubscription
 	subscription := &taskTerminalSubscription{result: make(chan error, 1)}

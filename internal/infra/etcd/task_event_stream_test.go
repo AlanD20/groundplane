@@ -15,7 +15,7 @@ func TestTaskEventStreamReplaysSuffixAndFinalDrains(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -50,7 +50,7 @@ func TestTaskEventStreamValidatesResumeBeforeOpeningWatches(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -88,7 +88,7 @@ func TestTaskEventStreamRecoversCompactionBySequence(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -121,7 +121,7 @@ func TestTaskEventStreamDisconnectsOnSequenceGap(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -164,7 +164,7 @@ func TestTaskEventStreamCancellationJoinsWatches(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -205,15 +205,7 @@ func terminalizeTaskStream(
 	if err != nil {
 		t.Fatalf("GetTask(terminalize) error = %v", err)
 	}
-	running, err := transitionTaskStatus(
-		current.Record,
-		TaskStatusPending,
-		TaskStatusRunning,
-		taskJournalTime().Add(20*time.Second),
-	)
-	if err != nil {
-		t.Fatalf("transitionTaskStatus(running) error = %v", err)
-	}
+	running := current.Record
 	terminal, err := transitionTaskStatus(
 		running,
 		TaskStatusRunning,

@@ -189,7 +189,8 @@ func composeRuntimeAssignment() (Assignment, *agentpb.ExecutionStep) {
 		}},
 	}}}
 	return Assignment{
-		TaskID: "tsk_01J00000000000000000000000", OperationID: "op_01J00000000000000000000000",
+		AssignmentID: "asgn_01J00000000000000000000000",
+		TaskID:       "tsk_01J00000000000000000000000", OperationID: "op_01J00000000000000000000000",
 		Plan: plan, Timeout: time.Minute,
 	}, step
 }

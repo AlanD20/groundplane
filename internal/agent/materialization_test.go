@@ -240,7 +240,8 @@ func materializationAssignment(t *testing.T, content []byte) Assignment {
 		t.Fatalf("Seal() error = %v", err)
 	}
 	return Assignment{
-		TaskID: materializationTaskID, OperationID: materializationOperationID,
+		AssignmentID: workerTestAssignmentID,
+		TaskID:       materializationTaskID, OperationID: materializationOperationID,
 		Plan: plan, Timeout: time.Minute,
 	}
 }
@@ -255,7 +256,8 @@ func materializationTransfers(
 	planHash := hashForPlan(assignment.Plan)
 	outer := func() *agentpb.MaterializationTransfer {
 		return &agentpb.MaterializationTransfer{
-			TaskId: assignment.TaskID, PlanHash: append([]byte(nil), planHash[:]...), StepId: step.StepId,
+			TaskId: assignment.TaskID, AssignmentId: assignment.AssignmentID,
+			PlanHash: append([]byte(nil), planHash[:]...), StepId: step.StepId,
 		}
 	}
 	headerRecord := outer()

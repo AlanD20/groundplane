@@ -299,7 +299,8 @@ func (c *Client) sendTaskEvent(stream agentStream, progress TaskProgress) error 
 	}
 	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskEvent{
 		TaskEvent: &agentpb.TaskEvent{
-			TaskId: progress.TaskID, PlanHash: append([]byte(nil), progress.PlanHash[:]...),
+			AssignmentId: progress.AssignmentID,
+			TaskId:       progress.TaskID, PlanHash: append([]byte(nil), progress.PlanHash[:]...),
 			StepId: progress.StepID, Attempt: progress.Attempt, Ordinal: progress.Ordinal,
 			State: state, Chunk: append([]byte(nil), progress.Chunk...),
 		},
@@ -327,13 +328,14 @@ func (c *Client) sendReady(stream agentStream) error {
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
 	if assignment := message.GetTaskAssignment(); assignment != nil {
 		return false, c.pool.Submit(ctx, Assignment{
-			TaskID: assignment.TaskId, OperationID: assignment.OperationId,
+			AssignmentID: assignment.AssignmentId,
+			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan,
 			Timeout: time.Duration(assignment.TimeoutSeconds) * time.Second,
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {
-		return false, c.pool.Abort(ctx, abort.TaskId)
+		return false, c.pool.Abort(ctx, abort.TaskId, abort.AssignmentId)
 	}
 	if transfer := message.GetMaterializationTransfer(); transfer != nil {
 		return false, c.pool.AcceptMaterializationTransfer(ctx, transfer)
@@ -362,7 +364,8 @@ func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
 		return errs.New(errs.KindInternal, "agent: worker returned an invalid terminal state")
 	}
 	acknowledgement := &agentpb.TaskAck{
-		TaskId: result.TaskID, PlanHash: append([]byte(nil), result.PlanHash[:]...), Terminal: terminal,
+		AssignmentId: result.AssignmentID,
+		TaskId:       result.TaskID, PlanHash: append([]byte(nil), result.PlanHash[:]...), Terminal: terminal,
 		ExitCode: result.ExitCode,
 	}
 	if result.Compose != nil {

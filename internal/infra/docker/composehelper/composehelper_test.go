@@ -280,7 +280,8 @@ func validRequest(t *testing.T) *agentpb.ComposeHelperRequest {
 		t.Fatalf("seal helper plan: %v", err)
 	}
 	return &agentpb.ComposeHelperRequest{
-		Schema: SchemaVersion, TaskId: helperTaskID, OperationId: helperOperationID,
+		Schema: SchemaVersion, AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		TaskId: helperTaskID, OperationId: helperOperationID,
 		Plan: plan, StepId: helperStepID, TimeoutSeconds: 30,
 	}
 }

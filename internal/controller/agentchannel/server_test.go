@@ -38,15 +38,16 @@ type pausedAuthenticator struct {
 }
 
 type fakeTaskStore struct {
-	assignments   []etcd.TaskAssignment
-	claims        []etcd.TaskAssignment
-	tasks         map[string]etcd.Versioned[etcd.TaskRecord]
-	ackAgentID    string
-	ackGeneration uint64
-	ackTaskID     string
-	ackTerminal   etcd.TaskStatus
-	ackResult     etcd.TaskResultRecord
-	events        []etcd.TaskEventInput
+	assignments     []etcd.TaskAssignment
+	claims          []etcd.TaskAssignment
+	tasks           map[string]etcd.Versioned[etcd.TaskRecord]
+	ackAgentID      string
+	ackGeneration   uint64
+	ackTaskID       string
+	ackAssignmentID string
+	ackTerminal     etcd.TaskStatus
+	ackResult       etcd.TaskResultRecord
+	events          []etcd.TaskEventInput
 }
 
 type fakePlanResolver struct {
@@ -109,6 +110,7 @@ func (store *fakeTaskStore) AcknowledgeTask(
 	agentID string,
 	generation uint64,
 	taskID string,
+	assignmentID string,
 	terminal etcd.TaskStatus,
 	result etcd.TaskResultRecord,
 	_ time.Time,
@@ -116,6 +118,7 @@ func (store *fakeTaskStore) AcknowledgeTask(
 	store.ackAgentID = agentID
 	store.ackGeneration = generation
 	store.ackTaskID = taskID
+	store.ackAssignmentID = assignmentID
 	store.ackTerminal = terminal
 	store.ackResult = result
 	task := store.tasks[taskID]
@@ -415,6 +418,7 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	stream := newLiveStream(ctx)
 	stream.received <- authenticateMessage(testAgentID, testToken(7))
 	taskID := ids.NewAt(ids.KindTask, testTime(), 19)
+	assignmentID := ids.NewAt(ids.KindAssignment, testTime(), 18)
 	planHash := bytes.Repeat([]byte{0x19}, 32)
 	tasks := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: {Record: etcd.TaskRecord{
 		ID: taskID, PlanHash: hex.EncodeToString(planHash), Status: etcd.TaskStatusRunning,
@@ -432,24 +436,26 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Controller did not send initial config")
 	}
-	terminal, err := registry.TaskTerminal(ctx, testAgentID, 1, taskID)
+	terminal, err := registry.TaskTerminal(ctx, testAgentID, 1, taskID, assignmentID)
 	if err != nil {
 		t.Fatalf("TaskTerminal() error = %v", err)
 	}
-	if err := registry.AbortTask(ctx, testAgentID, 1, taskID, "agent_removed"); err != nil {
+	if err := registry.AbortTask(ctx, testAgentID, 1, taskID, assignmentID, "agent_removed"); err != nil {
 		t.Fatalf("AbortTask() error = %v", err)
 	}
 	select {
 	case message := <-stream.sent:
 		abort := message.GetTaskAbort()
-		if abort == nil || abort.TaskId != taskID || abort.Reason != "agent_removed" {
+		if abort == nil || abort.TaskId != taskID || abort.AssignmentId != assignmentID ||
+			abort.Reason != "agent_removed" {
 			t.Fatalf("TaskAbort = %#v", abort)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Controller did not deliver TaskAbort")
 	}
 	stream.received <- &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
-		TaskId: taskID, PlanHash: planHash, Terminal: agentpb.TaskTerminal_TASK_TERMINAL_ABORTED,
+		TaskId: taskID, AssignmentId: assignmentID,
+		PlanHash: planHash, Terminal: agentpb.TaskTerminal_TASK_TERMINAL_ABORTED,
 		Result: &agentpb.TaskAck_ComposeResult{ComposeResult: &agentpb.ComposeTaskResult{
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 		}},
@@ -489,20 +495,28 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	plan := testExecutionPlan(t, task)
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	planHash := append([]byte(nil), plan.PlanHash...)
+	assignmentID := ids.NewAt(ids.KindAssignment, now, 26)
 	versioned := etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5}
 	tasks := &fakeTaskStore{
-		claims: []etcd.TaskAssignment{{Task: versioned}},
-		tasks:  map[string]etcd.Versioned[etcd.TaskRecord]{taskID: versioned},
+		claims: []etcd.TaskAssignment{{
+			Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+				AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
+				AgentID: testAgentID, AgentGeneration: 1,
+			}},
+			Task: versioned,
+		}},
+		tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: versioned},
 	}
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
 		authenticateMessage(testAgentID, testToken(8)),
 		readyMessage(1),
 		{Payload: &agentpb.AgentMessage_TaskEvent{TaskEvent: &agentpb.TaskEvent{
-			TaskId: taskID, PlanHash: planHash, StepId: task.Steps[0].ID,
+			TaskId: taskID, AssignmentId: assignmentID,
+			PlanHash: planHash, StepId: task.Steps[0].ID,
 			Attempt: 1, Ordinal: 2, State: agentpb.TaskState_TASK_STATE_COMPLETED,
 		}}},
 		{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
-			TaskId: taskID, PlanHash: planHash,
+			TaskId: taskID, AssignmentId: assignmentID, PlanHash: planHash,
 			Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
 			Result: &agentpb.TaskAck_ComposeResult{ComposeResult: &agentpb.ComposeTaskResult{
 				Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
@@ -518,7 +532,7 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		t.Fatalf("Controller messages = %d, want config plus assignment", len(stream.sent))
 	}
 	assignment := stream.sent[1].GetTaskAssignment()
-	if assignment == nil || assignment.TaskId != task.ID ||
+	if assignment == nil || assignment.TaskId != task.ID || assignment.AssignmentId != assignmentID ||
 		assignment.OperationId != task.OperationID || assignment.Plan == nil ||
 		assignment.Plan.PlanId != task.PlanID ||
 		assignment.Plan.RenderGeneration != uint64(task.RenderGeneration) ||
@@ -527,7 +541,8 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		t.Fatalf("TaskAssignment = %#v", assignment)
 	}
 	if tasks.ackAgentID != testAgentID || tasks.ackGeneration != 1 ||
-		tasks.ackTaskID != task.ID || tasks.ackTerminal != etcd.TaskStatusCompleted {
+		tasks.ackTaskID != task.ID || tasks.ackAssignmentID != assignmentID ||
+		tasks.ackTerminal != etcd.TaskStatusCompleted {
 		t.Fatalf(
 			"ack = agent %q generation %d task %q terminal %q",
 			tasks.ackAgentID,
@@ -537,6 +552,9 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		)
 	}
 	if len(tasks.events) != 1 ||
+		tasks.events[0].Identity.AssignmentID != assignmentID ||
+		tasks.events[0].Identity.AgentID != testAgentID ||
+		tasks.events[0].Identity.AgentGeneration != 1 ||
 		tasks.events[0].Identity.TaskID != task.ID ||
 		tasks.events[0].Identity.StepID != task.Steps[0].ID ||
 		tasks.events[0].Identity.Attempt != 1 ||
@@ -544,6 +562,22 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		tasks.events[0].State != etcd.TaskEventStateCompleted ||
 		!bytes.Equal(tasks.events[0].Payload, []byte(`{}`)) {
 		t.Fatalf("persisted Task events = %#v", tasks.events)
+	}
+}
+
+func TestServerRejectsMissingAssignmentIdentityOnAgentWrites(t *testing.T) {
+	t.Parallel()
+	server := &Server{}
+	if err := server.recordTaskEvent(
+		context.Background(), testAgentID, 1,
+		&agentpb.TaskEvent{PlanHash: make([]byte, 32), Attempt: 1, Ordinal: 1},
+	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("recordTaskEvent(missing assignment) error = %v, want validation failed", err)
+	}
+	if err := server.acknowledge(
+		context.Background(), testAgentID, 1, &agentpb.TaskAck{PlanHash: make([]byte, 32)},
+	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("acknowledge(missing assignment) error = %v, want validation failed", err)
 	}
 }
 

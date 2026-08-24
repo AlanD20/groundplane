@@ -27,7 +27,8 @@ func TestSendTaskAssignmentStreamsExactMaterializationRecords(t *testing.T) {
 	server := NewWithMaterializations(
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan}, resolver,
 	)
-	if err := server.sendTaskAssignment(stream, task); err != nil {
+	claim := controllerMaterializationClaim(task)
+	if err := server.sendTaskAssignment(stream, claim); err != nil {
 		t.Fatalf("sendTaskAssignment() error = %v", err)
 	}
 	if len(stream.sent) != 5 || stream.sent[0].GetTaskAssignment() == nil ||
@@ -39,7 +40,9 @@ func TestSendTaskAssignmentStreamsExactMaterializationRecords(t *testing.T) {
 	}
 	transfer := stream.sent[1].GetMaterializationTransfer()
 	materialization := plan.Steps[0].GetMaterializeFile()
-	if transfer.GetTaskId() != task.ID || transfer.GetStepId() != task.Steps[0].ID ||
+	if transfer.GetTaskId() != task.ID ||
+		transfer.GetAssignmentId() != claim.Assignment.Record.AssignmentID ||
+		transfer.GetStepId() != task.Steps[0].ID ||
 		!bytes.Equal(transfer.GetPlanHash(), plan.PlanHash) ||
 		transfer.GetHeader().GetMaterializationId() != materialization.GetMaterializationId() ||
 		resolver.task.ID != task.ID || resolver.step.GetStepId() != task.Steps[0].ID {
@@ -61,7 +64,7 @@ func TestSendTaskAssignmentRejectsSourceDigestMismatchWithoutEnd(t *testing.T) {
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan},
 		&fakeMaterializationResolver{source: source},
 	)
-	if err := server.sendTaskAssignment(stream, task); err == nil {
+	if err := server.sendTaskAssignment(stream, controllerMaterializationClaim(task)); err == nil {
 		t.Fatal("sendTaskAssignment() error = nil, want digest mismatch")
 	}
 	for _, message := range stream.sent {
@@ -162,4 +165,14 @@ func controllerMaterializationTask(
 		Status: etcd.TaskStatusRunning, NextEventSequence: 1, CreatedAt: now,
 	}
 	return task, plan
+}
+
+func controllerMaterializationClaim(task etcd.TaskRecord) etcd.TaskAssignment {
+	return etcd.TaskAssignment{
+		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+			AssignmentID: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			TaskID:       task.ID, Executor: etcd.TaskExecutorAgent,
+		}},
+		Task: etcd.Versioned[etcd.TaskRecord]{Record: task},
+	}
 }

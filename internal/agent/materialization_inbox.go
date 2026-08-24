@@ -20,6 +20,7 @@ type materializationInbox struct {
 }
 
 type materializationTaskInbox struct {
+	assignmentID     string
 	planHash         [sha256.Size]byte
 	renderGeneration uint64
 	steps            map[string]*materializationStepInbox
@@ -73,7 +74,12 @@ func (inbox *materializationInbox) Register(assignment Assignment) error {
 		return nil
 	}
 	task := &materializationTaskInbox{
-		planHash: hashForPlan(assignment.Plan), renderGeneration: assignment.Plan.GetRenderGeneration(), steps: steps,
+		assignmentID: assignment.AssignmentID,
+		planHash: hashForPlan(
+			assignment.Plan,
+		),
+		renderGeneration: assignment.Plan.GetRenderGeneration(),
+		steps:            steps,
 	}
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
@@ -97,7 +103,7 @@ func (inbox *materializationInbox) Accept(
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
 	task := inbox.tasks[transfer.GetTaskId()]
-	if task == nil || len(transfer.GetPlanHash()) != sha256.Size ||
+	if task == nil || transfer.GetAssignmentId() != task.assignmentID || len(transfer.GetPlanHash()) != sha256.Size ||
 		subtle.ConstantTimeCompare(transfer.GetPlanHash(), task.planHash[:]) != 1 {
 		return errs.New(errs.KindInternal, "agent: materialization transfer correlation is invalid")
 	}

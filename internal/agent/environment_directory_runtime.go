@@ -56,8 +56,9 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 		)
 	}
 	response, err := runtime.helper.Execute(ctx, &agentpb.EnvironmentDirectoryHelperRequest{
-		Schema: environmentDirectoryHelperSchema,
-		TaskId: assignment.TaskID, OperationId: assignment.OperationID,
+		Schema:       environmentDirectoryHelperSchema,
+		AssignmentId: assignment.AssignmentID,
+		TaskId:       assignment.TaskID, OperationId: assignment.OperationID,
 		Plan: assignment.Plan, StepId: step.StepId,
 		TimeoutSeconds: remainingSeconds(ctx, step.TimeoutSeconds),
 	})

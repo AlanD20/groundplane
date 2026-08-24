@@ -74,7 +74,7 @@ func taskEventKey(taskID string, sequence uint64) string {
 }
 
 func taskEventDedupKey(identity TaskEventIdentity) string {
-	return taskEventDedupRootPrefix + identity.TaskID + "/" + identity.StepID + "/" +
+	return taskEventDedupRootPrefix + identity.TaskID + "/" + identity.AssignmentID + "/" + identity.StepID + "/" +
 		strconv.FormatUint(uint64(identity.Attempt), 10) + "/" + strconv.FormatUint(identity.Ordinal, 10)
 }
 

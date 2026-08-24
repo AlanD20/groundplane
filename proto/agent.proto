@@ -57,6 +57,7 @@ message TaskEvent {
   uint64 ordinal = 5; // one-based stable delivery identity within the step attempt
   TaskState state = 6;
   bytes chunk = 7; // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
+  string assignment_id = 8;
 }
 
 enum TaskState {
@@ -143,6 +144,7 @@ message TaskAck {
     ComposeTaskResult compose_result = 5;
     EnvironmentDirectoryTaskResult environment_directory_result = 6;
   }
+  string assignment_id = 7;
 }
 
 message ComposeTaskResult {
@@ -188,6 +190,7 @@ message MaterializationTransfer {
     MaterializationTransferChunk chunk = 5;
     MaterializationTransferEnd end = 6;
   }
+  string assignment_id = 7;
 }
 
 message MaterializationTransferHeader {
@@ -221,6 +224,7 @@ message TaskAssignment {
   string retry_of = 3;     // set iff this is a retry of a prior task_id
   ExecutionPlan plan = 4;  // complete authoritative procedure
   int32 timeout_seconds = 5;
+  string assignment_id = 6;
 }
 
 message ExecutionPlan {
@@ -431,6 +435,7 @@ message EnvironmentDirectoryHelperRequest {
   ExecutionPlan plan = 4;
   string step_id = 5;
   uint32 timeout_seconds = 6; // remaining bounded execution time
+  string assignment_id = 7;
 }
 
 message EnvironmentDirectoryHelperResponse {
@@ -448,6 +453,7 @@ message ComposeHelperRequest {
   ExecutionPlan plan = 4;
   string step_id = 5;
   uint32 timeout_seconds = 6; // remaining bounded execution time
+  string assignment_id = 7;
 }
 
 message ComposeHelperResponse {
@@ -475,6 +481,7 @@ enum ComposeHelperDiagnostic {
 message TaskAbort {
   string task_id = 1;
   string reason = 2;
+  string assignment_id = 3;
 }
 
 message ConfigUpdate {

@@ -342,11 +342,14 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		ctx,
 		agentID,
 		3,
-		first.ID,
+		first.ID, taskAssignmentIDForTest(t, repository,
+
+			first.ID),
+
 		TaskStatusCompleted,
 		completedComposeTaskResult(),
-		terminalAt,
-	)
+		terminalAt)
+
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
@@ -387,11 +390,14 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		ctx,
 		agentID,
 		3,
-		first.ID,
+		first.ID, taskAssignmentIDForTest(t, repository,
+
+			first.ID),
+
 		TaskStatusCompleted,
 		completedComposeTaskResult(),
-		terminalAt.Add(time.Second),
-	)
+		terminalAt.Add(time.Second))
+
 	if err != nil || replay.Record.Status != TaskStatusCompleted ||
 		replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(replay) = %#v, %v", replay, err)
@@ -401,7 +407,15 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		ProjectName: "gp-platform", ObservedAt: terminalAt,
 	}}
 	if _, err := repository.AcknowledgeTask(
-		ctx, agentID, 3, first.ID, TaskStatusCompleted, mismatched, terminalAt.Add(2*time.Second),
+		ctx,
+		agentID,
+		3,
+		first.ID,
+		taskAssignmentIDForTest(t, repository,
+			first.ID),
+		TaskStatusCompleted,
+		mismatched,
+		terminalAt.Add(2*time.Second),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(mismatched replay) error = %v, want state conflict", err)
 	}
@@ -432,11 +446,14 @@ func TestTaskRetryClaimAllocatesFreshAssignmentID(t *testing.T) {
 		ctx,
 		agentID,
 		1,
-		source.ID,
+		source.ID, taskAssignmentIDForTest(t, repository,
+
+			source.ID),
+
 		TaskStatusFailed,
 		failedResult,
-		source.CreatedAt.Add(2*time.Second),
-	)
+		source.CreatedAt.Add(2*time.Second))
+
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(source) error = %v", err)
 	}
@@ -639,11 +656,13 @@ func TestTaskRepositoryRejectsStaleGenerationAndAbortsPendingTask(t *testing.T) 
 		ctx,
 		agentID,
 		9,
-		runningTask.ID,
+		runningTask.ID, taskAssignmentIDForTest(t, repository,
+
+			runningTask.ID),
+
 		TaskStatusCompleted,
 		completedComposeTaskResult(),
-		runningTask.CreatedAt.Add(2*time.Second),
-	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		runningTask.CreatedAt.Add(2*time.Second)); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(stale generation) error = %v, want state.conflict", err)
 	}
 	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, runningTask.ID), true)

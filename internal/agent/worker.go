@@ -20,11 +20,12 @@ import (
 type PlanHash [sha256.Size]byte
 
 type Assignment struct {
-	TaskID      string
-	OperationID string
-	RetryOf     string
-	Plan        *agentpb.ExecutionPlan
-	Timeout     time.Duration
+	AssignmentID string
+	TaskID       string
+	OperationID  string
+	RetryOf      string
+	Plan         *agentpb.ExecutionPlan
+	Timeout      time.Duration
 }
 
 type TaskTerminal uint8
@@ -37,6 +38,7 @@ const (
 )
 
 type TaskResult struct {
+	AssignmentID         string
 	TaskID               string
 	PlanHash             PlanHash
 	Terminal             TaskTerminal
@@ -56,13 +58,14 @@ const (
 )
 
 type TaskProgress struct {
-	TaskID   string
-	PlanHash PlanHash
-	StepID   string
-	Attempt  uint32
-	Ordinal  uint64
-	State    TaskProgressState
-	Chunk    []byte
+	AssignmentID string
+	TaskID       string
+	PlanHash     PlanHash
+	StepID       string
+	Attempt      uint32
+	Ordinal      uint64
+	State        TaskProgressState
+	Chunk        []byte
 }
 
 // WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
@@ -192,7 +195,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			break
 		}
 		p.emitProgress(runCtx, TaskProgress{
-			TaskID: reservation.assignment.TaskID, PlanHash: planHash,
+			AssignmentID: reservation.assignment.AssignmentID,
+			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
 			StepID: step.StepId, Attempt: 1, Ordinal: 1, State: TaskProgressRunning,
 		})
 		stepCtx, cancel := context.WithTimeout(
@@ -251,7 +255,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			failedStepID = step.GetStepId()
 		}
 		p.emitProgress(runCtx, TaskProgress{
-			TaskID: reservation.assignment.TaskID, PlanHash: planHash,
+			AssignmentID: reservation.assignment.AssignmentID,
+			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
 			StepID: step.StepId, Attempt: 1, Ordinal: 2,
 			State: progressStateFor(reservation.ctx, err),
 		})
@@ -264,7 +269,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		p.logger.Error("agent: step failed", "task_id", reservation.assignment.TaskID, "error", err)
 	}
 	result := TaskResult{
-		TaskID: reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
+		AssignmentID: reservation.assignment.AssignmentID,
+		TaskID:       reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
 		ExitCode: exitCode,
 	}
 	if environmentDirectoryTask {
@@ -368,7 +374,8 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 		select {
 		case reservation := <-p.work:
 			result := TaskResult{
-				TaskID: reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
+				AssignmentID: reservation.assignment.AssignmentID,
+				TaskID:       reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
 				Terminal: TaskTerminalAborted,
 			}
 			if reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
@@ -386,7 +393,7 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 }
 
 // Abort cancels queued or active work because ownership starts at Submit.
-func (p *WorkerPool) Abort(ctx context.Context, taskID string) error {
+func (p *WorkerPool) Abort(ctx context.Context, taskID string, assignmentID string) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "agent: abort context is required")
 	}
@@ -396,10 +403,16 @@ func (p *WorkerPool) Abort(ctx context.Context, taskID string) error {
 	if err := ids.Validate(ids.KindTask, taskID); err != nil {
 		return errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
-	p.mu.Lock()
-	if reservation := p.reservations[taskID]; reservation != nil {
-		reservation.cancel()
+	if err := ids.Validate(ids.KindAssignment, assignmentID); err != nil {
+		return errs.New(errs.KindInternal, "agent: Controller sent an invalid assignment id")
 	}
+	p.mu.Lock()
+	reservation := p.reservations[taskID]
+	if reservation == nil || reservation.assignment.AssignmentID != assignmentID {
+		p.mu.Unlock()
+		return errs.New(errs.KindStateConflict, "agent: Task abort assignment is not reserved")
+	}
+	reservation.cancel()
 	p.mu.Unlock()
 	p.materializations.Release(taskID)
 	return nil
@@ -430,8 +443,9 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 		return errs.New(errs.KindStateConflict, "agent: worker pool is stopped")
 	}
 	if existing := p.reservations[owned.TaskID]; existing != nil {
-		if hashForPlan(existing.assignment.Plan) != hashForPlan(owned.Plan) {
-			return errs.New(errs.KindInternal, "agent: task id was reused with a different plan hash")
+		if existing.assignment.AssignmentID != owned.AssignmentID ||
+			hashForPlan(existing.assignment.Plan) != hashForPlan(owned.Plan) {
+			return errs.New(errs.KindStateConflict, "agent: task id was reused with a different assignment")
 		}
 		return nil
 	}
@@ -456,6 +470,9 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 }
 
 func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assignment, error) {
+	if err := ids.Validate(ids.KindAssignment, assignment.AssignmentID); err != nil {
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid assignment id")
+	}
 	if err := ids.Validate(ids.KindTask, assignment.TaskID); err != nil {
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
@@ -487,7 +504,8 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		}
 	}
 	return Assignment{
-		TaskID: assignment.TaskID, OperationID: assignment.OperationID,
+		AssignmentID: assignment.AssignmentID,
+		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
 		RetryOf: assignment.RetryOf, Plan: plan, Timeout: assignment.Timeout,
 	}, nil
 }

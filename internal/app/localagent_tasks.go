@@ -13,8 +13,8 @@ type localAgentTaskAssignments interface {
 }
 
 type localAgentTaskChannel interface {
-	TaskTerminal(context.Context, string, uint64, string) (<-chan error, error)
-	AbortTask(context.Context, string, uint64, string, string) error
+	TaskTerminal(context.Context, string, uint64, string, string) (<-chan error, error)
+	AbortTask(context.Context, string, uint64, string, string, string) error
 }
 
 // localAgentTasksAdapter closes the delivery-versus-acknowledgement race in
@@ -27,8 +27,9 @@ type localAgentTasksAdapter struct {
 }
 
 type localAgentTaskSubscription struct {
-	cancel context.CancelFunc
-	result <-chan error
+	assignmentID string
+	cancel       context.CancelFunc
+	result       <-chan error
 }
 
 func newLocalAgentTasksAdapter(
@@ -92,7 +93,10 @@ func (adapter *localAgentTasksAdapter) AbortActive(
 			return errs.New(errs.KindInternal, "local agent Task assignment snapshot contains a duplicate")
 		}
 		subscriptionContext, cancel := context.WithCancel(ctx)
-		terminal, err := adapter.channel.TaskTerminal(subscriptionContext, agentID, generation, taskID)
+		assignmentID := assignment.Assignment.Record.AssignmentID
+		terminal, err := adapter.channel.TaskTerminal(
+			subscriptionContext, agentID, generation, taskID, assignmentID,
+		)
 		if err != nil {
 			cancel()
 			return err
@@ -101,7 +105,9 @@ func (adapter *localAgentTasksAdapter) AbortActive(
 			cancel()
 			return errs.New(errs.KindInternal, "local agent Task terminal subscription is nil")
 		}
-		subscriptions[taskID] = localAgentTaskSubscription{cancel: cancel, result: terminal}
+		subscriptions[taskID] = localAgentTaskSubscription{
+			assignmentID: assignmentID, cancel: cancel, result: terminal,
+		}
 		order = append(order, taskID)
 	}
 
@@ -144,7 +150,9 @@ func (adapter *localAgentTasksAdapter) AbortActive(
 			delete(subscriptions, taskID)
 			continue
 		}
-		if err := adapter.channel.AbortTask(ctx, agentID, generation, taskID, reason); err != nil {
+		if err := adapter.channel.AbortTask(
+			ctx, agentID, generation, taskID, subscription.assignmentID, reason,
+		); err != nil {
 			if terminalErr, completed := localAgentTaskTerminalResult(subscription.result); completed {
 				if terminalErr != nil {
 					return terminalErr

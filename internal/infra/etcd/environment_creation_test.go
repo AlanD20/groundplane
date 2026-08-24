@@ -142,13 +142,16 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	}
 	terminalAt := assignedAt.Add(time.Second)
 	if _, err := tasks.AcknowledgeTask(
-		ctx, agentID, 1, task.ID, TaskStatusCompleted, resultRecord, terminalAt,
-	); !isKind(err, errs.KindStateConflict) {
+		ctx, agentID, 1, task.ID, taskAssignmentIDForTest(t, tasks,
+			task.ID),
+		TaskStatusCompleted, resultRecord, terminalAt); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("generic AcknowledgeTask(Environment create) error = %v", err)
 	}
 	terminal, err := tasks.AcknowledgeEnvironmentCreation(
-		ctx, agentID, 1, task.ID, record.ID, TaskStatusCompleted, resultRecord, terminalAt,
-	)
+		ctx, agentID, 1, task.ID, taskAssignmentIDForTest(t, tasks,
+			task.ID),
+		record.ID, TaskStatusCompleted, resultRecord, terminalAt)
+
 	if err != nil || terminal.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeEnvironmentCreation() = %#v, %v", terminal.Record, err)
 	}

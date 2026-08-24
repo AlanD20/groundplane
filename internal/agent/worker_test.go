@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	workerTestTaskID     = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	workerOtherTaskID    = "task_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	workerTestStepID     = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	workerTestServiceID  = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	workerTestArtifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerTestAssignmentID = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerTestTaskID       = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerOtherTaskID      = "task_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	workerTestStepID       = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerTestServiceID    = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	workerTestArtifactID   = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
 // Rationale: replaying one live assignment must neither execute twice nor
@@ -46,8 +47,13 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 		t.Fatalf("Submit(replay) error = %v", err)
 	}
 	mismatch := workerAssignment(workerTestTaskID, "plan-b")
-	if err := pool.Submit(ctx, mismatch); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("Submit(mismatch) error = %v, want internal", err)
+	if err := pool.Submit(ctx, mismatch); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Submit(mismatch) error = %v, want state conflict", err)
+	}
+	stale := assignment
+	stale.AssignmentID = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	if err := pool.Submit(ctx, stale); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Submit(stale assignment) error = %v, want state conflict", err)
 	}
 	if capacity := pool.Capacity(); capacity != 1 {
 		t.Fatalf("Capacity() = %d, want 1 reservation remaining", capacity)
@@ -62,7 +68,12 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 		t.Fatal("matching replay executed concurrently")
 	default:
 	}
-	if err := pool.Abort(ctx, workerTestTaskID); err != nil {
+	if err := pool.Abort(
+		ctx, workerTestTaskID, "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Abort(stale assignment) error = %v, want state conflict", err)
+	}
+	if err := pool.Abort(ctx, workerTestTaskID, assignment.AssignmentID); err != nil {
 		t.Fatalf("Abort() error = %v", err)
 	}
 	result := nextWorkerResult(t, pool)
@@ -97,7 +108,7 @@ func TestWorkerPoolRetainsQueuedAbortAndReservationCapacity(t *testing.T) {
 	if capacity := pool.Capacity(); capacity != 0 {
 		t.Fatalf("Capacity() = %d, want queued reservation to consume the slot", capacity)
 	}
-	if err := pool.Abort(ctx, workerTestTaskID); err != nil {
+	if err := pool.Abort(ctx, workerTestTaskID, assignment.AssignmentID); err != nil {
 		t.Fatalf("Abort() error = %v", err)
 	}
 	done := make(chan struct{})
@@ -136,6 +147,16 @@ func TestWorkerPoolSubmitReturnsConflictWithoutBlockingWhenFull(t *testing.T) {
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Submit(full) blocked the control loop")
+	}
+}
+
+func TestWorkerPoolRejectsMissingAssignmentIdentity(t *testing.T) {
+	t.Parallel()
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	assignment := workerAssignment(workerTestTaskID, "plan-a")
+	assignment.AssignmentID = ""
+	if err := pool.Submit(context.Background(), assignment); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("Submit(missing assignment) error = %v, want internal", err)
 	}
 }
 
@@ -214,7 +235,8 @@ func workerAssignment(taskID, plan string) Assignment {
 		panic(err)
 	}
 	return Assignment{
-		TaskID: taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		AssignmentID: workerTestAssignmentID,
+		TaskID:       taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: sealed, Timeout: time.Minute,
 	}
 }

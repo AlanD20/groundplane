@@ -188,7 +188,8 @@ func validateRequest(
 	if err := executionplan.RejectUnknown(request); err != nil {
 		return nil, nil, err
 	}
-	if ids.Validate(ids.KindTask, request.TaskId) != nil ||
+	if ids.Validate(ids.KindAssignment, request.AssignmentId) != nil ||
+		ids.Validate(ids.KindTask, request.TaskId) != nil ||
 		ids.Validate(ids.KindOperation, request.OperationId) != nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Environment directory helper task identity is invalid")
 	}

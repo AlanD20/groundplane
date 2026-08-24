@@ -69,13 +69,18 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 	task := validTaskRecord(now)
 	createLifecycleTask(t, repository, task)
 	agentID := ids.NewAt(ids.KindAgent, now, 1601)
-	if _, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(time.Second)); err != nil || !found {
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(time.Second))
+	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	for ordinal := uint64(1); ordinal <= 48; ordinal++ {
+		input := taskEventInput(task.ID, ordinal, TaskEventStateRunning)
+		input.Identity.AssignmentID = claim.Assignment.Record.AssignmentID
+		input.Identity.AgentID = agentID
+		input.Identity.AgentGeneration = 4
 		if _, err := repository.AppendTaskEvent(
 			ctx,
-			taskEventInput(task.ID, ordinal, TaskEventStateRunning),
+			input,
 			now.Add(time.Duration(ordinal+1)*time.Second),
 		); err != nil {
 			t.Fatalf("AppendTaskEvent(%d) error = %v", ordinal, err)
@@ -83,8 +88,10 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 	}
 	terminalAt := now.Add(2 * time.Minute)
 	terminal, err := repository.AcknowledgeTask(
-		ctx, agentID, 4, task.ID, TaskStatusCompleted, completedComposeTaskResult(), terminalAt,
-	)
+		ctx, agentID, 4, task.ID, taskAssignmentIDForTest(t, repository,
+			task.ID),
+		TaskStatusCompleted, completedComposeTaskResult(), terminalAt)
+
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}

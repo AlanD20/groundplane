@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	testLocalAgentTaskOne = "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	testLocalAgentTaskTwo = "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	testLocalAgentTaskOne      = "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	testLocalAgentTaskTwo      = "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	testLocalAgentAssignmentID = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
 // Rationale: removal must subscribe before abort delivery, exclude assignments
@@ -111,8 +112,10 @@ func TestLocalAgentTasksAdapterRejectsNonIdleGenerationWithoutAbort(t *testing.T
 
 func testLocalAgentAssignment(taskID string) etcd.TaskAssignment {
 	return etcd.TaskAssignment{
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{TaskID: taskID}},
-		Task:       etcd.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{ID: taskID}},
+		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+			AssignmentID: testLocalAgentAssignmentID, TaskID: taskID,
+		}},
+		Task: etcd.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{ID: taskID}},
 	}
 }
 
@@ -162,6 +165,7 @@ func (channel *fakeLocalAgentTaskChannel) TaskTerminal(
 	_ string,
 	_ uint64,
 	taskID string,
+	_ string,
 ) (<-chan error, error) {
 	terminal := make(chan error, 1)
 	channel.terminals[taskID] = terminal
@@ -174,6 +178,7 @@ func (channel *fakeLocalAgentTaskChannel) AbortTask(
 	_ string,
 	_ uint64,
 	taskID string,
+	_ string,
 	_ string,
 ) error {
 	terminal, subscribed := channel.terminals[taskID]

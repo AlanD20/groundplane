@@ -54,6 +54,7 @@ type TaskStore interface {
 		string,
 		uint64,
 		string,
+		string,
 		etcd.TaskStatus,
 		etcd.TaskResultRecord,
 		time.Time,
@@ -65,6 +66,7 @@ type environmentCreationTaskStore interface {
 		context.Context,
 		string,
 		uint64,
+		string,
 		string,
 		string,
 		etcd.TaskStatus,
@@ -163,7 +165,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		return status.Error(codes.FailedPrecondition, "agent session is not current")
 	}
 	defer session.Close()
-	delivered := make(map[string]struct{}, authorization.Config.MaxConcurrentTasks)
+	delivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 
 	config := proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 	if err := stream.Send(&agentpb.ControllerMessage{
@@ -200,7 +202,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		case abort := <-session.taskAborts():
 			sendErr := stream.Send(&agentpb.ControllerMessage{
 				Payload: &agentpb.ControllerMessage_TaskAbort{TaskAbort: &agentpb.TaskAbort{
-					TaskId: abort.taskID,
+					TaskId: abort.taskID, AssignmentId: abort.assignmentID,
 					Reason: abort.reason,
 				}},
 			})
@@ -290,7 +292,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				); err != nil {
 					return taskStoreStatus(err)
 				}
-				if err := session.RecordTaskTerminal(acknowledgement.TaskId); err != nil {
+				if err := session.RecordTaskTerminal(
+					acknowledgement.TaskId, acknowledgement.AssignmentId,
+				); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
 				}
 				delete(delivered, acknowledgement.TaskId)
@@ -300,7 +304,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if s.tasks == nil {
 					return status.Error(codes.Internal, "agent task store is not configured")
 				}
-				if err := s.recordTaskEvent(stream.Context(), event); err != nil {
+				if err := s.recordTaskEvent(
+					stream.Context(), authenticate.AgentId, authorization.Generation, event,
+				); err != nil {
 					return taskStoreStatus(err)
 				}
 				continue
@@ -313,8 +319,14 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	}
 }
 
-func (s *Server) recordTaskEvent(ctx context.Context, event *agentpb.TaskEvent) error {
-	if event == nil || len(event.PlanHash) != 32 || event.Attempt == 0 || event.Ordinal == 0 {
+func (s *Server) recordTaskEvent(
+	ctx context.Context,
+	agentID string,
+	agentGeneration uint64,
+	event *agentpb.TaskEvent,
+) error {
+	if event == nil || ids.Validate(ids.KindAssignment, event.AssignmentId) != nil ||
+		len(event.PlanHash) != 32 || event.Attempt == 0 || event.Ordinal == 0 {
 		return errs.New(errs.KindValidationFailed, "Agent Task event is invalid")
 	}
 	if len(event.Chunk) != 0 {
@@ -350,6 +362,7 @@ func (s *Server) recordTaskEvent(ctx context.Context, event *agentpb.TaskEvent) 
 	}
 	_, err = s.tasks.AppendTaskEvent(ctx, etcd.TaskEventInput{
 		Identity: etcd.TaskEventIdentity{
+			AssignmentID: event.AssignmentId, AgentID: agentID, AgentGeneration: agentGeneration,
 			TaskID: event.TaskId, StepID: event.StepId,
 			Attempt: event.Attempt, Ordinal: event.Ordinal,
 		},
@@ -365,7 +378,7 @@ func (s *Server) dispatchReady(
 	agentID string,
 	authorization Authorization,
 	capacity int32,
-	delivered map[string]struct{},
+	delivered map[string]string,
 ) error {
 	if capacity == 0 || !session.AssignmentsAllowed() {
 		return nil
@@ -381,16 +394,19 @@ func (s *Server) dispatchReady(
 	}
 	remaining := capacity
 	for _, assignment := range recovered {
-		if _, alreadyDelivered := delivered[assignment.Task.Record.ID]; alreadyDelivered {
+		if err := validateAgentDispatchClaim(assignment, agentID, authorization.Generation); err != nil {
+			return err
+		}
+		if delivered[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
 			continue
 		}
 		if remaining == 0 {
 			return nil
 		}
-		if err := s.sendTaskAssignment(stream, assignment.Task.Record); err != nil {
+		if err := s.sendTaskAssignment(stream, assignment); err != nil {
 			return err
 		}
-		delivered[assignment.Task.Record.ID] = struct{}{}
+		delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
 		remaining--
 	}
 	for remaining > 0 {
@@ -406,20 +422,33 @@ func (s *Server) dispatchReady(
 		if !found {
 			return nil
 		}
-		if err := s.sendTaskAssignment(stream, assignment.Task.Record); err != nil {
+		if err := validateAgentDispatchClaim(assignment, agentID, authorization.Generation); err != nil {
 			return err
 		}
-		delivered[assignment.Task.Record.ID] = struct{}{}
+		if err := s.sendTaskAssignment(stream, assignment); err != nil {
+			return err
+		}
+		delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
 		remaining--
+	}
+	return nil
+}
+
+func validateAgentDispatchClaim(assignment etcd.TaskAssignment, agentID string, generation uint64) error {
+	record := assignment.Assignment.Record
+	if record.Executor != etcd.TaskExecutorAgent || record.AgentID != agentID ||
+		record.AgentGeneration != generation || record.TaskID != assignment.Task.Record.ID ||
+		ids.Validate(ids.KindAssignment, record.AssignmentID) != nil {
+		return errs.New(errs.KindInternal, "durable Agent Task claim does not match its dispatch session")
 	}
 	return nil
 }
 
 func (s *Server) sendTaskAssignment(
 	stream agentpb.AgentChannel_ConnectServer,
-	task etcd.TaskRecord,
+	claim etcd.TaskAssignment,
 ) error {
-	assignment, err := s.taskAssignmentMessage(stream.Context(), task)
+	assignment, err := s.taskAssignmentMessage(stream.Context(), claim)
 	if err != nil {
 		return err
 	}
@@ -432,7 +461,9 @@ func (s *Server) sendTaskAssignment(
 		if step.GetMaterializeFile() == nil {
 			continue
 		}
-		if err := s.sendMaterialization(stream, task, assignment.GetPlan(), step); err != nil {
+		if err := s.sendMaterialization(
+			stream, claim.Task.Record, assignment.GetAssignmentId(), assignment.GetPlan(), step,
+		); err != nil {
 			return err
 		}
 	}
@@ -442,6 +473,7 @@ func (s *Server) sendTaskAssignment(
 func (s *Server) sendMaterialization(
 	stream agentpb.AgentChannel_ConnectServer,
 	task etcd.TaskRecord,
+	assignmentID string,
 	plan *agentpb.ExecutionPlan,
 	step *agentpb.ExecutionStep,
 ) (resultErr error) {
@@ -470,7 +502,7 @@ func (s *Server) sendMaterialization(
 		Mode: materialization.GetMode(), Length: materialization.GetLength(),
 		Sha256: append([]byte(nil), materialization.GetSha256()...),
 	}
-	headerMessage := materializationControllerMessage(task.ID, plan.GetPlanHash(), step.GetStepId())
+	headerMessage := materializationControllerMessage(task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId())
 	headerMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Header{Header: header}
 	if err := stream.Send(headerMessage); err != nil {
 		return err
@@ -494,7 +526,9 @@ func (s *Server) sendMaterialization(
 			sequence++
 			content := append([]byte(nil), buffer[:read]...)
 			chunk := &agentpb.MaterializationTransferChunk{Sequence: sequence, Content: content}
-			chunkMessage := materializationControllerMessage(task.ID, plan.GetPlanHash(), step.GetStepId())
+			chunkMessage := materializationControllerMessage(
+				task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId(),
+			)
 			chunkMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Chunk{Chunk: chunk}
 			sendErr := stream.Send(chunkMessage)
 			clear(content)
@@ -521,7 +555,7 @@ func (s *Server) sendMaterialization(
 	if subtle.ConstantTimeCompare(digest, materialization.GetSha256()) != 1 {
 		return errs.New(errs.KindInternal, "materialization source digest does not match its plan")
 	}
-	endMessage := materializationControllerMessage(task.ID, plan.GetPlanHash(), step.GetStepId())
+	endMessage := materializationControllerMessage(task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId())
 	endMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_End{
 		End: &agentpb.MaterializationTransferEnd{ChunkCount: sequence},
 	}
@@ -530,17 +564,28 @@ func (s *Server) sendMaterialization(
 
 func materializationControllerMessage(
 	taskID string,
+	assignmentID string,
 	planHash []byte,
 	stepID string,
 ) *agentpb.ControllerMessage {
 	return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_MaterializationTransfer{
 		MaterializationTransfer: &agentpb.MaterializationTransfer{
-			TaskId: taskID, PlanHash: append([]byte(nil), planHash...), StepId: stepID,
+			TaskId: taskID, AssignmentId: assignmentID,
+			PlanHash: append([]byte(nil), planHash...), StepId: stepID,
 		},
 	}}
 }
 
-func (s *Server) taskAssignmentMessage(ctx context.Context, task etcd.TaskRecord) (*agentpb.TaskAssignment, error) {
+func (s *Server) taskAssignmentMessage(
+	ctx context.Context,
+	claim etcd.TaskAssignment,
+) (*agentpb.TaskAssignment, error) {
+	task := claim.Task.Record
+	record := claim.Assignment.Record
+	if ids.Validate(ids.KindAssignment, record.AssignmentID) != nil || record.TaskID != task.ID ||
+		record.Executor != etcd.TaskExecutorAgent {
+		return nil, errs.New(errs.KindInternal, "durable Agent Task assignment is invalid")
+	}
 	if s.plans == nil {
 		return nil, errs.New(errs.KindInternal, "execution plan resolver is not configured")
 	}
@@ -565,7 +610,8 @@ func (s *Server) taskAssignmentMessage(ctx context.Context, task etcd.TaskRecord
 		return nil, errs.New(errs.KindInternal, "resolved execution plan does not match its durable Task")
 	}
 	return &agentpb.TaskAssignment{
-		TaskId: task.ID, OperationId: task.OperationID, RetryOf: task.RetryOf,
+		TaskId: task.ID, AssignmentId: record.AssignmentID,
+		OperationId: task.OperationID, RetryOf: task.RetryOf,
 		Plan: plan, TimeoutSeconds: int32(task.TimeoutSeconds),
 	}, nil
 }
@@ -611,7 +657,8 @@ func (s *Server) acknowledge(
 	agentGeneration uint64,
 	acknowledgement *agentpb.TaskAck,
 ) error {
-	if acknowledgement == nil || len(acknowledgement.PlanHash) != 32 {
+	if acknowledgement == nil || ids.Validate(ids.KindAssignment, acknowledgement.AssignmentId) != nil ||
+		len(acknowledgement.PlanHash) != 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
 	}
 	task, err := s.tasks.GetTask(ctx, acknowledgement.TaskId)
@@ -654,6 +701,7 @@ func (s *Server) acknowledge(
 			agentID,
 			agentGeneration,
 			acknowledgement.TaskId,
+			acknowledgement.AssignmentId,
 			task.Record.Target,
 			terminal,
 			durableEnvironmentDirectoryTaskResult(acknowledgement),
@@ -665,6 +713,7 @@ func (s *Server) acknowledge(
 			agentID,
 			agentGeneration,
 			acknowledgement.TaskId,
+			acknowledgement.AssignmentId,
 			terminal,
 			durableComposeTaskResult(acknowledgement),
 			s.now().UTC(),

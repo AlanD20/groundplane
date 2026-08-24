@@ -21,8 +21,8 @@ type taskAbortRepository interface {
 }
 
 type taskAbortAgentChannel interface {
-	TaskTerminal(context.Context, string, uint64, string) (<-chan error, error)
-	AbortTask(context.Context, string, uint64, string, string) error
+	TaskTerminal(context.Context, string, uint64, string, string) (<-chan error, error)
+	AbortTask(context.Context, string, uint64, string, string, string) error
 }
 
 type taskAbortControllerRunner interface {
@@ -120,6 +120,7 @@ func (service *taskAbortService) abortAgentTask(ctx context.Context, assignment 
 		record.AgentID,
 		record.AgentGeneration,
 		record.TaskID,
+		record.AssignmentID,
 	)
 	if err != nil {
 		return err
@@ -139,6 +140,7 @@ func (service *taskAbortService) abortAgentTask(ctx context.Context, assignment 
 		record.AgentID,
 		record.AgentGeneration,
 		record.TaskID,
+		record.AssignmentID,
 		taskAbortReasonOperatorRequested,
 	); err != nil {
 		return err

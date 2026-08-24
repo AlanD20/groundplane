@@ -96,7 +96,8 @@ func (runtime *ComposeRuntime) removeManagedNetwork(
 ) (composeStepResult, error) {
 	result := composeStepResult{MutationAttempted: true}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
-		Schema: composeHelperSchema, TaskId: assignment.TaskID, OperationId: assignment.OperationID,
+		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
+		TaskId: assignment.TaskID, OperationId: assignment.OperationID,
 		Plan: assignment.Plan, StepId: step.GetStepId(),
 		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
@@ -136,6 +137,7 @@ func (runtime *ComposeRuntime) mutate(
 	result := composeStepResult{MutationAttempted: true}
 	response, helperErr := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema:         composeHelperSchema,
+		AssignmentId:   assignment.AssignmentID,
 		TaskId:         assignment.TaskID,
 		OperationId:    assignment.OperationID,
 		Plan:           assignment.Plan,

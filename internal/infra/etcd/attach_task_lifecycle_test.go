@@ -40,8 +40,10 @@ func TestAttachTaskClaimAndAcknowledgementAdvanceProvisioningAtomically(t *testi
 
 	terminalAt := record.CreatedAt.Add(2 * time.Second)
 	terminal, err := tasks.AcknowledgeTask(
-		ctx, agentID, 1, record.TaskID, TaskStatusCompleted, completedComposeTaskResult(), terminalAt,
-	)
+		ctx, agentID, 1, record.TaskID, taskAssignmentIDForTest(t, tasks,
+			record.TaskID),
+		TaskStatusCompleted, completedComposeTaskResult(), terminalAt)
+
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
@@ -50,8 +52,10 @@ func TestAttachTaskClaimAndAcknowledgementAdvanceProvisioningAtomically(t *testi
 		t.Fatalf("ready Attach = %#v, %v", ready, err)
 	}
 	replay, err := tasks.AcknowledgeTask(
-		ctx, agentID, 1, record.TaskID, TaskStatusCompleted, completedComposeTaskResult(), terminalAt.Add(time.Second),
-	)
+		ctx, agentID, 1, record.TaskID, taskAssignmentIDForTest(t, tasks,
+			record.TaskID),
+		TaskStatusCompleted, completedComposeTaskResult(), terminalAt.Add(time.Second))
+
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(replay) = %#v, %v", replay, err)
 	}
@@ -116,8 +120,10 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, ReconciliationRequired: true,
 	}
 	terminal, err := tasks.AcknowledgeTask(
-		ctx, agentID, 2, record.TaskID, TaskStatusTimedOut, result, terminalAt,
-	)
+		ctx, agentID, 2, record.TaskID, taskAssignmentIDForTest(t, tasks,
+			record.TaskID),
+		TaskStatusTimedOut, result, terminalAt)
+
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(timeout) error = %v", err)
 	}
@@ -176,11 +182,13 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		ctx,
 		agentID,
 		3,
-		record.TaskID,
+		record.TaskID, taskAssignmentIDForTest(t, tasks,
+
+			record.TaskID),
+
 		TaskStatusCompleted,
 		completedComposeTaskResult(),
-		record.CreatedAt.Add(2*time.Second),
-	); err != nil {
+		record.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeTask(provision) error = %v", err)
 	}
 	ready, err := attaches.GetAttach(ctx, record.ID)
@@ -199,8 +207,10 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, ReconciliationRequired: true,
 	}
 	failedTask, err := tasks.AcknowledgeTask(
-		ctx, agentID, 3, detachID, TaskStatusTimedOut, failedResult, detachFailureAt,
-	)
+		ctx, agentID, 3, detachID, taskAssignmentIDForTest(t, tasks,
+			detachID),
+		TaskStatusTimedOut, failedResult, detachFailureAt)
+
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(detach timeout) error = %v", err)
 	}
@@ -228,11 +238,14 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		ctx,
 		agentID,
 		3,
-		retryID,
+		retryID, taskAssignmentIDForTest(t, tasks,
+
+			retryID),
+
 		TaskStatusCompleted,
 		completedComposeTaskResult(),
-		retryAt.Add(2*time.Second),
-	)
+		retryAt.Add(2*time.Second))
+
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(detach retry) error = %v", err)
 	}
@@ -258,11 +271,14 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		ctx,
 		agentID,
 		3,
-		retryID,
+		retryID, taskAssignmentIDForTest(t, tasks,
+
+			retryID),
+
 		TaskStatusCompleted,
 		completedComposeTaskResult(),
-		retryAt.Add(3*time.Second),
-	)
+		retryAt.Add(3*time.Second))
+
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(detach replay) = %#v, %v", replay, err)
 	}

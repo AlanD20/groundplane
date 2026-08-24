@@ -90,7 +90,8 @@ func managedNetworkRequest(t *testing.T) (*agentpb.ComposeHelperRequest, string,
 		t.Fatalf("Seal() error = %v", err)
 	}
 	return &agentpb.ComposeHelperRequest{
-		Schema: SchemaVersion, TaskId: ids.NewAt(ids.KindTask, now, 5),
+		Schema: SchemaVersion, AssignmentId: ids.NewAt(ids.KindAssignment, now, 7),
+		TaskId:      ids.NewAt(ids.KindTask, now, 5),
 		OperationId: ids.NewAt(ids.KindOperation, now, 6), Plan: plan,
 		StepId: plan.Steps[0].StepId, TimeoutSeconds: 120,
 	}, dockerName, environmentID

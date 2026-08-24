@@ -960,6 +960,7 @@ type TaskEvent struct {
 	Ordinal       uint64                 `protobuf:"varint,5,opt,name=ordinal,proto3" json:"ordinal,omitempty"` // one-based stable delivery identity within the step attempt
 	State         TaskState              `protobuf:"varint,6,opt,name=state,proto3,enum=groundplane.agent.v1.TaskState" json:"state,omitempty"`
 	Chunk         []byte                 `protobuf:"bytes,7,opt,name=chunk,proto3" json:"chunk,omitempty"` // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
+	AssignmentId  string                 `protobuf:"bytes,8,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1041,6 +1042,13 @@ func (x *TaskEvent) GetChunk() []byte {
 		return x.Chunk
 	}
 	return nil
+}
+
+func (x *TaskEvent) GetAssignmentId() string {
+	if x != nil {
+		return x.AssignmentId
+	}
+	return ""
 }
 
 type ObservedState struct {
@@ -1462,6 +1470,7 @@ type TaskAck struct {
 	//	*TaskAck_ComposeResult
 	//	*TaskAck_EnvironmentDirectoryResult
 	Result        isTaskAck_Result `protobuf_oneof:"result"`
+	AssignmentId  string           `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1547,6 +1556,13 @@ func (x *TaskAck) GetEnvironmentDirectoryResult() *EnvironmentDirectoryTaskResul
 		}
 	}
 	return nil
+}
+
+func (x *TaskAck) GetAssignmentId() string {
+	if x != nil {
+		return x.AssignmentId
+	}
+	return ""
 }
 
 type isTaskAck_Result interface {
@@ -1821,6 +1837,7 @@ type MaterializationTransfer struct {
 	//	*MaterializationTransfer_Chunk
 	//	*MaterializationTransfer_End
 	Record        isMaterializationTransfer_Record `protobuf_oneof:"record"`
+	AssignmentId  string                           `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1908,6 +1925,13 @@ func (x *MaterializationTransfer) GetEnd() *MaterializationTransferEnd {
 		}
 	}
 	return nil
+}
+
+func (x *MaterializationTransfer) GetAssignmentId() string {
+	if x != nil {
+		return x.AssignmentId
+	}
+	return ""
 }
 
 type isMaterializationTransfer_Record interface {
@@ -2175,6 +2199,7 @@ type TaskAssignment struct {
 	RetryOf        string                 `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
 	Plan           *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`                                  // complete authoritative procedure
 	TimeoutSeconds int32                  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	AssignmentId   string                 `protobuf:"bytes,6,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2242,6 +2267,13 @@ func (x *TaskAssignment) GetTimeoutSeconds() int32 {
 		return x.TimeoutSeconds
 	}
 	return 0
+}
+
+func (x *TaskAssignment) GetAssignmentId() string {
+	if x != nil {
+		return x.AssignmentId
+	}
+	return ""
 }
 
 type ExecutionPlan struct {
@@ -3724,6 +3756,7 @@ type EnvironmentDirectoryHelperRequest struct {
 	Plan           *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
 	StepId         string                 `protobuf:"bytes,5,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
 	TimeoutSeconds uint32                 `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // remaining bounded execution time
+	AssignmentId   string                 `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3800,6 +3833,13 @@ func (x *EnvironmentDirectoryHelperRequest) GetTimeoutSeconds() uint32 {
 	return 0
 }
 
+func (x *EnvironmentDirectoryHelperRequest) GetAssignmentId() string {
+	if x != nil {
+		return x.AssignmentId
+	}
+	return ""
+}
+
 type EnvironmentDirectoryHelperResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Schema        uint32                 `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
@@ -3870,6 +3910,7 @@ type ComposeHelperRequest struct {
 	Plan           *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
 	StepId         string                 `protobuf:"bytes,5,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
 	TimeoutSeconds uint32                 `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // remaining bounded execution time
+	AssignmentId   string                 `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3946,6 +3987,13 @@ func (x *ComposeHelperRequest) GetTimeoutSeconds() uint32 {
 	return 0
 }
 
+func (x *ComposeHelperRequest) GetAssignmentId() string {
+	if x != nil {
+		return x.AssignmentId
+	}
+	return ""
+}
+
 type ComposeHelperResponse struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	Schema        uint32                  `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
@@ -4018,6 +4066,7 @@ type TaskAbort struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	AssignmentId  string                 `protobuf:"bytes,3,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4062,6 +4111,13 @@ func (x *TaskAbort) GetTaskId() string {
 func (x *TaskAbort) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *TaskAbort) GetAssignmentId() string {
+	if x != nil {
+		return x.AssignmentId
 	}
 	return ""
 }
@@ -4171,7 +4227,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\apayload\"=\n" +
 	"\x05Ready\x12\x1a\n" +
 	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\xdb\x01\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\x80\x02\n" +
 	"\tTaskEvent\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12\x17\n" +
@@ -4179,7 +4235,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\aattempt\x18\x04 \x01(\rR\aattempt\x12\x18\n" +
 	"\aordinal\x18\x05 \x01(\x04R\aordinal\x125\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x1f.groundplane.agent.v1.TaskStateR\x05state\x12\x14\n" +
-	"\x05chunk\x18\a \x01(\fR\x05chunk\"R\n" +
+	"\x05chunk\x18\a \x01(\fR\x05chunk\x12#\n" +
+	"\rassignment_id\x18\b \x01(\tR\fassignmentId\"R\n" +
 	"\rObservedState\x12A\n" +
 	"\bprojects\x18\x01 \x03(\v2%.groundplane.agent.v1.ObservedProjectR\bprojects\"\x86\x03\n" +
 	"\x0fObservedProject\x12!\n" +
@@ -4218,14 +4275,15 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x06labels\x18\x03 \x03(\v2\x1f.groundplane.agent.v1.LabelPairR\x06labels\"h\n" +
 	"\x11ObservedCollision\x12?\n" +
 	"\x04kind\x18\x01 \x01(\x0e2+.groundplane.agent.v1.ObservedCollisionKindR\x04kind\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\xf2\x02\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x97\x03\n" +
 	"\aTaskAck\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12>\n" +
 	"\bterminal\x18\x03 \x01(\x0e2\".groundplane.agent.v1.TaskTerminalR\bterminal\x12\x1b\n" +
 	"\texit_code\x18\x04 \x01(\x05R\bexitCode\x12P\n" +
 	"\x0ecompose_result\x18\x05 \x01(\v2'.groundplane.agent.v1.ComposeTaskResultH\x00R\rcomposeResult\x12x\n" +
-	"\x1cenvironment_directory_result\x18\x06 \x01(\v24.groundplane.agent.v1.EnvironmentDirectoryTaskResultH\x00R\x1aenvironmentDirectoryResultB\b\n" +
+	"\x1cenvironment_directory_result\x18\x06 \x01(\v24.groundplane.agent.v1.EnvironmentDirectoryTaskResultH\x00R\x1aenvironmentDirectoryResult\x12#\n" +
+	"\rassignment_id\x18\a \x01(\tR\fassignmentIdB\b\n" +
 	"\x06result\"\x84\x02\n" +
 	"\x11ComposeTaskResult\x12A\n" +
 	"\bprojects\x18\x01 \x03(\v2%.groundplane.agent.v1.ObservedProjectR\bprojects\x12$\n" +
@@ -4243,14 +4301,15 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\rconfig_update\x18\x03 \x01(\v2\".groundplane.agent.v1.ConfigUpdateH\x00R\fconfigUpdate\x12<\n" +
 	"\bshutdown\x18\x04 \x01(\v2\x1e.groundplane.agent.v1.ShutdownH\x00R\bshutdown\x12j\n" +
 	"\x18materialization_transfer\x18\x05 \x01(\v2-.groundplane.agent.v1.MaterializationTransferH\x00R\x17materializationTransferB\t\n" +
-	"\apayload\"\xd3\x02\n" +
+	"\apayload\"\xf8\x02\n" +
 	"\x17MaterializationTransfer\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1b\n" +
 	"\tplan_hash\x18\x02 \x01(\fR\bplanHash\x12\x17\n" +
 	"\astep_id\x18\x03 \x01(\tR\x06stepId\x12M\n" +
 	"\x06header\x18\x04 \x01(\v23.groundplane.agent.v1.MaterializationTransferHeaderH\x00R\x06header\x12J\n" +
 	"\x05chunk\x18\x05 \x01(\v22.groundplane.agent.v1.MaterializationTransferChunkH\x00R\x05chunk\x12D\n" +
-	"\x03end\x18\x06 \x01(\v20.groundplane.agent.v1.MaterializationTransferEndH\x00R\x03endB\b\n" +
+	"\x03end\x18\x06 \x01(\v20.groundplane.agent.v1.MaterializationTransferEndH\x00R\x03end\x12#\n" +
+	"\rassignment_id\x18\a \x01(\tR\fassignmentIdB\b\n" +
 	"\x06record\"\xe1\x03\n" +
 	"\x1dMaterializationTransferHeader\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
@@ -4275,13 +4334,14 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\acontent\x18\x02 \x01(\fR\acontent\"=\n" +
 	"\x1aMaterializationTransferEnd\x12\x1f\n" +
 	"\vchunk_count\x18\x01 \x01(\rR\n" +
-	"chunkCount\"\xc9\x01\n" +
+	"chunkCount\"\xee\x01\n" +
 	"\x0eTaskAssignment\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
 	"\bretry_of\x18\x03 \x01(\tR\aretryOf\x127\n" +
 	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12'\n" +
-	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\"\xea\x02\n" +
+	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\x12#\n" +
+	"\rassignment_id\x18\x06 \x01(\tR\fassignmentId\"\xea\x02\n" +
 	"\rExecutionPlan\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12\x1b\n" +
@@ -4415,35 +4475,38 @@ const file_proto_agent_proto_rawDesc = "" +
 	"artifactId\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x02 \x01(\tR\tserviceId\x12)\n" +
-	"\x10caddyfile_sha256\x18\x03 \x01(\fR\x0fcaddyfileSha256\"\xf2\x01\n" +
+	"\x10caddyfile_sha256\x18\x03 \x01(\fR\x0fcaddyfileSha256\"\x97\x02\n" +
 	"!EnvironmentDirectoryHelperRequest\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x03 \x01(\tR\voperationId\x127\n" +
 	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12\x17\n" +
 	"\astep_id\x18\x05 \x01(\tR\x06stepId\x12'\n" +
-	"\x0ftimeout_seconds\x18\x06 \x01(\rR\x0etimeoutSeconds\"\x7f\n" +
+	"\x0ftimeout_seconds\x18\x06 \x01(\rR\x0etimeoutSeconds\x12#\n" +
+	"\rassignment_id\x18\a \x01(\tR\fassignmentId\"\x7f\n" +
 	"\"EnvironmentDirectoryHelperResponse\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x1b\n" +
 	"\texit_code\x18\x02 \x01(\x05R\bexitCode\x12$\n" +
-	"\x0efailed_step_id\x18\x03 \x01(\tR\ffailedStepId\"\xe5\x01\n" +
+	"\x0efailed_step_id\x18\x03 \x01(\tR\ffailedStepId\"\x8a\x02\n" +
 	"\x14ComposeHelperRequest\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x03 \x01(\tR\voperationId\x127\n" +
 	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12\x17\n" +
 	"\astep_id\x18\x05 \x01(\tR\x06stepId\x12'\n" +
-	"\x0ftimeout_seconds\x18\x06 \x01(\rR\x0etimeoutSeconds\"\xe1\x01\n" +
+	"\x0ftimeout_seconds\x18\x06 \x01(\rR\x0etimeoutSeconds\x12#\n" +
+	"\rassignment_id\x18\a \x01(\tR\fassignmentId\"\xe1\x01\n" +
 	"\x15ComposeHelperResponse\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12D\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2*.groundplane.agent.v1.ComposeHelperOutcomeR\aoutcome\x12\x1b\n" +
 	"\texit_code\x18\x03 \x01(\x05R\bexitCode\x12M\n" +
 	"\n" +
 	"diagnostic\x18\x04 \x01(\x0e2-.groundplane.agent.v1.ComposeHelperDiagnosticR\n" +
-	"diagnostic\"<\n" +
+	"diagnostic\"a\n" +
 	"\tTaskAbort\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"T\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12#\n" +
+	"\rassignment_id\x18\x03 \x01(\tR\fassignmentId\"T\n" +
 	"\fConfigUpdate\x12D\n" +
 	"\fagent_config\x18\x01 \x01(\v2!.groundplane.agent.v1.AgentConfigR\vagentConfig\"\n" +
 	"\n" +

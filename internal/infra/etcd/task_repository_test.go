@@ -21,7 +21,11 @@ func TestTaskRepositoryKeysMatchTheApprovedLayout(t *testing.T) {
 	taskID := ids.NewAt(ids.KindTask, now, 21)
 	operationID := ids.NewAt(ids.KindOperation, now, 22)
 	stepID := ids.NewAt(ids.KindStep, now, 23)
-	identity := TaskEventIdentity{TaskID: taskID, StepID: stepID, Attempt: 3, Ordinal: 17}
+	identity := TaskEventIdentity{
+		AssignmentID: taskEventTestAssignmentID,
+		AgentID:      taskEventTestAgentID, AgentGeneration: 1,
+		TaskID: taskID, StepID: stepID, Attempt: 3, Ordinal: 17,
+	}
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 24)
 	tenantID := ids.NewAt(ids.KindTenant, now, 25)
 	tenantWorkspacePath := "/v1/indexes/tasks/by-workspace/tenant/" + tenantID + "/" + taskID
@@ -29,10 +33,11 @@ func TestTaskRepositoryKeysMatchTheApprovedLayout(t *testing.T) {
 
 	wants := map[string]string{
 		taskKey(taskID): "/v1/tasks/" + taskID,
-		taskOperationIndexKey(operationID, taskID):         "/v1/indexes/tasks/operation/" + operationID + "/" + taskID,
-		taskActiveOperationKey(operationID):                "/v1/indexes/tasks/active-operation/" + operationID,
-		taskEventKey(taskID, 42):                           "/v1/runtime/task-events/" + taskID + "/00000000000000000042",
-		taskEventDedupKey(identity):                        "/v1/runtime/task-event-dedup/" + taskID + "/" + stepID + "/3/17",
+		taskOperationIndexKey(operationID, taskID): "/v1/indexes/tasks/operation/" + operationID + "/" + taskID,
+		taskActiveOperationKey(operationID):        "/v1/indexes/tasks/active-operation/" + operationID,
+		taskEventKey(taskID, 42):                   "/v1/runtime/task-events/" + taskID + "/00000000000000000042",
+		taskEventDedupKey(identity): "/v1/runtime/task-event-dedup/" + taskID + "/" +
+			taskEventTestAssignmentID + "/" + stepID + "/3/17",
 		deletionTombstoneKey("environment", environmentID): "/v1/runtime/deletions/environment/" + environmentID,
 		taskWorkspacePlatformIndexKey(taskID):              "/v1/indexes/tasks/by-workspace/platform/" + taskID,
 		taskWorkspaceTenantIndexKey(tenantID, taskID):      tenantWorkspacePath,
@@ -54,7 +59,7 @@ func TestTaskRepositoryAppendIsRestartSafeAndDeduplicated(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -97,7 +102,7 @@ func TestTaskRepositoryConcurrentAppendsAllocateUniqueSequences(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -148,7 +153,7 @@ func TestTaskRepositoryBacksOffAfterCASConflicts(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	store.conflictNextTransactions(3)
 	waits := make([]time.Duration, 0, 3)
 	policy := taskCASRetryPolicy{
@@ -195,7 +200,7 @@ func TestTaskRepositoryBacksOffAfterCASConflicts(t *testing.T) {
 	}
 
 	store = newMemoryTaskStore()
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	store.conflictNextTransactions(12)
 	longWaits := 0
 	policy.wait = func(context.Context, time.Duration) error {
@@ -243,7 +248,7 @@ func TestTaskRepositoryDoesNotInferSuccessAfterUnknownOutcome(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -277,7 +282,7 @@ func TestTaskRepositoryRejectsSequenceCollisionAndEventCap(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	collidingInput := taskEventInput(task.ID, 99, TaskEventStateRunning)
 	colliding, err := prepareTaskEvent(task, collidingInput, nil, taskJournalTime().Add(time.Second))
 	if err != nil {
@@ -304,7 +309,7 @@ func TestTaskRepositoryRejectsSequenceCollisionAndEventCap(t *testing.T) {
 	capped := validTaskRecord(taskJournalTime())
 	capped.EventCount = MaximumTaskEvents
 	capped.NextEventSequence = MaximumTaskEvents + 1
-	seedTaskRepositoryTask(t, cappedStore, capped)
+	seedTaskRepositoryRunningTask(t, cappedStore, capped)
 	cappedRepository, err := newTaskRepository(cappedStore)
 	if err != nil {
 		t.Fatalf("newTaskRepository(capped) error = %v", err)
@@ -324,7 +329,7 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
-	seedTaskRepositoryTask(t, store, task)
+	seedTaskRepositoryRunningTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -337,15 +342,7 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask() error = %v", err)
 	}
-	running, err := transitionTaskStatus(
-		current.Record,
-		TaskStatusPending,
-		TaskStatusRunning,
-		taskJournalTime().Add(2*time.Second),
-	)
-	if err != nil {
-		t.Fatalf("transitionTaskStatus(running) error = %v", err)
-	}
+	running := current.Record
 	terminal, err := transitionTaskStatus(
 		running,
 		TaskStatusRunning,
@@ -394,8 +391,8 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	second := validTaskRecord(taskJournalTime())
 	second.ID = ids.NewAt(ids.KindTask, taskJournalTime().Add(time.Second), 31)
 	second.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), 32)
-	seedTaskRepositoryTask(t, store, first)
-	seedTaskRepositoryTask(t, store, second)
+	seedTaskRepositoryRunningTask(t, store, first)
+	seedTaskRepositoryRunningTask(t, store, second)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -410,7 +407,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	third := validTaskRecord(taskJournalTime())
 	third.ID = ids.NewAt(ids.KindTask, taskJournalTime().Add(2*time.Second), 33)
 	third.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), 34)
-	seedTaskRepositoryTask(t, store, third)
+	seedTaskRepositoryRunningTask(t, store, third)
 	secondPage, err := repository.ListTasks(ctx, PageRequest{Limit: 1, Cursor: page.NextCursor})
 	if err != nil {
 		t.Fatalf("ListTasks(second page) error = %v", err)

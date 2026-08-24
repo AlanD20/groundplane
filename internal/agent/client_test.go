@@ -59,8 +59,9 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 		configMessage(60, 1),
 		&agentpb.ControllerMessage{
 			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
-				TaskId: workerTestTaskID, OperationId: assignment.OperationID,
-				Plan: assignment.Plan, TimeoutSeconds: 60,
+				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
+				OperationId: assignment.OperationID,
+				Plan:        assignment.Plan, TimeoutSeconds: 60,
 			}},
 		},
 	)
@@ -266,7 +267,8 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 	}
 	if acknowledgement := message.GetTaskAck(); acknowledgement != nil {
 		owned := &agentpb.TaskAck{
-			TaskId: acknowledgement.TaskId, PlanHash: append([]byte(nil), acknowledgement.PlanHash...),
+			TaskId: acknowledgement.TaskId, AssignmentId: acknowledgement.AssignmentId,
+			PlanHash: append([]byte(nil), acknowledgement.PlanHash...),
 			Terminal: acknowledgement.Terminal, ExitCode: acknowledgement.ExitCode,
 		}
 		if acknowledgement.GetComposeResult() != nil {
@@ -282,8 +284,9 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 	}
 	if event := message.GetTaskEvent(); event != nil {
 		copyMessage.Payload = &agentpb.AgentMessage_TaskEvent{TaskEvent: &agentpb.TaskEvent{
-			TaskId: event.TaskId, PlanHash: append([]byte(nil), event.PlanHash...),
-			StepId: event.StepId, Attempt: event.Attempt, Ordinal: event.Ordinal,
+			TaskId: event.TaskId, AssignmentId: event.AssignmentId,
+			PlanHash: append([]byte(nil), event.PlanHash...),
+			StepId:   event.StepId, Attempt: event.Attempt, Ordinal: event.Ordinal,
 			State: event.State, Chunk: append([]byte(nil), event.Chunk...),
 		}}
 	}

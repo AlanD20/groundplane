@@ -432,9 +432,13 @@ func validTaskRecord(now time.Time) TaskRecord {
 
 func taskEventInput(taskID string, ordinal uint64, state TaskEventState) TaskEventInput {
 	return TaskEventInput{
-		Identity: TaskEventIdentity{TaskID: taskID, StepID: taskJournalStepID(), Attempt: 1, Ordinal: ordinal},
-		State:    state,
-		Payload:  json.RawMessage(`{"message":"progress"}`),
+		Identity: TaskEventIdentity{
+			AssignmentID: taskEventTestAssignmentID,
+			AgentID:      taskEventTestAgentID, AgentGeneration: 1,
+			TaskID: taskID, StepID: taskJournalStepID(), Attempt: 1, Ordinal: ordinal,
+		},
+		State:   state,
+		Payload: json.RawMessage(`{"message":"progress"}`),
 	}
 }
 

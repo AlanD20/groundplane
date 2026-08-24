@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"math/rand/v2"
 	"time"
@@ -351,13 +352,15 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err := ctx.Err(); err != nil {
 			return TaskEventAppend{}, err
 		}
+		claimKey := taskAssignmentKey(input.Identity.AgentID, input.Identity.TaskID)
 		result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-			taskKey(input.Identity.TaskID), taskEventDedupKey(input.Identity),
+			taskKey(input.Identity.TaskID), taskEventDedupKey(input.Identity), claimKey,
+			taskAssignmentIndexKey(input.Identity.TaskID),
 		}})
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		if len(result.Values) != 2 {
+		if len(result.Values) != 4 {
 			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event read returned an invalid record count")
 		}
 		taskValue := result.Values[0]
@@ -396,6 +399,25 @@ func (repository *TaskRepository) AppendTaskEvent(
 				Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true,
 			}, nil
 		}
+		assignmentValue := result.Values[2]
+		assignmentIndexValue := result.Values[3]
+		if task.Status != TaskStatusRunning || assignmentValue == nil || assignmentIndexValue == nil {
+			return TaskEventAppend{}, errs.New(errs.KindStateConflict, "task event has no matching active assignment")
+		}
+		assignment, err := decodeTaskAssignment(assignmentValue.Value)
+		if err != nil {
+			return TaskEventAppend{}, err
+		}
+		if assignmentIndexValue.ModRevision != assignmentValue.ModRevision ||
+			!bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
+			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event assignment index is inconsistent")
+		}
+		if assignment.AssignmentID != input.Identity.AssignmentID ||
+			assignment.TaskID != input.Identity.TaskID || assignment.Executor != TaskExecutorAgent ||
+			assignment.AgentID != input.Identity.AgentID ||
+			assignment.AgentGeneration != input.Identity.AgentGeneration {
+			return TaskEventAppend{}, errs.New(errs.KindStateConflict, "task event assignment identity does not match")
+		}
 
 		eventKey := taskEventKey(task.ID, prepared.Sequence)
 		eventAtRevision, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -427,6 +449,8 @@ func (repository *TaskRepository) AppendTaskEvent(
 			ctx,
 			[]Condition{
 				{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+				{Key: claimKey, ModRevision: assignmentValue.ModRevision},
+				{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
 				{Key: taskEventDedupKey(input.Identity)},
 				{Key: eventKey},
 			},

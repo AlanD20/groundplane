@@ -151,7 +151,8 @@ func validRequest(t *testing.T) *agentpb.EnvironmentDirectoryHelperRequest {
 		t.Fatalf("Seal() error = %v", err)
 	}
 	return &agentpb.EnvironmentDirectoryHelperRequest{
-		Schema: SchemaVersion, TaskId: testTaskID, OperationId: testOperationID,
+		Schema: SchemaVersion, AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		TaskId: testTaskID, OperationId: testOperationID,
 		Plan: plan, StepId: testStepID, TimeoutSeconds: 30,
 	}
 }
@@ -190,7 +191,8 @@ func validManagedVolumeRequest(t *testing.T) *agentpb.EnvironmentDirectoryHelper
 		t.Fatalf("Seal() error = %v", err)
 	}
 	return &agentpb.EnvironmentDirectoryHelperRequest{
-		Schema: SchemaVersion, TaskId: testTaskID, OperationId: testOperationID,
+		Schema: SchemaVersion, AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		TaskId: testTaskID, OperationId: testOperationID,
 		Plan: plan, StepId: testStepID, TimeoutSeconds: 30,
 	}
 }
@@ -213,7 +215,8 @@ func validRemoveRequest(t *testing.T) *agentpb.EnvironmentDirectoryHelperRequest
 		t.Fatalf("Seal() error = %v", err)
 	}
 	return &agentpb.EnvironmentDirectoryHelperRequest{
-		Schema: SchemaVersion, TaskId: testTaskID, OperationId: testOperationID,
+		Schema: SchemaVersion, AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		TaskId: testTaskID, OperationId: testOperationID,
 		Plan: plan, StepId: testStepID, TimeoutSeconds: 30,
 	}
 }
