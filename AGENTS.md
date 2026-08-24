@@ -26,8 +26,9 @@ Console (`console/`), and the Go implementation scaffold.
 - **docs/standards.md** — the enforceable Go rules (import matrix, one
   error type, the subprocess Runner, banned patterns, CI gate). Reach
   for it when writing Go code.
-- **docs/agents.md** — the repository workflow and source-of-truth map.
-  Reach for it before changing multiple layers or moving a contract.
+- **docs/agents.md** — the repository workflow, source-of-truth map, and
+  multi-agent delegation policy. Reach for it before changing multiple layers,
+  moving a contract, or delegating repository work to subagents.
 - **docs/delivery.md** — the delivery and commit contract. Reach for it
   before committing, opening a PR, or declaring a change complete.
 - **docs/capabilities.md** — the implementation ledger and vertical delivery
