@@ -111,7 +111,7 @@ type Options struct {
 
 type taskQueries interface {
 	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
-	ListTasks(context.Context, etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error)
+	ListTasksByScope(context.Context, etcd.TaskListScope, etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error)
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 }
 
@@ -300,7 +300,7 @@ func (s *Server) routes() {
 }
 
 func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiTypes.Task, error) {
-	status, err := taskAPIStatus(record.Status)
+	response, err := taskListResponse(record)
 	if err != nil {
 		return apiTypes.Task{}, err
 	}
@@ -318,11 +318,7 @@ func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiT
 		}
 		stepStatus[event.Identity.StepID] = mapped
 	}
-	response := apiTypes.Task{
-		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
-		PlanHash: record.PlanHash, Type: string(record.Type), Target: record.Target, Status: status,
-		Steps: make([]apiTypes.TaskStep, len(record.Steps)),
-	}
+	response.Steps = make([]apiTypes.TaskStep, len(record.Steps))
 	for index, step := range record.Steps {
 		response.Steps[index] = apiTypes.TaskStep{Name: step.ID, Status: stepStatus[step.ID]}
 	}

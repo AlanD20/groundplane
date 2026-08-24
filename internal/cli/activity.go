@@ -6,29 +6,6 @@ import "github.com/spf13/cobra"
 // See api-cli.md's resource map.
 func newActivityCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "activity", Short: "The scoped activity journal (alias of `task list`)"}
-
-	var workspace string
-	list := &cobra.Command{
-		Use:   "list",
-		Short: "List activity",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			q := map[string]string{}
-			if workspace != "" {
-				q["workspace"] = workspace
-			}
-			if len(q) != 0 {
-				return runList(cmd, "/api/v1/activity", q)
-			}
-			page, err := fromContext(cmd).Client.ListActivity(cmd.Context(), 0, "")
-			if err != nil {
-				return err
-			}
-			return renderTaskPage(cmd, page)
-		},
-	}
-	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")
-	cmd.AddCommand(list)
-
+	cmd.AddCommand(newTaskJournalListCmd("List activity", true))
 	return cmd
 }

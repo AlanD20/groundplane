@@ -13,6 +13,8 @@
 // translate between them.
 package api
 
+import "time"
+
 // --- Core entity DTOs (mirror internal/core's fields at the API
 // surface; see mvp.md's "Desired state" and blueprint.md's extension
 // grammar for the full internal shape) ---
@@ -127,7 +129,7 @@ type Zone struct {
 
 type ZoneCreate struct {
 	EnvironmentID string `json:"environment_id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Name          string `json:"name" pattern:"^[A-Za-z0-9._-]+$"`
+	Name          string `json:"name"           pattern:"^[A-Za-z0-9._-]+$"`
 	Subnet        string `json:"subnet"`
 	Internal      bool   `json:"internal"`
 }
@@ -653,15 +655,38 @@ const (
 	TaskTimedOut  TaskStatus = "timed_out"
 )
 
+type TaskWorkspaceType string
+
+const (
+	TaskWorkspacePlatform TaskWorkspaceType = "platform"
+	TaskWorkspaceTenant   TaskWorkspaceType = "tenant"
+)
+
+type TaskActor string
+
+const (
+	TaskActorOperator TaskActor = "operator"
+	TaskActorSystem   TaskActor = "system"
+)
+
 type Task struct {
-	ID          string     `json:"id"`
-	OperationID string     `json:"operation_id"`
-	RetryOf     string     `json:"retry_of,omitempty"`
-	PlanHash    string     `json:"plan_hash,omitempty"`
-	Type        string     `json:"type"`
-	Target      string     `json:"target"`
-	Status      TaskStatus `json:"status"`
-	Steps       []TaskStep `json:"steps,omitempty"`
+	ID            string            `json:"id"`
+	OperationID   string            `json:"operation_id"`
+	RetryOf       string            `json:"retry_of,omitempty"`
+	PlanHash      string            `json:"plan_hash,omitempty"`
+	Type          string            `json:"type"`
+	Target        string            `json:"target"`
+	Status        TaskStatus        `json:"status"`
+	WorkspaceType TaskWorkspaceType `json:"workspace_type"           enum:"platform,tenant"`
+	TenantID      string            `json:"tenant_id,omitempty"`
+	ProjectID     string            `json:"project_id,omitempty"`
+	EnvironmentID string            `json:"environment_id,omitempty"`
+	Actor         TaskActor         `json:"actor"                    enum:"operator,system"`
+	CreatedAt     time.Time         `json:"created_at"`
+	UpdatedAt     time.Time         `json:"updated_at"`
+	StartedAt     *time.Time        `json:"started_at"`
+	FinishedAt    *time.Time        `json:"finished_at"`
+	Steps         []TaskStep        `json:"steps,omitempty"`
 }
 
 type TaskStep struct {

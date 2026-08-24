@@ -697,6 +697,7 @@ func listPrimaryPage[T any](
 	if err != nil {
 		return Page[T]{}, err
 	}
+	defer clearRangeKeyValues(rangeResult.Values)
 	items := make([]Versioned[T], 0, len(rangeResult.Values))
 	for _, value := range rangeResult.Values {
 		if err := validateListKey(prefix, value.Key, idKind); err != nil {
@@ -828,6 +829,7 @@ func listIndexPage[T any](
 	if err != nil {
 		return Page[T]{}, err
 	}
+	defer clearRangeKeyValues(rangeResult.Values)
 	if len(rangeResult.Values) == 0 {
 		return Page[T]{Items: []Versioned[T]{}, Revision: rangeResult.ReadRevision}, nil
 	}
@@ -844,10 +846,11 @@ func listIndexPage[T any](
 		primaryKeys[index] = primaryKey(id)
 		expectedIDs[index] = id
 	}
-	primaries, err := store.GetMany(ctx, GetManyRequest{Keys: primaryKeys, Revision: rangeResult.ReadRevision})
+	primaries, err := getManyBatchedAtRevision(ctx, store, primaryKeys, rangeResult.ReadRevision)
 	if err != nil {
 		return Page[T]{}, err
 	}
+	defer clearKeyValues(primaries.Values)
 	if len(primaries.Values) != len(primaryKeys) {
 		return Page[T]{}, errs.New(errs.KindInternal, "owner index read returned an invalid primary count")
 	}
@@ -875,6 +878,48 @@ func listIndexPage[T any](
 		return Page[T]{}, err
 	}
 	return Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
+}
+
+func getManyBatchedAtRevision(
+	ctx context.Context,
+	store hierarchyStore,
+	keys []string,
+	revision int64,
+) (*GetManyResult, error) {
+	if len(keys) == 0 || revision <= 0 {
+		return nil, errs.New(errs.KindInternal, "fixed-revision batched read is invalid")
+	}
+	values := make([]*KeyValue, 0, len(keys))
+	responseRevision := int64(0)
+	for start := 0; start < len(keys); start += maximumTransactionOperations {
+		end := min(start+maximumTransactionOperations, len(keys))
+		batch, err := store.GetMany(ctx, GetManyRequest{Keys: keys[start:end], Revision: revision})
+		if err != nil {
+			if batch != nil {
+				clearKeyValues(batch.Values)
+			}
+			clearKeyValues(values)
+			return nil, err
+		}
+		if batch == nil || batch.ReadRevision != revision || len(batch.Values) != end-start {
+			if batch != nil {
+				clearKeyValues(batch.Values)
+			}
+			clearKeyValues(values)
+			return nil, errs.New(errs.KindInternal, "fixed-revision batched read is incomplete")
+		}
+		values = append(values, batch.Values...)
+		responseRevision = max(responseRevision, batch.ResponseRevision)
+	}
+	return &GetManyResult{
+		Values: values, ReadRevision: revision, ResponseRevision: responseRevision,
+	}, nil
+}
+
+func clearRangeKeyValues(values []KeyValue) {
+	for index := range values {
+		clear(values[index].Value)
+	}
 }
 
 func nextPageCursor(result *RangeResult, query string, kind ids.Kind, prefix string) (string, error) {

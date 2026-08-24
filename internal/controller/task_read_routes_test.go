@@ -20,7 +20,9 @@ type fakeTaskQueries struct {
 	task    etcd.Versioned[etcd.TaskRecord]
 	page    etcd.Page[etcd.TaskRecord]
 	request etcd.PageRequest
+	scope   etcd.TaskListScope
 	events  etcd.TaskEventSnapshot
+	list    func(etcd.TaskListScope, etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error)
 }
 
 func (queries *fakeTaskQueries) GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error) {
@@ -34,11 +36,16 @@ func (queries *fakeTaskQueries) ListTaskEvents(context.Context, string, int64) (
 	return queries.events, nil
 }
 
-func (queries *fakeTaskQueries) ListTasks(
+func (queries *fakeTaskQueries) ListTasksByScope(
 	_ context.Context,
+	scope etcd.TaskListScope,
 	request etcd.PageRequest,
 ) (etcd.Page[etcd.TaskRecord], error) {
+	queries.scope = scope
 	queries.request = request
+	if queries.list != nil {
+		return queries.list(scope, request)
+	}
 	return queries.page, nil
 }
 
@@ -48,6 +55,7 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	taskID := ids.NewAt(ids.KindTask, now, 1)
 	stepID := ids.NewAt(ids.KindStep, now, 2)
+	startedAt := now.Add(time.Second)
 	queries := &fakeTaskQueries{
 		task: etcd.Versioned[etcd.TaskRecord]{
 			Record: etcd.TaskRecord{
@@ -55,6 +63,8 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 				PlanHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Type:     etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 4),
 				Status: etcd.TaskStatusRunning, Steps: []etcd.TaskStepRecord{{ID: stepID}},
+				Owner: etcd.TaskOwner{WorkspaceType: etcd.TaskWorkspacePlatform}, Actor: etcd.TaskActorSystem,
+				CreatedAt: now, UpdatedAt: startedAt, StartedAt: &startedAt,
 			},
 			ReadRevision: 17,
 		},
@@ -76,7 +86,11 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	if body.ID != taskID || body.Status != apiTypes.TaskRunning || len(body.Steps) != 1 ||
-		body.Steps[0].Name != stepID || body.Steps[0].Status != apiTypes.TaskRunning {
+		body.Steps[0].Name != stepID || body.Steps[0].Status != apiTypes.TaskRunning ||
+		body.WorkspaceType != apiTypes.TaskWorkspacePlatform || body.Actor != apiTypes.TaskActorSystem ||
+		!body.CreatedAt.Equal(
+			now,
+		) || body.StartedAt == nil || !body.StartedAt.Equal(startedAt) || body.FinishedAt != nil {
 		t.Fatalf("Task response = %#v", body)
 	}
 }
@@ -98,16 +112,27 @@ func TestTaskShowReturnsTaskNotFoundProblem(t *testing.T) {
 // the same durable fixed-revision page and cursor.
 func TestTaskListAndActivityShareDurablePage(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	tenantID := ids.NewAt(ids.KindTenant, now, 9)
+	projectID := ids.NewAt(ids.KindProject, now, 8)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 7)
 	queries := &fakeTaskQueries{page: etcd.Page[etcd.TaskRecord]{
 		Items: []etcd.Versioned[etcd.TaskRecord]{{Record: etcd.TaskRecord{
 			ID: ids.NewAt(ids.KindTask, now, 10), OperationID: ids.NewAt(ids.KindOperation, now, 11),
 			Type: etcd.TaskStop, Target: ids.NewAt(ids.KindService, now, 12), Status: etcd.TaskStatusPending,
+			Owner: etcd.TaskOwner{
+				WorkspaceType: etcd.TaskWorkspaceTenant, TenantID: tenantID,
+				ProjectID: projectID, EnvironmentID: environmentID,
+			},
+			Actor: etcd.TaskActorOperator, CreatedAt: now, UpdatedAt: now,
 		}}},
 		NextCursor: "next-page",
 	}}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	server.tasks = queries
-	for _, path := range []string{"/api/v1/tasks?limit=7&cursor=current", "/api/v1/activity?limit=7&cursor=current"} {
+	for _, path := range []string{
+		"/api/v1/tasks?limit=7&cursor=current&workspace=" + tenantID,
+		"/api/v1/activity?limit=7&cursor=current&workspace=" + tenantID,
+	} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
 		server.Mux.ServeHTTP(response, request)
@@ -118,25 +143,191 @@ func TestTaskListAndActivityShareDurablePage(t *testing.T) {
 		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 			t.Fatalf("decode %s response: %v", path, err)
 		}
-		if len(body.Items) != 1 || body.Items[0].Status != apiTypes.TaskPending || body.NextCursor != "next-page" {
+		if len(body.Items) != 1 || body.Items[0].Status != apiTypes.TaskPending || body.NextCursor != "next-page" ||
+			body.Items[0].WorkspaceType != apiTypes.TaskWorkspaceTenant || body.Items[0].TenantID != tenantID ||
+			body.Items[0].ProjectID != projectID || body.Items[0].EnvironmentID != environmentID ||
+			body.Items[0].Actor != apiTypes.TaskActorOperator || !body.Items[0].CreatedAt.Equal(now) ||
+			body.Items[0].StartedAt != nil || body.Items[0].FinishedAt != nil {
 			t.Fatalf("%s response = %#v", path, body)
 		}
 		if queries.request != (etcd.PageRequest{Limit: 7, Cursor: "current"}) {
 			t.Fatalf("%s request = %#v", path, queries.request)
 		}
+		if queries.scope != (etcd.TaskListScope{Kind: etcd.TaskListScopeTenantWorkspace, ID: tenantID}) {
+			t.Fatalf("%s scope = %#v", path, queries.scope)
+		}
 	}
 }
 
-// Rationale: scope flags are part of the documented journal surface but must
-// fail explicitly until immutable Task ownership can be projected and indexed.
-func TestTaskListRejectsUnsupportedScope(t *testing.T) {
+// Rationale: Task and Activity are route aliases over one logical collection,
+// so a continuation issued by either route must be consumed by the other.
+func TestTaskListAndActivityConsumeEachOthersCursors(t *testing.T) {
+	now := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
+	records := []etcd.TaskRecord{
+		aliasTaskRecord(now, 31),
+		aliasTaskRecord(now.Add(time.Second), 32),
+	}
+	const sharedCursor = "shared-task-cursor"
+	queries := &fakeTaskQueries{}
+	queries.list = func(
+		scope etcd.TaskListScope,
+		request etcd.PageRequest,
+	) (etcd.Page[etcd.TaskRecord], error) {
+		if scope != (etcd.TaskListScope{Kind: etcd.TaskListScopePlatformWorkspace}) || request.Limit != 1 {
+			return etcd.Page[etcd.TaskRecord]{}, errs.New(errs.KindInternal, "alias list request changed")
+		}
+		switch request.Cursor {
+		case "":
+			return etcd.Page[etcd.TaskRecord]{
+				Items:      []etcd.Versioned[etcd.TaskRecord]{{Record: records[0]}},
+				NextCursor: sharedCursor,
+			}, nil
+		case sharedCursor:
+			return etcd.Page[etcd.TaskRecord]{
+				Items: []etcd.Versioned[etcd.TaskRecord]{{Record: records[1]}},
+			}, nil
+		default:
+			return etcd.Page[etcd.TaskRecord]{}, errs.New(errs.KindMalformedRequest, "cursor changed")
+		}
+	}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
-	server.tasks = &fakeTaskQueries{}
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?workspace=platform", nil)
+	server.tasks = queries
+	for _, routes := range [][2]string{{"tasks", "activity"}, {"activity", "tasks"}} {
+		first := requestTaskAliasPage(t, server, routes[0], "")
+		if len(first.Items) != 1 || first.Items[0].ID != records[0].ID || first.NextCursor != sharedCursor {
+			t.Fatalf("GET /%s first page = %#v", routes[0], first)
+		}
+		second := requestTaskAliasPage(t, server, routes[1], first.NextCursor)
+		if len(second.Items) != 1 || second.Items[0].ID != records[1].ID || second.NextCursor != "" {
+			t.Fatalf("GET /%s continuation = %#v", routes[1], second)
+		}
+	}
+}
+
+func aliasTaskRecord(at time.Time, seed int64) etcd.TaskRecord {
+	return etcd.TaskRecord{
+		ID:          ids.NewAt(ids.KindTask, at, seed),
+		OperationID: ids.NewAt(ids.KindOperation, at, seed+100),
+		Type:        etcd.TaskUpdate,
+		Target:      ids.NewAt(ids.KindComponent, at, seed+200),
+		Status:      etcd.TaskStatusPending,
+		Owner:       etcd.TaskOwner{WorkspaceType: etcd.TaskWorkspacePlatform},
+		Actor:       etcd.TaskActorOperator,
+		CreatedAt:   at,
+		UpdatedAt:   at,
+	}
+}
+
+func requestTaskAliasPage(
+	t *testing.T,
+	server *Server,
+	route string,
+	cursor string,
+) apiTypes.Page[apiTypes.Task] {
+	t.Helper()
+	path := "/api/v1/" + route + "?limit=1&workspace=platform"
+	if cursor != "" {
+		path += "&cursor=" + cursor
+	}
 	response := httptest.NewRecorder()
-	server.Mux.ServeHTTP(response, request)
-	if response.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	server.Mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /%s status = %d, body = %s", route, response.Code, response.Body.String())
+	}
+	var page apiTypes.Page[apiTypes.Task]
+	if err := json.NewDecoder(response.Body).Decode(&page); err != nil {
+		t.Fatalf("decode GET /%s response: %v", route, err)
+	}
+	return page
+}
+
+func TestTaskOpenAPIConstrainsOwnerAndActorEnums(t *testing.T) {
+	// Rationale: generated clients must carry the two closed C19 vocabularies,
+	// not widen them to arbitrary strings.
+	document, err := New(nil, nil, Options{}).OpenAPIDocument()
+	if err != nil {
+		t.Fatalf("OpenAPIDocument() error = %v", err)
+	}
+	var contract struct {
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]struct {
+					Enum []string `json:"enum"`
+				} `json:"properties"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(document, &contract); err != nil {
+		t.Fatalf("decode OpenAPI: %v", err)
+	}
+	properties := contract.Components.Schemas["Task"].Properties
+	assertTaskOpenAPIEnum(t, properties["workspace_type"].Enum, "platform", "tenant")
+	assertTaskOpenAPIEnum(t, properties["actor"].Enum, "operator", "system")
+}
+
+func assertTaskOpenAPIEnum(t *testing.T, got []string, want ...string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("OpenAPI enum = %v, want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("OpenAPI enum = %v, want %v", got, want)
+		}
+	}
+}
+
+// Rationale: the public stable-id filters must map to exactly one durable
+// owner index, while supplying both is one validation.failed response.
+func TestTaskListDispatchesEveryScopeAndRejectsScopeConflicts(t *testing.T) {
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	queries := &fakeTaskQueries{page: etcd.Page[etcd.TaskRecord]{Items: []etcd.Versioned[etcd.TaskRecord]{}}}
+	server.tasks = queries
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	tenantID := ids.NewAt(ids.KindTenant, now, 21)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 22)
+	tests := []struct {
+		path string
+		want etcd.TaskListScope
+	}{
+		{path: "/api/v1/tasks", want: etcd.TaskListScope{Kind: etcd.TaskListScopeGlobal}},
+		{path: "/api/v1/tasks?workspace=platform", want: etcd.TaskListScope{Kind: etcd.TaskListScopePlatformWorkspace}},
+		{
+			path: "/api/v1/tasks?workspace=" + tenantID,
+			want: etcd.TaskListScope{Kind: etcd.TaskListScopeTenantWorkspace, ID: tenantID},
+		},
+		{
+			path: "/api/v1/tasks?environment=" + environmentID,
+			want: etcd.TaskListScope{Kind: etcd.TaskListScopeEnvironment, ID: environmentID},
+		},
+	}
+	for _, test := range tests {
+		response := httptest.NewRecorder()
+		server.Mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if response.Code != http.StatusOK || queries.scope != test.want {
+			t.Fatalf(
+				"%s = status %d, scope %#v, body %s",
+				test.path,
+				response.Code,
+				queries.scope,
+				response.Body.String(),
+			)
+		}
+	}
+	response := httptest.NewRecorder()
+	server.Mux.ServeHTTP(response, httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/tasks?workspace=platform&environment="+environmentID,
+		nil,
+	))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("conflicting scope status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var problem struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&problem); err != nil || problem.Code != "validation.failed" {
+		t.Fatalf("conflicting scope problem = %#v, %v", problem, err)
 	}
 }
 

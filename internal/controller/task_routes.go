@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,8 +17,10 @@ import (
 )
 
 type taskListInput struct {
-	Limit  int    `query:"limit" required:"false"`
-	Cursor string `query:"cursor" required:"false"`
+	Limit       int    `query:"limit" required:"false" minimum:"1" maximum:"200"`
+	Cursor      string `query:"cursor" required:"false"`
+	Environment string `query:"environment" required:"false" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Workspace   string `query:"workspace" required:"false" pattern:"^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$"`
 }
 
 type taskShowInput struct {
@@ -156,7 +160,15 @@ func (s *Server) listTasks(ctx context.Context, request *taskListInput) (*taskPa
 	if request.Limit < 0 {
 		return nil, errs.New(errs.KindValidationFailed, "Task list limit must be a positive integer")
 	}
-	page, err := s.tasks.ListTasks(ctx, etcd.PageRequest{Limit: request.Limit, Cursor: request.Cursor})
+	scope, err := taskListScope(request)
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.tasks.ListTasksByScope(
+		ctx,
+		scope,
+		etcd.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
+	)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
@@ -204,20 +216,85 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 	if err != nil {
 		return apiTypes.Task{}, err
 	}
+	workspace, err := taskAPIWorkspace(record.Owner.WorkspaceType)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
+	actor, err := taskAPIActor(record.Actor)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
+	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() {
+		return apiTypes.Task{}, errs.New(errs.KindInternal, "task has an invalid durable timeline")
+	}
 	return apiTypes.Task{
 		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
 		PlanHash: record.PlanHash, Type: string(record.Type), Target: record.Target, Status: status,
+		WorkspaceType: workspace, TenantID: record.Owner.TenantID, ProjectID: record.Owner.ProjectID,
+		EnvironmentID: record.Owner.EnvironmentID, Actor: actor,
+		CreatedAt: record.CreatedAt.UTC(), UpdatedAt: record.UpdatedAt.UTC(),
+		StartedAt: taskAPITime(record.StartedAt), FinishedAt: taskAPITime(record.FinishedAt),
 	}, nil
+}
+
+func taskListScope(request *taskListInput) (etcd.TaskListScope, error) {
+	if request.Environment != "" && request.Workspace != "" {
+		return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list scopes are mutually exclusive")
+	}
+	if request.Environment != "" {
+		if ids.Validate(ids.KindEnvironment, request.Environment) != nil {
+			return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list Environment scope is invalid")
+		}
+		return etcd.TaskListScope{Kind: etcd.TaskListScopeEnvironment, ID: request.Environment}, nil
+	}
+	if request.Workspace == "platform" {
+		return etcd.TaskListScope{Kind: etcd.TaskListScopePlatformWorkspace}, nil
+	}
+	if request.Workspace != "" {
+		if ids.Validate(ids.KindTenant, request.Workspace) != nil {
+			return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list Tenant workspace is invalid")
+		}
+		return etcd.TaskListScope{Kind: etcd.TaskListScopeTenantWorkspace, ID: request.Workspace}, nil
+	}
+	return etcd.TaskListScope{Kind: etcd.TaskListScopeGlobal}, nil
+}
+
+func taskAPIWorkspace(workspace etcd.TaskWorkspaceType) (apiTypes.TaskWorkspaceType, error) {
+	switch workspace {
+	case etcd.TaskWorkspacePlatform:
+		return apiTypes.TaskWorkspacePlatform, nil
+	case etcd.TaskWorkspaceTenant:
+		return apiTypes.TaskWorkspaceTenant, nil
+	default:
+		return "", errs.New(errs.KindInternal, "task has an invalid durable workspace")
+	}
+}
+
+func taskAPIActor(actor etcd.TaskActor) (apiTypes.TaskActor, error) {
+	switch actor {
+	case etcd.TaskActorOperator:
+		return apiTypes.TaskActorOperator, nil
+	case etcd.TaskActorSystem:
+		return apiTypes.TaskActorSystem, nil
+	default:
+		return "", errs.New(errs.KindInternal, "task has an invalid durable actor")
+	}
+}
+
+func taskAPITime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	normalized := value.UTC()
+	return &normalized
 }
 
 func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)) {
 	requestURL := ctx.URL()
-	for key, values := range requestURL.Query() {
+	query := requestURL.Query()
+	for key, values := range query {
 		switch key {
-		case "environment", "workspace":
-			s.writeTaskListProblem(ctx, http.StatusNotImplemented, "scoped Task listing is not implemented")
-			return
-		case "limit", "cursor":
+		case "environment", "workspace", "limit", "cursor":
 		default:
 			s.writeTaskListProblem(ctx, http.StatusBadRequest, "Task list query is invalid")
 			return
@@ -226,6 +303,10 @@ func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)
 			s.writeTaskListProblem(ctx, http.StatusBadRequest, "Task list query contains duplicate values")
 			return
 		}
+	}
+	if query.Has("environment") && query.Has("workspace") {
+		s.writeTaskListProblem(ctx, http.StatusUnprocessableEntity, "Task list scopes are mutually exclusive")
+		return
 	}
 	next(ctx)
 }

@@ -3,8 +3,11 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/AlanD20/groundplane/internal/cli/apiclient"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
 )
 
@@ -13,30 +16,7 @@ import (
 // "Baked-in actions become Tasks" and "Activity IS tasks (locked)".
 func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "task", Short: "Tasks — the one record set behind every action and the activity journal"}
-
-	var workspace string
-	list := &cobra.Command{
-		Use:   "list",
-		Short: "List tasks",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			app := fromContext(cmd)
-			q := scopeQuery(app, "environment")
-			if workspace != "" {
-				q["workspace"] = workspace
-			}
-			if len(q) != 0 {
-				return runList(cmd, "/api/v1/tasks", q)
-			}
-			page, err := app.Client.ListTasks(cmd.Context(), 0, "")
-			if err != nil {
-				return err
-			}
-			return renderTaskPage(cmd, page)
-		},
-	}
-	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")
-	cmd.AddCommand(list)
+	cmd.AddCommand(newTaskJournalListCmd("List tasks", false))
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "show <id>",
@@ -106,11 +86,19 @@ func newTaskCmd() *cobra.Command {
 }
 
 func renderTaskPage(cmd *cobra.Command, page apiTypes.Page[apiTypes.Task]) error {
-	items := make([]map[string]any, len(page.Items))
-	for index, task := range page.Items {
-		items[index] = taskFields(task)
+	headers := []string{
+		"ID", "TYPE", "TARGET", "STATUS", "WORKSPACE", "TENANT", "PROJECT", "ENVIRONMENT",
+		"ACTOR", "CREATED", "UPDATED", "STARTED", "FINISHED",
 	}
-	headers, rows := tabulateVia(fromContext(cmd), items)
+	rows := make([][]string, len(page.Items))
+	for index, task := range page.Items {
+		rows[index] = []string{
+			task.ID, task.Type, task.Target, string(task.Status), string(task.WorkspaceType), task.TenantID,
+			task.ProjectID, task.EnvironmentID, string(task.Actor), taskTimestamp(task.CreatedAt),
+			taskTimestamp(task.UpdatedAt), nullableTaskTimestamp(task.StartedAt),
+			nullableTaskTimestamp(task.FinishedAt),
+		}
+	}
 	return fromContext(cmd).Out.Render(headers, rows, page)
 }
 
@@ -118,6 +106,76 @@ func taskFields(task apiTypes.Task) map[string]any {
 	return map[string]any{
 		"id": task.ID, "operation_id": task.OperationID, "retry_of": task.RetryOf,
 		"plan_hash": task.PlanHash, "type": task.Type, "target": task.Target,
-		"status": task.Status, "steps": task.Steps,
+		"status": task.Status, "workspace_type": task.WorkspaceType, "tenant_id": task.TenantID,
+		"project_id": task.ProjectID, "environment_id": task.EnvironmentID, "actor": task.Actor,
+		"created_at": taskTimestamp(task.CreatedAt), "updated_at": taskTimestamp(task.UpdatedAt),
+		"started_at":  nullableTaskTimestamp(task.StartedAt),
+		"finished_at": nullableTaskTimestamp(task.FinishedAt), "steps": task.Steps,
 	}
+}
+
+func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
+	var workspace string
+	list := &cobra.Command{
+		Use:   "list",
+		Short: short,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			options, err := resolveTaskJournalListOptions(cmd, workspace)
+			if err != nil {
+				return err
+			}
+			var page apiTypes.Page[apiTypes.Task]
+			if activity {
+				page, err = fromContext(cmd).Client.ListActivity(cmd.Context(), options)
+			} else {
+				page, err = fromContext(cmd).Client.ListTasks(cmd.Context(), options)
+			}
+			if err != nil {
+				return err
+			}
+			return renderTaskPage(cmd, page)
+		},
+	}
+	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")
+	return list
+}
+
+func resolveTaskJournalListOptions(cmd *cobra.Command, workspace string) (apiclient.TaskListOptions, error) {
+	app := fromContext(cmd)
+	if app.Scope.Environment != "" && workspace != "" {
+		return apiclient.TaskListOptions{}, errs.New(
+			errs.KindValidationFailed,
+			"task journal accepts only one of --env or --workspace",
+		)
+	}
+	if app.Scope.Environment != "" {
+		environmentID, err := resolveEnvironmentTarget(cmd, app.Scope.Environment)
+		if err != nil {
+			return apiclient.TaskListOptions{}, err
+		}
+		return apiclient.TaskListOptions{Environment: environmentID}, nil
+	}
+	if workspace == "" || workspace == "platform" {
+		return apiclient.TaskListOptions{Workspace: workspace}, nil
+	}
+	tenantID, err := resolveTenantTarget(cmd, workspace)
+	if err != nil {
+		return apiclient.TaskListOptions{}, err
+	}
+	return apiclient.TaskListOptions{Workspace: tenantID}, nil
+}
+
+func taskTimestamp(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
+func nullableTaskTimestamp(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return taskTimestamp(*value)
 }

@@ -21,6 +21,16 @@ import (
 
 const taskEventReconnectDelay = time.Second
 
+// TaskListOptions is the one query contract shared by Task and Activity.
+// Environment and Workspace are mutually exclusive stable API identifiers;
+// an empty pair selects the global journal.
+type TaskListOptions struct {
+	Limit       int
+	Cursor      string
+	Environment string
+	Workspace   string
+}
+
 func (c *Client) RetryTask(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
@@ -67,14 +77,16 @@ func (c *Client) AbortTask(ctx context.Context, id string) (apiTypes.TaskAccepte
 
 func (c *Client) ListTasks(
 	ctx context.Context,
-	limit int,
-	cursor string,
+	options TaskListOptions,
 ) (apiTypes.Page[apiTypes.Task], error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.Page[apiTypes.Task]{}, err
 	}
-	params := taskListParams(limit, cursor)
+	params, err := taskListParams(options)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
 	response, err := client.TaskListWithResponse(ctx, params)
 	if err != nil {
 		return apiTypes.Page[apiTypes.Task]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/tasks", err)
@@ -101,15 +113,19 @@ func (c *Client) ListTasks(
 
 func (c *Client) ListActivity(
 	ctx context.Context,
-	limit int,
-	cursor string,
+	options TaskListOptions,
 ) (apiTypes.Page[apiTypes.Task], error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.Page[apiTypes.Task]{}, err
 	}
-	base := taskListParams(limit, cursor)
-	params := &generated.ActivityListParams{Limit: base.Limit, Cursor: base.Cursor}
+	base, err := taskListParams(options)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
+	params := &generated.ActivityListParams{
+		Limit: base.Limit, Cursor: base.Cursor, Environment: base.Environment, Workspace: base.Workspace,
+	}
 	response, err := client.ActivityListWithResponse(ctx, params)
 	if err != nil {
 		return apiTypes.Page[apiTypes.Task]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/activity", err)
@@ -134,16 +150,28 @@ func (c *Client) ListActivity(
 	return taskPageFromGenerated(*parsed), nil
 }
 
-func taskListParams(limit int, cursor string) *generated.TaskListParams {
+func taskListParams(options TaskListOptions) (*generated.TaskListParams, error) {
+	if options.Environment != "" && options.Workspace != "" {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"task journal accepts only one of environment or workspace",
+		)
+	}
 	params := &generated.TaskListParams{}
-	if limit != 0 {
-		value := int64(limit)
+	if options.Limit != 0 {
+		value := int64(options.Limit)
 		params.Limit = &value
 	}
-	if cursor != "" {
-		params.Cursor = &cursor
+	if options.Cursor != "" {
+		params.Cursor = &options.Cursor
 	}
-	return params
+	if options.Environment != "" {
+		params.Environment = &options.Environment
+	}
+	if options.Workspace != "" {
+		params.Workspace = &options.Workspace
+	}
+	return params, nil
 }
 
 func taskPageFromGenerated(parsed generated.PageTask) apiTypes.Page[apiTypes.Task] {
@@ -189,13 +217,24 @@ func (c *Client) ShowTask(ctx context.Context, id string) (apiTypes.Task, error)
 func taskFromGenerated(task generated.Task) apiTypes.Task {
 	result := apiTypes.Task{
 		ID: task.Id, OperationID: task.OperationId, Type: task.Type, Target: task.Target,
-		Status: apiTypes.TaskStatus(task.Status),
+		Status: apiTypes.TaskStatus(task.Status), WorkspaceType: apiTypes.TaskWorkspaceType(task.WorkspaceType),
+		Actor: apiTypes.TaskActor(task.Actor), CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
+		StartedAt: task.StartedAt, FinishedAt: task.FinishedAt,
 	}
 	if task.RetryOf != nil {
 		result.RetryOf = *task.RetryOf
 	}
 	if task.PlanHash != nil {
 		result.PlanHash = *task.PlanHash
+	}
+	if task.TenantId != nil {
+		result.TenantID = *task.TenantId
+	}
+	if task.ProjectId != nil {
+		result.ProjectID = *task.ProjectId
+	}
+	if task.EnvironmentId != nil {
+		result.EnvironmentID = *task.EnvironmentId
 	}
 	if task.Steps != nil {
 		result.Steps = make([]apiTypes.TaskStep, len(*task.Steps))

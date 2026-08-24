@@ -38,6 +38,23 @@ type TaskEventSnapshot struct {
 	Revision int64
 }
 
+// TaskListScope selects one immutable Task journal. ID is empty for global
+// and platform scope, a Tenant id for tenant scope, and an Environment id for
+// environment scope.
+type TaskListScope struct {
+	Kind TaskListScopeKind
+	ID   string
+}
+
+type TaskListScopeKind string
+
+const (
+	TaskListScopeGlobal            TaskListScopeKind = "global"
+	TaskListScopePlatformWorkspace TaskListScopeKind = "platform_workspace"
+	TaskListScopeTenantWorkspace   TaskListScopeKind = "tenant_workspace"
+	TaskListScopeEnvironment       TaskListScopeKind = "environment"
+)
+
 type taskCASRetryPolicy struct {
 	initialDelay time.Duration
 	maximumDelay time.Duration
@@ -206,19 +223,111 @@ func (repository *TaskRepository) ListTasks(
 	ctx context.Context,
 	request PageRequest,
 ) (Page[TaskRecord], error) {
-	return listPrimaryPage(
-		ctx,
-		repository.store,
-		"tasks",
-		"global",
-		"-",
-		taskPrefix,
-		ids.KindTask,
-		request,
-		decodeTaskRecord,
-		func(record TaskRecord) string { return record.ID },
-		func(TaskRecord) bool { return true },
-	)
+	return repository.ListTasksByScope(ctx, TaskListScope{Kind: TaskListScopeGlobal}, request)
+}
+
+// ListTasksByScope returns the selected immutable journal at one fixed MVCC
+// revision. Every scope uses the logical collection identity "tasks", so a
+// cursor is route-agnostic between GET /tasks and GET /activity while still
+// binding its exact owner scope.
+func (repository *TaskRepository) ListTasksByScope(
+	ctx context.Context,
+	scope TaskListScope,
+	request PageRequest,
+) (Page[TaskRecord], error) {
+	identity := func(record TaskRecord) string { return record.ID }
+	switch scope.Kind {
+	case TaskListScopeGlobal:
+		if scope.ID != "" {
+			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "global task scope cannot contain an id")
+		}
+		page, err := listPrimaryPage(
+			ctx, repository.store, "tasks", "global", "-", taskPrefix, ids.KindTask,
+			request, decodeTaskRecord, identity, func(TaskRecord) bool { return true },
+		)
+		return repository.verifyTaskOwnerPage(ctx, page, err)
+	case TaskListScopePlatformWorkspace:
+		if scope.ID != "" {
+			return Page[TaskRecord]{}, errs.New(
+				errs.KindValidationFailed,
+				"platform task workspace scope cannot contain an id",
+			)
+		}
+		page, err := listIndexPage(
+			ctx, repository.store, "tasks", "workspace", "platform", taskWorkspacePlatformPrefix,
+			taskKey, ids.KindTask, request, decodeTaskRecord, identity,
+			func(record TaskRecord) bool { return record.Owner.WorkspaceType == TaskWorkspacePlatform },
+		)
+		return repository.verifyTaskOwnerPage(ctx, page, err)
+	case TaskListScopeTenantWorkspace:
+		if ids.Validate(ids.KindTenant, scope.ID) != nil {
+			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "tenant task workspace scope is invalid")
+		}
+		page, err := listIndexPage(
+			ctx, repository.store, "tasks", "workspace", scope.ID,
+			taskWorkspaceTenantPrefix+scope.ID+"/", taskKey, ids.KindTask, request,
+			decodeTaskRecord, identity,
+			func(record TaskRecord) bool {
+				return record.Owner.WorkspaceType == TaskWorkspaceTenant && record.Owner.TenantID == scope.ID
+			},
+		)
+		return repository.verifyTaskOwnerPage(ctx, page, err)
+	case TaskListScopeEnvironment:
+		if ids.Validate(ids.KindEnvironment, scope.ID) != nil {
+			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "environment task scope is invalid")
+		}
+		page, err := listIndexPage(
+			ctx, repository.store, "tasks", "environment", scope.ID,
+			taskEnvironmentIndexPrefix+scope.ID+"/", taskKey, ids.KindTask, request,
+			decodeTaskRecord, identity,
+			func(record TaskRecord) bool { return record.Owner.EnvironmentID == scope.ID },
+		)
+		return repository.verifyTaskOwnerPage(ctx, page, err)
+	default:
+		return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task list scope kind is invalid")
+	}
+}
+
+func (repository *TaskRepository) verifyTaskOwnerPage(
+	ctx context.Context,
+	page Page[TaskRecord],
+	listErr error,
+) (Page[TaskRecord], error) {
+	if listErr != nil {
+		return Page[TaskRecord]{}, listErr
+	}
+	if len(page.Items) == 0 {
+		return page, nil
+	}
+	if page.Revision <= 0 {
+		return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task list revision is invalid")
+	}
+	keys := make([]string, 0, len(page.Items)*2)
+	expectedTaskIDs := make([]string, 0, len(page.Items)*2)
+	for _, item := range page.Items {
+		ownerKeys, err := taskOwnerIndexKeys(item.Record.Owner, item.Record.ID)
+		if err != nil {
+			return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
+		}
+		keys = append(keys, ownerKeys...)
+		for range ownerKeys {
+			expectedTaskIDs = append(expectedTaskIDs, item.Record.ID)
+		}
+	}
+	indexes, err := getManyBatchedAtRevision(ctx, repository.store, keys, page.Revision)
+	if err != nil {
+		return Page[TaskRecord]{}, err
+	}
+	defer clearKeyValues(indexes.Values)
+	if indexes == nil || indexes.ReadRevision != page.Revision || len(indexes.Values) != len(keys) {
+		return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
+	}
+	for index, value := range indexes.Values {
+		if value == nil || value.Key != keys[index] || string(value.Value) != expectedTaskIDs[index] {
+			return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index membership is corrupt")
+		}
+	}
+	return page, nil
 }
 
 // AppendTaskEvent persists the event, updated Task summary, and deduplication

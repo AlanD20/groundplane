@@ -18,6 +18,42 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for TaskActor.
+const (
+	Operator TaskActor = "operator"
+	System   TaskActor = "system"
+)
+
+// Valid indicates whether the value is a known member of the TaskActor enum.
+func (e TaskActor) Valid() bool {
+	switch e {
+	case Operator:
+		return true
+	case System:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskWorkspaceType.
+const (
+	TaskWorkspaceTypePlatform TaskWorkspaceType = "platform"
+	TaskWorkspaceTypeTenant   TaskWorkspaceType = "tenant"
+)
+
+// Valid indicates whether the value is a known member of the TaskWorkspaceType enum.
+func (e TaskWorkspaceType) Valid() bool {
+	switch e {
+	case TaskWorkspaceTypePlatform:
+		return true
+	case TaskWorkspaceTypeTenant:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskEventState.
 const (
 	Aborted   TaskEventState = "aborted"
@@ -766,16 +802,31 @@ type Task struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Task.json
-	Schema      *string     `json:"$schema,omitempty"`
-	Id          string      `json:"id"`
-	OperationId string      `json:"operation_id"`
-	PlanHash    *string     `json:"plan_hash,omitempty"`
-	RetryOf     *string     `json:"retry_of,omitempty"`
-	Status      string      `json:"status"`
-	Steps       *[]TaskStep `json:"steps,omitempty"`
-	Target      string      `json:"target"`
-	Type        string      `json:"type"`
+	Schema        *string           `json:"$schema,omitempty"`
+	Actor         TaskActor         `json:"actor"`
+	CreatedAt     time.Time         `json:"created_at"`
+	EnvironmentId *string           `json:"environment_id,omitempty"`
+	FinishedAt    *time.Time        `json:"finished_at"`
+	Id            string            `json:"id"`
+	OperationId   string            `json:"operation_id"`
+	PlanHash      *string           `json:"plan_hash,omitempty"`
+	ProjectId     *string           `json:"project_id,omitempty"`
+	RetryOf       *string           `json:"retry_of,omitempty"`
+	StartedAt     *time.Time        `json:"started_at"`
+	Status        string            `json:"status"`
+	Steps         *[]TaskStep       `json:"steps,omitempty"`
+	Target        string            `json:"target"`
+	TenantId      *string           `json:"tenant_id,omitempty"`
+	Type          string            `json:"type"`
+	UpdatedAt     time.Time         `json:"updated_at"`
+	WorkspaceType TaskWorkspaceType `json:"workspace_type"`
 }
+
+// TaskActor defines model for Task.Actor.
+type TaskActor string
+
+// TaskWorkspaceType defines model for Task.WorkspaceType.
+type TaskWorkspaceType string
 
 // TaskAccepted defines model for TaskAccepted.
 type TaskAccepted struct {
@@ -924,8 +975,10 @@ type ZoneRemovalImpactService struct {
 
 // ActivityListParams defines parameters for ActivityList.
 type ActivityListParams struct {
-	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Workspace   *string `form:"workspace,omitempty" json:"workspace,omitempty"`
 }
 
 // AgentListParams defines parameters for AgentList.
@@ -1166,8 +1219,10 @@ type ServiceStopParams struct {
 
 // TaskListParams defines parameters for TaskList.
 type TaskListParams struct {
-	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Workspace   *string `form:"workspace,omitempty" json:"workspace,omitempty"`
 }
 
 // TaskAbortParams defines parameters for TaskAbort.
@@ -3476,6 +3531,30 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Environment != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Workspace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "workspace", *params.Workspace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -6508,6 +6587,30 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Environment != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Workspace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "workspace", *params.Workspace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
