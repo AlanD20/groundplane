@@ -633,6 +633,33 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector creation service: %w", err)
 	}
+	connectorDeletionRepository, err := newDurableConnectorDeletionRepository(hierarchyRecords, connectorRecords)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize Connector deletion repositories", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	connectorDeletionIdempotency, err := newDurableConnectorDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize Connector deletion idempotency", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	connectorDeletions, err := newConnectorDeletionService(
+		connectorDeletionRepository,
+		connectorDeletionIdempotency,
+	)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize Connector deletion service", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
 	secretDeletionIdempotency, err := newDurableSecretDeletionIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
@@ -973,6 +1000,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		SecretDeletions:       secretDeletions,
 		Connectors:            connectorReads,
 		ConnectorMutations:    connectorMutations,
+		ConnectorDeletions:    connectorDeletions,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,

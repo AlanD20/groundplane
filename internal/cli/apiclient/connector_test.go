@@ -10,6 +10,8 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// Rationale: every Connector command must retain the generated transport's
+// query, path, idempotency, redaction, and accepted-Task contract.
 func TestConnectorClientUsesTypedGeneratedOperations(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01K3D7R40G0000000000000000"
@@ -43,6 +45,12 @@ func TestConnectorClientUsesTypedGeneratedOperations(t *testing.T) {
 			})
 		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/connectors/"+connectorID:
 			_ = json.NewEncoder(w).Encode(testConnectorClientResponse(connectorID, environmentID))
+		case request.Method == http.MethodDelete && request.URL.Path == "/api/v1/connectors/"+connectorID:
+			if request.Header.Get("Idempotency-Key") == "" {
+				t.Errorf("delete header = %q", request.Header)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(apiTypes.TaskAccepted{TaskID: "task_01K3D7R40G0000000000000002"})
 		default:
 			http.NotFound(w, request)
 		}
@@ -65,8 +73,12 @@ func TestConnectorClientUsesTypedGeneratedOperations(t *testing.T) {
 		t.Fatalf("ListConnectors() = %#v, %v", page, err)
 	}
 	shown, err := client.ShowConnector(context.Background(), connectorID)
-	if err != nil || shown.ID != connectorID || requests != 3 {
-		t.Fatalf("ShowConnector() = %#v, %v; requests = %d", shown, err, requests)
+	if err != nil || shown.ID != connectorID {
+		t.Fatalf("ShowConnector() = %#v, %v", shown, err)
+	}
+	accepted, err := client.RemoveConnector(context.Background(), connectorID)
+	if err != nil || accepted.TaskID != "task_01K3D7R40G0000000000000002" || requests != 4 {
+		t.Fatalf("RemoveConnector() = %#v, %v; requests = %d", accepted, err, requests)
 	}
 }
 

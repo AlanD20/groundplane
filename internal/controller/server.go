@@ -56,6 +56,7 @@ type Server struct {
 	secretDeletions       SecretDeleter
 	connectors            ConnectorReader
 	connectorMutations    ConnectorMutator
+	connectorDeletions    ConnectorDeleter
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
@@ -97,6 +98,7 @@ type Options struct {
 	SecretDeletions       SecretDeleter
 	Connectors            ConnectorReader
 	ConnectorMutations    ConnectorMutator
+	ConnectorDeletions    ConnectorDeleter
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
@@ -155,6 +157,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		secretDeletions:       options.SecretDeletions,
 		connectors:            options.Connectors,
 		connectorMutations:    options.ConnectorMutations,
+		connectorDeletions:    options.ConnectorDeletions,
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
@@ -282,9 +285,6 @@ func (s *Server) routes() {
 
 	// Secret reads, protected create/delete, and explicit reveal are typed
 	// Huma operations.
-
-	// Connector deletion is registered when its Controller finalizer Task is implemented.
-	mux.HandleFunc("DELETE /api/v1/connectors/{id}", s.acceptTask)
 
 	// runner (?tenant= or ?project=) — org-scoped or repo-scoped
 	mux.HandleFunc("GET /api/v1/runners", s.notImplemented)

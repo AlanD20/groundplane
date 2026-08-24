@@ -64,8 +64,11 @@ func (handler *controllerTaskHandler) Execute(
 		}
 		return nil
 	case etcd.TaskResourceConnector:
-		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindConnector, task.Target) != nil || len(task.Params) != 1 {
-			return errs.New(errs.KindValidationFailed, "Controller Task Connector removal is invalid")
+		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindConnector, task.Target) != nil ||
+			len(task.Params) != 3 ||
+			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskConnectorEnvironmentParam]) != nil ||
+			task.Params[etcd.TaskConnectorNameParam] == "" {
+			return errs.New(errs.KindValidationFailed, "controller Task Connector removal is invalid")
 		}
 		return nil
 	case etcd.TaskResourceScript:

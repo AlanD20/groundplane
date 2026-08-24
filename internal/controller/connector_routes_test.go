@@ -52,6 +52,25 @@ type fakeConnectorMutator struct {
 	response        etcd.IdempotencyResponse
 }
 
+type fakeConnectorDeleter struct {
+	wantID   string
+	wantKey  string
+	response etcd.IdempotencyResponse
+	calls    int
+}
+
+func (fake *fakeConnectorDeleter) DeleteConnector(
+	_ context.Context,
+	id string,
+	key string,
+) (etcd.IdempotencyResponse, error) {
+	fake.calls++
+	if id != fake.wantID || key != fake.wantKey {
+		return etcd.IdempotencyResponse{}, io.ErrUnexpectedEOF
+	}
+	return fake.response, nil
+}
+
 func (fake *fakeConnectorMutator) CreateConnector(
 	_ context.Context,
 	environmentID string,
@@ -201,5 +220,63 @@ func TestConnectorCreateRoutePassesCompleteTypedDecision(t *testing.T) {
 			mutator.input,
 			mutator.key,
 		)
+	}
+}
+
+// Rationale: Connector removal is one bodyless protected action, so the route
+// must forward the stable target and idempotency key and return the exact Task.
+func TestConnectorRemoveRouteDispatchesProtectedFinalizerTask(t *testing.T) {
+	t.Parallel()
+	connectorID := ids.NewAt(ids.KindConnector, time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC), 1)
+	accepted := apiTypes.TaskAccepted{TaskID: ids.NewAt(
+		ids.KindTask,
+		time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC),
+		2,
+	)}
+	body, err := json.Marshal(accepted)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	deleter := &fakeConnectorDeleter{
+		wantID: connectorID, wantKey: "connector-delete-key-0003",
+		response: etcd.IdempotencyResponse{
+			Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
+		},
+	}
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{ConnectorDeletions: deleter})
+	request := httptest.NewRequest(http.MethodDelete, "/api/v1/connectors/"+connectorID, nil)
+	request.Header.Set("Idempotency-Key", deleter.wantKey)
+	response := httptest.NewRecorder()
+	server.Mux.ServeHTTP(response, request)
+	var got apiTypes.TaskAccepted
+	if response.Code != http.StatusAccepted || json.Unmarshal(response.Body.Bytes(), &got) != nil ||
+		got != accepted || deleter.calls != 1 {
+		t.Fatalf(
+			"remove response = %d/%s, accepted %#v, calls %d",
+			response.Code,
+			response.Body.String(),
+			got,
+			deleter.calls,
+		)
+	}
+}
+
+// Rationale: ignored body or query data would create an ambiguous canonical
+// DELETE intent, so both transports must fail before application dispatch.
+func TestConnectorRemoveRouteRejectsBodyAndQuery(t *testing.T) {
+	t.Parallel()
+	connectorID := ids.NewAt(ids.KindConnector, time.Date(2026, 8, 24, 12, 30, 0, 0, time.UTC), 1)
+	for _, request := range []*http.Request{
+		httptest.NewRequest(http.MethodDelete, "/api/v1/connectors/"+connectorID, strings.NewReader(`{}`)),
+		httptest.NewRequest(http.MethodDelete, "/api/v1/connectors/"+connectorID+"?force=true", nil),
+	} {
+		deleter := &fakeConnectorDeleter{}
+		server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{ConnectorDeletions: deleter})
+		request.Header.Set("Idempotency-Key", "connector-delete-key-0004")
+		response := httptest.NewRecorder()
+		server.Mux.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest || deleter.calls != 0 {
+			t.Fatalf("request %s = %d/%s, calls %d", request.URL, response.Code, response.Body.String(), deleter.calls)
+		}
 	}
 }

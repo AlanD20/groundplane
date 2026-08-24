@@ -8,8 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// connector: list | add | show. Connector deletion is added only with its
-// finalizer-backed Task endpoint.
+// connector: list | add | show | remove.
 func newConnectorCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "connector", Short: "Environment S3-compatible backup connectors"}
 	cmd.AddCommand(&cobra.Command{
@@ -113,6 +112,21 @@ func newConnectorCmd() *cobra.Command {
 				return err
 			}
 			return renderConnector(cmd, connector)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use: "remove <name>", Aliases: []string{"rm", "delete", "del"},
+		Short: "Remove a connector (dispatches a task)", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := resolveConnectorTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.RemoveConnector(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	})
 	return cmd

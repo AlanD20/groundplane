@@ -1053,6 +1053,11 @@ type ConnectorCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ConnectorRemoveParams defines parameters for ConnectorRemove.
+type ConnectorRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EntryListParams defines parameters for EntryList.
 type EntryListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -1543,6 +1548,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /connectors (the `ConnectorCreate` operationId).
 	ConnectorCreate(ctx context.Context, params *ConnectorCreateParams, body ConnectorCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectorRemove Remove an Environment connector
+	//
+	// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+	ConnectorRemove(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ConnectorShow Show connector metadata
 	//
@@ -2307,6 +2317,21 @@ func (c *Client) ConnectorCreateWithBody(ctx context.Context, params *ConnectorC
 // Corresponds with POST /connectors (the `ConnectorCreate` operationId).
 func (c *Client) ConnectorCreate(ctx context.Context, params *ConnectorCreateParams, body ConnectorCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewConnectorCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ConnectorRemove Remove an Environment connector
+//
+// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+func (c *Client) ConnectorRemove(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectorRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4441,6 +4466,53 @@ func NewConnectorCreateRequestWithBody(server string, params *ConnectorCreatePar
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewConnectorRemoveRequest constructs an http.Request for the ConnectorRemove method
+func NewConnectorRemoveRequest(server string, id string, params *ConnectorRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/connectors/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -7544,6 +7616,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /connectors (the `ConnectorCreate` operationId).
 	ConnectorCreateWithResponse(ctx context.Context, params *ConnectorCreateParams, body ConnectorCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectorCreateResponse, error)
 
+	// ConnectorRemoveWithResponse Remove an Environment connector
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+	ConnectorRemoveWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error)
+
 	// ConnectorShowWithResponse Show connector metadata
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -8924,6 +9003,61 @@ func (r ConnectorCreateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ConnectorCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ConnectorRemoveResponse202Headers the declared response headers of an HTTP 202 response for ConnectorRemove
+type ConnectorRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type ConnectorRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ConnectorRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ConnectorRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ConnectorRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ConnectorRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectorRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectorRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConnectorRemoveResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -12039,6 +12173,19 @@ func (c *ClientWithResponses) ConnectorCreateWithResponse(ctx context.Context, p
 	return ParseConnectorCreateResponse(rsp)
 }
 
+// ConnectorRemoveWithResponse Remove an Environment connector
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /connectors/{id} (the `ConnectorRemove` operationId).
+func (c *ClientWithResponses) ConnectorRemoveWithResponse(ctx context.Context, id string, params *ConnectorRemoveParams, reqEditors ...RequestEditorFn) (*ConnectorRemoveResponse, error) {
+	rsp, err := c.ConnectorRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectorRemoveResponse(rsp)
+}
+
 // ConnectorShowWithResponse Show connector metadata
 //
 // Returns a wrapper object for the known response body format(s).
@@ -13650,6 +13797,52 @@ func ParseConnectorCreateResponse(rsp *http.Response) (*ConnectorCreateResponse,
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseConnectorRemoveResponse parses an HTTP response from a ConnectorRemoveWithResponse call
+func ParseConnectorRemoveResponse(rsp *http.Response) (*ConnectorRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectorRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ConnectorRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

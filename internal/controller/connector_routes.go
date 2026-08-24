@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -31,10 +32,14 @@ type ConnectorMutator interface {
 	) (etcd.IdempotencyResponse, error)
 }
 
+type ConnectorDeleter interface {
+	DeleteConnector(context.Context, string, string) (etcd.IdempotencyResponse, error)
+}
+
 type connectorCreateInput struct {
-	Environment    string `query:"environment" required:"true" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
-	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
-	RawBody        []byte
+	Env     string `query:"environment" required:"true" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Key     string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody []byte
 }
 
 type connectorListInput struct {
@@ -45,6 +50,11 @@ type connectorListInput struct {
 
 type connectorShowInput struct {
 	ID string `path:"id" pattern:"^con_[0-9A-HJKMNP-TV-Z]{26}$"`
+}
+
+type connectorRemoveInput struct {
+	ID  string `path:"id" pattern:"^con_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Key string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type connectorPageOutput struct {
@@ -101,6 +111,16 @@ func (s *Server) registerConnectors() {
 		OperationID: "connector.show", Method: http.MethodGet, Path: "/connectors/{id}",
 		Summary: "Show connector metadata", Tags: []string{"Connector"},
 	}, s.showConnector)
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
+	)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "connector.remove", Method: http.MethodDelete, Path: "/connectors/{id}",
+		Summary: "Remove an Environment connector", Tags: []string{"Connector"},
+		DefaultStatus: http.StatusAccepted,
+		Middlewares:   huma.Middlewares{s.rejectConnectorDeleteBody, s.rejectConnectorDeleteQuery},
+		Responses:     attachMutationResponses(taskAcceptedSchema),
+	}, s.removeConnector)
 	s.setRoutePolicy("POST /api/v1/connectors", routePolicy{body: jsonBody})
 }
 
@@ -118,9 +138,9 @@ func (s *Server) createConnector(
 	}
 	response, err := s.connectorMutations.CreateConnector(
 		ctx,
-		request.Environment,
+		request.Env,
 		input,
-		request.IdempotencyKey,
+		request.Key,
 	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
@@ -172,6 +192,53 @@ func (s *Server) showConnector(
 		return nil, normalizeProjectError(err)
 	}
 	return &connectorOutput{Body: connectorAPI(record.Record)}, nil
+}
+
+func (s *Server) removeConnector(
+	ctx context.Context,
+	request *connectorRemoveInput,
+) (*connectorMutationOutput, error) {
+	if s.connectorDeletions == nil {
+		return nil, errs.New(errs.KindInternal, "connector deleter is not configured")
+	}
+	response, err := s.connectorDeletions.DeleteConnector(ctx, request.ID, request.Key)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &connectorMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
+				s.Logger.Error("controller: write Connector deletion response", slog.Any("error", writeErr))
+			}
+		},
+	}, nil
+}
+
+func (s *Server) rejectConnectorDeleteBody(ctx huma.Context, next func(huma.Context)) {
+	var probe [1]byte
+	count, err := ctx.BodyReader().Read(probe[:])
+	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		s.writeConnectorProblem(ctx, "connector deletion body is not allowed")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectConnectorDeleteQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeConnectorProblem(ctx, "connector deletion query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) writeConnectorProblem(ctx huma.Context, detail string) {
+	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
+		s.Logger.Error("controller: write Connector request problem", slog.Any("error", err))
+	}
 }
 
 func connectorAPI(record etcd.ConnectorRecord) apiTypes.Connector {
