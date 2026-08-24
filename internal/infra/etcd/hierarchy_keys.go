@@ -19,13 +19,15 @@ import (
 )
 
 const (
-	tenantPrefix               = "/v1/records/tenants/"
-	projectPrefix              = "/v1/records/projects/"
-	environmentPrefix          = "/v1/records/environments/"
-	projectPlatformOwnerPrefix = "/v1/indexes/projects/by-owner/platform/-/"
-	maximumEncodedCursorBytes  = 2048
-	cursorVersion              = 1
-	cursorOrder                = "id_asc"
+	tenantPrefix                   = "/v1/records/tenants/"
+	projectPrefix                  = "/v1/records/projects/"
+	environmentPrefix              = "/v1/records/environments/"
+	environmentMutationEpochPrefix = "/v1/runtime/environment-mutation-epochs/"
+	environmentOperationLockPrefix = "/v1/runtime/environment-operation-locks/"
+	projectPlatformOwnerPrefix     = "/v1/indexes/projects/by-owner/platform/-/"
+	maximumEncodedCursorBytes      = 2048
+	cursorVersion                  = 1
+	cursorOrder                    = "id_asc"
 )
 
 type recordEnvelope[T any] struct {
@@ -52,6 +54,14 @@ type cursorQuery struct {
 func tenantKey(id string) string      { return tenantPrefix + id }
 func projectKey(id string) string     { return projectPrefix + id }
 func environmentKey(id string) string { return environmentPrefix + id }
+
+func environmentMutationEpochKey(environmentID string) string {
+	return environmentMutationEpochPrefix + environmentID
+}
+
+func environmentOperationLockKey(environmentID string) string {
+	return environmentOperationLockPrefix + environmentID
+}
 
 func tenantSlugKey(slug string) string {
 	return "/v1/indexes/tenants/by-slug/global/-/" + encodeDynamicSegment(slug)
