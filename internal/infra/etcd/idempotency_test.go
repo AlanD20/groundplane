@@ -712,6 +712,128 @@ func TestIdempotencyRepositoryConcurrentClaimsHaveOneWinner(t *testing.T) {
 	}
 }
 
+// Rationale: a direct no-op still needs durable protected replay evidence, but
+// must not invent a domain mutation merely to make the coordinator transaction non-empty.
+func TestIdempotencyRepositoryMarkerOnlyReplayAndUnknownOutcomeRecovery(t *testing.T) {
+	t.Parallel()
+	store := &markerOnlyRecoveryStore{}
+	repository, err := NewIdempotencyRepository(store)
+	if err != nil {
+		t.Fatalf("NewIdempotencyRepository() error = %v", err)
+	}
+	marker := testDirectMarker()
+	classifier := func(int64, []*KeyValue) error {
+		return errs.New(errs.KindStateConflict, "domain fence changed")
+	}
+	plan, err := newIdempotencyMutationPlan(
+		[]Condition{{Key: "/v1/test/no-op-domain", ModRevision: 0}}, nil, classifier,
+	)
+	if err != nil {
+		t.Fatalf("newIdempotencyMutationPlan(marker-only) error = %v", err)
+	}
+	_, err = repository.Apply(context.Background(), marker, plan)
+	if !isKind(err, errs.KindStorageUnavailable) {
+		t.Fatalf("Apply(unknown marker-only) error = %v", err)
+	}
+	retryPlan, err := newIdempotencyMutationPlan(
+		[]Condition{{Key: "/v1/test/no-op-domain", ModRevision: 0}}, nil, classifier,
+	)
+	if err != nil {
+		t.Fatalf("newIdempotencyMutationPlan(retry) error = %v", err)
+	}
+	retry, err := repository.Apply(context.Background(), marker, retryPlan)
+	if err != nil {
+		t.Fatalf("Apply(retry) error = %v", err)
+	}
+	outcome, existing, conflict, classifyErr := retry.Classify()
+	defer clear(existing.Intent.Ciphertext)
+	defer clear(existing.Response.Body)
+	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting ||
+		existing.Intent.CiphertextDigest != marker.Intent.CiphertextDigest {
+		t.Fatalf("marker-only retry = %v, %#v, %v, %v", outcome, existing, conflict, classifyErr)
+	}
+	for _, call := range store.mutations {
+		for _, mutation := range call {
+			if !strings.HasPrefix(mutation.Key, idempotencyMarkerPrefix) &&
+				!strings.HasPrefix(mutation.Key, idempotencyRetentionPrefix) {
+				t.Fatalf("marker-only transaction wrote domain key %q", mutation.Key)
+			}
+		}
+	}
+
+	mismatch := marker
+	mismatch.Intent.Ciphertext = []byte("different-protected-intent")
+	digest := sha256.Sum256(mismatch.Intent.Ciphertext)
+	mismatch.Intent.CiphertextDigest = hex.EncodeToString(digest[:])
+	mismatchPlan, err := newIdempotencyMutationPlan(nil, nil, classifier)
+	if err != nil {
+		t.Fatalf("newIdempotencyMutationPlan(mismatch) error = %v", err)
+	}
+	mismatchResult, err := repository.Apply(context.Background(), mismatch, mismatchPlan)
+	if err != nil {
+		t.Fatalf("Apply(mismatch) error = %v", err)
+	}
+	mismatchOutcome, mismatchExisting, mismatchConflict, mismatchClassifyErr := mismatchResult.Classify()
+	defer clear(mismatchExisting.Intent.Ciphertext)
+	defer clear(mismatchExisting.Response.Body)
+	if mismatchClassifyErr != nil || mismatchConflict != nil || mismatchOutcome != IdempotencyKnownExisting ||
+		mismatchExisting.Intent.CiphertextDigest == mismatch.Intent.CiphertextDigest {
+		t.Fatalf(
+			"mismatched marker was not rejected as existing evidence: %v, %#v, %v, %v",
+			mismatchOutcome,
+			mismatchExisting,
+			mismatchConflict,
+			mismatchClassifyErr,
+		)
+	}
+	if _, err := newIdempotencyMutationPlanForMarker(
+		IdempotencyMarkerTask, nil, nil, classifier,
+	); !isKind(err, errs.KindInternal) {
+		t.Fatalf("zero-mutation Task plan error = %v, want internal", err)
+	}
+}
+
+type markerOnlyRecoveryStore struct {
+	Store
+	mu        sync.Mutex
+	revision  int64
+	marker    *KeyValue
+	mutations [][]Mutation
+}
+
+func (store *markerOnlyRecoveryStore) Transact(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return TransactionResult{}, err
+	}
+	store.revision++
+	store.mutations = append(store.mutations, cloneMutations(mutations))
+	if store.marker == nil {
+		for _, mutation := range mutations {
+			if mutation.Type == MutationPut && strings.HasPrefix(mutation.Key, idempotencyMarkerPrefix) {
+				store.marker = &KeyValue{
+					Key: mutation.Key, Value: append([]byte(nil), mutation.Value...), ModRevision: store.revision,
+				}
+				break
+			}
+		}
+		if store.marker == nil {
+			return TransactionResult{}, errs.New(errs.KindInternal, "marker-only transaction omitted its marker")
+		}
+		return TransactionResult{}, errs.New(errs.KindStorageUnavailable, "unknown marker-only transaction outcome")
+	}
+	reads := make([]*KeyValue, len(conditions))
+	reads[0] = &KeyValue{
+		Key: store.marker.Key, Value: append([]byte(nil), store.marker.Value...), ModRevision: store.marker.ModRevision,
+	}
+	return TransactionResult{Revision: store.revision, FailureReads: reads}, nil
+}
+
 type collectorSnapshot struct {
 	rangeResult RangeResult
 	markers     GetManyResult

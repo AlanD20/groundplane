@@ -129,6 +129,10 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("Service lifecycle outcome/conflict/error = %v/%v/%v", outcome, conflict, err)
 	}
+	epoch, err := store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
+	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != result.revision {
+		t.Fatalf("Service lifecycle mutation epoch = %#v, %v", epoch, err)
+	}
 	if _, err := tasks.AbortPendingTask(ctx, task.ID, task.CreatedAt.Add(time.Second)); err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}

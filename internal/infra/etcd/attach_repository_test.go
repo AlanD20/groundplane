@@ -33,6 +33,10 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	if created.Revision == 0 || created.Record.ID != record.ID {
 		t.Fatalf("CreateAttach() = %#v", created)
 	}
+	epoch, err := store.Get(ctx, environmentMutationEpochKey(record.EnvironmentID))
+	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != created.Revision {
+		t.Fatalf("Attach creation mutation epoch = %#v, %v", epoch, err)
+	}
 	resolved, err := repository.ResolveAttach(ctx, record.EnvironmentID, record.Name)
 	if err != nil {
 		t.Fatalf("ResolveAttach() error = %v", err)
@@ -217,13 +221,9 @@ func TestAttachRepositoryPublishesDetachTaskAtomically(t *testing.T) {
 	if err != nil || renderInput.Revision != detaching.Revision {
 		t.Fatalf("detach render input = %#v, %v", renderInput, err)
 	}
-	hierarchy, err := NewHierarchyRepository(store)
-	if err != nil {
-		t.Fatalf("NewHierarchyRepository() error = %v", err)
-	}
-	environment, err := hierarchy.GetEnvironment(ctx, record.EnvironmentID)
-	if err != nil || environment.Revision != detaching.Revision {
-		t.Fatalf("Attach topology fence = %#v, %v", environment, err)
+	epoch, err := store.Get(ctx, environmentMutationEpochKey(record.EnvironmentID))
+	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != detaching.Revision {
+		t.Fatalf("Attach mutation epoch = %#v, %v", epoch, err)
 	}
 }
 

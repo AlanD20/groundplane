@@ -59,6 +59,31 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	if err := validateAttachTaskRenderInputScope(scope, record, task, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
+		return existing, err
+	}
+	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+		ctx,
+		repository.store,
+		record.EnvironmentID,
+		attachKey(record.ID),
+		scope.Project.Record.ID,
+		scope.Project.Record.TenantID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+		&scope.Tenant,
+		scope.Project,
+		scope.Environment,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	if attachCreateWithTaskOperationCount(record, facts != nil) > maximumTransactionOperations {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -199,20 +224,30 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		defer clear(factValue)
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: attachFactsKey(record.ID), Value: factValue})
 	}
-	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, scope.Project)
+	initiation, err := newEnvironmentTaskInitiation(
+		versionedTenant,
+		versionedProject,
+		versionedEnvironment,
+		TaskActorOperator,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(taskTenant, scope.Project, scope.Environment, TaskActorOperator)
+	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	defer binding.clear()
+	defer clearMutationValues(binding.mutations)
+	classify := func(revision int64, values []*KeyValue) error {
+		return binding.classify(revision, values, classifyAttachTaskCreateConflict)
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
 		initiation,
-		conditions,
-		mutations,
-		classifyAttachTaskCreateConflict,
+		binding.conditions,
+		binding.mutations,
+		classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -269,16 +304,38 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if err := validateAttachTaskRenderInputScope(scope, detaching, task, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
+		return existing, err
+	}
+	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+		ctx,
+		repository.store,
+		current.Record.EnvironmentID,
+		attachKey(current.Record.ID),
+		scope.Project.Record.ID,
+		scope.Project.Record.TenantID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+		&scope.Tenant,
+		scope.Project,
+		scope.Environment,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	if attachDetachWithTaskOperationCount(detaching) > maximumTransactionOperations {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach detach combination exceeds the atomic transaction limit",
 		)
 	}
-	revision := current.ReadRevision
-	if revision == 0 {
-		revision = current.Revision
-	}
+	revision := mutationContext.readRevision
 	dependents, err := repository.store.Range(ctx, RangeRequest{
 		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
@@ -395,12 +452,8 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	}
 	initiation := TaskInitiation{}
 	if provided == nil {
-		taskTenant, tenantErr := loadTaskInitiationTenant(ctx, repository.store, scope.Project)
-		if tenantErr != nil {
-			return IdempotencyTransactionResult{}, tenantErr
-		}
 		initiation, err = newEnvironmentTaskInitiation(
-			taskTenant, scope.Project, scope.Environment, TaskActorOperator,
+			versionedTenant, versionedProject, versionedEnvironment, TaskActorOperator,
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
@@ -415,12 +468,21 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			)
 		}
 	}
+	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer binding.clear()
+	defer clearMutationValues(binding.mutations)
+	classify := func(revision int64, values []*KeyValue) error {
+		return binding.classify(revision, values, classifyAttachDetachTaskConflict)
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
 		initiation,
-		conditions,
-		mutations,
-		classifyAttachDetachTaskConflict,
+		binding.conditions,
+		binding.mutations,
+		classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -630,12 +692,26 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
+		return existing, err
+	}
+	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+		ctx,
+		repository.store,
+		current.Record.EnvironmentID,
+		attachKey(current.Record.ID),
+		project.Record.ID,
+		project.Record.TenantID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			attachNameKey(current.Record.EnvironmentID, current.Record.Name),
 			attachOwnerKey(current.Record.EnvironmentID, current.Record.ID),
 		},
-		Revision: current.ReadRevision,
+		Revision: mutationContext.readRevision,
 	})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -690,7 +766,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 			},
 		}
 	}
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*KeyValue) error {
+	originalClassify := func(_ int64, values []*KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Attach rename compare evidence is incomplete")
 		}
@@ -712,7 +788,17 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 			return errs.New(errs.KindInternal, "Attach indexes are missing or mismatched")
 		}
 		return errs.New(errs.KindStateConflict, "Attach rename scope changed concurrently")
-	})
+	}
+	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, renaming)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer binding.clear()
+	defer clearMutationValues(binding.mutations)
+	classify := func(revision int64, values []*KeyValue) error {
+		return binding.classify(revision, values, originalClassify)
+	}
+	plan, err := newIdempotencyMutationPlan(binding.conditions, binding.mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -1034,7 +1120,7 @@ func validateAttachDetachTask(
 }
 
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 45 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	operations := 48 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
 	if hasFacts {
 		operations++
 	}
@@ -1042,7 +1128,7 @@ func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int 
 }
 
 func attachDetachWithTaskOperationCount(record AttachRecord) int {
-	return 38 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
+	return 41 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
 }
 
 func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRecord) bool {

@@ -767,7 +767,7 @@ func newIdempotencyMutationPlanForMarker(
 	if markerKind != IdempotencyMarkerDirect && markerKind != IdempotencyMarkerTask {
 		return nil, errs.New(errs.KindInternal, "idempotency mutation plan marker kind is invalid")
 	}
-	if len(mutations) == 0 || classify == nil {
+	if classify == nil || markerKind == IdempotencyMarkerTask && len(mutations) == 0 {
 		return nil, errs.New(errs.KindInternal, "idempotency mutation plan is incomplete")
 	}
 	if err := validateIdempotencyPlanKeys(conditions, mutations); err != nil {

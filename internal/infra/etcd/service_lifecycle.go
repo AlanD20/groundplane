@@ -49,13 +49,38 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 			"Service lifecycle marker does not match its Task",
 		)
 	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
+		return existing, err
+	}
+	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+		ctx,
+		repository.store,
+		current.Record.EnvironmentID,
+		serviceKey(current.Record.Desired.ID),
+		project.Record.ID,
+		project.Record.TenantID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+		&tenant,
+		project,
+		environment,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			serviceNameKey(environment.Record.ID, current.Record.Desired.Name),
 			serviceOwnerKey(environment.Record.ID, current.Record.Desired.ID),
 		},
-		Revision: current.ReadRevision,
+		Revision: mutationContext.readRevision,
 	})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -72,9 +97,6 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
 	if err := validateTaskRecord(task); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	serviceValue, err := encodeServiceRecord(replacement)
@@ -142,22 +164,33 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 			})
 		}
 	}
-	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	initiation, err := newEnvironmentTaskInitiation(
+		versionedTenant,
+		versionedProject,
+		versionedEnvironment,
+		TaskActorOperator,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	originalClassify := classifyServiceLifecycleStartConflict(
+		tenant, project, environment, current, projection, renderInput != nil, task.OperationID,
+	)
+	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	defer binding.clear()
+	defer clearMutationValues(binding.mutations)
+	classify := func(revision int64, values []*KeyValue) error {
+		return binding.classify(revision, values, originalClassify)
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
 		initiation,
-		conditions,
-		mutations,
-		classifyServiceLifecycleStartConflict(
-			tenant, project, environment, current, projection, renderInput != nil, task.OperationID,
-		),
+		binding.conditions,
+		binding.mutations,
+		classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
