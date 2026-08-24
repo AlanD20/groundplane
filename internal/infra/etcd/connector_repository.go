@@ -2,8 +2,10 @@ package etcd
 
 import (
 	"context"
+	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -43,6 +45,10 @@ func (repository *ConnectorRepository) CreateConnector(
 			"Connector encrypted credentials do not match the Connector",
 		)
 	}
+	secretFence, err := repository.loadConnectorSecretReferenceFence(ctx, project.Record.ID, record)
+	if err != nil {
+		return Versioned[ConnectorRecord]{}, err
+	}
 	primaryValue, err := encodeConnectorRecord(record)
 	if err != nil {
 		return Versioned[ConnectorRecord]{}, err
@@ -76,6 +82,7 @@ func (repository *ConnectorRepository) CreateConnector(
 	}
 	defer clear(epochMutation.Value)
 	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
+	conditions = append(conditions, secretFence.conditions...)
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
 		{
@@ -101,7 +108,7 @@ func (repository *ConnectorRepository) CreateConnector(
 	if !result.Succeeded {
 		defer clearKeyValues(result.FailureReads)
 		return Versioned[ConnectorRecord]{}, classifyConnectorCreateConflict(
-			result.FailureReads, fence,
+			result.FailureReads, fence, len(secretFence.conditions),
 		)
 	}
 	return Versioned[ConnectorRecord]{
@@ -144,6 +151,10 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	); err != nil ||
 		found {
 		return existing, err
+	}
+	secretFence, err := repository.loadConnectorSecretReferenceFence(ctx, project.Record.ID, record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
 	primaryValue, err := encodeConnectorRecord(record)
 	if err != nil {
@@ -197,11 +208,13 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	}
 	mutations = append(mutations, epochMutation)
 	defer clearMutationValues(mutations)
+	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
+	conditions = append(conditions, secretFence.conditions...)
 	plan, err := newIdempotencyMutationPlan(
-		append(connectorCreateConditions(record), fence.transactionConditions()...),
+		conditions,
 		mutations,
 		func(_ int64, values []*KeyValue) error {
-			return classifyConnectorCreateConflict(values, fence)
+			return classifyConnectorCreateConflict(values, fence, len(secretFence.conditions))
 		},
 	)
 	if err != nil {
@@ -311,6 +324,228 @@ func connectorCreateConditions(
 		{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 	}
 	return conditions
+}
+
+type connectorSecretReferenceFence struct {
+	conditions []Condition
+}
+
+type connectorSecretCandidate struct {
+	reference     string
+	projectIndex  *KeyValue
+	platformIndex *KeyValue
+}
+
+func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
+	ctx context.Context,
+	projectID string,
+	record ConnectorRecord,
+) (connectorSecretReferenceFence, error) {
+	references := connectorSecretReferences(record)
+	if len(references) == 0 {
+		return connectorSecretReferenceFence{}, nil
+	}
+	indexKeys := make([]string, 0, len(references)*2)
+	for _, reference := range references {
+		indexKeys = append(indexKeys,
+			secretKeyIndexKey(core.SecretScopeProject, projectID, reference),
+			secretKeyIndexKey(core.SecretScopePlatform, "", reference),
+		)
+	}
+	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: indexKeys})
+	if err != nil {
+		return connectorSecretReferenceFence{}, err
+	}
+	if indexes == nil || indexes.ReadRevision <= 0 || len(indexes.Values) != len(indexKeys) {
+		return connectorSecretReferenceFence{}, errs.New(
+			errs.KindInternal,
+			"Connector credential Secret index evidence is incomplete",
+		)
+	}
+	defer clearKeyValues(indexes.Values)
+	candidates := make([]connectorSecretCandidate, len(references))
+	candidateKeys := make([]string, 0, len(references)*6)
+	for index, reference := range references {
+		projectIndex := indexes.Values[index*2]
+		platformIndex := indexes.Values[index*2+1]
+		if err := validateConnectorSecretIndex(indexKeys[index*2], projectIndex); err != nil {
+			return connectorSecretReferenceFence{}, err
+		}
+		if err := validateConnectorSecretIndex(indexKeys[index*2+1], platformIndex); err != nil {
+			return connectorSecretReferenceFence{}, err
+		}
+		candidates[index] = connectorSecretCandidate{
+			reference: reference, projectIndex: projectIndex, platformIndex: platformIndex,
+		}
+		for _, selected := range []*KeyValue{projectIndex, platformIndex} {
+			if selected == nil {
+				continue
+			}
+			secretID := string(selected.Value)
+			candidateKeys = append(candidateKeys,
+				secretRecordKey(secretID),
+				deletionTombstoneKey(string(DeletionTargetSecret), secretID),
+				secretValueKey(secretID),
+			)
+		}
+	}
+	if len(candidateKeys) == 0 {
+		return connectorSecretReferenceFence{}, errs.New(
+			errs.KindSecretNotFound,
+			"Connector credential Secret was not found in scope",
+		)
+	}
+	values, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: candidateKeys, Revision: indexes.ReadRevision,
+	})
+	if err != nil {
+		return connectorSecretReferenceFence{}, err
+	}
+	if values == nil || values.ReadRevision != indexes.ReadRevision || len(values.Values) != len(candidateKeys) {
+		return connectorSecretReferenceFence{}, errs.New(
+			errs.KindInternal,
+			"Connector credential Secret evidence is incomplete",
+		)
+	}
+	defer clearKeyValues(values.Values)
+	fence := connectorSecretReferenceFence{conditions: make([]Condition, 0, len(candidateKeys)+len(indexKeys))}
+	offset := 0
+	for _, candidate := range candidates {
+		projectIndexKey := secretKeyIndexKey(core.SecretScopeProject, projectID, candidate.reference)
+		fence.conditions = append(fence.conditions, connectorSecretIndexCondition(projectIndexKey, candidate.projectIndex))
+		selected, selectedConditions, consumed, selectedErr := selectConnectorCredentialSecret(
+			candidate.reference,
+			projectID,
+			core.SecretScopeProject,
+			candidate.projectIndex,
+			values.Values[offset:],
+		)
+		offset += consumed
+		fence.conditions = append(fence.conditions, selectedConditions...)
+		if selectedErr != nil {
+			return connectorSecretReferenceFence{}, selectedErr
+		}
+		if selected {
+			if candidate.platformIndex != nil {
+				offset += 3
+			}
+			continue
+		}
+		platformIndexKey := secretKeyIndexKey(core.SecretScopePlatform, "", candidate.reference)
+		fence.conditions = append(
+			fence.conditions,
+			connectorSecretIndexCondition(platformIndexKey, candidate.platformIndex),
+		)
+		selected, selectedConditions, consumed, selectedErr = selectConnectorCredentialSecret(
+			candidate.reference,
+			projectID,
+			core.SecretScopePlatform,
+			candidate.platformIndex,
+			values.Values[offset:],
+		)
+		offset += consumed
+		fence.conditions = append(fence.conditions, selectedConditions...)
+		if selectedErr != nil {
+			return connectorSecretReferenceFence{}, selectedErr
+		}
+		if !selected {
+			return connectorSecretReferenceFence{}, errs.New(
+				errs.KindSecretNotFound,
+				"Connector credential Secret was not found in scope",
+			)
+		}
+	}
+	if offset != len(values.Values) {
+		return connectorSecretReferenceFence{}, errs.New(
+			errs.KindInternal,
+			"Connector credential Secret evidence is inconsistent",
+		)
+	}
+	return fence, nil
+}
+
+func connectorSecretReferences(record ConnectorRecord) []string {
+	unique := make(map[string]struct{}, len(record.Connector.Credentials))
+	for _, credential := range record.Connector.Credentials {
+		if credential.Kind == core.ConnectorCredentialSecretRef {
+			unique[credential.SecretRef] = struct{}{}
+		}
+	}
+	references := make([]string, 0, len(unique))
+	for reference := range unique {
+		references = append(references, reference)
+	}
+	sort.Strings(references)
+	return references
+}
+
+func validateConnectorSecretIndex(key string, value *KeyValue) error {
+	if value == nil {
+		return nil
+	}
+	if value.Key != key || value.ModRevision <= 0 || ids.Validate(ids.KindSecret, string(value.Value)) != nil {
+		return errs.New(errs.KindInternal, "Connector credential Secret index is corrupt")
+	}
+	return nil
+}
+
+func connectorSecretIndexCondition(key string, value *KeyValue) Condition {
+	if value == nil {
+		return Condition{Key: key}
+	}
+	return Condition{Key: key, ModRevision: value.ModRevision}
+}
+
+func selectConnectorCredentialSecret(
+	reference string,
+	projectID string,
+	scope core.SecretScope,
+	index *KeyValue,
+	values []*KeyValue,
+) (bool, []Condition, int, error) {
+	if index == nil {
+		return false, nil, 0, nil
+	}
+	if len(values) < 3 || values[0] == nil || values[0].Key != secretRecordKey(string(index.Value)) ||
+		values[2] == nil || values[2].Key != secretValueKey(string(index.Value)) {
+		return false, nil, 0, errs.New(errs.KindInternal, "Connector credential Secret evidence is corrupt")
+	}
+	record, err := decodeSecretRecord(values[0].Value)
+	if err != nil || record.Secret.ID != string(index.Value) || record.Secret.Key != reference ||
+		record.Secret.Scope != scope || (scope == core.SecretScopeProject && record.Secret.ProjectID != projectID) ||
+		(scope == core.SecretScopePlatform && record.Secret.ProjectID != "") {
+		return false, nil, 0, corruptSecretRecord()
+	}
+	conditions := []Condition{{Key: values[0].Key, ModRevision: values[0].ModRevision}}
+	if values[1] != nil {
+		if values[1].Key != deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID) {
+			return false, nil, 0, errs.New(errs.KindInternal, "Connector credential Secret tombstone evidence is corrupt")
+		}
+		if err := validateSecretDeletionFence(values[1], record.Secret.ID); err != nil {
+			return false, nil, 0, err
+		}
+		conditions = append(conditions, Condition{Key: values[1].Key, ModRevision: values[1].ModRevision})
+		return false, conditions, 3, nil
+	}
+	conditions = append(conditions, Condition{
+		Key: deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID),
+	})
+	value, err := decodeSecretEncryptedValue(values[2].Value)
+	if err != nil {
+		return false, nil, 0, corruptSecretRecord()
+	}
+	defer clear(value.Ciphertext)
+	if err := validateSecretValueBinding(record, value); err != nil {
+		return false, nil, 0, corruptSecretRecord()
+	}
+	if record.Secret.Kind != core.SecretKindEnvVar {
+		return false, nil, 0, errs.New(
+			errs.KindValidationFailed,
+			"Connector credential secret_ref must name an env_var Secret",
+		)
+	}
+	conditions = append(conditions, Condition{Key: values[2].Key, ModRevision: values[2].ModRevision})
+	return true, conditions, 3, nil
 }
 
 func (repository *ConnectorRepository) loadConnectorMutationFence(
@@ -429,8 +664,9 @@ func validateConnectorVersion(current Versioned[ConnectorRecord]) error {
 func classifyConnectorCreateConflict(
 	reads []*KeyValue,
 	fence environmentMutationFenceEvidence,
+	secretConditionCount int,
 ) error {
-	want := 5 + len(fence.conditions)
+	want := 5 + len(fence.conditions) + secretConditionCount
 	if len(reads) != want {
 		return errs.New(errs.KindInternal, "Connector create conflict read is incomplete")
 	}
@@ -443,8 +679,11 @@ func classifyConnectorCreateConflict(
 	if reads[4] != nil {
 		return errs.New(errs.KindResourceInUse, "Connector deletion is in progress")
 	}
-	if conflict := fence.classifyCAS(reads[5:]); conflict != nil {
+	if conflict := fence.classifyCAS(reads[5 : 5+len(fence.conditions)]); conflict != nil {
 		return conflict
+	}
+	if secretConditionCount > 0 {
+		return errs.New(errs.KindStateConflict, "Connector credential Secret changed during creation")
 	}
 	return errs.New(errs.KindStateConflict, "Connector owner changed or is being deleted")
 }

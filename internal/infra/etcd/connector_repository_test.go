@@ -32,9 +32,7 @@ func TestConnectorRecordNormalizesCompleteS3Decision(t *testing.T) {
 		Region:    "auto",
 		PathStyle: true,
 		Credentials: map[string]core.ConnectorCredential{
-			core.ConnectorCredentialAccessKey: {
-				Kind: core.ConnectorCredentialSecretRef, SecretRef: "S3_ACCESS_KEY",
-			},
+			core.ConnectorCredentialAccessKey: {Kind: core.ConnectorCredentialDirect},
 			core.ConnectorCredentialSecretKey: {Kind: core.ConnectorCredentialDirect},
 		},
 	})
@@ -183,9 +181,7 @@ func testConnectorRecord(
 		Region:        "auto",
 		PathStyle:     true,
 		Credentials: map[string]core.ConnectorCredential{
-			core.ConnectorCredentialAccessKey: {
-				Kind: core.ConnectorCredentialSecretRef, SecretRef: "S3_ACCESS_KEY",
-			},
+			core.ConnectorCredentialAccessKey: {Kind: core.ConnectorCredentialDirect},
 			core.ConnectorCredentialSecretKey: {Kind: core.ConnectorCredentialDirect},
 		},
 	})
