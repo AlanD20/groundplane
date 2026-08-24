@@ -43,6 +43,9 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 	if err != nil || terminal.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
+	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != terminal.Revision {
+		t.Fatalf("completed Entry deletion epoch = %d, want %d", epoch, terminal.Revision)
+	}
 	_, err = repository.GetEntry(ctx, current.Record.Entry.ID)
 	if !isKind(err, errs.KindEntryNotFound) {
 		t.Fatalf("GetEntry(completed removal) error = %v", err)
@@ -98,6 +101,9 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	if err != nil || failed.Record.Status != TaskStatusFailed {
 		t.Fatalf("AcknowledgeControllerTask(failed) = %#v/%v", failed, err)
 	}
+	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != failed.Revision {
+		t.Fatalf("failed Entry deletion epoch = %d, want %d", epoch, failed.Revision)
+	}
 	assertEntryRemovalRetained(t, repository, store, current, generationIDs)
 	retryAt := task.CreatedAt.Add(3 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 9001)
@@ -110,8 +116,23 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("RetryTask() outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	if _, err := tasks.AbortPendingTask(ctx, retryID, retryAt.Add(time.Second)); err != nil {
+	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != result.revision {
+		t.Fatalf("retried Entry deletion epoch = %d, want %d", epoch, result.revision)
+	}
+	replay, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	if err != nil {
+		t.Fatalf("RetryTask(replay) error = %v", err)
+	}
+	replayOutcome, _, replayConflict, replayErr := replay.Classify()
+	if replayErr != nil || replayConflict != nil || replayOutcome != IdempotencyKnownExisting {
+		t.Fatalf("RetryTask(replay) outcome/conflict/error = %v/%v/%v", replayOutcome, replayConflict, replayErr)
+	}
+	aborted, err := tasks.AbortPendingTask(ctx, retryID, retryAt.Add(time.Second))
+	if err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != aborted.Revision {
+		t.Fatalf("aborted Entry deletion epoch = %d, want %d", epoch, aborted.Revision)
 	}
 	assertEntryRemovalRetained(t, repository, store, current, generationIDs)
 	hierarchy, err := newHierarchyRepository(store)
@@ -167,6 +188,9 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 
 	if err != nil || terminal.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask() = %#v/%v", terminal, err)
+	}
+	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != terminal.Revision {
+		t.Fatalf("completed applied Entry deletion epoch = %d, want %d", epoch, terminal.Revision)
 	}
 	_, err = repository.GetEntry(ctx, current.Record.Entry.ID)
 	if !isKind(err, errs.KindEntryNotFound) {

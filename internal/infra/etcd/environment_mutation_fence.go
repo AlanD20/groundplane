@@ -24,6 +24,7 @@ const (
 	environmentMutationFenceProject
 	environmentMutationFenceTenant
 	environmentMutationFenceEnvironmentTombstone
+	environmentMutationFenceOwnedDeletionTombstone
 	environmentMutationFenceProjectTombstone
 	environmentMutationFenceTenantTombstone
 	environmentMutationFenceEpoch
@@ -116,7 +117,17 @@ func loadEnvironmentMutationFence(
 			"environment mutation fence environment is corrupt",
 		)
 	}
-	if base.Values[3] != nil {
+	deletionOwner := owner != nil && owner.Kind == BackupOperationDeletion
+	if deletionOwner {
+		if err := validateOwnedEnvironmentDeletionTombstone(
+			base.Values[3],
+			environmentID,
+			base.Values[0].ModRevision,
+			*owner,
+		); err != nil {
+			return environmentMutationFenceEvidence{}, err
+		}
+	} else if base.Values[3] != nil {
 		return environmentMutationFenceEvidence{}, errs.New(
 			errs.KindResourceInUse,
 			"environment hierarchy deletion is in progress",
@@ -208,8 +219,16 @@ func loadEnvironmentMutationFence(
 		)
 	}
 
+	environmentTombstoneCondition := environmentMutationFenceCondition{
+		key: baseKeys[3], kind: environmentMutationFenceEnvironmentTombstone,
+	}
+	if deletionOwner {
+		environmentTombstoneCondition.stableID = owner.TaskID
+		environmentTombstoneCondition.modRevision = base.Values[3].ModRevision
+		environmentTombstoneCondition.kind = environmentMutationFenceOwnedDeletionTombstone
+	}
 	conditions = append(conditions,
-		environmentMutationFenceCondition{key: baseKeys[3], kind: environmentMutationFenceEnvironmentTombstone},
+		environmentTombstoneCondition,
 		environmentMutationFenceCondition{key: projectKeys[1], kind: environmentMutationFenceProjectTombstone},
 	)
 	if project.Kind == ProjectKindTenant {
@@ -304,6 +323,27 @@ func validateEnvironmentMutationFenceLock(
 	return value.ModRevision, nil
 }
 
+func validateOwnedEnvironmentDeletionTombstone(
+	value *KeyValue,
+	environmentID string,
+	environmentRevision int64,
+	owner environmentMutationFenceOwner,
+) error {
+	if value == nil {
+		return errs.New(errs.KindStateConflict, "environment deletion tombstone is missing")
+	}
+	tombstone, err := decodeDeletionTombstone(value.Value)
+	if err != nil {
+		return errs.New(errs.KindInternal, "environment deletion tombstone is corrupt")
+	}
+	if tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != environmentID ||
+		tombstone.TargetRevision != environmentRevision || tombstone.TaskID != owner.TaskID ||
+		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
+		return errs.New(errs.KindStateConflict, "environment deletion tombstone ownership changed")
+	}
+	return nil
+}
+
 func validateEnvironmentMutationFenceOwner(owner environmentMutationFenceOwner) error {
 	switch owner.Kind {
 	case BackupOperationBackup, BackupOperationRestore, BackupOperationRotation, BackupOperationDeletion:
@@ -388,6 +428,21 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue)
 			environmentMutationFenceTenantTombstone:
 			if value != nil {
 				return errs.New(errs.KindResourceInUse, "environment hierarchy deletion is in progress")
+			}
+		case environmentMutationFenceOwnedDeletionTombstone:
+			if evidence.owner == nil {
+				return errs.New(errs.KindInternal, "environment deletion tombstone owner is missing")
+			}
+			if err := validateOwnedEnvironmentDeletionTombstone(
+				value,
+				evidence.environmentID,
+				evidence.conditions[0].modRevision,
+				*evidence.owner,
+			); err != nil {
+				return err
+			}
+			if value.ModRevision != condition.modRevision {
+				return stateConflict("environment deletion tombstone", condition.stableID)
 			}
 		case environmentMutationFenceEpoch:
 			if _, err := decodeEnvironmentMutationFenceEpoch(value, condition.stableID); err != nil {

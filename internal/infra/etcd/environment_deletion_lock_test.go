@@ -119,6 +119,101 @@ func TestEnvironmentDeletionBlueprintBatchFencesOwnedLockAndAdvancesEpoch(t *tes
 	)
 }
 
+// Rationale: owned deletion work must fail closed when its tombstone is
+// missing, belongs to another Task, or changes after the fixed-revision read.
+func TestEnvironmentDeletionOwnedFenceValidatesExactTombstone(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		mutate func(*testing.T, *environmentDeletionLockFixture)
+	}{
+		{
+			name: "missing",
+			mutate: func(t *testing.T, fixture *environmentDeletionLockFixture) {
+				result, err := fixture.store.Transact(context.Background(), nil, []Mutation{{
+					Type: MutationDelete,
+					Key: deletionTombstoneKey(
+						string(DeletionTargetEnvironment),
+						fixture.environment.Record.ID,
+					),
+				}})
+				if err != nil || !result.Succeeded {
+					t.Fatalf("delete tombstone = %#v, %v", result, err)
+				}
+			},
+		},
+		{
+			name: "wrong task",
+			mutate: func(t *testing.T, fixture *environmentDeletionLockFixture) {
+				tombstone := fixture.tombstone
+				tombstone.TaskID = ids.NewAt(ids.KindTask, fixture.now, 8050)
+				value, err := encodeDeletionTombstone(tombstone)
+				if err != nil {
+					t.Fatalf("encodeDeletionTombstone() error = %v", err)
+				}
+				defer clear(value)
+				fixture.putRaw(
+					t,
+					deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+					value,
+				)
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newEnvironmentDeletionLockFixture(t)
+			fixture.mustBegin(t)
+			test.mutate(t, fixture)
+			_, err := loadOwnedEnvironmentMutationFence(
+				context.Background(),
+				fixture.store,
+				fixture.environment.Record.ID,
+				fixture.store.revision,
+				environmentMutationFenceOwner{
+					Kind: BackupOperationDeletion, OperationID: fixture.task.OperationID, TaskID: fixture.task.ID,
+				},
+			)
+			if !isKind(err, errs.KindStateConflict) {
+				t.Fatalf("loadOwnedEnvironmentMutationFence() error = %v", err)
+			}
+		})
+	}
+
+	fixture := newEnvironmentDeletionLockFixture(t)
+	fixture.mustBegin(t)
+	owner := environmentMutationFenceOwner{
+		Kind: BackupOperationDeletion, OperationID: fixture.task.OperationID, TaskID: fixture.task.ID,
+	}
+	evidence, err := loadOwnedEnvironmentMutationFence(
+		context.Background(), fixture.store, fixture.environment.Record.ID, fixture.store.revision, owner,
+	)
+	if err != nil {
+		t.Fatalf("loadOwnedEnvironmentMutationFence() error = %v", err)
+	}
+	tombstone := fixture.mustGet(
+		t,
+		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+	)
+	fixture.putRaw(t, tombstone.Key, tombstone.Value)
+	epochMutation, err := evidence.epochRewriteMutation()
+	if err != nil {
+		t.Fatalf("epochRewriteMutation() error = %v", err)
+	}
+	defer clear(epochMutation.Value)
+	result, err := fixture.store.Transact(
+		context.Background(), evidence.transactionConditions(), []Mutation{epochMutation},
+	)
+	if err != nil || result.Succeeded {
+		t.Fatalf("Transact(stale tombstone) = %#v, %v", result, err)
+	}
+	conflict := evidence.classifyCAS(result.FailureReads)
+	clearKeyValues(result.FailureReads)
+	if !isKind(conflict, errs.KindStateConflict) {
+		t.Fatalf("classifyCAS(stale tombstone) error = %v", conflict)
+	}
+}
+
 // Rationale: every terminal outcome must release the exact deletion lock;
 // success removes the Environment epoch while non-success advances and retains it.
 func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.T) {

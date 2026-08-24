@@ -47,6 +47,7 @@ func TestAttachTaskClaimAndAcknowledgementAdvanceProvisioningAtomically(t *testi
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
+	assertAttachTaskEnvironmentEpoch(t, ctx, store, scope.Environment.Record.ID, terminal.Revision)
 	ready, err := attaches.GetAttach(ctx, record.ID)
 	if err != nil || ready.Record.Status != core.AttachReady || ready.Revision != terminal.Revision {
 		t.Fatalf("ready Attach = %#v, %v", ready, err)
@@ -84,6 +85,7 @@ func TestAttachTaskPendingAbortAtomicallyFailsProvisioning(t *testing.T) {
 	if err != nil || aborted.Record.Status != TaskStatusAborted {
 		t.Fatalf("AbortPendingTask() = %#v, %v", aborted.Record, err)
 	}
+	assertAttachTaskEnvironmentEpoch(t, ctx, store, scope.Environment.Record.ID, aborted.Revision)
 	failed, err := attaches.GetAttach(ctx, record.ID)
 	if err != nil || failed.Record.Status != core.AttachFailed || failed.Record.Operation != AttachOperationProvision ||
 		failed.Record.TaskID != record.TaskID || failed.Revision != aborted.Revision {
@@ -135,9 +137,21 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 	retryAt := terminalAt.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 803)
 	marker := pendingRetryMarker(terminal.Record, retryID, retryAt, "attach-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, record.TaskID, retryID, TaskActorOperator, marker); err != nil {
+	retryResult, err := tasks.RetryTask(ctx, record.TaskID, retryID, TaskActorOperator, marker)
+	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
+	retryOutcome, _, retryConflict, classifyErr := retryResult.Classify()
+	if classifyErr != nil || retryConflict != nil || retryOutcome != IdempotencyKnownApplied {
+		t.Fatalf(
+			"RetryTask() outcome/revision/conflict/error = %v/%d/%v/%v",
+			retryOutcome,
+			retryResult.revision,
+			retryConflict,
+			classifyErr,
+		)
+	}
+	assertAttachTaskEnvironmentEpoch(t, ctx, store, scope.Environment.Record.ID, retryResult.revision)
 	retryTask, err := tasks.GetTask(ctx, retryID)
 	if err != nil {
 		t.Fatalf("GetTask(retry) error = %v", err)
@@ -223,9 +237,21 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	retryAt := detachFailureAt.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 806)
 	marker := pendingRetryMarker(failedTask.Record, retryID, retryAt, "detach-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, detachID, retryID, TaskActorOperator, marker); err != nil {
+	retryResult, err := tasks.RetryTask(ctx, detachID, retryID, TaskActorOperator, marker)
+	if err != nil {
 		t.Fatalf("RetryTask(detach) error = %v", err)
 	}
+	retryOutcome, _, retryConflict, classifyErr := retryResult.Classify()
+	if classifyErr != nil || retryConflict != nil || retryOutcome != IdempotencyKnownApplied {
+		t.Fatalf(
+			"RetryTask(detach) outcome/revision/conflict/error = %v/%d/%v/%v",
+			retryOutcome,
+			retryResult.revision,
+			retryConflict,
+			classifyErr,
+		)
+	}
+	assertAttachTaskEnvironmentEpoch(t, ctx, store, scope.Environment.Record.ID, retryResult.revision)
 	retrying, err := attaches.GetAttach(ctx, record.ID)
 	if err != nil || retrying.Record.Status != core.AttachDetaching || retrying.Record.TaskID != retryID {
 		t.Fatalf("retrying detach Attach = %#v, %v", retrying, err)
@@ -249,6 +275,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(detach retry) error = %v", err)
 	}
+	assertAttachTaskEnvironmentEpoch(t, ctx, store, scope.Environment.Record.ID, terminal.Revision)
 	_, err = attaches.GetAttach(ctx, record.ID)
 	kind, _ := errs.KindOf(err)
 	if kind != errs.KindAttachNotFound {
@@ -281,5 +308,19 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(detach replay) = %#v, %v", replay, err)
+	}
+}
+
+func assertAttachTaskEnvironmentEpoch(
+	t *testing.T,
+	ctx context.Context,
+	store *attachTestStore,
+	environmentID string,
+	wantRevision int64,
+) {
+	t.Helper()
+	result, err := store.Get(ctx, environmentMutationEpochKey(environmentID))
+	if err != nil || result.Entry == nil || result.Entry.ModRevision != wantRevision {
+		t.Fatalf("Attach Task Environment epoch = %#v, %v; want revision %d", result, err, wantRevision)
 	}
 }

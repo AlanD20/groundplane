@@ -303,6 +303,13 @@ func (repository *TaskRepository) retryTask(
 	if err := validateTaskRecord(retry); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if existing, found, err := existingIdempotencyTransaction(
+		ctx,
+		repository.store,
+		marker,
+	); err != nil || found {
+		return existing, err
+	}
 
 	taskValue, err := encodeTaskRecord(retry)
 	if err != nil {
@@ -428,25 +435,50 @@ func (repository *TaskRepository) retryTask(
 		mutations = append(mutations, runnerChange.mutations...)
 	}
 	defer clearRunnerTaskChange(runnerChange)
+	retryClassifier := classifyTaskRetryConflict(
+		sourceTaskID,
+		retry.OperationID,
+		len(attachChange.conditions),
+		len(environmentChange.conditions),
+		len(secretChange.conditions),
+		len(scriptChange.conditions),
+		len(routeChange.conditions),
+		len(serviceChange.conditions),
+		len(backingZoneChange.conditions),
+		len(componentChange.conditions),
+		len(connectorChange.conditions),
+		len(runnerChange.conditions),
+	)
+	environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
+		ctx,
+		source.Record,
+		source.ReadRevision,
+		conditions,
+		mutations,
+		attachChange.applies,
+		routeChange.applies && source.Record.Params[TaskEntryEnvironmentParam] != "",
+		serviceChange.applies,
+		connectorChange.applies,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if environmentBinding != nil {
+		defer environmentBinding.clear()
+		defer clear(environmentBinding.mutations[len(environmentBinding.mutations)-1].Value)
+		conditions = environmentBinding.conditions
+		mutations = environmentBinding.mutations
+		baseClassifier := retryClassifier
+		retryClassifier = func(revision int64, values []*KeyValue) error {
+			return environmentBinding.classify(revision, values, baseClassifier)
+		}
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		retry,
 		initiation,
 		conditions,
 		mutations,
-		classifyTaskRetryConflict(
-			sourceTaskID,
-			retry.OperationID,
-			len(attachChange.conditions),
-			len(environmentChange.conditions),
-			len(secretChange.conditions),
-			len(scriptChange.conditions),
-			len(routeChange.conditions),
-			len(serviceChange.conditions),
-			len(backingZoneChange.conditions),
-			len(componentChange.conditions),
-			len(connectorChange.conditions),
-			len(runnerChange.conditions),
-		),
+		retryClassifier,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -1618,6 +1650,39 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, runnerChange.conditions...)
 			mutations = append(mutations, runnerChange.mutations...)
 		}
+		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
+			ctx,
+			task,
+			primaryAndAssignment.ReadRevision,
+			conditions,
+			mutations,
+			attachChange.applies,
+			routeChange.applies && task.Params[TaskEntryEnvironmentParam] != "",
+			serviceChange.applies,
+			connectorChange.applies,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearConnectorTaskChange(connectorChange)
+			clearRunnerTaskChange(runnerChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		var environmentEpochValue []byte
+		if environmentBinding != nil {
+			conditions = environmentBinding.conditions
+			mutations = environmentBinding.mutations
+			environmentEpochValue = mutations[len(mutations)-1].Value
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
@@ -1632,6 +1697,8 @@ func (repository *TaskRepository) acknowledgeTask(
 		clearComponentTaskChange(componentChange)
 		clearConnectorTaskChange(connectorChange)
 		clearRunnerTaskChange(runnerChange)
+		clear(environmentEpochValue)
+		environmentBinding.clear()
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -2137,6 +2204,40 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, runnerChange.conditions...)
 			mutations = append(mutations, runnerChange.mutations...)
 		}
+		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
+			ctx,
+			current.Record,
+			current.ReadRevision,
+			conditions,
+			mutations,
+			attachChange.applies,
+			routeChange.applies && current.Record.Params[TaskEntryEnvironmentParam] != "",
+			serviceChange.applies,
+			connectorChange.applies,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearConnectorTaskChange(connectorChange)
+			clearRunnerTaskChange(runnerChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		var environmentEpochValue []byte
+		if environmentBinding != nil {
+			conditions = environmentBinding.conditions
+			mutations = environmentBinding.mutations
+			environmentEpochValue = mutations[len(mutations)-1].Value
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
@@ -2152,6 +2253,8 @@ func (repository *TaskRepository) AbortPendingTask(
 		clearComponentTaskChange(componentChange)
 		clearConnectorTaskChange(connectorChange)
 		clearRunnerTaskChange(runnerChange)
+		clear(environmentEpochValue)
+		environmentBinding.clear()
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -2167,6 +2270,72 @@ func (repository *TaskRepository) AbortPendingTask(
 			Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		}, nil
 	}
+}
+
+func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
+	ctx context.Context,
+	task TaskRecord,
+	readRevision int64,
+	conditions []Condition,
+	mutations []Mutation,
+	attachChange bool,
+	entryChange bool,
+	serviceChange bool,
+	connectorChange bool,
+) (*ordinaryEnvironmentMutationBinding, error) {
+	environmentID, applies, err := ordinaryTaskEnvironmentMutationTarget(
+		task,
+		attachChange,
+		entryChange,
+		serviceChange,
+		connectorChange,
+	)
+	if err != nil || !applies {
+		return nil, err
+	}
+	fence, err := loadOrdinaryEnvironmentMutationFence(ctx, repository.store, environmentID, readRevision)
+	if err != nil {
+		return nil, err
+	}
+	mutationContext := ordinaryEnvironmentMutationContext{
+		environmentID: environmentID,
+		readRevision:  readRevision,
+		fence:         fence,
+	}
+	return mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+}
+
+func ordinaryTaskEnvironmentMutationTarget(
+	task TaskRecord,
+	attachChange bool,
+	entryChange bool,
+	serviceChange bool,
+	connectorChange bool,
+) (string, bool, error) {
+	targets := make([]string, 0, 1)
+	if attachChange {
+		targets = append(targets, task.Params[TaskMutationEnvironmentParam])
+	}
+	if entryChange {
+		targets = append(targets, task.Params[TaskEntryEnvironmentParam])
+	}
+	if serviceChange {
+		targets = append(targets, task.Params[TaskServiceEnvironmentParam])
+	}
+	if connectorChange {
+		targets = append(targets, task.Params[TaskConnectorEnvironmentParam])
+	}
+	if len(targets) == 0 {
+		return "", false, nil
+	}
+	if len(targets) != 1 {
+		return "", false, errs.New(errs.KindInternal, "task has conflicting environment mutation targets")
+	}
+	environmentID := targets[0]
+	if ids.Validate(ids.KindEnvironment, environmentID) != nil || task.Owner.EnvironmentID != environmentID {
+		return "", false, errs.New(errs.KindInternal, "task environment mutation ownership is corrupt")
+	}
+	return environmentID, true, nil
 }
 
 func prepareTerminalTaskMarker(

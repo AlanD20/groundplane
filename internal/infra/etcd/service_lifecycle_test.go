@@ -133,11 +133,42 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != result.revision {
 		t.Fatalf("Service lifecycle mutation epoch = %#v, %v", epoch, err)
 	}
-	if _, err := tasks.AbortPendingTask(ctx, task.ID, task.CreatedAt.Add(time.Second)); err != nil {
+	aborted, err := tasks.AbortPendingTask(ctx, task.ID, task.CreatedAt.Add(time.Second))
+	if err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+	epoch, err = store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
+	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != aborted.Revision {
+		t.Fatalf("terminal Service lifecycle mutation epoch = %#v, %v", epoch, err)
 	}
 	active, err := store.Get(ctx, serviceLifecycleActiveKey(serviceID))
 	if err != nil || active.Entry != nil {
 		t.Fatalf("active Service lifecycle fence after abort = %#v, %v", active, err)
+	}
+	retryAt := task.CreatedAt.Add(2 * time.Second)
+	retryID := ids.NewAt(ids.KindTask, retryAt, 7)
+	retryMarker := pendingRetryMarker(aborted.Record, retryID, retryAt, "service-retry-key-0001")
+	retryResult, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	if err != nil {
+		t.Fatalf("RetryTask() error = %v", err)
+	}
+	if epochRevision := mustEnvironmentMutationEpochRevision(
+		t,
+		store,
+		environment.Record.ID,
+	); epochRevision != retryResult.revision {
+		t.Fatalf("Service lifecycle retry epoch = %d, want %d", epochRevision, retryResult.revision)
+	}
+	replay, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	if err != nil {
+		t.Fatalf("RetryTask(replay) error = %v", err)
+	}
+	outcome, _, conflict, classifyErr := replay.Classify()
+	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting {
+		t.Fatalf("RetryTask(replay) outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+	}
+	retryActive, err := store.Get(ctx, serviceLifecycleActiveKey(serviceID))
+	if err != nil || retryActive.Entry == nil || retryActive.Entry.ModRevision != retryResult.revision {
+		t.Fatalf("active Service lifecycle retry fence = %#v, %v", retryActive, err)
 	}
 }

@@ -108,6 +108,13 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 	if err != nil || terminal.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
+	if epoch := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	); epoch != terminal.Revision {
+		t.Fatalf("completed Connector deletion epoch = %d, want %d", epoch, terminal.Revision)
+	}
 	for _, key := range []string{
 		connectorRecordKey(task.Target),
 		connectorEnvironmentKey(fixture.environment.Record.ID, task.Target),
@@ -170,10 +177,18 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 		!found {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(
+	failed, err := tasks.AcknowledgeControllerTask(
 		ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
+	}
+	if epoch := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	); epoch != failed.Revision {
+		t.Fatalf("failed Connector deletion epoch = %d, want %d", epoch, failed.Revision)
 	}
 	assertConnectorDeletionVisible(t, connectors, task.Target)
 	assertConnectorCredentialPresence(t, fixture.store, task.Target, true)
@@ -187,14 +202,22 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 		task.CreatedAt.Add(3*time.Second),
 		"connector-retry-key-0001",
 	)
-	if _, err := tasks.RetryTask(
+	retryResult, err := tasks.RetryTask(
 		ctx,
 		task.ID,
 		retryID,
 		TaskActorOperator,
 		retryMarker,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
+	}
+	if epoch := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	); epoch != retryResult.revision {
+		t.Fatalf("retried Connector deletion epoch = %d, want %d", epoch, retryResult.revision)
 	}
 	assertConnectorDeletionVisible(t, connectors, task.Target)
 	claim, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(4*time.Second))
@@ -216,26 +239,49 @@ func TestConnectorDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testin
 	if err != nil || timedOut.Record.Status != TaskStatusTimedOut {
 		t.Fatalf("GetTask(timed out) = %#v/%v", timedOut, err)
 	}
+	if epoch := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	); epoch != timedOut.Revision {
+		t.Fatalf("timed-out Connector deletion epoch = %d, want %d", epoch, timedOut.Revision)
+	}
 	abortID := ids.NewAt(ids.KindTask, task.CreatedAt.Add(5*time.Second), 2530)
 	abortMarker := pendingRetryMarker(
 		timedOut.Record, abortID, task.CreatedAt.Add(5*time.Second), "connector-retry-key-0002",
 	)
-	if _, err := tasks.RetryTask(
+	abortRetryResult, err := tasks.RetryTask(
 		ctx,
 		retryID,
 		abortID,
 		TaskActorOperator,
 		abortMarker,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("RetryTask(after timeout) error = %v", err)
 	}
+	if epoch := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	); epoch != abortRetryResult.revision {
+		t.Fatalf("second Connector retry epoch = %d, want %d", epoch, abortRetryResult.revision)
+	}
 	assertConnectorDeletionVisible(t, connectors, task.Target)
-	if _, err := tasks.AbortPendingTask(
+	aborted, err := tasks.AbortPendingTask(
 		ctx,
 		abortID,
 		task.CreatedAt.Add(6*time.Second),
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+	if epoch := mustEnvironmentMutationEpochRevision(
+		t,
+		fixture.store,
+		fixture.environment.Record.ID,
+	); epoch != aborted.Revision {
+		t.Fatalf("aborted Connector deletion epoch = %d, want %d", epoch, aborted.Revision)
 	}
 	assertConnectorDeletionVisible(t, connectors, task.Target)
 	assertConnectorCredentialPresence(t, fixture.store, task.Target, true)

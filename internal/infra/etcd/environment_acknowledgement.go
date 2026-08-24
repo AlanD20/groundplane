@@ -125,16 +125,16 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
 		return false, errs.New(errs.KindStateConflict, "Environment deletion tombstone does not match its Task")
 	}
-	epoch, err := decodeEnvironmentDeletionEpoch(tombstoneResult.Values[1], task.Target)
+	ownedFence, err := loadOwnedEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		task.Target,
+		page.ReadRevision,
+		environmentMutationFenceOwner{
+			Kind: BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
+		},
+	)
 	if err != nil {
-		return false, err
-	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
-	if err != nil {
-		return false, err
-	}
-	defer clear(epochValue)
-	if _, err := decodeOwnedEnvironmentDeletionLock(tombstoneResult.Values[2], task); err != nil {
 		return false, err
 	}
 	revisionID, err := environmentBlueprintRevisionIDFromKey(prefix, page.Values[len(page.Values)-1].Key)
@@ -160,22 +160,24 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 		ModRevision: tombstoneValue.ModRevision,
 	})
-	conditions = append(conditions,
-		Condition{
-			Key: environmentMutationEpochKey(task.Target), ModRevision: tombstoneResult.Values[1].ModRevision,
-		},
-		Condition{
-			Key: environmentOperationLockKey(task.Target), ModRevision: tombstoneResult.Values[2].ModRevision,
-		},
-	)
 	mutations = append(mutations, Mutation{
 		Type:  MutationPut,
 		Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 		Value: encodedTombstone,
 	})
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: environmentMutationEpochKey(task.Target), Value: epochValue,
-	})
+	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
+	if err != nil {
+		return false, err
+	}
+	epochMutation, err := ownedFence.epochRewriteMutation()
+	if err != nil {
+		return false, err
+	}
+	defer clear(epochMutation.Value)
+	mutations = append(mutations, epochMutation)
+	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
+		return false, err
+	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return false, err
@@ -248,6 +250,18 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	if _, err := decodeOwnedEnvironmentDeletionLock(stored.Values[6], task); err != nil {
 		return nil, nil, err
 	}
+	ownedFence, err := loadOwnedEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		environment.ID,
+		readRevision,
+		environmentMutationFenceOwner{
+			Kind: BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
 	poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
 		stored.Values[4].Value,
 		"environment_pool_registry",
@@ -282,6 +296,10 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		{Key: environmentComposeProjectionKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
 		{Key: environmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
 		{Key: environmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
+	}
+	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
+	if err != nil {
+		return nil, nil, err
 	}
 	mutations := []Mutation{
 		{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
@@ -342,7 +360,45 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			Type: MutationPut, Key: environmentMutationEpochKey(environment.ID), Value: epochValue,
 		})
 	}
+	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
+		clearMutationValues(mutations)
+		return nil, nil, err
+	}
 	return conditions, mutations, nil
+}
+
+func appendEnvironmentMutationFenceConditions(
+	conditions []Condition,
+	fence environmentMutationFenceEvidence,
+) ([]Condition, error) {
+	indexes := make(map[string]int, len(conditions))
+	for index, condition := range conditions {
+		if condition.Key == "" || condition.Prefix {
+			return nil, errs.New(errs.KindInternal, "environment mutation compare is invalid")
+		}
+		if _, duplicate := indexes[condition.Key]; duplicate {
+			return nil, errs.New(errs.KindInternal, "environment mutation compare is duplicated")
+		}
+		indexes[condition.Key] = index
+	}
+	for _, required := range fence.transactionConditions() {
+		if index, found := indexes[required.Key]; found {
+			if conditions[index].ModRevision != required.ModRevision {
+				return nil, errs.New(errs.KindInternal, "environment mutation compare conflicts with its fence")
+			}
+			continue
+		}
+		indexes[required.Key] = len(conditions)
+		conditions = append(conditions, required)
+	}
+	return conditions, nil
+}
+
+func validateEnvironmentMutationTransactionBudget(conditions []Condition, mutations []Mutation) error {
+	if len(conditions)+len(mutations) > maximumTransactionOperations {
+		return errs.New(errs.KindValidationFailed, "environment mutation exceeds the atomic transaction limit")
+	}
+	return nil
 }
 
 func (repository *TaskRepository) validateEnvironmentRemovalReplay(
