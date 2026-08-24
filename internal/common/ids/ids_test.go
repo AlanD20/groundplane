@@ -53,6 +53,7 @@ func TestKindsHaveCanonicalPrefixesAndShape(t *testing.T) {
 		{KindBackupSource, "spt"},
 		{KindRecoveryPoint, "rp"},
 		{KindTask, "task"},
+		{KindAssignment, "asgn"},
 		{KindOperation, "op"},
 		{KindPlan, "plan"},
 		{KindStep, "step"},
@@ -81,6 +82,23 @@ func TestKindsHaveCanonicalPrefixesAndShape(t *testing.T) {
 				t.Fatalf("ULID body %q is invalid: %v", body, err)
 			}
 		})
+	}
+}
+
+// Rationale: a durable claim identity must not be confused with its Task or
+// operation when reconnect and retry paths validate stale execution messages.
+func TestAssignmentIDsUseTheCanonicalStableShape(t *testing.T) {
+	t.Parallel()
+
+	value := NewAt(KindAssignment, time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC), 12)
+	if !strings.HasPrefix(value, "asgn_") {
+		t.Fatalf("NewAt(KindAssignment) = %q, want asgn_ prefix", value)
+	}
+	if err := Validate(KindAssignment, value); err != nil {
+		t.Fatalf("Validate(KindAssignment, %q): %v", value, err)
+	}
+	if err := Validate(KindAssignment, strings.Replace(value, "asgn_", "task_", 1)); err == nil {
+		t.Fatal("Validate(KindAssignment) accepted a Task id")
 	}
 }
 

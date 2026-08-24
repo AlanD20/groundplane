@@ -51,18 +51,25 @@ func (repository *TaskRepository) GetTaskAssignment(
 	}
 	claimKey := taskExecutionClaimKey(assignment.Executor, assignment.AgentID, taskID)
 	claim, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{claimKey}, Revision: indexed.ReadRevision,
+		Keys: []string{
+			claimKey,
+			taskTimeoutIndexKey(taskID, assignment.Deadline),
+		},
+		Revision: indexed.ReadRevision,
 	})
 	if err != nil {
 		return TaskAssignment{}, err
 	}
-	if len(claim.Values) != 1 || claim.Values[0] == nil {
+	if len(claim.Values) != 2 || claim.Values[0] == nil || claim.Values[1] == nil {
 		clearKeyValues(claim.Values)
 		return TaskAssignment{}, errs.New(errs.KindStateConflict, "Task execution claim changed")
 	}
 	claimValue := claim.Values[0]
 	defer clear(claimValue.Value)
-	if claimValue.ModRevision != indexValue.ModRevision || !bytes.Equal(claimValue.Value, indexValue.Value) {
+	timeoutValue := claim.Values[1]
+	defer clear(timeoutValue.Value)
+	if claimValue.ModRevision != indexValue.ModRevision || timeoutValue.ModRevision != indexValue.ModRevision ||
+		!bytes.Equal(claimValue.Value, indexValue.Value) || !bytes.Equal(timeoutValue.Value, indexValue.Value) {
 		return TaskAssignment{}, errs.New(errs.KindInternal, "Task assignment index does not match its claim")
 	}
 	return TaskAssignment{

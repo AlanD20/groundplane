@@ -15,6 +15,7 @@ import (
 // Agent daemon generation. ClaimedTaskRevision is the pending Task revision
 // consumed by the assignment transaction, not the transaction's new revision.
 type TaskAssignmentRecord struct {
+	AssignmentID        string
 	TaskID              string
 	Executor            TaskExecutor
 	AgentID             string
@@ -32,6 +33,7 @@ type TaskAssignment struct {
 
 type taskAssignmentJSON struct {
 	Schema              int          `json:"schema"`
+	AssignmentID        string       `json:"assignment_id"`
 	TaskID              string       `json:"task_id"`
 	Executor            TaskExecutor `json:"executor"`
 	AgentID             string       `json:"agent_id"`
@@ -46,7 +48,8 @@ func encodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(taskAssignmentJSON{
-		Schema: 1, TaskID: record.TaskID, Executor: record.Executor, AgentID: record.AgentID,
+		Schema: 1, AssignmentID: record.AssignmentID, TaskID: record.TaskID,
+		Executor: record.Executor, AgentID: record.AgentID,
 		AgentGeneration: record.AgentGeneration, ClaimedTaskRevision: record.ClaimedTaskRevision,
 		AssignedAt: record.AssignedAt.Format(time.RFC3339Nano),
 		Deadline:   record.Deadline.Format(time.RFC3339Nano),
@@ -72,7 +75,8 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
 	record := TaskAssignmentRecord{
-		TaskID: data.TaskID, Executor: data.Executor, AgentID: data.AgentID, AgentGeneration: data.AgentGeneration,
+		AssignmentID: data.AssignmentID, TaskID: data.TaskID,
+		Executor: data.Executor, AgentID: data.AgentID, AgentGeneration: data.AgentGeneration,
 		ClaimedTaskRevision: data.ClaimedTaskRevision, AssignedAt: assignedAt, Deadline: deadline,
 	}
 	if err := validateTaskAssignment(record); err != nil {
@@ -82,7 +86,8 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 }
 
 func validateTaskAssignment(record TaskAssignmentRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil || !validTaskExecutor(record.Executor) ||
+	if validateStableID(ids.KindAssignment, record.AssignmentID) != nil ||
+		validateStableID(ids.KindTask, record.TaskID) != nil || !validTaskExecutor(record.Executor) ||
 		record.ClaimedTaskRevision <= 0 ||
 		validateTimestamp("task assignment assigned_at", record.AssignedAt) != nil ||
 		validateTimestamp("task assignment deadline", record.Deadline) != nil ||
@@ -590,7 +595,8 @@ func (repository *TaskRepository) claimNextTask(
 			return TaskAssignment{}, false, err
 		}
 		assignment := TaskAssignmentRecord{
-			TaskID: task.ID, Executor: executor, AgentID: agentID, AgentGeneration: agentGeneration,
+			AssignmentID: ids.New(ids.KindAssignment),
+			TaskID:       task.ID, Executor: executor, AgentID: agentID, AgentGeneration: agentGeneration,
 			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: claimAt, Deadline: deadline,
 		}
 		runningValue, err := encodeTaskRecord(running)
@@ -808,7 +814,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 	}
 
 	records := make([]TaskAssignmentRecord, len(assignments.Values))
-	taskKeys := make([]string, len(assignments.Values))
+	companionKeys := make([]string, 0, len(assignments.Values)*3)
 	for index, value := range assignments.Values {
 		taskID, err := taskIDFromAssignmentKey(agentID, value.Key)
 		if err != nil {
@@ -828,28 +834,41 @@ func (repository *TaskRepository) ListAgentAssignments(
 			return nil, corruptTaskAssignment()
 		}
 		records[index] = record
-		taskKeys[index] = taskKey(taskID)
+		companionKeys = append(
+			companionKeys,
+			taskKey(taskID),
+			taskAssignmentIndexKey(taskID),
+			taskTimeoutIndexKey(taskID, record.Deadline),
+		)
 	}
-	tasks, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: taskKeys, Revision: assignments.ReadRevision,
+	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: companionKeys, Revision: assignments.ReadRevision,
 	})
 	if err != nil {
 		return nil, err
 	}
-	if len(tasks.Values) != len(records) {
-		return nil, errs.New(errs.KindInternal, "agent assignment Task read is incomplete")
+	if len(companions.Values) != len(companionKeys) {
+		return nil, errs.New(errs.KindInternal, "agent assignment companion read is incomplete")
 	}
 	result := make([]TaskAssignment, len(records))
 	for index, record := range records {
-		taskValue := tasks.Values[index]
-		if taskValue == nil {
-			return nil, errs.New(errs.KindInternal, "assigned Task primary is missing")
+		taskValue := companions.Values[index*3]
+		indexValue := companions.Values[index*3+1]
+		timeoutValue := companions.Values[index*3+2]
+		assignmentValue := assignments.Values[index]
+		if taskValue == nil || indexValue == nil || timeoutValue == nil {
+			return nil, errs.New(errs.KindInternal, "assigned Task companion is missing")
+		}
+		if indexValue.ModRevision != assignmentValue.ModRevision ||
+			timeoutValue.ModRevision != assignmentValue.ModRevision ||
+			!bytes.Equal(indexValue.Value, assignmentValue.Value) ||
+			!bytes.Equal(timeoutValue.Value, assignmentValue.Value) {
+			return nil, errs.New(errs.KindInternal, "durable Task assignment copies do not match")
 		}
 		task, err := decodeTaskRecord(taskValue.Value)
 		if err != nil {
 			return nil, err
 		}
-		assignmentValue := assignments.Values[index]
 		if task.ID != record.TaskID || task.Status != TaskStatusRunning ||
 			task.StartedAt == nil || !task.StartedAt.Equal(record.AssignedAt) ||
 			!record.Deadline.Equal(record.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
@@ -920,16 +939,28 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		claim.ClaimedTaskRevision >= claimValue.ModRevision {
 		return nil, errs.New(errs.KindInternal, "controller Task claim does not match its key")
 	}
-	tasks, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{taskKey(claim.TaskID)}, Revision: claims.ReadRevision,
+	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{
+			taskKey(claim.TaskID),
+			taskAssignmentIndexKey(claim.TaskID),
+			taskTimeoutIndexKey(claim.TaskID, claim.Deadline),
+		},
+		Revision: claims.ReadRevision,
 	})
 	if err != nil {
 		return nil, err
 	}
-	if len(tasks.Values) != 1 || tasks.Values[0] == nil {
-		return nil, errs.New(errs.KindInternal, "claimed Controller Task primary is missing")
+	if len(companions.Values) != 3 || companions.Values[0] == nil ||
+		companions.Values[1] == nil || companions.Values[2] == nil {
+		return nil, errs.New(errs.KindInternal, "claimed Controller Task companion is missing")
 	}
-	taskValue := tasks.Values[0]
+	taskValue := companions.Values[0]
+	if companions.Values[1].ModRevision != claimValue.ModRevision ||
+		companions.Values[2].ModRevision != claimValue.ModRevision ||
+		!bytes.Equal(companions.Values[1].Value, claimValue.Value) ||
+		!bytes.Equal(companions.Values[2].Value, claimValue.Value) {
+		return nil, errs.New(errs.KindInternal, "Controller Task assignment copies do not match")
+	}
 	task, err := decodeTaskRecord(taskValue.Value)
 	if err != nil {
 		return nil, err
@@ -1206,7 +1237,8 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		if assignmentIndexValue == nil || !bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
+		if assignmentIndexValue == nil || assignmentIndexValue.ModRevision != assignmentValue.ModRevision ||
+			!bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"task assignment index does not match assignment",
@@ -1281,6 +1313,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if len(companions.Values) != len(companionKeys) || companions.Values[0] == nil || companions.Values[1] == nil ||
 			companions.Values[2] != nil || companions.Values[3] != nil || companions.Values[4] == nil ||
+			companions.Values[4].ModRevision != assignmentValue.ModRevision ||
 			!bytes.Equal(companions.Values[4].Value, assignmentValue.Value) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,

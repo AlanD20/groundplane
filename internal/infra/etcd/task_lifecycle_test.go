@@ -20,7 +20,8 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 
 	now := taskJournalTime()
 	record := TaskAssignmentRecord{
-		TaskID: ids.NewAt(ids.KindTask, now, 1), Executor: TaskExecutorAgent,
+		AssignmentID: ids.NewAt(ids.KindAssignment, now, 3),
+		TaskID:       ids.NewAt(ids.KindTask, now, 1), Executor: TaskExecutorAgent,
 		AgentID:         ids.NewAt(ids.KindAgent, now, 2),
 		AgentGeneration: 7, ClaimedTaskRevision: 41, AssignedAt: now, Deadline: now.Add(time.Minute),
 	}
@@ -39,6 +40,19 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 	unknown := bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"extra":true`), 1)
 	if _, err := decodeTaskAssignment(unknown); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskAssignment(unknown) error = %v, want internal", err)
+	}
+	missingID := bytes.Replace(
+		value,
+		[]byte(`"assignment_id":"`+record.AssignmentID+`",`),
+		nil,
+		1,
+	)
+	if _, err := decodeTaskAssignment(missingID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("decodeTaskAssignment(missing assignment id) error = %v, want internal", err)
+	}
+	malformedID := bytes.Replace(value, []byte(record.AssignmentID), []byte(record.TaskID), 1)
+	if _, err := decodeTaskAssignment(malformedID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("decodeTaskAssignment(malformed assignment id) error = %v, want internal", err)
 	}
 	controller := record
 	controller.Executor = TaskExecutorController
@@ -306,6 +320,7 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 	}
 	if claim.Task.Record.ID != first.ID || claim.Task.Record.Status != TaskStatusRunning ||
 		claim.Assignment.Record.TaskID != first.ID ||
+		ids.Validate(ids.KindAssignment, claim.Assignment.Record.AssignmentID) != nil ||
 		claim.Assignment.Record.AgentGeneration != 3 ||
 		claim.Assignment.Record.ClaimedTaskRevision <= 0 {
 		t.Fatalf("ClaimNextTask() = %#v", claim)
@@ -389,6 +404,95 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		ctx, agentID, 3, first.ID, TaskStatusCompleted, mismatched, terminalAt.Add(2*time.Second),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(mismatched replay) error = %v, want state conflict", err)
+	}
+}
+
+// Rationale: a retry is a new immutable Task attempt and therefore must never
+// inherit the terminal source Task's assignment identity.
+func TestTaskRetryClaimAllocatesFreshAssignmentID(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	source := validTaskRecord(taskJournalTime())
+	createLifecycleTask(t, repository, source)
+	agentID := ids.NewAt(ids.KindAgent, source.CreatedAt, 801)
+	sourceClaim, found, err := repository.ClaimNextTask(
+		ctx, agentID, 1, source.CreatedAt.Add(time.Second),
+	)
+	if err != nil || !found {
+		t.Fatalf("ClaimNextTask(source) = %#v, %t, %v", sourceClaim, found, err)
+	}
+	failedResult := completedComposeTaskResult()
+	failedResult.ExitCode = 1
+	terminal, err := repository.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		source.ID,
+		TaskStatusFailed,
+		failedResult,
+		source.CreatedAt.Add(2*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("AcknowledgeTask(source) error = %v", err)
+	}
+	retryAt := source.CreatedAt.Add(3 * time.Second)
+	retryID := ids.NewAt(ids.KindTask, retryAt, 802)
+	marker := pendingRetryMarker(terminal.Record, retryID, retryAt, "assignment-retry-key-0001")
+	result, err := repository.RetryTask(ctx, source.ID, retryID, TaskActorOperator, marker)
+	if err != nil {
+		t.Fatalf("RetryTask() error = %v", err)
+	}
+	outcome, _, conflict, classifyErr := result.Classify()
+	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+		t.Fatalf("RetryTask() outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+	}
+	retryClaim, found, err := repository.ClaimNextTask(ctx, agentID, 1, retryAt.Add(time.Second))
+	if err != nil || !found {
+		t.Fatalf("ClaimNextTask(retry) = %#v, %t, %v", retryClaim, found, err)
+	}
+	if retryClaim.Assignment.Record.AssignmentID == sourceClaim.Assignment.Record.AssignmentID {
+		t.Fatalf("retry reused assignment id %q", retryClaim.Assignment.Record.AssignmentID)
+	}
+}
+
+// Rationale: a committed claim whose response is lost must retain exactly one
+// assignment identity for lookup and reconnect instead of allocating again.
+func TestTaskClaimUnknownOutcomeRecoversCommittedAssignmentID(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	task := validTaskRecord(taskJournalTime())
+	createLifecycleTask(t, repository, task)
+	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 811)
+	unknown := errs.New(errs.KindStorageUnavailable, "unknown Task claim outcome")
+	store.failAfterCommit(unknown)
+	if _, _, err := repository.ClaimNextTask(
+		ctx, agentID, 5, task.CreatedAt.Add(time.Second),
+	); !errors.Is(err, unknown) {
+		t.Fatalf("ClaimNextTask(unknown) error = %v", err)
+	}
+	recovered, err := repository.GetTaskAssignment(ctx, task.ID)
+	if err != nil || ids.Validate(ids.KindAssignment, recovered.Assignment.Record.AssignmentID) != nil {
+		t.Fatalf("GetTaskAssignment(after unknown) = %#v, %v", recovered, err)
+	}
+	reconnected, err := repository.ListAgentAssignments(ctx, agentID, 5, 1)
+	if err != nil || len(reconnected) != 1 ||
+		reconnected[0].Assignment.Record.AssignmentID != recovered.Assignment.Record.AssignmentID {
+		t.Fatalf("ListAgentAssignments(after unknown) = %#v, %v", reconnected, err)
+	}
+	if another, found, err := repository.ClaimNextTask(
+		ctx, agentID, 5, task.CreatedAt.Add(2*time.Second),
+	); err != nil || found || another.Assignment.Record.AssignmentID != "" {
+		t.Fatalf("ClaimNextTask(after unknown) = %#v, %t, %v", another, found, err)
 	}
 }
 

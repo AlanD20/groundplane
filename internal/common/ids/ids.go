@@ -42,6 +42,7 @@ const (
 	KindBackupSource   Kind = "spt"  // blueprint.md: source_id: spt_01J...
 	KindRecoveryPoint  Kind = "rp"   // blueprint.md: recovery_point_id: rp_01J...
 	KindTask           Kind = "task" // blueprint.md: task_id: task_01J... (not the old 3-letter "tsk")
+	KindAssignment     Kind = "asgn" // internal durable Task claim identity
 	KindOperation      Kind = "op"   // blueprint.md: operation_id: op_01J... — stable across a task's retries
 	KindPlan           Kind = "plan" // blueprint.md: plan_id: plan_01J... — the ExecutionPlan
 	KindStep           Kind = "step" // mvp.md: immutable execution step identity carried by task events
