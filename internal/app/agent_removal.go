@@ -230,12 +230,13 @@ func newAgentRemovalTask(
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
+		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
 		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: agentID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceAgent},
 		TimeoutSeconds: agentRemovalTimeoutSeconds, Status: etcd.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt,
+		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil
 }
 

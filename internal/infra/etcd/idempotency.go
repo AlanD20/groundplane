@@ -733,10 +733,23 @@ func newIdempotencyMutationPlan(
 }
 
 func newTaskIdempotencyMutationPlan(
+	record TaskRecord,
+	initiation TaskInitiation,
 	conditions []Condition,
 	mutations []Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
+	if err := validateTaskInitiation(record, initiation, true); err != nil {
+		return nil, err
+	}
+	conditions, classify, err := prepareTaskInitiationFences(initiation, conditions, classify)
+	if err != nil {
+		return nil, err
+	}
+	conditions, mutations, classify, err = prepareTaskOwnerIndexPlan(record, conditions, mutations, classify)
+	if err != nil {
+		return nil, err
+	}
 	return newIdempotencyMutationPlanForMarker(
 		IdempotencyMarkerTask,
 		conditions,

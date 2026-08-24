@@ -40,6 +40,7 @@ func TestTaskMaterializationReferencesRoundTripAndClone(t *testing.T) {
 	retry, err := cloneRetryTask(
 		failed,
 		ids.NewAt(ids.KindTask, task.CreatedAt, 31),
+		TaskActorOperator,
 		task.CreatedAt.Add(3),
 	)
 	if err != nil {

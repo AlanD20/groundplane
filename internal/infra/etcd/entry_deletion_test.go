@@ -17,7 +17,7 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
-	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, nil)
+	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
 	result, err := repository.BeginEntryDeletionWithTask(
 		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
 	)
@@ -77,7 +77,7 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
-	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, nil)
+	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
 	if _, err := repository.BeginEntryDeletionWithTask(
 		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
 	); err != nil {
@@ -102,7 +102,7 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	retryAt := task.CreatedAt.Add(3 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 9001)
 	retryMarker := pendingRetryMarker(failed.Record, retryID, retryAt, "entry-retry-key-0001")
-	result, err := tasks.RetryTask(ctx, task.ID, retryID, retryMarker)
+	result, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -131,7 +131,7 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
 	projection := entryDeletionTestProjection(t, store, current)
-	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, &projection)
+	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, &projection)
 	result, err := repository.BeginEntryDeletionWithTask(
 		ctx, environment, project, current, &projection, nil, tombstone, intent, task, marker,
 	)
@@ -216,7 +216,7 @@ func TestEntryDeletionFencesCloudflareTokenReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateEnvironmentComponent() error = %v", err)
 	}
-	task, marker, tombstone, intent := entryDeletionTestRecords(t, current, nil)
+	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
 	if _, err := repository.BeginEntryDeletionWithTask(
 		ctx, environment, project, current, nil, &cloudflare, tombstone, intent, task, marker,
 	); !isKind(err, errs.KindResourceInUse) {
@@ -291,12 +291,15 @@ func entryDeletionTestState(
 
 func entryDeletionTestRecords(
 	t *testing.T,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
 	entry Versioned[EntryRecord],
 	projection *Versioned[EnvironmentComposeProjection],
 ) (TaskRecord, IdempotencyMarker, DeletionTombstoneRecord, EntryRemovalIntent) {
 	t.Helper()
 	createdAt := serviceRecordTestTime().Add(6 * time.Hour)
 	task := validTaskRecord(createdAt)
+	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
 	task.ID = ids.NewAt(ids.KindTask, createdAt, 9200)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 9201)
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 9202)

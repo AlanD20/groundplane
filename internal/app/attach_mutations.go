@@ -77,6 +77,15 @@ type attachMutationRepository interface {
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
+	BeginAttachDetachWithTaskInitiation(
+		context.Context,
+		etcd.AttachCreateScope,
+		etcd.Versioned[etcd.AttachRecord],
+		etcd.AttachTaskRenderInput,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+		etcd.TaskInitiation,
+	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type attachMutationFacts interface {
@@ -399,6 +408,7 @@ func (service *attachMutationService) createAttachOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	task, artifactID, err := newAttachMutationTask(
+		scope.Project.Record, scope.Environment.Record,
 		taskID, record.ID, record.EnvironmentID, etcd.TaskAttach,
 		scope.ComposeProjection.Record.RenderGeneration, attachTaskStepCount(adapter, len(grantIDs)),
 		idempotencyKey, now,
@@ -431,6 +441,24 @@ func (service *attachMutationService) DetachAttach(
 	attachID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	return service.detachAttach(ctx, attachID, idempotencyKey, nil)
+}
+
+func (service *attachMutationService) DetachAttachWithInitiation(
+	ctx context.Context,
+	attachID string,
+	idempotencyKey string,
+	initiation etcd.TaskInitiation,
+) (etcd.IdempotencyResponse, error) {
+	return service.detachAttach(ctx, attachID, idempotencyKey, &initiation)
+}
+
+func (service *attachMutationService) detachAttach(
+	ctx context.Context,
+	attachID string,
+	idempotencyKey string,
+	initiation *etcd.TaskInitiation,
+) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach context is required")
 	}
@@ -438,7 +466,7 @@ func (service *attachMutationService) DetachAttach(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Attach id is invalid")
 	}
 	for attempt := 0; attempt < maximumAttachMutationTries; attempt++ {
-		response, err := service.detachAttachOnce(ctx, attachID, idempotencyKey)
+		response, err := service.detachAttachOnce(ctx, attachID, idempotencyKey, initiation)
 		if err == nil {
 			return response, nil
 		}
@@ -454,6 +482,7 @@ func (service *attachMutationService) detachAttachOnce(
 	ctx context.Context,
 	attachID string,
 	idempotencyKey string,
+	initiation *etcd.TaskInitiation,
 ) (etcd.IdempotencyResponse, error) {
 	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetAttach, ID: attachID}
 	replayLocator, indexed, err := service.idempotency.ResolveReplayLocator(
@@ -516,12 +545,17 @@ func (service *attachMutationService) detachAttachOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	task, artifactID, err := newAttachMutationTask(
+		scope.Project.Record, scope.Environment.Record,
 		taskID, current.Record.ID, current.Record.EnvironmentID, etcd.TaskDetach,
 		scope.ComposeProjection.Record.RenderGeneration,
 		attachTaskStepCount(adapter, len(current.Record.GrantAttachIDs)), idempotencyKey, now,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	if initiation != nil {
+		task.Owner = initiation.Owner()
+		task.Actor = initiation.Actor()
 	}
 	renderInput, err := buildAttachTaskRenderInput(scope, detaching, currentAttaches, task, artifactID)
 	if err != nil {
@@ -537,9 +571,17 @@ func (service *attachMutationService) detachAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	result, detachErr := service.repository.BeginAttachDetachWithTask(
-		ctx, scope, current, renderInput, task, marker,
-	)
+	var result etcd.IdempotencyTransactionResult
+	var detachErr error
+	if initiation == nil {
+		result, detachErr = service.repository.BeginAttachDetachWithTask(
+			ctx, scope, current, renderInput, task, marker,
+		)
+	} else {
+		result, detachErr = service.repository.BeginAttachDetachWithTaskInitiation(
+			ctx, scope, current, renderInput, task, marker, *initiation,
+		)
+	}
 	return service.resolveMutationResult(ctx, locator, evidence, result, detachErr, response)
 }
 
@@ -814,6 +856,8 @@ func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequ
 }
 
 func newAttachMutationTask(
+	project etcd.ProjectRecord,
+	environment etcd.EnvironmentRecord,
 	taskID string,
 	attachID string,
 	environmentID string,
@@ -828,17 +872,22 @@ func newAttachMutationTask(
 		renderGeneration > math.MaxInt32 || stepCount <= 0 {
 		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "Attach Task input is invalid")
 	}
+	owner, err := etcd.EnvironmentTaskOwner(project, environment)
+	if err != nil || environment.ID != environmentID {
+		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "attach task owner is invalid")
+	}
 	steps := make([]etcd.TaskStepRecord, stepCount)
 	for index := range steps {
 		steps[index] = etcd.TaskStepRecord{ID: ids.New(ids.KindStep)}
 	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: owner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
 		RenderGeneration: int32(renderGeneration), Type: taskType, Target: attachID,
 		Params: map[string]string{etcd.TaskMutationEnvironmentParam: environmentID}, Steps: steps,
 		TimeoutSeconds: attachMutationTimeout, Status: etcd.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt,
+		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, ids.New(ids.KindConfig), nil
 }
 
@@ -1007,6 +1056,20 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTask(
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.attaches.BeginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker)
+}
+
+func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInitiation(
+	ctx context.Context,
+	scope etcd.AttachCreateScope,
+	current etcd.Versioned[etcd.AttachRecord],
+	renderInput etcd.AttachTaskRenderInput,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+	initiation etcd.TaskInitiation,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.attaches.BeginAttachDetachWithTaskInitiation(
+		ctx, scope, current, renderInput, task, marker, initiation,
+	)
 }
 
 type draftAttachPlanSealer struct {

@@ -126,8 +126,16 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			Value: tombstoneValue,
 		},
 	}
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
-		conditions, mutations,
+		task, initiation, conditions, mutations,
 		classifyScriptDeletionStartConflict(environment, project, target, current, task.OperationID),
 	)
 	if err != nil {

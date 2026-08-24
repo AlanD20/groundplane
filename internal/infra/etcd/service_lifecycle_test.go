@@ -105,6 +105,7 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 		t.Fatalf("SetServiceRuntimeIntent() error = %v", err)
 	}
 	task := validTaskRecord(at.Add(time.Second))
+	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
 	task.Executor = TaskExecutorController
 	task.Type = TaskStop
 	task.Target = serviceID

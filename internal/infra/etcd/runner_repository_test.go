@@ -20,7 +20,7 @@ func TestRunnerCreatePublishesOneOwnerAndLowestFreeAllocations(t *testing.T) {
 	config := runnerTestAllocationConfig()
 
 	tenantRunner := runnerTestDesired(10, RunnerOwnerTenant, tenantID, tenantID)
-	firstTask := runnerTestTask(tenantRunner.ID, TaskCreate, 20, "runner-create-key-0001")
+	firstTask := runnerTestTask(tenantRunner, TaskCreate, 20, "runner-create-key-0001")
 	firstMarker := runnerTestMarker(firstTask, tenantRunner)
 	first, err := repository.CreateRunnerWithTask(
 		ctx, config, tenantRunner, firstTask, firstMarker,
@@ -33,7 +33,7 @@ func TestRunnerCreatePublishesOneOwnerAndLowestFreeAllocations(t *testing.T) {
 	}
 
 	projectRunner := runnerTestDesired(11, RunnerOwnerProject, projectID, tenantID)
-	secondTask := runnerTestTask(projectRunner.ID, TaskCreate, 21, "runner-create-key-0002")
+	secondTask := runnerTestTask(projectRunner, TaskCreate, 21, "runner-create-key-0002")
 	if _, err := repository.CreateRunnerWithTask(
 		ctx, config, projectRunner, secondTask, runnerTestMarker(secondTask, projectRunner),
 	); err != nil {
@@ -94,7 +94,7 @@ func TestRunnerCreateReplayAndCombinedTenantQuota(t *testing.T) {
 		}
 		desired := runnerTestDesired(30+index, ownerKind, ownerID, tenantID)
 		key := "runner-quota-key-000" + string(rune('0'+index))
-		task := runnerTestTask(desired.ID, TaskCreate, 40+index, key)
+		task := runnerTestTask(desired, TaskCreate, 40+index, key)
 		first, err := repository.CreateRunnerWithTask(ctx, config, desired, task, runnerTestMarker(task, desired))
 		if err != nil {
 			t.Fatalf("CreateRunnerWithTask(%d) error = %v", index, err)
@@ -115,7 +115,7 @@ func TestRunnerCreateReplayAndCombinedTenantQuota(t *testing.T) {
 		_ = first
 	}
 	sixth := runnerTestDesired(99, RunnerOwnerTenant, tenantID, tenantID)
-	task := runnerTestTask(sixth.ID, TaskCreate, 99, "runner-quota-key-9999")
+	task := runnerTestTask(sixth, TaskCreate, 99, "runner-quota-key-9999")
 	if _, err := repository.CreateRunnerWithTask(
 		ctx, config, sixth, task, runnerTestMarker(task, sixth),
 	); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
@@ -131,7 +131,7 @@ func TestRunnerFailedCreateRetryReusesAllocationAndReplays(t *testing.T) {
 	ctx := context.Background()
 	store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 	desired := runnerTestDesired(50, RunnerOwnerTenant, tenantID, tenantID)
-	source := runnerTestTask(desired.ID, TaskCreate, 51, "runner-create-operation-key-01")
+	source := runnerTestTask(desired, TaskCreate, 51, "runner-create-operation-key-01")
 	if _, err := repository.CreateRunnerWithTask(
 		ctx, runnerTestAllocationConfig(), desired, source, runnerTestMarker(source, desired),
 	); err != nil {
@@ -141,7 +141,7 @@ func TestRunnerFailedCreateRetryReusesAllocationAndReplays(t *testing.T) {
 	if failed.Record.ProvisioningState != RunnerProvisioningFailed {
 		t.Fatalf("failed Runner state = %s", failed.Record.ProvisioningState)
 	}
-	retry := runnerTestTask(desired.ID, TaskCreate, 52, source.IdempotencyKey)
+	retry := runnerTestTask(desired, TaskCreate, 52, source.IdempotencyKey)
 	retry.RetryOf = source.ID
 	retry.OperationID = source.OperationID
 	retryMarker := runnerTestMarker(retry, desired)
@@ -184,7 +184,7 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 		config.HostPool.SubGIDEnd = config.HostPool.SubGIDStart + 5*runnerSubordinateBlockSize - 1
 		for index := 0; index < 5; index++ {
 			desired := runnerTestDesired(100+index, RunnerOwnerTenant, tenantID, tenantID)
-			task := runnerTestTask(desired.ID, TaskCreate, 110+index, "runner-host-capacity-key-0"+string(rune('0'+index)))
+			task := runnerTestTask(desired, TaskCreate, 110+index, "runner-host-capacity-key-0"+string(rune('0'+index)))
 			if _, err := repository.CreateRunnerWithTask(
 				ctx, config, desired, task, runnerTestMarker(task, desired),
 			); err != nil {
@@ -202,7 +202,7 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 			t.Fatalf("CreateTenant(other) error = %v", err)
 		}
 		desired := runnerTestDesired(199, RunnerOwnerTenant, otherTenantID, otherTenantID)
-		task := runnerTestTask(desired.ID, TaskCreate, 199, "runner-host-capacity-over")
+		task := runnerTestTask(desired, TaskCreate, 199, "runner-host-capacity-over")
 		if _, err := repository.CreateRunnerWithTask(
 			ctx, config, desired, task, runnerTestMarker(task, desired),
 		); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
@@ -234,7 +234,7 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 			t.Fatalf("seed system pool = %#v, %v", result, err)
 		}
 		desired := runnerTestDesired(200, RunnerOwnerTenant, tenantID, tenantID)
-		task := runnerTestTask(desired.ID, TaskCreate, 201, "runner-network-capacity-key")
+		task := runnerTestTask(desired, TaskCreate, 201, "runner-network-capacity-key")
 		if _, err := repository.CreateRunnerWithTask(
 			ctx, config, desired, task, runnerTestMarker(task, desired),
 		); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
@@ -259,7 +259,7 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 			t.Fatalf("seed corrupt host slot = %#v, %v", result, err)
 		}
 		desired := runnerTestDesired(202, RunnerOwnerTenant, tenantID, tenantID)
-		task := runnerTestTask(desired.ID, TaskCreate, 203, "runner-corrupt-slot-key")
+		task := runnerTestTask(desired, TaskCreate, 203, "runner-corrupt-slot-key")
 		if _, err := repository.CreateRunnerWithTask(
 			ctx, runnerTestAllocationConfig(), desired, task, runnerTestMarker(task, desired),
 		); !errors.Is(err, errs.New(errs.KindInternal, "")) {
@@ -274,7 +274,7 @@ func TestRunnerMarkersAreOperationSpecific(t *testing.T) {
 	t.Parallel()
 	_, _, tenantID, _ := newRunnerRepositoryFixture(t)
 	desired := runnerTestDesired(210, RunnerOwnerTenant, tenantID, tenantID)
-	createTask := runnerTestTask(desired.ID, TaskCreate, 211, "runner-marker-create-key")
+	createTask := runnerTestTask(desired, TaskCreate, 211, "runner-marker-create-key")
 	createMarker := runnerTestMarker(createTask, desired)
 	if err := validateRunnerCreateMarker(desired, createTask, createMarker); err != nil {
 		t.Fatalf("validateRunnerCreateMarker() error = %v", err)
@@ -291,7 +291,7 @@ func TestRunnerMarkersAreOperationSpecific(t *testing.T) {
 	) {
 		t.Fatalf("validateRunnerCreateMarker(empty task key) error = %v", err)
 	}
-	createTask = runnerTestTask(desired.ID, TaskCreate, 211, "runner-marker-create-key")
+	createTask = runnerTestTask(desired, TaskCreate, 211, "runner-marker-create-key")
 	createMarker = runnerTestMarker(createTask, desired)
 	createMarker.Locator.Key = "runner-marker-other-key"
 	if err := validateRunnerCreateMarker(desired, createTask, createMarker); !errors.Is(
@@ -306,7 +306,7 @@ func TestRunnerMarkersAreOperationSpecific(t *testing.T) {
 	) {
 		t.Fatalf("validateRunnerCreateMarker(wrong response) error = %v", err)
 	}
-	removeTask := runnerTestTask(desired.ID, TaskRemove, 212, "runner-marker-remove-key")
+	removeTask := runnerTestTask(desired, TaskRemove, 212, "runner-marker-remove-key")
 	allocation, err := runnerTestAllocationConfig().HostPool.Allocation(
 		0, netip.MustParsePrefix("10.240.0.0/29"),
 	)
@@ -343,7 +343,7 @@ func TestRunnerObservationAndRemovalFinalizer(t *testing.T) {
 	store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 	config := runnerTestAllocationConfig()
 	desired := runnerTestDesired(60, RunnerOwnerTenant, tenantID, tenantID)
-	createTask := runnerTestTask(desired.ID, TaskCreate, 61, "runner-lifecycle-key-01")
+	createTask := runnerTestTask(desired, TaskCreate, 61, "runner-lifecycle-key-01")
 	if _, err := repository.CreateRunnerWithTask(
 		ctx, config, desired, createTask, runnerTestMarker(createTask, desired),
 	); err != nil {
@@ -361,7 +361,7 @@ func TestRunnerObservationAndRemovalFinalizer(t *testing.T) {
 		t.Fatalf("PutRunnerObservation() = %#v, %v", observation, err)
 	}
 
-	removeTask := runnerTestTask(desired.ID, TaskRemove, 62, "runner-removal-key-001")
+	removeTask := runnerTestTask(desired, TaskRemove, 62, "runner-removal-key-001")
 	removeTask.Params = runnerRemovalTaskParams(ready.Record)
 	removeMarker := runnerTestMarker(removeTask, desired)
 	tombstone := DeletionTombstoneRecord{
@@ -430,7 +430,7 @@ func TestRunnerObservationAndRemovalFinalizer(t *testing.T) {
 		t.Fatalf("ResolveReplayLocator(remove) = %#v, %v, %v", locator, found, err)
 	}
 	replacement := runnerTestDesired(63, RunnerOwnerTenant, tenantID, tenantID)
-	replacementTask := runnerTestTask(replacement.ID, TaskCreate, 64, "runner-replace-key-001")
+	replacementTask := runnerTestTask(replacement, TaskCreate, 64, "runner-replace-key-001")
 	if _, err := repository.CreateRunnerWithTask(
 		ctx, config, replacement, replacementTask, runnerTestMarker(replacementTask, replacement),
 	); err != nil {
@@ -451,7 +451,7 @@ func TestRunnerRemovalFailureTimeoutAbortAndRetryRetainAllocations(t *testing.T)
 	ctx := context.Background()
 	store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 	desired := runnerTestDesired(70, RunnerOwnerTenant, tenantID, tenantID)
-	createTask := runnerTestTask(desired.ID, TaskCreate, 71, "runner-removal-source-key")
+	createTask := runnerTestTask(desired, TaskCreate, 71, "runner-removal-source-key")
 	if _, err := repository.CreateRunnerWithTask(
 		ctx, runnerTestAllocationConfig(), desired, createTask, runnerTestMarker(createTask, desired),
 	); err != nil {
@@ -459,7 +459,7 @@ func TestRunnerRemovalFailureTimeoutAbortAndRetryRetainAllocations(t *testing.T)
 	}
 	ready := runnerTestFinishCreate(t, store, repository, createTask, TaskStatusCompleted)
 	allocation := ready.Record.Allocation
-	removeTask := runnerTestTask(desired.ID, TaskRemove, 72, "runner-removal-failure-key")
+	removeTask := runnerTestTask(desired, TaskRemove, 72, "runner-removal-failure-key")
 	removeTask.Params = runnerRemovalTaskParams(ready.Record)
 	removeMarker := runnerTestMarker(removeTask, desired)
 	tombstone := DeletionTombstoneRecord{
@@ -496,7 +496,7 @@ func TestRunnerRemovalFailureTimeoutAbortAndRetryRetainAllocations(t *testing.T)
 	)
 	retryMarker.Locator.ScopeKind = IdempotencyScopeTenant
 	retryMarker.Locator.ScopeID = tenantID
-	if _, err := tasks.RetryTask(ctx, removeTask.ID, retryID, retryMarker); err != nil {
+	if _, err := tasks.RetryTask(ctx, removeTask.ID, retryID, TaskActorOperator, retryMarker); err != nil {
 		t.Fatalf("RetryTask(after failure) error = %v", err)
 	}
 	if _, found, err := tasks.ClaimNextControllerTask(
@@ -527,7 +527,7 @@ func TestRunnerRemovalFailureTimeoutAbortAndRetryRetainAllocations(t *testing.T)
 	)
 	abortMarker.Locator.ScopeKind = IdempotencyScopeTenant
 	abortMarker.Locator.ScopeID = tenantID
-	if _, err := tasks.RetryTask(ctx, retryID, abortID, abortMarker); err != nil {
+	if _, err := tasks.RetryTask(ctx, retryID, abortID, TaskActorOperator, abortMarker); err != nil {
 		t.Fatalf("RetryTask(after timeout) error = %v", err)
 	}
 	aborted, err := tasks.AbortPendingTask(ctx, abortID, removeTask.CreatedAt.Add(7*time.Second))
@@ -558,7 +558,7 @@ func TestRunnerHighSlotAllocationHasBoundedCASAndRejectsSelectedSlotRace(t *test
 			t.Fatalf("newRunnerRepository() error = %v", err)
 		}
 		desired := runnerTestDesired(300, RunnerOwnerTenant, tenantID, tenantID)
-		task := runnerTestTask(desired.ID, TaskCreate, 301, "runner-high-slot-key-0001")
+		task := runnerTestTask(desired, TaskCreate, 301, "runner-high-slot-key-0001")
 		if _, err := repository.CreateRunnerWithTask(
 			ctx, runnerTestAllocationConfigWithSlots(hostSlots), desired, task, runnerTestMarker(task, desired),
 		); err != nil {
@@ -595,7 +595,7 @@ func TestRunnerHighSlotAllocationHasBoundedCASAndRejectsSelectedSlotRace(t *test
 			t.Fatalf("newRunnerRepository() error = %v", err)
 		}
 		desired := runnerTestDesired(302, RunnerOwnerTenant, tenantID, tenantID)
-		task := runnerTestTask(desired.ID, TaskCreate, 303, "runner-high-slot-race-key")
+		task := runnerTestTask(desired, TaskCreate, 303, "runner-high-slot-race-key")
 		result, err := repository.CreateRunnerWithTask(
 			ctx, runnerTestAllocationConfigWithSlots(hostSlots), desired, task, runnerTestMarker(task, desired),
 		)
@@ -647,7 +647,7 @@ func TestRunnerCreationTerminalizationRequiresEveryAllocationFence(t *testing.T)
 			ctx := context.Background()
 			store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 			desired := runnerTestDesired(320+index, RunnerOwnerTenant, tenantID, tenantID)
-			task := runnerTestTask(desired.ID, TaskCreate, 330+index, "runner-terminal-fence-key-0"+string(rune('0'+index)))
+			task := runnerTestTask(desired, TaskCreate, 330+index, "runner-terminal-fence-key-0"+string(rune('0'+index)))
 			if _, err := repository.CreateRunnerWithTask(
 				ctx, runnerTestAllocationConfig(), desired, task, runnerTestMarker(task, desired),
 			); err != nil {
@@ -689,7 +689,7 @@ func TestRunnerCreationTerminalizationCASFencesAllocationRace(t *testing.T) {
 			ctx := context.Background()
 			store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 			desired := runnerTestDesired(340+index, RunnerOwnerTenant, tenantID, tenantID)
-			task := runnerTestTask(desired.ID, TaskCreate, 350+index, "runner-terminal-race-key-0"+string(rune('0'+index)))
+			task := runnerTestTask(desired, TaskCreate, 350+index, "runner-terminal-race-key-0"+string(rune('0'+index)))
 			if _, err := repository.CreateRunnerWithTask(
 				ctx, runnerTestAllocationConfig(), desired, task, runnerTestMarker(task, desired),
 			); err != nil {
@@ -733,14 +733,14 @@ func TestRunnerCreationRetryReplayPrecedesMutableStateReads(t *testing.T) {
 	ctx := context.Background()
 	store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 	desired := runnerTestDesired(360, RunnerOwnerTenant, tenantID, tenantID)
-	source := runnerTestTask(desired.ID, TaskCreate, 361, "runner-replay-source-key")
+	source := runnerTestTask(desired, TaskCreate, 361, "runner-replay-source-key")
 	if _, err := repository.CreateRunnerWithTask(
 		ctx, runnerTestAllocationConfig(), desired, source, runnerTestMarker(source, desired),
 	); err != nil {
 		t.Fatalf("CreateRunnerWithTask() error = %v", err)
 	}
 	runnerTestFinishCreate(t, store, repository, source, TaskStatusFailed)
-	retry := runnerTestTask(desired.ID, TaskCreate, 362, source.IdempotencyKey)
+	retry := runnerTestTask(desired, TaskCreate, 362, source.IdempotencyKey)
 	retry.RetryOf = source.ID
 	retry.OperationID = source.OperationID
 	marker := runnerTestMarker(retry, desired)
@@ -835,7 +835,7 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			}
 			desired := runnerTestDesired(380+index, test.ownerKind, ownerID, tenantID)
 			createTask := runnerTestTask(
-				desired.ID, TaskCreate, 390+index, "runner-owner-evidence-create-0"+string(rune('0'+index)),
+				desired, TaskCreate, 390+index, "runner-owner-evidence-create-0"+string(rune('0'+index)),
 			)
 			if _, err := repository.CreateRunnerWithTask(
 				ctx, runnerTestAllocationConfig(), desired, createTask, runnerTestMarker(createTask, desired),
@@ -844,7 +844,7 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			}
 			ready := runnerTestFinishCreate(t, store, repository, createTask, TaskStatusCompleted)
 			removeTask := runnerTestTask(
-				desired.ID, TaskRemove, 400+index, "runner-owner-evidence-remove-0"+string(rune('0'+index)),
+				desired, TaskRemove, 400+index, "runner-owner-evidence-remove-0"+string(rune('0'+index)),
 			)
 			removeTask.Params = runnerRemovalTaskParams(ready.Record)
 			removeMarker := runnerTestMarker(removeTask, desired)
@@ -887,7 +887,7 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 				retryMarker.Locator.ScopeID = tenantID
 			}
 			if _, err := tasks.RetryTask(
-				ctx, removeTask.ID, retryID, retryMarker,
+				ctx, removeTask.ID, retryID, TaskActorOperator, retryMarker,
 			); !errors.Is(err, errs.New(test.wantedKind, "")) {
 				t.Fatalf("RetryTask() error = %v, want %v", err, test.wantedKind)
 			}
@@ -1241,13 +1241,19 @@ func runnerTestDesired(
 	}
 }
 
-func runnerTestTask(target string, taskType TaskType, offset int, key string) TaskRecord {
+func runnerTestTask(desired RunnerDesiredRecord, taskType TaskType, offset int, key string) TaskRecord {
 	task := validTaskRecord(taskJournalTime())
+	owner := TaskOwner{WorkspaceType: TaskWorkspaceTenant, TenantID: desired.TenantID}
+	if desired.OwnerKind == RunnerOwnerProject {
+		owner.ProjectID = desired.OwnerID
+	}
 	task.ID = ids.NewAt(ids.KindTask, taskJournalTime(), runnerTaskEntropyBase+int64(offset))
 	task.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), runnerOperationEntropyBase+int64(offset))
 	task.Executor = TaskExecutorController
+	task.Owner = owner
+	task.Actor = TaskActorOperator
 	task.Type = taskType
-	task.Target = target
+	task.Target = desired.ID
 	task.IdempotencyKey = key
 	task.Params = map[string]string{TaskResourceKindParam: TaskResourceRunner}
 	if taskType == TaskCreate {

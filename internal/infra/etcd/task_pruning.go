@@ -42,10 +42,10 @@ func validateTaskPruneIntent(intent taskPruneIntent) error {
 	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
 		intent.RemainingEvents > MaximumTaskEvents ||
 		intent.RemainingDeduplications > MaximumTaskEvents {
-		return errs.New(errs.KindValidationFailed, "Task prune intent is invalid")
+		return errs.New(errs.KindValidationFailed, "task prune intent is invalid")
 	}
 	if intent.AttachPlanID != "" && ids.Validate(ids.KindPlan, intent.AttachPlanID) != nil {
-		return errs.New(errs.KindValidationFailed, "Task prune Attach plan is invalid")
+		return errs.New(errs.KindValidationFailed, "task prune Attach plan is invalid")
 	}
 	return nil
 }
@@ -57,10 +57,10 @@ func (repository *TaskRepository) PruneExpiredTasks(ctx context.Context, now tim
 		return 0, err
 	}
 	if repository == nil || repository.store == nil {
-		return 0, errs.New(errs.KindInternal, "Task repository is not initialized")
+		return 0, errs.New(errs.KindInternal, "task repository is not initialized")
 	}
 	if !validTaskPruneTime(now) {
-		return 0, errs.New(errs.KindValidationFailed, "Task prune time must be UTC")
+		return 0, errs.New(errs.KindValidationFailed, "task prune time must be UTC")
 	}
 	for attempt := 0; attempt < maximumTaskPruneCASAttempts; attempt++ {
 		intent, found, err := repository.nextTaskPruneIntent(ctx)
@@ -87,7 +87,7 @@ func (repository *TaskRepository) PruneExpiredTasks(ctx context.Context, now tim
 		}
 		return 1, nil
 	}
-	return 0, errs.New(errs.KindStateConflict, "Task prune state kept changing")
+	return 0, errs.New(errs.KindStateConflict, "task prune state kept changing")
 }
 
 func (repository *TaskRepository) nextTaskPruneIntent(
@@ -171,6 +171,12 @@ func (repository *TaskRepository) beginTaskPrune(
 		routeRemovalIntentKey(task.ID),
 		entryRemovalIntentKey(task.ID),
 	}
+	ownerIndexStart := len(companionKeys)
+	ownerIndexKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+	}
+	companionKeys = append(companionKeys, ownerIndexKeys...)
 	planReferenceIndex := -1
 	if task.Type == TaskAttach || task.Type == TaskDetach {
 		planReferenceIndex = len(companionKeys)
@@ -206,24 +212,30 @@ func (repository *TaskRepository) beginTaskPrune(
 	if companions.Values[4] != nil {
 		componentIntent, decodeErr := decodeComponentTaskIntent(companions.Values[4].Value)
 		if decodeErr != nil || validateComponentTaskOwner(task, componentIntent) != nil ||
-			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.TerminalAt == nil ||
-			!componentIntent.TerminalAt.Equal(*task.TerminalAt) {
+			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			!componentIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	if companions.Values[5] != nil {
 		routeIntent, decodeErr := decodeRouteRemovalIntent(companions.Values[5].Value)
 		if decodeErr != nil || validateRouteRemovalTaskOwner(task, routeIntent) != nil ||
-			routeIntent.Status != task.Status || routeIntent.TerminalAt == nil || task.TerminalAt == nil ||
-			!routeIntent.TerminalAt.Equal(*task.TerminalAt) {
+			routeIntent.Status != task.Status || routeIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			!routeIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	if companions.Values[6] != nil {
 		entryIntent, decodeErr := decodeEntryRemovalIntent(companions.Values[6].Value)
 		if decodeErr != nil || validateEntryRemovalTaskOwner(task, entryIntent) != nil ||
-			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.TerminalAt == nil ||
-			!entryIntent.TerminalAt.Equal(*task.TerminalAt) {
+			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			!entryIntent.TerminalAt.Equal(*task.FinishedAt) {
+			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		}
+	}
+	for index, key := range ownerIndexKeys {
+		value := companions.Values[ownerIndexStart+index]
+		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
@@ -265,6 +277,11 @@ func (repository *TaskRepository) beginTaskPrune(
 		{Type: MutationDelete, Key: retentionEntry.Key},
 		{Type: MutationDelete, Key: taskOperationIndexKey(task.OperationID, task.ID)},
 	}
+	for index, key := range ownerIndexKeys {
+		value := companions.Values[ownerIndexStart+index]
+		conditions = append(conditions, Condition{Key: key, ModRevision: value.ModRevision})
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+	}
 	componentCondition := Condition{Key: componentTaskIntentKey(task.ID)}
 	if companions.Values[4] != nil {
 		componentCondition.ModRevision = companions.Values[4].ModRevision
@@ -296,7 +313,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[taskPruneIntent]{}, false, errs.New(errs.KindStateConflict, "Task prune start changed")
+		return Versioned[taskPruneIntent]{}, false, errs.New(errs.KindStateConflict, "task prune start changed")
 	}
 	return Versioned[taskPruneIntent]{
 		Record: intent, Revision: transaction.Revision, ReadRevision: transaction.Revision,
@@ -382,7 +399,7 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return errs.New(errs.KindStateConflict, "Task prune completion changed")
+		return errs.New(errs.KindStateConflict, "task prune completion changed")
 	}
 	return nil
 }
@@ -449,7 +466,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 		Type: MutationPut, Key: taskPruneIntentKey(next.TaskID), Value: intentValue,
 	})
 	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		return Versioned[taskPruneIntent]{}, errs.New(errs.KindInternal, "Task prune batch exceeds transaction limit")
+		return Versioned[taskPruneIntent]{}, errs.New(errs.KindInternal, "task prune batch exceeds transaction limit")
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -457,7 +474,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[taskPruneIntent]{}, errs.New(errs.KindStateConflict, "Task prune batch changed")
+		return Versioned[taskPruneIntent]{}, errs.New(errs.KindStateConflict, "task prune batch changed")
 	}
 	return Versioned[taskPruneIntent]{
 		Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
@@ -514,5 +531,5 @@ func taskPruneConflict(err error) bool {
 }
 
 func corruptTaskPruneIntent() error {
-	return errs.New(errs.KindInternal, "Task prune state is corrupt")
+	return errs.New(errs.KindInternal, "task prune state is corrupt")
 }

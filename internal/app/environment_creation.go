@@ -256,7 +256,14 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	task, err := newEnvironmentCreationTask(environment, taskID, idempotencyKey, now, service.volumeRoot)
+	task, err := newEnvironmentCreationTask(
+		project.Record,
+		environment,
+		taskID,
+		idempotencyKey,
+		now,
+		service.volumeRoot,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -326,12 +333,17 @@ func newInitialEnvironmentComponents(environmentID string) ([]etcd.ComponentReco
 }
 
 func newEnvironmentCreationTask(
+	project etcd.ProjectRecord,
 	environment etcd.EnvironmentRecord,
 	taskID string,
 	idempotencyKey string,
 	createdAt time.Time,
 	volumeRoot string,
 ) (etcd.TaskRecord, error) {
+	owner, err := etcd.EnvironmentTaskOwner(project, environment)
+	if err != nil {
+		return etcd.TaskRecord{}, err
+	}
 	planID := ids.New(ids.KindPlan)
 	stepID := ids.New(ids.KindStep)
 	plan, err := controllerpkg.BuildPlan(controllerpkg.PlanBuildInput{
@@ -352,6 +364,7 @@ func newEnvironmentCreationTask(
 	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation),
+		Owner: owner, Actor: etcd.TaskActorOperator,
 		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorAgent,
 		PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash), RenderGeneration: 1,
 		Type: etcd.TaskCreate, Target: environment.ID,
@@ -360,7 +373,7 @@ func newEnvironmentCreationTask(
 		},
 		Steps:          []etcd.TaskStepRecord{{ID: stepID}},
 		TimeoutSeconds: environmentCreationTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt,
+		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil
 }
 

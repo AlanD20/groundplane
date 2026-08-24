@@ -199,7 +199,15 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		defer clear(factValue)
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: attachFactsKey(record.ID), Value: factValue})
 	}
-	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, classifyAttachTaskCreateConflict)
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, scope.Project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, scope.Project, scope.Environment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classifyAttachTaskCreateConflict)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -217,6 +225,30 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	return repository.beginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker, nil)
+}
+
+func (repository *AttachRepository) BeginAttachDetachWithTaskInitiation(
+	ctx context.Context,
+	scope AttachCreateScope,
+	current Versioned[AttachRecord],
+	renderInput AttachTaskRenderInput,
+	task TaskRecord,
+	marker IdempotencyMarker,
+	initiation TaskInitiation,
+) (IdempotencyTransactionResult, error) {
+	return repository.beginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker, &initiation)
+}
+
+func (repository *AttachRepository) beginAttachDetachWithTask(
+	ctx context.Context,
+	scope AttachCreateScope,
+	current Versioned[AttachRecord],
+	renderInput AttachTaskRenderInput,
+	task TaskRecord,
+	marker IdempotencyMarker,
+	provided *TaskInitiation,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateAttachDetachScope(ctx, scope, current); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -355,7 +387,29 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 			Condition{Key: deletionTombstoneKey("attach", grant.Record.ID)},
 		)
 	}
-	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, classifyAttachDetachTaskConflict)
+	initiation := TaskInitiation{}
+	if provided == nil {
+		taskTenant, tenantErr := loadTaskInitiationTenant(ctx, repository.store, scope.Project)
+		if tenantErr != nil {
+			return IdempotencyTransactionResult{}, tenantErr
+		}
+		initiation, err = newEnvironmentTaskInitiation(
+			taskTenant, scope.Project, scope.Environment, TaskActorOperator,
+		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+	} else {
+		initiation = *provided
+		conditions = append(conditions, initiation.fences...)
+		if attachDetachWithTaskOperationCount(current.Record)+len(initiation.fences) > maximumTransactionOperations {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"attach detach initiation exceeds the atomic transaction limit",
+			)
+		}
+	}
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classifyAttachDetachTaskConflict)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -968,7 +1022,7 @@ func validateAttachDetachTask(
 }
 
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 41 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	operations := 45 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
 	if hasFacts {
 		operations++
 	}
@@ -976,7 +1030,7 @@ func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int 
 }
 
 func attachDetachWithTaskOperationCount(record AttachRecord) int {
-	return 34 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
+	return 38 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
 }
 
 func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRecord) bool {

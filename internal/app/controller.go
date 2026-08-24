@@ -145,6 +145,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task repository: %w", err)
 	}
+	if err := tasks.EnsureTaskJournalSchema(ctx); err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("validate Task journal schema", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
 	idempotency, err := etcd.NewIdempotencyRepository(store)
 	if err != nil {
 		_ = store.Close()

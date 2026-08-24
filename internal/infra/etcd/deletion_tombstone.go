@@ -237,7 +237,17 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 	}
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
 		conditions,
 		mutations,
 		classifyEnvironmentDeletionStartConflict(project, environment, task.OperationID, expectedBlueprintRevision),

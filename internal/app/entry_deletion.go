@@ -361,6 +361,10 @@ func (service *entryDeletionService) removeEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	cloudflare, err := service.cloudflareComponent(ctx, environment.Record.ID, entryID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -377,8 +381,9 @@ func (service *entryDeletionService) removeEntryOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		PlanID: ids.New(ids.KindPlan), Type: etcd.TaskRemove, Target: entryID,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
+		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	intent, err := etcd.NewEntryRemovalIntent(
 		task.ID, environment.Record.ID, entryID, current.Revision, projectionInput, now,

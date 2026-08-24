@@ -107,7 +107,17 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		{Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID), Value: tombstoneValue},
 		{Type: MutationPut, Key: connectorRemovalIntentKey(task.ID), Value: intentValue},
 	}
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
 		evidence.conditions,
 		mutations,
 		evidence.classifier(),

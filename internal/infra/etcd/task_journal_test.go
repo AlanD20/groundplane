@@ -232,8 +232,9 @@ func TestTaskStatusTransitionRejectsStaleAndInvalidState(t *testing.T) {
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("transitionTaskStatus(regression) error = %v, want state.conflict", err)
 	}
-	if completed.RetainUntil == nil || completed.TerminalAt == nil ||
-		!completed.RetainUntil.Equal(completed.TerminalAt.Add(TaskRetention)) {
+	if completed.RetainUntil == nil || completed.FinishedAt == nil ||
+		!completed.RetainUntil.Equal(completed.FinishedAt.Add(TaskRetention)) ||
+		!completed.UpdatedAt.Equal(*completed.FinishedAt) {
 		t.Fatalf("terminal retention metadata = %#v", completed)
 	}
 }
@@ -252,7 +253,7 @@ func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 		t.Fatalf("transitionTaskStatus(failed) error = %v", err)
 	}
 	retryID := ids.NewAt(ids.KindTask, now.Add(3*time.Second), 3)
-	retry, err := cloneRetryTask(failed, retryID, now.Add(3*time.Second))
+	retry, err := cloneRetryTask(failed, retryID, TaskActorOperator, now.Add(3*time.Second))
 	if err != nil {
 		t.Fatalf("cloneRetryTask() error = %v", err)
 	}
@@ -260,11 +261,13 @@ func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 		retry.IdempotencyKey != failed.IdempotencyKey || retry.PlanID != failed.PlanID ||
 		retry.PlanHash != failed.PlanHash || retry.RenderGeneration != failed.RenderGeneration ||
 		retry.Type != failed.Type || retry.Target != failed.Target || retry.TimeoutSeconds != failed.TimeoutSeconds ||
+		retry.Owner != failed.Owner || retry.Actor != TaskActorOperator ||
 		!reflect.DeepEqual(retry.Params, failed.Params) || !reflect.DeepEqual(retry.Steps, failed.Steps) {
 		t.Fatalf("retry did not preserve operation metadata: source=%#v retry=%#v", failed, retry)
 	}
 	if retry.Status != TaskStatusPending || retry.EventCount != 0 || retry.NextEventSequence != 1 ||
-		retry.StartedAt != nil || retry.TerminalAt != nil || retry.RetainUntil != nil {
+		retry.StartedAt != nil || retry.FinishedAt != nil || retry.RetainUntil != nil ||
+		!retry.UpdatedAt.Equal(retry.CreatedAt) {
 		t.Fatalf("retry lifecycle was not reset: %#v", retry)
 	}
 	retry.Params["name"] = "changed"
@@ -275,6 +278,8 @@ func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 }
 
 func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
+	// Rationale: clean-start decoding must reject every Task journal shape that
+	// predates or omits the accepted durable schema.
 	// Rationale: persisted records are trusted only after their versioned
 	// envelope, stable ids, canonical timestamps, and event digest all agree.
 	now := taskJournalTime()
@@ -286,6 +291,39 @@ func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
 	corruptTask := strings.Replace(string(encodedTask), `"next_event_sequence":1`, `"next_event_sequence":2`, 1)
 	if _, err := decodeTaskRecord([]byte(corruptTask)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskRecord(corrupt) error = %v, want internal", err)
+	}
+	ownerless := strings.Replace(string(encodedTask), `"owner":{"workspace_type":"platform"},`, "", 1)
+	if _, err := decodeTaskRecord([]byte(ownerless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("decodeTaskRecord(ownerless clean-start record) error = %v, want internal", err)
+	}
+	actorless := strings.Replace(string(encodedTask), `"actor":"operator",`, "", 1)
+	if _, err := decodeTaskRecord([]byte(actorless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("decodeTaskRecord(actorless clean-start record) error = %v, want internal", err)
+	}
+	updatedless := strings.Replace(
+		string(encodedTask),
+		`"updated_at":"`+task.UpdatedAt.Format(time.RFC3339Nano)+`"`,
+		`"updated_at":""`,
+		1,
+	)
+	if _, err := decodeTaskRecord([]byte(updatedless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("decodeTaskRecord(timestampless clean-start record) error = %v, want internal", err)
+	}
+	running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
+	if err != nil {
+		t.Fatalf("transitionTaskStatus(running) error = %v", err)
+	}
+	terminal, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusFailed, now.Add(2*time.Second))
+	if err != nil {
+		t.Fatalf("transitionTaskStatus(terminal) error = %v", err)
+	}
+	encodedTerminal, err := encodeTaskRecord(terminal)
+	if err != nil {
+		t.Fatalf("encodeTaskRecord(terminal) error = %v", err)
+	}
+	oldTerminal := strings.Replace(string(encodedTerminal), `"finished_at":`, `"terminal_at":`, 1)
+	if _, err := decodeTaskRecord([]byte(oldTerminal)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("decodeTaskRecord(old terminal schema) error = %v, want internal", err)
 	}
 
 	prepared, err := prepareTaskEvent(
@@ -304,6 +342,45 @@ func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
 	corruptEvent := strings.Replace(string(encodedEvent), prepared.Event.PayloadSHA256, strings.Repeat("0", 64), 1)
 	if _, err := decodeTaskEventRecord([]byte(corruptEvent)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskEventRecord(corrupt) error = %v, want internal", err)
+	}
+}
+
+func TestTaskControllerTimestampsNormalizeEqualityAndRegression(t *testing.T) {
+	// Rationale: wall-clock equality and regression must not make otherwise
+	// valid Controller transitions fail or move updated_at backwards.
+	now := taskJournalTime()
+	task := validTaskRecord(now)
+	running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, now)
+	if err != nil {
+		t.Fatalf("transitionTaskStatus(equal) error = %v", err)
+	}
+	wantRunning := now.Add(time.Nanosecond)
+	if !running.UpdatedAt.Equal(wantRunning) || running.StartedAt == nil ||
+		!running.StartedAt.Equal(wantRunning) {
+		t.Fatalf("equal transition timestamps = %#v", running)
+	}
+	terminal, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusFailed, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("transitionTaskStatus(regressed) error = %v", err)
+	}
+	wantTerminal := wantRunning.Add(time.Nanosecond)
+	if !terminal.UpdatedAt.Equal(wantTerminal) || terminal.FinishedAt == nil ||
+		!terminal.FinishedAt.Equal(wantTerminal) {
+		t.Fatalf("regressed transition timestamps = %#v", terminal)
+	}
+
+	eventTask := validTaskRecord(now)
+	prepared, err := prepareTaskEvent(
+		eventTask,
+		taskEventInput(eventTask.ID, 1, TaskEventStateRunning),
+		nil,
+		now.Add(-time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("prepareTaskEvent(regressed) error = %v", err)
+	}
+	if !prepared.Task.UpdatedAt.Equal(now.Add(time.Nanosecond)) {
+		t.Fatalf("event updated_at = %s", prepared.Task.UpdatedAt)
 	}
 }
 
@@ -337,6 +414,8 @@ func validTaskRecord(now time.Time) TaskRecord {
 	task := newTaskRecord(
 		ids.NewAt(ids.KindTask, now, 1),
 		ids.NewAt(ids.KindOperation, now, 2),
+		PlatformTaskOwner(),
+		TaskActorOperator,
 		TaskScript,
 		ids.NewAt(ids.KindService, now, 4),
 		120,

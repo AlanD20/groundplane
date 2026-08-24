@@ -11,7 +11,8 @@ func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
 	terminalAt := record.CreatedAt.Add(2)
 	record.Status = TaskStatusCompleted
 	record.StartedAt = &startedAt
-	record.TerminalAt = &terminalAt
+	record.FinishedAt = &terminalAt
+	record.UpdatedAt = terminalAt
 	retainUntil := terminalAt.Add(TaskRetention)
 	record.RetainUntil = &retainUntil
 	result := completedComposeTaskResult()

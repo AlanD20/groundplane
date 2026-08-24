@@ -110,6 +110,94 @@ func TestTaskRepositoryCreatesAndReplaysAtomicTask(t *testing.T) {
 	}
 }
 
+func TestTaskRepositoryGenericCreationRejectsNonPlatformOwner(t *testing.T) {
+	// Rationale: the generic publisher has no hierarchy evidence and therefore may publish only platform/operator Tasks.
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	task := validTaskRecord(taskJournalTime())
+	task.Owner = TaskOwner{
+		WorkspaceType: TaskWorkspaceTenant,
+		TenantID:      ids.NewAt(ids.KindTenant, task.CreatedAt, 590),
+	}
+
+	if _, err := repository.CreateTask(ctx, task, pendingTaskMarker(task)); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("CreateTask(non-platform owner) error = %v, want validation_failed", err)
+	}
+	assertTaskLifecycleValue(t, store, taskKey(task.ID), false)
+}
+
+func TestTaskRepositoryOrdinaryRetryRejectsSystemActor(t *testing.T) {
+	// Rationale: only a typed Controller-parent initiation may authorize a
+	// system retry; the ordinary entry point is operator-only.
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	source := validTaskRecord(taskJournalTime())
+	createLifecycleTask(t, repository, source)
+	finishedAt := source.CreatedAt.Add(time.Second)
+	if _, err := repository.AbortPendingTask(ctx, source.ID, finishedAt); err != nil {
+		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+	retryID := ids.NewAt(ids.KindTask, finishedAt.Add(time.Second), 591)
+	marker := pendingRetryMarker(source, retryID, finishedAt.Add(time.Second), "system-retry-key-0002")
+	if _, err := repository.RetryTask(ctx, source.ID, retryID, TaskActorSystem, marker); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("RetryTask(system actor) error = %v, want validation_failed", err)
+	}
+	assertTaskLifecycleValue(t, store, taskKey(retryID), false)
+}
+
+func TestTaskRepositoryNormalizesEqualAndRegressedLifecycleTimestamps(t *testing.T) {
+	// Rationale: Controller timestamps must advance monotonically even when its clock repeats or moves backward.
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	task := validTaskRecord(taskJournalTime())
+	task.Executor = TaskExecutorController
+	createLifecycleTask(t, repository, task)
+
+	claim, found, err := repository.ClaimNextControllerTask(ctx, task.UpdatedAt)
+	if err != nil || !found {
+		t.Fatalf("ClaimNextControllerTask(equal timestamp) = %#v, %v, %v", claim, found, err)
+	}
+	wantStartedAt := task.UpdatedAt.Add(time.Nanosecond)
+	if claim.Task.Record.StartedAt == nil || !claim.Task.Record.StartedAt.Equal(wantStartedAt) ||
+		!claim.Task.Record.UpdatedAt.Equal(wantStartedAt) ||
+		!claim.Assignment.Record.AssignedAt.Equal(wantStartedAt) {
+		t.Fatalf("normalized claim = %#v", claim)
+	}
+
+	terminal, err := repository.AcknowledgeControllerTask(
+		ctx,
+		task.ID,
+		TaskStatusCompleted,
+		task.CreatedAt,
+	)
+	if err != nil {
+		t.Fatalf("AcknowledgeControllerTask(regressed timestamp) error = %v", err)
+	}
+	wantFinishedAt := wantStartedAt.Add(time.Nanosecond)
+	if terminal.Record.FinishedAt == nil || !terminal.Record.FinishedAt.Equal(wantFinishedAt) ||
+		!terminal.Record.UpdatedAt.Equal(wantFinishedAt) {
+		t.Fatalf("normalized terminal Task = %#v", terminal.Record)
+	}
+}
+
 func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
@@ -126,7 +214,7 @@ func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
 
 	retryID := ids.NewAt(ids.KindTask, terminalAt.Add(time.Second), 601)
 	marker := pendingRetryMarker(source, retryID, terminalAt.Add(time.Second), "retry-request-key-0001")
-	result, err := repository.RetryTask(ctx, source.ID, retryID, marker)
+	result, err := repository.RetryTask(ctx, source.ID, retryID, TaskActorOperator, marker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -141,6 +229,7 @@ func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
 	if persisted.Record.RetryOf != source.ID || persisted.Record.OperationID != source.OperationID ||
 		persisted.Record.IdempotencyKey != source.IdempotencyKey ||
 		persisted.Record.Executor != source.Executor ||
+		persisted.Record.Owner != source.Owner || persisted.Record.Actor != TaskActorOperator ||
 		persisted.Record.PlanID != source.PlanID || persisted.Record.PlanHash != source.PlanHash ||
 		persisted.Record.Status != TaskStatusPending || persisted.Record.idempotencyMarker == nil ||
 		*persisted.Record.idempotencyMarker != marker.Locator {
@@ -152,7 +241,7 @@ func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
 
 	replayID := ids.NewAt(ids.KindTask, terminalAt.Add(2*time.Second), 602)
 	replayMarker := pendingRetryMarker(source, replayID, terminalAt.Add(2*time.Second), marker.Locator.Key)
-	replay, err := repository.RetryTask(ctx, source.ID, replayID, replayMarker)
+	replay, err := repository.RetryTask(ctx, source.ID, replayID, TaskActorOperator, replayMarker)
 	if err != nil {
 		t.Fatalf("RetryTask(replay) error = %v", err)
 	}
@@ -176,7 +265,7 @@ func TestTaskRepositoryRetriesTerminalTaskAtomically(t *testing.T) {
 		terminalAt.Add(3*time.Second),
 		"second-retry-key-0001",
 	)
-	conflicted, err := repository.RetryTask(ctx, source.ID, conflictID, conflictMarker)
+	conflicted, err := repository.RetryTask(ctx, source.ID, conflictID, TaskActorOperator, conflictMarker)
 	if err != nil {
 		t.Fatalf("RetryTask(active retry) error = %v", err)
 	}
@@ -246,8 +335,8 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
-	if terminal.Record.Status != TaskStatusCompleted || terminal.Record.TerminalAt == nil ||
-		!terminal.Record.TerminalAt.Equal(terminalAt) || terminal.Record.Result == nil {
+	if terminal.Record.Status != TaskStatusCompleted || terminal.Record.FinishedAt == nil ||
+		!terminal.Record.FinishedAt.Equal(terminalAt) || terminal.Record.Result == nil {
 		t.Fatalf("AcknowledgeTask() = %#v", terminal)
 	}
 	assertTaskLifecycleValue(t, store, taskAssignmentKey(agentID, first.ID), false)
@@ -344,8 +433,8 @@ func TestTaskRepositoryTimesOutExactAgentGenerationAssignments(t *testing.T) {
 		if getErr != nil {
 			t.Fatalf("GetTask(%s) error = %v", taskID, getErr)
 		}
-		if task.Record.Status != TaskStatusTimedOut || task.Record.TerminalAt == nil ||
-			!task.Record.TerminalAt.Equal(terminalAt) || task.Record.Result == nil ||
+		if task.Record.Status != TaskStatusTimedOut || task.Record.FinishedAt == nil ||
+			!task.Record.FinishedAt.Equal(terminalAt) || task.Record.Result == nil ||
 			!task.Record.Result.ReconciliationRequired {
 			t.Fatalf("timed-out Task %s = %#v", taskID, task.Record)
 		}

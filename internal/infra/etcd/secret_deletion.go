@@ -136,7 +136,22 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 			Value: tombstoneValue,
 		},
 	}
+	var initiation TaskInitiation
+	if owner.Project == nil {
+		initiation, err = newPlatformTaskInitiation(TaskActorOperator)
+	} else {
+		taskTenant, tenantErr := loadTaskInitiationTenant(ctx, repository.store, *owner.Project)
+		if tenantErr != nil {
+			return IdempotencyTransactionResult{}, tenantErr
+		}
+		initiation, err = newProjectTaskInitiation(taskTenant, *owner.Project, TaskActorOperator)
+	}
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
 		conditions,
 		mutations,
 		classifySecretDeletionStartConflict(owner, current, task.OperationID),

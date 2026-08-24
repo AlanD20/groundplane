@@ -336,6 +336,38 @@ func TestStoreTransactScopesAtomicCompareAndMutations(t *testing.T) {
 	}
 }
 
+func TestStoreTransactScopesEmptyPrefixCondition(t *testing.T) {
+	// Rationale: clean-start schema initialization must atomically prove that the complete Task prefix remains empty.
+	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 23}, Succeeded: true,
+	}}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatalf("newStore() error = %v", err)
+	}
+
+	_, err = store.Transact(
+		context.Background(),
+		[]Condition{{Key: "/v1/records/tasks/", Prefix: true}},
+		[]Mutation{{Type: MutationPut, Key: "/v1/meta/task-journal-schema", Value: []byte("v1")}},
+	)
+	if err != nil {
+		t.Fatalf("Transact(empty prefix) error = %v", err)
+	}
+	if len(backend.transaction.conditions) != 1 || len(backend.transaction.otherwise) != 1 {
+		t.Fatalf("prefix transaction = %#v", backend.transaction)
+	}
+	condition := backend.transaction.conditions[0]
+	wantKey := "/groundplane/v1/records/tasks/"
+	wantEnd := clientv3.GetPrefixRangeEnd(wantKey)
+	otherwise := backend.transaction.otherwise[0]
+	if string(condition.KeyBytes()) != wantKey || string(condition.RangeEnd) != wantEnd ||
+		string(otherwise.KeyBytes()) != wantKey || string(otherwise.RangeBytes()) != wantEnd ||
+		otherwise.Limit() != 1 {
+		t.Fatalf("prefix compare/read = %#v/%#v", condition, otherwise)
+	}
+}
+
 func TestStoreTransactScopesPrefixDelete(t *testing.T) {
 	// Rationale: deleting an Entry must remove every immutable subordinate
 	// value generation in the same transaction without imposing an artificial

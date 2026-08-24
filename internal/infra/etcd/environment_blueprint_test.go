@@ -23,7 +23,7 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	project, environment := createEnvironmentBlueprintOwners(t, repository)
-	task := environmentBlueprintTestTask(environment.Record.ID, 20)
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 20)
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 
@@ -93,7 +93,7 @@ func TestEnvironmentBlueprintApplyPublishesComponentCandidateAtomically(t *testi
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	project, environment := createEnvironmentBlueprintOwners(t, repository)
-	task := environmentBlueprintTestTask(environment.Record.ID, 25)
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 25)
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
 	zoneChanges := environmentBlueprintTestZoneChanges(t, repository, projection)
@@ -191,7 +191,7 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	project, environment := createEnvironmentBlueprintOwners(t, repository)
-	firstTask := environmentBlueprintTestTask(environment.Record.ID, 30)
+	firstTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 30)
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {old: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
 	firstZoneChanges := environmentBlueprintTestZoneChanges(t, repository, firstProjection)
@@ -214,7 +214,7 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 		t.Fatalf("first head = %#v, %v, %v", head, found, err)
 	}
 
-	secondTask := environmentBlueprintTestTask(environment.Record.ID, 40)
+	secondTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 40)
 	second := environmentBlueprintTestRevision(environment.Record.ID, secondTask, "services: {new: {}}\n")
 	secondProjection := firstProjection
 	secondProjection.BlueprintRevisionID = secondTask.ID
@@ -254,7 +254,7 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	project, environment := createEnvironmentBlueprintOwners(t, repository)
-	firstTask := environmentBlueprintTestTask(environment.Record.ID, 50)
+	firstTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 50)
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {api: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
 	firstZoneChanges := environmentBlueprintTestZoneChanges(t, repository, firstProjection)
@@ -285,7 +285,7 @@ func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("head = %#v, %v, %v", head, found, err)
 	}
-	secondTask := environmentBlueprintTestTask(environment.Record.ID, 60)
+	secondTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 60)
 	second := environmentBlueprintTestRevision(environment.Record.ID, secondTask, "services: {}\n")
 	omitted := environmentBlueprintTestProjection(environment.Record.ID, secondTask, 2)
 	omitted.Services = nil
@@ -332,21 +332,32 @@ func createEnvironmentBlueprintOwners(
 	return project, environment
 }
 
-func environmentBlueprintTestTask(environmentID string, seed int64) TaskRecord {
+func environmentBlueprintTestTask(
+	t *testing.T,
+	project ProjectRecord,
+	environment EnvironmentRecord,
+	seed int64,
+) TaskRecord {
+	t.Helper()
 	at := time.Date(2026, 8, 22, 19, 0, int(seed), 0, time.UTC)
 	taskID := ids.NewAt(ids.KindTask, at, seed)
+	owner, err := EnvironmentTaskOwner(project, environment)
+	if err != nil {
+		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
+	}
 	return TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, at, seed+1),
+		Owner: owner, Actor: TaskActorOperator,
 		IdempotencyKey: ids.NewAt(ids.KindOperation, at, seed+2)[3:],
 		Executor:       etcdTaskExecutorAgent(), PlanID: ids.NewAt(ids.KindPlan, at, seed+3),
 		PlanHash: strings.Repeat("a", 64), RenderGeneration: 1,
-		Type: TaskUpdate, Target: environmentID,
+		Type: TaskUpdate, Target: environment.ID,
 		Params: map[string]string{
 			EnvironmentBlueprintRevisionParam:   taskID,
-			TaskMaterializationEnvironmentParam: environmentID,
+			TaskMaterializationEnvironmentParam: environment.ID,
 		},
 		Steps:          []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, at, seed+4)}},
-		TimeoutSeconds: 120, Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: at,
+		TimeoutSeconds: 120, Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: at, UpdatedAt: at,
 	}
 }
 

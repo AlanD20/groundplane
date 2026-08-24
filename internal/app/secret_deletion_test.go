@@ -21,6 +21,7 @@ func TestSecretDeletionDispatchesTheClosedControllerFinalizer(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
 	projectID := ids.NewAt(ids.KindProject, now, 1)
+	tenantID := ids.NewAt(ids.KindTenant, now, 3)
 	secretID := ids.NewAt(ids.KindSecret, now, 2)
 	record, err := etcd.NewProjectSecretRecord(
 		secretID, projectID, "TOKEN", core.SecretKindEnvVar, "", now,
@@ -30,7 +31,9 @@ func TestSecretDeletionDispatchesTheClosedControllerFinalizer(t *testing.T) {
 	}
 	repository := &fakeSecretDeletionRepository{
 		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record:   etcd.ProjectRecord{ID: projectID, Kind: etcd.ProjectKindTenant},
+			Record: etcd.ProjectRecord{
+				ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant,
+			},
 			Revision: 5, ReadRevision: 5,
 		},
 		secret: etcd.Versioned[etcd.SecretRecord]{Record: record, Revision: 7, ReadRevision: 7},

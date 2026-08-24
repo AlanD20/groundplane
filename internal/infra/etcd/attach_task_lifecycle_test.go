@@ -129,7 +129,7 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 	retryAt := terminalAt.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 803)
 	marker := pendingRetryMarker(terminal.Record, retryID, retryAt, "attach-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, record.TaskID, retryID, marker); err != nil {
+	if _, err := tasks.RetryTask(ctx, record.TaskID, retryID, TaskActorOperator, marker); err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
 	retryTask, err := tasks.GetTask(ctx, retryID)
@@ -213,7 +213,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	retryAt := detachFailureAt.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 806)
 	marker := pendingRetryMarker(failedTask.Record, retryID, retryAt, "detach-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, detachID, retryID, marker); err != nil {
+	if _, err := tasks.RetryTask(ctx, detachID, retryID, TaskActorOperator, marker); err != nil {
 		t.Fatalf("RetryTask(detach) error = %v", err)
 	}
 	retrying, err := attaches.GetAttach(ctx, record.ID)

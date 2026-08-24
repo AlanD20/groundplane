@@ -118,7 +118,17 @@ func (repository *TaskRepository) CreateTask(
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || record.Status != TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"Task creation marker does not match its Task",
+			"task creation marker does not match its Task",
+		)
+	}
+	initiation, err := newPlatformTaskInitiation(TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateTaskInitiation(record, initiation, true); err != nil {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"generic task creation accepts only platform operator tasks",
 		)
 	}
 	record = cloneTaskRecord(record)
@@ -156,6 +166,8 @@ func (repository *TaskRepository) CreateTask(
 		{Type: MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		record,
+		initiation,
 		conditions,
 		mutations,
 		classifyTaskCreateConflict(record.OperationID),
@@ -173,7 +185,7 @@ func (repository *TaskRepository) CreateTask(
 func classifyTaskCreateConflict(operationID string) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		if len(values) != 4 {
-			return errs.New(errs.KindInternal, "Task creation compare evidence is incomplete")
+			return errs.New(errs.KindInternal, "task creation compare evidence is incomplete")
 		}
 		if values[2] != nil {
 			activeTaskID, err := decodeTaskReference(values[2].Value)
@@ -189,10 +201,10 @@ func classifyTaskCreateConflict(operationID string) idempotencyPlanClassifier {
 		}
 		for index, value := range values {
 			if index != 2 && value != nil {
-				return errs.New(errs.KindInternal, "Task creation collided with durable Task state")
+				return errs.New(errs.KindInternal, "task creation collided with durable Task state")
 			}
 		}
-		return errs.New(errs.KindInternal, "Task creation compare failure was not classified")
+		return errs.New(errs.KindInternal, "task creation compare failure was not classified")
 	}
 }
 
@@ -205,6 +217,34 @@ func (repository *TaskRepository) RetryTask(
 	ctx context.Context,
 	sourceTaskID string,
 	retryTaskID string,
+	actor TaskActor,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if actor != TaskActorOperator {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"ordinary task retry actor must be operator",
+		)
+	}
+	return repository.retryTask(ctx, sourceTaskID, retryTaskID, TaskActorOperator, nil, marker)
+}
+
+func (repository *TaskRepository) RetryTaskWithInitiation(
+	ctx context.Context,
+	sourceTaskID string,
+	retryTaskID string,
+	initiation TaskInitiation,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	return repository.retryTask(ctx, sourceTaskID, retryTaskID, initiation.actor, &initiation, marker)
+}
+
+func (repository *TaskRepository) retryTask(
+	ctx context.Context,
+	sourceTaskID string,
+	retryTaskID string,
+	actor TaskActor,
+	provided *TaskInitiation,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
@@ -217,16 +257,30 @@ func (repository *TaskRepository) RetryTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	retry, err := cloneRetryTask(source.Record, retryTaskID, marker.CreatedAt)
+	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newInheritedTaskInitiation(source, actor)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if provided != nil {
+		if err := validateTaskInitiation(TaskRecord{}, *provided, false); err != nil || provided.actor != TaskActorSystem {
+			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "system task retry initiation is invalid")
+		}
+		fences := append(append([]Condition(nil), initiation.fences...), provided.fences...)
+		initiation, err = newTaskInitiation(source.Record.Owner, TaskActorSystem, fences...)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
 	}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"Task retry marker does not match its Task",
+			"task retry marker does not match its Task",
 		)
 	}
 	if err := validateIdempotencyMarker(marker); err != nil {
@@ -362,6 +416,8 @@ func (repository *TaskRepository) RetryTask(
 	}
 	defer clearRunnerTaskChange(runnerChange)
 	plan, err := newTaskIdempotencyMutationPlan(
+		retry,
+		initiation,
 		conditions,
 		mutations,
 		classifyTaskRetryConflict(
@@ -408,7 +464,7 @@ func classifyTaskRetryConflict(
 			scriptConditions + routeConditions + serviceConditions + backingZoneConditions + componentConditions +
 			connectorConditions + runnerConditions
 		if len(values) != expectedValues {
-			return errs.New(errs.KindInternal, "Task retry compare evidence is incomplete")
+			return errs.New(errs.KindInternal, "task retry compare evidence is incomplete")
 		}
 		if values[0] == nil {
 			return errs.Newf(errs.KindTaskNotFound, "task not found: %s", sourceTaskID)
@@ -426,7 +482,7 @@ func classifyTaskRetryConflict(
 			)
 		}
 		if values[1] != nil || values[2] != nil || values[4] != nil {
-			return errs.New(errs.KindInternal, "Task retry collided with durable Task state")
+			return errs.New(errs.KindInternal, "task retry collided with durable Task state")
 		}
 		return errs.New(errs.KindStateConflict, "source Task changed while creating its retry")
 	}
@@ -466,7 +522,7 @@ func (repository *TaskRepository) claimNextTask(
 	if !validTaskExecutor(executor) ||
 		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0)) ||
 		(executor == TaskExecutorController && (agentID != "" || agentGeneration != 0)) {
-		return TaskAssignment{}, false, errs.New(errs.KindValidationFailed, "Task execution claim identity is invalid")
+		return TaskAssignment{}, false, errs.New(errs.KindValidationFailed, "task execution claim identity is invalid")
 	}
 	if err := validateTimestamp("task assignment assigned_at", assignedAt); err != nil {
 		return TaskAssignment{}, false, err
@@ -481,10 +537,14 @@ func (repository *TaskRepository) claimNextTask(
 		queued := candidate.queued
 		taskValue := candidate.taskValue
 		task := candidate.task
+		claimAt, err := nextTaskControllerTimestamp(task.UpdatedAt, assignedAt)
+		if err != nil {
+			return TaskAssignment{}, false, err
+		}
 		activeKey := taskActiveOperationKey(task.OperationID)
 		assignmentKey := taskExecutionClaimKey(executor, agentID, task.ID)
 		assignmentIndexKey := taskAssignmentIndexKey(task.ID)
-		deadline := assignedAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
+		deadline := claimAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
 		timeoutIndexKey := taskTimeoutIndexKey(task.ID, deadline)
 		companionKeys := []string{activeKey, assignmentKey, assignmentIndexKey, timeoutIndexKey}
 		if candidate.writerKey != "" {
@@ -517,13 +577,13 @@ func (repository *TaskRepository) claimNextTask(
 			}
 			continue
 		}
-		running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, assignedAt)
+		running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, claimAt)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
 		assignment := TaskAssignmentRecord{
 			TaskID: task.ID, Executor: executor, AgentID: agentID, AgentGeneration: agentGeneration,
-			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: assignedAt, Deadline: deadline,
+			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: claimAt, Deadline: deadline,
 		}
 		runningValue, err := encodeTaskRecord(running)
 		if err != nil {
@@ -723,7 +783,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		return nil, err
 	}
 	if validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || maximum <= 0 {
-		return nil, errs.New(errs.KindValidationFailed, "Agent assignment query is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "agent assignment query is invalid")
 	}
 	assignments, err := repository.store.Range(ctx, RangeRequest{
 		Prefix: taskAssignmentScopePrefix(agentID),
@@ -733,7 +793,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		return nil, err
 	}
 	if assignments.More || len(assignments.Values) > int(maximum) {
-		return nil, errs.New(errs.KindInternal, "Agent assignments exceed configured concurrency")
+		return nil, errs.New(errs.KindInternal, "agent assignments exceed configured concurrency")
 	}
 	if len(assignments.Values) == 0 {
 		return []TaskAssignment{}, nil
@@ -769,7 +829,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		return nil, err
 	}
 	if len(tasks.Values) != len(records) {
-		return nil, errs.New(errs.KindInternal, "Agent assignment Task read is incomplete")
+		return nil, errs.New(errs.KindInternal, "agent assignment Task read is incomplete")
 	}
 	result := make([]TaskAssignment, len(records))
 	for index, record := range records {
@@ -838,7 +898,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		return nil, err
 	}
 	if claims.More || len(claims.Values) > 1 {
-		return nil, errs.New(errs.KindInternal, "Controller Task claims exceed serial execution")
+		return nil, errs.New(errs.KindInternal, "controller Task claims exceed serial execution")
 	}
 	if len(claims.Values) == 0 {
 		return []TaskAssignment{}, nil
@@ -850,7 +910,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 	}
 	if claim.Executor != TaskExecutorController || claimValue.Key != controllerTaskClaimKey(claim.TaskID) ||
 		claim.ClaimedTaskRevision >= claimValue.ModRevision {
-		return nil, errs.New(errs.KindInternal, "Controller Task claim does not match its key")
+		return nil, errs.New(errs.KindInternal, "controller Task claim does not match its key")
 	}
 	tasks, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{taskKey(claim.TaskID)}, Revision: claims.ReadRevision,
@@ -871,7 +931,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		!task.StartedAt.Equal(claim.AssignedAt) ||
 		!claim.Deadline.Equal(claim.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
 		taskValue.ModRevision < claimValue.ModRevision || task.idempotencyMarker == nil {
-		return nil, errs.New(errs.KindInternal, "Controller Task claim and Task are inconsistent")
+		return nil, errs.New(errs.KindInternal, "controller Task claim and Task are inconsistent")
 	}
 	return []TaskAssignment{{
 		Assignment: Versioned[TaskAssignmentRecord]{
@@ -1003,7 +1063,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		!isTerminalTaskStatus(terminalStatus) ||
 		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || result == nil)) ||
 		(executor == TaskExecutorController && (agentID != "" || agentGeneration != 0 || result != nil)) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Task acknowledgement is invalid")
+		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task acknowledgement is invalid")
 	}
 	if err := validateTimestamp("task terminal_at", terminalAt); err != nil {
 		return Versioned[TaskRecord]{}, err
@@ -1011,7 +1071,7 @@ func (repository *TaskRepository) acknowledgeTask(
 	if environmentID != "" && validateStableID(ids.KindEnvironment, environmentID) != nil {
 		return Versioned[TaskRecord]{}, errs.New(
 			errs.KindValidationFailed,
-			"Environment creation acknowledgement is invalid",
+			"environment creation acknowledgement is invalid",
 		)
 	}
 
@@ -1035,7 +1095,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		assignmentValue := primaryAndAssignment.Values[1]
 		assignmentIndexValue := primaryAndAssignment.Values[2]
 		if task.Executor != executor {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Task execution authority changed")
+			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task execution authority changed")
 		}
 		environmentCreation := executor == TaskExecutorAgent && task.Type == TaskCreate &&
 			validateStableID(ids.KindEnvironment, task.Target) == nil
@@ -1046,7 +1106,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
-				"Environment creation Task requires its atomic provisioning acknowledgement",
+				"environment creation Task requires its atomic provisioning acknowledgement",
 			)
 		}
 		if result != nil {
@@ -1056,7 +1116,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if assignmentValue == nil {
 			if assignmentIndexValue != nil {
-				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Task assignment index is orphaned")
+				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task assignment index is orphaned")
 			}
 			if task.Status == terminalStatus &&
 				((result == nil && task.Result == nil) ||
@@ -1132,7 +1192,7 @@ func (repository *TaskRepository) acknowledgeTask(
 					ReadRevision: primaryAndAssignment.ReadRevision,
 				}, nil
 			}
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Task has no matching active assignment")
+			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task has no matching active assignment")
 		}
 		assignment, err := decodeTaskAssignment(assignmentValue.Value)
 		if err != nil {
@@ -1141,7 +1201,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		if assignmentIndexValue == nil || !bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
-				"Task assignment index does not match assignment",
+				"task assignment index does not match assignment",
 			)
 		}
 		if assignment.TaskID != task.ID || assignment.Executor != executor || assignment.AgentID != agentID ||
@@ -1150,8 +1210,12 @@ func (repository *TaskRepository) acknowledgeTask(
 			!assignment.AssignedAt.Equal(*task.StartedAt) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
-				"Task assignment does not match the Agent generation",
+				"task assignment does not match the Agent generation",
 			)
+		}
+		terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
+		if err != nil {
+			return Versioned[TaskRecord]{}, err
 		}
 		if environmentRemoval && terminalStatus == TaskStatusCompleted {
 			processed, err := repository.finalizeEnvironmentBlueprintRevisionBatch(ctx, task, terminalAt)
@@ -1597,7 +1661,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		return Versioned[TaskRecord]{}, err
 	}
 	if validateStableID(ids.KindTask, taskID) != nil {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Task id is invalid")
+		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task id is invalid")
 	}
 	if err := validateTimestamp("task terminal_at", terminalAt); err != nil {
 		return Versioned[TaskRecord]{}, err
@@ -1694,6 +1758,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
+		terminalAt = *terminal.FinishedAt
 		transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
 			current.Record,
 			TaskStatusAborted,
@@ -2044,12 +2109,12 @@ func prepareTerminalTaskMarker(
 	if task.idempotencyMarker == nil {
 		return IdempotencyMarker{}, "", "", errs.New(
 			errs.KindInternal,
-			"Task is missing its idempotency marker locator",
+			"task is missing its idempotency marker locator",
 		)
 	}
 	markerKey, err := idempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
-		return IdempotencyMarker{}, "", "", errs.New(errs.KindInternal, "Task idempotency marker locator is corrupt")
+		return IdempotencyMarker{}, "", "", errs.New(errs.KindInternal, "task idempotency marker locator is corrupt")
 	}
 	state := IdempotencyMarkerFailed
 	if status == TaskStatusCompleted {
@@ -2080,7 +2145,7 @@ func validateTaskLifecycleCompanions(task TaskRecord, activeValue *KeyValue, mar
 	defer clear(marker.Response.Body)
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != task.ID {
-		return errs.New(errs.KindInternal, "Task idempotency marker is not pending for its Task")
+		return errs.New(errs.KindInternal, "task idempotency marker is not pending for its Task")
 	}
 	return nil
 }

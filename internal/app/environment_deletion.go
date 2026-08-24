@@ -217,6 +217,10 @@ func (service *environmentDeletionService) deleteEnvironmentOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	projection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -244,12 +248,13 @@ func (service *environmentDeletionService) deleteEnvironmentOnce(
 	}
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan), RenderGeneration: renderGeneration,
 		Type: etcd.TaskRemove, Target: environmentID,
 		Params:         params,
 		Steps:          steps,
 		TimeoutSeconds: environmentDeletionTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
+		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	plan, err := service.plans.ResolveExecutionPlan(ctx, task)
 	if err != nil {

@@ -35,6 +35,7 @@ type backingZoneCascadeRepository interface {
 		int64,
 	) ([]etcd.Versioned[etcd.AttachRecord], error)
 	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	GetSystemTaskInitiation(context.Context, string) (etcd.TaskInitiation, error)
 	HandoffBackingZoneDeletion(
 		context.Context,
 		etcd.Versioned[etcd.ZoneRecord],
@@ -83,6 +84,13 @@ func (repository *durableBackingZoneCascadeRepository) GetTask(
 	return repository.tasks.GetTask(ctx, id)
 }
 
+func (repository *durableBackingZoneCascadeRepository) GetSystemTaskInitiation(
+	ctx context.Context,
+	id string,
+) (etcd.TaskInitiation, error) {
+	return repository.tasks.GetSystemTaskInitiation(ctx, id)
+}
+
 func (repository *durableBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
 	ctx context.Context,
 	zone etcd.Versioned[etcd.ZoneRecord],
@@ -95,11 +103,21 @@ func (repository *durableBackingZoneCascadeRepository) HandoffBackingZoneDeletio
 }
 
 type backingZoneCascadeDetaches interface {
-	DetachAttach(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DetachAttachWithInitiation(
+		context.Context,
+		string,
+		string,
+		etcd.TaskInitiation,
+	) (etcd.IdempotencyResponse, error)
 }
 
 type backingZoneCascadeRetries interface {
-	RetryTask(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	RetryTaskWithInitiation(
+		context.Context,
+		string,
+		string,
+		etcd.TaskInitiation,
+	) (etcd.IdempotencyResponse, error)
 }
 
 type backingZoneCascadeService struct {
@@ -196,19 +214,28 @@ func (service *backingZoneCascadeService) advanceAttach(
 ) error {
 	var response etcd.IdempotencyResponse
 	var err error
+	initiation, err := service.repository.GetSystemTaskInitiation(ctx, parent.ID)
+	if err != nil {
+		return err
+	}
+	if initiation.Owner() != parent.Owner || initiation.Actor() != etcd.TaskActorSystem {
+		return errs.New(errs.KindStateConflict, "backing Zone cascade initiation changed")
+	}
 	switch {
 	case attach.Status == core.AttachReady ||
 		(attach.Status == core.AttachFailed && attach.Operation == etcd.AttachOperationProvision):
-		response, err = service.detaches.DetachAttach(
+		response, err = service.detaches.DetachAttachWithInitiation(
 			ctx,
 			attach.ID,
 			cascadeIdempotencyKey("detach", parent.ID, attach.ID),
+			initiation,
 		)
 	case attach.Status == core.AttachFailed && attach.Operation == etcd.AttachOperationDetach:
-		response, err = service.retries.RetryTask(
+		response, err = service.retries.RetryTaskWithInitiation(
 			ctx,
 			attach.TaskID,
 			cascadeIdempotencyKey("retry", parent.ID, attach.ID),
+			initiation,
 		)
 	case attach.Status == core.AttachPending || attach.Status == core.AttachProvisioning:
 		_, err = service.waitForTask(ctx, attach.TaskID)
@@ -220,7 +247,7 @@ func (service *backingZoneCascadeService) advanceAttach(
 		}
 		return requireCascadeChildSuccess(terminal.Record)
 	default:
-		return errs.New(errs.KindStateConflict, "Attach lifecycle cannot advance during backing Zone removal")
+		return errs.New(errs.KindStateConflict, "attach lifecycle cannot advance during backing Zone removal")
 	}
 	if err != nil {
 		return err
@@ -293,6 +320,8 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 	child := etcd.TaskRecord{
 		ID:               ids.New(ids.KindTask),
 		OperationID:      ids.New(ids.KindOperation),
+		Owner:            parent.Owner,
+		Actor:            etcd.TaskActorSystem,
 		Executor:         etcd.TaskExecutorAgent,
 		PlanID:           ids.New(ids.KindPlan),
 		RenderGeneration: 1,
@@ -306,6 +335,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		Status:            etcd.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 	plan, err := service.plans.ResolveExecutionPlan(ctx, child)
 	if err != nil {

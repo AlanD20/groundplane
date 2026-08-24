@@ -338,6 +338,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID ||
 		project.Record.Kind != etcd.ProjectKindTenant {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment hierarchy is inconsistent")
@@ -551,6 +555,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
 		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: environmentID,
 		Params: map[string]string{
@@ -560,7 +565,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		},
 		Steps: stepRecords, TimeoutSeconds: environmentBlueprintTimeoutSeconds,
 		Materializations: materializations,
-		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
+		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	revision := environmentBlueprintRevision(environmentID, taskID, now, bundle)
 	projection := environmentComposeProjection(

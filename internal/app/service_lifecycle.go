@@ -378,6 +378,10 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	projection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -394,8 +398,9 @@ func (service *serviceLifecycleService) runOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		PlanID: ids.New(ids.KindPlan), Type: taskType, Target: serviceID,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
+		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	var renderInput *etcd.ServiceLifecycleRenderInput
 	if hasProjection && serviceInComposeProjection(projection.Record, serviceID) {

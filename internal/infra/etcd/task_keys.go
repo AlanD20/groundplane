@@ -11,6 +11,8 @@ import (
 )
 
 const (
+	taskJournalSchemaKey            = "/v1/meta/task-journal-schema"
+	taskJournalSchemaValue          = "task-journal/v1"
 	taskPrefix                      = "/v1/tasks/"
 	taskOperationIndexPrefix        = "/v1/indexes/tasks/operation/"
 	taskActiveOperationPrefix       = "/v1/indexes/tasks/active-operation/"
@@ -22,6 +24,9 @@ const (
 	taskAssignmentIndexPrefix       = "/v1/indexes/tasks/assignment/"
 	taskTimeoutIndexPrefix          = "/v1/indexes/tasks/timeout/"
 	taskRetentionIndexPrefix        = "/v1/indexes/tasks/by-retain-until/"
+	taskWorkspacePlatformPrefix     = "/v1/indexes/tasks/by-workspace/platform/"
+	taskWorkspaceTenantPrefix       = "/v1/indexes/tasks/by-workspace/tenant/"
+	taskEnvironmentIndexPrefix      = "/v1/indexes/tasks/by-environment/"
 	taskPruneIntentPrefix           = "/v1/runtime/task-pruning/"
 	taskMaterializationWriterPrefix = "/v1/runtime/task-materialization-writers/"
 	deletionTombstoneRootPrefix     = "/v1/runtime/deletions/"
@@ -38,6 +43,18 @@ func taskOperationIndexKey(operationID string, taskID string) string {
 
 func taskOperationIndexScopePrefix(operationID string) string {
 	return taskOperationIndexPrefix + operationID + "/"
+}
+
+func taskWorkspacePlatformIndexKey(taskID string) string {
+	return taskWorkspacePlatformPrefix + taskID
+}
+
+func taskWorkspaceTenantIndexKey(tenantID string, taskID string) string {
+	return taskWorkspaceTenantPrefix + tenantID + "/" + taskID
+}
+
+func taskEnvironmentIndexKey(environmentID string, taskID string) string {
+	return taskEnvironmentIndexPrefix + environmentID + "/" + taskID
 }
 
 func taskActiveOperationKey(operationID string) string {

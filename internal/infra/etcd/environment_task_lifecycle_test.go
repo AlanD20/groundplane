@@ -58,6 +58,7 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 	}
+	source.Owner = mustEnvironmentTaskOwner(t, project.Record, environment)
 	marker := pendingTaskMarker(source)
 	marker.Locator = IdempotencyLocator{
 		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
@@ -126,7 +127,7 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 		retryAt,
 		"environment-retry-request-key-0001",
 	)
-	retryResult, err := tasks.RetryTask(ctx, source.ID, retryID, retryMarker)
+	retryResult, err := tasks.RetryTask(ctx, source.ID, retryID, TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -226,6 +227,7 @@ func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 	}
+	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment)
 	marker := pendingTaskMarker(task)
 	marker.Locator = IdempotencyLocator{
 		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
@@ -278,7 +280,7 @@ func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T
 	retryAt := terminalAt.Add(2 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 723)
 	retryMarker := pendingRetryMarker(aborted.Record, retryID, retryAt, "environment-abort-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, task.ID, retryID, retryMarker); err != nil {
+	if _, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker); err != nil {
 		t.Fatalf("RetryTask(aborted Environment) error = %v", err)
 	}
 	retrying, err := hierarchy.GetEnvironment(ctx, environment.ID)

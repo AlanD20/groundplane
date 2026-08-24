@@ -23,6 +23,9 @@ func TestTaskRepositoryKeysMatchTheApprovedLayout(t *testing.T) {
 	stepID := ids.NewAt(ids.KindStep, now, 23)
 	identity := TaskEventIdentity{TaskID: taskID, StepID: stepID, Attempt: 3, Ordinal: 17}
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 24)
+	tenantID := ids.NewAt(ids.KindTenant, now, 25)
+	tenantWorkspacePath := "/v1/indexes/tasks/by-workspace/tenant/" + tenantID + "/" + taskID
+	environmentTaskPath := "/v1/indexes/tasks/by-environment/" + environmentID + "/" + taskID
 
 	wants := map[string]string{
 		taskKey(taskID): "/v1/tasks/" + taskID,
@@ -31,6 +34,9 @@ func TestTaskRepositoryKeysMatchTheApprovedLayout(t *testing.T) {
 		taskEventKey(taskID, 42):                           "/v1/runtime/task-events/" + taskID + "/00000000000000000042",
 		taskEventDedupKey(identity):                        "/v1/runtime/task-event-dedup/" + taskID + "/" + stepID + "/3/17",
 		deletionTombstoneKey("environment", environmentID): "/v1/runtime/deletions/environment/" + environmentID,
+		taskWorkspacePlatformIndexKey(taskID):              "/v1/indexes/tasks/by-workspace/platform/" + taskID,
+		taskWorkspaceTenantIndexKey(tenantID, taskID):      tenantWorkspacePath,
+		taskEnvironmentIndexKey(environmentID, taskID):     environmentTaskPath,
 	}
 	for got, want := range wants {
 		if got != want {
@@ -451,7 +457,20 @@ func seedTaskRepositoryTask(t *testing.T, store *memoryTaskStore, task TaskRecor
 	if err != nil {
 		t.Fatalf("encodeTaskRecord(seed) error = %v", err)
 	}
-	seedTaskRepositoryValue(t, store, taskKey(task.ID), value)
+	keys, err := taskOwnerIndexKeys(task.Owner, task.ID)
+	if err != nil {
+		t.Fatalf("taskOwnerIndexKeys(seed) error = %v", err)
+	}
+	conditions := []Condition{{Key: taskKey(task.ID)}}
+	mutations := []Mutation{{Type: MutationPut, Key: taskKey(task.ID), Value: value}}
+	for _, key := range keys {
+		conditions = append(conditions, Condition{Key: key})
+		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: []byte(task.ID)})
+	}
+	result, err := store.Transact(context.Background(), conditions, mutations)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("seed Task with owner indexes = %#v, %v", result, err)
+	}
 }
 
 func seedTaskRepositoryValue(t *testing.T, store *memoryTaskStore, key string, value []byte) {
@@ -660,7 +679,7 @@ func (store *memoryTaskStore) Transact(
 		return TransactionResult{Revision: store.revision}, nil
 	}
 	for _, condition := range conditions {
-		value := store.valueAtLocked(condition.Key, store.revision)
+		value := store.conditionValueLocked(condition, store.revision)
 		actual := int64(0)
 		if value != nil {
 			actual = value.ModRevision
@@ -668,7 +687,7 @@ func (store *memoryTaskStore) Transact(
 		if actual != condition.ModRevision {
 			failureReads := make([]*KeyValue, len(conditions))
 			for index, failedCondition := range conditions {
-				failureReads[index] = store.valueAtLocked(failedCondition.Key, store.revision)
+				failureReads[index] = store.conditionValueLocked(failedCondition, store.revision)
 			}
 			return TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
 		}
@@ -700,6 +719,23 @@ func (store *memoryTaskStore) Transact(
 		return TransactionResult{}, err
 	}
 	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
+}
+
+func (store *memoryTaskStore) conditionValueLocked(condition Condition, revision int64) *KeyValue {
+	if !condition.Prefix {
+		return store.valueAtLocked(condition.Key, revision)
+	}
+	var first *KeyValue
+	for key := range store.history {
+		if !strings.HasPrefix(key, condition.Key) {
+			continue
+		}
+		value := store.valueAtLocked(key, revision)
+		if value != nil && (first == nil || value.Key < first.Key) {
+			first = value
+		}
+	}
+	return first
 }
 
 func (store *memoryTaskStore) failWatch(prefix string, err error) {

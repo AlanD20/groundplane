@@ -79,6 +79,13 @@ func (inertBackingZoneCascadeRepository) GetTask(
 	return etcd.Versioned[etcd.TaskRecord]{}, nil
 }
 
+func (inertBackingZoneCascadeRepository) GetSystemTaskInitiation(
+	context.Context,
+	string,
+) (etcd.TaskInitiation, error) {
+	return etcd.TaskInitiation{}, nil
+}
+
 func (inertBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
 	context.Context,
 	etcd.Versioned[etcd.ZoneRecord],
@@ -92,18 +99,20 @@ func (inertBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
 
 type inertBackingZoneCascadeMutations struct{}
 
-func (inertBackingZoneCascadeMutations) DetachAttach(
+func (inertBackingZoneCascadeMutations) DetachAttachWithInitiation(
 	context.Context,
 	string,
 	string,
+	etcd.TaskInitiation,
 ) (etcd.IdempotencyResponse, error) {
 	return etcd.IdempotencyResponse{}, nil
 }
 
-func (inertBackingZoneCascadeMutations) RetryTask(
+func (inertBackingZoneCascadeMutations) RetryTaskWithInitiation(
 	context.Context,
 	string,
 	string,
+	etcd.TaskInitiation,
 ) (etcd.IdempotencyResponse, error) {
 	return etcd.IdempotencyResponse{}, nil
 }

@@ -543,7 +543,17 @@ func (repository *HierarchyRepository) ApplyEnvironmentBlueprintWithTask(
 		len(revision.Files), expectedHeadRevision, project, environment, task.OperationID, preparedZones,
 		preparedServices, preparedRoutes,
 	)
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
 		conditions,
 		mutations,
 		classifyEnvironmentBlueprintComponentPublication(baseClassifier, componentPublication),

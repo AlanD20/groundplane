@@ -131,7 +131,7 @@ type TaskResultRecord struct {
 }
 
 // TaskRecord is the versioned persistence DTO for one execution attempt.
-// NextEventSequence starts at one. TerminalAt is the retention epoch; the
+// NextEventSequence starts at one. FinishedAt is the retention epoch; the
 // pruning scheduler can delete the task, events, and dedupe records together
 // after RetainUntil without deriving time from a ULID.
 type TaskRecord struct {
@@ -139,6 +139,8 @@ type TaskRecord struct {
 	OperationID       string                      `json:"operation_id"`
 	RetryOf           string                      `json:"retry_of,omitempty"`
 	IdempotencyKey    string                      `json:"idempotency_key,omitempty"`
+	Owner             TaskOwner                   `json:"owner"`
+	Actor             TaskActor                   `json:"actor"`
 	Executor          TaskExecutor                `json:"executor"`
 	PlanID            string                      `json:"plan_id"`
 	PlanHash          string                      `json:"plan_hash,omitempty"`
@@ -154,8 +156,9 @@ type TaskRecord struct {
 	NextEventSequence uint64                      `json:"next_event_sequence"`
 	EventCount        uint32                      `json:"event_count"`
 	CreatedAt         time.Time                   `json:"created_at"`
+	UpdatedAt         time.Time                   `json:"updated_at"`
 	StartedAt         *time.Time                  `json:"started_at,omitempty"`
-	TerminalAt        *time.Time                  `json:"terminal_at,omitempty"`
+	FinishedAt        *time.Time                  `json:"finished_at,omitempty"`
 	RetainUntil       *time.Time                  `json:"retain_until,omitempty"`
 	idempotencyMarker *IdempotencyLocator
 }
@@ -210,6 +213,8 @@ type taskRecordData struct {
 	OperationID       string                      `json:"operation_id"`
 	RetryOf           string                      `json:"retry_of,omitempty"`
 	IdempotencyKey    string                      `json:"idempotency_key,omitempty"`
+	Owner             TaskOwner                   `json:"owner"`
+	Actor             TaskActor                   `json:"actor"`
 	Executor          TaskExecutor                `json:"executor"`
 	PlanID            string                      `json:"plan_id"`
 	PlanHash          string                      `json:"plan_hash,omitempty"`
@@ -225,8 +230,9 @@ type taskRecordData struct {
 	NextEventSequence uint64                      `json:"next_event_sequence"`
 	EventCount        uint32                      `json:"event_count"`
 	CreatedAt         string                      `json:"created_at"`
+	UpdatedAt         string                      `json:"updated_at"`
 	StartedAt         string                      `json:"started_at,omitempty"`
-	TerminalAt        string                      `json:"terminal_at,omitempty"`
+	FinishedAt        string                      `json:"finished_at,omitempty"`
 	RetainUntil       string                      `json:"retain_until,omitempty"`
 	IdempotencyMarker *IdempotencyLocator         `json:"idempotency_marker,omitempty"`
 }
@@ -266,19 +272,22 @@ type taskEventFingerprint struct {
 func newTaskRecord(
 	id string,
 	operationID string,
+	owner TaskOwner,
+	actor TaskActor,
 	taskType TaskType,
 	target string,
 	timeoutSeconds int64,
 	createdAt time.Time,
 ) TaskRecord {
 	return TaskRecord{
-		ID: id, OperationID: operationID, Executor: TaskExecutorAgent, Type: taskType, Target: target,
+		ID: id, OperationID: operationID, Owner: owner, Actor: actor,
+		Executor: TaskExecutorAgent, Type: taskType, Target: target,
 		TimeoutSeconds: timeoutSeconds, Status: TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt,
+		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 }
 
-func cloneRetryTask(source TaskRecord, id string, createdAt time.Time) (TaskRecord, error) {
+func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt time.Time) (TaskRecord, error) {
 	if err := validateTaskRecord(source); err != nil {
 		return TaskRecord{}, err
 	}
@@ -299,12 +308,13 @@ func cloneRetryTask(source TaskRecord, id string, createdAt time.Time) (TaskReco
 
 	retry := TaskRecord{
 		ID: id, OperationID: source.OperationID, RetryOf: source.ID,
-		IdempotencyKey: source.IdempotencyKey, Executor: source.Executor, PlanID: source.PlanID,
+		IdempotencyKey: source.IdempotencyKey, Owner: source.Owner, Actor: actor,
+		Executor: source.Executor, PlanID: source.PlanID,
 		PlanHash: source.PlanHash, RenderGeneration: source.RenderGeneration,
 		Type: source.Type, Target: source.Target, Params: cloneStringMap(source.Params),
 		Steps: cloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
 		Materializations: cloneTaskMaterializationReferences(source.Materializations),
-		Status:           TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt,
+		Status:           TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	if err := validateTaskRecord(retry); err != nil {
 		return TaskRecord{}, err
@@ -343,13 +353,18 @@ func transitionTaskStatus(
 		return TaskRecord{}, err
 	}
 
+	at, err := nextTaskControllerTimestamp(record.UpdatedAt, at)
+	if err != nil {
+		return TaskRecord{}, err
+	}
 	replacement := cloneTaskRecord(record)
 	replacement.Status = next
+	replacement.UpdatedAt = at
 	if next == TaskStatusRunning {
 		replacement.StartedAt = timePointer(at)
 	}
 	if isTerminalTaskStatus(next) {
-		replacement.TerminalAt = timePointer(at)
+		replacement.FinishedAt = timePointer(at)
 		retention := at.Add(TaskRetention)
 		replacement.RetainUntil = &retention
 	}
@@ -357,6 +372,16 @@ func transitionTaskStatus(
 		return TaskRecord{}, err
 	}
 	return replacement, nil
+}
+
+func nextTaskControllerTimestamp(previous time.Time, supplied time.Time) (time.Time, error) {
+	if err := validateTimestamp("task controller timestamp", supplied); err != nil {
+		return time.Time{}, err
+	}
+	if supplied.After(previous) {
+		return supplied, nil
+	}
+	return previous.Add(time.Nanosecond), nil
 }
 
 func prepareTaskEvent(
@@ -422,15 +447,20 @@ func prepareTaskEvent(
 	}
 	updated := cloneTaskRecord(task)
 	sequence := task.NextEventSequence
+	eventAt, err := nextTaskControllerTimestamp(task.UpdatedAt, receivedAt)
+	if err != nil {
+		return PreparedTaskEvent{}, err
+	}
 	event := TaskEventRecord{
 		Sequence: sequence, Identity: input.Identity, State: input.State,
-		Payload: payload, PayloadSHA256: hash, ReceivedAt: receivedAt,
+		Payload: payload, PayloadSHA256: hash, ReceivedAt: eventAt,
 	}
 	if _, err := encodeTaskEventRecord(event); err != nil {
 		return PreparedTaskEvent{}, err
 	}
 	updated.EventCount++
 	updated.NextEventSequence++
+	updated.UpdatedAt = eventAt
 	if err := validateTaskRecord(updated); err != nil {
 		return PreparedTaskEvent{}, err
 	}
@@ -473,6 +503,12 @@ func validateTaskRecord(record TaskRecord) error {
 			return errs.New(errs.KindValidationFailed, "task retry_of must name another task")
 		}
 	}
+	if err := validateTaskOwner(record.Owner); err != nil {
+		return err
+	}
+	if !validTaskActor(record.Actor) {
+		return errs.New(errs.KindValidationFailed, "task actor is invalid")
+	}
 	if !validTaskExecutor(record.Executor) {
 		return errs.New(errs.KindValidationFailed, "task executor is invalid")
 	}
@@ -511,6 +547,15 @@ func validateTaskRecord(record TaskRecord) error {
 	}
 	if err := validateTimestamp("task created_at", record.CreatedAt); err != nil {
 		return err
+	}
+	if err := validateTimestamp("task updated_at", record.UpdatedAt); err != nil {
+		return err
+	}
+	if record.UpdatedAt.Before(record.CreatedAt) {
+		return errs.New(errs.KindInternal, "task updated_at precedes created_at")
+	}
+	if record.Status == TaskStatusPending && record.EventCount == 0 && !record.UpdatedAt.Equal(record.CreatedAt) {
+		return errs.New(errs.KindInternal, "new pending task timestamps are inconsistent")
 	}
 	if err := validateTaskSteps(record.Steps); err != nil {
 		return err
@@ -594,27 +639,33 @@ func validateTaskTimeline(record TaskRecord) error {
 		if record.StartedAt.Before(record.CreatedAt) {
 			return errs.New(errs.KindInternal, "task started_at precedes created_at")
 		}
+		if record.UpdatedAt.Before(*record.StartedAt) {
+			return errs.New(errs.KindInternal, "task updated_at precedes started_at")
+		}
 	}
 	if isTerminalTaskStatus(record.Status) {
-		if record.TerminalAt == nil || record.RetainUntil == nil {
+		if record.FinishedAt == nil || record.RetainUntil == nil {
 			return errs.New(errs.KindInternal, "terminal task is missing retention timestamps")
 		}
-		if err := validateTimestamp("task terminal_at", *record.TerminalAt); err != nil {
+		if err := validateTimestamp("task finished_at", *record.FinishedAt); err != nil {
 			return err
 		}
 		if err := validateTimestamp("task retain_until", *record.RetainUntil); err != nil {
 			return err
 		}
-		if record.TerminalAt.Before(record.CreatedAt) ||
-			(record.StartedAt != nil && record.TerminalAt.Before(*record.StartedAt)) {
-			return errs.New(errs.KindInternal, "task terminal_at precedes its lifecycle")
+		if record.FinishedAt.Before(record.CreatedAt) ||
+			(record.StartedAt != nil && record.FinishedAt.Before(*record.StartedAt)) {
+			return errs.New(errs.KindInternal, "task finished_at precedes its lifecycle")
 		}
-		if !record.RetainUntil.Equal(record.TerminalAt.Add(TaskRetention)) {
+		if !record.UpdatedAt.Equal(*record.FinishedAt) {
+			return errs.New(errs.KindInternal, "terminal task updated_at does not equal finished_at")
+		}
+		if !record.RetainUntil.Equal(record.FinishedAt.Add(TaskRetention)) {
 			return errs.New(errs.KindInternal, "task retention deadline is inconsistent")
 		}
 		return nil
 	}
-	if record.TerminalAt != nil || record.RetainUntil != nil {
+	if record.FinishedAt != nil || record.RetainUntil != nil {
 		return errs.New(errs.KindInternal, "nonterminal task has terminal retention timestamps")
 	}
 	if record.Status == TaskStatusPending && record.StartedAt != nil {
@@ -857,7 +908,8 @@ func decodeTaskEventDedupRecord(value []byte) (TaskEventDedupRecord, error) {
 func taskRecordToData(record TaskRecord) taskRecordData {
 	return taskRecordData{
 		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
-		IdempotencyKey: record.IdempotencyKey, Executor: record.Executor, PlanID: record.PlanID,
+		IdempotencyKey: record.IdempotencyKey, Owner: record.Owner, Actor: record.Actor,
+		Executor: record.Executor, PlanID: record.PlanID,
 		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
 		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
@@ -865,8 +917,9 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Status:           record.Status, NextEventSequence: record.NextEventSequence,
 		Result:     taskResultToData(record.Result),
 		EventCount: record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:         record.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		StartedAt:         formatOptionalTimestamp(record.StartedAt),
-		TerminalAt:        formatOptionalTimestamp(record.TerminalAt),
+		FinishedAt:        formatOptionalTimestamp(record.FinishedAt),
 		RetainUntil:       formatOptionalTimestamp(record.RetainUntil),
 		IdempotencyMarker: cloneIdempotencyLocator(record.idempotencyMarker),
 	}
@@ -877,11 +930,15 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 	if err != nil {
 		return TaskRecord{}, err
 	}
+	updatedAt, err := parseCanonicalTimestamp(data.UpdatedAt)
+	if err != nil {
+		return TaskRecord{}, err
+	}
 	startedAt, err := parseOptionalTimestamp(data.StartedAt)
 	if err != nil {
 		return TaskRecord{}, err
 	}
-	terminalAt, err := parseOptionalTimestamp(data.TerminalAt)
+	finishedAt, err := parseOptionalTimestamp(data.FinishedAt)
 	if err != nil {
 		return TaskRecord{}, err
 	}
@@ -895,14 +952,15 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 	}
 	return TaskRecord{
 		ID: data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
-		IdempotencyKey: data.IdempotencyKey, Executor: data.Executor, PlanID: data.PlanID,
+		IdempotencyKey: data.IdempotencyKey, Owner: data.Owner, Actor: data.Actor,
+		Executor: data.Executor, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
 		Materializations: data.Materializations,
 		TimeoutSeconds:   data.TimeoutSeconds, Status: data.Status,
 		Result:            result,
 		NextEventSequence: data.NextEventSequence, EventCount: data.EventCount,
-		CreatedAt: createdAt, StartedAt: startedAt, TerminalAt: terminalAt,
+		CreatedAt: createdAt, UpdatedAt: updatedAt, StartedAt: startedAt, FinishedAt: finishedAt,
 		RetainUntil: retainUntil, idempotencyMarker: cloneIdempotencyLocator(data.IdempotencyMarker),
 	}, nil
 }
@@ -990,7 +1048,7 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.Steps = cloneTaskSteps(record.Steps)
 	cloned.Materializations = cloneTaskMaterializationReferences(record.Materializations)
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
-	cloned.TerminalAt = cloneTimePointer(record.TerminalAt)
+	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)
 	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
 	cloned.Result = cloneTaskResult(record.Result)
 	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)

@@ -337,6 +337,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	ordinaryOwnership := project.Record.Kind == etcd.ProjectKindTenant &&
 		zone.Record.Desired.OwnerKind == core.ZoneOwnerEnvironment && zone.Record.Desired.OwnerID == environment.Record.ID
 	backingOwnership := project.Record.Kind == etcd.ProjectKindBacking &&
@@ -367,11 +371,12 @@ func (service *zoneDeletionService) removeZoneOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: zoneID,
 		Params: map[string]string{etcd.TaskZoneEnvironmentParam: environment.Record.ID},
 		Steps:  []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}, TimeoutSeconds: zoneDeletionTimeoutSeconds,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
+		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	if backing {
 		task.Executor = etcd.TaskExecutorController

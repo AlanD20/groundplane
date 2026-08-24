@@ -154,7 +154,17 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		})
 	}
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
 		conditions,
 		mutations,
 		classifyEntryDeletionStartConflict(

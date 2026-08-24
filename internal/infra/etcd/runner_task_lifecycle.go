@@ -54,6 +54,12 @@ func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence
 		(ownerKind != RunnerOwnerTenant && ownerKind != RunnerOwnerProject) {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}
+	expectedOwner, err := runnerTaskOwner(RunnerDesiredRecord{
+		ID: task.Target, OwnerKind: ownerKind, OwnerID: ownerID, TenantID: task.Params[RunnerTenantIDParam],
+	})
+	if err != nil || task.Owner != expectedOwner {
+		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid owner")
+	}
 	hostSlot, err := parseRunnerHostSlotSegment(task.Params[RunnerHostSlotParam])
 	if err != nil {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
@@ -214,6 +220,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if retry.RetryOf != source.ID || retry.OperationID != source.OperationID ||
+		retry.Owner != source.Owner ||
 		retry.Executor != TaskExecutorController || retry.Type != TaskCreate ||
 		retry.Target != source.Target || retry.Status != TaskStatusPending ||
 		retry.IdempotencyKey != source.IdempotencyKey || retry.PlanID != source.PlanID ||
@@ -298,7 +305,13 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		}
 		return stateConflict("runner creation retry", current.Record.Desired.ID)
 	}
-	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, classifier)
+	initiation, err := newInheritedTaskInitiation(Versioned[TaskRecord]{
+		Record: source, Revision: sourceResult.Entry.ModRevision, ReadRevision: sourceResult.ReadRevision,
+	}, retry.Actor)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(retry, initiation, conditions, mutations, classifier)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -578,7 +591,11 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		}
 		return stateConflict("runner", current.Record.Desired.ID)
 	}
-	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, classifier)
+	initiation, err := newRunnerTaskInitiation(current.Record.Desired, parents, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classifier)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

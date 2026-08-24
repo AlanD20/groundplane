@@ -77,7 +77,7 @@ func TestBackingZoneCascadeFailureAndRetryTransferTheFence(t *testing.T) {
 	}
 	retryID := ids.NewAt(ids.KindTask, now.Add(4*time.Second), 40)
 	retryMarker := pendingRetryMarker(parent, retryID, now.Add(4*time.Second), "backing-zone-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, parent.ID, retryID, retryMarker); err != nil {
+	if _, err := tasks.RetryTask(ctx, parent.ID, retryID, TaskActorOperator, retryMarker); err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
 	stored, err = store.Get(ctx, deletionTombstoneKey(string(DeletionTargetZone), zoneID))

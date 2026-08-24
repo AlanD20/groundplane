@@ -154,7 +154,17 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 			},
 		)
 	}
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentCreationTaskInitiation(taskTenant, project, record, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
 		conditions,
 		mutations,
 		classifyEnvironmentCreateConflict(project, poolRegistry, components, task.OperationID),

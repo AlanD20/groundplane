@@ -49,6 +49,7 @@ func TestTaskPruningWaitsForMarkerAndRemovesComponentIntent(t *testing.T) {
 	}
 	assertTaskLifecycleValue(t, store, taskKey(task.ID), false)
 	assertTaskLifecycleValue(t, store, taskOperationIndexKey(task.OperationID, task.ID), false)
+	assertTaskLifecycleValue(t, store, taskWorkspacePlatformIndexKey(task.ID), false)
 	assertTaskLifecycleValue(t, store, componentTaskIntentKey(task.ID), false)
 	assertTaskLifecycleValue(t, store, taskPruneIntentKey(task.ID), false)
 	assertTaskLifecycleValue(t, store, taskRetentionIndexKey(task.ID, *terminal.Record.RetainUntil), false)
@@ -107,6 +108,7 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 		)
 	}
 	assertTaskLifecycleValue(t, store.memoryTaskStore, taskKey(task.ID), false)
+	assertTaskLifecycleValue(t, store.memoryTaskStore, taskWorkspacePlatformIndexKey(task.ID), false)
 	assertTaskLifecycleValue(t, store.memoryTaskStore, taskPruneIntentKey(task.ID), false)
 	if terminal.Record.EventCount != 48 {
 		t.Fatalf("terminal EventCount = %d, want 48", terminal.Record.EventCount)

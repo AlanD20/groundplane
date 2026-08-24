@@ -118,7 +118,10 @@ func TestDeleteEnvironmentBuildsBlueprintAwareRemovalTask(t *testing.T) {
 	)
 	repository := &fakeEnvironmentDeletionRepository{
 		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record: etcd.ProjectRecord{ID: projectID, TenantID: tenantID}, Revision: 9, ReadRevision: 41,
+			Record: etcd.ProjectRecord{
+				ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant,
+			},
+			Revision: 9, ReadRevision: 41,
 		},
 		environment: etcd.Versioned[etcd.EnvironmentRecord]{
 			Record: etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",

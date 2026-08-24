@@ -98,9 +98,73 @@ func (repository *TaskRepository) GetTask(
 	if record.ID != taskID || result.Entry.Key != taskKey(taskID) {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task primary does not match its key")
 	}
+	indexKeys, err := taskOwnerIndexKeys(record.Owner, taskID)
+	if err != nil {
+		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
+	}
+	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: indexKeys, Revision: result.ReadRevision,
+	})
+	if err != nil {
+		return Versioned[TaskRecord]{}, err
+	}
+	if indexes == nil || indexes.ReadRevision != result.ReadRevision || len(indexes.Values) != len(indexKeys) {
+		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index read is incomplete")
+	}
+	for index, value := range indexes.Values {
+		if value == nil || value.Key != indexKeys[index] || string(value.Value) != taskID {
+			return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index membership is corrupt")
+		}
+	}
 	return Versioned[TaskRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
+}
+
+// EnsureTaskJournalSchema is the clean-start gate for the ownership journal.
+// A missing marker can be initialized only when the Task primary collection is
+// empty. Any incompatible state or lost initialization CAS fails closed.
+func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+	primary, err := repository.store.Range(ctx, RangeRequest{Prefix: taskPrefix, Limit: 1})
+	if err != nil {
+		return err
+	}
+	if primary == nil {
+		return errs.New(errs.KindInternal, "task journal schema primary read is missing")
+	}
+	marker, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{taskJournalSchemaKey}, Revision: primary.ReadRevision,
+	})
+	if err != nil {
+		return err
+	}
+	if marker == nil || marker.ReadRevision != primary.ReadRevision || len(marker.Values) != 1 {
+		return errs.New(errs.KindInternal, "task journal schema marker read is incomplete")
+	}
+	if marker.Values[0] != nil {
+		if marker.Values[0].Key != taskJournalSchemaKey || string(marker.Values[0].Value) != taskJournalSchemaValue {
+			return errs.New(errs.KindInternal, "task journal schema marker is incompatible")
+		}
+		return nil
+	}
+	if len(primary.Values) != 0 {
+		return errs.New(errs.KindInternal, "task journal schema marker is missing for existing tasks")
+	}
+	initialized, err := repository.store.Transact(
+		ctx,
+		[]Condition{{Key: taskJournalSchemaKey}, {Key: taskPrefix, Prefix: true}},
+		[]Mutation{{Type: MutationPut, Key: taskJournalSchemaKey, Value: []byte(taskJournalSchemaValue)}},
+	)
+	if err != nil {
+		return err
+	}
+	if !initialized.Succeeded {
+		return errs.New(errs.KindInternal, "task journal schema initialization compare failed")
+	}
+	return nil
 }
 
 // TaskRetryScope is the immutable durable owner used to domain-separate a
@@ -118,14 +182,24 @@ func (repository *TaskRepository) GetTaskRetryScope(
 	if err != nil {
 		return TaskRetryScope{}, err
 	}
-	if task.Record.idempotencyMarker == nil {
-		return TaskRetryScope{}, errs.New(errs.KindInternal, "Task retry owner scope is missing")
+	return taskOwnerRetryScope(task.Record.Owner)
+}
+
+func (repository *TaskRepository) GetSystemTaskInitiation(
+	ctx context.Context,
+	taskID string,
+) (TaskInitiation, error) {
+	parent, err := repository.GetTask(ctx, taskID)
+	if err != nil {
+		return TaskInitiation{}, err
 	}
-	locator := *task.Record.idempotencyMarker
-	if err := validateIdempotencyLocator(locator); err != nil {
-		return TaskRetryScope{}, errs.New(errs.KindInternal, "Task retry owner scope is corrupt")
+	if parent.Record.Executor != TaskExecutorController || parent.Record.Status != TaskStatusRunning {
+		return TaskInitiation{}, errs.New(
+			errs.KindStateConflict,
+			"system task initiation parent is not a running controller task",
+		)
 	}
-	return TaskRetryScope{Kind: locator.ScopeKind, ID: locator.ScopeID}, nil
+	return newInheritedTaskInitiation(parent, TaskActorSystem)
 }
 
 func (repository *TaskRepository) ListTasks(

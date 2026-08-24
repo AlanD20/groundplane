@@ -56,6 +56,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 	}
+	task.Owner = mustEnvironmentTaskOwner(t, project.Record, record)
 	components := environmentCreationTestComponents(t, record.ID, now)
 	marker := pendingTaskMarker(task)
 	marker.Locator = IdempotencyLocator{

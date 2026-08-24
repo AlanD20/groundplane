@@ -44,8 +44,8 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err := validateComponentTaskOwner(source, intent); err != nil {
 		return componentTaskChange{}, err
 	}
-	if source.TerminalAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
-		!intent.TerminalAt.Equal(*source.TerminalAt) || retry.Executor != source.Executor ||
+	if source.FinishedAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
+		!intent.TerminalAt.Equal(*source.FinishedAt) || retry.Executor != source.Executor ||
 		retry.Type != source.Type || retry.Target != source.Target || retry.RetryOf != source.ID ||
 		retry.RenderGeneration != source.RenderGeneration {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry changed its pinned Task")
@@ -508,8 +508,8 @@ func (repository *TaskRepository) validateComponentTaskAcknowledgementReplay(
 	if err := validateComponentTaskOwner(task, intent); err != nil {
 		return err
 	}
-	if intent.Status != terminalStatus || intent.TerminalAt == nil || task.TerminalAt == nil ||
-		!intent.TerminalAt.Equal(*task.TerminalAt) {
+	if intent.Status != terminalStatus || intent.TerminalAt == nil || task.FinishedAt == nil ||
+		!intent.TerminalAt.Equal(*task.FinishedAt) {
 		return errs.New(errs.KindStateConflict, "Component candidate does not match terminal Task")
 	}
 	if result.Values[1] != nil {

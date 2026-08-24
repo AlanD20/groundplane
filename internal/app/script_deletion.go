@@ -249,6 +249,10 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	targetService, err := service.repository.GetService(ctx, current.Record.ServiceID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -279,12 +283,13 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: scriptID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceScript},
 		Steps:          []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: scriptDeletionTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
+		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	task.PlanHash, err = scriptDeletionPlanHash(scriptID)
 	if err != nil {

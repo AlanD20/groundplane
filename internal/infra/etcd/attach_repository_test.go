@@ -533,10 +533,16 @@ func createTestAttach(
 	for index := range steps {
 		steps[index] = TaskStepRecord{ID: ids.NewAt(ids.KindStep, record.CreatedAt, seed+2+int64(index))}
 	}
+	owner, err := EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	if err != nil {
+		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
+	}
 	task := TaskRecord{
 		ID:             record.TaskID,
 		OperationID:    ids.NewAt(ids.KindOperation, record.CreatedAt, seed),
 		IdempotencyKey: "attach-create-key-" + record.ID,
+		Owner:          owner,
+		Actor:          TaskActorOperator,
 		Executor:       TaskExecutorAgent,
 		PlanID:         ids.NewAt(ids.KindPlan, record.CreatedAt, seed+1),
 		PlanHash: hex.EncodeToString(
@@ -551,6 +557,7 @@ func createTestAttach(
 		Status:            TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         record.CreatedAt,
+		UpdatedAt:         record.CreatedAt,
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
@@ -637,6 +644,12 @@ func publishTestDetach(
 		t.Fatalf("GetEnvironment() error = %v", err)
 	}
 	task := validTaskRecord(createdAt)
+	owner, err := EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	if err != nil {
+		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
+	}
+	task.Owner = owner
+	task.Actor = TaskActorOperator
 	task.ID = ids.NewAt(ids.KindTask, createdAt, 901)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 902)
 	task.IdempotencyKey = "attach-detach-key-0001"

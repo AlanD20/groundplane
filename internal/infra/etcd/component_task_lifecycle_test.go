@@ -188,7 +188,7 @@ func TestRetryTaskReacquiresExactComponentCandidateReservation(t *testing.T) {
 
 	retryID := ids.NewAt(ids.KindTask, terminalAt.Add(time.Second), 1262)
 	marker := pendingRetryMarker(source, retryID, terminalAt.Add(time.Second), "component-retry-key-0001")
-	result, err := repository.RetryTask(ctx, source.ID, retryID, marker)
+	result, err := repository.RetryTask(ctx, source.ID, retryID, TaskActorOperator, marker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -258,7 +258,7 @@ func TestRetryTaskRejectsTakenComponentCandidateReservation(t *testing.T) {
 
 	retryID := ids.NewAt(ids.KindTask, terminalAt.Add(time.Second), 1273)
 	marker := pendingRetryMarker(source, retryID, terminalAt.Add(time.Second), "component-retry-key-0002")
-	if _, err := repository.RetryTask(ctx, source.ID, retryID, marker); err == nil {
+	if _, err := repository.RetryTask(ctx, source.ID, retryID, TaskActorOperator, marker); err == nil {
 		t.Fatal("RetryTask() accepted a candidate address reserved by another Component")
 	}
 }

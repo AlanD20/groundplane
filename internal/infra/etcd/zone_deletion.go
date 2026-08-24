@@ -157,7 +157,17 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 	}
+	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
 		conditions,
 		mutations,
 		classifyZoneDeletionStartConflict(
@@ -366,15 +376,27 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			Value: tombstoneValue,
 		},
 	}
-	plan, err := newTaskIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*KeyValue) error {
-		if len(values) != len(conditions) {
-			return errs.New(errs.KindInternal, "backing Zone handoff compare evidence is incomplete")
-		}
-		if values[2] != nil {
-			return errs.New(errs.KindStateConflict, "backing Zone final removal is already active")
-		}
-		return errs.New(errs.KindStateConflict, "backing Zone handoff state changed")
-	})
+	initiation, err := newInheritedTaskInitiation(Versioned[TaskRecord]{
+		Record: parent, Revision: parentResult.Values[0].ModRevision, ReadRevision: parentResult.ReadRevision,
+	}, TaskActorSystem)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
+		conditions,
+		mutations,
+		func(_ int64, values []*KeyValue) error {
+			if len(values) != len(conditions) {
+				return errs.New(errs.KindInternal, "backing Zone handoff compare evidence is incomplete")
+			}
+			if values[2] != nil {
+				return errs.New(errs.KindStateConflict, "backing Zone final removal is already active")
+			}
+			return errs.New(errs.KindStateConflict, "backing Zone handoff state changed")
+		},
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

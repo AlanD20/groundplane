@@ -170,11 +170,31 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 		{Type: MutationPut, Key: runnerHostSlotKey(allocationState.host.slot), Value: values.host},
 		{Type: MutationPut, Key: systemPoolRegistryKey, Value: values.system},
 	}
-	plan, err := newTaskIdempotencyMutationPlan(layout.conditions, mutations, layout.classifier())
+	initiation, err := newRunnerTaskInitiation(desired, parents, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, layout.conditions, mutations, layout.classifier())
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
+}
+
+func newRunnerTaskInitiation(
+	desired RunnerDesiredRecord,
+	parents runnerParents,
+	actor TaskActor,
+) (TaskInitiation, error) {
+	owner, err := runnerTaskOwner(desired)
+	if err != nil {
+		return TaskInitiation{}, err
+	}
+	fences := []Condition{{Key: tenantKey(desired.TenantID), ModRevision: parents.tenant.Revision}}
+	if desired.OwnerKind == RunnerOwnerProject {
+		fences = append(fences, Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
+	}
+	return newTaskInitiation(owner, actor, fences...)
 }
 
 type runnerCreateValues struct {
@@ -341,13 +361,28 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 }
 
 func validateRunnerCreateTask(desired RunnerDesiredRecord, task TaskRecord) error {
+	owner, err := runnerTaskOwner(desired)
+	if err != nil {
+		return err
+	}
 	if task.Executor != TaskExecutorController || task.Type != TaskCreate || task.Target != desired.ID ||
+		task.Owner != owner ||
 		task.Status != TaskStatusPending || task.IdempotencyKey == "" || len(task.Params) != 2 ||
 		task.Params[TaskResourceKindParam] != TaskResourceRunner ||
 		task.Params[RunnerRegistrationTokenPresentParam] != "true" {
 		return errs.New(errs.KindValidationFailed, "runner creation task has invalid durable input")
 	}
 	return nil
+}
+
+func runnerTaskOwner(desired RunnerDesiredRecord) (TaskOwner, error) {
+	if err := validateRunnerDesired(desired); err != nil {
+		return TaskOwner{}, err
+	}
+	if desired.OwnerKind == RunnerOwnerTenant {
+		return TenantTaskOwner(desired.TenantID)
+	}
+	return TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
 }
 
 func validateRunnerCreateMarker(desired RunnerDesiredRecord, task TaskRecord, marker IdempotencyMarker) error {

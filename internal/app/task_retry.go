@@ -18,7 +18,20 @@ const taskRetryRoute = "/tasks/{id}/retry"
 
 type taskRetryRepository interface {
 	GetTaskRetryScope(context.Context, string) (etcd.TaskRetryScope, error)
-	RetryTask(context.Context, string, string, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	RetryTask(
+		context.Context,
+		string,
+		string,
+		etcd.TaskActor,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+	RetryTaskWithInitiation(
+		context.Context,
+		string,
+		string,
+		etcd.TaskInitiation,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type taskRetryEvidence struct {
@@ -56,7 +69,7 @@ func newDurableTaskRetryIdempotency(
 	repository *etcd.IdempotencyRepository,
 ) (*durableTaskRetryIdempotency, error) {
 	if coordinator == nil || repository == nil {
-		return nil, errs.New(errs.KindInternal, "Task retry idempotency is not configured")
+		return nil, errs.New(errs.KindInternal, "task retry idempotency is not configured")
 	}
 	return &durableTaskRetryIdempotency{coordinator: coordinator, repository: repository}, nil
 }
@@ -122,7 +135,7 @@ func newTaskRetryService(
 	idempotency taskRetryIdempotency,
 ) (*taskRetryService, error) {
 	if repository == nil || idempotency == nil {
-		return nil, errs.New(errs.KindInternal, "Task retry service is not configured")
+		return nil, errs.New(errs.KindInternal, "task retry service is not configured")
 	}
 	return &taskRetryService{repository: repository, idempotency: idempotency, now: time.Now}, nil
 }
@@ -132,11 +145,29 @@ func (service *taskRetryService) RetryTask(
 	sourceTaskID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	return service.retryTask(ctx, sourceTaskID, idempotencyKey, nil)
+}
+
+func (service *taskRetryService) RetryTaskWithInitiation(
+	ctx context.Context,
+	sourceTaskID string,
+	idempotencyKey string,
+	initiation etcd.TaskInitiation,
+) (etcd.IdempotencyResponse, error) {
+	return service.retryTask(ctx, sourceTaskID, idempotencyKey, &initiation)
+}
+
+func (service *taskRetryService) retryTask(
+	ctx context.Context,
+	sourceTaskID string,
+	idempotencyKey string,
+	initiation *etcd.TaskInitiation,
+) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task retry context is required")
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "task retry context is required")
 	}
 	if ids.Validate(ids.KindTask, sourceTaskID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Task id is invalid")
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "task id is invalid")
 	}
 	durableScope, err := service.repository.GetTaskRetryScope(ctx, sourceTaskID)
 	if err != nil {
@@ -161,7 +192,7 @@ func (service *taskRetryService) RetryTask(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task retry replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "task retry replay resolution is invalid")
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
@@ -180,7 +211,17 @@ func (service *taskRetryService) RetryTask(
 		Locator: locator, Intent: evidence.durable, Response: response,
 		TaskID: retryTaskID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, retryErr := service.repository.RetryTask(ctx, sourceTaskID, retryTaskID, marker)
+	var result etcd.IdempotencyTransactionResult
+	var retryErr error
+	if initiation == nil {
+		result, retryErr = service.repository.RetryTask(
+			ctx, sourceTaskID, retryTaskID, etcd.TaskActorOperator, marker,
+		)
+	} else {
+		result, retryErr = service.repository.RetryTaskWithInitiation(
+			ctx, sourceTaskID, retryTaskID, *initiation, marker,
+		)
+	}
 	if retryErr != nil {
 		if !isUnknownTaskRetryOutcome(retryErr) {
 			return etcd.IdempotencyResponse{}, retryErr
@@ -198,7 +239,7 @@ func (service *taskRetryService) RetryTask(
 	case idempotentintent.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task retry resolution is invalid")
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "task retry resolution is invalid")
 	}
 }
 
@@ -206,7 +247,7 @@ func taskRetryIntentScope(scope etcd.TaskRetryScope) (idempotentintent.Scope, er
 	switch scope.Kind {
 	case etcd.IdempotencyScopePlatform:
 		if scope.ID != "-" {
-			return idempotentintent.Scope{}, errs.New(errs.KindInternal, "Task retry platform scope is invalid")
+			return idempotentintent.Scope{}, errs.New(errs.KindInternal, "task retry platform scope is invalid")
 		}
 		return idempotentintent.Scope{Kind: idempotentintent.ScopePlatform}, nil
 	case etcd.IdempotencyScopeTenant:
@@ -216,7 +257,7 @@ func taskRetryIntentScope(scope etcd.TaskRetryScope) (idempotentintent.Scope, er
 	case etcd.IdempotencyScopeEnvironment:
 		return idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: scope.ID}, nil
 	default:
-		return idempotentintent.Scope{}, errs.New(errs.KindInternal, "Task retry owner scope is invalid")
+		return idempotentintent.Scope{}, errs.New(errs.KindInternal, "task retry owner scope is invalid")
 	}
 }
 

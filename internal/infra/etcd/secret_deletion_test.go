@@ -16,6 +16,7 @@ import (
 // preserving platform fallback, and successful Task acknowledgement must
 // remove metadata, indexes, ciphertext, and the fence atomically.
 func TestSecretDeletionTaskFencesAndFinalizesTheCompleteSecret(t *testing.T) {
+	// Rationale: secret removal must publish its Task with the exact current Project and Tenant ancestry.
 	t.Parallel()
 	ctx := context.Background()
 	store, project := secretDeletionTestStore(t)
@@ -51,7 +52,7 @@ func TestSecretDeletionTaskFencesAndFinalizesTheCompleteSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSecret(project) error = %v", err)
 	}
-	task, marker, tombstone := secretDeletionTestTask(current, project, now.Add(2*time.Second), 10)
+	task, marker, tombstone := secretDeletionTestTask(t, current, project, now.Add(2*time.Second), 10)
 	result, err := secrets.BeginSecretDeletionWithTask(
 		ctx, ProjectSecretOwner(project), current, tombstone, task, marker,
 	)
@@ -114,6 +115,7 @@ func TestSecretDeletionTaskFencesAndFinalizesTheCompleteSecret(t *testing.T) {
 // Rationale: every non-success terminal path must restore visibility, while a
 // retry must atomically reacquire the fence before it can be queued again.
 func TestSecretDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testing.T) {
+	// Rationale: secret retry paths must preserve durable owner ancestry while restoring the encrypted record lifecycle.
 	t.Parallel()
 	ctx := context.Background()
 	store, project := secretDeletionTestStore(t)
@@ -139,7 +141,7 @@ func TestSecretDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testing.T
 	if err != nil {
 		t.Fatalf("CreateSecret() error = %v", err)
 	}
-	task, marker, tombstone := secretDeletionTestTask(current, project, now.Add(time.Second), 30)
+	task, marker, tombstone := secretDeletionTestTask(t, current, project, now.Add(time.Second), 30)
 	if _, err := secrets.BeginSecretDeletionWithTask(
 		ctx, ProjectSecretOwner(project), current, tombstone, task, marker,
 	); err != nil {
@@ -156,7 +158,7 @@ func TestSecretDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testing.T
 
 	retryID := ids.NewAt(ids.KindTask, now.Add(4*time.Second), 31)
 	retryMarker := pendingRetryMarker(task, retryID, now.Add(4*time.Second), "secret-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, task.ID, retryID, retryMarker); err != nil {
+	if _, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker); err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
 	assertSecretDeletionHidden(t, secrets, secretID)
@@ -178,7 +180,7 @@ func TestSecretDeletionFailureTimeoutAbortAndRetryRestoreVisibility(t *testing.T
 	abortMarker := pendingRetryMarker(
 		timedOut.Record, abortID, now.Add(6*time.Second), "secret-retry-key-0002",
 	)
-	if _, err := tasks.RetryTask(ctx, retryID, abortID, abortMarker); err != nil {
+	if _, err := tasks.RetryTask(ctx, retryID, abortID, TaskActorOperator, abortMarker); err != nil {
 		t.Fatalf("RetryTask(after timeout) error = %v", err)
 	}
 	assertSecretDeletionHidden(t, secrets, secretID)
@@ -195,14 +197,21 @@ func secretDeletionTestStore(t *testing.T) (*memoryHierarchyStore, Versioned[Pro
 		ID: ids.NewAt(ids.KindProject, now, 2), TenantID: ids.NewAt(ids.KindTenant, now, 1),
 		Slug: "secret-delete", Name: "Secret Delete", Kind: ProjectKindTenant,
 	}
+	tenant := TenantRecord{ID: project.TenantID, Slug: "secret-tenant", Name: "Secret Tenant"}
+	tenantValue, err := encodeTenant(tenant)
+	if err != nil {
+		t.Fatalf("encodeTenant() error = %v", err)
+	}
+	defer clear(tenantValue)
 	value, err := encodeProject(project)
 	if err != nil {
 		t.Fatalf("encodeProject() error = %v", err)
 	}
 	store := newMemoryHierarchyStore()
-	result, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: projectKey(project.ID), Value: value,
-	}})
+	result, err := store.Transact(context.Background(), nil, []Mutation{
+		{Type: MutationPut, Key: tenantKey(tenant.ID), Value: tenantValue},
+		{Type: MutationPut, Key: projectKey(project.ID), Value: value},
+	})
 	clear(value)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed Project = %#v/%v", result, err)
@@ -213,12 +222,14 @@ func secretDeletionTestStore(t *testing.T) (*memoryHierarchyStore, Versioned[Pro
 }
 
 func secretDeletionTestTask(
+	t *testing.T,
 	current Versioned[SecretRecord],
 	project Versioned[ProjectRecord],
 	createdAt time.Time,
 	entropy int64,
 ) (TaskRecord, IdempotencyMarker, DeletionTombstoneRecord) {
 	task := validTaskRecord(createdAt)
+	task.Owner = mustProjectTaskOwner(t, project.Record)
 	task.ID = ids.NewAt(ids.KindTask, createdAt, entropy)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, entropy+1)
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, entropy+2)

@@ -83,10 +83,12 @@ type GetManyResult struct {
 }
 
 // Condition requires Key's current modification revision to equal
-// ModRevision. A zero ModRevision means that the key must not exist.
+// ModRevision. A zero ModRevision means that the key must not exist. Prefix
+// is valid only with zero and requires the complete prefix to remain empty.
 type Condition struct {
 	Key         string
 	ModRevision int64
+	Prefix      bool
 }
 
 // MutationType distinguishes the two writes supported inside a transaction.
@@ -442,11 +444,21 @@ func (s *store) Transact(
 		if err != nil {
 			return TransactionResult{}, err
 		}
-		comparisons = append(
-			comparisons,
-			clientv3.Compare(clientv3.ModRevision(key), "=", condition.ModRevision),
-		)
-		failureReads = append(failureReads, clientv3.OpGet(key))
+		comparison := clientv3.Compare(clientv3.ModRevision(key), "=", condition.ModRevision)
+		failureRead := clientv3.OpGet(key)
+		if condition.Prefix {
+			if condition.ModRevision != 0 {
+				return TransactionResult{}, errs.New(
+					errs.KindValidationFailed,
+					"etcd prefix transaction condition requires a zero revision",
+				)
+			}
+			end := clientv3.GetPrefixRangeEnd(key)
+			comparison = comparison.WithRange(end)
+			failureRead = clientv3.OpGet(key, clientv3.WithRange(end), clientv3.WithLimit(1))
+		}
+		comparisons = append(comparisons, comparison)
+		failureReads = append(failureReads, failureRead)
 		physicalConditions = append(physicalConditions, key)
 	}
 
@@ -502,7 +514,7 @@ func (s *store) Transact(
 	}
 	result := TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}
 	if !response.Succeeded {
-		reads, err := transactionFailureReads(response, physicalConditions, s.root)
+		reads, err := transactionFailureReads(response, conditions, physicalConditions, s.root)
 		if err != nil {
 			return TransactionResult{}, err
 		}
@@ -523,16 +535,22 @@ func transactionRequest(
 		Failure: make([]*etcdserverpb.RequestOp, 0, len(conditions)),
 	}
 	for index, condition := range conditions {
-		request.Compare = append(request.Compare, &etcdserverpb.Compare{
+		comparison := &etcdserverpb.Compare{
 			Result:      etcdserverpb.Compare_EQUAL,
 			Target:      etcdserverpb.Compare_MOD,
 			Key:         []byte(physicalConditions[index]),
 			TargetUnion: &etcdserverpb.Compare_ModRevision{ModRevision: condition.ModRevision},
-		})
+		}
+		failure := &etcdserverpb.RangeRequest{Key: []byte(physicalConditions[index])}
+		if condition.Prefix {
+			end := []byte(clientv3.GetPrefixRangeEnd(physicalConditions[index]))
+			comparison.RangeEnd = end
+			failure.RangeEnd = end
+			failure.Limit = 1
+		}
+		request.Compare = append(request.Compare, comparison)
 		request.Failure = append(request.Failure, &etcdserverpb.RequestOp{
-			Request: &etcdserverpb.RequestOp_RequestRange{RequestRange: &etcdserverpb.RangeRequest{
-				Key: []byte(physicalConditions[index]),
-			}},
+			Request: &etcdserverpb.RequestOp_RequestRange{RequestRange: failure},
 		})
 	}
 	for index, mutation := range mutations {
@@ -558,23 +576,28 @@ func transactionRequest(
 
 func transactionFailureReads(
 	response *clientv3.TxnResponse,
+	conditions []Condition,
 	physicalKeys []string,
 	root string,
 ) ([]*KeyValue, error) {
-	if len(response.Responses) != len(physicalKeys) {
+	if len(response.Responses) != len(physicalKeys) || len(conditions) != len(physicalKeys) {
 		return nil, errs.New(errs.KindInternal, "etcd transaction failure reads are incomplete")
 	}
 	values := make([]*KeyValue, len(physicalKeys))
 	for index, operation := range response.Responses {
 		rangeResponse := operation.GetResponseRange()
-		if rangeResponse == nil || rangeResponse.More || len(rangeResponse.Kvs) > 1 {
+		if rangeResponse == nil || (!conditions[index].Prefix && rangeResponse.More) || len(rangeResponse.Kvs) > 1 {
 			return nil, errs.New(errs.KindInternal, "etcd transaction failure read is invalid")
 		}
 		if len(rangeResponse.Kvs) == 0 {
 			continue
 		}
 		entry := rangeResponse.Kvs[0]
-		if string(entry.Key) != physicalKeys[index] || entry.ModRevision <= 0 {
+		matches := string(entry.Key) == physicalKeys[index]
+		if conditions[index].Prefix {
+			matches = strings.HasPrefix(string(entry.Key), physicalKeys[index])
+		}
+		if !matches || entry.ModRevision <= 0 {
 			return nil, errs.New(errs.KindInternal, "etcd transaction failure read is inconsistent")
 		}
 		values[index] = &KeyValue{

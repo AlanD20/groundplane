@@ -23,7 +23,7 @@ func TestRouteRepositoryBeginsRemovalInOneTransaction(t *testing.T) {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 	projection := routeDeletionTestProjection(t, store, current)
-	task, marker, tombstone, intent := routeDeletionTestRecords(t, current, projection)
+	task, marker, tombstone, intent := routeDeletionTestRecords(t, project, environment, current, projection)
 	result, err := repository.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, current, &projection, tombstone, intent, task, marker,
 	)
@@ -150,7 +150,7 @@ func TestRouteRepositoryRejectsRemovalDuringEnvironmentReconciliation(t *testing
 	if err != nil || !fenceResult.Succeeded {
 		t.Fatalf("seed Environment reconciliation fence = %#v/%v", fenceResult, err)
 	}
-	task, marker, tombstone, intent := routeDeletionTestRecords(t, current, projection)
+	task, marker, tombstone, intent := routeDeletionTestRecords(t, project, environment, current, projection)
 	result, err := repository.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, current, &projection, tombstone, intent, task, marker,
 	)
@@ -184,7 +184,7 @@ func TestRouteRemovalFailureRetryAndAbortPreserveAppliedState(t *testing.T) {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
 	projection := routeDeletionTestProjection(t, store, current)
-	task, marker, tombstone, intent := routeDeletionTestRecords(t, current, projection)
+	task, marker, tombstone, intent := routeDeletionTestRecords(t, project, environment, current, projection)
 	if _, err := repository.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, current, &projection, tombstone, intent, task, marker,
 	); err != nil {
@@ -214,7 +214,7 @@ func TestRouteRemovalFailureRetryAndAbortPreserveAppliedState(t *testing.T) {
 		task.CreatedAt.Add(3*time.Second),
 		"route-retry-key-0001",
 	)
-	result, err := tasks.RetryTask(ctx, task.ID, retryID, retryMarker)
+	result, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -303,12 +303,15 @@ func routeDeletionTestProjection(
 
 func routeDeletionTestRecords(
 	t *testing.T,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
 	route Versioned[RouteRecord],
 	projection Versioned[EnvironmentComposeProjection],
 ) (TaskRecord, IdempotencyMarker, DeletionTombstoneRecord, RouteRemovalIntent) {
 	t.Helper()
 	createdAt := serviceRecordTestTime().Add(2 * time.Hour)
 	task := validTaskRecord(createdAt)
+	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
 	task.ID = ids.NewAt(ids.KindTask, createdAt, 1130)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 1131)
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 1132)

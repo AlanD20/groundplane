@@ -48,8 +48,8 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	if err := validateEntryRemovalTaskOwner(source, intent); err != nil {
 		return routeTaskChange{}, err
 	}
-	if source.TerminalAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
-		!intent.TerminalAt.Equal(*source.TerminalAt) || retry.RetryOf != source.ID ||
+	if source.FinishedAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
+		!intent.TerminalAt.Equal(*source.FinishedAt) || retry.RetryOf != source.ID ||
 		retry.Executor != source.Executor || retry.Type != source.Type || retry.Target != source.Target ||
 		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash ||
 		retry.RenderGeneration != source.RenderGeneration || !maps.Equal(retry.Params, source.Params) {
@@ -405,8 +405,8 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 	if err := validateEntryRemovalTaskOwner(task, intent); err != nil {
 		return err
 	}
-	if intent.Status != terminalStatus || intent.TerminalAt == nil || task.TerminalAt == nil ||
-		!intent.TerminalAt.Equal(*task.TerminalAt) {
+	if intent.Status != terminalStatus || intent.TerminalAt == nil || task.FinishedAt == nil ||
+		!intent.TerminalAt.Equal(*task.FinishedAt) {
 		return errs.New(errs.KindStateConflict, "Entry removal intent does not match terminal Task")
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{

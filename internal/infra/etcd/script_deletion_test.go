@@ -31,7 +31,7 @@ func TestScriptRepositoryRemovalFinalizesOnlyAfterSuccessfulTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateScript(): %v", err)
 	}
-	task, marker, tombstone := scriptDeletionTestRecords(t, current)
+	task, marker, tombstone := scriptDeletionTestRecords(t, project, environment, current)
 	result, err := repository.BeginScriptDeletionWithTask(
 		ctx, environment, project, target, current, tombstone, task, marker,
 	)
@@ -92,7 +92,7 @@ func TestScriptRemovalAbortRetainsTargetAndSupportsReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateScript(): %v", err)
 	}
-	task, marker, tombstone := scriptDeletionTestRecords(t, current)
+	task, marker, tombstone := scriptDeletionTestRecords(t, project, environment, current)
 	if _, err := repository.BeginScriptDeletionWithTask(
 		ctx, environment, project, target, current, tombstone, task, marker,
 	); err != nil {
@@ -120,11 +120,14 @@ func TestScriptRemovalAbortRetainsTargetAndSupportsReplay(t *testing.T) {
 
 func scriptDeletionTestRecords(
 	t *testing.T,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
 	script Versioned[ScriptRecord],
 ) (TaskRecord, IdempotencyMarker, DeletionTombstoneRecord) {
 	t.Helper()
 	createdAt := serviceRecordTestTime().Add(4 * time.Hour)
 	task := validTaskRecord(createdAt)
+	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
 	task.ID = ids.NewAt(ids.KindTask, createdAt, 1700)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 1701)
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 1702)
