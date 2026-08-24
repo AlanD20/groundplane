@@ -92,6 +92,17 @@ type MaterializationResolver interface {
 	) (io.ReadCloser, error)
 }
 
+// BackupSecretSlotResolver returns task-owned transient plaintext slots. The
+// channel takes ownership of every returned buffer and clears it on every path.
+type BackupSecretSlotResolver interface {
+	ResolveBackupSecretSlots(
+		context.Context,
+		etcd.TaskRecord,
+		*agentpb.ExecutionPlan,
+		*agentpb.ExecutionStep,
+	) (map[agentpb.BackupSecretSlotPurpose][]byte, error)
+}
+
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
@@ -100,6 +111,7 @@ type Server struct {
 	tasks     TaskStore
 	plans     PlanResolver
 	materials MaterializationResolver
+	secrets   BackupSecretSlotResolver
 	now       func() time.Time
 }
 
@@ -118,11 +130,30 @@ func NewWithMaterializations(
 	plans PlanResolver,
 	materials MaterializationResolver,
 ) *Server {
+	return NewWithPrivateTransfers(auth, sessions, tasks, plans, materials, nil)
+}
+
+// NewWithPrivateTransfers returns a server with both transient plaintext
+// resolvers used by the sole authenticated stream send loop.
+func NewWithPrivateTransfers(
+	auth Authenticator,
+	sessions *Registry,
+	tasks TaskStore,
+	plans PlanResolver,
+	materials MaterializationResolver,
+	secrets BackupSecretSlotResolver,
+) *Server {
 	if sessions == nil {
 		sessions = NewRegistry()
 	}
 	return &Server{
-		auth: auth, sessions: sessions, tasks: tasks, plans: plans, materials: materials, now: time.Now,
+		auth:      auth,
+		sessions:  sessions,
+		tasks:     tasks,
+		plans:     plans,
+		materials: materials,
+		secrets:   secrets,
+		now:       time.Now,
 	}
 }
 
@@ -458,6 +489,13 @@ func (s *Server) sendTaskAssignment(
 		return err
 	}
 	for _, step := range assignment.GetPlan().GetSteps() {
+		if step.GetBackupSourceCapture() != nil {
+			if err := s.sendBackupSecretSlots(
+				stream.Context(), stream, claim.Task.Record, assignment.GetAssignmentId(), assignment.GetPlan(), step,
+			); err != nil {
+				return err
+			}
+		}
 		if step.GetMaterializeFile() == nil {
 			continue
 		}
@@ -646,6 +684,8 @@ func operationMatchesTask(operation agentpb.PlanOperation, taskType etcd.TaskTyp
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	case etcd.TaskUpdate:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	case etcd.TaskBackup:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP
 	default:
 		return false
 	}

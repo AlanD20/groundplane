@@ -95,6 +95,7 @@ type WorkerPool struct {
 	materializer           *MaterializationRuntime
 	adapter                *AdapterRuntime
 	materializations       *materializationInbox
+	backupSecrets          *backupSecretSlotInbox
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -112,6 +113,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		outputs:          make(chan WorkerOutput, size),
 		reservations:     make(map[string]*taskReservation, size),
 		materializations: newMaterializationInbox(),
+		backupSecrets:    newBackupSecretSlotInbox(),
 		adapter:          NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
@@ -340,6 +342,8 @@ func (p *WorkerPool) emitProgress(runCtx context.Context, progress TaskProgress)
 }
 
 func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
+	p.backupSecrets.Release(result.TaskID)
+
 	owned := result
 	if result.Compose != nil {
 		owned.Compose = proto.Clone(result.Compose).(*agentpb.ComposeTaskResult)
@@ -367,6 +371,7 @@ func (p *WorkerPool) stop() {
 		reservation.cancel()
 	}
 	p.mu.Unlock()
+	p.backupSecrets.ReleaseAll()
 }
 
 func (p *WorkerPool) releaseQueued(runCtx context.Context) {
@@ -415,6 +420,7 @@ func (p *WorkerPool) Abort(ctx context.Context, taskID string, assignmentID stri
 	reservation.cancel()
 	p.mu.Unlock()
 	p.materializations.Release(taskID)
+	p.backupSecrets.Release(taskID)
 	return nil
 }
 
@@ -423,6 +429,26 @@ func (p *WorkerPool) AcceptMaterializationTransfer(
 	transfer *agentpb.MaterializationTransfer,
 ) error {
 	return p.materializations.Accept(ctx, transfer)
+}
+
+func (p *WorkerPool) AcceptBackupSecretSlotTransfer(
+	ctx context.Context,
+	transfer *agentpb.BackupSecretSlotTransfer,
+) error {
+	return p.backupSecrets.Accept(ctx, transfer)
+}
+
+// ConsumeBackupSecretSlot gives one owned transient slot to a callback exactly
+// once and clears it immediately when the callback returns.
+func (p *WorkerPool) ConsumeBackupSecretSlot(
+	ctx context.Context,
+	taskID string,
+	assignmentID string,
+	stepID string,
+	purpose agentpb.BackupSecretSlotPurpose,
+	consume func([]byte) error,
+) error {
+	return p.backupSecrets.Consume(ctx, taskID, assignmentID, stepID, purpose, consume)
 }
 
 // Submit reserves capacity without blocking the sole receive/control loop.
@@ -455,6 +481,10 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	if err := p.materializations.Register(owned); err != nil {
 		return err
 	}
+	if err := p.backupSecrets.Register(owned); err != nil {
+		p.materializations.Release(owned.TaskID)
+		return err
+	}
 	taskCtx, cancel := context.WithTimeout(ctx, owned.Timeout)
 	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel}
 	p.reservations[owned.TaskID] = reservation
@@ -465,6 +495,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 		delete(p.reservations, owned.TaskID)
 		cancel()
 		p.materializations.Release(owned.TaskID)
+		p.backupSecrets.Release(owned.TaskID)
 		return errs.New(errs.KindInternal, "agent: worker queue reservation is inconsistent")
 	}
 }
@@ -520,7 +551,8 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 		*agentpb.ExecutionStep_EnvironmentDirectoryCreate,
 		*agentpb.ExecutionStep_EnvironmentDirectoryRemove,
 		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,
-		*agentpb.ExecutionStep_MaterializeFile, *agentpb.ExecutionStep_AdapterProcedure:
+		*agentpb.ExecutionStep_MaterializeFile, *agentpb.ExecutionStep_AdapterProcedure,
+		*agentpb.ExecutionStep_BackupSourceCapture:
 		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
 	default:
 		return errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")

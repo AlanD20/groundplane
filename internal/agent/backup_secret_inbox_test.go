@@ -1,0 +1,443 @@
+package agent
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"sync"
+	"testing"
+
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+)
+
+// Rationale: the inbox must assemble only the exact assignment slot, transfer
+// ownership to one callback, and clear its buffer immediately after consume.
+func TestBackupSecretInboxConsumesOnceAndClears(t *testing.T) {
+	inbox := newBackupSecretSlotInbox()
+	assignment := agentBackupSecretAssignment(t)
+	if err := inbox.Register(assignment); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	frames := agentBackupSecretFrames(assignment, []byte("access"))
+	for _, frame := range frames {
+		if err := inbox.Accept(context.Background(), frame); err != nil {
+			t.Fatalf("Accept() error = %v", err)
+		}
+	}
+	slot := inbox.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY]
+	alias := slot.content
+	if err := inbox.Consume(
+		context.Background(), assignment.TaskID, assignment.AssignmentID, workerTestStepID,
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+		func(content []byte) error {
+			if !bytes.Equal(content, []byte("access")) {
+				t.Fatalf("consumed content = %q", content)
+			}
+			return nil
+		},
+	); err != nil {
+		t.Fatalf("Consume() error = %v", err)
+	}
+	if !agentAllZero(alias) {
+		t.Fatal("Consume() retained slot bytes")
+	}
+	if err := inbox.Consume(
+		context.Background(), assignment.TaskID, assignment.AssignmentID, workerTestStepID,
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+		func([]byte) error { return nil },
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Consume(second) error = %v, want state conflict", err)
+	}
+}
+
+// Rationale: the gRPC receive object is untrusted transient ownership; the
+// Client must clear it after the inbox has copied the accepted chunk.
+func TestClientClearsBackupSecretTransferChunk(t *testing.T) {
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	assignment := agentBackupSecretAssignment(t)
+	if err := pool.backupSecrets.Register(assignment); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	client := &Client{pool: pool}
+	frames := agentBackupSecretFrames(assignment, []byte("access"))
+	if _, err := client.handleControllerMessage(context.Background(), &agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_BackupSecretSlotTransfer{BackupSecretSlotTransfer: frames[0]},
+	}); err != nil {
+		t.Fatalf("handleControllerMessage(header) error = %v", err)
+	}
+	chunkAlias := frames[1].GetChunk().Content
+	if _, err := client.handleControllerMessage(context.Background(), &agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_BackupSecretSlotTransfer{BackupSecretSlotTransfer: frames[1]},
+	}); err != nil {
+		t.Fatalf("handleControllerMessage(chunk) error = %v", err)
+	}
+	if frames[1].GetChunk().Content != nil || !agentAllZero(chunkAlias) {
+		t.Fatal("Client retained received Backup secret chunk")
+	}
+}
+
+// Rationale: stale assignment traffic must not mutate the currently reserved
+// slot or close its ready signal.
+func TestBackupSecretInboxRejectsStaleAssignment(t *testing.T) {
+	inbox := newBackupSecretSlotInbox()
+	assignment := agentBackupSecretAssignment(t)
+	if err := inbox.Register(assignment); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	frame := agentBackupSecretFrames(assignment, []byte("access"))[0]
+	frame.AssignmentId = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	if err := inbox.Accept(context.Background(), frame); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Accept(stale assignment) error = %v, want state conflict", err)
+	}
+}
+
+// Rationale: abort and stream teardown share reservation ownership and must
+// synchronously zero every partially or fully received slot.
+func TestWorkerPoolClearsBackupSecretsOnAbortAndStop(t *testing.T) {
+	for _, stop := range []bool{false, true} {
+		name := "abort"
+		if stop {
+			name = "stop"
+		}
+		t.Run(name, func(t *testing.T) {
+			pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+			assignment := agentBackupSecretAssignment(t)
+			if err := pool.Submit(context.Background(), assignment); err != nil {
+				t.Fatalf("Submit() error = %v", err)
+			}
+			frames := agentBackupSecretFrames(assignment, []byte("access"))
+			for _, frame := range frames {
+				if err := pool.AcceptBackupSecretSlotTransfer(context.Background(), frame); err != nil {
+					t.Fatalf("AcceptBackupSecretSlotTransfer() error = %v", err)
+				}
+			}
+			alias := pool.backupSecrets.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+			if stop {
+				pool.stop()
+			} else if err := pool.Abort(context.Background(), assignment.TaskID, assignment.AssignmentID); err != nil {
+				t.Fatalf("Abort() error = %v", err)
+			}
+			if !agentAllZero(alias) || len(pool.backupSecrets.tasks) != 0 {
+				t.Fatal("lifecycle release retained Backup secret bytes")
+			}
+		})
+	}
+}
+
+// Rationale: terminal acknowledgement becomes publishable as soon as the
+// WorkerOutput is visible, so every slot must already be zero at that point.
+func TestWorkerPoolClearsBackupSecretsBeforeTerminalOutput(t *testing.T) {
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	assignment := agentBackupSecretAssignment(t)
+	if err := pool.Submit(context.Background(), assignment); err != nil {
+		t.Fatalf("Submit() error = %v", err)
+	}
+	for _, frame := range agentBackupSecretFrames(assignment, []byte("access")) {
+		if err := pool.AcceptBackupSecretSlotTransfer(context.Background(), frame); err != nil {
+			t.Fatalf("AcceptBackupSecretSlotTransfer() error = %v", err)
+		}
+	}
+	alias := pool.backupSecrets.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+	pool.mu.Lock()
+	reservation := pool.reservations[assignment.TaskID]
+	pool.mu.Unlock()
+	if reservation == nil {
+		t.Fatal("reservation = nil")
+	}
+	done := make(chan struct{})
+	go func() {
+		pool.complete(context.Background(), reservation, TaskResult{
+			AssignmentID: assignment.AssignmentID,
+			TaskID:       assignment.TaskID,
+			PlanHash:     hashForPlan(assignment.Plan),
+			Terminal:     TaskTerminalFailed,
+		})
+		close(done)
+	}()
+	output := <-pool.Outputs()
+	if output.Result == nil {
+		t.Fatal("terminal WorkerOutput result = nil")
+	}
+	if !agentAllZero(alias) {
+		t.Fatal("terminal WorkerOutput was visible before Backup secret zeroization")
+	}
+	<-done
+}
+
+// Rationale: abort and stream teardown must wake a blocked consumer with a
+// lifecycle conflict, rather than strand it or classify cancellation as an
+// internal corruption.
+func TestWorkerPoolBlockedBackupSecretConsumeRacingAbortAndStop(t *testing.T) {
+	for _, stop := range []bool{false, true} {
+		name := "abort"
+		if stop {
+			name = "stop"
+		}
+		t.Run(name, func(t *testing.T) {
+			pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+			assignment := agentBackupSecretAssignment(t)
+			if err := pool.Submit(context.Background(), assignment); err != nil {
+				t.Fatalf("Submit() error = %v", err)
+			}
+			frames := agentBackupSecretFrames(assignment, []byte("access"))
+			for _, frame := range frames[:2] {
+				if err := pool.AcceptBackupSecretSlotTransfer(context.Background(), frame); err != nil {
+					t.Fatalf("AcceptBackupSecretSlotTransfer() error = %v", err)
+				}
+			}
+			alias := pool.backupSecrets.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+			consumeContext := newObservedDoneContext()
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- pool.ConsumeBackupSecretSlot(
+					consumeContext, assignment.TaskID, assignment.AssignmentID, workerTestStepID,
+					agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+					func([]byte) error { return nil },
+				)
+			}()
+			<-consumeContext.observed
+			if stop {
+				pool.stop()
+			} else if err := pool.Abort(context.Background(), assignment.TaskID, assignment.AssignmentID); err != nil {
+				t.Fatalf("Abort() error = %v", err)
+			}
+			close(consumeContext.proceed)
+			if err := <-errCh; !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+				t.Fatalf("ConsumeBackupSecretSlot() error = %v, want state conflict", err)
+			}
+			if !agentAllZero(alias) {
+				t.Fatal("lifecycle release retained blocked consumer bytes")
+			}
+		})
+	}
+}
+
+// Rationale: a complete slot can be selected by Consume while lifecycle
+// release wins the following lock. That cancellation is a state conflict, not
+// an impossible internal state.
+func TestBackupSecretInboxCompleteReleaseRacingConsumeIsStateConflict(t *testing.T) {
+	inbox := newBackupSecretSlotInbox()
+	assignment := agentBackupSecretAssignment(t)
+	if err := inbox.Register(assignment); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	for _, frame := range agentBackupSecretFrames(assignment, []byte("access")) {
+		if err := inbox.Accept(context.Background(), frame); err != nil {
+			t.Fatalf("Accept() error = %v", err)
+		}
+	}
+	alias := inbox.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+	consumeContext := newObservedDoneContext()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- inbox.Consume(
+			consumeContext, assignment.TaskID, assignment.AssignmentID, workerTestStepID,
+			agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+			func([]byte) error { return nil },
+		)
+	}()
+	<-consumeContext.observed
+	inbox.Release(assignment.TaskID)
+	close(consumeContext.proceed)
+	if err := <-errCh; !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Consume() error = %v, want state conflict", err)
+	}
+	if !agentAllZero(alias) {
+		t.Fatal("release retained complete slot bytes")
+	}
+}
+
+// Rationale: every record transition is closed. Malformed, duplicate, extra,
+// and incomplete streams fail closed and release any accumulated plaintext.
+func TestBackupSecretInboxRejectsInvalidFrameSequences(t *testing.T) {
+	t.Run("malformed header", func(t *testing.T) {
+		inbox, assignment := registeredBackupSecretInbox(t)
+		frame := agentBackupSecretFrames(assignment, []byte("access"))[0]
+		frame.GetHeader().TotalBytes = 0
+		if err := inbox.Accept(context.Background(), frame); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Fatalf("Accept(malformed header) error = %v, want internal", err)
+		}
+	})
+
+	t.Run("duplicate header", func(t *testing.T) {
+		inbox, assignment := registeredBackupSecretInbox(t)
+		frame := agentBackupSecretFrames(assignment, []byte("access"))[0]
+		if err := inbox.Accept(context.Background(), frame); err != nil {
+			t.Fatalf("Accept(header) error = %v", err)
+		}
+		if err := inbox.Accept(context.Background(), frame); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Fatalf("Accept(duplicate header) error = %v, want internal", err)
+		}
+	})
+
+	t.Run("extra after end", func(t *testing.T) {
+		inbox, assignment := registeredBackupSecretInbox(t)
+		frames := agentBackupSecretFrames(assignment, []byte("access"))
+		for _, frame := range frames {
+			if err := inbox.Accept(context.Background(), frame); err != nil {
+				t.Fatalf("Accept() error = %v", err)
+			}
+		}
+		alias := inbox.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+		if err := inbox.Accept(context.Background(), frames[2]); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Fatalf("Accept(extra end) error = %v, want internal", err)
+		}
+		if !agentAllZero(alias) {
+			t.Fatal("extra frame failure retained slot bytes")
+		}
+	})
+
+	t.Run("missing end", func(t *testing.T) {
+		inbox, assignment := registeredBackupSecretInbox(t)
+		frames := agentBackupSecretFrames(assignment, []byte("access"))
+		for _, frame := range frames[:2] {
+			if err := inbox.Accept(context.Background(), frame); err != nil {
+				t.Fatalf("Accept() error = %v", err)
+			}
+		}
+		alias := inbox.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+		inbox.Release(assignment.TaskID)
+		if !agentAllZero(alias) {
+			t.Fatal("missing end release retained slot bytes")
+		}
+	})
+}
+
+// Rationale: stream loss destroys the old inbox. Redispatch of the identical
+// durable claim on a fresh connection accepts only freshly transferred bytes.
+func TestWorkerPoolBackupSecretInboxResetsAcrossReconnectRedispatch(t *testing.T) {
+	assignment := agentBackupSecretAssignment(t)
+	oldPool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	if err := oldPool.Submit(context.Background(), assignment); err != nil {
+		t.Fatalf("old Submit() error = %v", err)
+	}
+	for _, frame := range agentBackupSecretFrames(assignment, []byte("old-access")) {
+		if err := oldPool.AcceptBackupSecretSlotTransfer(context.Background(), frame); err != nil {
+			t.Fatalf("old AcceptBackupSecretSlotTransfer() error = %v", err)
+		}
+	}
+	oldAlias := oldPool.backupSecrets.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+	oldPool.stop()
+	if !agentAllZero(oldAlias) {
+		t.Fatal("stream teardown retained old slot bytes")
+	}
+
+	newPool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	if err := newPool.Submit(context.Background(), assignment); err != nil {
+		t.Fatalf("redispatch Submit() error = %v", err)
+	}
+	for _, frame := range agentBackupSecretFrames(assignment, []byte("fresh-access")) {
+		if err := newPool.AcceptBackupSecretSlotTransfer(context.Background(), frame); err != nil {
+			t.Fatalf("new AcceptBackupSecretSlotTransfer() error = %v", err)
+		}
+	}
+	if err := newPool.ConsumeBackupSecretSlot(
+		context.Background(), assignment.TaskID, assignment.AssignmentID, workerTestStepID,
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+		func(content []byte) error {
+			if !bytes.Equal(content, []byte("fresh-access")) {
+				t.Fatalf("redispatched content = %q", content)
+			}
+			return nil
+		},
+	); err != nil {
+		t.Fatalf("ConsumeBackupSecretSlot() error = %v", err)
+	}
+	newPool.stop()
+}
+
+func registeredBackupSecretInbox(t *testing.T) (*backupSecretSlotInbox, Assignment) {
+	t.Helper()
+	inbox := newBackupSecretSlotInbox()
+	assignment := agentBackupSecretAssignment(t)
+	if err := inbox.Register(assignment); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	return inbox, assignment
+}
+
+type observedDoneContext struct {
+	context.Context
+	observed chan struct{}
+	proceed  chan struct{}
+	once     sync.Once
+}
+
+func newObservedDoneContext() *observedDoneContext {
+	return &observedDoneContext{
+		Context:  context.Background(),
+		observed: make(chan struct{}),
+		proceed:  make(chan struct{}),
+	}
+}
+
+func (ctx *observedDoneContext) Done() <-chan struct{} {
+	ctx.once.Do(func() {
+		close(ctx.observed)
+		<-ctx.proceed
+	})
+	return nil
+}
+
+func agentBackupSecretAssignment(t *testing.T) Assignment {
+	t.Helper()
+	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
+		Schema: executionplan.SchemaVersion, PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP,
+		TargetId:  "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: workerTestStepID, TimeoutSeconds: 60,
+			Payload: &agentpb.ExecutionStep_BackupSourceCapture{BackupSourceCapture: &agentpb.BackupSourceCapture{
+				SourceId: "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV", SourceRevision: 2,
+				TargetId: "att_01ARZ3NDEKTSV4RRFFQ69G5FAV", TargetRevision: 3,
+				PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", ConnectorId: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				ConnectorRevision: 4,
+				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
+				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
+				Source: &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
+					BackingServiceId: "bks_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 5,
+					Database: "application", Role: "application_owner",
+				}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Seal(Backup) error = %v", err)
+	}
+	return Assignment{
+		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
+		OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV", Plan: plan, Timeout: 120 * 1e9,
+	}
+}
+
+func agentBackupSecretFrames(assignment Assignment, content []byte) []*agentpb.BackupSecretSlotTransfer {
+	purpose := agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY
+	identity := func() *agentpb.BackupSecretSlotTransfer {
+		return &agentpb.BackupSecretSlotTransfer{
+			TaskId: assignment.TaskID, AssignmentId: assignment.AssignmentID,
+			StepId: workerTestStepID, Purpose: purpose,
+		}
+	}
+	header := identity()
+	header.Record = &agentpb.BackupSecretSlotTransfer_Header{
+		Header: &agentpb.BackupSecretSlotHeader{TotalBytes: uint64(len(content)), ChunkCount: 1},
+	}
+	chunk := identity()
+	chunk.Record = &agentpb.BackupSecretSlotTransfer_Chunk{
+		Chunk: &agentpb.BackupSecretSlotChunk{Sequence: 1, Content: append([]byte(nil), content...)},
+	}
+	end := identity()
+	end.Record = &agentpb.BackupSecretSlotTransfer_End{End: &agentpb.BackupSecretSlotEnd{ChunkCount: 1}}
+	return []*agentpb.BackupSecretSlotTransfer{header, chunk, end}
+}
+
+func agentAllZero(value []byte) bool {
+	for _, current := range value {
+		if current != 0 {
+			return false
+		}
+	}
+	return true
+}

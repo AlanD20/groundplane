@@ -340,6 +340,16 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 	if transfer := message.GetMaterializationTransfer(); transfer != nil {
 		return false, c.pool.AcceptMaterializationTransfer(ctx, transfer)
 	}
+	if transfer := message.GetBackupSecretSlotTransfer(); transfer != nil {
+		chunk := transfer.GetChunk()
+		if chunk != nil {
+			defer func() {
+				clear(chunk.Content)
+				chunk.Content = nil
+			}()
+		}
+		return false, c.pool.AcceptBackupSecretSlotTransfer(ctx, transfer)
+	}
 	if message.GetShutdown() != nil {
 		return true, nil
 	}
