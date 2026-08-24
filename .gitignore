@@ -4,3 +4,4 @@ console/dist/
 /coverage.out
 /.go-*
 /.tmp*
+/.codex*
