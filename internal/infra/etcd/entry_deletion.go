@@ -70,10 +70,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		)
 	}
 
-	owner, err := repository.entryOwnerAtCurrentRevision(ctx, entry)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
 		task.IdempotencyKey = marker.Locator.Key
@@ -107,24 +103,56 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	defer clear(reference)
 
 	tombstoneKey := deletionTombstoneKey(string(DeletionTargetEntry), entry.Record.Entry.ID)
+	domainKeys := []string{
+		taskKey(task.ID),
+		taskOperationIndexKey(task.OperationID, task.ID),
+		taskActiveOperationKey(task.OperationID),
+		taskQueueKey(task.Executor, task.ID),
+		entryRecordKey(entry.Record.Entry.ID),
+		entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID),
+		entryRemovalIntentKey(task.ID),
+		tombstoneKey,
+	}
+	if projection != nil {
+		domainKeys = append(
+			domainKeys,
+			environmentComposeProjectionKey(environment.Record.ID),
+			componentTaskActiveEnvironmentKey(environment.Record.ID),
+		)
+	}
+	if cloudflare == nil {
+		domainKeys = append(
+			domainKeys,
+			componentEnvironmentKindKey(environment.Record.ID, core.ComponentKindEdgeCloudflare),
+		)
+	} else {
+		domainKeys = append(domainKeys, componentKey(cloudflare.Record.Desired.ID))
+	}
+	fence, ownerRevision, err := repository.loadEntryMutationFence(
+		ctx,
+		environment,
+		project,
+		domainKeys,
+		5,
+		entry.Record.Entry.ID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(epochMutation.Value)
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: entryRecordKey(entry.Record.Entry.ID), ModRevision: entry.Revision},
-		{Key: entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID), ModRevision: owner.ModRevision},
+		{Key: entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID), ModRevision: ownerRevision},
 		{Key: entryRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{
-			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
-		})
 	}
 	if projection != nil {
 		conditions = append(conditions,
@@ -141,6 +169,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			Key: componentKey(cloudflare.Record.Desired.ID), ModRevision: cloudflare.Revision,
 		})
 	}
+	conditions = append(conditions, fence.transactionConditions()...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
@@ -148,13 +177,19 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{Type: MutationPut, Key: entryRemovalIntentKey(task.ID), Value: intentValue},
+		epochMutation,
 	}
 	if projection != nil {
 		mutations = append(mutations, Mutation{
 			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		})
 	}
-	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
+	taskTenant, err := loadEntryTaskInitiationTenantAtRevision(
+		ctx,
+		repository.store,
+		project,
+		fence.readAtRevision(),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -168,7 +203,12 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		conditions,
 		mutations,
 		classifyEntryDeletionStartConflict(
-			environment, project, entry, projection, cloudflare, owner, task.OperationID,
+			entry,
+			projection,
+			cloudflare,
+			ownerRevision,
+			task.OperationID,
+			fence,
 		),
 	)
 	if err != nil {
@@ -227,23 +267,20 @@ func validateEntryDeletionProjection(
 }
 
 func classifyEntryDeletionStartConflict(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	entry Versioned[EntryRecord],
 	projection *Versioned[EnvironmentComposeProjection],
 	cloudflare *Versioned[ComponentRecord],
-	owner *KeyValue,
+	ownerRevision int64,
 	operationID string,
+	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expected := 12
-		if project.Record.TenantID != "" {
-			expected++
-		}
+		domainCount := 8
 		if projection != nil {
-			expected += 2
+			domainCount += 2
 		}
-		expected++
+		domainCount++
+		expected := domainCount + len(fence.conditions)
 		if len(values) != expected {
 			return errs.New(errs.KindInternal, "Entry deletion compare evidence is incomplete")
 		}
@@ -273,38 +310,16 @@ func classifyEntryDeletionStartConflict(
 		if values[5] == nil || string(values[5].Value) != entry.Record.Entry.ID {
 			return errs.New(errs.KindInternal, "Entry owner index changed or is corrupt")
 		}
-		if values[5].ModRevision != owner.ModRevision {
+		if values[5].ModRevision != ownerRevision {
 			return stateConflict("entry", entry.Record.Entry.ID)
 		}
 		if values[6] != nil || values[7] != nil {
 			return errs.New(errs.KindResourceInUse, "Entry deletion is already in progress")
 		}
-		if values[8] == nil {
-			return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
-		}
-		if values[8].ModRevision != environment.Revision {
-			return stateConflict("environment", environment.Record.ID)
-		}
-		if values[9] == nil {
-			return errs.New(errs.KindProjectNotFound, "project was not found")
-		}
-		if values[9].ModRevision != project.Revision {
-			return stateConflict("project", project.Record.ID)
-		}
-		position := 10
-		hierarchyFenceCount := 2
-		if project.Record.TenantID != "" {
-			hierarchyFenceCount++
-		}
-		for index := position; index < position+hierarchyFenceCount; index++ {
-			if values[index] != nil {
-				return errs.New(errs.KindResourceInUse, "Entry hierarchy deletion is in progress")
-			}
-		}
-		position += hierarchyFenceCount
+		position := 8
 		if projection != nil {
 			if values[position] == nil || values[position].ModRevision != projection.Revision {
-				return stateConflict("Environment projection", environment.Record.ID)
+				return stateConflict("Environment projection", entry.Record.EnvironmentID)
 			}
 			position++
 			if values[position] != nil {
@@ -314,11 +329,46 @@ func classifyEntryDeletionStartConflict(
 		}
 		if cloudflare == nil {
 			if values[position] != nil {
-				return stateConflict("Cloudflare Component", environment.Record.ID)
+				return stateConflict("Cloudflare Component", entry.Record.EnvironmentID)
 			}
 		} else if values[position] == nil || values[position].ModRevision != cloudflare.Revision {
 			return stateConflict("Cloudflare Component", cloudflare.Record.Desired.ID)
 		}
+		if conflict := fence.classifyCAS(values[domainCount:]); conflict != nil {
+			return conflict
+		}
 		return errs.New(errs.KindStateConflict, "Entry deletion state changed")
 	}
+}
+
+func loadEntryTaskInitiationTenantAtRevision(
+	ctx context.Context,
+	store hierarchyStore,
+	project Versioned[ProjectRecord],
+	readRevision int64,
+) (*Versioned[TenantRecord], error) {
+	if project.Record.Kind == ProjectKindBacking {
+		return nil, nil
+	}
+	if project.Record.Kind != ProjectKindTenant || ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
+		return nil, errs.New(errs.KindValidationFailed, "task initiation project ancestry is invalid")
+	}
+	result, err := store.GetMany(ctx, GetManyRequest{
+		Keys: []string{tenantKey(project.Record.TenantID)}, Revision: readRevision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.ReadRevision != readRevision || len(result.Values) != 1 || result.Values[0] == nil {
+		return nil, errs.New(errs.KindStateConflict, "task initiation tenant is missing")
+	}
+	defer clearKeyValues(result.Values)
+	tenant, err := decodeTenant(result.Values[0].Value)
+	if err != nil || result.Values[0].Key != tenantKey(project.Record.TenantID) ||
+		tenant.ID != project.Record.TenantID {
+		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")
+	}
+	return &Versioned[TenantRecord]{
+		Record: tenant, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
+	}, nil
 }

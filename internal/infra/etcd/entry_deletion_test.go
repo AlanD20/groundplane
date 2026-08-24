@@ -157,11 +157,14 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 		ctx,
 		agentID,
 		1,
-		task.ID,
+		task.ID, taskAssignmentIDForTest(t, tasks,
+
+			task.ID),
+
 		TaskStatusCompleted,
 		TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone},
-		terminalAt,
-	)
+		terminalAt)
+
 	if err != nil || terminal.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask() = %#v/%v", terminal, err)
 	}
@@ -247,6 +250,70 @@ func TestEntryDeletionFencesCloudflareTokenReference(t *testing.T) {
 	if classifyErr != nil || !isKind(conflict, errs.KindStateConflict) {
 		t.Fatalf("stale Component conflict/error = %v/%v", conflict, classifyErr)
 	}
+}
+
+// Rationale: Entry deletion Task publication is an ordinary Environment
+// mutation, and replaying its durable marker must not advance the epoch again.
+func TestEntryDeletionPublicationFencesLockAndKeepsReplayEpoch(t *testing.T) {
+	t.Parallel()
+	t.Run("held lock", func(t *testing.T) {
+		t.Parallel()
+		repository, store, environment, project, current, _ := entryDeletionTestState(t)
+		putEnvironmentMutationFenceTestLock(
+			t,
+			store,
+			environment.Record.ID,
+			environmentMutationFenceTestOwner(
+				time.Date(2026, 8, 24, 22, 0, 0, 0, time.UTC),
+				12400,
+			),
+		)
+		task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
+		if _, err := repository.BeginEntryDeletionWithTask(
+			context.Background(),
+			environment,
+			project,
+			current,
+			nil,
+			nil,
+			tombstone,
+			intent,
+			task,
+			marker,
+		); !isKind(err, errs.KindResourceInUse) {
+			t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
+		}
+	})
+	t.Run("replay", func(t *testing.T) {
+		t.Parallel()
+		repository, store, environment, project, current, _ := entryDeletionTestState(t)
+		task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
+		first, err := repository.BeginEntryDeletionWithTask(
+			context.Background(), environment, project, current, nil, nil, tombstone, intent, task, marker,
+		)
+		if err != nil {
+			t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
+		}
+		firstOutcome, _, firstConflict, firstClassifyErr := first.Classify()
+		if firstClassifyErr != nil || firstConflict != nil || firstOutcome != IdempotencyKnownApplied {
+			t.Fatalf("first = %v/%v/%v", firstOutcome, firstConflict, firstClassifyErr)
+		}
+		afterFirst := mustBackupPolicyMutationEpoch(t, store, environment.Record.ID)
+		replay, err := repository.BeginEntryDeletionWithTask(
+			context.Background(), environment, project, current, nil, nil, tombstone, intent, task, marker,
+		)
+		if err != nil {
+			t.Fatalf("BeginEntryDeletionWithTask(replay) error = %v", err)
+		}
+		outcome, _, conflict, classifyErr := replay.Classify()
+		if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting {
+			t.Fatalf("replay = %v/%v/%v", outcome, conflict, classifyErr)
+		}
+		afterReplay := mustBackupPolicyMutationEpoch(t, store, environment.Record.ID)
+		if afterReplay.Revision != afterFirst.Revision {
+			t.Fatalf("replay epoch = %d, want %d", afterReplay.Revision, afterFirst.Revision)
+		}
+	})
 }
 
 func entryDeletionTestState(

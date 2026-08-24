@@ -52,8 +52,31 @@ func (repository *EntryRepository) CreateEntry(
 		return Versioned[EntryRecord]{}, err
 	}
 	defer clear(generationValue)
-
-	conditions := entryWriteConditions(environment, project, record, generationKey, 0, 0)
+	fence, _, err := repository.loadEntryMutationFence(
+		ctx,
+		environment,
+		project,
+		[]string{
+			entryRecordKey(record.Entry.ID),
+			entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+			generationKey,
+			deletionTombstoneKey(string(DeletionTargetEntry), record.Entry.ID),
+		},
+		-1,
+		record.Entry.ID,
+	)
+	if err != nil {
+		return Versioned[EntryRecord]{}, err
+	}
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return Versioned[EntryRecord]{}, err
+	}
+	defer clear(epochMutation.Value)
+	conditions := append(
+		entryWriteConditions(record, generationKey, 0, 0),
+		fence.transactionConditions()...,
+	)
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationPut, Key: entryRecordKey(record.Entry.ID), Value: primaryValue},
 		{
@@ -61,13 +84,15 @@ func (repository *EntryRepository) CreateEntry(
 			Value: []byte(record.Entry.ID),
 		},
 		{Type: MutationPut, Key: generationKey, Value: generationValue},
+		epochMutation,
 	})
 	if err != nil {
 		return Versioned[EntryRecord]{}, err
 	}
 	if !result.Succeeded {
+		defer clearKeyValues(result.FailureReads)
 		return Versioned[EntryRecord]{}, classifyEntryWriteConflict(
-			result.FailureReads, environment, project, record, 0,
+			result.FailureReads, record, 0, 0, fence,
 		)
 	}
 	return Versioned[EntryRecord]{
@@ -107,8 +132,32 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(generationValue)
+	fence, _, err := repository.loadEntryMutationFence(
+		ctx,
+		environment,
+		project,
+		[]string{
+			entryRecordKey(record.Entry.ID),
+			entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+			generationKey,
+			deletionTombstoneKey(string(DeletionTargetEntry), record.Entry.ID),
+		},
+		-1,
+		record.Entry.ID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(epochMutation.Value)
 	plan, err := newIdempotencyMutationPlan(
-		entryWriteConditions(environment, project, record, generationKey, 0, 0),
+		append(
+			entryWriteConditions(record, generationKey, 0, 0),
+			fence.transactionConditions()...,
+		),
 		[]Mutation{
 			{Type: MutationPut, Key: entryRecordKey(record.Entry.ID), Value: primaryValue},
 			{
@@ -116,9 +165,10 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 				Value: []byte(record.Entry.ID),
 			},
 			{Type: MutationPut, Key: generationKey, Value: generationValue},
+			epochMutation,
 		},
 		func(_ int64, values []*KeyValue) error {
-			return classifyEntryWriteConflict(values, environment, project, record, 0)
+			return classifyEntryWriteConflict(values, record, 0, 0, fence)
 		},
 	)
 	if err != nil {
@@ -195,10 +245,6 @@ func (repository *EntryRepository) ReplaceEntry(
 	if err := validateEntryVersion(current); err != nil {
 		return Versioned[EntryRecord]{}, err
 	}
-	owner, err := repository.entryOwnerAtCurrentRevision(ctx, current)
-	if err != nil {
-		return Versioned[EntryRecord]{}, err
-	}
 	primaryValue, err := encodeEntryRecord(replacement)
 	if err != nil {
 		return Versioned[EntryRecord]{}, err
@@ -209,20 +255,44 @@ func (repository *EntryRepository) ReplaceEntry(
 		return Versioned[EntryRecord]{}, err
 	}
 	defer clear(generationValue)
+	fence, ownerRevision, err := repository.loadEntryMutationFence(
+		ctx,
+		environment,
+		project,
+		[]string{
+			entryRecordKey(current.Record.Entry.ID),
+			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
+			generationKey,
+			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
+		},
+		1,
+		current.Record.Entry.ID,
+	)
+	if err != nil {
+		return Versioned[EntryRecord]{}, err
+	}
 
-	conditions := entryWriteConditions(
-		environment, project, current.Record, generationKey, current.Revision, owner.ModRevision,
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return Versioned[EntryRecord]{}, err
+	}
+	defer clear(epochMutation.Value)
+	conditions := append(
+		entryWriteConditions(current.Record, generationKey, current.Revision, ownerRevision),
+		fence.transactionConditions()...,
 	)
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationPut, Key: entryRecordKey(current.Record.Entry.ID), Value: primaryValue},
 		{Type: MutationPut, Key: generationKey, Value: generationValue},
+		epochMutation,
 	})
 	if err != nil {
 		return Versioned[EntryRecord]{}, err
 	}
 	if !result.Succeeded {
+		defer clearKeyValues(result.FailureReads)
 		return Versioned[EntryRecord]{}, classifyEntryWriteConflict(
-			result.FailureReads, environment, project, current.Record, current.Revision,
+			result.FailureReads, current.Record, current.Revision, ownerRevision, fence,
 		)
 	}
 	return Versioned[EntryRecord]{
@@ -265,10 +335,6 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	owner, err := repository.entryOwnerAtCurrentRevision(ctx, current)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
 	primaryValue, err := encodeEntryRecord(replacement)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -279,17 +345,40 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(generationValue)
+	fence, ownerRevision, err := repository.loadEntryMutationFence(
+		ctx,
+		environment,
+		project,
+		[]string{
+			entryRecordKey(current.Record.Entry.ID),
+			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
+			generationKey,
+			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
+		},
+		1,
+		current.Record.Entry.ID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(epochMutation.Value)
 	plan, err := newIdempotencyMutationPlan(
-		entryWriteConditions(
-			environment, project, current.Record, generationKey, current.Revision, owner.ModRevision,
+		append(
+			entryWriteConditions(current.Record, generationKey, current.Revision, ownerRevision),
+			fence.transactionConditions()...,
 		),
 		[]Mutation{
 			{Type: MutationPut, Key: entryRecordKey(current.Record.Entry.ID), Value: primaryValue},
 			{Type: MutationPut, Key: generationKey, Value: generationValue},
+			epochMutation,
 		},
 		func(_ int64, values []*KeyValue) error {
 			return classifyEntryWriteConflict(
-				values, environment, project, current.Record, current.Revision,
+				values, current.Record, current.Revision, ownerRevision, fence,
 			)
 		},
 	)
@@ -315,11 +404,30 @@ func (repository *EntryRepository) DeleteEntry(
 	if err := validateEntryVersion(current); err != nil {
 		return 0, err
 	}
-	owner, err := repository.entryOwnerAtCurrentRevision(ctx, current)
+	fence, ownerRevision, err := repository.loadEntryMutationFence(
+		ctx,
+		environment,
+		project,
+		[]string{
+			entryRecordKey(current.Record.Entry.ID),
+			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
+			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
+		},
+		1,
+		current.Record.Entry.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
-	conditions := entryDeleteConditions(environment, project, current, owner.ModRevision)
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		return 0, err
+	}
+	defer clear(epochMutation.Value)
+	conditions := append(
+		entryDeleteConditions(current, ownerRevision),
+		fence.transactionConditions()...,
+	)
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationDelete, Key: entryRecordKey(current.Record.Entry.ID)},
 		{Type: MutationDelete, Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID)},
@@ -331,12 +439,14 @@ func (repository *EntryRepository) DeleteEntry(
 			Type: MutationDelete, Key: entrySecretValueGenerationPrefix + current.Record.Entry.ID + "/",
 			Prefix: true,
 		},
+		epochMutation,
 	})
 	if err != nil {
 		return 0, err
 	}
 	if !result.Succeeded {
-		return 0, classifyEntryDeleteConflict(result.FailureReads, environment, project, current)
+		defer clearKeyValues(result.FailureReads)
+		return 0, classifyEntryDeleteConflict(result.FailureReads, current, ownerRevision, fence)
 	}
 	return result.Revision, nil
 }
@@ -373,27 +483,79 @@ func prepareEntryGeneration(
 	return secretEntryValueGenerationKey(record.Entry.ID, record.CurrentValueGenerationID), value, err
 }
 
-func (repository *EntryRepository) entryOwnerAtCurrentRevision(
+func (repository *EntryRepository) loadEntryMutationFence(
 	ctx context.Context,
-	current Versioned[EntryRecord],
-) (*KeyValue, error) {
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	domainKeys []string,
+	ownerIndex int,
+	entryID string,
+) (environmentMutationFenceEvidence, int64, error) {
+	keys := append([]string(nil), domainKeys...)
+	environmentIndex := len(keys)
+	keys = append(keys, environmentKey(environment.Record.ID))
+	projectIndex := len(keys)
+	keys = append(keys, projectKey(project.Record.ID))
 	result, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys:     []string{entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID)},
-		Revision: current.ReadRevision,
+		Keys: keys,
 	})
 	if err != nil {
-		return nil, err
+		return environmentMutationFenceEvidence{}, 0, err
 	}
-	if result == nil || len(result.Values) != 1 || result.Values[0] == nil ||
-		string(result.Values[0].Value) != current.Record.Entry.ID {
-		return nil, errs.New(errs.KindInternal, "Entry owner index is missing or corrupt")
+	if result == nil || result.ReadRevision <= 0 || len(result.Values) != len(keys) {
+		return environmentMutationFenceEvidence{}, 0, errs.New(
+			errs.KindInternal,
+			"Entry mutation fixed-revision evidence is incomplete",
+		)
 	}
-	return result.Values[0], nil
+	defer clearKeyValues(result.Values)
+	for index, value := range result.Values {
+		if value != nil && value.Key != keys[index] {
+			return environmentMutationFenceEvidence{}, 0, errs.New(
+				errs.KindInternal,
+				"Entry mutation fixed-revision evidence is corrupt",
+			)
+		}
+	}
+	if result.Values[environmentIndex] == nil {
+		return environmentMutationFenceEvidence{}, 0, errs.New(
+			errs.KindEnvironmentNotFound,
+			"Environment was not found",
+		)
+	}
+	if result.Values[environmentIndex].ModRevision != environment.Revision {
+		return environmentMutationFenceEvidence{}, 0, stateConflict("Environment", environment.Record.ID)
+	}
+	if result.Values[projectIndex] == nil {
+		return environmentMutationFenceEvidence{}, 0, errs.New(errs.KindProjectNotFound, "Project was not found")
+	}
+	if result.Values[projectIndex].ModRevision != project.Revision {
+		return environmentMutationFenceEvidence{}, 0, stateConflict("Project", project.Record.ID)
+	}
+	ownerRevision := int64(0)
+	if ownerIndex >= 0 {
+		if ownerIndex >= len(domainKeys) || result.Values[ownerIndex] == nil ||
+			string(result.Values[ownerIndex].Value) != entryID {
+			return environmentMutationFenceEvidence{}, 0, errs.New(
+				errs.KindInternal,
+				"Entry owner index is missing or corrupt",
+			)
+		}
+		ownerRevision = result.Values[ownerIndex].ModRevision
+	}
+	fence, err := loadOrdinaryEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		environment.Record.ID,
+		result.ReadRevision,
+	)
+	if err != nil {
+		return environmentMutationFenceEvidence{}, 0, err
+	}
+	return fence, ownerRevision, nil
 }
 
 func entryWriteConditions(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	record EntryRecord,
 	generationKey string,
 	entryRevision int64,
@@ -403,35 +565,19 @@ func entryWriteConditions(
 		{Key: entryRecordKey(record.Entry.ID), ModRevision: entryRevision},
 		{Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID), ModRevision: ownerRevision},
 		{Key: generationKey},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("entry", record.Entry.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		{Key: deletionTombstoneKey(string(DeletionTargetEntry), record.Entry.ID)},
 	}
 	return conditions
 }
 
 func entryDeleteConditions(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	current Versioned[EntryRecord],
 	ownerRevision int64,
 ) []Condition {
 	conditions := []Condition{
 		{Key: entryRecordKey(current.Record.Entry.ID), ModRevision: current.Revision},
 		{Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID), ModRevision: ownerRevision},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("entry", current.Record.Entry.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		{Key: deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID)},
 	}
 	return conditions
 }
@@ -474,15 +620,12 @@ func validateEntryVersion(current Versioned[EntryRecord]) error {
 
 func classifyEntryWriteConflict(
 	values []*KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	record EntryRecord,
 	expectedEntryRevision int64,
+	expectedOwnerRevision int64,
+	fence environmentMutationFenceEvidence,
 ) error {
-	expected := 8
-	if project.Record.TenantID != "" {
-		expected++
-	}
+	expected := 4 + len(fence.conditions)
 	if len(values) != expected {
 		return errs.New(errs.KindInternal, "Entry write compare evidence is incomplete")
 	}
@@ -500,43 +643,29 @@ func classifyEntryWriteConflict(
 		if values[1] == nil || string(values[1].Value) != record.Entry.ID {
 			return errs.New(errs.KindInternal, "Entry owner index changed or is corrupt")
 		}
+		if values[1].ModRevision != expectedOwnerRevision {
+			return stateConflict("Entry", record.Entry.ID)
+		}
 	}
 	if values[2] != nil {
 		return errs.New(errs.KindStateConflict, "Entry value generation id is already occupied")
 	}
-	if values[3] == nil {
-		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
+	if values[3] != nil {
+		return errs.New(errs.KindResourceInUse, "Entry deletion is in progress")
 	}
-	if values[3].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
-	}
-	if values[4] == nil {
-		return errs.New(errs.KindProjectNotFound, "Project was not found")
-	}
-	if values[4].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
-	}
-	for _, index := range []int{5, 6, 7} {
-		if values[index] != nil {
-			return errs.New(errs.KindResourceInUse, "Entry hierarchy deletion is in progress")
-		}
-	}
-	if expected == 9 && values[8] != nil {
-		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+	if conflict := fence.classifyCAS(values[4:]); conflict != nil {
+		return conflict
 	}
 	return stateConflict("entry", record.Entry.ID)
 }
 
 func classifyEntryDeleteConflict(
 	values []*KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	current Versioned[EntryRecord],
+	expectedOwnerRevision int64,
+	fence environmentMutationFenceEvidence,
 ) error {
-	expected := 7
-	if project.Record.TenantID != "" {
-		expected++
-	}
+	expected := 3 + len(fence.conditions)
 	if len(values) != expected {
 		return errs.New(errs.KindInternal, "Entry delete compare evidence is incomplete")
 	}
@@ -549,19 +678,14 @@ func classifyEntryDeleteConflict(
 	if values[1] == nil || string(values[1].Value) != current.Record.Entry.ID {
 		return errs.New(errs.KindInternal, "Entry owner index changed or is corrupt")
 	}
-	if values[2] == nil || values[2].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
+	if values[1].ModRevision != expectedOwnerRevision {
+		return stateConflict("Entry", current.Record.Entry.ID)
 	}
-	if values[3] == nil || values[3].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
+	if values[2] != nil {
+		return errs.New(errs.KindResourceInUse, "Entry deletion is in progress")
 	}
-	for _, index := range []int{4, 5, 6} {
-		if values[index] != nil {
-			return errs.New(errs.KindResourceInUse, "Entry hierarchy deletion is in progress")
-		}
-	}
-	if expected == 8 && values[7] != nil {
-		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+	if conflict := fence.classifyCAS(values[3:]); conflict != nil {
+		return conflict
 	}
 	return stateConflict("entry", current.Record.Entry.ID)
 }

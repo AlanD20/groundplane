@@ -15,13 +15,8 @@ const (
 	volumeEvidencePrimary = iota
 	volumeEvidenceOwner
 	volumeEvidenceName
-	volumeEvidenceEnvironment
-	volumeEvidenceProject
 	volumeEvidenceTargetDeletion
-	volumeEvidenceEnvironmentDeletion
-	volumeEvidenceProjectDeletion
-	volumeEvidenceTenantDeletion
-	volumeBaseEvidenceCount = volumeEvidenceTenantDeletion
+	volumeBaseEvidenceCount
 )
 
 func NewVolumeRepository(store Store) (*VolumeRepository, error) { return newVolumeRepository(store) }
@@ -39,7 +34,7 @@ func (repository *VolumeRepository) CreateVolume(
 	project Versioned[ProjectRecord],
 	record VolumeRecord,
 ) (Versioned[VolumeRecord], error) {
-	conditions, mutations, classify, err := prepareVolumeCreation(ctx, environment, project, record)
+	conditions, mutations, classify, err := repository.prepareVolumeCreation(ctx, environment, project, record)
 	if err != nil {
 		return Versioned[VolumeRecord]{}, err
 	}
@@ -66,7 +61,7 @@ func (repository *VolumeRepository) CreateVolumeIdempotent(
 	if err := validateVolumeMutationMarker(marker, record.EnvironmentID); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	conditions, mutations, classify, err := prepareVolumeCreation(ctx, environment, project, record)
+	conditions, mutations, classify, err := repository.prepareVolumeCreation(ctx, environment, project, record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -82,7 +77,7 @@ func (repository *VolumeRepository) CreateVolumeIdempotent(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func prepareVolumeCreation(
+func (repository *VolumeRepository) prepareVolumeCreation(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
@@ -95,7 +90,68 @@ func prepareVolumeCreation(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	conditions := volumeWriteConditions(environment, project, record)
+	domainKeys := []string{
+		volumeKey(record.ID),
+		volumeOwnerKey(record.EnvironmentID, record.ID),
+		volumeNameKey(record.EnvironmentID, record.Name),
+		deletionTombstoneKey("volume", record.ID),
+		environmentKey(environment.Record.ID),
+		projectKey(project.Record.ID),
+	}
+	anchor, err := repository.store.GetMany(ctx, GetManyRequest{Keys: domainKeys})
+	if err != nil {
+		clear(value)
+		return nil, nil, nil, err
+	}
+	if anchor == nil || anchor.ReadRevision <= 0 || len(anchor.Values) != len(domainKeys) {
+		clear(value)
+		return nil, nil, nil, errs.New(
+			errs.KindInternal,
+			"volume creation fixed-revision evidence is incomplete",
+		)
+	}
+	defer clearKeyValues(anchor.Values)
+	for index, entry := range anchor.Values {
+		if entry != nil && entry.Key != domainKeys[index] {
+			clear(value)
+			return nil, nil, nil, errs.New(
+				errs.KindInternal,
+				"volume creation fixed-revision evidence is corrupt",
+			)
+		}
+	}
+	if anchor.Values[4] == nil {
+		clear(value)
+		return nil, nil, nil, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
+	}
+	if anchor.Values[4].ModRevision != environment.Revision {
+		clear(value)
+		return nil, nil, nil, stateConflict("environment", environment.Record.ID)
+	}
+	if anchor.Values[5] == nil {
+		clear(value)
+		return nil, nil, nil, errs.New(errs.KindProjectNotFound, "project was not found")
+	}
+	if anchor.Values[5].ModRevision != project.Revision {
+		clear(value)
+		return nil, nil, nil, stateConflict("project", project.Record.ID)
+	}
+	fence, err := loadOrdinaryEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		environment.Record.ID,
+		anchor.ReadRevision,
+	)
+	if err != nil {
+		clear(value)
+		return nil, nil, nil, err
+	}
+	epochMutation, err := fence.epochRewriteMutation()
+	if err != nil {
+		clear(value)
+		return nil, nil, nil, err
+	}
+	conditions := append(volumeWriteConditions(record), fence.transactionConditions()...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: volumeKey(record.ID), Value: value},
 		{
@@ -108,9 +164,10 @@ func prepareVolumeCreation(
 			Key:   volumeNameKey(record.EnvironmentID, record.Name),
 			Value: []byte(record.ID),
 		},
+		epochMutation,
 	}
 	classify := func(_ int64, values []*KeyValue) error {
-		return classifyVolumeWriteConflict(values, environment, project, record)
+		return classifyVolumeWriteConflict(values, record, fence)
 	}
 	return conditions, mutations, classify, nil
 }
@@ -219,24 +276,13 @@ func validateVolumeMutationMarker(marker IdempotencyMarker, environmentID string
 }
 
 func volumeWriteConditions(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	record VolumeRecord,
 ) []Condition {
 	conditions := []Condition{
 		{Key: volumeKey(record.ID)},
 		{Key: volumeOwnerKey(record.EnvironmentID, record.ID)},
 		{Key: volumeNameKey(record.EnvironmentID, record.Name)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey("volume", record.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{
-			Key: deletionTombstoneKey("tenant", project.Record.TenantID),
-		})
 	}
 	return conditions
 }
@@ -272,14 +318,10 @@ func validateVolumeHierarchy(
 
 func classifyVolumeWriteConflict(
 	values []*KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
 	record VolumeRecord,
+	fence environmentMutationFenceEvidence,
 ) error {
-	expected := volumeBaseEvidenceCount
-	if project.Record.TenantID != "" {
-		expected++
-	}
+	expected := volumeBaseEvidenceCount + len(fence.conditions)
 	if len(values) != expected {
 		return errs.New(errs.KindInternal, "volume write compare evidence is incomplete")
 	}
@@ -289,22 +331,11 @@ func classifyVolumeWriteConflict(
 	if values[volumeEvidenceName] != nil {
 		return errs.New(errs.KindNameConflict, "volume name is already in use")
 	}
-	if values[volumeEvidenceEnvironment] == nil {
-		return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
+	if values[volumeEvidenceTargetDeletion] != nil {
+		return errs.New(errs.KindResourceInUse, "volume deletion is in progress")
 	}
-	if values[volumeEvidenceEnvironment].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
-	}
-	if values[volumeEvidenceProject] == nil {
-		return errs.New(errs.KindProjectNotFound, "project was not found")
-	}
-	if values[volumeEvidenceProject].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
-	}
-	for _, value := range values[volumeEvidenceTargetDeletion:] {
-		if value != nil {
-			return errs.New(errs.KindResourceInUse, "volume hierarchy deletion is in progress")
-		}
+	if conflict := fence.classifyCAS(values[volumeBaseEvidenceCount:]); conflict != nil {
+		return conflict
 	}
 	return stateConflict("volume", record.ID)
 }

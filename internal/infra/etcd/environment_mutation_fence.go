@@ -405,9 +405,11 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue)
 					value,
 					condition.stableID,
 					evidence.owner,
-				); err != nil &&
-					!isKind(err, errs.KindResourceInUse) {
-					return err
+				); err != nil {
+					kind, ok := errs.KindOf(err)
+					if !ok || kind != errs.KindResourceInUse {
+						return err
+					}
 				}
 				return stateConflict("environment operation lock", condition.stableID)
 			}

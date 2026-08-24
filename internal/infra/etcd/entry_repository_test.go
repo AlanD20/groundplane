@@ -220,36 +220,8 @@ func testEntryRepositoryHierarchy(
 	t *testing.T,
 ) (*memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
 	t.Helper()
-	now := time.Date(2026, 8, 22, 11, 0, 0, 0, time.UTC)
-	tenantID := ids.NewAt(ids.KindTenant, now, 1)
-	projectID := ids.NewAt(ids.KindProject, now, 2)
-	environmentID := ids.NewAt(ids.KindEnvironment, now, 3)
-	project := ProjectRecord{
-		ID: projectID, TenantID: tenantID, Slug: "entry-project", Name: "Entry Project",
-		Kind: ProjectKindTenant,
-	}
-	environment := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
-		ID: environmentID, ProjectID: projectID, Name: "production",
-		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
-		ProvisioningState: EnvironmentProvisioningReady,
-		CreateTaskID:      ids.NewAt(ids.KindTask, now, 4),
-		CreatedAt:         now,
-	}
-	store := newMemoryHierarchyStore()
-	result, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: projectKey(projectID), Value: []byte("parent")},
-		{Type: MutationPut, Key: environmentKey(environmentID), Value: []byte("parent")},
-	})
-	if err != nil || !result.Succeeded {
-		t.Fatalf("seed hierarchy = %#v, %v", result, err)
-	}
-	return store,
-		Versioned[EnvironmentRecord]{
-			Record: environment, Revision: result.Revision, ReadRevision: result.Revision,
-		},
-		Versioned[ProjectRecord]{
-			Record: project, Revision: result.Revision, ReadRevision: result.Revision,
-		}
+	_, store, environment, project, _ := routeRepositoryTestHierarchy(t)
+	return store, environment, project
 }
 
 func testPlainGeneration(
