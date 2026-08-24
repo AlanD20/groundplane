@@ -41,6 +41,7 @@ message AgentMessage {
     TaskEvent task_event = 3;      // step progress + streamed output
     ObservedState observed_state = 4; // drift-detection feed for reconciliation
     TaskAck task_ack = 5;          // completed / failed
+    BackupCheckpointRequest backup_checkpoint_request = 6;
   }
 }
 
@@ -175,6 +176,7 @@ message ControllerMessage {
     ConfigUpdate config_update = 3;     // delivered at the first fully idle Ready; applied without process restart
     Shutdown shutdown = 4;
     MaterializationTransfer materialization_transfer = 5; // transient bytes; never durable Task or plan state
+    BackupCheckpointAck backup_checkpoint_ack = 6;
   }
 }
 
@@ -251,6 +253,7 @@ enum PlanOperation {
   PLAN_OPERATION_ENVIRONMENT_CREATE = 9;
   PLAN_OPERATION_ATTACH = 10;
   PLAN_OPERATION_DETACH = 11;
+  PLAN_OPERATION_BACKUP = 12;
 }
 
 message ComposeArtifact {
@@ -314,7 +317,181 @@ message ExecutionStep {
     AdapterProcedure adapter_procedure = 11;
     ManagedNetworkRemove managed_network_remove = 12;
     CaddyConfigApply caddy_config_apply = 13;
+    BackupSourceCapture backup_source_capture = 14;
   }
+}
+
+// BackupSourceCapture is one immutable source attempt in policy order. It
+// carries only Controller-authorized control evidence. Object locators,
+// credentials, private identities, Entry values, artifact bytes, and provider
+// responses travel through neither this plan nor ordinary Task messages.
+message BackupSourceCapture {
+  string source_id = 1;
+  uint64 source_revision = 2;
+  string target_id = 3;
+  uint64 target_revision = 4;
+  string point_id = 5;
+  string connector_id = 6;
+  uint64 connector_revision = 7;
+  BackupSourceFormat source_format = 8;
+  BackupEncryption encryption = 9;
+  uint64 key_era = 10;       // positive exactly when encryption is age
+  string age_recipient = 11; // public recipient; empty when encryption is none
+  oneof source {
+    BackupAttachSource attach = 12;
+    BackupConfigSource config = 13;
+    BackupVolumeSource volume = 14;
+  }
+}
+
+enum BackupSourceFormat {
+  BACKUP_SOURCE_FORMAT_UNSPECIFIED = 0;
+  BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1 = 1;
+  BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1 = 2;
+  BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1 = 3;
+}
+
+enum BackupEncryption {
+  BACKUP_ENCRYPTION_UNSPECIFIED = 0;
+  BACKUP_ENCRYPTION_NONE = 1;
+  BACKUP_ENCRYPTION_AGE = 2;
+}
+
+message BackupAttachSource {
+  string backing_service_id = 1;
+  uint64 backing_service_revision = 2;
+  string database = 3;
+  string role = 4;
+}
+
+// The snapshot revision is the one linearizable read shared by every Entry
+// metadata record, current generation, and bounded transient value frame.
+message BackupConfigSource {
+  uint64 snapshot_revision = 1;
+}
+
+message BackupVolumeSource {
+  repeated BackupVolumeService services = 1; // uniquely sorted by service_id
+}
+
+message BackupVolumeService {
+  string service_id = 1;
+  uint64 service_revision = 2;
+  BackupServiceRuntimeIntent prior_intent = 3;
+}
+
+enum BackupServiceRuntimeIntent {
+  BACKUP_SERVICE_RUNTIME_INTENT_UNSPECIFIED = 0;
+  BACKUP_SERVICE_RUNTIME_INTENT_RUNNING = 1;
+  BACKUP_SERVICE_RUNTIME_INTENT_STOPPED = 2;
+  BACKUP_SERVICE_RUNTIME_INTENT_ABSENT = 3;
+}
+
+// A checkpoint request is private assignment traffic. Sequence is one-based
+// and contiguous within the exact task/assignment/step tuple. The digest is
+// the canonical Controller-protected control payload; it contains no
+// Secret-derived fingerprint.
+message BackupCheckpointRequest {
+  string task_id = 1;
+  string assignment_id = 2;
+  string step_id = 3;
+  uint32 sequence = 4;
+  BackupCheckpointKind kind = 5;
+  bytes control_payload_sha256 = 6;
+  oneof payload {
+    BackupArtifactPreparedCheckpoint artifact_prepared = 7;
+    BackupUploadVerifiedCheckpoint upload_verified = 8;
+    BackupSourceCleanupCompletedCheckpoint source_cleanup_completed = 9;
+    BackupRestoreArtifactValidatedCheckpoint restore_artifact_validated = 10;
+    BackupVolumeTreeStagedCheckpoint volume_tree_staged = 11;
+    BackupVolumeTreeExchangedCheckpoint volume_tree_exchanged = 12;
+    BackupVolumeReplacedTreeCleanedCheckpoint volume_replaced_tree_cleaned = 13;
+    BackupConfigGenerationStagedCheckpoint config_generation_staged = 14;
+    BackupConfigGenerationActivatedCheckpoint config_generation_activated = 15;
+    BackupPostgresRestoreVerifiedCheckpoint postgres_restore_verified = 16;
+    BackupRemoteObjectAbsentCheckpoint remote_object_absent = 17;
+  }
+}
+
+// A future Controller sends this only after the domain checkpoint,
+// deduplication evidence, next-sequence cursor, and required lock/epoch change
+// commit atomically. It echoes the delivery identity and nothing else.
+message BackupCheckpointAck {
+  string task_id = 1;
+  string assignment_id = 2;
+  string step_id = 3;
+  uint32 sequence = 4;
+}
+
+enum BackupCheckpointKind {
+  BACKUP_CHECKPOINT_KIND_UNSPECIFIED = 0;
+  BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED = 1;
+  BACKUP_CHECKPOINT_KIND_UPLOAD_VERIFIED = 2;
+  BACKUP_CHECKPOINT_KIND_SOURCE_CLEANUP_COMPLETED = 3;
+  BACKUP_CHECKPOINT_KIND_RESTORE_ARTIFACT_VALIDATED = 4;
+  BACKUP_CHECKPOINT_KIND_VOLUME_TREE_STAGED = 5;
+  BACKUP_CHECKPOINT_KIND_VOLUME_TREE_EXCHANGED = 6;
+  BACKUP_CHECKPOINT_KIND_VOLUME_REPLACED_TREE_CLEANED = 7;
+  BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_STAGED = 8;
+  BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_ACTIVATED = 9;
+  BACKUP_CHECKPOINT_KIND_POSTGRES_RESTORE_VERIFIED = 10;
+  BACKUP_CHECKPOINT_KIND_REMOTE_OBJECT_ABSENT = 11;
+}
+
+message BackupArtifactPreparedCheckpoint {
+  string point_id = 1;
+  uint64 stored_size_bytes = 2;
+  bytes stored_sha256 = 3;
+}
+
+message BackupUploadVerifiedCheckpoint {
+  string point_id = 1;
+  uint64 stored_size_bytes = 2;
+  bytes stored_sha256 = 3;
+}
+
+message BackupSourceCleanupCompletedCheckpoint {
+  string point_id = 1;
+}
+
+message BackupRestoreArtifactValidatedCheckpoint {
+  string point_id = 1;
+  bytes stored_sha256 = 2;
+  bytes decoded_sha256 = 3;
+}
+
+message BackupVolumeTreeStagedCheckpoint {
+  string point_id = 1;
+  bytes staged_tree_manifest_sha256 = 2;
+}
+
+message BackupVolumeTreeExchangedCheckpoint {
+  string point_id = 1;
+  bytes live_tree_manifest_sha256 = 2;
+}
+
+message BackupVolumeReplacedTreeCleanedCheckpoint {
+  string point_id = 1;
+}
+
+message BackupConfigGenerationStagedCheckpoint {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  bytes entry_generation_manifest_sha256 = 3;
+}
+
+message BackupConfigGenerationActivatedCheckpoint {
+  string point_id = 1;
+  string restore_generation_id = 2;
+  uint64 render_generation = 3;
+}
+
+message BackupPostgresRestoreVerifiedCheckpoint {
+  string point_id = 1;
+}
+
+message BackupRemoteObjectAbsentCheckpoint {
+  string point_id = 1;
 }
 
 enum AdapterProcedurePhase {

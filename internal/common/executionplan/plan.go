@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -27,6 +28,7 @@ const (
 	MaximumPlanBytes            = 4 * 1024 * 1024
 	MaximumAdapterKeyBytes      = 64
 	MaximumAdapterSecretBytes   = 256
+	MaximumBackupSources        = 12
 	maximumComposeNameBytes     = 255
 	maximumAdapterIdentityBytes = 63
 )
@@ -166,7 +168,11 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if err := validateID(ids.KindPlan, plan.PlanId); err != nil {
 		return err
 	}
-	if plan.RenderGeneration == 0 {
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP {
+		if plan.RenderGeneration != 0 {
+			return errs.New(errs.KindValidationFailed, "Backup execution plan cannot carry a render generation")
+		}
+	} else if plan.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "execution plan render generation must be positive")
 	}
 	if !validOperation(plan.Operation) {
@@ -182,6 +188,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
 		return validateEnvironmentCreatePlan(plan)
+	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP {
+		return validateBackupPlan(plan)
 	}
 	if len(plan.Artifacts) == 0 && (plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
 		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH) {
@@ -246,6 +255,48 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 				)
 			}
 			materializationDestinations[destinationKey] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func validateBackupPlan(plan *agentpb.ExecutionPlan) error {
+	if validateID(ids.KindEnvironment, plan.TargetId) != nil || len(plan.Artifacts) != 0 ||
+		len(plan.Steps) == 0 || len(plan.Steps) > MaximumBackupSources {
+		return errs.New(errs.KindValidationFailed, "Backup execution plan shape is invalid")
+	}
+	stepIDs := make(map[string]struct{}, len(plan.Steps))
+	sourceIDs := make(map[string]struct{}, len(plan.Steps))
+	pointIDs := make(map[string]struct{}, len(plan.Steps))
+	var fixed *agentpb.BackupSourceCapture
+	for _, step := range plan.Steps {
+		if step == nil || validateID(ids.KindStep, step.StepId) != nil || step.TimeoutSeconds == 0 {
+			return errs.New(errs.KindValidationFailed, "Backup execution step identity or timeout is invalid")
+		}
+		capture := step.GetBackupSourceCapture()
+		if err := validateBackupSourceCapture(plan.TargetId, capture); err != nil {
+			return err
+		}
+		if _, duplicate := stepIDs[step.StepId]; duplicate {
+			return errs.New(errs.KindValidationFailed, "execution plan step ids must be unique")
+		}
+		if _, duplicate := sourceIDs[capture.SourceId]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Backup source ids must be unique")
+		}
+		if _, duplicate := pointIDs[capture.PointId]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Backup point ids must be unique")
+		}
+		stepIDs[step.StepId] = struct{}{}
+		sourceIDs[capture.SourceId] = struct{}{}
+		pointIDs[capture.PointId] = struct{}{}
+		if fixed == nil {
+			fixed = capture
+			continue
+		}
+		if capture.ConnectorId != fixed.ConnectorId || capture.ConnectorRevision != fixed.ConnectorRevision ||
+			capture.Encryption != fixed.Encryption || capture.KeyEra != fixed.KeyEra ||
+			capture.AgeRecipient != fixed.AgeRecipient {
+			return errs.New(errs.KindValidationFailed, "Backup plan policy controls must be identical across sources")
 		}
 	}
 	return nil
@@ -613,6 +664,76 @@ func validateStep(
 	}
 }
 
+func validateBackupSourceCapture(environmentID string, capture *agentpb.BackupSourceCapture) error {
+	if capture == nil || validateID(ids.KindBackupSource, capture.SourceId) != nil ||
+		capture.SourceRevision == 0 || capture.TargetRevision == 0 ||
+		validateID(ids.KindRecoveryPoint, capture.PointId) != nil ||
+		validateID(ids.KindConnector, capture.ConnectorId) != nil || capture.ConnectorRevision == 0 {
+		return errs.New(errs.KindValidationFailed, "Backup source identity or revision is invalid")
+	}
+	switch capture.Encryption {
+	case agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE:
+		if capture.KeyEra != 0 || capture.AgeRecipient != "" {
+			return errs.New(errs.KindValidationFailed, "unencrypted Backup source carries age control data")
+		}
+	case agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE:
+		recipient, err := age.ParseX25519Recipient(capture.AgeRecipient)
+		if capture.KeyEra == 0 || err != nil || recipient.String() != capture.AgeRecipient {
+			return errs.New(errs.KindValidationFailed, "age-encrypted Backup source control data is invalid")
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "Backup source encryption is unsupported")
+	}
+	switch source := capture.Source.(type) {
+	case *agentpb.BackupSourceCapture_Attach:
+		if source.Attach == nil || capture.SourceFormat !=
+			agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1 ||
+			validateID(ids.KindAttach, capture.TargetId) != nil ||
+			validateID(ids.KindBackingService, source.Attach.BackingServiceId) != nil ||
+			source.Attach.BackingServiceRevision == 0 || !validAdapterIdentity(source.Attach.Database, true) ||
+			!validAdapterIdentity(source.Attach.Role, true) {
+			return errs.New(errs.KindValidationFailed, "PostgreSQL Backup source control data is invalid")
+		}
+	case *agentpb.BackupSourceCapture_Config:
+		if source.Config == nil || capture.SourceFormat !=
+			agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1 ||
+			capture.TargetId != environmentID || validateID(ids.KindEnvironment, capture.TargetId) != nil ||
+			source.Config.SnapshotRevision == 0 ||
+			capture.Encryption != agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
+			return errs.New(errs.KindValidationFailed, "config Backup source control data is invalid")
+		}
+	case *agentpb.BackupSourceCapture_Volume:
+		if source.Volume == nil || capture.SourceFormat !=
+			agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1 ||
+			validateID(ids.KindVolume, capture.TargetId) != nil {
+			return errs.New(errs.KindValidationFailed, "Volume Backup source control data is invalid")
+		}
+		previousServiceID := ""
+		for _, service := range source.Volume.Services {
+			if service == nil || validateID(ids.KindService, service.ServiceId) != nil ||
+				service.ServiceId <= previousServiceID || service.ServiceRevision == 0 ||
+				!validBackupServiceRuntimeIntent(service.PriorIntent) {
+				return errs.New(errs.KindValidationFailed, "Volume Backup Service control data is invalid")
+			}
+			previousServiceID = service.ServiceId
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "Backup source kind is unsupported")
+	}
+	return nil
+}
+
+func validBackupServiceRuntimeIntent(intent agentpb.BackupServiceRuntimeIntent) bool {
+	switch intent {
+	case agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
+		agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_STOPPED,
+		agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_ABSENT:
+		return true
+	default:
+		return false
+	}
+}
+
 func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentpb.AdapterProcedure) error {
 	if procedure == nil || !validAdapterKey(procedure.AdapterKey) ||
 		validateID(ids.KindAttach, procedure.AttachId) != nil ||
@@ -891,7 +1012,8 @@ func validOperation(operation agentpb.PlanOperation) bool {
 		agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY,
 		agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
 		agentpb.PlanOperation_PLAN_OPERATION_ATTACH,
-		agentpb.PlanOperation_PLAN_OPERATION_DETACH:
+		agentpb.PlanOperation_PLAN_OPERATION_DETACH,
+		agentpb.PlanOperation_PLAN_OPERATION_BACKUP:
 		return true
 	default:
 		return false
