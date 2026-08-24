@@ -22,6 +22,7 @@ import (
 )
 
 const maxIdentitySize = 4096
+const encryptionStreamBufferSize = 32 << 10
 
 // Keypair is a per-environment backup-encryption identity, generated
 // LAZILY the first time backups are enabled for that environment (a
@@ -173,11 +174,97 @@ func (k *ControllerKey) Unwrap(ciphertext []byte) ([]byte, error) {
 // Encrypt encrypts data under a recipient's public key (backup
 // encryption path — the environment's AgeRecipient). Pure crypto, no ctx.
 func Encrypt(recipient string, plaintext []byte) ([]byte, error) {
-	parsed, err := age.ParseX25519Recipient(strings.TrimSpace(recipient))
+	parsed, err := parseRecipient(recipient)
 	if err != nil {
-		return nil, errs.Wrap(errs.KindValidationFailed, fmt.Errorf("age: invalid recipient: %w", err))
+		return nil, err
 	}
 	return encrypt(parsed, plaintext)
+}
+
+// InterruptFunc must promptly interrupt any in-flight input Read or output
+// Write. For staged files and pipes it should close the owned endpoints. It is
+// called at most once, only after ctx is canceled, and may run concurrently
+// with an I/O call.
+type InterruptFunc func()
+
+// EncryptStream encrypts every byte read from input under recipient and
+// writes the age stream to output. When ctx is canceled, interrupt is called
+// to release an in-flight Read or Write; EncryptStream waits for both the I/O
+// and interrupt paths before returning, so it does not abandon goroutines.
+// Endpoint ownership remains with the caller except for the actions performed
+// by interrupt. The age writer is always finalized when possible, and all
+// streaming uses bounded backpressure.
+func EncryptStream(
+	ctx context.Context,
+	recipient string,
+	input io.Reader,
+	output io.Writer,
+	interrupt InterruptFunc,
+) error {
+	if interrupt == nil {
+		return errs.New(errs.KindValidationFailed, "age: encryption interrupt is required")
+	}
+	return encryptStream(ctx, recipient, input, output, interrupt)
+}
+
+// encryptStreamNonClosing is the package-private path for caller-owned streams.
+// It cannot interrupt an arbitrary blocked Read or Write and must not be used
+// by Backup execution.
+func encryptStreamNonClosing(
+	ctx context.Context,
+	recipient string,
+	input io.Reader,
+	output io.Writer,
+) error {
+	return encryptStream(ctx, recipient, input, output, nil)
+}
+
+func encryptStream(
+	ctx context.Context,
+	recipient string,
+	input io.Reader,
+	output io.Writer,
+	interrupt InterruptFunc,
+) error {
+	if ctx == nil {
+		return errs.New(errs.KindValidationFailed, "age: encryption context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if input == nil {
+		return errs.New(errs.KindValidationFailed, "age: encryption input is required")
+	}
+	if output == nil {
+		return errs.New(errs.KindValidationFailed, "age: encryption output is required")
+	}
+
+	parsed, err := parseRecipient(recipient)
+	if err != nil {
+		return err
+	}
+
+	stopInterrupt := watchStreamCancellation(ctx, interrupt)
+	defer stopInterrupt()
+
+	checkedOutput := exactWriter{writer: contextWriter{ctx: ctx, writer: output}}
+	writer, err := age.Encrypt(checkedOutput, parsed)
+	if err != nil {
+		return classifyStreamFailure(ctx, err, "age: initialize streaming encryption")
+	}
+
+	copyErr := copyEncryptedStream(ctx, writer, input)
+	closeErr := writer.Close()
+	if copyErr != nil {
+		return classifyStreamFailure(ctx, copyErr, "age: stream input")
+	}
+	if closeErr != nil {
+		return classifyStreamFailure(ctx, closeErr, "age: finalize streaming encryption")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Decrypt decrypts data under a private identity (restore path — the
@@ -189,6 +276,102 @@ func Decrypt(identity string, ciphertext []byte) ([]byte, error) {
 		return nil, errs.Wrap(errs.KindValidationFailed, fmt.Errorf("age: invalid identity: %w", err))
 	}
 	return decrypt(parsed, ciphertext)
+}
+
+func parseRecipient(recipient string) (age.Recipient, error) {
+	parsed, err := age.ParseX25519Recipient(recipient)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindValidationFailed, fmt.Errorf("age: invalid recipient: %w", err))
+	}
+	return parsed, nil
+}
+
+func copyEncryptedStream(ctx context.Context, destination io.Writer, source io.Reader) error {
+	buffer := make([]byte, encryptionStreamBufferSize)
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		read, readErr := source.Read(buffer)
+		if read > 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			written, writeErr := destination.Write(buffer[:read])
+			if writeErr != nil {
+				return writeErr
+			}
+			if written != read {
+				return io.ErrShortWrite
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			return readErr
+		}
+	}
+}
+
+func watchStreamCancellation(ctx context.Context, interrupt InterruptFunc) func() {
+	if interrupt == nil {
+		return func() {}
+	}
+	finished := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		select {
+		case <-ctx.Done():
+			interrupt()
+		case <-finished:
+		}
+	}()
+	return func() {
+		close(finished)
+		<-done
+	}
+}
+
+func classifyStreamFailure(ctx context.Context, err error, operation string) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	privateCause := err
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		privateCause = fmt.Errorf("dependency cancellation: %v", err)
+	}
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("%s: %w", operation, privateCause))
+}
+
+type contextWriter struct {
+	ctx    context.Context
+	writer io.Writer
+}
+
+func (writer contextWriter) Write(p []byte) (int, error) {
+	if err := writer.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := writer.writer.Write(p)
+	if contextErr := writer.ctx.Err(); contextErr != nil {
+		return n, contextErr
+	}
+	return n, err
+}
+
+type exactWriter struct{ writer io.Writer }
+
+func (writer exactWriter) Write(p []byte) (int, error) {
+	n, err := writer.writer.Write(p)
+	if err == nil && n != len(p) {
+		return n, io.ErrShortWrite
+	}
+	return n, err
 }
 
 func encrypt(recipient age.Recipient, plaintext []byte) ([]byte, error) {
