@@ -124,19 +124,16 @@ func newBackupCmd() *cobra.Command {
 	policy.AddCommand(set)
 	cmd.AddCommand(policy)
 
-	var runSources []string
 	run := &cobra.Command{
 		Use:   "run",
-		Short: "Run a backup now",
+		Short: "Run all configured backup sources now",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			app := fromContext(cmd)
 			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/backup-run"
-			return runAction(cmd, path, map[string]interface{}{"source_ids": runSources})
+			return runAction(cmd, path, nil)
 		},
 	}
-	run.Flags().
-		StringSliceVar(&runSources, "source", nil, "restrict to specific source id(s) (default: every enabled source)")
 	cmd.AddCommand(run)
 
 	points := &cobra.Command{

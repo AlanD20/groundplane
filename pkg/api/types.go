@@ -652,10 +652,6 @@ type AttachRenameRequest struct {
 	Name string `json:"name"`
 }
 
-type BackupRunRequest struct {
-	SourceIDs []string `json:"source_ids,omitempty"` // empty = every enabled source
-}
-
 type RestoreRequest struct {
 	SourceID        string `json:"source_id"`
 	RecoveryPointID string `json:"recovery_point_id,omitempty"` // empty = latest

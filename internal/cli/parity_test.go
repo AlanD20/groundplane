@@ -424,6 +424,35 @@ func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
 	}
 }
 
+func TestBackupRunPostsWithoutBodyOrSourceSelection(t *testing.T) {
+	t.Parallel()
+
+	command := newBackupCmd()
+	run, _, err := command.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find backup run command: %v", err)
+	}
+	if source := run.Flags().Lookup("source"); source != nil {
+		t.Fatalf("backup run source flag = %#v, want absent", source)
+	}
+
+	server := exactRequestServer(
+		t,
+		http.MethodPost,
+		"/api/v1/environments/production/backup-run",
+		"",
+		http.StatusAccepted,
+		`{"task_id":"task_backup"}`,
+	)
+	defer server.Close()
+
+	output := executeNoun(t, command, server.URL, Scope{Environment: "production"}, "run")
+	want := "{\n  \"task_id\": \"task_backup\"\n}\n"
+	if output != want {
+		t.Fatalf("output = %q, want %q", output, want)
+	}
+}
+
 func TestBackupExportKeyPostsAndPrintsIdentity(t *testing.T) {
 	t.Parallel()
 

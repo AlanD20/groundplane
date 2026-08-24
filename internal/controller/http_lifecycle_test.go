@@ -60,6 +60,22 @@ func TestProductionHTTPPolicyIsPinned(t *testing.T) {
 	}
 }
 
+func TestBackupRunRouteIsBodyless(t *testing.T) {
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/environments/env_1/backup-run",
+		strings.NewReader(`{"source_ids":["backup-source_1"]}`),
+	)
+	_, pattern := server.Mux.Handler(request)
+	if pattern != "POST /api/v1/environments/{id}/backup-run" {
+		t.Fatalf("backup run pattern = %q", pattern)
+	}
+	if policy := server.policyFor(request); policy.body != bodyless {
+		t.Fatalf("backup run body policy = %d, want bodyless", policy.body)
+	}
+}
+
 func TestNewHTTPServerAppliesOnlyNarrowGlobalTimeouts(t *testing.T) {
 	// Rationale: nonzero server-wide read/write deadlines would either conflate
 	// body classes or eventually kill a healthy indefinite SSE stream.
