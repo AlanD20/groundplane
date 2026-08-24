@@ -266,8 +266,16 @@ func (repository *TaskRepository) retryTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if provided != nil {
-		if err := validateTaskInitiation(TaskRecord{}, *provided, false); err != nil || provided.actor != TaskActorSystem {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "system task retry initiation is invalid")
+		if err := validateTaskInitiation(
+			TaskRecord{},
+			*provided,
+			false,
+		); err != nil ||
+			provided.actor != TaskActorSystem {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"system task retry initiation is invalid",
+			)
 		}
 		fences := append(append([]Condition(nil), initiation.fences...), provided.fences...)
 		initiation, err = newTaskInitiation(source.Record.Owner, TaskActorSystem, fences...)

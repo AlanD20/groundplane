@@ -40,14 +40,16 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return []Condition{
+	conditions := []Condition{
 		{Key: environmentKey(record.ID), ModRevision: state.Environment.Revision},
 		{Key: environmentMutationEpochKey(record.ID), ModRevision: state.EpochRevision},
 		{Key: environmentOperationLockKey(record.ID)},
-	}, []Mutation{
+	}
+	mutations := []Mutation{
 		{Type: MutationPut, Key: environmentKey(record.ID), Value: encoded},
 		{Type: MutationPut, Key: environmentMutationEpochKey(record.ID), Value: state.EpochValue},
-	}, encoded, nil
+	}
+	return conditions, mutations, encoded, nil
 }
 
 func (repository *TaskRepository) validateEnvironmentCreationReplay(

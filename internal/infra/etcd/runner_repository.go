@@ -79,7 +79,10 @@ func (repository *RunnerRepository) resolveRunnerParents(
 		}
 		if parents.project.Record.Kind != ProjectKindTenant ||
 			parents.project.Record.TenantID != desired.TenantID {
-			return runnerParents{}, errs.New(errs.KindValidationFailed, "runner project owner does not belong to its tenant")
+			return runnerParents{}, errs.New(
+				errs.KindValidationFailed,
+				"runner project owner does not belong to its tenant",
+			)
 		}
 	}
 	return parents, nil
@@ -301,7 +304,9 @@ func newRunnerCreateEvidence(
 	evidence.tenantDeletion = add(Condition{Key: deletionTombstoneKey(string(DeletionTargetTenant), desired.TenantID)})
 	if desired.OwnerKind == RunnerOwnerProject {
 		evidence.project = add(Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
-		evidence.projectDeletion = add(Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), desired.OwnerID)})
+		evidence.projectDeletion = add(
+			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), desired.OwnerID)},
+		)
 	}
 	evidence.host = add(allocation.host.condition)
 	return evidence
@@ -317,7 +322,12 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 			if err != nil {
 				return err
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", evidence.operationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				evidence.operationID,
+				activeTaskID,
+			)
 		}
 		for _, index := range []int{evidence.task, evidence.operation, evidence.queue} {
 			if values[index] != nil {
@@ -490,7 +500,10 @@ func (repository *RunnerRepository) ListRunners(
 		return Page[RunnerRecord]{}, err
 	}
 	if (filter.TenantID == "") == (filter.ProjectID == "") {
-		return Page[RunnerRecord]{}, errs.New(errs.KindValidationFailed, "runner list requires exactly one tenant or project filter")
+		return Page[RunnerRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"runner list requires exactly one tenant or project filter",
+		)
 	}
 	if filter.ProjectID != "" {
 		if err := validateID(ids.KindProject, filter.ProjectID); err != nil {
@@ -666,7 +679,10 @@ func (repository *RunnerRepository) GetRunnerObservation(
 		return Versioned[RunnerObservationRecord]{}, false, err
 	}
 	if result == nil {
-		return Versioned[RunnerObservationRecord]{}, false, errs.New(errs.KindInternal, "runner observation read is empty")
+		return Versioned[RunnerObservationRecord]{}, false, errs.New(
+			errs.KindInternal,
+			"runner observation read is empty",
+		)
 	}
 	if result.Entry == nil {
 		return Versioned[RunnerObservationRecord]{ReadRevision: result.ReadRevision}, false, nil

@@ -77,7 +77,10 @@ func (config RunnerHostPoolConfig) Allocation(slot uint32, network netip.Prefix)
 		return RunnerHostAllocationRecord{}, err
 	}
 	if slot >= slots {
-		return RunnerHostAllocationRecord{}, errs.New(errs.KindResourceInUse, "runner host allocation pool is exhausted")
+		return RunnerHostAllocationRecord{}, errs.New(
+			errs.KindResourceInUse,
+			"runner host allocation pool is exhausted",
+		)
 	}
 	allocation := RunnerHostAllocationRecord{
 		Slot:        slot,
@@ -170,7 +173,10 @@ func (registry SystemPoolRegistry) ReserveRunner(
 	}
 	candidate, err := ipam.FirstAvailableChild(root, runnerSubnetBits, reserved)
 	if err != nil {
-		return SystemPoolRegistry{}, netip.Prefix{}, errs.New(errs.KindResourceInUse, "runner network pool is exhausted")
+		return SystemPoolRegistry{}, netip.Prefix{}, errs.New(
+			errs.KindResourceInUse,
+			"runner network pool is exhausted",
+		)
 	}
 	next := SystemPoolRegistry{Reservations: make(map[string]string, len(registry.Reservations)+1)}
 	for key, value := range registry.Reservations {
@@ -183,7 +189,10 @@ func (registry SystemPoolRegistry) ReserveRunner(
 func (registry SystemPoolRegistry) ReleaseRunner(runnerID string, subnet string) (SystemPoolRegistry, error) {
 	owner := runnerPoolOwner(runnerID)
 	if registry.Reservations[owner] != subnet {
-		return SystemPoolRegistry{}, errs.New(errs.KindStateConflict, "runner network allocation does not match its owner")
+		return SystemPoolRegistry{}, errs.New(
+			errs.KindStateConflict,
+			"runner network allocation does not match its owner",
+		)
 	}
 	next := SystemPoolRegistry{Reservations: make(map[string]string, len(registry.Reservations)-1)}
 	for key, value := range registry.Reservations {
@@ -253,7 +262,10 @@ func (quota RunnerTenantQuota) Release(runnerID string) (RunnerTenantQuota, erro
 	}
 	index := sort.SearchStrings(quota.RunnerIDs, runnerID)
 	if index >= len(quota.RunnerIDs) || quota.RunnerIDs[index] != runnerID {
-		return RunnerTenantQuota{}, errs.New(errs.KindStateConflict, "runner tenant quota slot does not match its owner")
+		return RunnerTenantQuota{}, errs.New(
+			errs.KindStateConflict,
+			"runner tenant quota slot does not match its owner",
+		)
 	}
 	next := RunnerTenantQuota{RunnerIDs: make([]string, 0, len(quota.RunnerIDs)-1)}
 	next.RunnerIDs = append(next.RunnerIDs, quota.RunnerIDs[:index]...)

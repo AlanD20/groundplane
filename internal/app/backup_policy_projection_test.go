@@ -19,15 +19,24 @@ func TestBackupPolicyAPIProjectsExactStableFields(t *testing.T) {
 		ConnectorID: "con_01AAAAAAAAAAAAAAAAAAAAAAAA", AgeRecipient: "age1recipient", KeyEra: 2,
 		KeyCreatedAt: created, KeyRotatedAt: rotated,
 		Sources: []etcd.BackupPolicySourceProjection{
-			{ID: "spt_01AAAAAAAAAAAAAAAAAAAAAAAA", Kind: core.BackupSourceVolume, TargetID: "vol_01AAAAAAAAAAAAAAAAAAAAAAAA"},
-			{ID: "spt_01BBBBBBBBBBBBBBBBBBBBBBBB", Kind: core.BackupSourceConfig, TargetID: "env_01AAAAAAAAAAAAAAAAAAAAAAAA"},
+			{
+				ID:       "spt_01AAAAAAAAAAAAAAAAAAAAAAAA",
+				Kind:     core.BackupSourceVolume,
+				TargetID: "vol_01AAAAAAAAAAAAAAAAAAAAAAAA",
+			},
+			{
+				ID:       "spt_01BBBBBBBBBBBBBBBBBBBBBBBB",
+				Kind:     core.BackupSourceConfig,
+				TargetID: "env_01AAAAAAAAAAAAAAAAAAAAAAAA",
+			},
 		},
 	})
 	if len(got.Sources) != 2 || got.Sources[0].TargetID != "vol_01AAAAAAAAAAAAAAAAAAAAAAAA" ||
 		got.Sources[1].ID != "spt_01BBBBBBBBBBBBBBBBBBBBBBBB" {
 		t.Fatalf("sources = %#v", got.Sources)
 	}
-	if got.KeyCreatedAt != created.UTC().Format(time.RFC3339) || got.KeyRotatedAt != rotated.UTC().Format(time.RFC3339) {
+	if got.KeyCreatedAt != created.UTC().Format(time.RFC3339) ||
+		got.KeyRotatedAt != rotated.UTC().Format(time.RFC3339) {
 		t.Fatalf("timestamps = %q, %q", got.KeyCreatedAt, got.KeyRotatedAt)
 	}
 }

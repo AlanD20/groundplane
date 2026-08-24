@@ -85,7 +85,12 @@ func TestBackupConfigSnapshotRecordRejectsInvalidStateEvidence(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			record := testBackupConfigSnapshotRecord()
 			mutate(&record)
-			if _, err := encodeBackupConfigSnapshotRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+			if _, err := encodeBackupConfigSnapshotRecord(
+				record,
+			); !errors.Is(
+				err,
+				errs.New(errs.KindValidationFailed, ""),
+			) {
 				t.Fatalf("encodeBackupConfigSnapshotRecord() error = %v, want validation", err)
 			}
 		})
@@ -142,7 +147,12 @@ func TestBackupConfigSnapshotDescriptorChunkRoundTripAndValidation(t *testing.T)
 		t.Fatalf("restored descriptor chunk = %#v, want %#v", restored, record)
 	}
 	record.SHA256 = testBackupConfigSHA256([]byte("different"))
-	if _, err := encodeBackupConfigSnapshotDescriptorChunkRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupConfigSnapshotDescriptorChunkRecord(
+		record,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("mismatched descriptor digest error = %v, want validation", err)
 	}
 }
@@ -196,7 +206,12 @@ func TestBackupConfigSnapshotValueChunkRejectsConfusedStorageShape(t *testing.T)
 		},
 	}
 	record.Protected = &BackupConfigProtectedChunkPayload{}
-	if _, err := encodeBackupConfigSnapshotValueChunkRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupConfigSnapshotValueChunkRecord(
+		record,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("confused value chunk error = %v, want validation", err)
 	}
 }
@@ -326,7 +341,12 @@ func TestBackupConfigSnapshotKeysAreCanonical(t *testing.T) {
 		"/v1/runtime/backup-config-snapshot-values/"+taskID+entrySuffix+"/0000000003" {
 		t.Fatalf("snapshot value key = %q", got)
 	}
-	if low, high := backupConfigChunkOrdinal(3), backupConfigChunkOrdinal(^uint32(0)); len(high) != 10 || low >= high || high != "4294967295" {
+	if low, high := backupConfigChunkOrdinal(
+		3,
+	), backupConfigChunkOrdinal(
+		^uint32(0),
+	); len(high) != 10 || low >= high ||
+		high != "4294967295" {
 		t.Fatalf("chunk ordinal ordering low=%q high=%q", low, high)
 	}
 	if got := backupConfigSnapshotTaskReferenceKey(taskID, taskID); got !=

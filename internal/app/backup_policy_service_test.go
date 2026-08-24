@@ -85,7 +85,12 @@ func TestBackupPolicySetRejectsThirteenthSourceBeforePreparation(t *testing.T) {
 	idempotency := &backupPolicyTestIdempotency{}
 	service := backupPolicyTestService(t, repository, &backupPolicyTestKeys{}, idempotency)
 	input := apiTypes.BackupPolicyReplacementRequest{Sources: make([]apiTypes.BackupSourceInput, 13)}
-	if _, err := service.SetBackupPolicy(context.Background(), testEnvironmentID, input, testIdempotencyKey); err == nil {
+	if _, err := service.SetBackupPolicy(
+		context.Background(),
+		testEnvironmentID,
+		input,
+		testIdempotencyKey,
+	); err == nil {
 		t.Fatal("SetBackupPolicy() error = nil")
 	}
 	if repository.prepareCalls != 0 || idempotency.prepareCalls != 0 {

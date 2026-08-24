@@ -483,7 +483,11 @@ func TestConnectorDeletionTerminalReplayRejectsCorruptEvidence(t *testing.T) {
 			); err != nil {
 				t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
 			}
-			if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
+			if _, found, err := tasks.ClaimNextControllerTask(
+				ctx,
+				task.CreatedAt.Add(time.Second),
+			); err != nil ||
+				!found {
 				t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 			}
 			terminalAt := task.CreatedAt.Add(2 * time.Second)

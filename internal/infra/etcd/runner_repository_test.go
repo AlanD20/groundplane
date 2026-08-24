@@ -647,7 +647,12 @@ func TestRunnerCreationTerminalizationRequiresEveryAllocationFence(t *testing.T)
 			ctx := context.Background()
 			store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 			desired := runnerTestDesired(320+index, RunnerOwnerTenant, tenantID, tenantID)
-			task := runnerTestTask(desired, TaskCreate, 330+index, "runner-terminal-fence-key-0"+string(rune('0'+index)))
+			task := runnerTestTask(
+				desired,
+				TaskCreate,
+				330+index,
+				"runner-terminal-fence-key-0"+string(rune('0'+index)),
+			)
 			if _, err := repository.CreateRunnerWithTask(
 				ctx, runnerTestAllocationConfig(), desired, task, runnerTestMarker(task, desired),
 			); err != nil {
@@ -798,7 +803,10 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			name: "tenant tombstone", ownerKind: RunnerOwnerTenant, wantedKind: errs.KindResourceInUse,
 			mutate: func(t *testing.T, store *memoryHierarchyStore, record RunnerRecord) {
 				connectorDeletionPutKey(
-					t, store, deletionTombstoneKey(string(DeletionTargetTenant), record.Desired.TenantID), []byte("fenced"),
+					t,
+					store,
+					deletionTombstoneKey(string(DeletionTargetTenant), record.Desired.TenantID),
+					[]byte("fenced"),
 				)
 			},
 		},
@@ -812,7 +820,10 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			name: "project tombstone", ownerKind: RunnerOwnerProject, wantedKind: errs.KindResourceInUse,
 			mutate: func(t *testing.T, store *memoryHierarchyStore, record RunnerRecord) {
 				connectorDeletionPutKey(
-					t, store, deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID), []byte("fenced"),
+					t,
+					store,
+					deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID),
+					[]byte("fenced"),
 				)
 			},
 		},

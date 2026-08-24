@@ -305,9 +305,16 @@ func backupPolicyAPI(projection etcd.BackupPolicyProjection) apiTypes.BackupPoli
 		}
 	}
 	return apiTypes.BackupPolicy{
-		Enabled: projection.Enabled, Frequency: projection.Frequency, Keep: projection.Keep,
-		Encryption: apiTypes.BackupEncryption(projection.Encryption), ConnectorID: projection.ConnectorID, Sources: sources,
-		AgeRecipient: projection.AgeRecipient, KeyEra: projection.KeyEra,
+		Enabled:   projection.Enabled,
+		Frequency: projection.Frequency,
+		Keep:      projection.Keep,
+		Encryption: apiTypes.BackupEncryption(
+			projection.Encryption,
+		),
+		ConnectorID:  projection.ConnectorID,
+		Sources:      sources,
+		AgeRecipient: projection.AgeRecipient,
+		KeyEra:       projection.KeyEra,
 		KeyCreatedAt: backupPolicyTimestamp(projection.KeyCreatedAt),
 		KeyRotatedAt: backupPolicyTimestamp(projection.KeyRotatedAt),
 	}

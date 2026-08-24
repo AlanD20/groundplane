@@ -161,7 +161,12 @@ func TestBackupConfigRestoreEntryRejectsImpossibleChunkSummary(t *testing.T) {
 		DescriptorSHA256:  testBackupConfigSHA256([]byte("descriptor")), DescriptorChunks: 1,
 		PlainValueSHA256: testBackupConfigSHA256(nil),
 	}
-	if _, err := encodeBackupConfigRestoreEntryRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupConfigRestoreEntryRecord(
+		record,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("impossible restore Entry error = %v, want validation", err)
 	}
 }

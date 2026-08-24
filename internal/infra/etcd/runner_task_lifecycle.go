@@ -171,7 +171,10 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		retry.Status != TaskStatusPending || retry.IdempotencyKey == "" || len(retry.Params) != 2 ||
 		retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
 		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "runner creation retry has invalid durable input")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"runner creation retry has invalid durable input",
+		)
 	}
 	if err := validateRunnerRetryMarkerEnvelope(retry, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -210,10 +213,16 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "source task is not a runner creation")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"source task is not a runner creation",
+		)
 	}
 	if !runnerRetryableTerminal(source.Status) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "source runner creation task is not retryable")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"source runner creation task is not retryable",
+		)
 	}
 	current, err := repository.GetRunner(ctx, source.Target)
 	if err != nil {
@@ -229,7 +238,10 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		!runnerTaskMaterializationsEqual(retry.Materializations, source.Materializations) ||
 		len(retry.Params) != 2 || retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
 		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "runner creation retry has invalid durable input")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"runner creation retry has invalid durable input",
+		)
 	}
 	if err := validateRunnerRetryMarker(current.Record.Desired, retry, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -269,7 +281,11 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		{Key: taskKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
 		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{
-			Key:         runnerOwnerKey(current.Record.Desired.OwnerKind, current.Record.Desired.OwnerID, current.Record.Desired.ID),
+			Key: runnerOwnerKey(
+				current.Record.Desired.OwnerKind,
+				current.Record.Desired.OwnerID,
+				current.Record.Desired.ID,
+			),
 			ModRevision: allocation.owner.ModRevision,
 		},
 		{Key: runnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
@@ -301,7 +317,12 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 			if decodeErr != nil {
 				return decodeErr
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", retry.OperationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				retry.OperationID,
+				activeTaskID,
+			)
 		}
 		return stateConflict("runner creation retry", current.Record.Desired.ID)
 	}
@@ -546,7 +567,11 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{
-			Key:         runnerOwnerKey(current.Record.Desired.OwnerKind, current.Record.Desired.OwnerID, current.Record.Desired.ID),
+			Key: runnerOwnerKey(
+				current.Record.Desired.OwnerKind,
+				current.Record.Desired.OwnerID,
+				current.Record.Desired.ID,
+			),
 			ModRevision: allocation.owner.ModRevision,
 		},
 		{Key: runnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
@@ -584,7 +609,12 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 			if decodeErr != nil {
 				return decodeErr
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", task.OperationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				task.OperationID,
+				activeTaskID,
+			)
 		}
 		if values[10] != nil || values[11] != nil {
 			return errs.New(errs.KindResourceInUse, "runner removal is already in progress")
@@ -794,8 +824,12 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 		return runnerTaskChange{}, err
 	}
 	change.values = append(change.values, quotaValue, systemValue)
-	change.mutations = append(change.mutations,
-		Mutation{Type: MutationDelete, Key: runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target)},
+	change.mutations = append(
+		change.mutations,
+		Mutation{
+			Type: MutationDelete,
+			Key:  runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target),
+		},
 		Mutation{Type: MutationPut, Key: runnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
 		Mutation{Type: MutationDelete, Key: runnerHostSlotKey(record.Allocation.Slot)},
 		Mutation{Type: MutationPut, Key: systemPoolRegistryKey, Value: systemValue},

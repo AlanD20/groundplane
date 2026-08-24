@@ -46,16 +46,25 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if dependencies == nil || dependencies.ReadRevision != current.ReadRevision || len(dependencies.Values) != 3 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "connector deletion dependency read is incomplete")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"connector deletion dependency read is incomplete",
+		)
 	}
 	if dependencies.Values[0] == nil || string(dependencies.Values[0].Value) != connector.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "connector environment index is missing or corrupt")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"connector environment index is missing or corrupt",
+		)
 	}
 	if dependencies.Values[1] == nil || string(dependencies.Values[1].Value) != connector.ID {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "connector name index is missing or corrupt")
 	}
 	if dependencies.Values[2] == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "connector encrypted credentials are missing")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"connector encrypted credentials are missing",
+		)
 	}
 	credentials, err := decodeConnectorEncryptedCredentials(dependencies.Values[2].Value)
 	if err != nil || credentials.ConnectorID != connector.ID {
@@ -104,7 +113,11 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID), Value: tombstoneValue},
+		{
+			Type:  MutationPut,
+			Key:   deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
+			Value: tombstoneValue,
+		},
 		{Type: MutationPut, Key: connectorRemovalIntentKey(task.ID), Value: intentValue},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
@@ -249,8 +262,14 @@ func newConnectorDeletionEvidence(
 			{Key: taskActiveOperationKey(task.OperationID)},
 			{Key: taskQueueKey(task.Executor, task.ID)},
 			{Key: connectorRecordKey(connector.ID), ModRevision: current.Revision},
-			{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID), ModRevision: dependencies.Values[0].ModRevision},
-			{Key: connectorNameKey(connector.EnvironmentID, connector.Name), ModRevision: dependencies.Values[1].ModRevision},
+			{
+				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+				ModRevision: dependencies.Values[0].ModRevision,
+			},
+			{
+				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
+				ModRevision: dependencies.Values[1].ModRevision,
+			},
 			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 			{Key: connectorRemovalIntentKey(task.ID)},
@@ -280,7 +299,12 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 			if err != nil {
 				return err
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", evidence.operationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				evidence.operationID,
+				activeTaskID,
+			)
 		}
 		for _, index := range []int{evidence.task, evidence.operation, evidence.queue} {
 			if values[index] != nil {
@@ -294,7 +318,8 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 		if values[evidence.primary].ModRevision != evidence.current.Revision {
 			return stateConflict("connector", connector.ID)
 		}
-		if values[evidence.environmentIndex] == nil || string(values[evidence.environmentIndex].Value) != connector.ID ||
+		if values[evidence.environmentIndex] == nil ||
+			string(values[evidence.environmentIndex].Value) != connector.ID ||
 			values[evidence.environmentIndex].ModRevision != evidence.conditions[evidence.environmentIndex].ModRevision {
 			return errs.New(errs.KindInternal, "connector environment index changed or is corrupt")
 		}

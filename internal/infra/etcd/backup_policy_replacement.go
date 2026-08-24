@@ -677,7 +677,10 @@ func prepareBackupPolicyReplacement(
 		keyValueRevision,
 	)
 	if candidate.InitialKey != nil {
-		initial := backupPolicyInitialKey{Record: candidate.InitialKey.Record, Encrypted: candidate.InitialKey.Encrypted}
+		initial := backupPolicyInitialKey{
+			Record:    candidate.InitialKey.Record,
+			Encrypted: candidate.InitialKey.Encrypted,
+		}
 		initial.Encrypted.Ciphertext = append([]byte(nil), candidate.InitialKey.Encrypted.Ciphertext...)
 		defer clear(initial.Encrypted.Ciphertext)
 		recordValue, encodeErr := encodeBackupKeyRecord(initial.Record)
@@ -691,9 +694,14 @@ func prepareBackupPolicyReplacement(
 			clearMutationValues(plan.mutations)
 			return backupPolicyReplacementPlan{}, encodeErr
 		}
-		plan.mutations = append(plan.mutations,
+		plan.mutations = append(
+			plan.mutations,
 			Mutation{Type: MutationPut, Key: backupKeyKey(candidate.Replacement.EnvironmentID), Value: recordValue},
-			Mutation{Type: MutationPut, Key: backupKeyValueKey(candidate.Replacement.EnvironmentID), Value: encryptedValue},
+			Mutation{
+				Type:  MutationPut,
+				Key:   backupKeyValueKey(candidate.Replacement.EnvironmentID),
+				Value: encryptedValue,
+			},
 		)
 	}
 	return plan, nil

@@ -207,7 +207,13 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classifyAttachTaskCreateConflict)
+	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
+		conditions,
+		mutations,
+		classifyAttachTaskCreateConflict,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -409,7 +415,13 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			)
 		}
 	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classifyAttachDetachTaskConflict)
+	plan, err := newTaskIdempotencyMutationPlan(
+		task,
+		initiation,
+		conditions,
+		mutations,
+		classifyAttachDetachTaskConflict,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

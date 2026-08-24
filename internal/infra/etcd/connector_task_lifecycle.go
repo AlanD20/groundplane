@@ -151,8 +151,14 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			{Key: connectorRecordKey(connector.ID), ModRevision: stored.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 			{Key: connectorRemovalIntentKey(retry.ID)},
-			{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID), ModRevision: dependencies.Values[0].ModRevision},
-			{Key: connectorNameKey(connector.EnvironmentID, connector.Name), ModRevision: dependencies.Values[1].ModRevision},
+			{
+				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+				ModRevision: dependencies.Values[0].ModRevision,
+			},
+			{
+				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
+				ModRevision: dependencies.Values[1].ModRevision,
+			},
 			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 			{Key: backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
 			{Key: environmentKey(environment.ID), ModRevision: dependencies.Values[4].ModRevision},
@@ -311,10 +317,19 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		applies: true,
 		conditions: []Condition{
 			{Key: connectorRecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(DeletionTargetConnector), task.Target), ModRevision: stored.Values[1].ModRevision},
+			{
+				Key:         deletionTombstoneKey(string(DeletionTargetConnector), task.Target),
+				ModRevision: stored.Values[1].ModRevision,
+			},
 			{Key: connectorRemovalIntentKey(task.ID), ModRevision: stored.Values[2].ModRevision},
-			{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID), ModRevision: dependencies.Values[0].ModRevision},
-			{Key: connectorNameKey(connector.EnvironmentID, connector.Name), ModRevision: dependencies.Values[1].ModRevision},
+			{
+				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+				ModRevision: dependencies.Values[0].ModRevision,
+			},
+			{
+				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
+				ModRevision: dependencies.Values[1].ModRevision,
+			},
 			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 			{Key: backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
 		},

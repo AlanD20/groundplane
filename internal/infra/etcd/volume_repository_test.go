@@ -85,13 +85,28 @@ func TestVolumeRepositoryEnforcesScopedNameAndAncestorFences(t *testing.T) {
 			if err != nil || !transaction.Succeeded {
 				t.Fatalf("install %s fence = %#v, %v", name, transaction, err)
 			}
-			if _, err := repository.CreateVolume(ctx, environment, project, fenced); !isKind(err, errs.KindResourceInUse) {
+			if _, err := repository.CreateVolume(
+				ctx,
+				environment,
+				project,
+				fenced,
+			); !isKind(
+				err,
+				errs.KindResourceInUse,
+			) {
 				t.Fatalf("CreateVolume(%s fenced) error = %v", name, err)
 			}
 			if _, err := repository.GetVolume(ctx, fenced.ID); !isKind(err, errs.KindVolumeNotFound) {
 				t.Fatalf("GetVolume(after failed create) error = %v", err)
 			}
-			if _, err := repository.GetVolumeByName(ctx, environment.Record.ID, fenced.Name); !isKind(err, errs.KindVolumeNotFound) {
+			if _, err := repository.GetVolumeByName(
+				ctx,
+				environment.Record.ID,
+				fenced.Name,
+			); !isKind(
+				err,
+				errs.KindVolumeNotFound,
+			) {
 				t.Fatalf("GetVolumeByName(after failed create) error = %v", err)
 			}
 		})
@@ -133,7 +148,13 @@ func TestVolumeRepositoryIdempotentCreateKeepsExactStableIdentity(t *testing.T) 
 	firstOutcome, firstMarker, firstDomainErr, firstClassifyErr := first.Classify()
 	if firstClassifyErr != nil || firstDomainErr != nil || firstOutcome != IdempotencyKnownApplied ||
 		firstMarker.Kind != "" {
-		t.Fatalf("CreateVolumeIdempotent() classification = %v/%#v/%v/%v", firstOutcome, firstMarker, firstDomainErr, firstClassifyErr)
+		t.Fatalf(
+			"CreateVolumeIdempotent() classification = %v/%#v/%v/%v",
+			firstOutcome,
+			firstMarker,
+			firstDomainErr,
+			firstClassifyErr,
+		)
 	}
 	replayed, err := repository.CreateVolumeIdempotent(ctx, environment, project, record, marker)
 	if err != nil {
@@ -142,7 +163,13 @@ func TestVolumeRepositoryIdempotentCreateKeepsExactStableIdentity(t *testing.T) 
 	replayOutcome, replayMarker, replayDomainErr, replayClassifyErr := replayed.Classify()
 	if replayClassifyErr != nil || replayDomainErr != nil || replayOutcome != IdempotencyKnownExisting ||
 		replayMarker.Response.Status != http.StatusCreated {
-		t.Fatalf("CreateVolumeIdempotent(replay) classification = %v/%#v/%v/%v", replayOutcome, replayMarker, replayDomainErr, replayClassifyErr)
+		t.Fatalf(
+			"CreateVolumeIdempotent(replay) classification = %v/%#v/%v/%v",
+			replayOutcome,
+			replayMarker,
+			replayDomainErr,
+			replayClassifyErr,
+		)
 	}
 	stored, err := repository.GetVolume(ctx, record.ID)
 	if err != nil || stored.Record != record {
