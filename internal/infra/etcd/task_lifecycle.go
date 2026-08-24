@@ -1346,7 +1346,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		var environmentValue []byte
 		if environmentID != "" {
-			environmentCondition, environmentMutation, value, err := repository.prepareEnvironmentCreationAcknowledgement(
+			environmentConditions, environmentMutations, value, err := repository.prepareEnvironmentCreationAcknowledgement(
 				ctx,
 				task,
 				terminalStatus,
@@ -1359,8 +1359,8 @@ func (repository *TaskRepository) acknowledgeTask(
 				return Versioned[TaskRecord]{}, err
 			}
 			environmentValue = value
-			conditions = append(conditions, environmentCondition)
-			mutations = append(mutations, environmentMutation)
+			conditions = append(conditions, environmentConditions...)
+			mutations = append(mutations, environmentMutations...)
 		}
 		if environmentRemoval {
 			environmentConditions, environmentMutations, err := repository.prepareEnvironmentRemovalAcknowledgement(
@@ -1844,7 +1844,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		var environmentValue []byte
 		if environmentCreation {
-			environmentCondition, environmentMutation, value, prepareErr :=
+			environmentConditions, environmentMutations, value, prepareErr :=
 				repository.prepareEnvironmentCreationAcknowledgement(
 					ctx,
 					current.Record,
@@ -1859,8 +1859,8 @@ func (repository *TaskRepository) AbortPendingTask(
 				return Versioned[TaskRecord]{}, prepareErr
 			}
 			environmentValue = value
-			conditions = append(conditions, environmentCondition)
-			mutations = append(mutations, environmentMutation)
+			conditions = append(conditions, environmentConditions...)
+			mutations = append(mutations, environmentMutations...)
 		}
 		if environmentRemoval {
 			environmentConditions, environmentMutations, prepareErr :=

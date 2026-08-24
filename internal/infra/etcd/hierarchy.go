@@ -475,26 +475,47 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
+	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+		EnvironmentID: record.ID,
+	})
+	if err != nil {
+		return Versioned[EnvironmentRecord]{}, err
+	}
 	primary := environmentKey(record.ID)
 	label := environmentNameKey(record.ProjectID, record.Name)
 	ownerIndex := environmentOwnerKey(record.ProjectID, record.ID)
+	epochKey := environmentMutationEpochKey(record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]Condition{
 			{Key: primary},
 			{Key: label},
 			{Key: ownerIndex},
 			{Key: projectKey(record.ProjectID), ModRevision: owner.Revision},
+			{Key: epochKey},
 		},
 		[]Mutation{
 			{Type: MutationPut, Key: primary, Value: value},
 			{Type: MutationPut, Key: label, Value: []byte(record.ID)},
 			{Type: MutationPut, Key: ownerIndex, Value: []byte(record.ID)},
+			{Type: MutationPut, Key: epochKey, Value: epochValue},
 		},
 	)
 	if err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	if !result.Succeeded {
+		if len(result.FailureReads) != 5 {
+			return Versioned[EnvironmentRecord]{}, errs.New(
+				errs.KindInternal,
+				"environment creation compare evidence is incomplete",
+			)
+		}
+		if result.FailureReads[4] != nil {
+			return Versioned[EnvironmentRecord]{}, errs.New(
+				errs.KindInternal,
+				"environment creation collided with mutation epoch state",
+			)
+		}
 		return Versioned[EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)
 	}
 	return Versioned[EnvironmentRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil

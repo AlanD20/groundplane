@@ -745,8 +745,9 @@ func connectorDeletionPolicyCandidate(
 		t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 	}
 	return backupPolicyReplacementCandidate{
-		Environment: fixture.environment,
-		Project:     fixture.project,
+		Environment:   fixture.environment,
+		Project:       fixture.project,
+		MutationEpoch: mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID),
 		Replacement: BackupPolicyRecord{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,

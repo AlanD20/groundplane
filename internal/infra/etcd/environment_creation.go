@@ -10,7 +10,8 @@ import (
 // CreateEnvironmentWithTask atomically publishes the provisioning
 // Environment, its indexes, initial Components, the owning Task,
 // active-operation record, queue membership, and Task idempotency marker under
-// Project/Tenant deletion fences.
+// Project/Tenant deletion fences. The same transaction creates the canonical
+// Environment mutation epoch consumed by every later persistence mutation.
 func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	ctx context.Context,
 	volumeRoot string,
@@ -107,6 +108,13 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
+	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+		EnvironmentID: record.ID,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(epochValue)
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
@@ -121,6 +129,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
 		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
 		{Key: environmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
+		{Key: environmentMutationEpochKey(record.ID)},
 	}
 	for _, component := range components {
 		conditions = append(conditions,
@@ -138,6 +147,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Type: MutationPut, Key: environmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: environmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
+		{Type: MutationPut, Key: environmentMutationEpochKey(record.ID), Value: epochValue},
 	}
 	for index, component := range components {
 		mutations = append(mutations,
@@ -224,7 +234,7 @@ func classifyEnvironmentCreateConflict(
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 12+(3*len(components)) {
+		if len(values) != 13+(3*len(components)) {
 			return errs.New(errs.KindInternal, "Environment creation compare evidence is incomplete")
 		}
 		if values[2] != nil {
@@ -269,8 +279,11 @@ func classifyEnvironmentCreateConflict(
 			(poolRegistry.Revision > 0 && (values[11] == nil || values[11].ModRevision != poolRegistry.Revision)) {
 			return stateConflict("environment pool registry", "global")
 		}
+		if values[12] != nil {
+			return errs.New(errs.KindInternal, "environment creation collided with mutation epoch state")
+		}
 		for index := range components {
-			offset := 12 + (index * 3)
+			offset := 13 + (index * 3)
 			if values[offset] != nil || values[offset+1] != nil {
 				return errs.New(errs.KindStateConflict, "Component stable identity is already in use")
 			}

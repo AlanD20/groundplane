@@ -59,6 +59,19 @@ func TestBackupPolicyTypedPreparationCommitsStableProjection(t *testing.T) {
 		t.Fatalf("PrepareBackupPolicyReplacement() error = %v", err)
 	}
 	defer prepared.Destroy()
+	fixedRevision := prepared.candidate.MutationEpoch.ReadRevision
+	if fixedRevision <= 0 || prepared.candidate.Environment.ReadRevision != fixedRevision ||
+		prepared.candidate.Project.ReadRevision != fixedRevision ||
+		prepared.candidate.Connector == nil || prepared.candidate.Connector.ReadRevision != fixedRevision {
+		t.Fatalf("prepared base evidence does not share revision %d", fixedRevision)
+	}
+	for _, source := range prepared.candidate.Sources {
+		if source.Source.ReadRevision != fixedRevision ||
+			(source.Attach != nil && source.Attach.ReadRevision != fixedRevision) ||
+			(source.Volume != nil && source.Volume.ReadRevision != fixedRevision) {
+			t.Fatalf("prepared source evidence does not share revision %d", fixedRevision)
+		}
+	}
 	prepared, err = fixture.repository.SupplyBackupPolicyInitialKey(
 		context.Background(),
 		prepared,
@@ -420,9 +433,9 @@ func TestMaximumBackupPolicySourcesMatchesWorstCaseAtomicBudget(t *testing.T) {
 		t.Fatalf("prepareBackupPolicyReplacement(maximum) error = %v", err)
 	}
 	marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-budget-0001")
-	if operations := backupPolicyReplacementOperationCount(plan, marker); operations != 93 ||
+	if operations := backupPolicyReplacementOperationCount(plan, marker); operations != 96 ||
 		operations > maximumTransactionOperations {
-		t.Fatalf("maximum source operation budget = %d, want 93 <= %d", operations, maximumTransactionOperations)
+		t.Fatalf("maximum source operation budget = %d, want 96 <= %d", operations, maximumTransactionOperations)
 	}
 	candidate.Sources = backupPolicyBudgetVolumeEvidence(
 		t,
@@ -438,9 +451,9 @@ func TestMaximumBackupPolicySourcesMatchesWorstCaseAtomicBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareBackupPolicyReplacement(above maximum) error = %v", err)
 	}
-	if operations := backupPolicyReplacementOperationCount(above, marker); operations != 99 ||
+	if operations := backupPolicyReplacementOperationCount(above, marker); operations != 102 ||
 		operations <= maximumTransactionOperations {
-		t.Fatalf("above-maximum operation budget = %d, want 99 > %d", operations, maximumTransactionOperations)
+		t.Fatalf("above-maximum operation budget = %d, want 102 > %d", operations, maximumTransactionOperations)
 	}
 
 	audit := &backupPolicyPreparationAuditStore{memoryHierarchyStore: fixture.store}

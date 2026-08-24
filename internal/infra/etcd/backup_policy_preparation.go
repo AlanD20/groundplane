@@ -12,7 +12,7 @@ import (
 // MaximumBackupPolicySources is the largest selection whose worst-case
 // protected replacement fits the fixed 96-operation etcd transaction budget.
 // The worst case is an enabled Connector move that creates era 1 and selects
-// only Attach/Volume sources: 21 fixed operations plus 6 per source.
+// only Attach/Volume sources: 24 fixed operations plus 6 per source.
 const MaximumBackupPolicySources = 12
 
 // BackupPolicySourceSelection is the stable-id form accepted by the human API
@@ -125,44 +125,29 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	}
 
 	now := repository.now().UTC()
-	candidate := backupPolicyReplacementCandidate{
-		Environment: environment,
-		Project:     project,
-		Replacement: BackupPolicyRecord{
-			EnvironmentID: input.EnvironmentID,
-			Enabled:       input.Enabled,
-			Frequency:     input.Frequency,
-			Keep:          input.Keep,
-			Encryption:    input.Encryption,
-			ConnectorID:   input.ConnectorID,
-			SourceIDs:     make([]string, len(resolved)),
-			UpdatedAt:     now,
-		},
-		Sources: make([]backupPolicySourceEvidence, len(resolved)),
-	}
-	current, found, err := repository.GetBackupPolicy(ctx, input.EnvironmentID)
-	if err != nil {
-		return PreparedBackupPolicyReplacement{}, err
-	}
-	if found {
-		candidate.Current = &current
-	}
-	existingKey, keyFound, err := repository.GetBackupKey(ctx, input.EnvironmentID)
+	candidate, keyFound, err := repository.loadBackupPolicyReplacementBase(
+		ctx,
+		input,
+		environment.Record.ProjectID,
+		project.Record.TenantID,
+		now,
+	)
 	if err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	keepCandidate := false
 	defer func() {
-		if keyFound && !keepCandidate {
-			clear(existingKey.Encrypted.Ciphertext)
+		if candidate.ExistingKey != nil && !keepCandidate {
+			clear(candidate.ExistingKey.Encrypted.Ciphertext)
 		}
 	}()
-	if keyFound {
-		candidate.ExistingKey = &existingKey
-	}
 	for index, source := range resolved {
 		candidate.Replacement.SourceIDs[index] = source.Record.ID
-		candidate.Sources[index], err = repository.loadbackupPolicySourceEvidence(ctx, source)
+		candidate.Sources[index], err = repository.loadbackupPolicySourceEvidence(
+			ctx,
+			source,
+			candidate.MutationEpoch.ReadRevision,
+		)
 		if err != nil {
 			return PreparedBackupPolicyReplacement{}, err
 		}
@@ -172,12 +157,17 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 			ctx,
 			input.EnvironmentID,
 			input.ConnectorID,
+			candidate.MutationEpoch.ReadRevision,
 		)
 		if err != nil {
 			return PreparedBackupPolicyReplacement{}, err
 		}
 	}
-	candidate.ConnectorReferences, err = repository.loadBackupPolicyConnectorReferences(ctx, candidate)
+	candidate.ConnectorReferences, err = repository.loadBackupPolicyConnectorReferences(
+		ctx,
+		candidate,
+		candidate.MutationEpoch.ReadRevision,
+	)
 	if err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
@@ -193,6 +183,140 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	return PreparedBackupPolicyReplacement{
 		candidate: candidate, projection: projection, requiresInitialKey: requiresInitialKey,
 	}, nil
+}
+
+func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
+	ctx context.Context,
+	input BackupPolicyReplacementInput,
+	projectID string,
+	tenantID string,
+	now time.Time,
+) (backupPolicyReplacementCandidate, bool, error) {
+	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		environmentKey(input.EnvironmentID),
+		projectKey(projectID),
+		backupPolicyKey(input.EnvironmentID),
+		environmentMutationEpochKey(input.EnvironmentID),
+		environmentOperationLockKey(input.EnvironmentID),
+		backupKeyKey(input.EnvironmentID),
+		backupKeyValueKey(input.EnvironmentID),
+		deletionTombstoneKey(string(DeletionTargetEnvironment), input.EnvironmentID),
+		deletionTombstoneKey(string(DeletionTargetProject), projectID),
+		deletionTombstoneKey(string(DeletionTargetTenant), tenantID),
+	}})
+	if err != nil {
+		return backupPolicyReplacementCandidate{}, false, err
+	}
+	if result == nil || result.ReadRevision <= 0 || len(result.Values) != 10 {
+		return backupPolicyReplacementCandidate{}, false, errs.New(
+			errs.KindInternal,
+			"backup policy replacement base read is incomplete",
+		)
+	}
+	defer clearKeyValues(result.Values)
+	if result.Values[0] == nil {
+		return backupPolicyReplacementCandidate{}, false, errs.New(
+			errs.KindEnvironmentNotFound,
+			"environment was not found",
+		)
+	}
+	environment, err := decodeEnvironment(result.Values[0].Value)
+	if err != nil || environment.ID != input.EnvironmentID || environment.ProjectID != projectID {
+		return backupPolicyReplacementCandidate{}, false, corruptRecord()
+	}
+	if environment.ProvisioningState != EnvironmentProvisioningReady {
+		return backupPolicyReplacementCandidate{}, false, errs.New(
+			errs.KindStateConflict,
+			"environment is not ready for backup policy replacement",
+		)
+	}
+	if result.Values[1] == nil {
+		return backupPolicyReplacementCandidate{}, false, errs.New(errs.KindProjectNotFound, "project was not found")
+	}
+	project, err := decodeProject(result.Values[1].Value)
+	if err != nil || project.ID != projectID || project.TenantID != tenantID || project.Kind != ProjectKindTenant {
+		return backupPolicyReplacementCandidate{}, false, corruptRecord()
+	}
+	for _, index := range []int{7, 8, 9} {
+		if result.Values[index] != nil {
+			return backupPolicyReplacementCandidate{}, false, errs.New(
+				errs.KindResourceInUse,
+				"backup policy hierarchy deletion is in progress",
+			)
+		}
+	}
+	if result.Values[4] != nil {
+		return backupPolicyReplacementCandidate{}, false, errs.New(
+			errs.KindResourceInUse,
+			"environment persistence operation is in progress",
+		)
+	}
+	if result.Values[3] == nil {
+		return backupPolicyReplacementCandidate{}, false, errs.New(
+			errs.KindInternal,
+			"environment mutation epoch is missing",
+		)
+	}
+	epoch, err := decodeEnvironmentMutationEpochRecord(result.Values[3].Value)
+	if err != nil || epoch.EnvironmentID != input.EnvironmentID {
+		return backupPolicyReplacementCandidate{}, false, errs.New(
+			errs.KindInternal,
+			"environment mutation epoch is corrupt",
+		)
+	}
+	candidate := backupPolicyReplacementCandidate{
+		Environment: Versioned[EnvironmentRecord]{
+			Record: environment, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
+		},
+		Project: Versioned[ProjectRecord]{
+			Record: project, Revision: result.Values[1].ModRevision, ReadRevision: result.ReadRevision,
+		},
+		MutationEpoch: Versioned[EnvironmentMutationEpochRecord]{
+			Record: epoch, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
+		},
+		Replacement: BackupPolicyRecord{
+			EnvironmentID: input.EnvironmentID,
+			Enabled:       input.Enabled,
+			Frequency:     input.Frequency,
+			Keep:          input.Keep,
+			Encryption:    input.Encryption,
+			ConnectorID:   input.ConnectorID,
+			SourceIDs:     make([]string, len(input.Sources)),
+			UpdatedAt:     now,
+		},
+		Sources: make([]backupPolicySourceEvidence, len(input.Sources)),
+	}
+	if result.Values[2] != nil {
+		current, decodeErr := decodeBackupPolicyRecord(result.Values[2].Value)
+		if decodeErr != nil || current.EnvironmentID != input.EnvironmentID {
+			return backupPolicyReplacementCandidate{}, false, corruptRecord()
+		}
+		candidate.Current = &Versioned[BackupPolicyRecord]{
+			Record: current, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
+		}
+	}
+	if (result.Values[5] == nil) != (result.Values[6] == nil) {
+		return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
+	}
+	keyFound := result.Values[5] != nil
+	if keyFound {
+		record, decodeErr := decodeBackupKeyRecord(result.Values[5].Value)
+		if decodeErr != nil {
+			return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
+		}
+		encrypted, decodeErr := decodeBackupKeyEncryptedValue(result.Values[6].Value)
+		if decodeErr != nil || record.EnvironmentID != input.EnvironmentID ||
+			encrypted.EnvironmentID != input.EnvironmentID || record.KeyEra != encrypted.KeyEra {
+			clear(encrypted.Ciphertext)
+			return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
+		}
+		candidate.ExistingKey = &VersionedBackupKey{
+			Record: record, Encrypted: encrypted,
+			RecordRevision: result.Values[5].ModRevision, EncryptedRevision: result.Values[6].ModRevision,
+			ReadRevision: result.ReadRevision,
+		}
+	}
+	return candidate, keyFound, nil
 }
 
 func (repository *BackupPolicyRepository) SupplyBackupPolicyInitialKey(
@@ -357,6 +481,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	ctx context.Context,
 	expected Versioned[BackupSourceRecord],
+	revision int64,
 ) (backupPolicySourceEvidence, error) {
 	record := expected.Record
 	keys := []string{
@@ -369,11 +494,11 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	} else if record.Kind == core.BackupSourceVolume {
 		keys = append(keys, volumeKey(record.TargetID), volumeOwnerKey(record.EnvironmentID, record.TargetID))
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return backupPolicySourceEvidence{}, err
 	}
-	if result == nil || len(result.Values) != len(keys) || result.Values[0] == nil ||
+	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) || result.Values[0] == nil ||
 		result.Values[1] == nil || result.Values[2] == nil {
 		return backupPolicySourceEvidence{}, corruptRecord()
 	}
@@ -422,15 +547,16 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 	ctx context.Context,
 	environmentID string,
 	connectorID string,
+	revision int64,
 ) (*Versioned[ConnectorRecord], *KeyValue, error) {
 	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 		connectorRecordKey(connectorID),
 		connectorEnvironmentKey(environmentID, connectorID),
-	}})
+	}, Revision: revision})
 	if err != nil {
 		return nil, nil, err
 	}
-	if result == nil || len(result.Values) != 2 {
+	if result == nil || result.ReadRevision != revision || len(result.Values) != 2 {
 		return nil, nil, errs.New(errs.KindInternal, "backup policy connector read is incomplete")
 	}
 	if result.Values[0] == nil {
@@ -454,6 +580,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 	ctx context.Context,
 	candidate backupPolicyReplacementCandidate,
+	revision int64,
 ) ([]backupPolicyConnectorReferenceEvidence, error) {
 	oldConnectorID := ""
 	if candidate.Current != nil && candidate.Current.Record.Enabled {
@@ -472,19 +599,21 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 	}
 	evidence := make([]backupPolicyConnectorReferenceEvidence, len(connectorIDs))
 	for index, connectorID := range connectorIDs {
-		result, err := repository.store.Get(
-			ctx,
-			backupPolicyConnectorReferenceKey(connectorID, candidate.Replacement.EnvironmentID),
-		)
+		result, err := repository.store.GetMany(ctx, GetManyRequest{
+			Keys: []string{
+				backupPolicyConnectorReferenceKey(connectorID, candidate.Replacement.EnvironmentID),
+			},
+			Revision: revision,
+		})
 		if err != nil {
 			return nil, err
 		}
-		if result == nil {
+		if result == nil || result.ReadRevision != revision || len(result.Values) != 1 {
 			return nil, errs.New(errs.KindInternal, "backup policy connector reference read is empty")
 		}
 		evidence[index] = backupPolicyConnectorReferenceEvidence{
 			ConnectorID: connectorID,
-			Entry:       cloneBackupPolicyEvidenceKeyValue(result.Entry),
+			Entry:       cloneBackupPolicyEvidenceKeyValue(result.Values[0]),
 		}
 	}
 	return evidence, nil

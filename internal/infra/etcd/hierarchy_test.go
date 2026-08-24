@@ -45,6 +45,14 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateEnvironment(): %v", err)
 	}
+	epochResult, err := repository.store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
+	if err != nil || epochResult.Entry == nil || epochResult.Entry.ModRevision != environment.Revision {
+		t.Fatalf("Environment mutation epoch = %#v, %v", epochResult, err)
+	}
+	epoch, err := decodeEnvironmentMutationEpochRecord(epochResult.Entry.Value)
+	if err != nil || epoch.EnvironmentID != environment.Record.ID {
+		t.Fatalf("decoded Environment mutation epoch = %#v, %v", epoch, err)
+	}
 
 	renamed, err := repository.RenameTenant(ctx, tenantID, tenant.Revision, "acme-group")
 	if err != nil {

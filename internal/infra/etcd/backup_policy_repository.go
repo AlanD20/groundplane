@@ -11,6 +11,12 @@ import (
 
 const maximumBackupSourceEnsureAttempts = 3
 
+type backupSourceCreationEvidence struct {
+	environment   Versioned[EnvironmentRecord]
+	project       Versioned[ProjectRecord]
+	mutationEpoch Versioned[EnvironmentMutationEpochRecord]
+}
+
 // BackupPolicyRepository owns the Environment singleton and immutable source
 // catalog. Protected replacement is composed separately because it also owns
 // Connector references, age-key creation, and exact replay bytes.
@@ -53,11 +59,22 @@ func (repository *BackupPolicyRepository) EnsureBackupSource(
 		if found {
 			return existing, nil
 		}
+		creation, err := repository.loadBackupSourceCreationEvidence(
+			ctx,
+			environment,
+			project,
+			kind,
+			targetID,
+			existing.ReadRevision,
+		)
+		if err != nil {
+			return Versioned[BackupSourceRecord]{}, err
+		}
 		record := BackupSourceRecord{
 			ID: ids.New(ids.KindBackupSource), EnvironmentID: environment.Record.ID,
 			Kind: kind, TargetID: targetID, CreatedAt: repository.now().UTC(),
 		}
-		created, err := repository.createBackupSource(ctx, environment, project, record)
+		created, err := repository.createBackupSource(ctx, creation, record)
 		if err == nil {
 			return created, nil
 		}
@@ -151,8 +168,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicy(
 
 func (repository *BackupPolicyRepository) createBackupSource(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	evidence backupSourceCreationEvidence,
 	record BackupSourceRecord,
 ) (Versioned[BackupSourceRecord], error) {
 	value, err := encodeBackupSourceRecord(record)
@@ -160,6 +176,13 @@ func (repository *BackupPolicyRepository) createBackupSource(
 		return Versioned[BackupSourceRecord]{}, err
 	}
 	defer clear(value)
+	epochValue, err := encodeEnvironmentMutationEpochRecord(evidence.mutationEpoch.Record)
+	if err != nil {
+		return Versioned[BackupSourceRecord]{}, err
+	}
+	defer clear(epochValue)
+	environment := evidence.environment
+	project := evidence.project
 	result, err := repository.store.Transact(ctx, []Condition{
 		{Key: backupSourceKey(record.ID)},
 		{Key: backupSourceEnvironmentKey(record.EnvironmentID, record.ID)},
@@ -169,6 +192,11 @@ func (repository *BackupPolicyRepository) createBackupSource(
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID)},
+		{
+			Key:         environmentMutationEpochKey(environment.Record.ID),
+			ModRevision: evidence.mutationEpoch.Revision,
+		},
+		{Key: environmentOperationLockKey(environment.Record.ID)},
 	}, []Mutation{
 		{Type: MutationPut, Key: backupSourceKey(record.ID), Value: value},
 		{
@@ -179,6 +207,10 @@ func (repository *BackupPolicyRepository) createBackupSource(
 			Type: MutationPut, Key: backupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID),
 			Value: []byte(record.ID),
 		},
+		{
+			Type: MutationPut, Key: environmentMutationEpochKey(environment.Record.ID),
+			Value: epochValue,
+		},
 	})
 	if err != nil {
 		return Versioned[BackupSourceRecord]{}, err
@@ -186,12 +218,104 @@ func (repository *BackupPolicyRepository) createBackupSource(
 	if !result.Succeeded {
 		return Versioned[BackupSourceRecord]{}, classifyBackupSourceCreateConflict(
 			result.FailureReads,
-			environment,
-			project,
+			evidence,
 		)
 	}
 	return Versioned[BackupSourceRecord]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
+	}, nil
+}
+
+func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	kind core.BackupSourceKind,
+	targetID string,
+	revision int64,
+) (backupSourceCreationEvidence, error) {
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{
+			backupSourceIdentityKey(environment.Record.ID, kind, targetID),
+			environmentKey(environment.Record.ID),
+			projectKey(project.Record.ID),
+			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID),
+			deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID),
+			deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
+			environmentMutationEpochKey(environment.Record.ID),
+			environmentOperationLockKey(environment.Record.ID),
+		},
+		Revision: revision,
+	})
+	if err != nil {
+		return backupSourceCreationEvidence{}, err
+	}
+	if result == nil || result.ReadRevision != revision || len(result.Values) != 8 {
+		return backupSourceCreationEvidence{}, errs.New(
+			errs.KindInternal,
+			"backup source creation evidence is incomplete",
+		)
+	}
+	defer clearKeyValues(result.Values)
+	if result.Values[0] != nil {
+		return backupSourceCreationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"backup source identity was created concurrently",
+		)
+	}
+	if result.Values[1] == nil {
+		return backupSourceCreationEvidence{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
+	}
+	currentEnvironment, err := decodeEnvironment(result.Values[1].Value)
+	if err != nil || currentEnvironment.ID != environment.Record.ID ||
+		currentEnvironment.ProjectID != project.Record.ID {
+		return backupSourceCreationEvidence{}, corruptRecord()
+	}
+	if result.Values[2] == nil {
+		return backupSourceCreationEvidence{}, errs.New(errs.KindProjectNotFound, "project was not found")
+	}
+	currentProject, err := decodeProject(result.Values[2].Value)
+	if err != nil || currentProject.ID != project.Record.ID || currentProject.TenantID != project.Record.TenantID ||
+		currentProject.Kind != ProjectKindTenant {
+		return backupSourceCreationEvidence{}, corruptRecord()
+	}
+	for _, index := range []int{3, 4, 5} {
+		if result.Values[index] != nil {
+			return backupSourceCreationEvidence{}, errs.New(
+				errs.KindResourceInUse,
+				"backup source hierarchy deletion is in progress",
+			)
+		}
+	}
+	if result.Values[7] != nil {
+		return backupSourceCreationEvidence{}, errs.New(
+			errs.KindResourceInUse,
+			"environment persistence operation is in progress",
+		)
+	}
+	if result.Values[6] == nil {
+		return backupSourceCreationEvidence{}, errs.New(
+			errs.KindInternal,
+			"environment mutation epoch is missing",
+		)
+	}
+	epoch, err := decodeEnvironmentMutationEpochRecord(result.Values[6].Value)
+	if err != nil || epoch.EnvironmentID != environment.Record.ID {
+		return backupSourceCreationEvidence{}, errs.New(
+			errs.KindInternal,
+			"environment mutation epoch is corrupt",
+		)
+	}
+	return backupSourceCreationEvidence{
+		environment: Versioned[EnvironmentRecord]{
+			Record: currentEnvironment, Revision: result.Values[1].ModRevision, ReadRevision: result.ReadRevision,
+		},
+		project: Versioned[ProjectRecord]{
+			Record: currentProject, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
+		},
+		mutationEpoch: Versioned[EnvironmentMutationEpochRecord]{
+			Record: epoch, Revision: result.Values[6].ModRevision, ReadRevision: result.ReadRevision,
+		},
 	}, nil
 }
 
@@ -276,12 +400,13 @@ func validateBackupSourceHierarchy(
 
 func classifyBackupSourceCreateConflict(
 	values []*KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	evidence backupSourceCreationEvidence,
 ) error {
-	if len(values) != 8 {
+	if len(values) != 10 {
 		return errs.New(errs.KindInternal, "backup source create compare evidence is incomplete")
 	}
+	environment := evidence.environment
+	project := evidence.project
 	if values[2] != nil {
 		return errs.New(errs.KindStateConflict, "backup source identity was created concurrently")
 	}
@@ -304,6 +429,19 @@ func classifyBackupSourceCreateConflict(
 		if values[index] != nil {
 			return errs.New(errs.KindResourceInUse, "backup source hierarchy deletion is in progress")
 		}
+	}
+	if values[9] != nil {
+		return errs.New(errs.KindResourceInUse, "environment persistence operation is in progress")
+	}
+	if values[8] == nil {
+		return errs.New(errs.KindInternal, "environment mutation epoch is missing")
+	}
+	epoch, err := decodeEnvironmentMutationEpochRecord(values[8].Value)
+	if err != nil || epoch.EnvironmentID != environment.Record.ID {
+		return errs.New(errs.KindInternal, "environment mutation epoch is corrupt")
+	}
+	if values[8].ModRevision != evidence.mutationEpoch.Revision {
+		return stateConflict("environment mutation epoch", environment.Record.ID)
 	}
 	return errs.New(errs.KindStateConflict, "backup source state changed")
 }

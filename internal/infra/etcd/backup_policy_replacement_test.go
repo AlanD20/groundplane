@@ -90,6 +90,7 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 			t, fixture.store, fixture.connector.Record.Connector.ID, fixture.environment.Record.ID,
 		)
 		move := first
+		move.MutationEpoch = mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID)
 		move.Current = &current
 		move.Replacement.ConnectorID = secondConnector.Record.Connector.ID
 		move.Replacement.Encryption = "none"
@@ -129,9 +130,10 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 			t, fixture.store, secondConnector.Record.Connector.ID, fixture.environment.Record.ID,
 		)
 		disabled := backupPolicyReplacementCandidate{
-			Environment: fixture.environment,
-			Project:     fixture.project,
-			Current:     &moved,
+			Environment:   fixture.environment,
+			Project:       fixture.project,
+			MutationEpoch: mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID),
+			Current:       &moved,
 			Replacement: BackupPolicyRecord{
 				EnvironmentID: fixture.environment.Record.ID,
 				UpdatedAt:     move.Replacement.UpdatedAt.Add(time.Second),
@@ -268,9 +270,10 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		)
 		reference.Value = []byte("wrong-environment")
 		disabled := backupPolicyReplacementCandidate{
-			Environment: fixture.environment,
-			Project:     fixture.project,
-			Current:     &current,
+			Environment:   fixture.environment,
+			Project:       fixture.project,
+			MutationEpoch: mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID),
+			Current:       &current,
 			Replacement: BackupPolicyRecord{
 				EnvironmentID: fixture.environment.Record.ID,
 				UpdatedAt:     first.Replacement.UpdatedAt.Add(time.Second),
@@ -430,6 +433,70 @@ func TestBackupPolicyProtectedReplacementPreservesUnknownOutcomeAndConflicts(t *
 	}
 }
 
+// Rationale: a canonical Environment operation lock acquired after preparation
+// must fence policy publication without allowing any replacement write.
+func TestBackupPolicyProtectedReplacementRejectsHeldEnvironmentOperationLockWithoutWrites(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fixture := newBackupPolicyReplacementFixture(t, false)
+	candidate := fixture.candidate(t, true, "age")
+	transaction, err := fixture.store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut,
+		Key:  environmentOperationLockKey(fixture.environment.Record.ID),
+		Value: []byte("held"),
+	}})
+	if err != nil || !transaction.Succeeded {
+		t.Fatalf("seed Environment operation lock = %#v, %v", transaction, err)
+	}
+	revisionBefore := fixture.store.revision
+	result, err := fixture.repository.replaceBackupPolicyProtected(
+		ctx,
+		candidate,
+		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-held-lock-0001"),
+	)
+	if err != nil || result.kind != idempotencyTransactionConflict ||
+		!isKind(result.conflict, errs.KindResourceInUse) {
+		t.Fatalf("replaceBackupPolicyProtected(held lock) = %#v, %v", result, err)
+	}
+	if fixture.store.revision != revisionBefore {
+		t.Fatalf("held-lock replacement revision = %d, want unchanged %d", fixture.store.revision, revisionBefore)
+	}
+}
+
+// Rationale: preparation is valid only for its exact Environment mutation
+// epoch; advancing that epoch must reject the stale candidate without writes.
+func TestBackupPolicyProtectedReplacementRejectsAdvancedMutationEpochWithoutWrites(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fixture := newBackupPolicyReplacementFixture(t, false)
+	candidate := fixture.candidate(t, true, "age")
+	epoch, err := fixture.store.Get(ctx, environmentMutationEpochKey(fixture.environment.Record.ID))
+	if err != nil || epoch == nil || epoch.Entry == nil {
+		t.Fatalf("get Environment mutation epoch = %#v, %v", epoch, err)
+	}
+	transaction, err := fixture.store.Transact(ctx, nil, []Mutation{{
+		Type:  MutationPut,
+		Key:   environmentMutationEpochKey(fixture.environment.Record.ID),
+		Value: epoch.Entry.Value,
+	}})
+	if err != nil || !transaction.Succeeded {
+		t.Fatalf("advance Environment mutation epoch = %#v, %v", transaction, err)
+	}
+	revisionBefore := fixture.store.revision
+	result, err := fixture.repository.replaceBackupPolicyProtected(
+		ctx,
+		candidate,
+		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-stale-epoch-0001"),
+	)
+	if err != nil || result.kind != idempotencyTransactionConflict ||
+		!isKind(result.conflict, errs.KindStateConflict) {
+		t.Fatalf("replaceBackupPolicyProtected(stale epoch) = %#v, %v", result, err)
+	}
+	if fixture.store.revision != revisionBefore {
+		t.Fatalf("stale-epoch replacement revision = %d, want unchanged %d", fixture.store.revision, revisionBefore)
+	}
+}
+
 // Rationale: even a prevalidated candidate must be rejected before etcd when
 // its source compares and protected evidence exceed the 96-operation ceiling.
 func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) {
@@ -475,13 +542,14 @@ func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) 
 }
 
 type backupPolicyReplacementFixture struct {
-	repository  *BackupPolicyRepository
-	store       *memoryHierarchyStore
-	environment Versioned[EnvironmentRecord]
-	project     Versioned[ProjectRecord]
-	sources     []backupPolicySourceEvidence
-	connector   Versioned[ConnectorRecord]
-	now         time.Time
+	repository    *BackupPolicyRepository
+	store         *memoryHierarchyStore
+	environment   Versioned[EnvironmentRecord]
+	project       Versioned[ProjectRecord]
+	mutationEpoch Versioned[EnvironmentMutationEpochRecord]
+	sources       []backupPolicySourceEvidence
+	connector     Versioned[ConnectorRecord]
+	now           time.Time
 }
 
 func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backupPolicyReplacementFixture {
@@ -574,6 +642,7 @@ func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backup
 		sources: sources, now: now,
 	}
 	fixture.connector = fixture.createConnector(t, 2410, "primary-backups")
+	fixture.mutationEpoch = mustBackupPolicyMutationEpoch(t, store, environment.Record.ID)
 	return fixture
 }
 
@@ -613,9 +682,10 @@ func (fixture *backupPolicyReplacementFixture) candidate(
 		UpdatedAt:     fixture.now,
 	}
 	candidate := backupPolicyReplacementCandidate{
-		Environment: fixture.environment,
-		Project:     fixture.project,
-		Replacement: policy,
+		Environment:   fixture.environment,
+		Project:       fixture.project,
+		MutationEpoch: fixture.mutationEpoch,
+		Replacement:   policy,
 	}
 	if !enabled {
 		return candidate

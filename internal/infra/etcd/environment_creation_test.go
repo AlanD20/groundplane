@@ -91,6 +91,14 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		storedEnvironment.Record.CreateTaskID != task.ID {
 		t.Fatalf("stored Environment = %#v, %v", storedEnvironment.Record, err)
 	}
+	storedEpoch, err := store.Get(ctx, environmentMutationEpochKey(record.ID))
+	if err != nil || storedEpoch.Entry == nil || storedEpoch.Entry.ModRevision != storedEnvironment.Revision {
+		t.Fatalf("stored Environment mutation epoch = %#v, %v", storedEpoch, err)
+	}
+	epoch, err := decodeEnvironmentMutationEpochRecord(storedEpoch.Entry.Value)
+	if err != nil || epoch.EnvironmentID != record.ID {
+		t.Fatalf("decoded Environment mutation epoch = %#v, %v", epoch, err)
+	}
 	tasks, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -147,6 +155,10 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	ready, err := repository.GetEnvironment(ctx, record.ID)
 	if err != nil || ready.Record.ProvisioningState != EnvironmentProvisioningReady {
 		t.Fatalf("ready Environment = %#v, %v", ready.Record, err)
+	}
+	readyEpoch, err := store.Get(ctx, environmentMutationEpochKey(record.ID))
+	if err != nil || readyEpoch.Entry == nil || readyEpoch.Entry.ModRevision != ready.Revision {
+		t.Fatalf("ready Environment mutation epoch = %#v, %v", readyEpoch, err)
 	}
 }
 

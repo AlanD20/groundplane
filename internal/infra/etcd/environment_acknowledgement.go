@@ -16,23 +16,14 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	task TaskRecord,
 	terminalStatus TaskStatus,
 	readRevision int64,
-) (Condition, Mutation, []byte, error) {
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{environmentKey(task.Target)}, Revision: readRevision,
-	})
+) ([]Condition, []Mutation, []byte, error) {
+	state, err := repository.readTaskEnvironmentMutationState(ctx, task.Target, readRevision, true)
 	if err != nil {
-		return Condition{}, Mutation{}, nil, err
+		return nil, nil, nil, err
 	}
-	if len(stored.Values) != 1 || stored.Values[0] == nil {
-		return Condition{}, Mutation{}, nil, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
-	}
-	value := stored.Values[0]
-	record, err := decodeEnvironment(value.Value)
-	if err != nil {
-		return Condition{}, Mutation{}, nil, err
-	}
+	record := state.Environment.Record
 	if record.ID != task.Target || record.CreateTaskID != task.ID {
-		return Condition{}, Mutation{}, nil, errs.New(
+		return nil, nil, nil, errs.New(
 			errs.KindStateConflict,
 			"Environment provisioning belongs to another Task",
 		)
@@ -43,14 +34,19 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 		terminalStatus == TaskStatusCompleted,
 	)
 	if err != nil {
-		return Condition{}, Mutation{}, nil, err
+		return nil, nil, nil, err
 	}
 	encoded, err := encodeEnvironment(replacement)
 	if err != nil {
-		return Condition{}, Mutation{}, nil, err
+		return nil, nil, nil, err
 	}
-	return Condition{Key: environmentKey(record.ID), ModRevision: value.ModRevision}, Mutation{
-		Type: MutationPut, Key: environmentKey(record.ID), Value: encoded,
+	return []Condition{
+		{Key: environmentKey(record.ID), ModRevision: state.Environment.Revision},
+		{Key: environmentMutationEpochKey(record.ID), ModRevision: state.EpochRevision},
+		{Key: environmentOperationLockKey(record.ID)},
+	}, []Mutation{
+		{Type: MutationPut, Key: environmentKey(record.ID), Value: encoded},
+		{Type: MutationPut, Key: environmentMutationEpochKey(record.ID), Value: state.EpochValue},
 	}, encoded, nil
 }
 
@@ -60,19 +56,11 @@ func (repository *TaskRepository) validateEnvironmentCreationReplay(
 	terminalStatus TaskStatus,
 	readRevision int64,
 ) error {
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{environmentKey(task.Target)}, Revision: readRevision,
-	})
+	state, err := repository.readTaskEnvironmentMutationState(ctx, task.Target, readRevision, false)
 	if err != nil {
 		return err
 	}
-	if len(stored.Values) != 1 || stored.Values[0] == nil {
-		return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
-	}
-	record, err := decodeEnvironment(stored.Values[0].Value)
-	if err != nil {
-		return err
-	}
+	record := state.Environment.Record
 	want := EnvironmentProvisioningFailed
 	if terminalStatus == TaskStatusCompleted {
 		want = EnvironmentProvisioningReady
@@ -102,14 +90,28 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		return false, nil
 	}
 	tombstoneResult, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys:     []string{deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target)},
+		Keys: []string{
+			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+			environmentMutationEpochKey(task.Target),
+			environmentOperationLockKey(task.Target),
+		},
 		Revision: page.ReadRevision,
 	})
 	if err != nil {
 		return false, err
 	}
-	if tombstoneResult == nil || len(tombstoneResult.Values) != 1 || tombstoneResult.Values[0] == nil {
+	if tombstoneResult == nil || tombstoneResult.ReadRevision != page.ReadRevision ||
+		len(tombstoneResult.Values) != 3 {
+		return false, errs.New(errs.KindInternal, "Environment deletion fencing evidence is invalid")
+	}
+	if tombstoneResult.Values[0] == nil {
 		return false, errs.New(errs.KindStateConflict, "Environment deletion tombstone is missing")
+	}
+	if tombstoneResult.Values[1] == nil {
+		return false, errs.New(errs.KindInternal, "Environment mutation epoch is missing")
+	}
+	if tombstoneResult.Values[2] == nil {
+		return false, errs.New(errs.KindStateConflict, "Environment deletion operation lock is missing")
 	}
 	tombstoneValue := tombstoneResult.Values[0]
 	tombstone, err := decodeDeletionTombstone(tombstoneValue.Value)
@@ -120,6 +122,18 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		tombstone.TaskID != task.ID ||
 		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
 		return false, errs.New(errs.KindStateConflict, "Environment deletion tombstone does not match its Task")
+	}
+	epoch, err := decodeEnvironmentDeletionEpoch(tombstoneResult.Values[1], task.Target)
+	if err != nil {
+		return false, err
+	}
+	epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
+	if err != nil {
+		return false, err
+	}
+	defer clear(epochValue)
+	if _, err := decodeOwnedEnvironmentDeletionLock(tombstoneResult.Values[2], task); err != nil {
+		return false, err
 	}
 	revisionID, err := environmentBlueprintRevisionIDFromKey(prefix, page.Values[len(page.Values)-1].Key)
 	if err != nil {
@@ -134,8 +148,8 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	}
 	defer clear(encodedTombstone)
 
-	conditions := make([]Condition, 0, len(page.Values)+1)
-	mutations := make([]Mutation, 0, len(page.Values)+1)
+	conditions := make([]Condition, 0, len(page.Values)+3)
+	mutations := make([]Mutation, 0, len(page.Values)+2)
 	for _, value := range page.Values {
 		conditions = append(conditions, Condition{Key: value.Key, ModRevision: value.ModRevision})
 		mutations = append(mutations, Mutation{Type: MutationDelete, Key: value.Key})
@@ -144,10 +158,21 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 		ModRevision: tombstoneValue.ModRevision,
 	})
+	conditions = append(conditions,
+		Condition{
+			Key: environmentMutationEpochKey(task.Target), ModRevision: tombstoneResult.Values[1].ModRevision,
+		},
+		Condition{
+			Key: environmentOperationLockKey(task.Target), ModRevision: tombstoneResult.Values[2].ModRevision,
+		},
+	)
 	mutations = append(mutations, Mutation{
 		Type:  MutationPut,
 		Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 		Value: encodedTombstone,
+	})
+	mutations = append(mutations, Mutation{
+		Type: MutationPut, Key: environmentMutationEpochKey(task.Target), Value: epochValue,
 	})
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -182,13 +207,17 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
 			environmentPoolRegistryKey,
+			environmentMutationEpochKey(task.Target),
+			environmentOperationLockKey(task.Target),
 		},
 		Revision: readRevision,
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(stored.Values) != 5 || stored.Values[0] == nil || stored.Values[1] == nil || stored.Values[4] == nil {
+	if stored == nil || stored.ReadRevision != readRevision || len(stored.Values) != 7 ||
+		stored.Values[0] == nil || stored.Values[1] == nil || stored.Values[4] == nil ||
+		stored.Values[5] == nil || stored.Values[6] == nil {
 		return nil, nil, errs.New(errs.KindInternal, "Environment deletion state is inconsistent")
 	}
 	if (stored.Values[2] == nil) != (stored.Values[3] == nil) {
@@ -209,6 +238,13 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		tombstone.TaskID != task.ID ||
 		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Environment deletion tombstone does not match its Task")
+	}
+	epoch, err := decodeEnvironmentDeletionEpoch(stored.Values[5], environment.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := decodeOwnedEnvironmentDeletionLock(stored.Values[6], task); err != nil {
+		return nil, nil, err
 	}
 	poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
 		stored.Values[4].Value,
@@ -242,11 +278,15 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		},
 		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
 		{Key: environmentComposeProjectionKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
+		{Key: environmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
+		{Key: environmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
 	}
-	mutations := []Mutation{{
-		Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
-	}}
+	mutations := []Mutation{
+		{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
+		{Type: MutationDelete, Key: environmentOperationLockKey(environment.ID)},
+	}
 	if terminalStatus == TaskStatusCompleted {
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: environmentMutationEpochKey(environment.ID)})
 		nextPoolRegistry, err := poolRegistry.Release(environment.ID, environment.NetworkPool)
 		if err != nil {
 			return nil, nil, err
@@ -291,6 +331,14 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			Mutation{Type: MutationDelete, Key: environmentOwnerKey(environment.ProjectID, environment.ID)},
 			Mutation{Type: MutationDelete, Key: environmentKey(environment.ID)},
 		)
+	} else {
+		epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
+		if err != nil {
+			return nil, nil, err
+		}
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: environmentMutationEpochKey(environment.ID), Value: epochValue,
+		})
 	}
 	return conditions, mutations, nil
 }
@@ -308,17 +356,21 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
 			environmentPoolRegistryKey,
+			environmentMutationEpochKey(task.Target),
+			environmentOperationLockKey(task.Target),
 		},
 		Revision: readRevision,
 	})
 	if err != nil {
 		return err
 	}
-	if len(stored.Values) != 5 || stored.Values[1] != nil || (stored.Values[2] == nil) != (stored.Values[3] == nil) {
+	if stored == nil || stored.ReadRevision != readRevision || len(stored.Values) != 7 ||
+		stored.Values[1] != nil || (stored.Values[2] == nil) != (stored.Values[3] == nil) {
 		return errs.New(errs.KindStateConflict, "Environment deletion terminal state does not match its Task")
 	}
 	if terminalStatus == TaskStatusCompleted {
-		if stored.Values[0] != nil || stored.Values[2] != nil || stored.Values[3] != nil {
+		if stored.Values[0] != nil || stored.Values[2] != nil || stored.Values[3] != nil ||
+			stored.Values[5] != nil || stored.Values[6] != nil {
 			return errs.New(errs.KindStateConflict, "completed Environment deletion retained its target")
 		}
 		if stored.Values[4] != nil {
@@ -344,6 +396,18 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	}
 	if environment.ID != task.Target {
 		return errs.New(errs.KindStateConflict, "failed Environment deletion retained another target")
+	}
+	if _, err := decodeEnvironmentDeletionEpoch(stored.Values[5], environment.ID); err != nil {
+		return err
+	}
+	if stored.Values[6] != nil {
+		lock, err := decodeEnvironmentOperationLock(stored.Values[6], environment.ID)
+		if err != nil {
+			return err
+		}
+		if lock.TaskID == task.ID || lock.OperationID == task.OperationID {
+			return errs.New(errs.KindStateConflict, "failed Environment deletion retained its operation lock")
+		}
 	}
 	if stored.Values[4] == nil {
 		return errs.New(errs.KindStateConflict, "failed Environment deletion lost its pool")

@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *testing.T) {
@@ -127,6 +128,33 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 		retryAt,
 		"environment-retry-request-key-0001",
 	)
+	// Rationale: retry is an Environment persistence mutation and must not
+	// move either the Environment or its epoch while the canonical lock is held.
+	failedEnvironment, err := hierarchy.GetEnvironment(ctx, environment.ID)
+	if err != nil {
+		t.Fatalf("GetEnvironment(failed) error = %v", err)
+	}
+	failedEpoch := mustEnvironmentCreationEpoch(t, store, environment.ID)
+	putEnvironmentCreationHeldLock(t, store, environment.ID, now, 730)
+	if _, err := tasks.RetryTask(
+		ctx, source.ID, retryID, TaskActorOperator, retryMarker,
+	); !isKind(err, errs.KindStateConflict) {
+		t.Fatalf("RetryTask(held lock) error = %v", err)
+	}
+	unchangedFailed, err := hierarchy.GetEnvironment(ctx, environment.ID)
+	if err != nil || unchangedFailed.Revision != failedEnvironment.Revision ||
+		unchangedFailed.Record.CreateTaskID != failedEnvironment.Record.CreateTaskID {
+		t.Fatalf("Environment after blocked retry = %#v, %v", unchangedFailed, err)
+	}
+	unchangedFailedEpoch := mustEnvironmentCreationEpoch(t, store, environment.ID)
+	if unchangedFailedEpoch.ModRevision != failedEpoch.ModRevision {
+		t.Fatalf(
+			"mutation epoch after blocked retry = %d, want %d",
+			unchangedFailedEpoch.ModRevision,
+			failedEpoch.ModRevision,
+		)
+	}
+	deleteEnvironmentCreationHeldLock(t, store, environment.ID)
 	retryResult, err := tasks.RetryTask(ctx, source.ID, retryID, TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
@@ -160,6 +188,37 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	completedResult := TaskResultRecord{
 		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
 	}
+	// Rationale: acknowledgement uses the same lock fence and must leave the
+	// running Task companion and epoch unchanged while the lock is held.
+	preAcknowledgementEpoch := mustEnvironmentCreationEpoch(t, store, environment.ID)
+	putEnvironmentCreationHeldLock(t, store, environment.ID, now, 732)
+	if _, err := tasks.AcknowledgeEnvironmentCreation(
+		ctx,
+		agentID,
+		1,
+		retryID,
+		environment.ID,
+		TaskStatusCompleted,
+		completedResult,
+		retryAssignedAt.Add(time.Second),
+	); !isKind(err, errs.KindStateConflict) {
+		t.Fatalf("AcknowledgeEnvironmentCreation(held lock) error = %v", err)
+	}
+	unchangedRetrying, err := hierarchy.GetEnvironment(ctx, environment.ID)
+	if err != nil || unchangedRetrying.Revision != retrying.Revision ||
+		unchangedRetrying.Record.ProvisioningState != EnvironmentProvisioningProvisioning ||
+		unchangedRetrying.Record.CreateTaskID != retryID {
+		t.Fatalf("Environment after blocked acknowledgement = %#v, %v", unchangedRetrying, err)
+	}
+	unchangedAcknowledgementEpoch := mustEnvironmentCreationEpoch(t, store, environment.ID)
+	if unchangedAcknowledgementEpoch.ModRevision != preAcknowledgementEpoch.ModRevision {
+		t.Fatalf(
+			"mutation epoch after blocked acknowledgement = %d, want %d",
+			unchangedAcknowledgementEpoch.ModRevision,
+			preAcknowledgementEpoch.ModRevision,
+		)
+	}
+	deleteEnvironmentCreationHeldLock(t, store, environment.ID)
 	completed, err := tasks.AcknowledgeEnvironmentCreation(
 		ctx,
 		agentID,
@@ -177,6 +236,64 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	if err != nil || ready.Record.ProvisioningState != EnvironmentProvisioningReady ||
 		ready.Record.CreateTaskID != retryID || ready.Revision != completed.Revision {
 		t.Fatalf("ready Environment/completed Task = %#v/%#v, %v", ready, completed, err)
+	}
+	readyEpoch, err := store.Get(ctx, environmentMutationEpochKey(environment.ID))
+	if err != nil || readyEpoch.Entry == nil || readyEpoch.Entry.ModRevision != ready.Revision {
+		t.Fatalf("ready Environment mutation epoch = %#v, %v", readyEpoch, err)
+	}
+}
+
+func mustEnvironmentCreationEpoch(
+	t *testing.T,
+	store *memoryHierarchyStore,
+	environmentID string,
+) *KeyValue {
+	t.Helper()
+	result, err := store.Get(context.Background(), environmentMutationEpochKey(environmentID))
+	if err != nil || result.Entry == nil {
+		t.Fatalf("Get(Environment mutation epoch) = %#v, %v", result, err)
+	}
+	return result.Entry
+}
+
+func putEnvironmentCreationHeldLock(
+	t *testing.T,
+	store *memoryHierarchyStore,
+	environmentID string,
+	now time.Time,
+	seed int64,
+) {
+	t.Helper()
+	record := BackupOperationLockRecord{
+		EnvironmentID: environmentID,
+		OperationID:   ids.NewAt(ids.KindOperation, now, seed),
+		TaskID:        ids.NewAt(ids.KindTask, now, seed+1),
+		Kind:          BackupOperationBackup,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	value, err := encodeBackupOperationLockRecord(record)
+	if err != nil {
+		t.Fatalf("encodeBackupOperationLockRecord() error = %v", err)
+	}
+	defer clear(value)
+	transaction, err := store.Transact(
+		context.Background(),
+		[]Condition{{Key: environmentOperationLockKey(environmentID)}},
+		[]Mutation{{Type: MutationPut, Key: environmentOperationLockKey(environmentID), Value: value}},
+	)
+	if err != nil || !transaction.Succeeded {
+		t.Fatalf("put Environment operation lock = %#v, %v", transaction, err)
+	}
+}
+
+func deleteEnvironmentCreationHeldLock(t *testing.T, store *memoryHierarchyStore, environmentID string) {
+	t.Helper()
+	transaction, err := store.Transact(context.Background(), nil, []Mutation{{
+		Type: MutationDelete, Key: environmentOperationLockKey(environmentID),
+	}})
+	if err != nil || !transaction.Succeeded {
+		t.Fatalf("delete Environment operation lock = %#v, %v", transaction, err)
 	}
 }
 

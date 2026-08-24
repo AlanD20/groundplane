@@ -38,6 +38,7 @@ type backupPolicyConnectorReferenceEvidence struct {
 type backupPolicyReplacementCandidate struct {
 	Environment         Versioned[EnvironmentRecord]
 	Project             Versioned[ProjectRecord]
+	MutationEpoch       Versioned[EnvironmentMutationEpochRecord]
 	Current             *Versioned[BackupPolicyRecord]
 	Replacement         BackupPolicyRecord
 	Sources             []backupPolicySourceEvidence
@@ -54,6 +55,8 @@ const (
 	backupPolicyComparePolicy backupPolicyReplacementCompareKind = iota + 1
 	backupPolicyCompareEnvironment
 	backupPolicyCompareProject
+	backupPolicyCompareMutationEpoch
+	backupPolicyCompareOperationLock
 	backupPolicyCompareHierarchyTombstone
 	backupPolicyCompareSource
 	backupPolicyCompareSourceEnvironmentIndex
@@ -178,12 +181,17 @@ func validatebackupPolicyReplacementCandidate(
 	if err := validateProject(candidate.Project.Record); err != nil {
 		return err
 	}
+	if err := validateEnvironmentMutationEpochRecord(candidate.MutationEpoch.Record); err != nil {
+		return err
+	}
 	if err := validateBackupPolicyRecord(candidate.Replacement); err != nil {
 		return err
 	}
 	if !validReplacementRevision(candidate.Environment.Revision, candidate.Environment.ReadRevision) ||
 		!validReplacementRevision(candidate.Project.Revision, candidate.Project.ReadRevision) ||
+		!validReplacementRevision(candidate.MutationEpoch.Revision, candidate.MutationEpoch.ReadRevision) ||
 		candidate.Replacement.EnvironmentID != candidate.Environment.Record.ID ||
+		candidate.MutationEpoch.Record.EnvironmentID != candidate.Environment.Record.ID ||
 		candidate.Environment.Record.ProjectID != candidate.Project.Record.ID ||
 		candidate.Project.Record.Kind != ProjectKindTenant || candidate.Project.Record.TenantID == "" {
 		return errs.New(errs.KindValidationFailed, "backup policy hierarchy is invalid")
@@ -469,12 +477,23 @@ func prepareBackupPolicyReplacement(
 	if err != nil {
 		return backupPolicyReplacementPlan{}, err
 	}
+	epochValue, err := encodeEnvironmentMutationEpochRecord(candidate.MutationEpoch.Record)
+	if err != nil {
+		clear(policyValue)
+		return backupPolicyReplacementPlan{}, err
+	}
 	plan := backupPolicyReplacementPlan{
-		conditions: make([]Condition, 0, 16+len(candidate.Sources)*3),
-		mutations: []Mutation{{
-			Type: MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
-		}},
-		evidence: make([]backupPolicyReplacementCompare, 0, 16+len(candidate.Sources)*3),
+		conditions: make([]Condition, 0, 18+len(candidate.Sources)*3),
+		mutations: []Mutation{
+			{
+				Type: MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
+			},
+			{
+				Type: MutationPut, Key: environmentMutationEpochKey(candidate.Replacement.EnvironmentID),
+				Value: epochValue,
+			},
+		},
+		evidence: make([]backupPolicyReplacementCompare, 0, 18+len(candidate.Sources)*3),
 	}
 	policyRevision := int64(0)
 	if candidate.Current != nil {
@@ -497,6 +516,18 @@ func prepareBackupPolicyReplacement(
 		candidate.Project.Record.ID,
 		projectKey(candidate.Project.Record.ID),
 		candidate.Project.Revision,
+	)
+	plan.compare(
+		backupPolicyCompareMutationEpoch,
+		candidate.Replacement.EnvironmentID,
+		environmentMutationEpochKey(candidate.Replacement.EnvironmentID),
+		candidate.MutationEpoch.Revision,
+	)
+	plan.compare(
+		backupPolicyCompareOperationLock,
+		candidate.Replacement.EnvironmentID,
+		environmentOperationLockKey(candidate.Replacement.EnvironmentID),
+		0,
 	)
 	for _, fence := range []struct {
 		kind DeletionTargetKind
@@ -706,6 +737,17 @@ func classifyBackupPolicyReplacementConflict(
 				return errs.New(errs.KindProjectNotFound, "project was not found")
 			}
 			return stateConflict("project", comparison.ID)
+		case backupPolicyCompareMutationEpoch:
+			if value == nil {
+				return errs.New(errs.KindInternal, "environment mutation epoch is missing")
+			}
+			epoch, err := decodeEnvironmentMutationEpochRecord(value.Value)
+			if err != nil || epoch.EnvironmentID != comparison.ID {
+				return errs.New(errs.KindInternal, "environment mutation epoch is corrupt")
+			}
+			return stateConflict("environment mutation epoch", comparison.ID)
+		case backupPolicyCompareOperationLock:
+			return errs.New(errs.KindResourceInUse, "environment persistence operation is in progress")
 		case backupPolicyCompareSource:
 			if value == nil {
 				return errs.New(errs.KindBackupSourceNotFound, "backup source was not found")
