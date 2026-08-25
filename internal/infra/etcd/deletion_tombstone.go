@@ -318,14 +318,63 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	cleanupSnapshot, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		environmentMutationEpochKey(environment.Record.ID),
+	}})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if cleanupSnapshot == nil || cleanupSnapshot.ReadRevision < readRevision ||
+		len(cleanupSnapshot.Values) != 1 {
+		if cleanupSnapshot != nil {
+			clearKeyValues(cleanupSnapshot.Values)
+		}
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"environment deletion cleanup snapshot is incomplete",
+		)
+	}
+	cleanupReadRevision := cleanupSnapshot.ReadRevision
+	clearKeyValues(cleanupSnapshot.Values)
+	cleanupPhase, err := initialEnvironmentDeletionCleanupPhase(
+		ctx,
+		repository.store,
+		environment.Record.ID,
+		task.OperationID,
+		cleanupReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	intent, err := newEnvironmentDeletionIntent(
+		environment.Record.ID,
+		task.OperationID,
+		task.ID,
+		environment.Revision,
+		cleanupPhase,
+		task.CreatedAt,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	intentValue, err := encodeEnvironmentDeletionIntent(intent)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(intentValue)
+	conditions = append(conditions, Condition{Key: environmentDeletionIntentKey(task.OperationID)})
+	mutations = append(mutations, Mutation{
+		Type: MutationPut, Key: environmentDeletionIntentKey(task.OperationID), Value: intentValue,
+	})
+
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
 		initiation,
 		conditions,
 		mutations,
-		classifyEnvironmentDeletionStartConflict(
+		classifyEnvironmentDeletionIntentStartConflict(classifyEnvironmentDeletionStartConflict(
 			project, environment, task.OperationID, expectedBlueprintRevision, evidence.Values[7].ModRevision,
-		),
+		)),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

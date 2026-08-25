@@ -26,6 +26,10 @@ func (repository *TaskRepository) prepareEnvironmentTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (environmentTaskChange, error) {
+	if source.Executor == TaskExecutorAgent && source.Type == TaskRemove &&
+		ids.Validate(ids.KindEnvironment, source.Target) == nil {
+		return repository.prepareEnvironmentRemovalTaskRetry(ctx, source, retry, revision)
+	}
 	if source.Executor != TaskExecutorAgent || source.Type != TaskCreate ||
 		ids.Validate(ids.KindEnvironment, source.Target) != nil {
 		return environmentTaskChange{}, nil

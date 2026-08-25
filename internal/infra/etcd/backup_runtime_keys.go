@@ -15,6 +15,7 @@ const (
 	backupDueRetentionIndexPrefix          = "/v1/indexes/backup-due/by-retention/"
 	backupSourceTargetExclusionPrefix      = "/v1/runtime/backup-source-target-exclusions/"
 	backupRunPrefix                        = "/v1/runtime/backup-runs/"
+	backupRunEnvironmentPrefix             = "/v1/indexes/backup-runs/by-environment/"
 	backupRunVolumeServicePrefix           = "/v1/runtime/backup-run-volume-services/"
 	backupRecoveryPointPrefix              = "/v1/records/recovery-points/"
 	backupRecoveryPointEnvironmentPrefix   = "/v1/indexes/recovery-points/by-environment/"
@@ -22,12 +23,15 @@ const (
 	backupRecoveryPointConnectorPrefix     = "/v1/indexes/recovery-points/by-connector/"
 	backupOrphanPrefix                     = "/v1/runtime/backup-orphans/"
 	backupOrphanConnectorPrefix            = "/v1/indexes/backup-orphans/by-connector/"
+	backupOrphanEnvironmentPrefix          = "/v1/indexes/backup-orphans/by-environment/"
 	backupRetentionPrefix                  = "/v1/runtime/backup-retention/"
 	backupRecoveryPointPrunePrefix         = "/v1/runtime/recovery-point-prunes/"
 	backupRecoveryPointPruneDispatchPrefix = "/v1/runtime/recovery-point-prune-dispatches/"
 	backupRestorePrefix                    = "/v1/runtime/backup-restores/"
+	backupRestoreEnvironmentPrefix         = "/v1/indexes/backup-restores/by-environment/"
 	backupRestoreServicePrefix             = "/v1/runtime/backup-restore-services/"
 	backupKeyRotationPrefix                = "/v1/runtime/backup-key-rotations/"
+	backupKeyRotationEnvironmentPrefix     = "/v1/indexes/backup-key-rotations/by-environment/"
 	backupRuntimeOrderedSegmentWidth       = 20
 	backupRecoveryPointULIDAlphabet        = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 )
