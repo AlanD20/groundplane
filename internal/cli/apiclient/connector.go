@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) CreateConnector(
@@ -15,11 +16,19 @@ func (c *Client) CreateConnector(
 	environmentID string,
 	input apiTypes.ConnectorCreateRequest,
 ) (apiTypes.Connector, error) {
+	if input.PathStyle == nil {
+		return apiTypes.Connector{}, errs.New(errs.KindValidationFailed, "connector path_style is required")
+	}
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.Connector{}, err
 	}
-	credentials := make(map[string]generated.ConnectorCredentialInput, len(input.Credentials))
+	credentials := struct {
+		AccessKey generated.ConnectorCredentialInput `json:"access_key"`
+		SecretKey generated.ConnectorCredentialInput `json:"secret_key"`
+	}{}
+	hasAccessKey := false
+	hasSecretKey := false
 	for name, credential := range input.Credentials {
 		converted := generated.ConnectorCredentialInput{}
 		if credential.SecretRef != "" {
@@ -30,11 +39,30 @@ func (c *Client) CreateConnector(
 			value := credential.Value
 			converted.Value = &value
 		}
-		credentials[name] = converted
+		switch name {
+		case "access_key":
+			credentials.AccessKey = converted
+			hasAccessKey = true
+		case "secret_key":
+			credentials.SecretKey = converted
+			hasSecretKey = true
+		default:
+			return apiTypes.Connector{}, errs.Newf(
+				errs.KindValidationFailed,
+				"connector credential %q is not supported",
+				name,
+			)
+		}
+	}
+	if !hasAccessKey || !hasSecretKey {
+		return apiTypes.Connector{}, errs.New(
+			errs.KindValidationFailed,
+			"connector access_key and secret_key credentials are required",
+		)
 	}
 	body := generated.ConnectorCreateRequest{
 		Name: input.Name, Kind: input.Kind, Endpoint: input.Endpoint, Bucket: input.Bucket,
-		Region: input.Region, PathStyle: input.PathStyle, Credentials: credentials,
+		Region: input.Region, PathStyle: *input.PathStyle, Credentials: credentials,
 	}
 	if input.Prefix != "" {
 		body.Prefix = &input.Prefix

@@ -86,11 +86,7 @@ func (s *Server) registerConnectors() {
 		Required: true,
 		Content: map[string]*huma.MediaType{
 			"application/json": {
-				Schema: s.API.OpenAPI().Components.Schemas.Schema(
-					reflect.TypeFor[apiTypes.ConnectorCreateRequest](),
-					true,
-					"ConnectorCreateRequest",
-				),
+				Schema: connectorCreateRequestSchema(s.API.OpenAPI().Components.Schemas),
 			},
 		},
 	}

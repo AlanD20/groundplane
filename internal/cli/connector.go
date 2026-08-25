@@ -135,7 +135,7 @@ func newConnectorCmd() *cobra.Command {
 func connectorEnvironmentID(cmd *cobra.Command) (string, error) {
 	argument := fromContext(cmd).Scope.Environment
 	if argument == "" {
-		return "", errs.New(errs.KindValidationFailed, "connector command requires --environment")
+		return "", errs.New(errs.KindValidationFailed, "connector command requires --env")
 	}
 	return resolveEnvironmentTarget(cmd, argument)
 }

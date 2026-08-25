@@ -602,9 +602,21 @@
             "type": "string"
           },
           "credentials": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ConnectorCredentialInput"
+            "additionalProperties": false,
+            "maxProperties": 2,
+            "minProperties": 2,
+            "properties": {
+              "access_key": {
+                "$ref": "#/components/schemas/ConnectorCredentialInput"
+              },
+              "secret_key": {
+                "$ref": "#/components/schemas/ConnectorCredentialInput"
+              }
             },
+            "required": [
+              "access_key",
+              "secret_key"
+            ],
             "type": "object"
           },
           "endpoint": {
@@ -617,10 +629,7 @@
             "type": "string"
           },
           "path_style": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "prefix": {
             "type": "string"
@@ -657,6 +666,32 @@
       },
       "ConnectorCredentialInput": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "secret_ref": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "secret_ref"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "type": "object"
+          }
+        ],
         "properties": {
           "secret_ref": {
             "type": "string"

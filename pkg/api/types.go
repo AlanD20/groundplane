@@ -596,7 +596,7 @@ type ConnectorCreateRequest struct {
 	Bucket      string                              `json:"bucket"`
 	Prefix      string                              `json:"prefix,omitempty"`
 	Region      string                              `json:"region"`
-	PathStyle   *bool                               `json:"path_style"`
+	PathStyle   *bool                               `json:"path_style" nullable:"false"`
 	Credentials map[string]ConnectorCredentialInput `json:"credentials"`
 }
 

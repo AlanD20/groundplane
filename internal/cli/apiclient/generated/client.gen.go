@@ -352,15 +352,18 @@ type ConnectorCreateRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ConnectorCreateRequest.json
-	Schema      *string                             `json:"$schema,omitempty"`
-	Bucket      string                              `json:"bucket"`
-	Credentials map[string]ConnectorCredentialInput `json:"credentials"`
-	Endpoint    string                              `json:"endpoint"`
-	Kind        string                              `json:"kind"`
-	Name        string                              `json:"name"`
-	PathStyle   *bool                               `json:"path_style"`
-	Prefix      *string                             `json:"prefix,omitempty"`
-	Region      string                              `json:"region"`
+	Schema      *string `json:"$schema,omitempty"`
+	Bucket      string  `json:"bucket"`
+	Credentials struct {
+		AccessKey ConnectorCredentialInput `json:"access_key"`
+		SecretKey ConnectorCredentialInput `json:"secret_key"`
+	} `json:"credentials"`
+	Endpoint  string  `json:"endpoint"`
+	Kind      string  `json:"kind"`
+	Name      string  `json:"name"`
+	PathStyle bool    `json:"path_style"`
+	Prefix    *string `json:"prefix,omitempty"`
+	Region    string  `json:"region"`
 }
 
 // ConnectorCredential defines model for ConnectorCredential.
@@ -373,6 +376,17 @@ type ConnectorCredential struct {
 type ConnectorCredentialInput struct {
 	SecretRef *string `json:"secret_ref,omitempty"`
 	Value     *string `json:"value,omitempty"`
+	union     json.RawMessage
+}
+
+// ConnectorCredentialInput0 defines model for ConnectorCredentialInput.0.
+type ConnectorCredentialInput0 struct {
+	SecretRef string `json:"secret_ref"`
+}
+
+// ConnectorCredentialInput1 defines model for ConnectorCredentialInput.1.
+type ConnectorCredentialInput1 struct {
+	Value string `json:"value"`
 }
 
 // Entry defines model for Entry.
@@ -1536,6 +1550,116 @@ type TenantRenameJSONRequestBody = TenantRename
 
 // ZoneCreateJSONRequestBody defines body for ZoneCreate for application/json ContentType.
 type ZoneCreateJSONRequestBody = ZoneCreate
+
+// AsConnectorCredentialInput0 returns the union data inside the ConnectorCredentialInput as a ConnectorCredentialInput0
+func (t ConnectorCredentialInput) AsConnectorCredentialInput0() (ConnectorCredentialInput0, error) {
+	var body ConnectorCredentialInput0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConnectorCredentialInput0 overwrites any union data inside the ConnectorCredentialInput as the provided ConnectorCredentialInput0
+func (t *ConnectorCredentialInput) FromConnectorCredentialInput0(v ConnectorCredentialInput0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConnectorCredentialInput0 performs a merge with any union data inside the ConnectorCredentialInput, using the provided ConnectorCredentialInput0
+func (t *ConnectorCredentialInput) MergeConnectorCredentialInput0(v ConnectorCredentialInput0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConnectorCredentialInput1 returns the union data inside the ConnectorCredentialInput as a ConnectorCredentialInput1
+func (t ConnectorCredentialInput) AsConnectorCredentialInput1() (ConnectorCredentialInput1, error) {
+	var body ConnectorCredentialInput1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConnectorCredentialInput1 overwrites any union data inside the ConnectorCredentialInput as the provided ConnectorCredentialInput1
+func (t *ConnectorCredentialInput) FromConnectorCredentialInput1(v ConnectorCredentialInput1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConnectorCredentialInput1 performs a merge with any union data inside the ConnectorCredentialInput, using the provided ConnectorCredentialInput1
+func (t *ConnectorCredentialInput) MergeConnectorCredentialInput1(v ConnectorCredentialInput1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ConnectorCredentialInput) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.SecretRef != nil {
+		object["secret_ref"], err = json.Marshal(t.SecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'secret_ref': %w", err)
+		}
+	}
+
+	if t.Value != nil {
+		object["value"], err = json.Marshal(t.Value)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'value': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ConnectorCredentialInput) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["secret_ref"]; found {
+		err = json.Unmarshal(raw, &t.SecretRef)
+		if err != nil {
+			return fmt.Errorf("error reading 'secret_ref': %w", err)
+		}
+	}
+
+	if raw, found := object["value"]; found {
+		err = json.Unmarshal(raw, &t.Value)
+		if err != nil {
+			return fmt.Errorf("error reading 'value': %w", err)
+		}
+	}
+
+	return err
+}
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
