@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -101,6 +102,72 @@ func TestEnvironmentRenameRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 	}
 }
 
+func TestEnvironmentEditRouteIsStrictAndForwardsIdempotency(t *testing.T) {
+	t.Parallel()
+	stub := &environmentRouteStub{editResponse: etcd.IdempotencyResponse{
+		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"network_pool":"10.40.0.0/15"}`),
+	}}
+	server := New(nil, nil, Options{EnvironmentChanges: stub})
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/environments/"+environmentRouteID,
+		strings.NewReader(`{"network_pool":"10.40.0.0/15"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(idempotencyKeyHeader, "environment-edit-key-000001")
+	response := httptest.NewRecorder()
+	server.HTTPHandler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || stub.editID != environmentRouteID ||
+		stub.editInput.NetworkPool != "10.40.0.0/15" || stub.editKey != "environment-edit-key-000001" ||
+		stub.editCalls != 1 {
+		t.Fatalf(
+			"edit response/call = %d, %q, %#v, %q",
+			response.Code,
+			stub.editID,
+			stub.editInput,
+			stub.editKey,
+		)
+	}
+	body, _ := io.ReadAll(response.Result().Body)
+	if string(body) != `{"network_pool":"10.40.0.0/15"}` {
+		t.Fatalf("edit response body = %s", body)
+	}
+
+	invalidBodies := []string{
+		`{"network_pool":"10.40.0.0/15","name":"live"}`,
+		`{"network_pool":"10.40.0.0/15","network_pool":"10.42.0.0/15"}`,
+		`{}`,
+		`{"network_pool":"10.40.0.0/15"} {}`,
+	}
+	for index, body := range invalidBodies {
+		invalid := httptest.NewRequest(
+			http.MethodPatch,
+			"/api/v1/environments/"+environmentRouteID,
+			strings.NewReader(body),
+		)
+		invalid.Header.Set("Content-Type", "application/json")
+		invalid.Header.Set(idempotencyKeyHeader, "environment-edit-invalid-000"+strconv.Itoa(index))
+		invalidResponse := httptest.NewRecorder()
+		server.HTTPHandler().ServeHTTP(invalidResponse, invalid)
+		if (invalidResponse.Code < 400 || invalidResponse.Code >= 500) || stub.editCalls != 1 {
+			t.Fatalf("invalid body %q status = %d", body, invalidResponse.Code)
+		}
+	}
+
+	octet := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/environments/"+environmentRouteID,
+		strings.NewReader(`{"network_pool":"10.40.0.0/15"}`),
+	)
+	octet.Header.Set("Content-Type", "application/octet-stream")
+	octet.Header.Set(idempotencyKeyHeader, "environment-edit-octet-0001")
+	octetResponse := httptest.NewRecorder()
+	server.HTTPHandler().ServeHTTP(octetResponse, octet)
+	if octetResponse.Code < 400 || octetResponse.Code >= 500 || stub.editCalls != 1 {
+		t.Fatalf("octet-stream status = %d", octetResponse.Code)
+	}
+}
+
 func EnvironmentRecordForRouteTest(state etcd.EnvironmentProvisioningState) etcd.EnvironmentRecord {
 	return etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID: environmentRouteID, ProjectID: environmentRouteProjectID, Name: "production",
@@ -117,6 +184,11 @@ type environmentRouteStub struct {
 	renameInput    hierarchy.RenameEnvironmentInput
 	renameKey      string
 	renameResponse etcd.IdempotencyResponse
+	editID         string
+	editInput      hierarchy.EditEnvironmentInput
+	editKey        string
+	editResponse   etcd.IdempotencyResponse
+	editCalls      int
 }
 
 func (stub *environmentRouteStub) GetEnvironment(
@@ -149,4 +221,17 @@ func (stub *environmentRouteStub) RenameEnvironment(
 	stub.renameInput = input
 	stub.renameKey = key
 	return stub.renameResponse, nil
+}
+
+func (stub *environmentRouteStub) EditEnvironment(
+	_ context.Context,
+	id string,
+	input hierarchy.EditEnvironmentInput,
+	key string,
+) (etcd.IdempotencyResponse, error) {
+	stub.editCalls++
+	stub.editID = id
+	stub.editInput = input
+	stub.editKey = key
+	return stub.editResponse, nil
 }

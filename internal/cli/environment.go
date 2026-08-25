@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// environment (env): list | show | create | rename | apply | delete | logs
+// environment (env): list | show | create | edit | rename | apply | delete | logs
 // [--follow]. Environment ids are static; the name is only a human label
 // convenience — rename never breaks references. See mvp.md,
 // "Environment", and blueprint.md, "Identity and rename rules".
@@ -82,6 +82,34 @@ func newEnvironmentCmd() *cobra.Command {
 	create.Flags().StringVar(&networkPool, "network-pool", "", "reserved IPv4 CIDR for the environment")
 	_ = create.MarkFlagRequired("network-pool")
 	cmd.AddCommand(create)
+
+	var replacementNetworkPool string
+	edit := &cobra.Command{
+		Use:   "edit <name>",
+		Short: "Replace an environment's reserved IPv4 network pool",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := resolveEnvironmentTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			environment, err := fromContext(cmd).Client.EditEnvironment(
+				cmd.Context(), id, replacementNetworkPool,
+			)
+			if err != nil {
+				return err
+			}
+			return renderEnvironment(cmd, environment)
+		},
+	}
+	edit.Flags().StringVar(
+		&replacementNetworkPool,
+		"network-pool",
+		"",
+		"replacement canonical IPv4 CIDR containing every existing Zone subnet",
+	)
+	_ = edit.MarkFlagRequired("network-pool")
+	cmd.AddCommand(edit)
 
 	var newName string
 	rename := &cobra.Command{

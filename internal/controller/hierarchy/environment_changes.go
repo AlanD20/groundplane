@@ -30,6 +30,31 @@ type RenameEnvironmentInput struct {
 	Name string
 }
 
+type EditEnvironmentInput struct {
+	NetworkPool string
+}
+
+func ValidateEnvironmentEditInput(input EditEnvironmentInput) error {
+	pool, err := ipam.ParseIPv4Prefix(input.NetworkPool)
+	if err != nil || pool.String() != input.NetworkPool {
+		return errs.New(errs.KindValidationFailed, "environment network_pool must be a canonical IPv4 CIDR")
+	}
+	return nil
+}
+
+func PrepareEnvironmentEdit(
+	currentNetworkPool string,
+	input EditEnvironmentInput,
+) (string, error) {
+	if currentNetworkPool == "" {
+		return "", errs.New(errs.KindEnvironmentNotFound, "environment was not found")
+	}
+	if err := ValidateEnvironmentEditInput(input); err != nil {
+		return "", err
+	}
+	return input.NetworkPool, nil
+}
+
 func ValidateEnvironmentRenameInput(input RenameEnvironmentInput) error {
 	if err := validateSlug("environment name", input.Name); err != nil {
 		return err

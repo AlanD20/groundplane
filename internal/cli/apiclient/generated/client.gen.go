@@ -464,6 +464,15 @@ type EnvironmentCreate struct {
 	ProjectId   string  `json:"project_id"`
 }
 
+// EnvironmentEdit defines model for EnvironmentEdit.
+type EnvironmentEdit struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentEdit.json
+	Schema      *string `json:"$schema,omitempty"`
+	NetworkPool string  `json:"network_pool"`
+}
+
 // EnvironmentPage defines model for EnvironmentPage.
 type EnvironmentPage struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1243,6 +1252,11 @@ type EnvironmentCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// EnvironmentEditParams defines parameters for EnvironmentEdit.
+type EnvironmentEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // BackupPolicySetParams defines parameters for BackupPolicySet.
 type BackupPolicySetParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1468,6 +1482,9 @@ type EntryEditJSONRequestBody = EntryEditRequest
 
 // EnvironmentCreateJSONRequestBody defines body for EnvironmentCreate for application/json ContentType.
 type EnvironmentCreateJSONRequestBody = EnvironmentCreate
+
+// EnvironmentEditJSONRequestBody defines body for EnvironmentEdit for application/json ContentType.
+type EnvironmentEditJSONRequestBody = EnvironmentEdit
 
 // BackupPolicySetJSONRequestBody defines body for BackupPolicySet for application/json ContentType.
 type BackupPolicySetJSONRequestBody = BackupPolicyReplacementRequest
@@ -1796,6 +1813,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 	EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentEditWithBody Edit an environment network pool
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+	EnvironmentEditWithBody(ctx context.Context, id string, params *EnvironmentEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentEdit Edit an environment network pool
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+	EnvironmentEdit(ctx context.Context, id string, params *EnvironmentEditParams, body EnvironmentEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackupPolicyShow Show the effective Backup Policy
 	//
@@ -2729,6 +2760,40 @@ func (c *Client) EnvironmentCreate(ctx context.Context, params *EnvironmentCreat
 // Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 func (c *Client) EnvironmentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnvironmentShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentEditWithBody Edit an environment network pool
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+func (c *Client) EnvironmentEditWithBody(ctx context.Context, id string, params *EnvironmentEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentEdit Edit an environment network pool
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+func (c *Client) EnvironmentEdit(ctx context.Context, id string, params *EnvironmentEditParams, body EnvironmentEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5276,6 +5341,66 @@ func NewEnvironmentShowRequest(server string, id string) (*http.Request, error) 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentEditRequest calls the generic EnvironmentEdit builder with application/json body
+func NewEnvironmentEditRequest(server string, id string, params *EnvironmentEditParams, body EnvironmentEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnvironmentEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewEnvironmentEditRequestWithBody constructs an http.Request for the EnvironmentEdit method, with any body, and a specified content type
+func NewEnvironmentEditRequestWithBody(server string, id string, params *EnvironmentEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -8136,6 +8261,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
 	EnvironmentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*EnvironmentShowResponse, error)
 
+	// EnvironmentEditWithBodyWithResponse Edit an environment network pool
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+	EnvironmentEditWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentEditResponse, error)
+
+	// EnvironmentEditWithResponse Edit an environment network pool
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+	EnvironmentEditWithResponse(ctx context.Context, id string, params *EnvironmentEditParams, body EnvironmentEditJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentEditResponse, error)
+
 	// BackupPolicyShowWithResponse Show the effective Backup Policy
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -10016,6 +10155,61 @@ func (r EnvironmentShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EnvironmentShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnvironmentEditResponse200Headers the declared response headers of an HTTP 200 response for EnvironmentEdit
+type EnvironmentEditResponse200Headers struct {
+	ContentType *string
+}
+
+type EnvironmentEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Environment
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EnvironmentEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnvironmentEditResponse) GetJSON200() *Environment {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentEditResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -12956,6 +13150,32 @@ func (c *ClientWithResponses) EnvironmentShowWithResponse(ctx context.Context, i
 	return ParseEnvironmentShowResponse(rsp)
 }
 
+// EnvironmentEditWithBodyWithResponse Edit an environment network pool
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+func (c *ClientWithResponses) EnvironmentEditWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentEditResponse, error) {
+	rsp, err := c.EnvironmentEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentEditResponse(rsp)
+}
+
+// EnvironmentEditWithResponse Edit an environment network pool
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /environments/{id} (the `EnvironmentEdit` operationId).
+func (c *ClientWithResponses) EnvironmentEditWithResponse(ctx context.Context, id string, params *EnvironmentEditParams, body EnvironmentEditJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentEditResponse, error) {
+	rsp, err := c.EnvironmentEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentEditResponse(rsp)
+}
+
 // BackupPolicyShowWithResponse Show the effective Backup Policy
 //
 // Returns a wrapper object for the known response body format(s).
@@ -14878,6 +15098,52 @@ func ParseEnvironmentShowResponse(rsp *http.Response) (*EnvironmentShowResponse,
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentEditResponse parses an HTTP response from a EnvironmentEditWithResponse call
+func ParseEnvironmentEditResponse(rsp *http.Response) (*EnvironmentEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Environment
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EnvironmentEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

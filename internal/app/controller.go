@@ -858,7 +858,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment change idempotency: %w", err)
 	}
-	environmentChanges, err := newEnvironmentChangeService(hierarchyRecords, environmentChangeIdempotency)
+	environmentChanges, err := newEnvironmentChangeService(
+		cfg.EnvironmentPool,
+		hierarchyRecords,
+		environmentChangeIdempotency,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment change service: %w", err)

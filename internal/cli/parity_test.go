@@ -268,6 +268,29 @@ func TestDedicatedRenameRoutesReturnUpdatedEntities(t *testing.T) {
 	}
 }
 
+func TestEnvironmentEditPatchesNetworkPoolAndReturnsEnvironment(t *testing.T) {
+	t.Parallel()
+	server := exactRequestServer(
+		t,
+		http.MethodPatch,
+		"/api/v1/environments/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		`{"network_pool":"10.40.0.0/15"}`,
+		http.StatusOK,
+		`{"id":"env_01ARZ3NDEKTSV4RRFFQ69G5FAV","project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV","name":"production","network_pool":"10.40.0.0/15","volume_dir":"/var/lib/groundplane/vol/platform/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV","provisioning_state":"ready","create_task_id":null}`,
+	)
+	defer server.Close()
+	executeNoun(
+		t,
+		newEnvironmentCmd(),
+		server.URL,
+		Scope{AsID: true},
+		"edit",
+		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"--network-pool",
+		"10.40.0.0/15",
+	)
+}
+
 func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 	// Rationale: every component detail, action, and config operation must use
 	// the component's stable id rather than its mutable kind label.

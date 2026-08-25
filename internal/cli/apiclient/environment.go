@@ -131,6 +131,30 @@ func (c *Client) RenameEnvironment(ctx context.Context, id, name string) (apiTyp
 	return generatedEnvironmentBody(http.MethodPost, path, response.Body, response.JSON200)
 }
 
+func (c *Client) EditEnvironment(
+	ctx context.Context,
+	id string,
+	networkPool string,
+) (apiTypes.Environment, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Environment{}, err
+	}
+	path := "/api/v1/environments/" + id
+	params := &generated.EnvironmentEditParams{IdempotencyKey: ids.NewULID()}
+	body := generated.EnvironmentEditJSONRequestBody{NetworkPool: networkPool}
+	response, err := client.EnvironmentEditWithResponse(ctx, id, params, body)
+	if err != nil {
+		return apiTypes.Environment{}, generatedCallError(ctx, http.MethodPatch, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.Environment{}, err
+	}
+	return generatedEnvironmentBody(http.MethodPatch, path, response.Body, response.JSON200)
+}
+
 func (c *Client) ApplyEnvironmentBlueprint(
 	ctx context.Context,
 	id string,

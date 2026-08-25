@@ -31,7 +31,7 @@ func TestEnvironmentOpenAPIContainsServingOperations(t *testing.T) {
 	}
 	want := map[string]map[string]string{
 		"/environments":                {"get": "environment.list", "post": "environment.create"},
-		"/environments/{id}":           {"get": "environment.show"},
+		"/environments/{id}":           {"get": "environment.show", "patch": "environment.edit"},
 		"/environments/{id}/blueprint": {"put": "environment.apply"},
 		"/environments/{id}/rename":    {"post": "environment.rename"},
 	}
@@ -47,5 +47,10 @@ func TestEnvironmentOpenAPIContainsServingOperations(t *testing.T) {
 	_, hasAcceptedJSON := apply.Responses["202"].Content["application/json"]
 	if !apply.RequestBody.Required || len(apply.RequestBody.Content) != 1 || !hasMultipart || !hasAcceptedJSON {
 		t.Fatalf("environment.apply request/response contract = %#v", apply)
+	}
+	edit := contract.Paths["/environments/{id}"]["patch"]
+	_, hasEditJSON := edit.RequestBody.Content["application/json"]
+	if !edit.RequestBody.Required || len(edit.RequestBody.Content) != 1 || !hasEditJSON {
+		t.Fatalf("environment.edit request contract = %#v", edit.RequestBody)
 	}
 }

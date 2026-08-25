@@ -54,6 +54,12 @@ type environmentRenameInput struct {
 	RawBody        []byte
 }
 
+type environmentEditInput struct {
+	ID             string `path:"id"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           apiTypes.EnvironmentEdit
+}
+
 type environmentOutput struct {
 	Body apiTypes.Environment
 }
@@ -100,6 +106,17 @@ func (s *Server) registerEnvironments() {
 		Summary: "Show an environment", Tags: []string{"Environment"},
 		Middlewares: huma.Middlewares{s.rejectEnvironmentQuery},
 	}, s.showEnvironment)
+	registerEnvironmentMutation[apiTypes.EnvironmentEdit](
+		s,
+		huma.Operation{
+			OperationID: "environment.edit", Method: http.MethodPatch, Path: "/environments/{id}",
+			Summary: "Edit an environment network pool", Tags: []string{"Environment"}, DefaultStatus: http.StatusOK,
+			Middlewares: huma.Middlewares{s.rejectEnvironmentQuery},
+		},
+		environmentSchema,
+		s.editEnvironment,
+		"EnvironmentEdit",
+	)
 	registerEnvironmentMutation[apiTypes.EnvironmentRename](
 		s,
 		huma.Operation{
@@ -118,6 +135,9 @@ func (s *Server) registerEnvironments() {
 	} {
 		s.setRoutePolicy(pattern, routePolicy{body: jsonBody})
 	}
+	s.setRoutePolicy("PATCH /api/v1/environments/{id}", routePolicy{
+		body: jsonBody, validateJSON: validateEnvironmentEditJSON,
+	})
 }
 
 func registerEnvironmentMutation[InputBody any, Input any](

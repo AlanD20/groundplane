@@ -100,6 +100,10 @@ type EnvironmentCreate struct {
 	NetworkPool string `json:"network_pool"`
 }
 
+type EnvironmentEdit struct {
+	NetworkPool string `json:"network_pool"`
+}
+
 type EnvironmentRename struct {
 	Name string `json:"name"`
 }

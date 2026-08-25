@@ -53,3 +53,35 @@ func TestEnvironmentPoolRegistryEnforcesGlobalDisjointReservations(t *testing.T)
 		t.Fatalf("Reserve(released pool) error = %v", err)
 	}
 }
+
+func TestEnvironmentPoolRegistryReplaceExcludesOnlyCurrentOwner(t *testing.T) {
+	t.Parallel()
+	root := netip.MustParsePrefix("10.0.0.0/8")
+	firstID := ids.NewAt(ids.KindEnvironment, time.Unix(3, 0).UTC(), 3)
+	secondID := ids.NewAt(ids.KindEnvironment, time.Unix(4, 0).UTC(), 4)
+	registry := EnvironmentPoolRegistry{Reservations: map[string]string{
+		firstID:  "10.200.0.0/16",
+		secondID: "10.22.0.0/16",
+	}}
+	replaced, canonical, err := registry.Replace(root, firstID, "10.200.0.0/16", "10.200.0.0/15")
+	if err != nil || canonical != "10.200.0.0/15" || replaced.Reservations[firstID] != canonical ||
+		registry.Reservations[firstID] != "10.200.0.0/16" {
+		t.Fatalf("Replace(expand) = %#v, %q, %v", replaced, canonical, err)
+	}
+	if _, _, err := registry.Replace(
+		root,
+		firstID,
+		"10.200.0.0/16",
+		"10.22.0.0/15",
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Replace(overlap) error = %v", err)
+	}
+	if _, _, err := registry.Replace(
+		root,
+		firstID,
+		"10.201.0.0/16",
+		"10.24.0.0/16",
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Replace(stale owner) error = %v", err)
+	}
+}
