@@ -2,6 +2,14 @@
 # config". This file plus /etc/groundplane/controller.age are the only
 # two things etcd itself cannot hold. See mvp.md, "Everything is etcd
 # (locked)".
+environment_pool: 10.0.0.0/9
+system_pool: 10.128.0.0/9
+runner:
+  # Reserved exclusively from system_pool before the Controller serves.
+  network_pool: 10.240.0.0/24
+  host_uid_range: 200000-200007
+  subuid_range: 300000-824287
+  subgid_range: 900000-1424287
 etcd:
   endpoints:
     - 127.0.0.1:2379

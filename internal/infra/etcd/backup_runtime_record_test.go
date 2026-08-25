@@ -43,11 +43,20 @@ func TestBackupRuntimeRecordCodecsRoundTrip(t *testing.T) {
 	}{
 		{"schedule cursor", func(t *testing.T) {
 			record := BackupScheduleCursorRecord{
-				EnvironmentID: testBackupEnvironmentID, PolicyRevision: 7, Frequency: "*-*-* 03:00:00",
-				EnabledAt: createdAt, LastEvaluatedAt: updatedAt, NextDueAt: updatedAt.Add(time.Hour),
-				UpdatedAt: updatedAt,
+				EnvironmentID:   testBackupEnvironmentID,
+				PolicyRevision:  7,
+				Frequency:       "*-*-* 03:00:00",
+				EnabledAt:       createdAt,
+				LastEvaluatedAt: updatedAt,
+				NextDueAt:       updatedAt.Add(time.Hour),
+				UpdatedAt:       updatedAt,
 			}
-			assertBackupCodecRoundTrip(t, record, encodeBackupScheduleCursorRecord, decodeBackupScheduleCursorRecord)
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupScheduleCursorRecord,
+				decodeBackupScheduleCursorRecord,
+			)
 		}},
 		{"due outcome", func(t *testing.T) {
 			record := BackupDueOutcomeRecord{
@@ -55,7 +64,12 @@ func TestBackupRuntimeRecordCodecsRoundTrip(t *testing.T) {
 				Outcome: BackupDueDispatched, TaskID: testBackupTaskID, CreatedAt: updatedAt,
 				RetainUntil: updatedAt.Add(24 * time.Hour),
 			}
-			assertBackupCodecRoundTrip(t, record, encodeBackupDueOutcomeRecord, decodeBackupDueOutcomeRecord)
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupDueOutcomeRecord,
+				decodeBackupDueOutcomeRecord,
+			)
 		}},
 		{"mutation epoch", func(t *testing.T) {
 			record := EnvironmentMutationEpochRecord{EnvironmentID: testBackupEnvironmentID}
@@ -68,68 +82,129 @@ func TestBackupRuntimeRecordCodecsRoundTrip(t *testing.T) {
 		}},
 		{"operation lock", func(t *testing.T) {
 			record := BackupOperationLockRecord{
-				EnvironmentID: testBackupEnvironmentID, OperationID: testBackupOperationID,
-				TaskID: testBackupTaskID, Kind: BackupOperationDeletion, CreatedAt: createdAt, UpdatedAt: updatedAt,
+				EnvironmentID: testBackupEnvironmentID,
+				OperationID:   testBackupOperationID,
+				TaskID:        testBackupTaskID,
+				Kind:          BackupOperationDeletion,
+				CreatedAt:     createdAt,
+				UpdatedAt:     updatedAt,
 			}
-			assertBackupCodecRoundTrip(t, record, encodeBackupOperationLockRecord, decodeBackupOperationLockRecord)
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupOperationLockRecord,
+				decodeBackupOperationLockRecord,
+			)
 		}},
 		{"source-target exclusion", func(t *testing.T) {
 			record := BackupSourceTargetExclusionRecord{
 				EnvironmentID: testBackupEnvironmentID, OperationID: testBackupOperationID,
 				TaskID: testBackupTaskID, OperationKind: BackupOperationBackup,
-				TargetKind: BackupSourceTargetBackingService, TargetID: testBackupServiceID,
+				TargetKind: BackupSourceTargetAttach, TargetID: testBackupAttachID,
 				CreatedAt: createdAt, UpdatedAt: updatedAt,
 			}
 			assertBackupCodecRoundTrip(
-				t, record, encodeBackupSourceTargetExclusionRecord, decodeBackupSourceTargetExclusionRecord,
+				t,
+				record,
+				encodeBackupSourceTargetExclusionRecord,
+				decodeBackupSourceTargetExclusionRecord,
 			)
 		}},
 		{"backup run", func(t *testing.T) {
 			record := testBackupRun(createdAt, updatedAt, recipient)
+			record.RetentionKeep = MaximumBackupPolicyKeep
 			assertBackupCodecRoundTrip(t, record, encodeBackupRunRecord, decodeBackupRunRecord)
-		}},
-		{"backup run Volume service", func(t *testing.T) {
-			record := BackupRunVolumeServiceRecord{
-				TaskID: testBackupTaskID, EnvironmentID: testBackupEnvironmentID,
-				SourceID: testBackupSourceID, SourceOrdinal: 2, ServiceOrdinal: 3,
-				ServiceID: testBackupServiceID, ServiceRevision: 12, PriorIntent: BackupServiceIntentRunning,
+			record.RetentionKeep++
+			if _, err := encodeBackupRunRecord(record); !errors.Is(
+				err, errs.New(errs.KindValidationFailed, ""),
+			) {
+				t.Fatalf("encodeBackupRunRecord(Keep above maximum) error = %v", err)
 			}
-			assertBackupCodecRoundTrip(
-				t, record, encodeBackupRunVolumeServiceRecord, decodeBackupRunVolumeServiceRecord,
-			)
 		}},
 		{"recovery point", func(t *testing.T) {
-			record := BackupRecoveryPointRecord{BackupRecoveryPointSnapshot: point, VerifiedAt: updatedAt}
-			assertBackupCodecRoundTrip(t, record, encodeBackupRecoveryPointRecord, decodeBackupRecoveryPointRecord)
+			record := BackupRecoveryPointRecord{
+				BackupRecoveryPointSnapshot: point,
+				VerifiedAt:                  updatedAt,
+			}
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupRecoveryPointRecord,
+				decodeBackupRecoveryPointRecord,
+			)
 		}},
 		{"orphan", func(t *testing.T) {
 			record := BackupOrphanRecord{
 				Point: point, TaskID: testBackupTaskID, State: BackupOrphanInspect,
-				CreatedAt: createdAt, UpdatedAt: updatedAt,
-			}
-			assertBackupCodecRoundTrip(t, record, encodeBackupOrphanRecord, decodeBackupOrphanRecord)
-		}},
-		{"retention", func(t *testing.T) {
-			record := BackupRetentionSweepRecord{
-				SourceID: testBackupSourceID, TriggerRecoveryPointID: testBackupPointID, Keep: 7, Revision: 42,
-				Cursor: testBackupPointIDTwo, State: BackupRetentionScanning,
-				CreatedAt: createdAt, UpdatedAt: updatedAt,
-			}
-			assertBackupCodecRoundTrip(t, record, encodeBackupRetentionSweepRecord, decodeBackupRetentionSweepRecord)
-		}},
-		{"prune", func(t *testing.T) {
-			record := BackupRecoveryPointPruneRecord{
-				Point: point, State: BackupPruneAssigned, TaskID: testBackupTaskID,
+				Reconciliation: BackupOrphanReconciliationAuthority{
+					OperationID: testBackupOperationID, PolicyRevision: 42,
+					RetentionKeep: MaximumBackupPolicyKeep,
+				},
 				CreatedAt: createdAt, UpdatedAt: updatedAt,
 			}
 			assertBackupCodecRoundTrip(
-				t, record, encodeBackupRecoveryPointPruneRecord, decodeBackupRecoveryPointPruneRecord,
+				t,
+				record,
+				encodeBackupOrphanRecord,
+				decodeBackupOrphanRecord,
+			)
+			record.Reconciliation.RetentionKeep++
+			if _, err := encodeBackupOrphanRecord(record); !errors.Is(
+				err, errs.New(errs.KindValidationFailed, ""),
+			) {
+				t.Fatalf("encodeBackupOrphanRecord(Keep above maximum) error = %v", err)
+			}
+		}},
+		{"retention", func(t *testing.T) {
+			record := BackupRetentionSweepRecord{
+				SourceID:               testBackupSourceID,
+				TriggerRecoveryPointID: testBackupPointID,
+				Keep:                   MaximumBackupPolicyKeep,
+				Revision:               42,
+				SelectionRevision:      43,
+				Cursor:                 testBackupPointIDTwo,
+				RetainedCount:          MaximumBackupPolicyKeep,
+				PruneOperationID:       testBackupOperationID,
+				State:                  BackupRetentionScanning,
+				CreatedAt:              createdAt,
+				UpdatedAt:              updatedAt,
+			}
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupRetentionSweepRecord,
+				decodeBackupRetentionSweepRecord,
+			)
+			record.Keep++
+			if _, err := encodeBackupRetentionSweepRecord(record); !errors.Is(
+				err, errs.New(errs.KindValidationFailed, ""),
+			) {
+				t.Fatalf("encodeBackupRetentionSweepRecord(Keep above maximum) error = %v", err)
+			}
+		}},
+		{"prune", func(t *testing.T) {
+			record := BackupRecoveryPointPruneRecord{
+				Point: point, PointRevision: 41, OperationID: testBackupOperationID,
+				State: BackupPruneAssigned, TaskID: testBackupTaskID,
+				CreatedAt: createdAt, UpdatedAt: updatedAt,
+			}
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupRecoveryPointPruneRecord,
+				decodeBackupRecoveryPointPruneRecord,
 			)
 		}},
 		{"prune dispatch", func(t *testing.T) {
 			record := BackupRecoveryPointPruneDispatchRecord{
-				TaskID: testBackupTaskID, ConnectorID: testBackupConnectorID,
-				RecoveryPointIDs: []string{testBackupPointID, testBackupPointIDTwo}, CreatedAt: createdAt,
+				TaskID:        testBackupTaskID,
+				OperationID:   testBackupOperationID,
+				EnvironmentID: testBackupEnvironmentID,
+				RecoveryPointIDs: []string{
+					testBackupPointID,
+					testBackupPointIDTwo,
+				},
+				CreatedAt: createdAt,
 			}
 			assertBackupCodecRoundTrip(
 				t, record, encodeBackupRecoveryPointPruneDispatchRecord,
@@ -138,7 +213,12 @@ func TestBackupRuntimeRecordCodecsRoundTrip(t *testing.T) {
 		}},
 		{"restore", func(t *testing.T) {
 			record := testBackupRestore(point, createdAt, updatedAt)
-			assertBackupCodecRoundTrip(t, record, encodeBackupRestoreRecord, decodeBackupRestoreRecord)
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupRestoreRecord,
+				decodeBackupRestoreRecord,
+			)
 		}},
 		{"restore service", func(t *testing.T) {
 			record := BackupRestoreServiceRecord{
@@ -157,7 +237,12 @@ func TestBackupRuntimeRecordCodecsRoundTrip(t *testing.T) {
 				NextRecipient: recipient, NextEncryptedIdentity: []byte{1, 2, 3},
 				State: BackupKeyRotationPrepared, CreatedAt: createdAt, UpdatedAt: updatedAt,
 			}
-			assertBackupCodecRoundTrip(t, record, encodeBackupKeyRotationRecord, decodeBackupKeyRotationRecord)
+			assertBackupCodecRoundTrip(
+				t,
+				record,
+				encodeBackupKeyRotationRecord,
+				decodeBackupKeyRotationRecord,
+			)
 		}},
 	}
 	for _, test := range tests {
@@ -176,7 +261,12 @@ func TestBackupRuntimeRecordsRejectAmbiguousState(t *testing.T) {
 		Outcome: BackupDueSkippedOverlap, TaskID: testBackupTaskID, CreatedAt: updatedAt,
 		RetainUntil: updatedAt.Add(time.Hour),
 	}
-	if _, err := encodeBackupDueOutcomeRecord(due); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupDueOutcomeRecord(
+		due,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("encodeBackupDueOutcomeRecord() error = %v, want validation failure", err)
 	}
 
@@ -184,13 +274,23 @@ func TestBackupRuntimeRecordsRejectAmbiguousState(t *testing.T) {
 	run.Sources[0].Snapshot.Volume = &BackupVolumeSourceSnapshot{
 		EnvironmentID: testBackupEnvironmentID, VolumeID: testBackupVolumeID, VolumeRevision: 1,
 	}
-	if _, err := encodeBackupRunRecord(run); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRunRecord(
+		run,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("encodeBackupRunRecord() error = %v, want validation failure", err)
 	}
 
 	restore := testBackupRestore(testBackupVolumePoint(createdAt, recipient), createdAt, updatedAt)
 	restore.UsesOldIdentity = true
-	if _, err := encodeBackupRestoreRecord(restore); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRestoreRecord(
+		restore,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("encodeBackupRestoreRecord() error = %v, want validation failure", err)
 	}
 }
@@ -206,10 +306,16 @@ func TestBackupRuntimeRecordsRejectConfigTargetOutsideEnvironment(t *testing.T) 
 	run.Sources[0].Kind = BackupRuntimeSourceConfig
 	run.Sources[0].TargetID = testBackupBackingEnvironmentID
 	run.Sources[0].Snapshot = BackupRunSourceSnapshot{Config: &BackupConfigSourceSnapshot{
-		ConfigSnapshotTaskID: testBackupTaskID,
+		ConfigSnapshotID: testBackupTaskID,
+		ReadRevision:     1,
 	}}
 	run.Sources[0].Format = BackupRuntimeFormatConfig
-	if _, err := encodeBackupRunRecord(run); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRunRecord(
+		run,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("encodeBackupRunRecord() error = %v, want validation failure", err)
 	}
 
@@ -233,7 +339,12 @@ func TestBackupRuntimeDecoderRejectsUnknownFields(t *testing.T) {
 		`"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV",` +
 		`"kind":"backup","created_at":"2026-08-24T10:00:00Z",` +
 		`"updated_at":"2026-08-24T10:00:00Z","unexpected":true}}`)
-	if _, err := decodeBackupOperationLockRecord(value); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := decodeBackupOperationLockRecord(
+		value,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
 		t.Fatalf("decodeBackupOperationLockRecord() error = %v, want internal", err)
 	}
 }
@@ -243,16 +354,69 @@ func TestBackupRecoveryPointRejectsEncryptionMismatch(t *testing.T) {
 	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	point := testBackupVolumePoint(createdAt, newTestBackupRecipient(t))
 	point.Encryption = BackupRuntimeEncryptionNone
-	if err := validateBackupRecoveryPointSnapshot(point); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if err := validateBackupRecoveryPointSnapshot(
+		point,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("validateBackupRecoveryPointSnapshot() error = %v, want validation failure", err)
 	}
 }
 
-// Rationale: pruning transactions are bounded to twelve unique points so dispatch records cannot exceed the MVP plan.
+// Rationale: immutable Recovery Point allocation binds its ULID millisecond and
+// normalized Connector prefix to the only accepted artifact object key.
+func TestBackupRuntimeRecordsBindPointTimeAndObjectKeyToAllocation(t *testing.T) {
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 123000000, time.UTC)
+	run := testBackupRun(createdAt, createdAt.Add(time.Minute), newTestBackupRecipient(t))
+	run.Sources[0].RecoveryPointCreatedAt = createdAt.Add(time.Millisecond)
+	if _, err := encodeBackupRunRecord(run); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("mismatched run point time error = %v, want validation", err)
+	}
+	run = testBackupRun(createdAt, createdAt.Add(time.Minute), newTestBackupRecipient(t))
+	run.Sources[0].ObjectKey = "arbitrary/" + run.Sources[0].ObjectKey
+	if _, err := encodeBackupRunRecord(run); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("mismatched run object key error = %v, want validation", err)
+	}
+	point := testBackupVolumePoint(createdAt, newTestBackupRecipient(t))
+	point.CreatedAt = createdAt.Add(time.Millisecond)
+	if err := validateBackupRecoveryPointSnapshot(point); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("mismatched point time error = %v, want validation", err)
+	}
+}
+
+// Rationale: acknowledged immutable Put evidence permits a HEAD-uncertain
+// orphan, while any failure code remains bound to that persisted phase.
+func TestBackupRunValidationAcceptsHeadVerificationOrphan(t *testing.T) {
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	run := testBackupRun(createdAt, createdAt.Add(time.Minute), newTestBackupRecipient(t))
+	run.State = BackupRunRunning
+	run.Sources[0].State = BackupSourceAttemptOrphaned
+	run.Sources[0].Phase = BackupSourcePhaseHeadVerification
+	if _, err := encodeBackupRunRecord(run); err != nil {
+		t.Fatalf("encodeBackupRunRecord(head-verification orphan) error = %v", err)
+	}
+	run.Sources[0].FailureCode = BackupFailurePointCommit
+	if _, err := encodeBackupRunRecord(run); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("mismatched orphan failure phase error = %v, want validation", err)
+	}
+}
+
+// Rationale: pruning transactions are bounded to eleven unique points so dispatch records cannot exceed the MVP plan.
 func TestBackupPruneDispatchRejectsDuplicateAndOversizedBatches(t *testing.T) {
 	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	record := BackupRecoveryPointPruneDispatchRecord{
-		TaskID: testBackupTaskID, ConnectorID: testBackupConnectorID,
+		TaskID: testBackupTaskID, OperationID: testBackupOperationID,
+		EnvironmentID:    testBackupEnvironmentID,
 		RecoveryPointIDs: []string{testBackupPointID, testBackupPointID}, CreatedAt: createdAt,
 	}
 	if err := validateBackupRecoveryPointPruneDispatchRecord(record); !errors.Is(
@@ -281,31 +445,78 @@ func TestBackupRunValidationEnforcesFailFastCheckpointTable(t *testing.T) {
 	run := testBackupRun(createdAt, updatedAt, newTestBackupRecipient(t))
 	run.State = BackupRunFailed
 	run.Sources[0].State = BackupSourceAttemptFailed
+	run.Sources[0].Phase = BackupSourcePhaseCapture
 	run.Sources[0].SizeBytes = 0
 	run.Sources[0].SHA256 = ""
 	run.Sources[0].FailureCode = BackupFailureCapture
-	run.Sources = append(run.Sources, testBackupLaterSource(createdAt, 1, BackupSourceAttemptUnstarted))
+	run.Sources = append(
+		run.Sources,
+		testBackupLaterSource(createdAt, 1, BackupSourceAttemptUnstarted),
+	)
 	if _, err := encodeBackupRunRecord(run); err != nil {
 		t.Fatalf("encodeBackupRunRecord(valid failed checkpoint) error = %v", err)
 	}
 
 	run.Sources[1] = testBackupLaterSource(createdAt, 1, BackupSourceAttemptSucceeded)
-	if _, err := encodeBackupRunRecord(run); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRunRecord(
+		run,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("later successful source error = %v, want validation", err)
 	}
 
 	run.Sources[1] = testBackupLaterSource(createdAt, 1, BackupSourceAttemptUnstarted)
 	run.Sources[0].FailureCode = BackupFailureCode("provider said access key rejected")
-	if _, err := encodeBackupRunRecord(run); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRunRecord(
+		run,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("free-form failure error = %v, want validation", err)
 	}
 
 	run.Sources[0].State = BackupSourceAttemptPointCommitted
+	run.Sources[0].Phase = BackupSourcePhaseRetention
 	run.Sources[0].SizeBytes = 123
 	run.Sources[0].SHA256 = testBackupDigest
 	run.Sources[0].FailureCode = BackupFailureRetention
+	run.Sources[0].Phase = BackupSourcePhaseRetention
 	if _, err := encodeBackupRunRecord(run); err != nil {
 		t.Fatalf("encodeBackupRunRecord(retention checkpoint) error = %v", err)
+	}
+}
+
+// Rationale: an upload-phase failure can only be resumed safely when it keeps
+// exact artifact evidence; its phase and failure code must also agree.
+func TestBackupRunValidationBindsFailureCodeToPersistedPhase(t *testing.T) {
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	run := testBackupRun(createdAt, createdAt.Add(time.Minute), newTestBackupRecipient(t))
+	run.State = BackupRunFailed
+	run.Sources[0].State = BackupSourceAttemptFailed
+	run.Sources[0].Phase = BackupSourcePhaseUpload
+	run.Sources[0].SizeBytes = 0
+	run.Sources[0].SHA256 = ""
+	run.Sources[0].FailureCode = BackupFailureUpload
+	if _, err := encodeBackupRunRecord(run); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("empty upload evidence error = %v, want validation", err)
+	}
+	run.Sources[0].SizeBytes = 123
+	run.Sources[0].SHA256 = testBackupDigest
+	if _, err := encodeBackupRunRecord(run); err != nil {
+		t.Fatalf("encodeBackupRunRecord(upload evidence) error = %v", err)
+	}
+	run.Sources[0].FailureCode = BackupFailureHeadVerification
+	if _, err := encodeBackupRunRecord(run); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("mismatched failure phase error = %v, want validation", err)
 	}
 }
 
@@ -315,14 +526,19 @@ func TestBackupRuntimeRecordsRejectCrossEnvironmentSourceOwnership(t *testing.T)
 	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	run := testBackupRun(createdAt, createdAt.Add(time.Minute), newTestBackupRecipient(t))
 	run.Sources[0].Snapshot.Postgres.ConsumerEnvironmentID = testBackupBackingEnvironmentID
-	if _, err := encodeBackupRunRecord(run); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRunRecord(
+		run,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("cross-Environment Attach snapshot error = %v, want validation", err)
 	}
 
 	exclusion := BackupSourceTargetExclusionRecord{
 		EnvironmentID: testBackupEnvironmentID, OperationID: testBackupOperationID,
 		TaskID: testBackupTaskID, OperationKind: BackupOperationRotation,
-		TargetKind: BackupSourceTargetBackingProject, TargetID: testBackupProjectID,
+		TargetKind: BackupSourceTargetAttach, TargetID: testBackupAttachID,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	if _, err := encodeBackupSourceTargetExclusionRecord(exclusion); !errors.Is(
@@ -343,14 +559,24 @@ func TestBackupVolumeRestoreRequiresManifestAndExactMutationBoundary(t *testing.
 		createdAt.Add(time.Minute),
 	)
 	restore.StagedTreeManifestSHA256 = ""
-	if _, err := encodeBackupRestoreRecord(restore); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRestoreRecord(
+		restore,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("completed restore without manifest error = %v, want validation", err)
 	}
 
 	restore.StagedTreeManifestSHA256 = testBackupDigest
 	restore.State = BackupRestoreExchangeReady
 	restore.Verification = BackupVerificationPending
-	if _, err := encodeBackupRestoreRecord(restore); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupRestoreRecord(
+		restore,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("pre-exchange mutation error = %v, want validation", err)
 	}
 	restore.MutationStarted = false
@@ -397,6 +623,7 @@ func TestBackupConfigRestoreDecoderRejectsChunkCursorBeyondAggregateCount(t *tes
 	point.TargetID = testBackupEnvironmentID
 	point.SourceFormat = BackupRuntimeFormatConfig
 	restore := testBackupRestore(point, createdAt, createdAt.Add(time.Minute))
+	restore.RestoreGenerationID = ids.NewAt(ids.KindConfig, createdAt, 27)
 	restore.CurrentTarget = BackupRestoreTargetSnapshot{Config: &BackupRestoreConfigTarget{
 		EnvironmentID: testBackupEnvironmentID, EnvironmentRevision: 22,
 	}}
@@ -443,6 +670,51 @@ func TestBackupConfigRestoreDecoderRejectsChunkCursorBeyondAggregateCount(t *tes
 	}
 }
 
+// Rationale: a Config restore generation is immutable `cfg_` authority across
+// Task retries, while non-Config restores have no generation identity.
+func TestBackupRestoreRecordRequiresConfigGenerationIdentity(t *testing.T) {
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	point := testBackupVolumePoint(createdAt, newTestBackupRecipient(t))
+	point.SourceKind = BackupRuntimeSourceConfig
+	point.TargetID = testBackupEnvironmentID
+	point.SourceFormat = BackupRuntimeFormatConfig
+	restore := testBackupRestore(point, createdAt, createdAt.Add(time.Minute))
+	restore.RestoreGenerationID = ids.NewAt(ids.KindConfig, createdAt, 27)
+	restore.CurrentTarget = BackupRestoreTargetSnapshot{Config: &BackupRestoreConfigTarget{
+		EnvironmentID: testBackupEnvironmentID, EnvironmentRevision: 22,
+	}}
+	restore.StagedTreeManifestSHA256 = ""
+	restore.State = BackupRestoreReceiving
+	restore.MutationStarted = false
+	restore.ServiceCount = 0
+	restore.ConfigProgress = &BackupRestoreConfigProgress{MaterializationGeneration: 9}
+	restore.Verification = BackupVerificationPending
+	value, err := encodeBackupRestoreRecord(restore)
+	if err != nil {
+		t.Fatalf("encodeBackupRestoreRecord(cfg generation) error = %v", err)
+	}
+	clear(value)
+	restore.RestoreGenerationID = testBackupTaskID
+	if _, err := encodeBackupRestoreRecord(restore); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("Task-shaped restore generation error = %v", err)
+	}
+	volume := testBackupRestore(
+		testBackupVolumePoint(createdAt, newTestBackupRecipient(t)),
+		createdAt,
+		createdAt.Add(time.Minute),
+	)
+	volume.RestoreGenerationID = ids.NewAt(ids.KindConfig, createdAt, 28)
+	if _, err := encodeBackupRestoreRecord(volume); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("Volume restore generation error = %v", err)
+	}
+}
+
 // Rationale: once rotation commits the new current key, its transient wrapped
 // identity must be removed from the durable operation checkpoint.
 func TestBackupKeyRotationAppliedRecordRejectsRetainedIdentity(t *testing.T) {
@@ -458,8 +730,79 @@ func TestBackupKeyRotationAppliedRecordRejectsRetainedIdentity(t *testing.T) {
 		t.Fatalf("encodeBackupKeyRotationRecord(applied) error = %v", err)
 	}
 	record.NextEncryptedIdentity = []byte("wrapped")
-	if _, err := encodeBackupKeyRotationRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := encodeBackupKeyRotationRecord(
+		record,
+	); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("applied rotation retained identity error = %v, want validation", err)
+	}
+}
+
+// Rationale: the immutable Connector credential-mode decision determines
+// whether an encrypted subordinate revision must exist or must be absent.
+func TestBackupRunConnectorCredentialRevisionCardinality(t *testing.T) {
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	record := testBackupRun(createdAt, createdAt, newTestBackupRecipient(t))
+	record.ConnectorCredentialsRevision = 0
+	if _, err := encodeBackupRunRecord(record); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("direct Connector without encrypted revision error = %v", err)
+	}
+	record.ConnectorHasDirectCredentials = false
+	if _, err := encodeBackupRunRecord(record); err != nil {
+		t.Fatalf("secret-ref-only Connector with absent encrypted revision error = %v", err)
+	}
+	record.ConnectorCredentialsRevision = 9
+	if _, err := encodeBackupRunRecord(record); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("secret-ref-only Connector with encrypted revision error = %v", err)
+	}
+	restore := testBackupRestore(
+		testBackupVolumePoint(createdAt, newTestBackupRecipient(t)),
+		createdAt,
+		createdAt,
+	)
+	restore.ConnectorCredentialsRevision = 0
+	if _, err := encodeBackupRestoreRecord(restore); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("direct restore Connector without encrypted revision error = %v", err)
+	}
+	restore.ConnectorHasDirectCredentials = false
+	if _, err := encodeBackupRestoreRecord(restore); err != nil {
+		t.Fatalf("secret-ref-only restore Connector with absent encrypted revision error = %v", err)
+	}
+}
+
+// Rationale: Volume service restart evidence is one compact deterministic
+// snapshot; ordering and uniqueness cannot be inferred after restart.
+func TestBackupVolumeServiceSnapshotRequiresStableIDOrder(t *testing.T) {
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	first := ids.NewAt(ids.KindService, createdAt, 1)
+	second := ids.NewAt(ids.KindService, createdAt, 2)
+	snapshot := BackupVolumeSourceSnapshot{
+		EnvironmentID: testBackupEnvironmentID, VolumeID: testBackupVolumeID, VolumeRevision: 7,
+		Services: []BackupVolumeServiceSnapshot{
+			{ServiceID: first, ServiceRevision: 8, PriorIntent: BackupServiceIntentRunning},
+			{ServiceID: second, ServiceRevision: 9, PriorIntent: BackupServiceIntentStopped},
+		},
+	}
+	if err := validateBackupVolumeSnapshot(snapshot); err != nil {
+		t.Fatalf("validateBackupVolumeSnapshot() error = %v", err)
+	}
+	snapshot.Services[0], snapshot.Services[1] = snapshot.Services[1], snapshot.Services[0]
+	if err := validateBackupVolumeSnapshot(snapshot); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("unordered Volume service snapshot error = %v", err)
 	}
 }
 
@@ -487,12 +830,58 @@ func assertBackupCodecRoundTrip[T any](
 	}
 }
 
+// Rationale: the durable retention contract accepts the full signed int64
+// width and rejects JSON integers outside it instead of narrowing on decode.
+func TestBackupRetentionSweepRejectsOutOfInt64Range(t *testing.T) {
+	t.Parallel()
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	record := BackupRetentionSweepRecord{
+		SourceID: testBackupSourceID, TriggerRecoveryPointID: testBackupPointID,
+		Keep: 1, Revision: 1, State: BackupRetentionPending,
+		CreatedAt: createdAt, UpdatedAt: createdAt,
+	}
+	value, err := encodeBackupRetentionSweepRecord(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	malformed := bytes.Replace(value, []byte(`"keep":1`), []byte(`"keep":9223372036854775808`), 1)
+	if bytes.Equal(malformed, value) {
+		t.Fatalf("encoded retention sweep lacks Keep field: %s", value)
+	}
+	if _, err := decodeBackupRetentionSweepRecord(malformed); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
+		t.Fatalf("decode out-of-range retention Keep error = %v", err)
+	}
+}
+
+// Rationale: prune dispatch must never predate the point authority it consumes.
+func TestBackupRecoveryPointPruneRejectsCreationBeforePoint(t *testing.T) {
+	t.Parallel()
+	createdAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	point := testBackupVolumePoint(createdAt, newTestBackupRecipient(t))
+	record := BackupRecoveryPointPruneRecord{
+		Point: point, PointRevision: 41, OperationID: testBackupOperationID,
+		State: BackupPrunePending, CreatedAt: createdAt.Add(-time.Nanosecond),
+		UpdatedAt: createdAt,
+	}
+	if _, err := encodeBackupRecoveryPointPruneRecord(record); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("encode prune before point error = %v", err)
+	}
+}
+
 func testBackupRun(createdAt time.Time, updatedAt time.Time, recipient string) BackupRunRecord {
+	pointID := ids.NewAt(ids.KindRecoveryPoint, createdAt, 300)
 	return BackupRunRecord{
 		TaskID: testBackupTaskID, OperationID: testBackupOperationID,
-		EnvironmentID: testBackupEnvironmentID, PolicyRevision: 7,
+		EnvironmentID: testBackupEnvironmentID, PolicyRevision: 7, RetentionKeep: 3,
 		Initiator: BackupRunInitiatorOperator, ConnectorID: testBackupConnectorID,
-		ConnectorRevision: 8, ConnectorCredentialsRevision: 9,
+		ConnectorPrefix:   "production/",
+		ConnectorRevision: 8, ConnectorHasDirectCredentials: true, ConnectorCredentialsRevision: 9,
 		Encryption: BackupRuntimeEncryptionAge, BackupKeyRecordRevision: 10,
 		BackupKeyValueRevision: 11, KeyEra: 2, Recipient: recipient,
 		State: BackupRunCompleted,
@@ -500,16 +889,25 @@ func testBackupRun(createdAt time.Time, updatedAt time.Time, recipient string) B
 			Ordinal: 0, SourceID: testBackupSourceID, Kind: BackupRuntimeSourceAttach,
 			TargetID: testBackupAttachID, SourceRevision: 12, TargetRevision: 13,
 			Snapshot: BackupRunSourceSnapshot{Postgres: &BackupPostgresSourceSnapshot{
-				ConsumerEnvironmentID: testBackupEnvironmentID,
-				AttachID:              testBackupAttachID, AttachRevision: 13,
-				BackingProjectID: testBackupProjectID, BackingProjectRevision: 14,
-				BackingEnvironmentID: testBackupBackingEnvironmentID, BackingEnvironmentRevision: 15,
-				BackingServiceID: testBackupServiceID, BackingServiceRevision: 16, AttachFactsRevision: 17,
+				ConsumerEnvironmentID:      testBackupEnvironmentID,
+				AttachID:                   testBackupAttachID,
+				AttachRevision:             13,
+				BackingProjectID:           testBackupProjectID,
+				BackingProjectRevision:     14,
+				BackingEnvironmentID:       testBackupBackingEnvironmentID,
+				BackingEnvironmentRevision: 15,
+				BackingServiceID:           testBackupServiceID,
+				BackingServiceRevision:     16,
+				AttachFactsRevision:        17,
+				Database:                   "app_db",
+				Role:                       "app_role",
 			}},
-			Format: BackupRuntimeFormatPostgres, RecoveryPointID: testBackupPointID,
-			ObjectKey: testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
-				testBackupPointID + "/artifact.bin",
-			State: BackupSourceAttemptSucceeded, SizeBytes: 123, SHA256: testBackupDigest,
+			Format: BackupRuntimeFormatPostgres, RecoveryPointID: pointID,
+			RecoveryPointCreatedAt: createdAt,
+			ObjectKey: "production/" + testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
+				pointID + "/artifact.bin",
+			State: BackupSourceAttemptSucceeded, Phase: BackupSourcePhaseCleanup,
+			SizeBytes: 123, SHA256: testBackupDigest,
 		}},
 		CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}
@@ -520,21 +918,40 @@ func testBackupLaterSource(
 	ordinal uint32,
 	state BackupSourceAttemptState,
 ) BackupRunSourceAttemptRecord {
+	phase := BackupSourcePhaseCapture
+	if state == BackupSourceAttemptSucceeded {
+		phase = BackupSourcePhaseCleanup
+	}
 	sourceID := ids.NewAt(ids.KindBackupSource, createdAt, int64(100+ordinal))
 	attachID := ids.NewAt(ids.KindAttach, createdAt, int64(200+ordinal))
 	pointID := ids.NewAt(ids.KindRecoveryPoint, createdAt, int64(300+ordinal))
 	record := BackupRunSourceAttemptRecord{
-		Ordinal: ordinal, SourceID: sourceID, Kind: BackupRuntimeSourceAttach,
-		TargetID: attachID, SourceRevision: 12, TargetRevision: 13,
+		Ordinal:        ordinal,
+		SourceID:       sourceID,
+		Kind:           BackupRuntimeSourceAttach,
+		TargetID:       attachID,
+		SourceRevision: 12,
+		TargetRevision: 13,
 		Snapshot: BackupRunSourceSnapshot{Postgres: &BackupPostgresSourceSnapshot{
-			ConsumerEnvironmentID: testBackupEnvironmentID, AttachID: attachID, AttachRevision: 13,
-			BackingProjectID: testBackupProjectID, BackingProjectRevision: 14,
-			BackingEnvironmentID: testBackupBackingEnvironmentID, BackingEnvironmentRevision: 15,
-			BackingServiceID: testBackupServiceID, BackingServiceRevision: 16, AttachFactsRevision: 17,
+			ConsumerEnvironmentID:      testBackupEnvironmentID,
+			AttachID:                   attachID,
+			AttachRevision:             13,
+			BackingProjectID:           testBackupProjectID,
+			BackingProjectRevision:     14,
+			BackingEnvironmentID:       testBackupBackingEnvironmentID,
+			BackingEnvironmentRevision: 15,
+			BackingServiceID:           testBackupServiceID,
+			BackingServiceRevision:     16,
+			AttachFactsRevision:        17,
+			Database:                   "app_db",
+			Role:                       "app_role",
 		}},
-		Format: BackupRuntimeFormatPostgres, RecoveryPointID: pointID,
-		ObjectKey: testBackupEnvironmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
-		State:     state,
+		Format:                 BackupRuntimeFormatPostgres,
+		RecoveryPointID:        pointID,
+		RecoveryPointCreatedAt: createdAt,
+		ObjectKey:              "production/" + testBackupEnvironmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
+		State:                  state,
+		Phase:                  phase,
 	}
 	if state == BackupSourceAttemptSucceeded {
 		record.SizeBytes = 123
@@ -544,12 +961,14 @@ func testBackupLaterSource(
 }
 
 func testBackupVolumePoint(createdAt time.Time, recipient string) BackupRecoveryPointSnapshot {
+	pointID := ids.NewAt(ids.KindRecoveryPoint, createdAt, 301)
 	return BackupRecoveryPointSnapshot{
-		ID: testBackupPointID, EnvironmentID: testBackupEnvironmentID,
+		ID: pointID, EnvironmentID: testBackupEnvironmentID,
 		SourceID: testBackupSourceID, SourceKind: BackupRuntimeSourceVolume,
 		TargetID: testBackupVolumeID, ConnectorID: testBackupConnectorID,
-		ObjectKey: testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
-			testBackupPointID + "/artifact.bin",
+		ConnectorPrefix: "production/",
+		ObjectKey: "production/" + testBackupEnvironmentID + "/" + testBackupSourceID + "/" +
+			pointID + "/artifact.bin",
 		SourceFormat: BackupRuntimeFormatVolume, Encryption: BackupRuntimeEncryptionAge,
 		KeyEra: 2, Recipient: recipient, SizeBytes: 123, SHA256: testBackupDigest,
 		CreatedAt: createdAt,
@@ -571,17 +990,36 @@ func testBackupRestore(
 	updatedAt time.Time,
 ) BackupRestoreRecord {
 	return BackupRestoreRecord{
-		TaskID: testBackupTaskID, OperationID: testBackupOperationID,
-		EnvironmentID: testBackupEnvironmentID, RecoveryPointRevision: 20,
-		Point: point, SourceRevision: 21,
+		TaskID:                testBackupTaskID,
+		OperationID:           testBackupOperationID,
+		EnvironmentID:         testBackupEnvironmentID,
+		RecoveryPointRevision: 20,
+		Point:                 point,
+		SourceRevision:        21,
 		CurrentTarget: BackupRestoreTargetSnapshot{Volume: &BackupVolumeSourceSnapshot{
-			EnvironmentID: testBackupEnvironmentID, VolumeID: testBackupVolumeID, VolumeRevision: 22,
+			EnvironmentID:  testBackupEnvironmentID,
+			VolumeID:       testBackupVolumeID,
+			VolumeRevision: 22,
+			Services: []BackupVolumeServiceSnapshot{{
+				ServiceID: testBackupServiceID, ServiceRevision: 23,
+				PriorIntent: BackupServiceIntentRunning,
+			}},
 		}},
-		ConnectorRevision: 23, ConnectorCredentialsRevision: 24,
-		ExpectedKeyRecordRevision: 25, ExpectedKeyValueRevision: 26,
-		Artifact:                 &BackupArtifactEvidence{SizeBytes: point.SizeBytes, SHA256: point.SHA256},
+		ConnectorRevision:             23,
+		ConnectorHasDirectCredentials: true,
+		ConnectorCredentialsRevision:  24,
+		ExpectedKeyRecordRevision:     25,
+		ExpectedKeyValueRevision:      26,
+		Artifact: &BackupArtifactEvidence{
+			SizeBytes: point.SizeBytes,
+			SHA256:    point.SHA256,
+		},
 		StagedTreeManifestSHA256: testBackupDigest,
-		State:                    BackupRestoreCompleted, MutationStarted: true, ServiceCount: 1,
-		Verification: BackupVerificationPassed, CreatedAt: createdAt, UpdatedAt: updatedAt,
+		State:                    BackupRestoreCompleted,
+		MutationStarted:          true,
+		ServiceCount:             1,
+		Verification:             BackupVerificationPassed,
+		CreatedAt:                createdAt,
+		UpdatedAt:                updatedAt,
 	}
 }

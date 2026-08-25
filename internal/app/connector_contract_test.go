@@ -24,8 +24,8 @@ func TestPrepareConnectorCreationSeparatesDirectValuesFromRedactedMetadata(t *te
 			Endpoint: "https://objects.example.test/", Bucket: "groundplane-backups",
 			Prefix: "production", Region: "auto", PathStyle: &pathStyle,
 			Credentials: map[string]apiTypes.ConnectorCredentialInput{
-				core.ConnectorCredentialAccessKey: {SecretRef: "S3_ACCESS_KEY"},
-				core.ConnectorCredentialSecretKey: {Value: "direct-secret"},
+				string(core.ConnectorCredentialAccessKey): {SecretRef: "S3_ACCESS_KEY"},
+				string(core.ConnectorCredentialSecretKey): {Value: "direct-secret"},
 			},
 		},
 	)
@@ -36,7 +36,7 @@ func TestPrepareConnectorCreationSeparatesDirectValuesFromRedactedMetadata(t *te
 		record.Connector.Prefix != "production/" || record.Connector.PathStyle {
 		t.Fatalf("prepareConnectorCreation() record = %#v", record)
 	}
-	if len(direct) != 1 || direct[core.ConnectorCredentialSecretKey] != "direct-secret" {
+	if len(direct) != 1 || direct[string(core.ConnectorCredentialSecretKey)] != "direct-secret" {
 		t.Fatalf("prepareConnectorCreation() direct = %#v", direct)
 	}
 	response := connectorResponse(record)
@@ -45,8 +45,8 @@ func TestPrepareConnectorCreationSeparatesDirectValuesFromRedactedMetadata(t *te
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
 	if strings.Contains(string(encoded), "direct-secret") ||
-		response.Credentials[core.ConnectorCredentialAccessKey].SecretRef != "S3_ACCESS_KEY" ||
-		response.Credentials[core.ConnectorCredentialSecretKey].Kind != apiTypes.ConnectorCredentialDirect {
+		response.Credentials[string(core.ConnectorCredentialAccessKey)].SecretRef != "S3_ACCESS_KEY" ||
+		response.Credentials[string(core.ConnectorCredentialSecretKey)].Kind != apiTypes.ConnectorCredentialDirect {
 		t.Fatalf("connectorResponse() = %s", encoded)
 	}
 }
@@ -56,8 +56,8 @@ func TestPrepareConnectorCreationRejectsIncompleteDecisions(t *testing.T) {
 		Name: "primary-backups", Kind: "s3-compatible",
 		Endpoint: "https://objects.example.test", Bucket: "groundplane-backups",
 		Region: "auto", Credentials: map[string]apiTypes.ConnectorCredentialInput{
-			core.ConnectorCredentialAccessKey: {SecretRef: "S3_ACCESS_KEY"},
-			core.ConnectorCredentialSecretKey: {Value: "direct-secret"},
+			string(core.ConnectorCredentialAccessKey): {SecretRef: "S3_ACCESS_KEY"},
+			string(core.ConnectorCredentialSecretKey): {Value: "direct-secret"},
 		},
 	}
 	environmentID := ids.NewAt(
@@ -72,7 +72,7 @@ func TestPrepareConnectorCreationRejectsIncompleteDecisions(t *testing.T) {
 		{name: "missing path style", mutate: func(_ *apiTypes.ConnectorCreateRequest) {}},
 		{name: "missing credential", mutate: func(input *apiTypes.ConnectorCreateRequest) {
 			input.PathStyle = &pathStyle
-			delete(input.Credentials, core.ConnectorCredentialSecretKey)
+			delete(input.Credentials, string(core.ConnectorCredentialSecretKey))
 		}},
 		{name: "extra credential", mutate: func(input *apiTypes.ConnectorCreateRequest) {
 			input.PathStyle = &pathStyle
@@ -80,7 +80,7 @@ func TestPrepareConnectorCreationRejectsIncompleteDecisions(t *testing.T) {
 		}},
 		{name: "ambiguous credential", mutate: func(input *apiTypes.ConnectorCreateRequest) {
 			input.PathStyle = &pathStyle
-			input.Credentials[core.ConnectorCredentialSecretKey] = apiTypes.ConnectorCredentialInput{
+			input.Credentials[string(core.ConnectorCredentialSecretKey)] = apiTypes.ConnectorCredentialInput{
 				SecretRef: "S3_SECRET_KEY", Value: "value",
 			}
 		}},

@@ -194,6 +194,7 @@ func TestProtectorRejectsNilContextBeforeDependencies(t *testing.T) {
 	sealer := &retainingSealer{ciphertext: []byte("must-not-seal")}
 	opener := &retainingOpener{plaintext: []byte("must-not-open")}
 	protector := mustProtector(t, sealer, opener)
+	//lint:ignore SA1012 This test verifies rejection before the sealing dependency runs.
 	_, sealErr := protector.Seal(nil, []byte("plaintext"))
 	assertInternal(t, sealErr)
 	if sealer.calls != 0 {
@@ -206,6 +207,7 @@ func TestProtectorRejectsNilContextBeforeDependencies(t *testing.T) {
 		t.Fatalf("Restore() error = %v", err)
 	}
 	callbackCalled := false
+	//lint:ignore SA1012 This test verifies rejection before plaintext reaches the callback.
 	openErr := protector.Open(nil, envelope, func([]byte) error {
 		callbackCalled = true
 		return nil

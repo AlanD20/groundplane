@@ -27,22 +27,23 @@ const (
 type TaskType string
 
 const (
-	TaskDeploy    TaskType = "deploy"
-	TaskRollback  TaskType = "rollback"
-	TaskBackup    TaskType = "backup"
-	TaskRestore   TaskType = "restore"
-	TaskAttach    TaskType = "attach"
-	TaskDetach    TaskType = "detach"
-	TaskRun       TaskType = "run"
-	TaskScript    TaskType = "script"
-	TaskProvision TaskType = "provision"
-	TaskCreate    TaskType = "create"
-	TaskUpdate    TaskType = "update"
-	TaskRemove    TaskType = "remove"
-	TaskStart     TaskType = "start"
-	TaskStop      TaskType = "stop"
-	TaskDestroy   TaskType = "destroy"
-	TaskRotate    TaskType = "rotate"
+	TaskDeploy      TaskType = "deploy"
+	TaskRollback    TaskType = "rollback"
+	TaskBackup      TaskType = "backup"
+	TaskBackupPrune TaskType = "backup_prune"
+	TaskRestore     TaskType = "restore"
+	TaskAttach      TaskType = "attach"
+	TaskDetach      TaskType = "detach"
+	TaskRun         TaskType = "run"
+	TaskScript      TaskType = "script"
+	TaskProvision   TaskType = "provision"
+	TaskCreate      TaskType = "create"
+	TaskUpdate      TaskType = "update"
+	TaskRemove      TaskType = "remove"
+	TaskStart       TaskType = "start"
+	TaskStop        TaskType = "stop"
+	TaskDestroy     TaskType = "destroy"
+	TaskRotate      TaskType = "rotate"
 )
 
 // TaskExecutor is the immutable authority allowed to claim a Task. It is
@@ -526,6 +527,9 @@ func validateTaskRecord(record TaskRecord) error {
 	if !validTaskType(record.Type) {
 		return errs.New(errs.KindValidationFailed, "task type is not in the durable task catalog")
 	}
+	if record.Type == TaskBackupPrune && record.Actor != TaskActorSystem {
+		return errs.New(errs.KindValidationFailed, "backup_prune task actor must be system")
+	}
 	if record.Target == "" || !utf8.ValidString(record.Target) {
 		return errs.New(errs.KindValidationFailed, "task target is required and must be valid UTF-8")
 	}
@@ -535,7 +539,12 @@ func validateTaskRecord(record TaskRecord) error {
 	if !validSHA256(record.PlanHash) {
 		return errs.New(errs.KindValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
 	}
-	if record.RenderGeneration <= 0 {
+	backupTask := record.Type == TaskBackup || record.Type == TaskBackupPrune
+	if backupTask && (record.RenderGeneration != 0 || record.TimeoutSeconds != backupTaskTimeoutSeconds ||
+		len(record.Params) != 0 || len(record.Materializations) != 0) {
+		return errs.New(errs.KindValidationFailed, "backup task shape is invalid")
+	}
+	if !backupTask && record.RenderGeneration <= 0 {
 		return errs.New(errs.KindValidationFailed, "task render_generation must be positive")
 	}
 	materializationEnvironment, hasMaterializationEnvironment, err := taskMaterializationEnvironment(record)
@@ -767,7 +776,7 @@ func validateTaskEventDedupRecord(record TaskEventDedupRecord) error {
 
 func validTaskType(taskType TaskType) bool {
 	switch taskType {
-	case TaskDeploy, TaskRollback, TaskBackup, TaskRestore, TaskAttach, TaskDetach,
+	case TaskDeploy, TaskRollback, TaskBackup, TaskBackupPrune, TaskRestore, TaskAttach, TaskDetach,
 		TaskRun, TaskScript, TaskProvision, TaskCreate, TaskUpdate, TaskRemove,
 		TaskStart, TaskStop, TaskDestroy, TaskRotate:
 		return true

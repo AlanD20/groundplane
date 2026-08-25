@@ -37,7 +37,7 @@ func (repository *TaskRepository) prepareEnvironmentTaskRetry(
 	if retry.Type != source.Type || retry.Target != source.Target {
 		return environmentTaskChange{}, errs.New(
 			errs.KindInternal,
-			"Environment retry changed its durable target",
+			"environment retry changed its durable target",
 		)
 	}
 	state, err := repository.readTaskEnvironmentMutationState(ctx, source.Target, revision, true)
@@ -66,11 +66,16 @@ func (repository *TaskRepository) prepareEnvironmentTaskRetry(
 			{Key: environmentMutationEpochKey(source.Target), ModRevision: state.EpochRevision},
 			{Key: environmentOperationLockKey(source.Target)},
 		},
-		mutations: []Mutation{{
-			Type: MutationPut, Key: environmentKey(source.Target), Value: value,
-		}, {
-			Type: MutationPut, Key: environmentMutationEpochKey(source.Target), Value: state.EpochValue,
-		}},
+		mutations: []Mutation{
+			{
+				Type: MutationPut, Key: environmentKey(source.Target), Value: value,
+			},
+			{
+				Type:  MutationPut,
+				Key:   environmentMutationEpochKey(source.Target),
+				Value: state.EpochValue,
+			},
+		},
 		values: [][]byte{value, state.EpochValue},
 	}, nil
 }
@@ -158,7 +163,9 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 	}
 	return taskEnvironmentMutationState{
 		Environment: Versioned[EnvironmentRecord]{
-			Record: record, Revision: environmentValue.ModRevision, ReadRevision: result.ReadRevision,
+			Record:       record,
+			Revision:     environmentValue.ModRevision,
+			ReadRevision: result.ReadRevision,
 		},
 		EpochRevision: epochValue.ModRevision,
 		EpochValue:    canonicalEpoch,

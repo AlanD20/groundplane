@@ -14,6 +14,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	agentChannelControllerMaximumReceiveMessageBytes = 16 * 1024 * 1024
+	agentChannelControllerMaximumSendMessageBytes    = 5 * 1024 * 1024
+)
+
 type agentChannelRuntime struct {
 	registry  *agentchannel.Registry
 	listen    func(context.Context) (net.Listener, error)
@@ -30,15 +35,21 @@ func newAgentChannelRuntime(
 	tasks agentchannel.TaskStore,
 	plans agentchannel.PlanResolver,
 	materials agentchannel.MaterializationResolver,
+	secrets agentchannel.BackupSecretSlotResolver,
 ) *agentChannelRuntime {
 	return &agentChannelRuntime{
 		registry: agentchannel.NewRegistry(),
 		listen:   agentlistener.Listen,
 		newServer: func(registry *agentchannel.Registry) agentChannelGRPCServer {
-			server := grpc.NewServer()
+			server := grpc.NewServer(
+				grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
+				grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
+			)
 			agentpb.RegisterAgentChannelServer(
 				server,
-				agentchannel.NewWithMaterializations(authenticator, registry, tasks, plans, materials),
+				agentchannel.NewWithPrivateTransfers(
+					authenticator, registry, tasks, plans, materials, secrets,
+				),
 			)
 			return server
 		},

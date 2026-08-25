@@ -260,6 +260,7 @@ func TestProtectAndCompareProtectedFailClosed(t *testing.T) {
 	t.Parallel()
 
 	protectDigest := canonicalTestDigest(t, canonicalTestIntent())
+	//lint:ignore SA1012 This test verifies fail-closed handling of a nil operation context.
 	if _, err := Protect(nil, nil, 0, protectDigest); !hasKind(err, errs.KindInternal) {
 		t.Fatalf("Protect() error = %v, want internal", err)
 	}
@@ -268,6 +269,7 @@ func TestProtectAndCompareProtectedFailClosed(t *testing.T) {
 	}
 
 	if _, err := CompareProtected(
+		//lint:ignore SA1012 This test verifies fail-closed comparison with a nil operation context.
 		nil,
 		nil,
 		secretvalue.Envelope{},

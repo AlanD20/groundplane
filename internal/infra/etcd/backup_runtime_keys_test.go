@@ -55,6 +55,30 @@ func TestBackupRecoveryPointIndexSuffixInvertsCanonicalULIDOrder(t *testing.T) {
 	}
 }
 
+// Rationale: Connector deletion fences address exact durable point identities rather than public newest-first rows.
+func TestBackupConnectorReverseReferenceKeysUseRawStablePointID(t *testing.T) {
+	connectorID := "con_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	pointID := "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+	pointKey, err := backupRecoveryPointConnectorIndexKey(connectorID, pointID)
+	if err != nil {
+		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+	}
+	wantPointKey := "/v1/indexes/recovery-points/by-connector/" + connectorID + "/" + pointID
+	if pointKey != wantPointKey {
+		t.Fatalf("backupRecoveryPointConnectorIndexKey() = %q, want %q", pointKey, wantPointKey)
+	}
+
+	orphanKey, err := backupOrphanConnectorIndexKey(connectorID, pointID)
+	if err != nil {
+		t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
+	}
+	wantOrphanKey := "/v1/indexes/backup-orphans/by-connector/" + connectorID + "/" + pointID
+	if orphanKey != wantOrphanKey {
+		t.Fatalf("backupOrphanConnectorIndexKey() = %q, want %q", orphanKey, wantOrphanKey)
+	}
+}
+
 // Rationale: every runtime category needs a stable constructor before repositories compose atomic compare/mutation plans.
 func TestBackupRuntimeKeyConstructorsUseLockedV1Roots(t *testing.T) {
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -71,43 +95,77 @@ func TestBackupRuntimeKeyConstructorsUseLockedV1Roots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 	}
+	connectorPointKey, err := backupRecoveryPointConnectorIndexKey(connectorID, pointID)
+	if err != nil {
+		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+	}
+	runEnvironmentKey, err := backupRunEnvironmentIndexKey(environmentID, taskID)
+	if err != nil {
+		t.Fatalf("backupRunEnvironmentIndexKey() error = %v", err)
+	}
+	orphanConnectorKey, err := backupOrphanConnectorIndexKey(connectorID, pointID)
+	if err != nil {
+		t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
+	}
+	orphanEnvironmentKey, err := backupOrphanEnvironmentIndexKey(environmentID, pointID)
+	if err != nil {
+		t.Fatalf("backupOrphanEnvironmentIndexKey() error = %v", err)
+	}
+	restoreEnvironmentKey, err := backupRestoreEnvironmentIndexKey(environmentID, taskID)
+	if err != nil {
+		t.Fatalf("backupRestoreEnvironmentIndexKey() error = %v", err)
+	}
+	rotationEnvironmentKey, err := backupKeyRotationEnvironmentIndexKey(environmentID, taskID)
+	if err != nil {
+		t.Fatalf("backupKeyRotationEnvironmentIndexKey() error = %v", err)
+	}
 
 	cases := map[string]string{
-		"cursor":           cursorKey,
-		"lock":             environmentOperationLockKey(environmentID),
-		"source exclusion": volumeExclusionKey,
-		"run":              backupRunKey(taskID),
-		"run service":      backupRunVolumeServiceKey(taskID, 2, 3),
-		"point":            backupRecoveryPointKey(pointID),
-		"point connector":  backupRecoveryPointConnectorIndexKey(connectorID, pointID),
-		"orphan":           backupOrphanKey(pointID),
-		"orphan connector": backupOrphanConnectorIndexKey(connectorID, pointID),
-		"retention":        backupRetentionKey(sourceID, pointID),
-		"prune":            backupRecoveryPointPruneKey(pointID),
-		"prune dispatch":   backupRecoveryPointPruneDispatchKey(taskID),
-		"restore":          backupRestoreKey(taskID),
-		"restore service":  backupRestoreServiceKey(taskID, 1),
-		"rotation":         backupKeyRotationKey(taskID),
-		"mutation epoch":   environmentMutationEpochKey(environmentID),
+		"cursor":               cursorKey,
+		"lock":                 environmentOperationLockKey(environmentID),
+		"source exclusion":     volumeExclusionKey,
+		"run":                  backupRunKey(taskID),
+		"run environment":      runEnvironmentKey,
+		"point":                backupRecoveryPointKey(pointID),
+		"point connector":      connectorPointKey,
+		"orphan":               backupOrphanKey(pointID),
+		"orphan connector":     orphanConnectorKey,
+		"orphan environment":   orphanEnvironmentKey,
+		"retention":            backupRetentionKey(sourceID, pointID),
+		"prune":                backupRecoveryPointPruneKey(pointID),
+		"prune dispatch":       backupRecoveryPointPruneDispatchKey(taskID),
+		"terminal receipt":     backupTerminalReceiptKey(taskID),
+		"restore":              backupRestoreKey(taskID),
+		"restore environment":  restoreEnvironmentKey,
+		"restore service":      backupRestoreServiceKey(taskID, 1),
+		"rotation":             backupKeyRotationKey(taskID),
+		"rotation environment": rotationEnvironmentKey,
+		"mutation epoch":       environmentMutationEpochKey(environmentID),
 	}
 	wants := map[string]string{
 		"cursor":           "/v1/runtime/backup-schedule-cursors/" + environmentID + "/00000000000000000007",
 		"lock":             "/v1/runtime/environment-operation-locks/" + environmentID,
 		"source exclusion": "/v1/runtime/backup-source-target-exclusions/volume/" + volumeID,
 		"run":              "/v1/runtime/backup-runs/" + taskID,
-		"run service": "/v1/runtime/backup-run-volume-services/" + taskID +
-			"/00000000000000000002/00000000000000000003",
+		"run environment":  "/v1/indexes/backup-runs/by-environment/" + environmentID + "/" + taskID,
 		"point":            "/v1/records/recovery-points/" + pointID,
-		"point connector":  "/v1/indexes/recovery-points/by-connector/" + connectorID + "/" + pointID,
-		"orphan":           "/v1/runtime/backup-orphans/" + pointID,
-		"orphan connector": "/v1/indexes/backup-orphans/by-connector/" + connectorID + "/" + pointID,
-		"retention":        "/v1/runtime/backup-retention/" + sourceID + "/" + pointID,
-		"prune":            "/v1/runtime/recovery-point-prunes/" + pointID,
-		"prune dispatch":   "/v1/runtime/recovery-point-prune-dispatches/" + taskID,
-		"restore":          "/v1/runtime/backup-restores/" + taskID,
-		"restore service":  "/v1/runtime/backup-restore-services/" + taskID + "/00000000000000000001",
-		"rotation":         "/v1/runtime/backup-key-rotations/" + taskID,
-		"mutation epoch":   "/v1/runtime/environment-mutation-epochs/" + environmentID,
+		"point connector": "/v1/indexes/recovery-points/by-connector/" + connectorID +
+			"/" + pointID,
+		"orphan": "/v1/runtime/backup-orphans/" + pointID,
+		"orphan connector": "/v1/indexes/backup-orphans/by-connector/" + connectorID +
+			"/" + pointID,
+		"orphan environment": "/v1/indexes/backup-orphans/by-environment/" + environmentID +
+			"/ZYN70WAJHC564V77GG8SPFTGN4",
+		"retention":            "/v1/runtime/backup-retention/" + sourceID + "/" + pointID,
+		"prune":                "/v1/runtime/recovery-point-prunes/" + pointID,
+		"prune dispatch":       "/v1/runtime/recovery-point-prune-dispatches/" + taskID,
+		"terminal receipt":     "/v1/runtime/backup-terminal-receipts/" + taskID,
+		"restore":              "/v1/runtime/backup-restores/" + taskID,
+		"restore environment":  "/v1/indexes/backup-restores/by-environment/" + environmentID + "/" + taskID,
+		"restore service":      "/v1/runtime/backup-restore-services/" + taskID + "/00000000000000000001",
+		"rotation":             "/v1/runtime/backup-key-rotations/" + taskID,
+		"rotation environment": "/v1/indexes/backup-key-rotations/by-environment/" + environmentID + "/" + taskID,
+		"mutation epoch":       "/v1/runtime/environment-mutation-epochs/" + environmentID,
 	}
 	for name, got := range cases {
 		if got != wants[name] {

@@ -51,8 +51,7 @@ type Executor struct {
 // New constructs a production Executor against the fixed local Docker socket.
 func New(image string) (*Executor, error) {
 	engine, err := client.New(
-		client.WithHost("unix://"+dockerSocketPath),
-		client.WithAPIVersionNegotiation(),
+		client.WithHost("unix://" + dockerSocketPath),
 	)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -254,7 +253,7 @@ func (executor *Executor) stop(containerID string) error {
 	timeout := 0
 	_, err := executor.engine.ContainerStop(cleanupCtx, containerID, client.ContainerStopOptions{Timeout: &timeout})
 	if err != nil && !containerderrdefs.IsNotFound(err) {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("Compose helper container: stop: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("compose helper container: stop: %w", err))
 	}
 	return nil
 }
@@ -264,7 +263,7 @@ func (executor *Executor) remove(containerID string) error {
 	defer cancel()
 	_, err := executor.engine.ContainerRemove(cleanupCtx, containerID, client.ContainerRemoveOptions{Force: true})
 	if err != nil && !containerderrdefs.IsNotFound(err) {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("Compose helper container: remove: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("compose helper container: remove: %w", err))
 	}
 	return nil
 }
@@ -279,7 +278,7 @@ func operationError(ctx context.Context, operation string, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	return errs.Wrap(errs.KindInternal, fmt.Errorf("Compose helper container: %s: %w", operation, err))
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("compose helper container: %s: %w", operation, err))
 }
 
 func preferCleanup(original, cleanup error) error {

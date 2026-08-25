@@ -115,25 +115,32 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			"expected Blueprint revision cannot be negative",
 		)
 	}
-	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 || environment.Revision <= 0 ||
-		project.ReadRevision < project.Revision || environment.ReadRevision < environment.Revision ||
+	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 ||
+		environment.Revision <= 0 ||
+		project.ReadRevision < project.Revision ||
+		environment.ReadRevision < environment.Revision ||
 		environment.Record.ProjectID != project.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
-			"Environment hierarchy changed before deletion",
+			"environment hierarchy changed before deletion",
 		)
 	}
 	if err := validateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != environment.Record.ID ||
-		tombstone.TargetRevision != environment.Revision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
-		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != TaskExecutorAgent ||
-		task.Type != TaskRemove || task.Target != environment.Record.ID || task.Status != TaskStatusPending {
+		tombstone.TargetRevision != environment.Revision ||
+		tombstone.TaskID != task.ID ||
+		tombstone.Phase != DeletionPhaseHostEffects ||
+		!tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
+		task.Executor != TaskExecutorAgent ||
+		task.Type != TaskRemove ||
+		task.Target != environment.Record.ID ||
+		task.Status != TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"Environment deletion Task and tombstone do not match",
+			"environment deletion Task and tombstone do not match",
 		)
 	}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
@@ -142,7 +149,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"Environment deletion marker does not match its Task",
+			"environment deletion marker does not match its Task",
 		)
 	}
 
@@ -172,10 +179,11 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	}
 	if evidence == nil || evidence.ReadRevision != readRevision || len(evidence.Values) != 12 ||
 		evidence.Values[0] == nil || evidence.Values[1] == nil || evidence.Values[2] == nil ||
-		evidence.Values[3] == nil || evidence.Values[4] == nil || evidence.Values[7] == nil {
+		evidence.Values[3] == nil || evidence.Values[4] == nil ||
+		evidence.Values[7] == nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
-			"Environment deletion fixed-revision evidence is incomplete",
+			"environment deletion fixed-revision evidence is incomplete",
 		)
 	}
 	if evidence.Values[0].ModRevision != environment.Revision {
@@ -186,20 +194,23 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	}
 	storedTenant, err := decodeTenant(evidence.Values[2].Value)
 	if err != nil || storedTenant.ID != project.Record.TenantID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Environment deletion Tenant is corrupt")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"environment deletion Tenant is corrupt",
+		)
 	}
 	if string(
 		evidence.Values[3].Value,
 	) != environment.Record.ID || string(evidence.Values[4].Value) != environment.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
-			"Environment deletion index evidence is corrupt",
+			"environment deletion index evidence is corrupt",
 		)
 	}
 	if evidence.Values[9] != nil || evidence.Values[10] != nil || evidence.Values[11] != nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindResourceInUse,
-			"Environment deletion hierarchy is unavailable",
+			"environment deletion hierarchy is unavailable",
 		)
 	}
 	epoch, err := decodeEnvironmentDeletionEpoch(evidence.Values[7], environment.Record.ID)
@@ -212,16 +223,22 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	}
 	defer clear(epochValue)
 	if evidence.Values[8] != nil {
-		if _, err := decodeEnvironmentOperationLock(evidence.Values[8], environment.Record.ID); err != nil {
+		if _, err := decodeEnvironmentOperationLock(
+			evidence.Values[8],
+			environment.Record.ID,
+		); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Environment operation is in progress")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindResourceInUse,
+			"environment operation is in progress",
+		)
 	}
 	if expectedBlueprintRevision == 0 {
 		if evidence.Values[5] != nil || evidence.Values[6] != nil || len(task.Params) != 1 {
 			return IdempotencyTransactionResult{}, errs.New(
 				errs.KindStateConflict,
-				"Environment Blueprint state changed",
+				"environment Blueprint state changed",
 			)
 		}
 	} else if evidence.Values[5] == nil || evidence.Values[6] == nil ||
@@ -229,7 +246,10 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		evidence.Values[6].ModRevision != expectedBlueprintRevision ||
 		len(task.Params) != 4 || task.Params[EnvironmentBlueprintRevisionParam] == "" ||
 		task.Params[TaskMaterializationEnvironmentParam] != environment.Record.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment Blueprint state changed")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"environment Blueprint state changed",
+		)
 	}
 	lock := BackupOperationLockRecord{
 		EnvironmentID: environment.Record.ID,
@@ -288,22 +308,43 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			ModRevision: evidence.Values[4].ModRevision,
 		},
 		{Key: tombstoneKey},
-		{Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: expectedBlueprintRevision},
-		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: expectedBlueprintRevision},
+		{
+			Key:         environmentBlueprintHeadKey(environment.Record.ID),
+			ModRevision: expectedBlueprintRevision,
+		},
+		{
+			Key:         environmentComposeProjectionKey(environment.Record.ID),
+			ModRevision: expectedBlueprintRevision,
+		},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID)},
-		{Key: environmentMutationEpochKey(environment.Record.ID), ModRevision: evidence.Values[7].ModRevision},
+		{
+			Key:         environmentMutationEpochKey(environment.Record.ID),
+			ModRevision: evidence.Values[7].ModRevision,
+		},
 		{Key: environmentOperationLockKey(environment.Record.ID)},
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  MutationPut,
+			Key:   taskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: MutationPut, Key: environmentOperationLockKey(environment.Record.ID), Value: lockValue},
-		{Type: MutationPut, Key: environmentMutationEpochKey(environment.Record.ID), Value: epochValue},
+		{
+			Type:  MutationPut,
+			Key:   environmentOperationLockKey(environment.Record.ID),
+			Value: lockValue,
+		},
+		{
+			Type:  MutationPut,
+			Key:   environmentMutationEpochKey(environment.Record.ID),
+			Value: epochValue,
+		},
 	}
 	fixedTenant := Versioned[TenantRecord]{
 		Record: storedTenant, Revision: evidence.Values[2].ModRevision, ReadRevision: readRevision,
@@ -373,7 +414,11 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		conditions,
 		mutations,
 		classifyEnvironmentDeletionIntentStartConflict(classifyEnvironmentDeletionStartConflict(
-			project, environment, task.OperationID, expectedBlueprintRevision, evidence.Values[7].ModRevision,
+			project,
+			environment,
+			task.OperationID,
+			expectedBlueprintRevision,
+			evidence.Values[7].ModRevision,
 		)),
 	)
 	if err != nil {
@@ -395,7 +440,10 @@ func classifyEnvironmentDeletionStartConflict(
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		if len(values) != 15 {
-			return errs.New(errs.KindInternal, "Environment deletion compare evidence is incomplete")
+			return errs.New(
+				errs.KindInternal,
+				"environment deletion compare evidence is incomplete",
+			)
 		}
 		if values[2] != nil {
 			activeTaskID, err := decodeTaskReference(values[2].Value)
@@ -411,7 +459,10 @@ func classifyEnvironmentDeletionStartConflict(
 		}
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {
-				return errs.New(errs.KindInternal, "Environment deletion collided with durable Task state")
+				return errs.New(
+					errs.KindInternal,
+					"environment deletion collided with durable Task state",
+				)
 			}
 		}
 		if values[4] == nil {
@@ -422,15 +473,18 @@ func classifyEnvironmentDeletionStartConflict(
 		}
 		for _, index := range []int{5, 6} {
 			if values[index] == nil || string(values[index].Value) != environment.Record.ID {
-				return errs.New(errs.KindInternal, "Environment deletion index changed or is corrupt")
+				return errs.New(
+					errs.KindInternal,
+					"environment deletion index changed or is corrupt",
+				)
 			}
 		}
 		if values[7] != nil {
-			return errs.New(errs.KindResourceInUse, "Environment deletion is already in progress")
+			return errs.New(errs.KindResourceInUse, "environment deletion is already in progress")
 		}
 		if keyValueRevision(values[8]) != expectedBlueprintRevision ||
 			keyValueRevision(values[9]) != expectedBlueprintRevision {
-			return errs.New(errs.KindStateConflict, "Environment Blueprint state changed")
+			return errs.New(errs.KindStateConflict, "environment Blueprint state changed")
 		}
 		if values[10] == nil {
 			return errs.New(errs.KindProjectNotFound, "project was not found")
@@ -439,27 +493,30 @@ func classifyEnvironmentDeletionStartConflict(
 			return stateConflict("project", project.Record.ID)
 		}
 		if values[11] != nil {
-			return errs.New(errs.KindResourceInUse, "Project deletion is in progress")
+			return errs.New(errs.KindResourceInUse, "project deletion is in progress")
 		}
 		if values[12] != nil {
-			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+			return errs.New(errs.KindResourceInUse, "tenant deletion is in progress")
 		}
 		if values[13] == nil {
-			return errs.New(errs.KindInternal, "Environment mutation epoch is missing")
+			return errs.New(errs.KindInternal, "environment mutation epoch is missing")
 		}
 		if _, err := decodeEnvironmentDeletionEpoch(values[13], environment.Record.ID); err != nil {
 			return err
 		}
 		if values[13].ModRevision != expectedEpochRevision {
-			return errs.New(errs.KindStateConflict, "Environment mutation epoch advanced")
+			return errs.New(errs.KindStateConflict, "environment mutation epoch advanced")
 		}
 		if values[14] != nil {
-			if _, err := decodeEnvironmentOperationLock(values[14], environment.Record.ID); err != nil {
+			if _, err := decodeEnvironmentOperationLock(
+				values[14],
+				environment.Record.ID,
+			); err != nil {
 				return err
 			}
-			return errs.New(errs.KindResourceInUse, "Environment operation is in progress")
+			return errs.New(errs.KindResourceInUse, "environment operation is in progress")
 		}
-		return errs.New(errs.KindStateConflict, "Environment deletion state changed")
+		return errs.New(errs.KindStateConflict, "environment deletion state changed")
 	}
 }
 
@@ -468,35 +525,54 @@ func decodeEnvironmentDeletionEpoch(
 	environmentID string,
 ) (EnvironmentMutationEpochRecord, error) {
 	if value == nil {
-		return EnvironmentMutationEpochRecord{}, errs.New(errs.KindInternal, "Environment mutation epoch is missing")
+		return EnvironmentMutationEpochRecord{}, errs.New(
+			errs.KindInternal,
+			"environment mutation epoch is missing",
+		)
 	}
 	record, err := decodeEnvironmentMutationEpochRecord(value.Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return EnvironmentMutationEpochRecord{}, errs.New(errs.KindInternal, "Environment mutation epoch is corrupt")
+		return EnvironmentMutationEpochRecord{}, errs.New(
+			errs.KindInternal,
+			"environment mutation epoch is corrupt",
+		)
 	}
 	return record, nil
 }
 
-func decodeEnvironmentOperationLock(value *KeyValue, environmentID string) (BackupOperationLockRecord, error) {
+func decodeEnvironmentOperationLock(
+	value *KeyValue,
+	environmentID string,
+) (BackupOperationLockRecord, error) {
 	if value == nil {
-		return BackupOperationLockRecord{}, errs.New(errs.KindStateConflict, "Environment operation lock is missing")
+		return BackupOperationLockRecord{}, errs.New(
+			errs.KindStateConflict,
+			"environment operation lock is missing",
+		)
 	}
 	record, err := decodeBackupOperationLockRecord(value.Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return BackupOperationLockRecord{}, errs.New(errs.KindInternal, "Environment operation lock is corrupt")
+		return BackupOperationLockRecord{}, errs.New(
+			errs.KindInternal,
+			"environment operation lock is corrupt",
+		)
 	}
 	return record, nil
 }
 
-func decodeOwnedEnvironmentDeletionLock(value *KeyValue, task TaskRecord) (BackupOperationLockRecord, error) {
+func decodeOwnedEnvironmentDeletionLock(
+	value *KeyValue,
+	task TaskRecord,
+) (BackupOperationLockRecord, error) {
 	record, err := decodeEnvironmentOperationLock(value, task.Target)
 	if err != nil {
 		return BackupOperationLockRecord{}, err
 	}
-	if record.Kind != BackupOperationDeletion || record.OperationID != task.OperationID || record.TaskID != task.ID {
+	if record.Kind != BackupOperationDeletion || record.OperationID != task.OperationID ||
+		record.TaskID != task.ID {
 		return BackupOperationLockRecord{}, errs.New(
 			errs.KindStateConflict,
-			"Environment deletion operation lock ownership changed",
+			"environment deletion operation lock ownership changed",
 		)
 	}
 	return record, nil
@@ -527,7 +603,9 @@ func validateDeletionTombstone(record DeletionTombstoneRecord) error {
 	if record.TargetRevision <= 0 || validateStableID(ids.KindTask, record.TaskID) != nil ||
 		(record.Phase != DeletionPhaseHostEffects && record.Phase != DeletionPhaseFinalizing) ||
 		record.CreatedAt.IsZero() || !record.CreatedAt.Equal(record.CreatedAt.UTC()) ||
-		record.UpdatedAt.Before(record.CreatedAt) || !record.UpdatedAt.Equal(record.UpdatedAt.UTC()) {
+		record.UpdatedAt.Before(
+			record.CreatedAt,
+		) || !record.UpdatedAt.Equal(record.UpdatedAt.UTC()) {
 		return errs.New(errs.KindValidationFailed, "deletion tombstone lifecycle is invalid")
 	}
 	checkpoint := record.Checkpoint

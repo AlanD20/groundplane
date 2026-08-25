@@ -1,6 +1,7 @@
 package hierarchy
 
 import (
+	sluggrammar "github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -35,7 +36,7 @@ func PrepareProjectEdit(current core.Project, input EditProjectInput) (core.Proj
 }
 
 func ValidateProjectRenameInput(input RenameProjectInput) error {
-	return validateSlug("project slug", input.Slug)
+	return sluggrammar.Validate("project slug", input.Slug)
 }
 
 func PrepareProjectRename(current core.Project, input RenameProjectInput) (core.Project, error) {

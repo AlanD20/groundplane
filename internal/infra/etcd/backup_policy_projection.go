@@ -24,7 +24,7 @@ type BackupPolicyProjection struct {
 	EnvironmentID string
 	Enabled       bool
 	Frequency     string
-	Keep          int
+	Keep          int64
 	Encryption    string
 	ConnectorID   string
 	Sources       []BackupPolicySourceProjection

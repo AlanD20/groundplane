@@ -767,6 +767,12 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 			},
 		},
 		{
+			name: "zone reservation",
+			key: func(fixture *environmentDeletionLockFixture) string {
+				return zonePoolRegistryKey(fixture.environment.Record.ID)
+			},
+		},
+		{
 			name: "service",
 			key: func(fixture *environmentDeletionLockFixture) string {
 				return serviceOwnerPrefix(fixture.environment.Record.ID) + "retained"
@@ -857,6 +863,16 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 			assertEnvironmentDeletionCompanion(
 				t, fixture.store, environmentKey(fixture.environment.Record.ID), true,
 			)
+			for _, key := range []string{
+				deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+				environmentDeletionIntentKey(fixture.task.OperationID),
+				taskKey(fixture.task.ID),
+				environmentOperationLockKey(fixture.environment.Record.ID),
+				environmentMutationEpochKey(fixture.environment.Record.ID),
+				environmentPoolRegistryKey,
+			} {
+				assertEnvironmentDeletionCompanion(t, fixture.store, key, true)
+			}
 		})
 	}
 }

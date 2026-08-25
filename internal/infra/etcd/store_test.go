@@ -47,11 +47,19 @@ func TestStoreScopesCRUDAndRangeKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Put() error = %v", err)
 	}
-	if backend.putKey != "/groundplane/tasks/task_1" || backend.putValue != "updated" || putRevision != 8 {
-		t.Fatalf("Put() key/value/revision = %q/%q/%d", backend.putKey, backend.putValue, putRevision)
+	if backend.putKey != "/groundplane/tasks/task_1" || backend.putValue != "updated" ||
+		putRevision != 8 {
+		t.Fatalf(
+			"Put() key/value/revision = %q/%q/%d",
+			backend.putKey,
+			backend.putValue,
+			putRevision,
+		)
 	}
 
-	backend.deleteResponse = &clientv3.DeleteResponse{Header: &etcdserverpb.ResponseHeader{Revision: 9}}
+	backend.deleteResponse = &clientv3.DeleteResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 9},
+	}
 	deleteRevision, err := store.Delete(context.Background(), "/tasks/task_1")
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
@@ -88,9 +96,12 @@ func TestStoreScopesCRUDAndRangeKeys(t *testing.T) {
 			operation.Rev(),
 		)
 	}
-	if values.ReadRevision != 11 || values.ResponseRevision != 12 || values.More || len(values.Values) != 2 ||
-		values.Values[0].Key != "/tasks/task_1" || string(values.Values[0].Value) != "one" ||
-		values.Values[0].ModRevision != 10 || values.Values[1].Key != "/tasks/task_2" {
+	if values.ReadRevision != 11 || values.ResponseRevision != 12 || values.More ||
+		len(values.Values) != 2 ||
+		values.Values[0].Key != "/tasks/task_1" ||
+		string(values.Values[0].Value) != "one" ||
+		values.Values[0].ModRevision != 10 ||
+		values.Values[1].Key != "/tasks/task_2" {
 		t.Fatalf("Range() values = %#v", values)
 	}
 }
@@ -119,18 +130,32 @@ func TestStoreRangeRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
+// Rationale: index pagination must hydrate every primary from exactly one
+// MVCC view while retaining request order and explicit missing entries.
 func TestStoreGetManyUsesOneHistoricalRevision(t *testing.T) {
-	// Rationale: index pagination must hydrate every primary from exactly one
-	// MVCC view while retaining request order and explicit missing entries.
 	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
 		Header: &etcdserverpb.ResponseHeader{Revision: 18},
 		Responses: []*etcdserverpb.ResponseOp{
-			{Response: &etcdserverpb.ResponseOp_ResponseRange{ResponseRange: &etcdserverpb.RangeResponse{
-				Kvs: []*mvccpb.KeyValue{{
-					Key: []byte("/groundplane/services/svc_1"), Value: []byte("one"), ModRevision: 10,
-				}},
-			}}},
-			{Response: &etcdserverpb.ResponseOp_ResponseRange{ResponseRange: &etcdserverpb.RangeResponse{}}},
+			{
+				Response: &etcdserverpb.ResponseOp_ResponseRange{
+					ResponseRange: &etcdserverpb.RangeResponse{
+						Kvs: []*mvccpb.KeyValue{
+							{
+								Key: []byte(
+									"/groundplane/services/svc_1",
+								),
+								Value:       []byte("one"),
+								ModRevision: 10,
+							},
+						},
+					},
+				},
+			},
+			{
+				Response: &etcdserverpb.ResponseOp_ResponseRange{
+					ResponseRange: &etcdserverpb.RangeResponse{},
+				},
+			},
 		},
 	}}
 	store, err := newStore(backend, "/groundplane/")
@@ -143,28 +168,33 @@ func TestStoreGetManyUsesOneHistoricalRevision(t *testing.T) {
 		Revision: 14,
 	})
 	if err != nil {
-		t.Fatalf("GetMany() error = %v", err)
+		t.Fatalf("get many error = %v", err)
 	}
 	if result.ReadRevision != 14 || result.ResponseRevision != 18 || len(result.Values) != 2 ||
 		result.Values[0] == nil || result.Values[0].Key != "/services/svc_1" ||
 		string(result.Values[0].Value) != "one" || result.Values[0].ModRevision != 10 ||
 		result.Values[1] != nil {
-		t.Fatalf("GetMany() result = %#v", result)
+		t.Fatalf("get many result = %#v", result)
 	}
 	if len(backend.transaction.operations) != 2 {
-		t.Fatalf("GetMany() operations = %#v", backend.transaction.operations)
+		t.Fatalf("get many operations = %#v", backend.transaction.operations)
 	}
 	for index, operation := range backend.transaction.operations {
 		if operation.Rev() != 14 ||
 			string(operation.KeyBytes()) != "/groundplane/services/svc_"+string(rune('1'+index)) {
-			t.Fatalf("GetMany() operation %d = key %q revision %d", index, operation.KeyBytes(), operation.Rev())
+			t.Fatalf(
+				"GetMany() operation %d = key %q revision %d",
+				index,
+				operation.KeyBytes(),
+				operation.Rev(),
+			)
 		}
 	}
 }
 
+// Rationale: multi-get must reject empty batches, invalid revisions, and
+// unscoped keys rather than issuing ambiguous or partially scoped reads.
 func TestStoreGetManyRejectsInvalidInputs(t *testing.T) {
-	// Rationale: multi-get must reject empty batches, invalid revisions, and
-	// unscoped keys rather than issuing ambiguous or partially scoped reads.
 	backend := &fakeClient{}
 	store, err := newStore(backend, "/groundplane/")
 	if err != nil {
@@ -178,7 +208,64 @@ func TestStoreGetManyRejectsInvalidInputs(t *testing.T) {
 	}
 	for _, request := range cases {
 		if _, err := store.GetMany(context.Background(), request); err == nil {
-			t.Fatalf("GetMany(%#v) error = nil", request)
+			t.Fatalf("get many %#v error = nil", request)
+		}
+	}
+}
+
+// Rationale: once a later transaction response is malformed, no caller owns
+// the earlier decoded copies or client response values, so both must be
+// released before the typed error returns.
+func TestStoreGetManyClearsValuesAfterMalformedLaterResponse(t *testing.T) {
+	first := []byte("first-sensitive-value")
+	second := []byte("second-sensitive-value")
+	unexpected := []byte("unexpected-sensitive-value")
+	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 18},
+		Responses: []*etcdserverpb.ResponseOp{
+			{
+				Response: &etcdserverpb.ResponseOp_ResponseRange{
+					ResponseRange: &etcdserverpb.RangeResponse{
+						Kvs: []*mvccpb.KeyValue{{
+							Key: []byte("/groundplane/secrets/one"), Value: first, ModRevision: 10,
+						}},
+					},
+				},
+			},
+			{
+				Response: &etcdserverpb.ResponseOp_ResponseRange{
+					ResponseRange: &etcdserverpb.RangeResponse{
+						Kvs: []*mvccpb.KeyValue{
+							{
+								Key:         []byte("/groundplane/secrets/two"),
+								Value:       second,
+								ModRevision: 11,
+							},
+							{
+								Key:         []byte("/groundplane/secrets/unexpected"),
+								Value:       unexpected,
+								ModRevision: 12,
+							},
+						},
+					},
+				},
+			},
+		},
+	}}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetMany(context.Background(), GetManyRequest{
+		Keys: []string{"/secrets/one", "/secrets/two"}, Revision: 14,
+	}); err == nil {
+		t.Fatal("get many accepted malformed later response")
+	}
+	for index, value := range [][]byte{first, second, unexpected} {
+		for offset, octet := range value {
+			if octet != 0 {
+				t.Fatalf("response %d byte %d was not cleared", index, offset)
+			}
 		}
 	}
 }
@@ -228,8 +315,13 @@ func TestStoreWatchTranslatesLogicalEvents(t *testing.T) {
 	if watchErr, ok := <-stream.Errors; ok {
 		t.Fatalf("Watch() terminal error = %v", watchErr)
 	}
-	if backend.watchKey != "/groundplane/tasks/" || !clientv3.IsOptsWithPrefix(backend.watchOptions) {
-		t.Fatalf("Watch() key/prefix option = %q/%v", backend.watchKey, clientv3.IsOptsWithPrefix(backend.watchOptions))
+	if backend.watchKey != "/groundplane/tasks/" ||
+		!clientv3.IsOptsWithPrefix(backend.watchOptions) {
+		t.Fatalf(
+			"Watch() key/prefix option = %q/%v",
+			backend.watchKey,
+			clientv3.IsOptsWithPrefix(backend.watchOptions),
+		)
 	}
 	if revision := clientv3.OpGet("key", backend.watchOptions...).Rev(); revision != 13 {
 		t.Fatalf("Watch() start revision = %d, want 13", revision)
@@ -459,7 +551,8 @@ func TestStoreSeparatesCallerContextFromBackendStatus(t *testing.T) {
 			t.Fatalf("backend error = %v", err)
 		}
 		var domainError *errs.Error
-		if !errors.As(err, &domainError) || strings.Contains(domainError.ToProblem().Detail, "secret") {
+		if !errors.As(err, &domainError) ||
+			strings.Contains(domainError.ToProblem().Detail, "secret") {
 			t.Fatalf("backend problem = %#v", domainError)
 		}
 	}
@@ -516,7 +609,11 @@ type fakeClient struct {
 	closeError          error
 }
 
-func (f *fakeClient) Get(_ context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
+func (f *fakeClient) Get(
+	_ context.Context,
+	key string,
+	opts ...clientv3.OpOption,
+) (*clientv3.GetResponse, error) {
 	f.getKey = key
 	f.getOptions = opts
 	if f.getResponse == nil {
@@ -550,7 +647,11 @@ func (f *fakeClient) Txn(context.Context) clientv3.Txn {
 	return f.transaction
 }
 
-func (f *fakeClient) Watch(_ context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
+func (f *fakeClient) Watch(
+	_ context.Context,
+	key string,
+	opts ...clientv3.OpOption,
+) clientv3.WatchChan {
 	f.watchKey = key
 	f.watchOptions = opts
 	return f.watchResponses

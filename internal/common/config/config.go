@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/netip"
 	"net/url"
@@ -65,6 +66,12 @@ type ControllerConfig struct {
 		Image   string             `yaml:"image"`
 		Runtime AgentRuntimeConfig `yaml:"runtime"`
 	} `yaml:"agent"`
+	Runner struct {
+		NetworkPool  string `yaml:"network_pool"`
+		HostUIDRange string `yaml:"host_uid_range"`
+		SubUIDRange  string `yaml:"subuid_range"`
+		SubGIDRange  string `yaml:"subgid_range"`
+	} `yaml:"runner"`
 	AgeKeyPath string    `yaml:"age_key_path"` // /etc/groundplane/controller.age
 	Log        LogConfig `yaml:"log"`
 }
@@ -74,6 +81,19 @@ type ControllerConfig struct {
 type AllocationPools struct {
 	Environment netip.Prefix
 	System      netip.Prefix
+	Runner      RunnerAllocationPools
+}
+
+type InclusiveRange struct {
+	First uint32
+	Last  uint32
+}
+
+type RunnerAllocationPools struct {
+	Network netip.Prefix
+	HostUID InclusiveRange
+	SubUID  InclusiveRange
+	SubGID  InclusiveRange
 }
 
 func DefaultControllerConfig() ControllerConfig {
@@ -183,7 +203,7 @@ func (c ControllerConfig) Validate() error {
 	return validateLog("controller", c.Log)
 }
 
-// AllocationPools parses and validates the two required machine allocation roots.
+// AllocationPools parses and validates the required machine allocation roots.
 func (c ControllerConfig) AllocationPools() (AllocationPools, error) {
 	environmentPool, err := ipam.ParseIPv4Prefix(c.EnvironmentPool)
 	if err != nil {
@@ -196,7 +216,50 @@ func (c ControllerConfig) AllocationPools() (AllocationPools, error) {
 	if err := ipam.ValidateRootPair(environmentPool, systemPool); err != nil {
 		return AllocationPools{}, fmt.Errorf("config: controller allocation pools: %w", err)
 	}
-	return AllocationPools{Environment: environmentPool, System: systemPool}, nil
+	runnerPool, err := ipam.ParseIPv4Prefix(c.Runner.NetworkPool)
+	if err != nil || runnerPool.String() != c.Runner.NetworkPool || runnerPool.Bits() <= systemPool.Bits() ||
+		runnerPool.Bits() > 29 || !systemPool.Contains(runnerPool.Addr()) {
+		return AllocationPools{}, fmt.Errorf("config: controller runner.network_pool must be a canonical IPv4 child of system_pool with /29 children")
+	}
+	hostUID, err := parseInclusiveRange("runner.host_uid_range", c.Runner.HostUIDRange)
+	if err != nil {
+		return AllocationPools{}, err
+	}
+	subUID, err := parseInclusiveRange("runner.subuid_range", c.Runner.SubUIDRange)
+	if err != nil {
+		return AllocationPools{}, err
+	}
+	subGID, err := parseInclusiveRange("runner.subgid_range", c.Runner.SubGIDRange)
+	if err != nil {
+		return AllocationPools{}, err
+	}
+	hostCount := uint64(hostUID.Last) - uint64(hostUID.First) + 1
+	subUIDCount := uint64(subUID.Last) - uint64(subUID.First) + 1
+	subGIDCount := uint64(subGID.Last) - uint64(subGID.First) + 1
+	networkCount := uint64(1) << uint(29-runnerPool.Bits())
+	if hostCount < 5 || hostCount > math.MaxUint32 || subUIDCount != hostCount*65536 ||
+		subGIDCount != hostCount*65536 || networkCount < hostCount {
+		return AllocationPools{}, fmt.Errorf("config: controller runner allocation ranges must define at least five matching fixed-size slots")
+	}
+	return AllocationPools{
+		Environment: environmentPool,
+		System:      systemPool,
+		Runner:      RunnerAllocationPools{Network: runnerPool, HostUID: hostUID, SubUID: subUID, SubGID: subGID},
+	}, nil
+}
+
+func parseInclusiveRange(label string, value string) (InclusiveRange, error) {
+	parts := strings.Split(value, "-")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return InclusiveRange{}, fmt.Errorf("config: controller %s must be first-last", label)
+	}
+	first, firstErr := strconv.ParseUint(parts[0], 10, 32)
+	last, lastErr := strconv.ParseUint(parts[1], 10, 32)
+	if firstErr != nil || lastErr != nil || strconv.FormatUint(first, 10) != parts[0] ||
+		strconv.FormatUint(last, 10) != parts[1] || last < first {
+		return InclusiveRange{}, fmt.Errorf("config: controller %s must be a canonical unsigned inclusive range", label)
+	}
+	return InclusiveRange{First: uint32(first), Last: uint32(last)}, nil
 }
 
 func (c AgentConfig) Validate() error {

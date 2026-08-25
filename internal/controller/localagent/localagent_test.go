@@ -500,6 +500,7 @@ func TestHealthRejectsNilContext(t *testing.T) {
 
 	trace := &traceLog{}
 	harness := newTestManager(t, seededRepository(trace, PhaseReady), trace)
+	//lint:ignore SA1012 This test verifies the public nil-context failure contract.
 	if _, err := harness.manager.Health(nil, testAgentID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Health(nil) error = %v, want %s", err, errs.CodeInternal)
 	}

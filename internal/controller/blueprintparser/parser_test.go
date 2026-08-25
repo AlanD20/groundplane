@@ -756,6 +756,107 @@ func TestParseRejectsControllerGeneratedExtensions(t *testing.T) {
 	}
 }
 
+// Rationale: the largest YAML integer represented exactly by every public JSON
+// consumer must cross the Blueprint parser without narrowing.
+func TestParseAcceptsMaximumBackupPolicyKeep(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`x-gp-backup:
+  enabled: true
+  frequency: "*-*-* 03:15:00"
+  keep: 9007199254740991
+  encryption: none
+  connector: backups
+  sources: [{kind: config}]
+services: {web: {image: nginx}}
+`),
+	})
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+	if err != nil {
+		t.Fatalf("Parse(maximum Backup keep) error = %v", err)
+	}
+	if result.Extensions.Backup == nil || result.Extensions.Backup.Keep != 9_007_199_254_740_991 {
+		t.Fatalf("Parse(maximum Backup keep) extension = %#v", result.Extensions.Backup)
+	}
+}
+
+// Rationale: a disabled and wholly unconfigured Backup is the only authored
+// shape for which Keep may be absent; absence must not be converted into an
+// explicitly invalid zero before validation.
+func TestParseAcceptsDisabledUnconfiguredBackupWithOmittedKeep(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`x-gp-backup:
+  enabled: false
+services: {web: {image: nginx}}
+`),
+	})
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+	if err != nil {
+		t.Fatalf("Parse(disabled unconfigured Backup) error = %v", err)
+	}
+	if result.Extensions.Backup == nil || result.Extensions.Backup.Enabled || result.Extensions.Backup.Keep != 0 {
+		t.Fatalf("Parse(disabled unconfigured Backup) extension = %#v", result.Extensions.Backup)
+	}
+}
+
+// Rationale: explicit zero is authored configuration evidence and cannot be
+// treated as the permitted omitted Keep of a disabled-unconfigured Backup.
+func TestParseRejectsExplicitZeroBackupPolicyKeep(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`x-gp-backup:
+  enabled: false
+  keep: 0
+services: {web: {image: nginx}}
+`),
+	})
+	requireValidationError(t, parseError(bundle))
+}
+
+// Rationale: a disabled Backup may retain a complete configuration, but a
+// partial configuration is neither that shape nor wholly unconfigured.
+func TestParseRejectsPartialDisabledBackupConfiguration(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`x-gp-backup:
+  enabled: false
+  keep: 7
+services: {web: {image: nginx}}
+`),
+	})
+	requireValidationError(t, parseError(bundle))
+}
+
+// Rationale: enabled Backup configuration requires an authored in-range Keep;
+// the Go zero value cannot stand in for an omitted YAML decision.
+func TestParseRejectsEnabledBackupWithOmittedKeep(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`x-gp-backup:
+  enabled: true
+  frequency: "*-*-* 03:15:00"
+  encryption: none
+  connector: backups
+  sources: [{kind: config}]
+services: {web: {image: nginx}}
+`),
+	})
+	requireValidationError(t, parseError(bundle))
+}
+
+// Rationale: the next YAML integer would lose fidelity on the Console/API JSON
+// boundary and must be rejected before any desired state is accepted.
+func TestParseRejectsBackupPolicyKeepAboveMaximum(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`x-gp-backup:
+  enabled: true
+  frequency: "*-*-* 03:15:00"
+  keep: 9007199254740992
+  encryption: none
+  connector: backups
+  sources: [{kind: config}]
+services: {web: {image: nginx}}
+`),
+	})
+	requireValidationError(t, parseError(bundle))
+}
+
 func parseError(bundle core.BlueprintBundle) error {
 	_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	return err

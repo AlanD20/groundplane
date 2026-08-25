@@ -255,6 +255,7 @@ enum PlanOperation {
   PLAN_OPERATION_ATTACH = 10;
   PLAN_OPERATION_DETACH = 11;
   PLAN_OPERATION_BACKUP = 12;
+  PLAN_OPERATION_BACKUP_PRUNE = 13;
 }
 
 message ComposeArtifact {
@@ -319,6 +320,7 @@ message ExecutionStep {
     ManagedNetworkRemove managed_network_remove = 12;
     CaddyConfigApply caddy_config_apply = 13;
     BackupSourceCapture backup_source_capture = 14;
+    BackupArtifactPrune backup_artifact_prune = 15;
   }
 }
 
@@ -343,6 +345,37 @@ message BackupSourceCapture {
     BackupConfigSource config = 13;
     BackupVolumeSource volume = 14;
   }
+}
+
+enum BackupS3Addressing {
+  BACKUP_S3_ADDRESSING_UNSPECIFIED = 0;
+  BACKUP_S3_ADDRESSING_PATH_STYLE = 1;
+  BACKUP_S3_ADDRESSING_VIRTUAL_HOSTED_STYLE = 2;
+}
+
+// BackupArtifactPrune is one ordered Recovery Point authority. Credentials
+// arrive only through the existing assignment/step-fenced S3 secret slots.
+// The protected object key is private control evidence, never public Task data.
+message BackupArtifactPrune {
+  uint32 ordinal = 1;
+  string prune_operation_id = 2;
+  uint64 prune_revision = 3;
+  string point_id = 4;
+  uint64 point_revision = 5;
+  string source_id = 6;
+  uint64 source_revision = 7;
+  string environment_id = 8;
+  uint64 environment_revision = 9;
+  string connector_id = 10;
+  uint64 connector_revision = 11;
+  string connector_endpoint = 12;
+  string connector_bucket = 13;
+  string connector_prefix = 14;
+  string connector_region = 15;
+  BackupS3Addressing connector_addressing = 16;
+  string protected_object_key = 17;
+  uint64 stored_size_bytes = 18;
+  bytes stored_sha256 = 19;
 }
 
 enum BackupSourceFormat {
@@ -411,6 +444,7 @@ message BackupCheckpointRequest {
     BackupConfigGenerationActivatedCheckpoint config_generation_activated = 15;
     BackupPostgresRestoreVerifiedCheckpoint postgres_restore_verified = 16;
     BackupRemoteObjectAbsentCheckpoint remote_object_absent = 17;
+    BackupUploadCompletedCheckpoint upload_completed = 18;
   }
 }
 
@@ -474,9 +508,16 @@ enum BackupCheckpointKind {
   BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_ACTIVATED = 9;
   BACKUP_CHECKPOINT_KIND_POSTGRES_RESTORE_VERIFIED = 10;
   BACKUP_CHECKPOINT_KIND_REMOTE_OBJECT_ABSENT = 11;
+  BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED = 12;
 }
 
 message BackupArtifactPreparedCheckpoint {
+  string point_id = 1;
+  uint64 stored_size_bytes = 2;
+  bytes stored_sha256 = 3;
+}
+
+message BackupUploadCompletedCheckpoint {
   string point_id = 1;
   uint64 stored_size_bytes = 2;
   bytes stored_sha256 = 3;
@@ -514,13 +555,13 @@ message BackupVolumeReplacedTreeCleanedCheckpoint {
 
 message BackupConfigGenerationStagedCheckpoint {
   string point_id = 1;
-  string restore_generation_id = 2;
+  string restore_generation_id = 2; // Controller-owned cfg_ identity, stable across eligible Task retries.
   bytes entry_generation_manifest_sha256 = 3;
 }
 
 message BackupConfigGenerationActivatedCheckpoint {
   string point_id = 1;
-  string restore_generation_id = 2;
+  string restore_generation_id = 2; // Same cfg_ identity acknowledged by config_generation_staged.
   uint64 render_generation = 3;
 }
 

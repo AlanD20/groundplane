@@ -711,12 +711,69 @@ func decodeReplayTargetReference(value []byte, markerKey string) error {
 type idempotencyPlanClassifier func(int64, []*KeyValue) error
 
 type idempotencyMutationPlan struct {
-	mu         sync.Mutex
-	consumed   bool
-	markerKind IdempotencyMarkerKind
-	conditions []Condition
-	mutations  []Mutation
-	classify   idempotencyPlanClassifier
+	mu               sync.Mutex
+	consumed         bool
+	markerKind       IdempotencyMarkerKind
+	conditions       []Condition
+	mutations        []Mutation
+	classify         idempotencyPlanClassifier
+	validate         func([]Condition, []Mutation) error
+	validateExisting func(context.Context, IdempotencyMarker, int64, int64) error
+}
+
+func (plan *idempotencyMutationPlan) enforceExistingReplay(
+	validate func(context.Context, IdempotencyMarker, int64, int64) error,
+) error {
+	if plan == nil || validate == nil {
+		return errs.New(errs.KindInternal, "idempotency replay validator is required")
+	}
+	plan.mu.Lock()
+	defer plan.mu.Unlock()
+	if plan.consumed || plan.validateExisting != nil {
+		return errs.New(errs.KindInternal, "idempotency replay validator cannot be replaced")
+	}
+	plan.validateExisting = validate
+	return nil
+}
+
+func (plan *idempotencyMutationPlan) existingReplayValidator() func(
+	context.Context,
+	IdempotencyMarker,
+	int64,
+	int64,
+) error {
+	if plan == nil {
+		return nil
+	}
+	plan.mu.Lock()
+	defer plan.mu.Unlock()
+	return plan.validateExisting
+}
+
+// enforceTransactionBounds defers a domain envelope check until Apply has
+// appended the real idempotency marker, replay target, and retention writes.
+func (plan *idempotencyMutationPlan) enforceTransactionBounds(
+	validate func([]Condition, []Mutation) error,
+) error {
+	if plan == nil || validate == nil {
+		return errs.New(errs.KindInternal, "idempotency transaction validator is required")
+	}
+	plan.mu.Lock()
+	defer plan.mu.Unlock()
+	if plan.consumed || plan.validate != nil {
+		return errs.New(errs.KindInternal, "idempotency transaction validator cannot be replaced")
+	}
+	plan.validate = validate
+	return nil
+}
+
+func (plan *idempotencyMutationPlan) transactionValidator() func([]Condition, []Mutation) error {
+	if plan == nil {
+		return nil
+	}
+	plan.mu.Lock()
+	defer plan.mu.Unlock()
+	return plan.validate
 }
 
 func newIdempotencyMutationPlan(
@@ -828,6 +885,8 @@ func (plan *idempotencyMutationPlan) consume() ([]Condition, []Mutation, idempot
 	plan.conditions = nil
 	plan.mutations = nil
 	plan.classify = nil
+	plan.validate = nil
+	plan.validateExisting = nil
 	return conditions, mutations, classify, nil
 }
 
@@ -972,6 +1031,8 @@ func (repository *IdempotencyRepository) Apply(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(markerValue)
+	validateTransaction := plan.transactionValidator()
+	validateExisting := plan.existingReplayValidator()
 	conditions, mutations, classify, err := plan.consume()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -1005,6 +1066,11 @@ func (repository *IdempotencyRepository) Apply(
 		}
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: retentionKey, Value: retentionValue})
 	}
+	if validateTransaction != nil {
+		if err := validateTransaction(conditions, mutations); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -1022,6 +1088,16 @@ func (repository *IdempotencyRepository) Apply(
 		existing, err := decodeIdempotencyMarker(result.FailureReads[0].Value, marker.Locator)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
+		}
+		if validateExisting != nil {
+			if err := validateExisting(
+				ctx,
+				existing,
+				result.Revision,
+				result.FailureReads[0].ModRevision,
+			); err != nil {
+				return IdempotencyTransactionResult{}, err
+			}
 		}
 		return IdempotencyTransactionResult{
 			kind: idempotencyTransactionExisting, revision: result.Revision, marker: existing,

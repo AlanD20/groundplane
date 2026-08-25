@@ -186,7 +186,8 @@ func TestControllerConfigRequiresDisjointAllocationPools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllocationPools() error = %v", err)
 	}
-	if pools.Environment.String() != "10.0.0.0/9" || pools.System.String() != "10.128.0.0/9" {
+	if pools.Environment.String() != "10.0.0.0/9" || pools.System.String() != "10.128.0.0/9" ||
+		pools.Runner.Network.String() != "10.240.0.0/24" || pools.Runner.HostUID != (InclusiveRange{First: 200000, Last: 200007}) {
 		t.Fatalf("allocation pools = %#v", pools)
 	}
 
@@ -203,9 +204,33 @@ func TestControllerConfigRequiresDisjointAllocationPools(t *testing.T) {
 	}
 }
 
+// Rationale: Runner host identities and /29 networks are one combined pool,
+// so malformed ranges or a non-child network must fail at config load.
+func TestControllerConfigRequiresExactRunnerAllocationPools(t *testing.T) {
+	t.Parallel()
+	for _, mutate := range []func(*ControllerConfig){
+		func(cfg *ControllerConfig) { cfg.Runner.NetworkPool = "10.64.0.0/24" },
+		func(cfg *ControllerConfig) { cfg.Runner.NetworkPool = "10.240.0.1/24" },
+		func(cfg *ControllerConfig) { cfg.Runner.NetworkPool = "10.240.0.0/30" },
+		func(cfg *ControllerConfig) { cfg.Runner.HostUIDRange = "0200000-200007" },
+		func(cfg *ControllerConfig) { cfg.Runner.HostUIDRange = "200000-200003" },
+		func(cfg *ControllerConfig) { cfg.Runner.SubUIDRange = "300000-824286" },
+	} {
+		cfg := validControllerConfig()
+		mutate(&cfg)
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("invalid Runner allocation passed: %#v", cfg.Runner)
+		}
+	}
+}
+
 func validControllerConfig() ControllerConfig {
 	cfg := DefaultControllerConfig()
 	cfg.EnvironmentPool = "10.0.0.19/9"
 	cfg.SystemPool = "10.128.0.0/9"
+	cfg.Runner.NetworkPool = "10.240.0.0/24"
+	cfg.Runner.HostUIDRange = "200000-200007"
+	cfg.Runner.SubUIDRange = "300000-824287"
+	cfg.Runner.SubGIDRange = "900000-1424287"
 	return cfg
 }

@@ -7,6 +7,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +19,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const clientTestAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -198,6 +206,318 @@ func TestClientDoesNotLeakTokenFromTransportError(t *testing.T) {
 	}
 }
 
+// Rationale: one Agent process must reauthenticate after a transient stream
+// loss, fully stop the old pool first, and execute Controller redispatch only
+// on the replacement pool without rereading or exposing its channel token.
+func TestClientReconnectsSameInstanceAndExecutesRedispatchOnReplacementPool(t *testing.T) {
+	token := bytes.Repeat([]byte{0x42}, agentprotocol.RawTokenBytes)
+	first := newFakeStream(configMessage(60, 1))
+	first.receiveErr = status.Error(codes.Unavailable, "test stream loss")
+	assignment := workerAssignment(workerTestTaskID, "plan-reconnect")
+	second := newFakeStream(
+		configMessage(60, 1),
+		&agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
+				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
+				OperationId: assignment.OperationID,
+				Plan:        assignment.Plan, TimeoutSeconds: 60,
+			}},
+		},
+	)
+	client := newTestClient(t, token, first)
+	connections := 0
+	client.connect = func(ctx context.Context, _ string) (agentStream, io.Closer, error) {
+		connections++
+		switch connections {
+		case 1:
+			first.ctx = ctx
+			return first, first.connection, nil
+		case 2:
+			select {
+			case <-client.workersDone:
+			default:
+				t.Fatal("replacement stream connected before the old worker pool stopped")
+			}
+			second.ctx = ctx
+			return second, second.connection, nil
+		default:
+			t.Fatalf("connect call count = %d, want 2", connections)
+			return nil, nil, errors.New("unexpected reconnect")
+		}
+	}
+	var reconnectAttempts []uint
+	client.reconnect = func(_ context.Context, attempt uint) error {
+		reconnectAttempts = append(reconnectAttempts, attempt)
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- client.Run(ctx) }()
+	select {
+	case <-second.taskAckSent:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("redispatched task did not execute on the replacement pool")
+	}
+	cancel()
+	if err := <-result; err != nil {
+		t.Fatalf("Run() after reconnect cancellation = %v, want nil", err)
+	}
+	if connections != 2 || len(reconnectAttempts) != 1 || reconnectAttempts[0] != 0 {
+		t.Fatalf("connections/attempts = %d/%v, want 2/[0]", connections, reconnectAttempts)
+	}
+	for index, stream := range []*fakeStream{first, second} {
+		sent := stream.sentMessages()
+		if len(sent) < 2 || sent[0].GetAuthenticate() == nil || sent[1].GetReady() == nil ||
+			!bytes.Equal(sent[0].GetAuthenticate().GetToken(), token) {
+			t.Fatalf("stream %d did not authenticate and become Ready with the process token", index)
+		}
+	}
+	if len(first.taskAcknowledgements()) != 0 || len(second.taskAcknowledgements()) != 1 {
+		t.Fatalf(
+			"TaskAck counts before/after reconnect = %d/%d, want 0/1",
+			len(first.taskAcknowledgements()),
+			len(second.taskAcknowledgements()),
+		)
+	}
+}
+
+// Rationale: rejected authentication is permanent for the current runtime
+// material and must terminate without a retry loop or reflected server detail.
+func TestClientDoesNotReconnectPermanentAuthenticationFailure(t *testing.T) {
+	token := bytes.Repeat([]byte{'s'}, agentprotocol.RawTokenBytes)
+	stream := newFakeStream()
+	stream.receiveErr = status.Error(codes.Unauthenticated, "revoked secret detail")
+	client := newTestClient(t, token, stream)
+	reconnectCalled := false
+	client.reconnect = func(context.Context, uint) error {
+		reconnectCalled = true
+		return nil
+	}
+	err := client.Run(context.Background())
+	if err == nil || reconnectCalled {
+		t.Fatalf("Run()/reconnect = %v/%t, want terminal error without reconnect", err, reconnectCalled)
+	}
+	if strings.Contains(err.Error(), "revoked secret detail") || bytes.Contains([]byte(err.Error()), token) {
+		t.Fatalf("authentication failure leaked private detail: %v", err)
+	}
+}
+
+// Rationale: reconnect delay must grow exponentially without exceeding its
+// ceiling, while equal jitter prevents synchronized reconnect storms.
+func TestAgentChannelReconnectDelayIsBoundedAndJittered(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		attempt uint
+		minimum time.Duration
+		maximum time.Duration
+	}{
+		{name: "initial", attempt: 0, minimum: 50 * time.Millisecond, maximum: 100 * time.Millisecond},
+		{name: "second", attempt: 1, minimum: 100 * time.Millisecond, maximum: 200 * time.Millisecond},
+		{name: "capped", attempt: 63, minimum: 2500 * time.Millisecond, maximum: 5 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			window := test.maximum - test.minimum
+			if got := agentChannelReconnectDelay(test.attempt, 0); got != test.minimum {
+				t.Fatalf("minimum delay = %s, want %s", got, test.minimum)
+			}
+			if got := agentChannelReconnectDelay(test.attempt, uint64(window)); got != test.maximum {
+				t.Fatalf("maximum delay = %s, want %s", got, test.maximum)
+			}
+		})
+	}
+}
+
+// Rationale: process cancellation must interrupt a pending reconnect delay so
+// shutdown never waits for the backoff ceiling.
+func TestAgentChannelReconnectWaitHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitForAgentChannelReconnect(ctx, 63); !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForAgentChannelReconnect() error = %v, want context cancellation", err)
+	}
+}
+
+// Rationale: the Agent must receive the complete 5 MiB Controller envelope
+// while rejecting the first byte beyond that transport boundary.
+func TestConnectGRPCEnforcesExactReceiveMessageLimit(t *testing.T) {
+	if agentChannelAgentMaximumReceiveMessageBytes != 5*1024*1024 {
+		t.Fatalf("Agent receive limit = %d, want 5 MiB", agentChannelAgentMaximumReceiveMessageBytes)
+	}
+
+	for _, test := range []struct {
+		name     string
+		size     int
+		wantCode codes.Code
+	}{
+		{name: "boundary", size: 5 * 1024 * 1024, wantCode: codes.OK},
+		{name: "one_byte_over", size: 5*1024*1024 + 1, wantCode: codes.ResourceExhausted},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := &agentChannelClientTransportServer{response: sizedControllerMessage(t, test.size)}
+			socketPath := startAgentChannelClientTransportServer(t, server)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			stream, connection, err := connectGRPC(ctx, socketPath)
+			if err != nil {
+				t.Fatalf("connectGRPC() error = %v", err)
+			}
+			defer connection.Close()
+			if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
+				Ready: &agentpb.Ready{Capacity: 1, Version: "test"},
+			}}); err != nil {
+				t.Fatalf("send request: %v", err)
+			}
+			message, err := stream.Recv()
+			if status.Code(err) != test.wantCode {
+				t.Fatalf("receive %d-byte Controller message = %v, want %s", test.size, err, test.wantCode)
+			}
+			if err == nil && proto.Size(message) != test.size {
+				t.Fatalf("Controller message size = %d, want %d", proto.Size(message), test.size)
+			}
+		})
+	}
+}
+
+// Rationale: the Agent must send the complete 16 MiB envelope while rejecting
+// the first byte beyond that transport boundary.
+func TestConnectGRPCEnforcesExactSendMessageLimit(t *testing.T) {
+	if agentChannelAgentMaximumSendMessageBytes != 16*1024*1024 {
+		t.Fatalf("Agent send limit = %d, want 16 MiB", agentChannelAgentMaximumSendMessageBytes)
+	}
+
+	for _, test := range []struct {
+		name     string
+		size     int
+		wantCode codes.Code
+	}{
+		{name: "boundary", size: 16 * 1024 * 1024, wantCode: codes.OK},
+		{name: "one_byte_over", size: 16*1024*1024 + 1, wantCode: codes.ResourceExhausted},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := &agentChannelClientTransportServer{received: make(chan int, 1)}
+			socketPath := startAgentChannelClientTransportServer(t, server)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			stream, connection, err := connectGRPC(ctx, socketPath)
+			if err != nil {
+				t.Fatalf("connectGRPC() error = %v", err)
+			}
+			defer connection.Close()
+			sendErr := stream.Send(sizedAgentMessage(t, test.size))
+			if status.Code(sendErr) != test.wantCode {
+				t.Fatalf("send %d-byte Agent message = %v, want %s", test.size, sendErr, test.wantCode)
+			}
+			if sendErr == nil {
+				select {
+				case size := <-server.received:
+					if size != test.size {
+						t.Fatalf("server received %d-byte Agent message, want %d", size, test.size)
+					}
+				case <-ctx.Done():
+					t.Fatal("timed out waiting for exact-boundary Agent message")
+				}
+			}
+		})
+	}
+}
+
+type agentChannelClientTransportServer struct {
+	agentpb.UnimplementedAgentChannelServer
+	response *agentpb.ControllerMessage
+	received chan int
+}
+
+func (server *agentChannelClientTransportServer) Connect(stream agentpb.AgentChannel_ConnectServer) error {
+	message, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	if server.received != nil {
+		server.received <- proto.Size(message)
+	}
+	if server.response != nil {
+		return stream.Send(server.response)
+	}
+	return nil
+}
+
+func startAgentChannelClientTransportServer(
+	t *testing.T,
+	server agentpb.AgentChannelServer,
+) string {
+	t.Helper()
+	socketPath := shortUnixSocketPath(t)
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen on Agent channel socket: %v", err)
+	}
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(16*1024*1024+1),
+		grpc.MaxSendMsgSize(5*1024*1024+1),
+	)
+	agentpb.RegisterAgentChannelServer(grpcServer, server)
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- grpcServer.Serve(listener) }()
+	t.Cleanup(func() {
+		grpcServer.Stop()
+		if err := <-serveDone; err != nil {
+			t.Errorf("serve Agent channel: %v", err)
+		}
+	})
+	return socketPath
+}
+
+func shortUnixSocketPath(t *testing.T) string {
+	t.Helper()
+	directory, err := os.MkdirTemp("/tmp", "gp-uds-")
+	if err != nil {
+		t.Fatalf("create short Unix socket directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(directory); err != nil {
+			t.Errorf("remove short Unix socket directory: %v", err)
+		}
+	})
+	return filepath.Join(directory, "agent.sock")
+}
+
+func sizedControllerMessage(t *testing.T, target int) *agentpb.ControllerMessage {
+	t.Helper()
+	payload := strings.Repeat("x", target)
+	message := &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ConfigUpdate{
+		ConfigUpdate: &agentpb.ConfigUpdate{AgentConfig: &agentpb.AgentConfig{
+			PullIntervalSeconds: 1,
+			MaxConcurrentTasks:  1,
+			Labels:              map[string]string{"payload": payload},
+		}},
+	}}
+	for proto.Size(message) > target {
+		payload = payload[:len(payload)-(proto.Size(message)-target)]
+		message.GetConfigUpdate().GetAgentConfig().Labels["payload"] = payload
+	}
+	if proto.Size(message) != target {
+		t.Fatalf("cannot construct %d-byte Controller message; got %d", target, proto.Size(message))
+	}
+	return message
+}
+
+func sizedAgentMessage(t *testing.T, target int) *agentpb.AgentMessage {
+	t.Helper()
+	payload := make([]byte, target)
+	message := &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskEvent{
+		TaskEvent: &agentpb.TaskEvent{Chunk: payload},
+	}}
+	for proto.Size(message) > target {
+		payload = payload[:len(payload)-(proto.Size(message)-target)]
+		message.GetTaskEvent().Chunk = payload
+	}
+	if proto.Size(message) != target {
+		t.Fatalf("cannot construct %d-byte Agent message; got %d", target, proto.Size(message))
+	}
+	return message
+}
+
 func newTestClient(t *testing.T, token []byte, stream *fakeStream) *Client {
 	t.Helper()
 	client, err := NewClient(
@@ -229,6 +549,7 @@ type fakeStream struct {
 	mu          sync.Mutex
 	ctx         context.Context
 	receive     []*agentpb.ControllerMessage
+	receiveErr  error
 	sent        []*agentpb.AgentMessage
 	sendErr     error
 	closed      bool
@@ -302,6 +623,12 @@ func (s *fakeStream) Recv() (*agentpb.ControllerMessage, error) {
 		s.mu.Unlock()
 		return message, nil
 	}
+	if s.receiveErr != nil {
+		err := s.receiveErr
+		s.receiveErr = nil
+		s.mu.Unlock()
+		return nil, err
+	}
 	ctx := s.ctx
 	s.mu.Unlock()
 	<-ctx.Done()
@@ -325,6 +652,18 @@ func (s *fakeStream) wasClosed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.closed
+}
+
+func (s *fakeStream) taskAcknowledgements() []*agentpb.TaskAck {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var acknowledgements []*agentpb.TaskAck
+	for _, message := range s.sent {
+		if acknowledgement := message.GetTaskAck(); acknowledgement != nil {
+			acknowledgements = append(acknowledgements, acknowledgement)
+		}
+	}
+	return acknowledgements
 }
 
 type fakeCloser struct {

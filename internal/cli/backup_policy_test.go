@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -145,7 +146,7 @@ func TestBackupPolicySetResolvesLabelsAndPreservesSourceOrder(t *testing.T) {
 				backupPolicyVolumeID,
 			))
 		case "/api/v1/environments/" + backupPolicyTestEnvironmentID + "/backup-policy":
-			assertBackupPolicySetRequest(t, request, true, true)
+			assertBackupPolicySetRequest(t, request, true, true, 7)
 			writeBackupPolicyTestResponse(t, writer, http.StatusOK, configuredBackupPolicyJSON(true))
 		default:
 			t.Errorf("unexpected request %s %s", request.Method, request.URL.String())
@@ -183,7 +184,7 @@ func TestBackupPolicySetHonorsGlobalIDMode(t *testing.T) {
 			http.Error(writer, "unexpected request", http.StatusNotFound)
 			return
 		}
-		assertBackupPolicySetRequest(t, request, true, true)
+		assertBackupPolicySetRequest(t, request, true, true, 7)
 		writeBackupPolicyTestResponse(t, writer, http.StatusOK, configuredBackupPolicyJSON(true))
 	}))
 	defer server.Close()
@@ -205,6 +206,79 @@ func TestBackupPolicySetHonorsGlobalIDMode(t *testing.T) {
 	)
 }
 
+// Rationale: the CLI flag and generated-client dispatch preserve the largest
+// retention integer represented exactly by every public JSON consumer.
+func TestBackupPolicySetDispatchesMaximumPublicKeep(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.URL.Path != "/api/v1/environments/"+backupPolicyTestEnvironmentID+"/backup-policy" {
+			t.Errorf("unexpected request %s %s", request.Method, request.URL.String())
+			http.Error(writer, "unexpected request", http.StatusNotFound)
+			return
+		}
+		assertBackupPolicySetRequest(t, request, true, true, apiTypes.MaximumBackupPolicyKeep)
+		writeBackupPolicyTestResponse(t, writer, http.StatusOK, configuredBackupPolicyJSON(true))
+	}))
+	defer server.Close()
+
+	_ = executeNoun(
+		t,
+		newBackupCmd(),
+		server.URL,
+		Scope{Environment: backupPolicyTestEnvironmentID, AsID: true},
+		"policy",
+		"set",
+		"--connector", backupPolicyConnectorID,
+		"--frequency", "Tue *-*-* 04:30:00",
+		"--keep", "9007199254740991",
+		"--encryption", "age",
+		"--source", "attach:"+backupPolicyAttachID,
+		"--source", "volume:"+backupPolicyVolumeID,
+		"--source", "config",
+	)
+}
+
+// Rationale: a syntactically valid int64 above the public contract must fail
+// before scope resolution or any HTTP request can begin.
+func TestBackupPolicySetRejectsKeepAbovePublicMaximumBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	command := newBackupCmd()
+	command.SetArgs([]string{"policy", "set", "--keep", "9007199254740992"})
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "canonical base-10 integer") {
+		t.Fatalf("Execute(Keep above public maximum) error = %v, want range validation", err)
+	}
+}
+
+// Rationale: the documented CLI integer grammar has one unambiguous spelling;
+// Go-style hexadecimal, octal, signs, leading zeroes, and whitespace must fail
+// before context resolution or HTTP dispatch.
+func TestBackupPolicySetRejectsNonCanonicalKeepSyntaxBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	for _, keep := range []string{"01", "010", "0x10", "+7", "-1", " 7", "7 "} {
+		command := newBackupCmd()
+		command.SetArgs([]string{"policy", "set", "--keep", keep})
+		err := command.Execute()
+		if err == nil || !strings.Contains(err.Error(), "canonical base-10 integer") {
+			t.Fatalf("Execute(--keep %q) error = %v, want canonical syntax validation", keep, err)
+		}
+	}
+}
+
+// Rationale: values outside the signed 64-bit representation must fail at the
+// raw decimal boundary before scope resolution or any HTTP request can begin.
+func TestBackupPolicySetRejectsKeepOverflowBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	command := newBackupCmd()
+	command.SetArgs([]string{"policy", "set", "--keep", "9223372036854775808"})
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "canonical base-10 integer") {
+		t.Fatalf("Execute(overflow Keep) error = %v, want canonical range validation", err)
+	}
+}
+
 // Rationale: --off is a toggle over the singleton, not a zero-value
 // replacement; every configured field and ordered source must be retained.
 func TestBackupPolicySetOffRetainsConfiguredPolicy(t *testing.T) {
@@ -221,7 +295,7 @@ func TestBackupPolicySetOffRetainsConfiguredPolicy(t *testing.T) {
 		case http.MethodGet:
 			writeBackupPolicyTestResponse(t, writer, http.StatusOK, configuredBackupPolicyJSON(true))
 		case http.MethodPut:
-			assertBackupPolicySetRequest(t, request, false, true)
+			assertBackupPolicySetRequest(t, request, false, true, 7)
 			writeBackupPolicyTestResponse(t, writer, http.StatusOK, configuredBackupPolicyJSON(false))
 		default:
 			t.Errorf("method = %s, want GET or PUT", request.Method)
@@ -257,7 +331,7 @@ func TestBackupPolicySetOffRetainsUnconfiguredOptionals(t *testing.T) {
 		case http.MethodGet:
 			writeBackupPolicyTestResponse(t, writer, http.StatusOK, disabledBackupPolicyJSON())
 		case http.MethodPut:
-			assertBackupPolicySetRequest(t, request, false, false)
+			assertBackupPolicySetRequest(t, request, false, false, 0)
 			writeBackupPolicyTestResponse(t, writer, http.StatusOK, disabledBackupPolicyJSON())
 		default:
 			t.Errorf("method = %s, want GET or PUT", request.Method)
@@ -280,7 +354,7 @@ func TestBackupPolicySetOffRetainsUnconfiguredOptionals(t *testing.T) {
 type backupPolicySetBody struct {
 	Enabled     bool    `json:"enabled"`
 	Frequency   *string `json:"frequency"`
-	Keep        *int    `json:"keep"`
+	Keep        *int64  `json:"keep"`
 	Encryption  *string `json:"encryption"`
 	ConnectorID *string `json:"connector_id"`
 	Sources     []struct {
@@ -289,7 +363,13 @@ type backupPolicySetBody struct {
 	} `json:"sources"`
 }
 
-func assertBackupPolicySetRequest(t *testing.T, request *http.Request, enabled bool, configured bool) {
+func assertBackupPolicySetRequest(
+	t *testing.T,
+	request *http.Request,
+	enabled bool,
+	configured bool,
+	expectedKeep int64,
+) {
 	t.Helper()
 	if request.Method != http.MethodPut {
 		t.Errorf("method = %s, want PUT", request.Method)
@@ -319,7 +399,7 @@ func assertBackupPolicySetRequest(t *testing.T, request *http.Request, enabled b
 	if body.Frequency == nil || body.Keep == nil || body.Encryption == nil || body.ConnectorID == nil {
 		t.Fatalf("configured policy is missing optional fields: %#v", body)
 	}
-	if *body.Frequency != "Tue *-*-* 04:30:00" || *body.Keep != 7 || *body.Encryption != "age" {
+	if *body.Frequency != "Tue *-*-* 04:30:00" || *body.Keep != expectedKeep || *body.Encryption != "age" {
 		t.Errorf("configured policy fields = %#v", body)
 	}
 	if *body.ConnectorID != backupPolicyConnectorID {

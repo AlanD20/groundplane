@@ -31,7 +31,7 @@ func TestConnectorRecordNormalizesCompleteS3Decision(t *testing.T) {
 		Prefix:    "production/daily",
 		Region:    "auto",
 		PathStyle: true,
-		Credentials: map[string]core.ConnectorCredential{
+		Credentials: map[core.ConnectorCredentialName]core.ConnectorCredential{
 			core.ConnectorCredentialAccessKey: {Kind: core.ConnectorCredentialDirect},
 			core.ConnectorCredentialSecretKey: {Kind: core.ConnectorCredentialDirect},
 		},
@@ -180,7 +180,7 @@ func testConnectorRecord(
 		Prefix:        "production/",
 		Region:        "auto",
 		PathStyle:     true,
-		Credentials: map[string]core.ConnectorCredential{
+		Credentials: map[core.ConnectorCredentialName]core.ConnectorCredential{
 			core.ConnectorCredentialAccessKey: {Kind: core.ConnectorCredentialDirect},
 			core.ConnectorCredentialSecretKey: {Kind: core.ConnectorCredentialDirect},
 		},

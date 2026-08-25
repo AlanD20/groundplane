@@ -440,13 +440,22 @@ type ComponentProjection struct {
 
 // MaximumBackupPolicySources is the public replacement bound. It mirrors the
 // persistence transaction budget and is intentionally available to clients.
-const MaximumBackupPolicySources = 12
+const (
+	MaximumBackupPolicySources       = 12
+	MaximumBackupPolicyKeep    int64 = 9_007_199_254_740_991
+)
+
+// ValidBackupPolicyKeep reports whether keep is within the public integer
+// range that every supported JSON consumer can represent exactly.
+func ValidBackupPolicyKeep(keep int64) bool {
+	return keep >= 1 && keep <= MaximumBackupPolicyKeep
+}
 
 // BackupPolicyReplacementRequest is one complete desired policy document.
 type BackupPolicyReplacementRequest struct {
 	Enabled     bool                `json:"enabled"`
 	Frequency   string              `json:"frequency,omitempty" pattern:"^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"`
-	Keep        int                 `json:"keep,omitempty" minimum:"1"`
+	Keep        int64               `json:"keep,omitempty" minimum:"1" maximum:"9007199254740991"`
 	Encryption  BackupEncryption    `json:"encryption,omitempty" enum:"age,none"`
 	ConnectorID string              `json:"connector_id,omitempty" pattern:"^con_[0-9A-HJKMNP-TV-Z]{26}$"`
 	Sources     []BackupSourceInput `json:"sources" maxItems:"12" nullable:"false"`
@@ -463,7 +472,7 @@ const (
 type BackupPolicy struct {
 	Enabled      bool             `json:"enabled"`
 	Frequency    string           `json:"frequency,omitempty" pattern:"^(\\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \\*-\\*-\\* (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9])$"`
-	Keep         int              `json:"keep,omitempty"`
+	Keep         int64            `json:"keep,omitempty" minimum:"1" maximum:"9007199254740991"`
 	Encryption   BackupEncryption `json:"encryption,omitempty" enum:"age,none"`
 	ConnectorID  string           `json:"connector_id,omitempty"`
 	Sources      []BackupSource   `json:"sources" nullable:"false"`
@@ -710,7 +719,7 @@ type Task struct {
 	OperationID   string            `json:"operation_id"`
 	RetryOf       string            `json:"retry_of,omitempty"`
 	PlanHash      string            `json:"plan_hash,omitempty"`
-	Type          string            `json:"type"`
+	Type          string            `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate"`
 	Target        string            `json:"target"`
 	Status        TaskStatus        `json:"status"`
 	WorkspaceType TaskWorkspaceType `json:"workspace_type"           enum:"platform,tenant"`

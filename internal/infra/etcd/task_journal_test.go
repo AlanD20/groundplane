@@ -430,6 +430,76 @@ func validTaskRecord(now time.Time) TaskRecord {
 	return task
 }
 
+// Rationale: retention cleanup is an honest internal Agent Task and remains a
+// distinct closed durable type rather than masquerading as operator Backup.
+func TestTaskBackupPruneIsInClosedDurableCatalog(t *testing.T) {
+	now := taskJournalTime()
+	task := validTaskRecord(now)
+	task.Type = TaskBackupPrune
+	task.Target = ids.NewAt(ids.KindEnvironment, now, 901)
+	task.RenderGeneration = 0
+	task.Params = nil
+	task.Materializations = nil
+	task.TimeoutSeconds = backupTaskTimeoutSeconds
+	if err := validateTaskRecord(task); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("validateTaskRecord(operator backup prune) error = %v, want validation.failed", err)
+	}
+	task.Actor = TaskActorSystem
+	if err := validateTaskRecord(task); err != nil {
+		t.Fatalf("validateTaskRecord(backup prune) error = %v", err)
+	}
+}
+
+// Rationale: Backup journal records expose only sealed-plan identity and
+// ordered step ids; generic Params, materializations, render generations, and
+// caller-selected deadlines cannot become a second machine contract.
+func TestBackupTaskDurableShapeIsClosed(t *testing.T) {
+	now := taskJournalTime()
+	for _, taskType := range []TaskType{TaskBackup, TaskBackupPrune} {
+		base := validTaskRecord(now)
+		base.Type = taskType
+		if taskType == TaskBackupPrune {
+			base.Actor = TaskActorSystem
+		}
+		base.Target = ids.NewAt(ids.KindEnvironment, now, 902)
+		base.RenderGeneration = 0
+		base.Params = nil
+		base.Materializations = nil
+		base.TimeoutSeconds = backupTaskTimeoutSeconds
+		if err := validateTaskRecord(base); err != nil {
+			t.Fatalf("validateTaskRecord(%s) error = %v", taskType, err)
+		}
+		checks := []struct {
+			name   string
+			mutate func(*TaskRecord)
+		}{
+			{name: "params", mutate: func(task *TaskRecord) {
+				task.Params = map[string]string{"object": "private"}
+			}},
+			{name: "materialization", mutate: func(task *TaskRecord) {
+				task.Materializations = []TaskMaterializationRecord{{}}
+			}},
+			{name: "render generation", mutate: func(task *TaskRecord) { task.RenderGeneration = 1 }},
+			{name: "short timeout", mutate: func(task *TaskRecord) { task.TimeoutSeconds-- }},
+		}
+		for _, check := range checks {
+			t.Run(string(taskType)+"/"+check.name, func(t *testing.T) {
+				task := cloneTaskRecord(base)
+				check.mutate(&task)
+				if err := validateTaskRecord(task); !errors.Is(
+					err,
+					errs.New(errs.KindValidationFailed, ""),
+				) {
+					t.Fatalf("validateTaskRecord(%s) error = %v", check.name, err)
+				}
+			})
+		}
+	}
+}
+
 func taskEventInput(taskID string, ordinal uint64, state TaskEventState) TaskEventInput {
 	return TaskEventInput{
 		Identity: TaskEventIdentity{

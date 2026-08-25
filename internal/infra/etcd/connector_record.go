@@ -88,6 +88,15 @@ func decodeConnectorRecord(value []byte) (ConnectorRecord, error) {
 	return record, nil
 }
 
+func connectorRecordHasDirectCredentials(record ConnectorRecord) bool {
+	for _, credential := range record.Connector.Credentials {
+		if credential.Kind == core.ConnectorCredentialDirect {
+			return true
+		}
+	}
+	return false
+}
+
 func encodeConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) ([]byte, error) {
 	if err := validateConnectorEncryptedCredentials(value); err != nil {
 		return nil, err
@@ -133,21 +142,35 @@ func validateConnectorRecord(record ConnectorRecord) error {
 		return errs.New(errs.KindValidationFailed, "Connector region is invalid")
 	}
 	if len(connector.Credentials) != 2 {
-		return errs.New(errs.KindValidationFailed, "Connector credentials must contain access_key and secret_key")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Connector credentials must contain access_key and secret_key",
+		)
 	}
-	for _, name := range []string{core.ConnectorCredentialAccessKey, core.ConnectorCredentialSecretKey} {
+	for _, name := range []core.ConnectorCredentialName{
+		core.ConnectorCredentialAccessKey, core.ConnectorCredentialSecretKey,
+	} {
 		credential, ok := connector.Credentials[name]
 		if !ok {
-			return errs.New(errs.KindValidationFailed, "Connector credentials must contain access_key and secret_key")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Connector credentials must contain access_key and secret_key",
+			)
 		}
 		switch credential.Kind {
 		case core.ConnectorCredentialSecretRef:
 			if !validSecretEnvironmentKey(credential.SecretRef) {
-				return errs.New(errs.KindValidationFailed, "Connector credential secret_ref is invalid")
+				return errs.New(
+					errs.KindValidationFailed,
+					"Connector credential secret_ref is invalid",
+				)
 			}
 		case core.ConnectorCredentialDirect:
 			if credential.SecretRef != "" {
-				return errs.New(errs.KindValidationFailed, "Direct Connector credential must not have a secret_ref")
+				return errs.New(
+					errs.KindValidationFailed,
+					"Direct Connector credential must not have a secret_ref",
+				)
 			}
 		default:
 			return errs.New(errs.KindValidationFailed, "Connector credential kind is invalid")
@@ -159,14 +182,21 @@ func validateConnectorRecord(record ConnectorRecord) error {
 func validateConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) error {
 	if validateStableID(ids.KindConnector, value.ConnectorID) != nil || value.EnvelopeVersion != 1 ||
 		value.Cipher != "age-x25519" || value.DigestAlgorithm != "sha256" ||
-		len(value.Ciphertext) == 0 || len(value.Ciphertext) > MaximumEntryValueBytes ||
+		len(value.Ciphertext) == 0 ||
+		len(value.Ciphertext) > MaximumEntryValueBytes ||
 		!validSHA256(value.CiphertextSHA256) {
-		return errs.New(errs.KindValidationFailed, "Connector encrypted credential envelope is invalid")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Connector encrypted credential envelope is invalid",
+		)
 	}
 	digest := sha256.Sum256(value.Ciphertext)
 	want, _ := hex.DecodeString(value.CiphertextSHA256)
 	if subtle.ConstantTimeCompare(digest[:], want) != 1 {
-		return errs.New(errs.KindValidationFailed, "Connector encrypted credential digest does not match")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Connector encrypted credential digest does not match",
+		)
 	}
 	return nil
 }
@@ -183,8 +213,13 @@ func validateConnectorEndpoint(value string) error {
 
 func validConnectorBucket(value string) bool {
 	if len(value) < 3 || len(value) > 63 || net.ParseIP(value) != nil ||
-		!connectorBucketAlphaNumeric(value[0]) || !connectorBucketAlphaNumeric(value[len(value)-1]) ||
-		strings.Contains(value, "..") || strings.Contains(value, ".-") || strings.Contains(value, "-.") {
+		!connectorBucketAlphaNumeric(
+			value[0],
+		) || !connectorBucketAlphaNumeric(value[len(value)-1]) ||
+		strings.Contains(
+			value,
+			"..",
+		) || strings.Contains(value, ".-") || strings.Contains(value, "-.") {
 		return false
 	}
 	for index := range len(value) {
@@ -205,7 +240,8 @@ func validateConnectorPrefix(value string) error {
 		return nil
 	}
 	if !utf8.ValidString(value) || strings.ContainsRune(value, '\x00') || strings.Contains(value, `\`) ||
-		strings.HasPrefix(value, "/") || !strings.HasSuffix(value, "/") {
+		strings.HasPrefix(value, "/") ||
+		!strings.HasSuffix(value, "/") {
 		return errs.New(errs.KindValidationFailed, "Connector prefix is invalid")
 	}
 	withoutSlash := strings.TrimSuffix(value, "/")
@@ -233,12 +269,12 @@ func validConnectorRegion(value string) bool {
 }
 
 func cloneConnectorCredentials(
-	credentials map[string]core.ConnectorCredential,
-) map[string]core.ConnectorCredential {
+	credentials map[core.ConnectorCredentialName]core.ConnectorCredential,
+) map[core.ConnectorCredentialName]core.ConnectorCredential {
 	if credentials == nil {
 		return nil
 	}
-	copyOfCredentials := make(map[string]core.ConnectorCredential, len(credentials))
+	copyOfCredentials := make(map[core.ConnectorCredentialName]core.ConnectorCredential, len(credentials))
 	for name, credential := range credentials {
 		copyOfCredentials[name] = credential
 	}

@@ -8,7 +8,11 @@
 // file's comments cite the doc section that motivates each field.
 package core
 
-import "time"
+import (
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/backupsecret"
+)
 
 // ProjectKind distinguishes a tenant project (an application) from a
 // backing project (shared infra: datastore/cache/queue). Both follow the
@@ -439,7 +443,7 @@ type BackupSource struct {
 type BackupPolicy struct {
 	Enabled     bool           `yaml:"enabled"                json:"enabled"`
 	Frequency   string         `yaml:"frequency,omitempty"    json:"frequency,omitempty"` // systemd calendar expr
-	Keep        int            `yaml:"keep,omitempty"         json:"keep,omitempty"`
+	Keep        int64          `yaml:"keep,omitempty"         json:"keep,omitempty"`
 	Encryption  string         `yaml:"encryption,omitempty"   json:"encryption,omitempty"` // "age" | "none"
 	ConnectorID string         `yaml:"connector_id,omitempty" json:"connector_id,omitempty"`
 	Sources     []BackupSource `yaml:"sources,omitempty"      json:"sources,omitempty"`
@@ -491,18 +495,18 @@ type Runner struct {
 // Connectors, by contrast, are environment-scoped only — see Connector
 // below and blueprint.md: "There is no project or platform connector and
 // no fallback."
-type SecretKind string
+type SecretKind = backupsecret.SecretKind
 
 const (
-	SecretKindEnvVar SecretKind = "env_var"
+	SecretKindEnvVar            = backupsecret.SecretKindEnvVar
 	SecretKindFile   SecretKind = "file"
 )
 
-type SecretScope string
+type SecretScope = backupsecret.SecretScope
 
 const (
-	SecretScopeProject  SecretScope = "project"
-	SecretScopePlatform SecretScope = "platform"
+	SecretScopeProject  = backupsecret.SecretScopeProject
+	SecretScopePlatform = backupsecret.SecretScopePlatform
 )
 
 type Secret struct {
@@ -519,14 +523,15 @@ type ConnectorKind string
 
 const ConnectorKindS3Compatible ConnectorKind = "s3-compatible"
 
-type ConnectorCredentialKind string
+type ConnectorCredentialName = backupsecret.CredentialName
+type ConnectorCredentialKind = backupsecret.CredentialSource
 
 const (
-	ConnectorCredentialSecretRef ConnectorCredentialKind = "secret_ref"
-	ConnectorCredentialDirect    ConnectorCredentialKind = "direct"
+	ConnectorCredentialSecretRef = backupsecret.CredentialSourceSecretRef
+	ConnectorCredentialDirect    = backupsecret.CredentialSourceDirect
 
-	ConnectorCredentialAccessKey = "access_key"
-	ConnectorCredentialSecretKey = "secret_key"
+	ConnectorCredentialAccessKey = backupsecret.CredentialAccessKey
+	ConnectorCredentialSecretKey = backupsecret.CredentialSecretKey
 )
 
 // ConnectorCredential is listable source metadata. Direct plaintext lives
@@ -539,16 +544,16 @@ type ConnectorCredential struct {
 // Connector is a complete backup-destination decision owned by exactly one
 // Environment. There are no Project or platform Connectors.
 type Connector struct {
-	ID            string                         `yaml:"id"                    json:"id"` // con_<ulid>
-	EnvironmentID string                         `yaml:"environment_id"        json:"environment_id"`
-	Name          string                         `yaml:"name"                  json:"name"`
-	Kind          ConnectorKind                  `yaml:"kind"                  json:"kind"`
-	Endpoint      string                         `yaml:"endpoint"              json:"endpoint"`
-	Bucket        string                         `yaml:"bucket"                json:"bucket"`
-	Prefix        string                         `yaml:"prefix,omitempty"      json:"prefix,omitempty"`
-	Region        string                         `yaml:"region"                json:"region"`
-	PathStyle     bool                           `yaml:"path_style"            json:"path_style"`
-	Credentials   map[string]ConnectorCredential `yaml:"credentials"           json:"credentials"`
+	ID            string                                          `yaml:"id"                    json:"id"` // con_<ulid>
+	EnvironmentID string                                          `yaml:"environment_id"        json:"environment_id"`
+	Name          string                                          `yaml:"name"                  json:"name"`
+	Kind          ConnectorKind                                   `yaml:"kind"                  json:"kind"`
+	Endpoint      string                                          `yaml:"endpoint"              json:"endpoint"`
+	Bucket        string                                          `yaml:"bucket"                json:"bucket"`
+	Prefix        string                                          `yaml:"prefix,omitempty"      json:"prefix,omitempty"`
+	Region        string                                          `yaml:"region"                json:"region"`
+	PathStyle     bool                                            `yaml:"path_style"            json:"path_style"`
+	Credentials   map[ConnectorCredentialName]ConnectorCredential `yaml:"credentials"           json:"credentials"`
 }
 
 // DeployStatus is the release ledger's task-driven state machine. See

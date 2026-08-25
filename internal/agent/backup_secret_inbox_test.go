@@ -93,6 +93,47 @@ func TestBackupSecretInboxRejectsStaleAssignment(t *testing.T) {
 	}
 }
 
+// Rationale: capture encrypts with a public recipient and prune does not
+// decrypt, so neither current operation may reserve or accept either private
+// restore identity purpose.
+func TestBackupSecretInboxReservesOnlyS3PurposesForCaptureAndPrune(t *testing.T) {
+	for _, stepKind := range []string{"age capture", "prune"} {
+		t.Run(stepKind, func(t *testing.T) {
+			inbox := newBackupSecretSlotInbox()
+			assignment := agentBackupSecretAssignment(t)
+			if stepKind == "age capture" {
+				assignment.Plan.GetSteps()[0].GetBackupSourceCapture().Encryption =
+					agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE
+			} else {
+				assignment.Plan.GetSteps()[0].Payload = &agentpb.ExecutionStep_BackupArtifactPrune{
+					BackupArtifactPrune: &agentpb.BackupArtifactPrune{},
+				}
+			}
+			if err := inbox.Register(assignment); err != nil {
+				t.Fatalf("Register() error = %v", err)
+			}
+			slots := inbox.tasks[assignment.TaskID].steps[workerTestStepID]
+			if len(slots) != 2 ||
+				slots[agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY] == nil ||
+				slots[agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY] == nil {
+				t.Fatalf("reserved slots = %#v, want exact S3 pair", slots)
+			}
+			for _, purpose := range []agentpb.BackupSecretSlotPurpose{
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY,
+				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_OPERATOR_OLD_AGE_IDENTITY,
+			} {
+				frame := agentBackupSecretFrames(assignment, []byte("identity"))[0]
+				frame.Purpose = purpose
+				if err := inbox.Accept(context.Background(), frame); !errors.Is(
+					err, errs.New(errs.KindStateConflict, ""),
+				) {
+					t.Fatalf("Accept(%s) error = %v, want state conflict", purpose, err)
+				}
+			}
+		})
+	}
+}
+
 // Rationale: abort and stream teardown share reservation ownership and must
 // synchronously zero every partially or fully received slot.
 func TestWorkerPoolClearsBackupSecretsOnAbortAndStop(t *testing.T) {
@@ -397,7 +438,7 @@ func agentBackupSecretAssignment(t *testing.T) Assignment {
 				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
 				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
 				Source: &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
-					BackingServiceId: "bks_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 5,
+					BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 5,
 					Database: "application", Role: "application_owner",
 				}},
 			}},

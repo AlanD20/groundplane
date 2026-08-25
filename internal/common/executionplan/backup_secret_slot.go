@@ -40,7 +40,7 @@ func NewBackupSecretSlotValidator(
 	maximum := backupSecretSlotMaximum(transfer.Purpose)
 	if header == nil || maximum == 0 || header.TotalBytes == 0 || header.TotalBytes > maximum ||
 		header.ChunkCount == 0 || uint64(header.ChunkCount) != backupSecretSlotChunkCount(header.TotalBytes) {
-		return nil, errs.New(errs.KindValidationFailed, "Backup secret slot header is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "backup secret slot header is invalid")
 	}
 	return &BackupSecretSlotValidator{
 		taskID: transfer.TaskId, assignmentID: transfer.AssignmentId, stepID: transfer.StepId,
@@ -52,19 +52,19 @@ func NewBackupSecretSlotValidator(
 // responsible for clearing each owned chunk immediately after consumption.
 func (validator *BackupSecretSlotValidator) Accept(transfer *agentpb.BackupSecretSlotTransfer) error {
 	if validator == nil || validator.complete {
-		return errs.New(errs.KindStateConflict, "Backup secret slot is not accepting records")
+		return errs.New(errs.KindStateConflict, "backup secret slot is not accepting records")
 	}
 	if err := validateBackupSecretSlotIdentity(transfer); err != nil {
 		return err
 	}
 	if transfer.TaskId != validator.taskID || transfer.AssignmentId != validator.assignmentID ||
 		transfer.StepId != validator.stepID || transfer.Purpose != validator.purpose {
-		return errs.New(errs.KindStateConflict, "Backup secret slot record has a different assignment fence")
+		return errs.New(errs.KindStateConflict, "backup secret slot record has a different assignment fence")
 	}
 	if chunk := transfer.GetChunk(); chunk != nil {
 		if chunk.Sequence != validator.nextSequence || chunk.Sequence > validator.chunkCount ||
 			len(chunk.Content) == 0 {
-			return errs.New(errs.KindValidationFailed, "Backup secret slot chunk sequence is invalid")
+			return errs.New(errs.KindValidationFailed, "backup secret slot chunk sequence is invalid")
 		}
 		remaining := validator.totalBytes - validator.received
 		expected := MaximumBackupSecretChunkBytes
@@ -72,7 +72,7 @@ func (validator *BackupSecretSlotValidator) Accept(transfer *agentpb.BackupSecre
 			expected = remaining
 		}
 		if uint64(len(chunk.Content)) != expected {
-			return errs.New(errs.KindValidationFailed, "Backup secret slot chunk length is invalid")
+			return errs.New(errs.KindValidationFailed, "backup secret slot chunk length is invalid")
 		}
 		validator.received += uint64(len(chunk.Content))
 		validator.nextSequence++
@@ -81,12 +81,12 @@ func (validator *BackupSecretSlotValidator) Accept(transfer *agentpb.BackupSecre
 	if end := transfer.GetEnd(); end != nil {
 		if end.ChunkCount != validator.chunkCount || validator.received != validator.totalBytes ||
 			validator.nextSequence != validator.chunkCount+1 {
-			return errs.New(errs.KindValidationFailed, "Backup secret slot end is invalid")
+			return errs.New(errs.KindValidationFailed, "backup secret slot end is invalid")
 		}
 		validator.complete = true
 		return nil
 	}
-	return errs.New(errs.KindValidationFailed, "Backup secret slot record is invalid")
+	return errs.New(errs.KindValidationFailed, "backup secret slot record is invalid")
 }
 
 // Complete reports whether the exact end record closed the stream.
@@ -96,7 +96,7 @@ func (validator *BackupSecretSlotValidator) Complete() bool {
 
 func validateBackupSecretSlotIdentity(transfer *agentpb.BackupSecretSlotTransfer) error {
 	if transfer == nil {
-		return errs.New(errs.KindValidationFailed, "Backup secret slot transfer is required")
+		return errs.New(errs.KindValidationFailed, "backup secret slot transfer is required")
 	}
 	if err := RejectUnknown(transfer); err != nil {
 		return err
@@ -104,7 +104,7 @@ func validateBackupSecretSlotIdentity(transfer *agentpb.BackupSecretSlotTransfer
 	if ids.Validate(ids.KindTask, transfer.TaskId) != nil ||
 		ids.Validate(ids.KindAssignment, transfer.AssignmentId) != nil ||
 		ids.Validate(ids.KindStep, transfer.StepId) != nil || backupSecretSlotMaximum(transfer.Purpose) == 0 {
-		return errs.New(errs.KindValidationFailed, "Backup secret slot identity is invalid")
+		return errs.New(errs.KindValidationFailed, "backup secret slot identity is invalid")
 	}
 	return nil
 }

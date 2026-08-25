@@ -241,7 +241,7 @@ func connectorAPI(record etcd.ConnectorRecord) apiTypes.Connector {
 	connector := record.Connector
 	credentials := make(map[string]apiTypes.ConnectorCredential, len(connector.Credentials))
 	for name, credential := range connector.Credentials {
-		credentials[name] = apiTypes.ConnectorCredential{
+		credentials[string(name)] = apiTypes.ConnectorCredential{
 			Kind: apiTypes.ConnectorCredentialKind(credential.Kind), SecretRef: credential.SecretRef,
 		}
 	}

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,36 @@ type fakeTaskQueries struct {
 	scope   etcd.TaskListScope
 	events  etcd.TaskEventSnapshot
 	list    func(etcd.TaskListScope, etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error)
+}
+
+func TestTaskPublicProjectionRejectsMalformedDurableActor(t *testing.T) {
+	// Rationale: actor is public authorization provenance, so malformed durable
+	// state must fail closed rather than being projected as an operator action.
+	record := aliasTaskRecord(time.Date(2026, 8, 24, 16, 0, 0, 0, time.UTC), 301)
+	record.Actor = etcd.TaskActor("unknown")
+	if _, err := taskListResponse(record); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("taskListResponse(malformed actor) error = %v, want internal", err)
+	}
+}
+
+func TestTaskPublicProjectionRejectsUnknownDurableType(t *testing.T) {
+	// Rationale: the public journal type is a closed vocabulary, so an unknown
+	// durable kind must fail the projection instead of widening the contract.
+	record := aliasTaskRecord(time.Date(2026, 8, 24, 16, 0, 0, 0, time.UTC), 302)
+	record.Type = etcd.TaskType("unknown")
+	if _, err := taskListResponse(record); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("taskListResponse(unknown type) error = %v, want internal", err)
+	}
+}
+
+func TestTaskPublicProjectionRejectsOperatorBackupPrune(t *testing.T) {
+	// Rationale: backup_prune is internal system maintenance, so public
+	// projection must not present malformed operator provenance as legitimate.
+	record := aliasTaskRecord(time.Date(2026, 8, 24, 16, 0, 0, 0, time.UTC), 303)
+	record.Type = etcd.TaskBackupPrune
+	if _, err := taskListResponse(record); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("taskListResponse(operator backup_prune) error = %v, want internal", err)
+	}
 }
 
 func (queries *fakeTaskQueries) GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error) {
@@ -118,12 +149,12 @@ func TestTaskListAndActivityShareDurablePage(t *testing.T) {
 	queries := &fakeTaskQueries{page: etcd.Page[etcd.TaskRecord]{
 		Items: []etcd.Versioned[etcd.TaskRecord]{{Record: etcd.TaskRecord{
 			ID: ids.NewAt(ids.KindTask, now, 10), OperationID: ids.NewAt(ids.KindOperation, now, 11),
-			Type: etcd.TaskStop, Target: ids.NewAt(ids.KindService, now, 12), Status: etcd.TaskStatusPending,
+			Type: etcd.TaskBackupPrune, Target: environmentID, Status: etcd.TaskStatusPending,
 			Owner: etcd.TaskOwner{
 				WorkspaceType: etcd.TaskWorkspaceTenant, TenantID: tenantID,
 				ProjectID: projectID, EnvironmentID: environmentID,
 			},
-			Actor: etcd.TaskActorOperator, CreatedAt: now, UpdatedAt: now,
+			Actor: etcd.TaskActorSystem, CreatedAt: now, UpdatedAt: now,
 		}}},
 		NextCursor: "next-page",
 	}}
@@ -144,9 +175,10 @@ func TestTaskListAndActivityShareDurablePage(t *testing.T) {
 			t.Fatalf("decode %s response: %v", path, err)
 		}
 		if len(body.Items) != 1 || body.Items[0].Status != apiTypes.TaskPending || body.NextCursor != "next-page" ||
+			body.Items[0].Type != "backup_prune" || body.Items[0].Target != environmentID ||
 			body.Items[0].WorkspaceType != apiTypes.TaskWorkspaceTenant || body.Items[0].TenantID != tenantID ||
 			body.Items[0].ProjectID != projectID || body.Items[0].EnvironmentID != environmentID ||
-			body.Items[0].Actor != apiTypes.TaskActorOperator || !body.Items[0].CreatedAt.Equal(now) ||
+			body.Items[0].Actor != apiTypes.TaskActorSystem || !body.Items[0].CreatedAt.Equal(now) ||
 			body.Items[0].StartedAt != nil || body.Items[0].FinishedAt != nil {
 			t.Fatalf("%s response = %#v", path, body)
 		}
@@ -241,8 +273,8 @@ func requestTaskAliasPage(
 	return page
 }
 
-func TestTaskOpenAPIConstrainsOwnerAndActorEnums(t *testing.T) {
-	// Rationale: generated clients must carry the two closed C19 vocabularies,
+func TestTaskOpenAPIConstrainsPublicJournalEnums(t *testing.T) {
+	// Rationale: generated clients must carry the closed C19 vocabularies,
 	// not widen them to arbitrary strings.
 	document, err := New(nil, nil, Options{}).OpenAPIDocument()
 	if err != nil {
@@ -261,6 +293,10 @@ func TestTaskOpenAPIConstrainsOwnerAndActorEnums(t *testing.T) {
 		t.Fatalf("decode OpenAPI: %v", err)
 	}
 	properties := contract.Components.Schemas["Task"].Properties
+	assertTaskOpenAPIEnum(t, properties["type"].Enum,
+		"deploy", "rollback", "backup", "backup_prune", "restore", "attach", "detach", "run", "script",
+		"provision", "create", "update", "remove", "start", "stop", "destroy", "rotate",
+	)
 	assertTaskOpenAPIEnum(t, properties["workspace_type"].Enum, "platform", "tenant")
 	assertTaskOpenAPIEnum(t, properties["actor"].Enum, "operator", "system")
 }

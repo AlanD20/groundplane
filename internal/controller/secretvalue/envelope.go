@@ -49,6 +49,10 @@ type Metadata struct {
 
 // Envelope owns authenticated ciphertext and its non-secret metadata. Its
 // byte buffer is private; Ciphertext always returns an independent copy.
+// Clear and the owned APIs below make best-effort erasure of byte slices this
+// package owns. Go's runtime, compiler, strings, and cryptographic providers
+// may create copies that are not addressable here, so this is not a memory
+// zeroization guarantee.
 type Envelope struct {
 	metadata   Metadata
 	ciphertext []byte
@@ -102,6 +106,28 @@ func Restore(metadata Metadata, ciphertext []byte) (Envelope, error) {
 		return Envelope{}, err
 	}
 	return envelope, nil
+}
+
+// RestoreOwned validates metadata and takes ownership of ciphertext without
+// copying it. On failure it clears the supplied buffer. The caller must not
+// retain or use any alias after calling RestoreOwned.
+func RestoreOwned(metadata Metadata, ciphertext []byte) (Envelope, error) {
+	envelope := Envelope{metadata: metadata, ciphertext: ciphertext}
+	if err := envelope.Validate(); err != nil {
+		envelope.Clear()
+		return Envelope{}, err
+	}
+	return envelope, nil
+}
+
+// Clear makes a best-effort pass over the ciphertext buffer owned by e and
+// releases its slice. It is safe to call more than once.
+func (e *Envelope) Clear() {
+	if e == nil {
+		return
+	}
+	clear(e.ciphertext)
+	e.ciphertext = nil
 }
 
 func (e Envelope) Metadata() Metadata { return e.metadata }
@@ -196,6 +222,48 @@ func (p *Protector) Open(ctx context.Context, envelope Envelope, consume Plainte
 	transient := append([]byte(nil), plaintext...)
 	defer clear(transient)
 	if err := consume(transient); err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return errs.New(errs.KindInternal, "secret value: plaintext consumer failed")
+	}
+	return nil
+}
+
+// OpenOwned consumes and clears envelope without making the Protector's
+// ciphertext or plaintext copies. The injected Opener may necessarily copy
+// inside its cryptographic implementation; those provider-owned copies are
+// outside this package's erasure control. The callback must not retain value.
+func (p *Protector) OpenOwned(ctx context.Context, envelope *Envelope, consume PlaintextConsumer) error {
+	if ctx == nil {
+		return errs.New(errs.KindInternal, "secret value: context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if envelope == nil {
+		return errs.New(errs.KindInternal, "secret value: envelope is required")
+	}
+	defer envelope.Clear()
+	if consume == nil {
+		return errs.New(errs.KindInternal, "secret value: plaintext consumer is required")
+	}
+	if err := envelope.Validate(); err != nil {
+		return err
+	}
+
+	plaintext, err := p.opener.Open(ctx, envelope.ciphertext)
+	defer clear(plaintext)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return errs.New(errs.KindInternal, "secret value: open failed")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := consume(plaintext); err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return contextErr
 		}

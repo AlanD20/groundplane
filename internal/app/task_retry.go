@@ -17,6 +17,7 @@ import (
 const taskRetryRoute = "/tasks/{id}/retry"
 
 type taskRetryRepository interface {
+	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
 	GetTaskRetryScope(context.Context, string) (etcd.TaskRetryScope, error)
 	RetryTask(
 		context.Context,
@@ -168,6 +169,18 @@ func (service *taskRetryService) retryTask(
 	}
 	if ids.Validate(ids.KindTask, sourceTaskID) != nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "task id is invalid")
+	}
+	source, err := service.repository.GetTask(ctx, sourceTaskID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if source.Record.Type == etcd.TaskBackupPrune {
+		return etcd.IdempotencyResponse{}, errs.Newf(
+			errs.KindTaskNotRetryable,
+			"internal task %s of type %s is not operator-retryable",
+			sourceTaskID,
+			source.Record.Type,
+		)
 	}
 	durableScope, err := service.repository.GetTaskRetryScope(ctx, sourceTaskID)
 	if err != nil {

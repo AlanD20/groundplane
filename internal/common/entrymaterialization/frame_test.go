@@ -225,6 +225,7 @@ func TestSourceCloseFailureTakesPrecedence(t *testing.T) {
 	t.Parallel()
 
 	source := newTrackingReadCloser([]byte("secret"), io.ErrClosedPipe)
+	//lint:ignore SA1012 This test verifies cleanup when the operation context is nil.
 	err := Encode(nil, nil, Header{}, source, Limits{})
 	if err == nil || !strings.Contains(err.Error(), "content source close failed") {
 		t.Fatalf("Encode error = %v, want cleanup failure", err)

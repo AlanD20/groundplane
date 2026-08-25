@@ -34,8 +34,10 @@ func TestBackupPolicySetGeneratesInitialKeyOnlyWhenPreparedNeedsIt(t *testing.T)
 			repository := &backupPolicyTestRepository{needsKey: test.needsKey}
 			keys := &backupPolicyTestKeys{err: test.keyError}
 			service := backupPolicyTestService(t, repository, keys, &backupPolicyTestIdempotency{})
+			input := backupPolicyTestRequest()
+			input.Keep = 1
 			_, err := service.SetBackupPolicy(
-				context.Background(), testEnvironmentID, backupPolicyTestRequest(), testIdempotencyKey,
+				context.Background(), testEnvironmentID, input, testIdempotencyKey,
 			)
 			if !errors.Is(err, test.keyError) {
 				t.Fatalf("SetBackupPolicy() error = %v, want %v", err, test.keyError)
@@ -64,8 +66,10 @@ func TestBackupPolicySetReplayDoesNotPrepareOrGenerate(t *testing.T) {
 		},
 	}
 	service := backupPolicyTestService(t, repository, keys, idempotency)
+	input := backupPolicyTestRequest()
+	input.Keep = 1
 	result, err := service.SetBackupPolicy(
-		context.Background(), testEnvironmentID, backupPolicyTestRequest(), testIdempotencyKey,
+		context.Background(), testEnvironmentID, input, testIdempotencyKey,
 	)
 	if err != nil || result.Policy.Sources == nil || repository.prepareCalls != 0 || keys.calls != 0 {
 		t.Fatalf(
@@ -92,6 +96,48 @@ func TestBackupPolicySetRejectsThirteenthSourceBeforePreparation(t *testing.T) {
 		testIdempotencyKey,
 	); err == nil {
 		t.Fatal("SetBackupPolicy() error = nil")
+	}
+	if repository.prepareCalls != 0 || idempotency.prepareCalls != 0 {
+		t.Fatalf("preparation calls = repository %d, idempotency %d", repository.prepareCalls, idempotency.prepareCalls)
+	}
+}
+
+// Rationale: an out-of-contract Keep must fail before idempotency hashes or
+// durable preparation can observe the replacement.
+func TestBackupPolicySetRejectsKeepAbovePublicMaximumBeforePreparation(t *testing.T) {
+	repository := &backupPolicyTestRepository{}
+	idempotency := &backupPolicyTestIdempotency{}
+	service := backupPolicyTestService(t, repository, &backupPolicyTestKeys{}, idempotency)
+	input := backupPolicyTestRequest()
+	input.Keep = apiTypes.MaximumBackupPolicyKeep + 1
+	if _, err := service.SetBackupPolicy(
+		context.Background(),
+		testEnvironmentID,
+		input,
+		testIdempotencyKey,
+	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("SetBackupPolicy() error = %v, want validation.failed", err)
+	}
+	if repository.prepareCalls != 0 || idempotency.prepareCalls != 0 {
+		t.Fatalf("preparation calls = repository %d, idempotency %d", repository.prepareCalls, idempotency.prepareCalls)
+	}
+}
+
+// Rationale: zero Keep is outside the public retention contract and must fail
+// before idempotency hashing or durable preparation can observe the request.
+func TestBackupPolicySetRejectsZeroKeepBeforePreparation(t *testing.T) {
+	repository := &backupPolicyTestRepository{}
+	idempotency := &backupPolicyTestIdempotency{}
+	service := backupPolicyTestService(t, repository, &backupPolicyTestKeys{}, idempotency)
+	input := backupPolicyTestRequest()
+	input.Keep = 0
+	if _, err := service.SetBackupPolicy(
+		context.Background(),
+		testEnvironmentID,
+		input,
+		testIdempotencyKey,
+	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("SetBackupPolicy() error = %v, want validation.failed", err)
 	}
 	if repository.prepareCalls != 0 || idempotency.prepareCalls != 0 {
 		t.Fatalf("preparation calls = repository %d, idempotency %d", repository.prepareCalls, idempotency.prepareCalls)

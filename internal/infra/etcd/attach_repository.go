@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"slices"
@@ -215,6 +216,19 @@ func (repository *AttachRepository) CreateAttachWithTask(
 			Mutation{Type: MutationPut, Key: attachKey(grantID), Value: grantValue},
 		)
 	}
+	if len(record.GrantAttachIDs) != 0 {
+		dependentGrantValue, encodeErr := encodeAttachDependentGrantIndex(
+			record.ID, record.GrantAttachIDs,
+		)
+		if encodeErr != nil {
+			return IdempotencyTransactionResult{}, encodeErr
+		}
+		defer clear(dependentGrantValue)
+		conditions = append(conditions, Condition{Key: attachDependentGrantKey(record.ID)})
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: attachDependentGrantKey(record.ID), Value: dependentGrantValue,
+		})
+	}
 	var factValue []byte
 	if facts != nil {
 		factValue, err = encodeAttachEncryptedFacts(*facts)
@@ -336,6 +350,12 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		)
 	}
 	revision := mutationContext.readRevision
+	exclusionCondition, err := requireAttachBackupSourceExclusionAbsent(
+		ctx, repository.store, current.Record.ID, revision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	dependents, err := repository.store.Range(ctx, RangeRequest{
 		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
@@ -403,6 +423,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
+		exclusionCondition,
 		{Key: environmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
 		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
 		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
@@ -637,19 +658,48 @@ func (repository *AttachRepository) ReplaceLifecycle(
 	if !validAttachLifecycleReplacement(current.Record, replacement) {
 		return Versioned[AttachRecord]{}, errs.New(errs.KindStateConflict, "Attach lifecycle replacement is invalid")
 	}
+	conditions := []Condition{
+		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+	}
+	if replacement.Operation == AttachOperationDetach && replacement.Status != core.AttachFailed {
+		revision := current.ReadRevision
+		if revision < current.Revision {
+			revision = current.Revision
+		}
+		exclusionCondition, err := requireAttachBackupSourceExclusionAbsent(
+			ctx, repository.store, current.Record.ID, revision,
+		)
+		if err != nil {
+			return Versioned[AttachRecord]{}, err
+		}
+		conditions = append(conditions, exclusionCondition)
+	}
 	value, err := encodeAttachRecord(replacement)
 	if err != nil {
 		return Versioned[AttachRecord]{}, err
 	}
 	defer clear(value)
-	result, err := repository.store.Transact(ctx, []Condition{
-		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
-		{Key: deletionTombstoneKey("attach", current.Record.ID)},
-	}, []Mutation{{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value}})
+	result, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]Mutation{{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value}},
+	)
 	if err != nil {
 		return Versioned[AttachRecord]{}, err
 	}
 	if !result.Succeeded {
+		if replacement.Operation == AttachOperationDetach && replacement.Status != core.AttachFailed {
+			_, exclusionErr := requireAttachBackupSourceExclusionAbsent(
+				ctx,
+				repository.store,
+				current.Record.ID,
+				result.Revision,
+			)
+			if exclusionErr != nil {
+				return Versioned[AttachRecord]{}, exclusionErr
+			}
+		}
 		return Versioned[AttachRecord]{}, errs.New(errs.KindStateConflict, "Attach changed concurrently")
 	}
 	return Versioned[AttachRecord]{
@@ -854,6 +904,12 @@ func prepareAttachRemoval(
 	if revision <= 0 {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Attach removal revision must be positive")
 	}
+	exclusionCondition, err := requireAttachBackupSourceExclusionAbsent(
+		ctx, store, current.Record.ID, revision,
+	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	dependents, err := store.Range(ctx, RangeRequest{
 		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
@@ -866,10 +922,36 @@ func prepareAttachRemoval(
 	if len(dependents.Values) != 0 {
 		return nil, nil, nil, errs.New(errs.KindResourceInUse, "Attach is referenced by another Attach grant")
 	}
+	if dependents != nil {
+		defer clearRangeValues(dependents.Values)
+	}
+	dependentGrants, err := store.Range(ctx, RangeRequest{
+		Prefix: attachDependentGrantPrefix(current.Record.ID),
+		Limit: 2, Revision: revision,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if dependentGrants == nil || dependentGrants.ReadRevision != revision ||
+		dependentGrants.More || len(dependentGrants.Values) > 1 {
+		return nil, nil, nil, corruptAttachRecord()
+	}
+	defer clearRangeValues(dependentGrants.Values)
+	if err := validateAttachDependentGrantRange(
+		dependentGrants, current.Record.ID, current.Record.GrantAttachIDs,
+	); err != nil {
+		return nil, nil, nil, err
+	}
+	if (len(current.Record.GrantAttachIDs) == 0 && len(dependentGrants.Values) != 0) ||
+		(len(current.Record.GrantAttachIDs) != 0 && len(dependentGrants.Values) != 1) {
+		return nil, nil, nil, corruptAttachRecord()
+	}
 
 	conditions := []Condition{
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+		exclusionCondition,
+		{Key: attachGrantedByPrefix(current.Record.ID), Prefix: true},
 	}
 	mutations := []Mutation{
 		{Type: MutationDelete, Key: attachKey(current.Record.ID)},
@@ -882,6 +964,15 @@ func prepareAttachRemoval(
 	for _, serviceID := range current.Record.ServiceIDs {
 		mutations = append(mutations, Mutation{
 			Type: MutationDelete, Key: attachServiceKey(serviceID, current.Record.ID),
+		})
+	}
+	if len(current.Record.GrantAttachIDs) != 0 {
+		dependent := dependentGrants.Values[0]
+		conditions = append(conditions, Condition{
+			Key: attachDependentGrantKey(current.Record.ID), ModRevision: dependent.ModRevision,
+		})
+		mutations = append(mutations, Mutation{
+			Type: MutationDelete, Key: attachDependentGrantKey(current.Record.ID),
 		})
 	}
 	values := make([][]byte, 0, len(current.Record.GrantAttachIDs))
@@ -924,6 +1015,48 @@ func prepareAttachRemoval(
 		)
 	}
 	return conditions, mutations, values, nil
+}
+
+func requireAttachBackupSourceExclusionAbsent(
+	ctx context.Context,
+	store interface {
+		GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+	},
+	attachID string,
+	revision int64,
+) (Condition, error) {
+	key, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, attachID)
+	if err != nil {
+		return Condition{}, err
+	}
+	result, err := store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	if err != nil {
+		return Condition{}, err
+	}
+	if result == nil || result.ReadRevision != revision || len(result.Values) != 1 {
+		return Condition{}, errs.New(errs.KindInternal, "attach backup source exclusion read is incomplete")
+	}
+	if result.Values[0] != nil {
+		if evidenceErr := classifyAttachBackupSourceExclusionEvidence(result.Values[0], attachID); evidenceErr != nil {
+			return Condition{}, evidenceErr
+		}
+	}
+	return Condition{Key: key}, nil
+}
+
+func classifyAttachBackupSourceExclusionEvidence(evidence *KeyValue, attachID string) error {
+	if evidence == nil {
+		return nil
+	}
+	expectedKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, attachID)
+	if err != nil || evidence.Key != expectedKey {
+		return errs.New(errs.KindInternal, "attach backup source exclusion is misbucketed")
+	}
+	exclusion, decodeErr := decodeBackupSourceTargetExclusionRecord(evidence.Value)
+	if decodeErr != nil || exclusion.TargetKind != BackupSourceTargetAttach || exclusion.TargetID != attachID {
+		return errs.New(errs.KindInternal, "attach backup source exclusion is corrupt")
+	}
+	return errs.New(errs.KindResourceInUse, "attach is an active backup source")
 }
 
 func validateAttachCreateScope(
@@ -1121,6 +1254,9 @@ func validateAttachDetachTask(
 
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
 	operations := 48 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	if len(record.GrantAttachIDs) != 0 {
+		operations += 2
+	}
 	if hasFacts {
 		operations++
 	}
@@ -1128,7 +1264,11 @@ func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int 
 }
 
 func attachDetachWithTaskOperationCount(record AttachRecord) int {
-	return 41 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
+	operations := 42 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
+	if len(record.GrantAttachIDs) != 0 {
+		operations += 2
+	}
+	return operations
 }
 
 func validAttachLifecycleReplacement(current AttachRecord, replacement AttachRecord) bool {
@@ -1207,13 +1347,25 @@ func classifyAttachTaskCreateConflict(_ int64, reads []*KeyValue) error {
 }
 
 func classifyAttachDetachTaskConflict(_ int64, reads []*KeyValue) error {
-	if len(reads) < 5 {
+	if len(reads) < 6 {
 		return errs.New(errs.KindInternal, "Attach detach Task conflict evidence is incomplete")
 	}
 	for _, read := range reads[:4] {
 		if read != nil {
 			return errs.New(errs.KindStateConflict, "Attach detach Task operation is already active")
 		}
+	}
+	if reads[5] != nil {
+		exclusion := reads[5]
+		record, err := decodeBackupSourceTargetExclusionRecord(exclusion.Value)
+		if err != nil || record.TargetKind != BackupSourceTargetAttach {
+			return errs.New(errs.KindInternal, "attach detach Task exclusion evidence is corrupt")
+		}
+		expectedKey, err := backupSourceTargetExclusionKey(record.TargetKind, record.TargetID)
+		if err != nil || exclusion.Key != expectedKey {
+			return errs.New(errs.KindInternal, "attach detach Task exclusion evidence is misbucketed")
+		}
+		return errs.New(errs.KindResourceInUse, "attach is an active backup source")
 	}
 	return errs.New(errs.KindStateConflict, "Attach detach scope changed concurrently")
 }
@@ -1301,6 +1453,67 @@ func attachGrantedByPrefix(attachID string) string {
 
 func attachGrantedByKey(grantAttachID string, attachID string) string {
 	return attachGrantedByPrefix(grantAttachID) + attachID
+}
+
+func attachDependentGrantPrefix(attachID string) string {
+	return "/v1/indexes/attaches/by-dependent-attach/attach/" + attachID + "/"
+}
+
+func attachDependentGrantKey(attachID string) string {
+	return attachDependentGrantPrefix(attachID) + "grants"
+}
+
+func readAttachDependentGrantIndex(result *RangeResult, attachID string) ([]string, error) {
+	if result == nil || result.More || len(result.Values) > 1 {
+		return nil, corruptAttachRecord()
+	}
+	if len(result.Values) == 0 {
+		return nil, nil
+	}
+	value := result.Values[0]
+	if value.Key != attachDependentGrantKey(attachID) {
+		return nil, corruptAttachRecord()
+	}
+	return decodeAttachDependentGrantIndex(value.Value, attachID)
+}
+
+func validateAttachDependentGrantRange(
+	result *RangeResult, attachID string, grantAttachIDs []string,
+) error {
+	stored, err := readAttachDependentGrantIndex(result, attachID)
+	if err != nil || !slices.Equal(stored, grantAttachIDs) {
+		return corruptAttachRecord()
+	}
+	return nil
+}
+
+func encodeAttachDependentGrantIndex(attachID string, grantAttachIDs []string) ([]byte, error) {
+	if validateStableID(ids.KindAttach, attachID) != nil ||
+		validateSortedStableIDs(grantAttachIDs, ids.KindAttach, "Attach dependent grant_attach_ids") != nil {
+		return nil, errs.New(errs.KindValidationFailed, "Attach dependent grant index is invalid")
+	}
+	return json.Marshal(struct {
+		AttachID       string   `json:"attach_id"`
+		GrantAttachIDs []string `json:"grant_attach_ids"`
+	}{AttachID: attachID, GrantAttachIDs: append([]string(nil), grantAttachIDs...)})
+}
+
+func decodeAttachDependentGrantIndex(value []byte, attachID string) ([]string, error) {
+	if rejectDuplicateJSONFields(value) != nil {
+		return nil, corruptAttachRecord()
+	}
+	decoder := json.NewDecoder(bytes.NewReader(value))
+	decoder.DisallowUnknownFields()
+	var index struct {
+		AttachID       string   `json:"attach_id"`
+		GrantAttachIDs []string `json:"grant_attach_ids"`
+	}
+	if decoder.Decode(&index) != nil || requireJSONEOF(decoder) != nil ||
+		index.AttachID != attachID ||
+		validateSortedStableIDs(index.GrantAttachIDs, ids.KindAttach, "Attach dependent grant_attach_ids") != nil {
+		return nil, corruptAttachRecord()
+	}
+	return index.GrantAttachIDs, nil
 }
 
 func attachFactsKey(attachID string) string {

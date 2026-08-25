@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -53,6 +54,12 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 		fixture.store,
 		fixture.environment.Record.ID,
 	)
+	replayPointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2501)
+	replayReferenceKey, err := backupRecoveryPointConnectorIndexKey(task.Target, replayPointID)
+	if err != nil {
+		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+	}
+	connectorDeletionPutKey(t, fixture.store, replayReferenceKey, []byte(replayPointID))
 	storedIntent, found, err := connectors.GetConnectorRemovalIntent(ctx, task.ID)
 	if err != nil || !found || storedIntent.Record != intent {
 		t.Fatalf("GetConnectorRemovalIntent() = %#v/%v/%v", storedIntent, found, err)
@@ -83,8 +90,12 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 		t,
 		fixture.store,
 		fixture.environment.Record.ID,
-	); epochAfterReplay != epochAfterBegin {
+		); epochAfterReplay != epochAfterBegin {
 		t.Fatalf("deletion replay epoch = %d, want %d", epochAfterReplay, epochAfterBegin)
+	}
+	connectorDeletionDeleteKey(t, fixture.store, replayReferenceKey)
+	if mustOptionalKey(t, fixture.store, replayReferenceKey) != nil {
+		t.Fatal("replay-only Recovery Point reference remained before completed acknowledgement")
 	}
 	assertConnectorDeletionVisible(t, connectors, fixture.connector.Record.Connector.ID)
 	page, err := connectors.ListConnectors(
@@ -129,10 +140,41 @@ func TestConnectorDeletionTaskFencesAndFinalizesCompleteConnector(t *testing.T) 
 		}
 	}
 	assertConnectorDeletionKeyState(t, fixture, task, false, false)
+	replayOrphanID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2502)
+	replayOrphanKey, err := backupOrphanConnectorIndexKey(task.Target, replayOrphanID)
+	if err != nil {
+		t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
+	}
+	for name, reference := range map[string]struct {
+		key   string
+		value []byte
+	}{
+		"enabled policy": {
+			key: backupPolicyConnectorReferenceKey(task.Target, fixture.environment.Record.ID),
+			value: []byte(fixture.environment.Record.ID),
+		},
+		"Recovery Point": {key: replayReferenceKey, value: []byte(replayPointID)},
+		"orphan":         {key: replayOrphanKey, value: []byte(replayOrphanID)},
+	} {
+		connectorDeletionPutKey(t, fixture.store, reference.key, reference.value)
+		if _, err := tasks.AcknowledgeControllerTask(
+			ctx, task.ID, TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
+		); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+			t.Fatalf("AcknowledgeControllerTask(replay with %s) error = %v, want resource in use", name, err)
+		}
+		connectorDeletionDeleteKey(t, fixture.store, reference.key)
+	}
+	reusedNameOwnerID := ids.NewAt(ids.KindConnector, fixture.now, 2503)
+	connectorDeletionPutKey(
+		t,
+		fixture.store,
+		connectorNameKey(fixture.environment.Record.ID, fixture.connector.Record.Connector.Name),
+		[]byte(reusedNameOwnerID),
+	)
 	if _, err := tasks.AcknowledgeControllerTask(
 		ctx, task.ID, TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
 	); err != nil {
-		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
+		t.Fatalf("AcknowledgeControllerTask(replay with reused name) error = %v", err)
 	}
 }
 
@@ -347,7 +389,10 @@ func TestConnectorDeletionRacesBackupPolicyEnableWithExactlyOneWinner(t *testing
 	winners := 0
 	for name, value := range map[string]attempt{"delete": deleteResult, "policy": policyResult} {
 		if value.err != nil {
-			t.Fatalf("%s attempt error = %v", name, value.err)
+			if !errors.Is(value.err, errs.New(errs.KindResourceInUse, "")) {
+				t.Fatalf("%s attempt error = %v", name, value.err)
+			}
+			continue
 		}
 		outcome, _, conflict, classifyErr := value.result.Classify()
 		if classifyErr != nil {
@@ -374,6 +419,450 @@ func TestConnectorDeletionRacesBackupPolicyEnableWithExactlyOneWinner(t *testing
 		)
 	}
 	assertConnectorDeletionVisible(t, connectors, fixture.connector.Record.Connector.ID)
+}
+
+// Rationale: a Recovery Point published after the fixed read must fail the
+// deletion prefix compare rather than allowing both durable states to commit.
+func TestConnectorDeletionRacesRecoveryPointMembership(t *testing.T) {
+	ctx := context.Background()
+	fixture := newConnectorDeletionFixture(t)
+	pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2690)
+	referenceKey, err := backupRecoveryPointConnectorIndexKey(
+		fixture.connector.Record.Connector.ID,
+		pointID,
+	)
+	if err != nil {
+		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+	}
+	raceStore := &connectorReferenceRaceStore{
+		memoryHierarchyStore: fixture.store,
+		referenceKey:         referenceKey,
+		referenceValue:       []byte(pointID),
+	}
+	connectors, err := newConnectorRepository(raceStore)
+	if err != nil {
+		t.Fatalf("newConnectorRepository() error = %v", err)
+	}
+	task, marker, tombstone, intent := connectorDeletionTestTask(
+		t,
+		fixture.connector,
+		fixture.project,
+		fixture.environment,
+		fixture.now.Add(4*time.Minute),
+		2691,
+	)
+	result, err := connectors.BeginConnectorDeletionWithTask(
+		ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+	)
+	if err != nil {
+		t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
+	}
+	_, _, conflict, classifyErr := result.Classify()
+	if classifyErr != nil || !errors.Is(conflict, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("Connector deletion race conflict/error = %v/%v", conflict, classifyErr)
+	}
+	if mustOptionalKey(t, fixture.store, referenceKey) == nil {
+		t.Fatal("Recovery Point Connector membership was not injected")
+	}
+	if mustOptionalKey(t, fixture.store, deletionTombstoneKey(
+		string(DeletionTargetConnector), task.Target,
+	)) != nil {
+		t.Fatal("Connector deletion tombstone committed across Recovery Point race")
+	}
+}
+
+// Rationale: a post-read artifact index is authoritative only when its raw
+// stable id reconstructs the exact canonical raw Connector reverse-reference key.
+func TestConnectorDeletionRaceRejectsMalformedRecoveryPointMembership(t *testing.T) {
+	ctx := context.Background()
+	fixture := newConnectorDeletionFixture(t)
+	indexedPointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2703)
+	rawPointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2704)
+	referenceKey, err := backupRecoveryPointConnectorIndexKey(
+		fixture.connector.Record.Connector.ID,
+		indexedPointID,
+	)
+	if err != nil {
+		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+	}
+	raceStore := &connectorReferenceRaceStore{
+		memoryHierarchyStore: fixture.store,
+		referenceKey:         referenceKey,
+		referenceValue:       []byte(rawPointID),
+	}
+	connectors, err := newConnectorRepository(raceStore)
+	if err != nil {
+		t.Fatalf("newConnectorRepository() error = %v", err)
+	}
+	task, marker, tombstone, intent := connectorDeletionTestTask(
+		t,
+		fixture.connector,
+		fixture.project,
+		fixture.environment,
+		fixture.now.Add(4*time.Minute),
+		2705,
+	)
+	result, err := connectors.BeginConnectorDeletionWithTask(
+		ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+	)
+	if err != nil {
+		t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
+	}
+	_, _, conflict, classifyErr := result.Classify()
+	classified := classifyErr
+	if classified == nil {
+		classified = conflict
+	}
+	if !errors.Is(classified, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("Connector malformed reference race error = %v, want internal", classified)
+	}
+	if mustOptionalKey(t, fixture.store, deletionTombstoneKey(
+		string(DeletionTargetConnector), task.Target,
+	)) != nil {
+		t.Fatal("Connector deletion committed across malformed Recovery Point reference race")
+	}
+}
+
+// Rationale: both Recovery Point and orphan indexes must reject invalid raw
+// ids and canonical-key/value disagreement before reporting resource use.
+func TestConnectorArtifactReferenceClassificationRejectsMalformedIndexes(t *testing.T) {
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	connectorID := ids.NewAt(ids.KindConnector, now, 2706)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 2707)
+	indexedPointID := ids.NewAt(ids.KindRecoveryPoint, now, 2708)
+	otherPointID := ids.NewAt(ids.KindRecoveryPoint, now, 2709)
+	pointKey, err := backupRecoveryPointConnectorIndexKey(connectorID, indexedPointID)
+	if err != nil {
+		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+	}
+	orphanKey, err := backupOrphanConnectorIndexKey(connectorID, indexedPointID)
+	if err != nil {
+		t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
+	}
+	tests := []struct {
+		name  string
+		index int
+		value KeyValue
+	}{
+		{name: "Recovery Point invalid raw id", index: 1, value: KeyValue{Key: pointKey, Value: []byte("not-a-point")}},
+		{name: "Recovery Point key value mismatch", index: 1, value: KeyValue{Key: pointKey, Value: []byte(otherPointID)}},
+		{name: "orphan invalid raw id", index: 2, value: KeyValue{Key: orphanKey, Value: []byte("not-a-point")}},
+		{name: "orphan key value mismatch", index: 2, value: KeyValue{Key: orphanKey, Value: []byte(otherPointID)}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := classifyConnectorReference(test.index, test.value, connectorID, environmentID)
+			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
+				t.Fatalf("classifyConnectorReference() error = %v, want internal", err)
+			}
+		})
+	}
+}
+
+// Rationale: retry publication and successful finalization are independent
+// destructive commits and must re-prove artifact reverse-reference absence.
+func TestConnectorDeletionRetryAndFinalizationRejectArtifactMemberships(t *testing.T) {
+	t.Run("finalization Recovery Point", func(t *testing.T) {
+		ctx := context.Background()
+		fixture := newConnectorDeletionFixture(t)
+		connectors, err := newConnectorRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newConnectorRepository() error = %v", err)
+		}
+		tasks, err := newTaskRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newTaskRepository() error = %v", err)
+		}
+		task, marker, tombstone, intent := connectorDeletionTestTask(
+			t, fixture.connector, fixture.project, fixture.environment, fixture.now.Add(5*time.Minute), 2692,
+		)
+		if _, err := connectors.BeginConnectorDeletionWithTask(
+			ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		); err != nil {
+			t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
+		}
+		if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
+			t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
+		}
+		pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2693)
+		referenceKey, err := backupRecoveryPointConnectorIndexKey(task.Target, pointID)
+		if err != nil {
+			t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+		}
+		connectorDeletionPutKey(t, fixture.store, referenceKey, []byte(pointID))
+		_, err = tasks.AcknowledgeControllerTask(
+			ctx, task.ID, TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
+		)
+		if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+			t.Fatalf("AcknowledgeControllerTask() error = %v, want resource in use", err)
+		}
+		assertConnectorDeletionKeyState(t, fixture, task, true, true)
+	})
+
+	t.Run("retry orphan", func(t *testing.T) {
+		ctx := context.Background()
+		fixture := newConnectorDeletionFixture(t)
+		connectors, err := newConnectorRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newConnectorRepository() error = %v", err)
+		}
+		tasks, err := newTaskRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newTaskRepository() error = %v", err)
+		}
+		task, marker, tombstone, intent := connectorDeletionTestTask(
+			t, fixture.connector, fixture.project, fixture.environment, fixture.now.Add(6*time.Minute), 2694,
+		)
+		if _, err := connectors.BeginConnectorDeletionWithTask(
+			ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		); err != nil {
+			t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
+		}
+		if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
+			t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
+		}
+		if _, err := tasks.AcknowledgeControllerTask(
+			ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
+		); err != nil {
+			t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
+		}
+		pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2695)
+		referenceKey, err := backupOrphanConnectorIndexKey(task.Target, pointID)
+		if err != nil {
+			t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
+		}
+		connectorDeletionPutKey(t, fixture.store, referenceKey, []byte(pointID))
+		retryAt := task.CreatedAt.Add(3 * time.Second)
+		retryID := ids.NewAt(ids.KindTask, retryAt, 2696)
+		_, err = tasks.RetryTask(
+			ctx,
+			task.ID,
+			retryID,
+			TaskActorOperator,
+			pendingRetryMarker(task, retryID, retryAt, "connector-artifact-retry-key-0001"),
+		)
+		if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+			t.Fatalf("RetryTask() error = %v, want resource in use", err)
+		}
+		assertConnectorDeletionVisible(t, connectors, task.Target)
+	})
+}
+
+// Rationale: retry and terminal cleanup each read reference namespaces before
+// their transaction, so an artifact membership inserted in that gap must win.
+func TestConnectorDeletionRetryAndFinalizationRaceArtifactMemberships(t *testing.T) {
+	t.Run("retry", func(t *testing.T) {
+		ctx := context.Background()
+		fixture := newConnectorDeletionFixture(t)
+		connectors, err := newConnectorRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newConnectorRepository() error = %v", err)
+		}
+		tasks, err := newTaskRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newTaskRepository() error = %v", err)
+		}
+		task, marker, tombstone, intent := connectorDeletionTestTask(
+			t, fixture.connector, fixture.project, fixture.environment, fixture.now.Add(7*time.Minute), 2697,
+		)
+		if _, err := connectors.BeginConnectorDeletionWithTask(
+			ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		); err != nil {
+			t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
+		}
+		if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
+			t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
+		}
+		if _, err := tasks.AcknowledgeControllerTask(
+			ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
+		); err != nil {
+			t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
+		}
+		pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2698)
+		referenceKey, err := backupOrphanConnectorIndexKey(task.Target, pointID)
+		if err != nil {
+			t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
+		}
+		raceStore := &connectorReferenceRaceStore{
+			memoryHierarchyStore: fixture.store,
+			referenceKey:         referenceKey,
+			referenceValue:       []byte(pointID),
+		}
+		raceTasks, err := newTaskRepository(raceStore)
+		if err != nil {
+			t.Fatalf("newTaskRepository(race) error = %v", err)
+		}
+		retryAt := task.CreatedAt.Add(3 * time.Second)
+		retryID := ids.NewAt(ids.KindTask, retryAt, 2699)
+		result, err := raceTasks.RetryTask(
+			ctx,
+			task.ID,
+			retryID,
+			TaskActorOperator,
+			pendingRetryMarker(task, retryID, retryAt, "connector-reference-race-retry-key-0001"),
+		)
+		if err != nil {
+			t.Fatalf("RetryTask() error = %v", err)
+		}
+		outcome, _, conflict, classifyErr := result.Classify()
+		if classifyErr != nil || conflict == nil || outcome == IdempotencyKnownApplied {
+			t.Fatalf(
+				"RetryTask().Classify() = %v/%v/%v, want conflict",
+				outcome,
+				conflict,
+				classifyErr,
+			)
+		}
+		if mustOptionalKey(t, fixture.store, taskKey(retryID)) != nil {
+			t.Fatal("Connector retry Task committed across orphan membership race")
+		}
+		if mustOptionalKey(t, fixture.store, deletionTombstoneKey(
+			string(DeletionTargetConnector), task.Target,
+		)) != nil {
+			t.Fatal("Connector retry tombstone committed across orphan membership race")
+		}
+		assertConnectorDeletionVisible(t, connectors, task.Target)
+	})
+
+	t.Run("acknowledgement finalization", func(t *testing.T) {
+		ctx := context.Background()
+		fixture := newConnectorDeletionFixture(t)
+		connectors, err := newConnectorRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newConnectorRepository() error = %v", err)
+		}
+		tasks, err := newTaskRepository(fixture.store)
+		if err != nil {
+			t.Fatalf("newTaskRepository() error = %v", err)
+		}
+		task, marker, tombstone, intent := connectorDeletionTestTask(
+			t, fixture.connector, fixture.project, fixture.environment, fixture.now.Add(8*time.Minute), 2701,
+		)
+		if _, err := connectors.BeginConnectorDeletionWithTask(
+			ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+		); err != nil {
+			t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
+		}
+		if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
+			t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
+		}
+		pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2702)
+		referenceKey, err := backupRecoveryPointConnectorIndexKey(task.Target, pointID)
+		if err != nil {
+			t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+		}
+		raceStore := &connectorReferenceRaceStore{
+			memoryHierarchyStore: fixture.store,
+			referenceKey:         referenceKey,
+			referenceValue:       []byte(pointID),
+		}
+		raceTasks, err := newTaskRepository(raceStore)
+		if err != nil {
+			t.Fatalf("newTaskRepository(race) error = %v", err)
+		}
+		_, err = raceTasks.AcknowledgeControllerTask(
+			ctx, task.ID, TaskStatusCompleted, task.CreatedAt.Add(2*time.Second),
+		)
+		if err == nil {
+			t.Fatal("AcknowledgeControllerTask() succeeded across Recovery Point membership race")
+		}
+		if mustOptionalKey(t, fixture.store, referenceKey) == nil {
+			t.Fatal("Recovery Point Connector membership was not injected")
+		}
+		assertConnectorDeletionKeyState(t, fixture, task, true, true)
+		assertConnectorDeletionVisible(t, connectors, task.Target)
+	})
+}
+
+// Rationale: non-success terminal acknowledgements do not delete the
+// Connector, so they must release cleanup ownership even when an artifact
+// reference appeared after deletion publication.
+func TestConnectorDeletionNonDeletingTerminalStatusesReleaseCleanupWithReferences(t *testing.T) {
+	for _, terminalStatus := range []TaskStatus{
+		TaskStatusFailed,
+		TaskStatusTimedOut,
+		TaskStatusAborted,
+	} {
+		terminalStatus := terminalStatus
+		t.Run(string(terminalStatus), func(t *testing.T) {
+			ctx := context.Background()
+			fixture := newConnectorDeletionFixture(t)
+			connectors, err := newConnectorRepository(fixture.store)
+			if err != nil {
+				t.Fatalf("newConnectorRepository() error = %v", err)
+			}
+			tasks, err := newTaskRepository(fixture.store)
+			if err != nil {
+				t.Fatalf("newTaskRepository() error = %v", err)
+			}
+			seed := int64(2710)
+			switch terminalStatus {
+			case TaskStatusTimedOut:
+				seed = 2720
+			case TaskStatusAborted:
+				seed = 2730
+			}
+			task, marker, tombstone, intent := connectorDeletionTestTask(
+				t,
+				fixture.connector,
+				fixture.project,
+				fixture.environment,
+				fixture.now.Add(9*time.Minute),
+				seed,
+			)
+			if _, err := connectors.BeginConnectorDeletionWithTask(
+				ctx, fixture.environment, fixture.project, fixture.connector, tombstone, intent, task, marker,
+			); err != nil {
+				t.Fatalf("BeginConnectorDeletionWithTask() error = %v", err)
+			}
+
+			deadline := time.Time{}
+			if terminalStatus != TaskStatusAborted {
+				claim, found, claimErr := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second))
+				if claimErr != nil || !found {
+					t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, claimErr)
+				}
+				deadline = claim.Assignment.Record.Deadline
+			}
+
+			pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, seed+1)
+			referenceKey, keyErr := backupRecoveryPointConnectorIndexKey(task.Target, pointID)
+			if keyErr != nil {
+				t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", keyErr)
+			}
+			connectorDeletionPutKey(t, fixture.store, referenceKey, []byte(pointID))
+
+			var terminal Versioned[TaskRecord]
+			switch terminalStatus {
+			case TaskStatusFailed:
+				terminal, err = tasks.AcknowledgeControllerTask(
+					ctx, task.ID, terminalStatus, task.CreatedAt.Add(2*time.Second),
+				)
+			case TaskStatusTimedOut:
+				var expired int
+				expired, err = tasks.ExpireTimedOutTasks(ctx, deadline.Add(time.Second))
+				if err == nil && expired != 1 {
+					t.Fatalf("ExpireTimedOutTasks() = %d, want 1", expired)
+				}
+				if err == nil {
+					terminal, err = tasks.GetTask(ctx, task.ID)
+				}
+			case TaskStatusAborted:
+				terminal, err = tasks.AbortPendingTask(ctx, task.ID, task.CreatedAt.Add(2*time.Second))
+			default:
+				t.Fatalf("unexpected terminal status %s", terminalStatus)
+			}
+			if err != nil || terminal.Record.Status != terminalStatus {
+				t.Fatalf("terminal Connector deletion = %#v/%v", terminal, err)
+			}
+			assertConnectorDeletionVisible(t, connectors, task.Target)
+			assertConnectorCredentialPresence(t, fixture.store, task.Target, true)
+			assertConnectorDeletionKeyState(t, fixture, task, true, false)
+			if mustOptionalKey(t, fixture.store, referenceKey) == nil {
+				t.Fatal("Connector artifact reference was lost during non-deleting cleanup")
+			}
+		})
+	}
 }
 
 // Rationale: protected Connector deletion must reject any durable Task or
@@ -561,6 +1050,34 @@ func TestConnectorDeletionClassifiesCorruptionAndReferences(t *testing.T) {
 				connectorDeletionPutKey(t, fixture.store, backupPolicyConnectorReferenceKey(
 					fixture.connector.Record.Connector.ID, fixture.environment.Record.ID,
 				), []byte(fixture.environment.Record.ID))
+			},
+			kind: errs.KindResourceInUse,
+		},
+		"Recovery Point reference": {
+			mutate: func(t *testing.T, fixture *connectorDeletionFixture) {
+				pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2781)
+				key, err := backupRecoveryPointConnectorIndexKey(
+					fixture.connector.Record.Connector.ID,
+					pointID,
+				)
+				if err != nil {
+					t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
+				}
+				connectorDeletionPutKey(t, fixture.store, key, []byte(pointID))
+			},
+			kind: errs.KindResourceInUse,
+		},
+		"orphan reference": {
+			mutate: func(t *testing.T, fixture *connectorDeletionFixture) {
+				pointID := ids.NewAt(ids.KindRecoveryPoint, fixture.now, 2782)
+				key, err := backupOrphanConnectorIndexKey(
+					fixture.connector.Record.Connector.ID,
+					pointID,
+				)
+				if err != nil {
+					t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
+				}
+				connectorDeletionPutKey(t, fixture.store, key, []byte(pointID))
 			},
 			kind: errs.KindResourceInUse,
 		},
@@ -816,6 +1333,85 @@ func connectorDeletionTestTask(
 type connectorDeletionLockedStore struct {
 	store *memoryHierarchyStore
 	mutex sync.Mutex
+}
+
+type connectorReferenceRaceStore struct {
+	*memoryHierarchyStore
+	referenceKey   string
+	referenceValue []byte
+	injected       bool
+}
+
+func (store *connectorReferenceRaceStore) Transact(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	if !store.injected && connectorReferenceConditionContains(conditions, store.referenceKey) {
+		store.injected = true
+		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
+			Type: MutationPut, Key: store.referenceKey, Value: store.referenceValue,
+		}}); err != nil {
+			return TransactionResult{}, err
+		}
+	}
+	for _, condition := range conditions {
+		if !condition.Prefix {
+			continue
+		}
+		result, err := store.memoryHierarchyStore.Range(ctx, RangeRequest{
+			Prefix: condition.Key, Limit: 1,
+		})
+		if err != nil {
+			return TransactionResult{}, err
+		}
+		if len(result.Values) != 0 {
+			failureReads, err := connectorReferenceFailureReads(ctx, store.memoryHierarchyStore, conditions)
+			if err != nil {
+				return TransactionResult{}, err
+			}
+			return TransactionResult{
+				Succeeded: false, Revision: result.ResponseRevision, FailureReads: failureReads,
+			}, nil
+		}
+	}
+	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+func connectorReferenceConditionContains(conditions []Condition, key string) bool {
+	for _, condition := range conditions {
+		if condition.Prefix && strings.HasPrefix(key, condition.Key) {
+			return true
+		}
+	}
+	return false
+}
+
+func connectorReferenceFailureReads(
+	ctx context.Context,
+	store *memoryHierarchyStore,
+	conditions []Condition,
+) ([]*KeyValue, error) {
+	values := make([]*KeyValue, len(conditions))
+	for index, condition := range conditions {
+		if condition.Prefix {
+			result, err := store.Range(ctx, RangeRequest{Prefix: condition.Key, Limit: 1})
+			if err != nil {
+				return nil, err
+			}
+			if len(result.Values) != 0 {
+				value := result.Values[0]
+				values[index] = &value
+			}
+			continue
+		}
+		result, err := store.Get(ctx, condition.Key)
+		if err != nil {
+			return nil, err
+		}
+		values[index] = result.Entry
+	}
+	return values, nil
 }
 
 func (store *connectorDeletionLockedStore) Get(

@@ -96,9 +96,10 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return IdempotencyTransactionResult{}, corruptConnectorRecord()
 	}
 	clear(credentials.Ciphertext)
-	if err := requireConnectorReferencePrefixEmpty(
+	referenceConditions, err := requireConnectorReferencePrefixesEmpty(
 		ctx, repository.store, connector.ID, connector.EnvironmentID, fence.readAtRevision(),
-	); err != nil {
+	)
+	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 
@@ -131,7 +132,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	}
 	defer clear(reference)
 
-	evidence := newConnectorDeletionEvidence(current, fixed, task, fence)
+	evidence := newConnectorDeletionEvidence(current, fixed, task, fence, referenceConditions)
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -242,36 +243,67 @@ func validateConnectorDeletionEnvelope(
 	return nil
 }
 
-func requireConnectorReferencePrefixEmpty(
+func requireConnectorReferencePrefixesEmpty(
 	ctx context.Context,
 	store hierarchyStore,
 	connectorID string,
 	environmentID string,
 	revision int64,
+) ([]Condition, error) {
+	prefixes := []string{
+		backupPolicyConnectorReferencePrefix(connectorID),
+		backupRecoveryPointConnectorPrefix + connectorID + "/",
+		backupOrphanConnectorPrefix + connectorID + "/",
+	}
+	conditions := make([]Condition, 0, len(prefixes))
+	for index, prefix := range prefixes {
+		result, err := store.Range(ctx, RangeRequest{
+			Prefix: prefix, Limit: 1, Revision: revision,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if result == nil || result.ReadRevision != revision || len(result.Values) > 1 {
+			return nil, errs.New(errs.KindInternal, "connector reference prefix read is incomplete")
+		}
+		if len(result.Values) != 0 {
+			return nil, classifyConnectorReference(index, result.Values[0], connectorID, environmentID)
+		}
+		conditions = append(conditions, Condition{Key: prefix, Prefix: true})
+	}
+	return conditions, nil
+}
+
+func classifyConnectorReference(
+	index int,
+	value KeyValue,
+	connectorID string,
+	environmentID string,
 ) error {
-	result, err := store.Range(ctx, RangeRequest{
-		Prefix: backupPolicyConnectorReferencePrefix(connectorID), Limit: 2, Revision: revision,
-	})
-	if err != nil {
-		return err
+	switch index {
+	case 0:
+		expectedKey := backupPolicyConnectorReferenceKey(connectorID, environmentID)
+		if value.Key != expectedKey || string(value.Value) != environmentID {
+			return errs.New(errs.KindInternal, "connector reference prefix is corrupt")
+		}
+		return errs.New(errs.KindResourceInUse, "connector is referenced by an enabled backup policy")
+	case 1:
+		recoveryPointID := string(value.Value)
+		expectedKey, err := backupRecoveryPointConnectorIndexKey(connectorID, recoveryPointID)
+		if err != nil || value.Key != expectedKey {
+			return errs.New(errs.KindInternal, "connector recovery point reference is corrupt")
+		}
+		return errs.New(errs.KindResourceInUse, "connector is referenced by a recovery point")
+	case 2:
+		recoveryPointID := string(value.Value)
+		expectedKey, err := backupOrphanConnectorIndexKey(connectorID, recoveryPointID)
+		if err != nil || value.Key != expectedKey {
+			return errs.New(errs.KindInternal, "connector orphan reference is corrupt")
+		}
+		return errs.New(errs.KindResourceInUse, "connector is referenced by a backup orphan")
+	default:
+		return errs.New(errs.KindInternal, "connector reference kind is invalid")
 	}
-	if result == nil || result.ReadRevision != revision {
-		return errs.New(errs.KindInternal, "connector reference prefix read is incomplete")
-	}
-	if result.More || len(result.Values) > 1 {
-		return errs.New(
-			errs.KindInternal,
-			"connector reference prefix contains conflicting records",
-		)
-	}
-	if len(result.Values) == 0 {
-		return nil
-	}
-	expectedKey := backupPolicyConnectorReferenceKey(connectorID, environmentID)
-	if result.Values[0].Key != expectedKey || string(result.Values[0].Value) != environmentID {
-		return errs.New(errs.KindInternal, "connector reference prefix is corrupt")
-	}
-	return errs.New(errs.KindResourceInUse, "connector is referenced by an enabled backup policy")
 }
 
 type connectorDeletionEvidence struct {
@@ -287,6 +319,8 @@ type connectorDeletionEvidence struct {
 	tombstone        int
 	intent           int
 	reference        int
+	referenceStart   int
+	fenceStart       int
 	current          Versioned[ConnectorRecord]
 	operationID      string
 	fence            environmentMutationFenceEvidence
@@ -297,12 +331,13 @@ func newConnectorDeletionEvidence(
 	dependencies *GetManyResult,
 	task TaskRecord,
 	fence environmentMutationFenceEvidence,
+	referenceConditions []Condition,
 ) connectorDeletionEvidence {
 	connector := current.Record.Connector
 	evidence := connectorDeletionEvidence{
 		task: 0, operation: 1, active: 2, queue: 3, primary: 4,
 		environmentIndex: 5, nameIndex: 6, credentials: 7, tombstone: 8, intent: 9,
-		reference: 10, current: current, operationID: task.OperationID, fence: fence,
+		reference: 10, referenceStart: 11, current: current, operationID: task.OperationID, fence: fence,
 		conditions: []Condition{
 			{Key: taskKey(task.ID)},
 			{Key: taskOperationIndexKey(task.OperationID, task.ID)},
@@ -326,6 +361,8 @@ func newConnectorDeletionEvidence(
 			{Key: backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
 		},
 	}
+	evidence.conditions = append(evidence.conditions, referenceConditions...)
+	evidence.fenceStart = len(evidence.conditions)
 	evidence.conditions = append(evidence.conditions, fence.transactionConditions()...)
 	return evidence
 }
@@ -401,7 +438,12 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 				"connector is referenced by an enabled backup policy",
 			)
 		}
-		if conflict := evidence.fence.classifyCAS(values[11:]); conflict != nil {
+		for index, value := range values[evidence.referenceStart:evidence.fenceStart] {
+			if value != nil {
+				return classifyConnectorReference(index, *value, connector.ID, connector.EnvironmentID)
+			}
+		}
+		if conflict := evidence.fence.classifyCAS(values[evidence.fenceStart:]); conflict != nil {
 			return conflict
 		}
 		return errs.New(errs.KindStateConflict, "connector deletion state changed")

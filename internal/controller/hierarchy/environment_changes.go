@@ -3,6 +3,7 @@ package hierarchy
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	sluggrammar "github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,7 +17,7 @@ func ValidateEnvironmentCreateInput(input CreateEnvironmentInput) error {
 	if err := validateStableID(ids.KindProject, input.ProjectID); err != nil {
 		return errs.New(errs.KindValidationFailed, "environment project_id is invalid")
 	}
-	if err := validateSlug("environment name", input.Name); err != nil {
+	if err := sluggrammar.Validate("environment name", input.Name); err != nil {
 		return err
 	}
 	pool, err := ipam.ParseIPv4Prefix(input.NetworkPool)
@@ -56,7 +57,7 @@ func PrepareEnvironmentEdit(
 }
 
 func ValidateEnvironmentRenameInput(input RenameEnvironmentInput) error {
-	if err := validateSlug("environment name", input.Name); err != nil {
+	if err := sluggrammar.Validate("environment name", input.Name); err != nil {
 		return err
 	}
 	return nil

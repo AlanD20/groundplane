@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -15,11 +16,20 @@ import (
 )
 
 type fakeTaskRetryRepository struct {
-	scope     etcd.TaskRetryScope
-	sourceID  string
-	retryID   string
-	marker    etcd.IdempotencyMarker
-	initiated bool
+	task          etcd.TaskRecord
+	scope         etcd.TaskRetryScope
+	sourceID      string
+	retryID       string
+	marker        etcd.IdempotencyMarker
+	initiated     bool
+	mutationCalls int
+}
+
+func (repository *fakeTaskRetryRepository) GetTask(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.TaskRecord], error) {
+	return etcd.Versioned[etcd.TaskRecord]{Record: repository.task}, nil
 }
 
 func (repository *fakeTaskRetryRepository) GetTaskRetryScope(
@@ -36,6 +46,7 @@ func (repository *fakeTaskRetryRepository) RetryTask(
 	actor etcd.TaskActor,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
+	repository.mutationCalls++
 	repository.sourceID = sourceID
 	repository.retryID = retryID
 	if actor != etcd.TaskActorOperator {
@@ -44,6 +55,37 @@ func (repository *fakeTaskRetryRepository) RetryTask(
 	repository.marker = marker
 	repository.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
 	return etcd.IdempotencyTransactionResult{}, nil
+}
+
+func TestTaskRetryRejectsInternalBackupPruneBeforeIntentOrMutation(t *testing.T) {
+	// Rationale: internal retention cleanup has its own retained authority, so
+	// the generic operator retry surface must not claim idempotency or clone it.
+	const sourceID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	repository := &fakeTaskRetryRepository{
+		task:  etcd.TaskRecord{ID: sourceID, Type: etcd.TaskBackupPrune, Status: etcd.TaskStatusFailed},
+		scope: etcd.TaskRetryScope{Kind: etcd.IdempotencyScopeEnvironment, ID: environmentID},
+	}
+	idempotency := &fakeTaskRetryIdempotency{}
+	service, err := newTaskRetryService(repository, idempotency)
+	if err != nil {
+		t.Fatalf("newTaskRetryService() error = %v", err)
+	}
+	if _, err := service.RetryTask(context.Background(), sourceID, "task-prune-retry-key"); !errors.Is(
+		err,
+		errs.New(errs.KindTaskNotRetryable, ""),
+	) {
+		t.Fatalf("RetryTask(backup_prune) error = %v, want task.not_retryable", err)
+	}
+	if repository.mutationCalls != 0 || repository.sourceID != "" ||
+		idempotency.scope != (idempotentintent.Scope{}) {
+		t.Fatalf(
+			"backup_prune retry mutation/source/intent scope = %d/%q/%#v",
+			repository.mutationCalls,
+			repository.sourceID,
+			idempotency.scope,
+		)
+	}
 }
 
 func (repository *fakeTaskRetryRepository) RetryTaskWithInitiation(

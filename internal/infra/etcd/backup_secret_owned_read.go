@@ -1,0 +1,39 @@
+package etcd
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// getBackupSecretManyOwned takes ownership of every returned value buffer.
+// On every rejection path it clears those buffers before returning. A valid
+// result transfers that ownership to the caller without another ciphertext
+// copy; the caller must clear it after use.
+func getBackupSecretManyOwned(
+	ctx context.Context,
+	store backupSecretResolutionStore,
+	keys []string,
+	revision int64,
+) (*GetManyResult, error) {
+	result, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		if result != nil {
+			clearKeyValues(result.Values)
+		}
+		return nil, err
+	}
+	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) {
+		if result != nil {
+			clearKeyValues(result.Values)
+		}
+		return nil, errs.New(errs.KindInternal, "backup secret fixed read is incomplete")
+	}
+	for index, value := range result.Values {
+		if value != nil && value.Key != keys[index] {
+			clearKeyValues(result.Values)
+			return nil, errs.New(errs.KindInternal, "backup secret fixed read is corrupt")
+		}
+	}
+	return result, nil
+}

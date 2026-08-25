@@ -14,83 +14,139 @@ const (
 
 // BackupConfigRestoreEntryRecord is one fully bounded staged Entry. Restore
 // creates fresh immutable value generations, so no old revision is durable.
+// Attempt ownership lives on the bounded restore authority; staged children
+// retain only the stable restore generation and never require retry rewrites.
 type BackupConfigRestoreEntryRecord struct {
-	TaskID            string `json:"task_id"`
-	EntryOrdinal      uint64 `json:"entry_ordinal"`
-	EntryID           string `json:"entry_id"`
-	ValueGenerationID string `json:"value_generation_id"`
-	Secret            bool   `json:"secret"`
-	DescriptorLength  uint64 `json:"descriptor_length"`
-	DescriptorSHA256  string `json:"descriptor_sha256"`
-	DescriptorChunks  uint32 `json:"descriptor_chunks"`
-	PlainValueLength  uint64 `json:"plain_value_length"`
-	PlainValueSHA256  string `json:"plain_value_sha256,omitempty"`
-	ValueChunks       uint32 `json:"value_chunks"`
+	RestoreGenerationID string `json:"restore_generation_id"`
+	EntryOrdinal        uint64 `json:"entry_ordinal"`
+	EntryID             string `json:"entry_id"`
+	ValueGenerationID   string `json:"value_generation_id"`
+	Secret              bool   `json:"secret"`
+	DescriptorLength    uint64 `json:"descriptor_length"`
+	DescriptorSHA256    string `json:"descriptor_sha256"`
+	DescriptorChunks    uint32 `json:"descriptor_chunks"`
+	PlainValueLength    uint64 `json:"plain_value_length"`
+	PlainValueSHA256    string `json:"plain_value_sha256,omitempty"`
+	ValueChunks         uint32 `json:"value_chunks"`
 }
 
 type BackupConfigRestoreDescriptorChunkRecord struct {
-	TaskID            string `json:"task_id"`
-	EntryOrdinal      uint64 `json:"entry_ordinal"`
-	EntryID           string `json:"entry_id"`
-	ValueGenerationID string `json:"value_generation_id"`
-	Secret            bool   `json:"secret"`
-	ChunkOrdinal      uint32 `json:"chunk_ordinal"`
-	Offset            uint64 `json:"offset"`
-	Length            uint32 `json:"length"`
-	SHA256            string `json:"sha256"`
-	Content           []byte `json:"content"`
+	RestoreGenerationID string `json:"restore_generation_id"`
+	EntryOrdinal        uint64 `json:"entry_ordinal"`
+	EntryID             string `json:"entry_id"`
+	ValueGenerationID   string `json:"value_generation_id"`
+	Secret              bool   `json:"secret"`
+	ChunkOrdinal        uint32 `json:"chunk_ordinal"`
+	Offset              uint64 `json:"offset"`
+	Length              uint32 `json:"length"`
+	SHA256              string `json:"sha256"`
+	Content             []byte `json:"content"`
 }
 
 type BackupConfigRestoreValueChunkRecord struct {
-	TaskID            string                             `json:"task_id"`
-	EntryOrdinal      uint64                             `json:"entry_ordinal"`
-	EntryID           string                             `json:"entry_id"`
-	ValueGenerationID string                             `json:"value_generation_id"`
-	Secret            bool                               `json:"secret"`
-	ChunkOrdinal      uint32                             `json:"chunk_ordinal"`
-	Storage           BackupConfigChunkStorage           `json:"storage"`
-	Plain             *BackupConfigPlainChunkPayload     `json:"plain,omitempty"`
-	Protected         *BackupConfigProtectedChunkPayload `json:"protected,omitempty"`
+	RestoreGenerationID string                             `json:"restore_generation_id"`
+	EntryOrdinal        uint64                             `json:"entry_ordinal"`
+	EntryID             string                             `json:"entry_id"`
+	ValueGenerationID   string                             `json:"value_generation_id"`
+	Secret              bool                               `json:"secret"`
+	ChunkOrdinal        uint32                             `json:"chunk_ordinal"`
+	Storage             BackupConfigChunkStorage           `json:"storage"`
+	Plain               *BackupConfigPlainChunkPayload     `json:"plain,omitempty"`
+	Protected           *BackupConfigProtectedChunkPayload `json:"protected,omitempty"`
 }
 
-func backupConfigRestoreEntryPrefix(taskID string) string {
-	return backupConfigRestoreEntryRootPrefix + taskID + "/"
+func backupConfigRestoreEntryPrefix(restoreGenerationID string) (string, error) {
+	if err := validateBackupConfigRestoreGenerationID(restoreGenerationID); err != nil {
+		return "", err
+	}
+	return backupConfigRestoreEntryRootPrefix + restoreGenerationID + "/", nil
 }
 
-func backupConfigRestoreEntryKey(taskID string, entryOrdinal uint64) string {
-	return backupConfigRestoreEntryPrefix(taskID) + backupConfigEntryOrdinal(entryOrdinal)
+func backupConfigRestoreEntryKey(restoreGenerationID string, entryOrdinal uint64) (string, error) {
+	prefix, err := backupConfigRestoreEntryPrefix(restoreGenerationID)
+	if err != nil {
+		return "", err
+	}
+	return prefix + backupConfigEntryOrdinal(entryOrdinal), nil
 }
 
-func backupConfigRestoreDescriptorChunkPrefix(taskID string, entryOrdinal uint64) string {
-	return backupConfigRestoreDescriptorPrefix + taskID + "/" + backupConfigEntryOrdinal(entryOrdinal) + "/"
+func backupConfigRestoreDescriptorChunkPrefix(
+	restoreGenerationID string,
+	entryOrdinal uint64,
+) (string, error) {
+	if err := validateBackupConfigRestoreGenerationID(restoreGenerationID); err != nil {
+		return "", err
+	}
+	return backupConfigRestoreDescriptorPrefix + restoreGenerationID + "/" +
+		backupConfigEntryOrdinal(entryOrdinal) + "/", nil
 }
 
-func backupConfigRestoreDescriptorChunkKey(taskID string, entryOrdinal uint64, chunkOrdinal uint32) string {
-	return backupConfigRestoreDescriptorChunkPrefix(taskID, entryOrdinal) + backupConfigChunkOrdinal(chunkOrdinal)
+func backupConfigRestoreDescriptorChunkKey(
+	restoreGenerationID string,
+	entryOrdinal uint64,
+	chunkOrdinal uint32,
+) (string, error) {
+	prefix, err := backupConfigRestoreDescriptorChunkPrefix(restoreGenerationID, entryOrdinal)
+	if err != nil {
+		return "", err
+	}
+	return prefix + backupConfigChunkOrdinal(chunkOrdinal), nil
 }
 
-func backupConfigRestoreValueChunkPrefix(taskID string, entryOrdinal uint64) string {
-	return backupConfigRestoreValuePrefix + taskID + "/" + backupConfigEntryOrdinal(entryOrdinal) + "/"
+func backupConfigRestoreValueChunkPrefix(
+	restoreGenerationID string,
+	entryOrdinal uint64,
+) (string, error) {
+	if err := validateBackupConfigRestoreGenerationID(restoreGenerationID); err != nil {
+		return "", err
+	}
+	return backupConfigRestoreValuePrefix + restoreGenerationID + "/" +
+		backupConfigEntryOrdinal(entryOrdinal) + "/", nil
 }
 
-func backupConfigRestoreValueChunkKey(taskID string, entryOrdinal uint64, chunkOrdinal uint32) string {
-	return backupConfigRestoreValueChunkPrefix(taskID, entryOrdinal) + backupConfigChunkOrdinal(chunkOrdinal)
+func backupConfigRestoreValueChunkKey(
+	restoreGenerationID string,
+	entryOrdinal uint64,
+	chunkOrdinal uint32,
+) (string, error) {
+	prefix, err := backupConfigRestoreValueChunkPrefix(restoreGenerationID, entryOrdinal)
+	if err != nil {
+		return "", err
+	}
+	return prefix + backupConfigChunkOrdinal(chunkOrdinal), nil
 }
 
-func backupConfigRestoreEntryIdentityPrefix(taskID string) string {
-	return backupConfigRestoreIdentityPrefix + taskID + "/id/"
+func backupConfigRestoreEntryIdentityPrefix(restoreGenerationID string) (string, error) {
+	if err := validateBackupConfigRestoreGenerationID(restoreGenerationID); err != nil {
+		return "", err
+	}
+	return backupConfigRestoreIdentityPrefix + restoreGenerationID + "/id/", nil
 }
 
-func backupConfigRestoreEntryIdentityKey(taskID string, entryID string) string {
-	return backupConfigRestoreEntryIdentityPrefix(taskID) + entryID
+func backupConfigRestoreEntryIdentityKey(restoreGenerationID string, entryID string) (string, error) {
+	prefix, err := backupConfigRestoreEntryIdentityPrefix(restoreGenerationID)
+	if err != nil {
+		return "", err
+	}
+	if validateStableID(ids.KindEnvEntry, entryID) != nil {
+		return "", errs.New(errs.KindValidationFailed, "backup config restore Entry id is invalid")
+	}
+	return prefix + entryID, nil
 }
 
-func backupConfigRestoreDestinationPrefix(taskID string) string {
-	return backupConfigRestoreIdentityPrefix + taskID + "/destination/"
+func backupConfigRestoreDestinationPrefix(restoreGenerationID string) (string, error) {
+	if err := validateBackupConfigRestoreGenerationID(restoreGenerationID); err != nil {
+		return "", err
+	}
+	return backupConfigRestoreIdentityPrefix + restoreGenerationID + "/destination/", nil
 }
 
-func backupConfigRestoreDestinationKey(taskID string, destination string) string {
-	return backupConfigRestoreDestinationPrefix(taskID) + encodeDynamicSegment(destination)
+func backupConfigRestoreDestinationKey(restoreGenerationID string, destination string) (string, error) {
+	prefix, err := backupConfigRestoreDestinationPrefix(restoreGenerationID)
+	if err != nil {
+		return "", err
+	}
+	return prefix + encodeDynamicSegment(destination), nil
 }
 
 func encodeBackupConfigRestoreEntryRecord(record BackupConfigRestoreEntryRecord) ([]byte, error) {
@@ -162,9 +218,11 @@ func decodeBackupConfigRestoreValueChunkRecord(value []byte) (BackupConfigRestor
 }
 
 func validateBackupConfigRestoreEntryRecord(record BackupConfigRestoreEntryRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindEnvEntry, record.EntryID) != nil ||
-		validateStableID(ids.KindConfig, record.ValueGenerationID) != nil {
+	if validateBackupConfigRestoreEntryIdentity(
+		record.RestoreGenerationID,
+		record.EntryID,
+		record.ValueGenerationID,
+	) != nil {
 		return errs.New(errs.KindValidationFailed, "backup config restore Entry identity is invalid")
 	}
 	return validateBackupConfigEntryChunkSummary(
@@ -179,9 +237,11 @@ func validateBackupConfigRestoreEntryRecord(record BackupConfigRestoreEntryRecor
 }
 
 func validateBackupConfigRestoreDescriptorChunkRecord(record BackupConfigRestoreDescriptorChunkRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindEnvEntry, record.EntryID) != nil ||
-		validateStableID(ids.KindConfig, record.ValueGenerationID) != nil {
+	if validateBackupConfigRestoreEntryIdentity(
+		record.RestoreGenerationID,
+		record.EntryID,
+		record.ValueGenerationID,
+	) != nil {
 		return errs.New(errs.KindValidationFailed, "backup config restore descriptor identity is invalid")
 	}
 	return validateBackupConfigDescriptorChunk(
@@ -194,9 +254,11 @@ func validateBackupConfigRestoreDescriptorChunkRecord(record BackupConfigRestore
 }
 
 func validateBackupConfigRestoreValueChunkRecord(record BackupConfigRestoreValueChunkRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindEnvEntry, record.EntryID) != nil ||
-		validateStableID(ids.KindConfig, record.ValueGenerationID) != nil {
+	if validateBackupConfigRestoreEntryIdentity(
+		record.RestoreGenerationID,
+		record.EntryID,
+		record.ValueGenerationID,
+	) != nil {
 		return errs.New(errs.KindValidationFailed, "backup config restore value identity is invalid")
 	}
 	return validateBackupConfigValueChunkShape(
@@ -206,4 +268,74 @@ func validateBackupConfigRestoreValueChunkRecord(record BackupConfigRestoreValue
 		record.Plain,
 		record.Protected,
 	)
+}
+
+func validateBackupConfigRestoreGenerationID(restoreGenerationID string) error {
+	if validateStableID(ids.KindConfig, restoreGenerationID) != nil {
+		return errs.New(errs.KindValidationFailed, "backup config restore generation id is invalid")
+	}
+	return nil
+}
+
+func validateBackupConfigRestoreBatchIdentities(
+	restoreGenerationID string,
+	records []BackupConfigRestoreEntryRecord,
+	destinations []string,
+) error {
+	if validateBackupConfigRestoreGenerationID(restoreGenerationID) != nil || len(records) != len(destinations) {
+		return errs.New(errs.KindValidationFailed, "backup config restore batch identity is invalid")
+	}
+	ordinals := make(map[uint64]struct{}, len(records))
+	entryKeys := make(map[string]struct{}, len(records))
+	destinationKeys := make(map[string]struct{}, len(records))
+	valueGenerationIDs := make(map[string]struct{}, len(records))
+	for index, record := range records {
+		if record.RestoreGenerationID != restoreGenerationID ||
+			validateBackupConfigRestoreEntryIdentity(
+				record.RestoreGenerationID,
+				record.EntryID,
+				record.ValueGenerationID,
+			) != nil {
+			return errs.New(errs.KindValidationFailed, "backup config restore batch identity is invalid")
+		}
+		entryKey, err := backupConfigRestoreEntryIdentityKey(restoreGenerationID, record.EntryID)
+		if err != nil {
+			return errs.New(errs.KindValidationFailed, "backup config restore batch identity is invalid")
+		}
+		destinationKey, err := backupConfigRestoreDestinationKey(restoreGenerationID, destinations[index])
+		if err != nil {
+			return errs.New(errs.KindValidationFailed, "backup config restore batch identity is invalid")
+		}
+		if _, exists := ordinals[record.EntryOrdinal]; exists {
+			return errs.New(errs.KindValidationFailed, "backup config restore Entry ordinal is duplicated")
+		}
+		if _, exists := entryKeys[entryKey]; exists {
+			return errs.New(errs.KindValidationFailed, "backup config restore Entry id is duplicated")
+		}
+		if _, exists := destinationKeys[destinationKey]; exists {
+			return errs.New(errs.KindValidationFailed, "backup config restore destination is duplicated")
+		}
+		if _, exists := valueGenerationIDs[record.ValueGenerationID]; exists {
+			return errs.New(errs.KindValidationFailed, "backup config restore value generation is duplicated")
+		}
+		ordinals[record.EntryOrdinal] = struct{}{}
+		entryKeys[entryKey] = struct{}{}
+		destinationKeys[destinationKey] = struct{}{}
+		valueGenerationIDs[record.ValueGenerationID] = struct{}{}
+	}
+	return nil
+}
+
+func validateBackupConfigRestoreEntryIdentity(
+	restoreGenerationID string,
+	entryID string,
+	valueGenerationID string,
+) error {
+	if validateBackupConfigRestoreGenerationID(restoreGenerationID) != nil ||
+		validateStableID(ids.KindEnvEntry, entryID) != nil ||
+		validateStableID(ids.KindConfig, valueGenerationID) != nil ||
+		restoreGenerationID == valueGenerationID {
+		return errs.New(errs.KindValidationFailed, "backup config restore Entry identity is invalid")
+	}
+	return nil
 }

@@ -601,6 +601,47 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	}, nil
 }
 
+func environmentDeletionTaskPruneFence(
+	task TaskRecord,
+	values []*KeyValue,
+) (bool, string, error) {
+	if len(values) != 3 {
+		return false, "", corruptTaskPruneIntent()
+	}
+	absent := 0
+	for _, value := range values {
+		if value == nil {
+			absent++
+		}
+	}
+	if absent == len(values) {
+		return false, "", nil
+	}
+	if absent != 0 {
+		return false, "", corruptTaskPruneIntent()
+	}
+	tombstone, err := decodeDeletionTombstone(values[0].Value)
+	if err != nil || tombstone.TargetKind != DeletionTargetEnvironment ||
+		tombstone.TargetID != task.Target {
+		return false, "", corruptTaskPruneIntent()
+	}
+	lock, err := decodeEnvironmentOperationLock(values[1], task.Target)
+	if err != nil || lock.Kind != BackupOperationDeletion || lock.EnvironmentID != task.Target ||
+		lock.OperationID != task.OperationID {
+		return false, "", corruptTaskPruneIntent()
+	}
+	intent, err := decodeEnvironmentDeletionIntent(values[2].Value)
+	if err != nil || intent.EnvironmentID != task.Target ||
+		intent.OperationID != task.OperationID ||
+		intent.TargetRevision != tombstone.TargetRevision ||
+		!intent.CreatedAt.Equal(tombstone.CreatedAt) ||
+		tombstone.TaskID != lock.TaskID ||
+		tombstone.TaskID != intent.TaskID {
+		return false, "", corruptTaskPruneIntent()
+	}
+	return tombstone.TaskID == task.ID, tombstone.TaskID, nil
+}
+
 func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 	ctx context.Context,
 	task TaskRecord,

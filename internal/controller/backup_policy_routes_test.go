@@ -46,8 +46,8 @@ func TestBackupPolicyRoutesExposeEffectiveDisabledAndProtectedReplacement(t *tes
 	}
 }
 
-// Rationale: malformed JSON and the 12-source operation budget must fail at
-// the public boundary before the mutation service is invoked.
+// Rationale: malformed JSON, retention bounds, and the 12-source operation
+// budget must fail at the public boundary before the mutation service runs.
 func TestBackupPolicyRouteRejectsDuplicateAndOversizedSources(t *testing.T) {
 	service := &backupPolicyRouteTestService{}
 	server := New(nil, nil, Options{BackupPolicies: service, BackupPolicyMutations: service})
@@ -59,6 +59,10 @@ func TestBackupPolicyRouteRejectsDuplicateAndOversizedSources(t *testing.T) {
 		{
 			body:   `{"enabled":false,"enabled":true,"sources":[]}`,
 			status: http.StatusBadRequest,
+		},
+		{
+			body:   `{"enabled":false,"keep":9007199254740992,"sources":[]}`,
+			status: http.StatusUnprocessableEntity,
 		},
 		{body: oversizedBackupPolicyBody(t), status: http.StatusUnprocessableEntity},
 	}

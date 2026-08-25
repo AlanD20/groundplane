@@ -16,7 +16,6 @@ const (
 	backupSourceTargetExclusionPrefix      = "/v1/runtime/backup-source-target-exclusions/"
 	backupRunPrefix                        = "/v1/runtime/backup-runs/"
 	backupRunEnvironmentPrefix             = "/v1/indexes/backup-runs/by-environment/"
-	backupRunVolumeServicePrefix           = "/v1/runtime/backup-run-volume-services/"
 	backupRecoveryPointPrefix              = "/v1/records/recovery-points/"
 	backupRecoveryPointEnvironmentPrefix   = "/v1/indexes/recovery-points/by-environment/"
 	backupRecoveryPointSourcePrefix        = "/v1/indexes/recovery-points/by-source/"
@@ -44,7 +43,11 @@ func backupScheduleCursorKey(environmentID string, policyRevision int64) (string
 	return backupScheduleCursorPrefix + environmentID + "/" + orderedRevision, nil
 }
 
-func backupDueOutcomeKey(environmentID string, policyRevision int64, scheduledAt time.Time) (string, error) {
+func backupDueOutcomeKey(
+	environmentID string,
+	policyRevision int64,
+	scheduledAt time.Time,
+) (string, error) {
 	orderedRevision, err := backupRuntimeOrderedPositiveInt64(policyRevision)
 	if err != nil {
 		return "", err
@@ -80,7 +83,10 @@ func backupDueRetentionIndexKey(
 
 func backupSourceTargetExclusionKey(kind BackupSourceTargetKind, stableID string) (string, error) {
 	if validateBackupSourceTargetIdentity(kind, stableID) != nil {
-		return "", errs.New(errs.KindValidationFailed, "backup source-target exclusion key is invalid")
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup source-target exclusion key is invalid",
+		)
 	}
 	return backupSourceTargetExclusionPrefix + string(kind) + "/" + stableID, nil
 }
@@ -89,9 +95,15 @@ func backupRunKey(taskID string) string {
 	return backupRunPrefix + taskID
 }
 
-func backupRunVolumeServiceKey(taskID string, sourceOrdinal uint32, serviceOrdinal uint32) string {
-	return backupRunVolumeServicePrefix + taskID + "/" + backupRuntimeOrderedUint32(sourceOrdinal) + "/" +
-		backupRuntimeOrderedUint32(serviceOrdinal)
+func backupRunEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
+	if validateStableID(ids.KindEnvironment, environmentID) != nil ||
+		validateStableID(ids.KindTask, taskID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup run environment index key is invalid",
+		)
+	}
+	return backupRunEnvironmentPrefix + environmentID + "/" + taskID, nil
 }
 
 func backupRecoveryPointKey(recoveryPointID string) string {
@@ -102,6 +114,12 @@ func backupRecoveryPointEnvironmentIndexKey(
 	environmentID string,
 	recoveryPointID string,
 ) (string, error) {
+	if validateStableID(ids.KindEnvironment, environmentID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup recovery point environment index key is invalid",
+		)
+	}
 	inverted, err := invertedBackupRecoveryPointID(recoveryPointID)
 	if err != nil {
 		return "", err
@@ -110,6 +128,12 @@ func backupRecoveryPointEnvironmentIndexKey(
 }
 
 func backupRecoveryPointSourceIndexKey(sourceID string, recoveryPointID string) (string, error) {
+	if validateStableID(ids.KindBackupSource, sourceID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup recovery point source index key is invalid",
+		)
+	}
 	inverted, err := invertedBackupRecoveryPointID(recoveryPointID)
 	if err != nil {
 		return "", err
@@ -117,16 +141,50 @@ func backupRecoveryPointSourceIndexKey(sourceID string, recoveryPointID string) 
 	return backupRecoveryPointSourcePrefix + sourceID + "/" + inverted, nil
 }
 
-func backupRecoveryPointConnectorIndexKey(connectorID string, recoveryPointID string) string {
-	return backupRecoveryPointConnectorPrefix + connectorID + "/" + recoveryPointID
+func backupRecoveryPointConnectorIndexKey(
+	connectorID string,
+	recoveryPointID string,
+) (string, error) {
+	if validateStableID(ids.KindConnector, connectorID) != nil ||
+		validateStableID(ids.KindRecoveryPoint, recoveryPointID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup recovery point connector index key is invalid",
+		)
+	}
+	return backupRecoveryPointConnectorPrefix + connectorID + "/" + recoveryPointID, nil
 }
 
 func backupOrphanKey(recoveryPointID string) string {
 	return backupOrphanPrefix + recoveryPointID
 }
 
-func backupOrphanConnectorIndexKey(connectorID string, recoveryPointID string) string {
-	return backupOrphanConnectorPrefix + connectorID + "/" + recoveryPointID
+func backupOrphanConnectorIndexKey(connectorID string, recoveryPointID string) (string, error) {
+	if validateStableID(ids.KindConnector, connectorID) != nil ||
+		validateStableID(ids.KindRecoveryPoint, recoveryPointID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup orphan connector index key is invalid",
+		)
+	}
+	return backupOrphanConnectorPrefix + connectorID + "/" + recoveryPointID, nil
+}
+
+func backupOrphanEnvironmentIndexKey(
+	environmentID string,
+	recoveryPointID string,
+) (string, error) {
+	if validateStableID(ids.KindEnvironment, environmentID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup orphan environment index key is invalid",
+		)
+	}
+	inverted, err := invertedBackupRecoveryPointID(recoveryPointID)
+	if err != nil {
+		return "", err
+	}
+	return backupOrphanEnvironmentPrefix + environmentID + "/" + inverted, nil
 }
 
 func backupRetentionKey(sourceID string, triggerRecoveryPointID string) string {
@@ -145,12 +203,34 @@ func backupRestoreKey(taskID string) string {
 	return backupRestorePrefix + taskID
 }
 
+func backupRestoreEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
+	if validateStableID(ids.KindEnvironment, environmentID) != nil ||
+		validateStableID(ids.KindTask, taskID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup restore environment index key is invalid",
+		)
+	}
+	return backupRestoreEnvironmentPrefix + environmentID + "/" + taskID, nil
+}
+
 func backupRestoreServiceKey(taskID string, ordinal uint32) string {
 	return backupRestoreServicePrefix + taskID + "/" + backupRuntimeOrderedUint32(ordinal)
 }
 
 func backupKeyRotationKey(taskID string) string {
 	return backupKeyRotationPrefix + taskID
+}
+
+func backupKeyRotationEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
+	if validateStableID(ids.KindEnvironment, environmentID) != nil ||
+		validateStableID(ids.KindTask, taskID) != nil {
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"backup key rotation environment index key is invalid",
+		)
+	}
+	return backupKeyRotationEnvironmentPrefix + environmentID + "/" + taskID, nil
 }
 
 func backupRuntimeOrderedPositiveInt64(value int64) (string, error) {
@@ -178,7 +258,10 @@ func invertedBackupRecoveryPointID(recoveryPointID string) (string, error) {
 	body := strings.TrimPrefix(recoveryPointID, string(ids.KindRecoveryPoint)+"_")
 	inverted, ok := invertBackupRecoveryPointULIDBody(body)
 	if !ok {
-		return "", errs.New(errs.KindValidationFailed, "recovery point id has a non-canonical ULID body")
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"recovery point id has a non-canonical ULID body",
+		)
 	}
 	return inverted, nil
 }

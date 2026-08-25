@@ -3,8 +3,8 @@ package agentchannel
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -12,10 +12,7 @@ import (
 func (s *Server) sendBackupSecretSlots(
 	ctx context.Context,
 	stream agentpb.AgentChannel_ConnectServer,
-	task etcd.TaskRecord,
-	assignmentID string,
-	plan *agentpb.ExecutionPlan,
-	step *agentpb.ExecutionStep,
+	request backupsecret.Request,
 ) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "backup secret slot context is required")
@@ -26,12 +23,12 @@ func (s *Server) sendBackupSecretSlots(
 	if s.secrets == nil {
 		return errs.New(errs.KindInternal, "backup secret slot resolver is not configured")
 	}
-	slots, err := s.secrets.ResolveBackupSecretSlots(ctx, task, plan, step)
+	slots, err := s.secrets.ResolveBackupSecretSlots(ctx, request)
 	defer clearBackupSecretSlots(slots)
 	if err != nil {
 		return err
 	}
-	expected, err := expectedBackupSecretSlotPurposes(step.GetBackupSourceCapture())
+	expected, err := expectedBackupSecretSlotPurposes(request.Step)
 	if err != nil || len(slots) != len(expected) {
 		return errs.New(errs.KindInternal, "backup secret slot resolver returned an invalid purpose set")
 	}
@@ -43,9 +40,9 @@ func (s *Server) sendBackupSecretSlots(
 		if err := sendBackupSecretSlot(
 			ctx,
 			stream,
-			task.ID,
-			assignmentID,
-			step.GetStepId(),
+			request.TaskID,
+			request.AssignmentID,
+			request.StepID,
 			purpose,
 			content,
 		); err != nil {
@@ -89,7 +86,7 @@ func sendBackupSecretSlot(
 	for sequence := uint32(1); sequence <= chunkCount; sequence++ {
 		start := uint64(sequence-1) * executionplan.MaximumBackupSecretChunkBytes
 		end := min(start+executionplan.MaximumBackupSecretChunkBytes, total)
-		owned := append([]byte(nil), content[start:end]...)
+		owned := content[start:end]
 		chunk := backupSecretControllerMessage(taskID, assignmentID, stepID, purpose)
 		chunk.GetBackupSecretSlotTransfer().Record = &agentpb.BackupSecretSlotTransfer_Chunk{
 			Chunk: &agentpb.BackupSecretSlotChunk{Sequence: sequence, Content: owned},
@@ -125,21 +122,23 @@ func backupSecretControllerMessage(
 }
 
 func expectedBackupSecretSlotPurposes(
-	capture *agentpb.BackupSourceCapture,
+	step *agentpb.ExecutionStep,
 ) ([]agentpb.BackupSecretSlotPurpose, error) {
-	if capture == nil {
-		return nil, errs.New(errs.KindInternal, "backup source capture is required")
+	if step == nil {
+		return nil, errs.New(errs.KindInternal, "backup secret slot step is required")
 	}
-	purposes := []agentpb.BackupSecretSlotPurpose{
+	if capture := step.GetBackupSourceCapture(); capture != nil {
+		if capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE &&
+			capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
+			return nil, errs.New(errs.KindInternal, "backup source encryption is invalid")
+		}
+	} else if step.GetBackupArtifactPrune() == nil {
+		return nil, errs.New(errs.KindInternal, "backup secret slot step is invalid")
+	}
+	return []agentpb.BackupSecretSlotPurpose{
 		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
 		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
-	}
-	if capture.GetEncryption() == agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
-		purposes = append(purposes, agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY)
-	} else if capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE {
-		return nil, errs.New(errs.KindInternal, "backup source encryption is invalid")
-	}
-	return purposes, nil
+	}, nil
 }
 
 func clearBackupSecretSlots(slots map[agentpb.BackupSecretSlotPurpose][]byte) {

@@ -36,6 +36,7 @@ func TestNilContextFailsBeforeEveryBoundary(t *testing.T) {
 
 	limits := entrymaterialization.Limits{MaxContentBytes: 64, MaxDestinationBytes: 4095}
 	source := &trackingReadCloser{}
+	//lint:ignore SA1012 This test verifies rejection before reading the source.
 	if err := Run(nil, source, limits); !isInternal(err) {
 		t.Fatalf("Run(nil) error = %v, want internal failure", err)
 	}
@@ -46,10 +47,12 @@ func TestNilContextFailsBeforeEveryBoundary(t *testing.T) {
 			source.read,
 		)
 	}
+	//lint:ignore SA1012 This test verifies rejection before opening the secure root.
 	if materializer, err := openMaterializer(nil); materializer != nil || !isInternal(err) {
 		t.Fatalf("openMaterializer(nil) = (%v, %v), want internal failure", materializer, err)
 	}
 	if materializer, err := newMaterializer(
+		//lint:ignore SA1012 This test verifies constructor rejection before using dependencies.
 		nil,
 		nil,
 		nil,
@@ -61,9 +64,11 @@ func TestNilContextFailsBeforeEveryBoundary(t *testing.T) {
 	}
 	materializer, _ := testMaterializer(t)
 	header := testHeader(t, "files/secret", entrymaterialization.OutputSecretFile, []byte("secret"))
+	//lint:ignore SA1012 This test verifies rejection before reading plaintext.
 	if err := materializer.materialize(nil, header, panicReader{}); !isInternal(err) {
 		t.Fatalf("materialize(nil) error = %v, want internal failure", err)
 	}
+	//lint:ignore SA1012 This test verifies the close method's nil-context contract.
 	if err := materializer.close(nil); !isInternal(err) {
 		t.Fatalf("close(nil) error = %v, want internal failure", err)
 	}

@@ -524,6 +524,7 @@ func environmentDeletionLiveAuthorityConditions(environmentID string, operationI
 
 func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
 	return []string{
+		zonePoolRegistryKey(environmentID),
 		environmentCoordinationKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),
 		backupPolicyKey(environmentID),

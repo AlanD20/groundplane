@@ -46,6 +46,8 @@ func TestControllerDiagnosticsLoadAndForwardControllerConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "controller.yaml")
 	contents := []byte(
 		"environment_pool: 10.0.0.0/9\nsystem_pool: 10.128.0.0/9\n" +
+			"runner:\n  network_pool: 10.240.0.0/24\n  host_uid_range: 200000-200007\n" +
+			"  subuid_range: 300000-824287\n  subgid_range: 900000-1424287\n" +
 			"etcd:\n  endpoints: [10.0.0.2:2379, 10.0.0.1:2379]\nage_key_path: /custom/controller.age\n",
 	)
 	if err := os.WriteFile(configPath, contents, 0o600); err != nil {

@@ -320,7 +320,7 @@ func (r *Runner) cancelWait(
 		cleanupErrors = append(cleanupErrors, fmt.Errorf("drain helper wait: %w", outcome.err))
 	}
 	if outcome.response.Error != nil {
-		cleanupErrors = append(cleanupErrors, errors.New("drain helper wait: Docker reported a failure"))
+		cleanupErrors = append(cleanupErrors, errors.New("drain helper wait: docker reported a failure"))
 	}
 	return cleanupErrors
 }
@@ -331,13 +331,13 @@ func forwardWait(wait client.ContainerWaitResult) <-chan waitOutcome {
 		select {
 		case response, ok := <-wait.Result:
 			if !ok {
-				forwarded <- waitOutcome{err: errors.New("Docker closed the helper wait result")}
+				forwarded <- waitOutcome{err: errors.New("docker closed the helper wait result")}
 				return
 			}
 			forwarded <- waitOutcome{response: response}
 		case err, ok := <-wait.Error:
 			if !ok || err == nil {
-				forwarded <- waitOutcome{err: errors.New("Docker closed the helper wait error")}
+				forwarded <- waitOutcome{err: errors.New("docker closed the helper wait error")}
 				return
 			}
 			forwarded <- waitOutcome{err: err}

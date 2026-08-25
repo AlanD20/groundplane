@@ -670,8 +670,13 @@ func (store *memoryHierarchyStore) valueAt(key string, revision int64) *KeyValue
 		if !version.present {
 			return nil
 		}
+		keyVersion := int64(0)
+		for previous := index; previous >= 0 && versions[previous].present; previous-- {
+			keyVersion++
+		}
 		return &KeyValue{
-			Key: key, Value: append([]byte(nil), version.value...), ModRevision: version.revision,
+			Key: key, Value: append([]byte(nil), version.value...),
+			Version: keyVersion, ModRevision: version.revision,
 		}
 	}
 	return nil

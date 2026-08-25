@@ -158,6 +158,23 @@ func Wrap(kind Kind, err error) *Error {
 	return result
 }
 
+// WrapJoined attaches one Error to a primary private cause and any secondary
+// cleanup causes. The primary cause is always first, so diagnostics preserve
+// operation-failure precedence while errors.Is can still find every cleanup
+// failure. Callers must not separately Wrap the secondary causes.
+func WrapJoined(kind Kind, primary error, cleanup ...error) *Error {
+	causes := make([]error, 0, 1+len(cleanup))
+	if primary != nil {
+		causes = append(causes, primary)
+	}
+	for _, cause := range cleanup {
+		if cause != nil {
+			causes = append(causes, cause)
+		}
+	}
+	return Wrap(kind, errors.Join(causes...))
+}
+
 // Kind, Class, and Op expose descriptor-derived internal semantics without
 // making them mutable fields.
 func (e *Error) Kind() Kind { return normalizeKind(e.kind) }

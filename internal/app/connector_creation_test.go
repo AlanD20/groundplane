@@ -148,8 +148,8 @@ func TestConnectorCreationResolvesReferencesAndSealsOnlyDirectValues(t *testing.
 			Endpoint: "https://objects.example.test", Bucket: "groundplane-backups",
 			Prefix: "production/", Region: "auto", PathStyle: &pathStyle,
 			Credentials: map[string]apiTypes.ConnectorCredentialInput{
-				core.ConnectorCredentialAccessKey: {SecretRef: "S3_ACCESS_KEY"},
-				core.ConnectorCredentialSecretKey: {Value: "direct-secret"},
+				string(core.ConnectorCredentialAccessKey): {SecretRef: "S3_ACCESS_KEY"},
+				string(core.ConnectorCredentialSecretKey): {Value: "direct-secret"},
 			},
 		}, "connector-create-key-0001",
 	)
@@ -200,8 +200,8 @@ func TestConnectorCreationRejectsNonEnvironmentSecretReference(t *testing.T) {
 			Endpoint: "https://objects.example.test", Bucket: "groundplane-backups",
 			Region: "auto", PathStyle: &pathStyle,
 			Credentials: map[string]apiTypes.ConnectorCredentialInput{
-				core.ConnectorCredentialAccessKey: {SecretRef: "S3_ACCESS_KEY"},
-				core.ConnectorCredentialSecretKey: {Value: "direct-secret"},
+				string(core.ConnectorCredentialAccessKey): {SecretRef: "S3_ACCESS_KEY"},
+				string(core.ConnectorCredentialSecretKey): {Value: "direct-secret"},
 			},
 		}, "connector-create-key-0002",
 	)

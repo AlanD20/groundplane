@@ -213,6 +213,29 @@ func (service *AttachFactService) ResolveReadyDatabase(
 	})
 }
 
+// ResolveBackupIdentity opens only repository-supplied fixed-revision facts
+// and exposes the exact ready Attach database/role pair during consume.
+func (service *AttachFactService) ResolveBackupIdentity(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	stored etcd.AttachEncryptedFacts,
+	consume func(etcd.BackupPostgresIdentity) error,
+) error {
+	if ctx == nil || consume == nil || current.Record.Status != core.AttachReady ||
+		stored.AttachID != current.Record.ID {
+		return errs.New(errs.KindStateConflict, "backup Attach identity is unavailable")
+	}
+	return service.openStoredBundle(ctx, current.Record, stored, func(bundle *attachFactBundle) error {
+		if bundle.Identity.Database == "" || bundle.Identity.Role == "" {
+			return errs.New(errs.KindInternal, "backup Attach identity is incomplete")
+		}
+		return consume(etcd.BackupPostgresIdentity{
+			Database: bundle.Identity.Database,
+			Role:     bundle.Identity.Role,
+		})
+	})
+}
+
 // ResolveRemovalDatabase exposes only the stable database identity required by
 // a destructive impact preview. Failed provisioning may have applied the
 // database side effect, so its sealed identity remains part of the cascade.
@@ -305,6 +328,15 @@ func (service *AttachFactService) openBundle(
 		return errs.New(errs.KindInternal, "Ready Attach has no encrypted facts")
 	}
 	defer clearAttachBytes(stored.Ciphertext)
+	return service.openStoredBundle(ctx, current.Record, stored, consume)
+}
+
+func (service *AttachFactService) openStoredBundle(
+	ctx context.Context,
+	record etcd.AttachRecord,
+	stored etcd.AttachEncryptedFacts,
+	consume func(*attachFactBundle) error,
+) error {
 	envelope, err := secretvalue.Restore(secretvalue.Metadata{
 		Version: secretvalue.EnvelopeVersion(stored.EnvelopeVersion),
 		Cipher:  secretvalue.CipherSuite(stored.Cipher),
@@ -322,7 +354,7 @@ func (service *AttachFactService) openBundle(
 			return errs.New(errs.KindInternal, "Attach fact plaintext is corrupt")
 		}
 		defer bundle.clear()
-		if !validAttachFactBundle(bundle, current.Record) {
+		if !validAttachFactBundle(bundle, record) {
 			return errs.New(errs.KindInternal, "Attach fact plaintext does not match durable metadata")
 		}
 		return consume(&bundle)

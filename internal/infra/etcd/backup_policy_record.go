@@ -26,7 +26,7 @@ type BackupPolicyRecord struct {
 	EnvironmentID string    `json:"environment_id"`
 	Enabled       bool      `json:"enabled"`
 	Frequency     string    `json:"frequency,omitempty"`
-	Keep          int       `json:"keep,omitempty"`
+	Keep          int64     `json:"keep,omitempty"`
 	Encryption    string    `json:"encryption,omitempty"`
 	ConnectorID   string    `json:"connector_id,omitempty"`
 	SourceIDs     []string  `json:"source_ids,omitempty"`
@@ -111,8 +111,8 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 	if !utf8.ValidString(record.Frequency) || strings.TrimSpace(record.Frequency) != record.Frequency {
 		return errs.New(errs.KindValidationFailed, "backup policy frequency is invalid")
 	}
-	if record.Keep < 0 {
-		return errs.New(errs.KindValidationFailed, "backup policy retention cannot be negative")
+	if record.Keep < 0 || record.Keep > MaximumBackupPolicyKeep {
+		return errs.New(errs.KindValidationFailed, "backup policy retention is out of range")
 	}
 	if record.Encryption != "" && record.Encryption != "age" && record.Encryption != "none" {
 		return errs.New(errs.KindValidationFailed, "backup policy encryption is invalid")
@@ -132,9 +132,13 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 		}
 		seen[sourceID] = struct{}{}
 	}
-	if record.Enabled && (record.Frequency == "" || record.Keep <= 0 || record.Encryption == "" ||
-		record.ConnectorID == "" || len(record.SourceIDs) == 0) {
-		return errs.New(errs.KindValidationFailed, "enabled Backup Policy is incomplete")
+	configured := record.Frequency != "" || record.Keep != 0 || record.Encryption != "" ||
+		record.ConnectorID != "" || len(record.SourceIDs) != 0
+	if record.Enabled || configured {
+		if record.Frequency == "" || record.Keep <= 0 || record.Encryption == "" ||
+			record.ConnectorID == "" || len(record.SourceIDs) == 0 {
+			return errs.New(errs.KindValidationFailed, "configured Backup Policy is incomplete")
+		}
 	}
 	return nil
 }

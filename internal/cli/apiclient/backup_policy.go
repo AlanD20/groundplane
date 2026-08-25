@@ -65,7 +65,7 @@ func (c *Client) SetBackupPolicy(
 		body.Frequency = &input.Frequency
 	}
 	if input.Keep != 0 {
-		keep := int64(input.Keep)
+		keep := input.Keep
 		body.Keep = &keep
 	}
 	if input.Encryption != "" {
@@ -164,7 +164,7 @@ func backupPolicyFromGenerated(policy generated.BackupPolicy) apiTypes.BackupPol
 		converted.Frequency = *policy.Frequency
 	}
 	if policy.Keep != nil {
-		converted.Keep = int(*policy.Keep)
+		converted.Keep = *policy.Keep
 	}
 	if policy.Encryption != nil {
 		converted.Encryption = apiTypes.BackupEncryption(*policy.Encryption)

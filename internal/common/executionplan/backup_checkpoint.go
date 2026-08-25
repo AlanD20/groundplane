@@ -13,15 +13,16 @@ import (
 )
 
 // ValidateBackupCheckpointRequest validates one private delivery against the
-// exact next sequence held by the future durable checkpoint cursor. The ADR
-// does not define a canonical payload serialization, so this boundary validates
-// the protected digest shape but deliberately does not invent a digest input.
+// exact next sequence held by the future durable checkpoint cursor. It
+// validates the closed payload and the ADR's canonical version-one digest.
+// Validation alone never authorizes Put: the Agent must first receive the
+// durable Controller acknowledgement for ARTIFACT_PREPARED.
 func ValidateBackupCheckpointRequest(
 	request *agentpb.BackupCheckpointRequest,
 	expectedSequence uint32,
 ) (*agentpb.BackupCheckpointRequest, error) {
 	if request == nil || expectedSequence == 0 {
-		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint request or sequence is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "backup checkpoint request or sequence is invalid")
 	}
 	owned := proto.Clone(request).(*agentpb.BackupCheckpointRequest)
 	if err := RejectUnknown(owned); err != nil {
@@ -30,14 +31,14 @@ func ValidateBackupCheckpointRequest(
 	if ids.Validate(ids.KindTask, owned.TaskId) != nil || ids.Validate(ids.KindAssignment, owned.AssignmentId) != nil ||
 		ids.Validate(ids.KindStep, owned.StepId) != nil || owned.Sequence != expectedSequence ||
 		len(owned.ControlPayloadSha256) != sha256.Size {
-		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint delivery identity is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "backup checkpoint delivery identity is invalid")
 	}
 	digest, err := ComputeBackupCheckpointPayloadDigest(owned)
 	if err != nil {
 		return nil, err
 	}
 	if subtle.ConstantTimeCompare(digest, owned.ControlPayloadSha256) != 1 {
-		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint control payload digest does not match")
+		return nil, errs.New(errs.KindValidationFailed, "backup checkpoint control payload digest does not match")
 	}
 	return owned, nil
 }
@@ -47,7 +48,7 @@ func ValidateBackupCheckpointRequest(
 // are deliberately outside this Controller-protected control-payload digest.
 func ComputeBackupCheckpointPayloadDigest(request *agentpb.BackupCheckpointRequest) ([]byte, error) {
 	if request == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint request is required")
+		return nil, errs.New(errs.KindValidationFailed, "backup checkpoint request is required")
 	}
 	if err := RejectUnknown(request); err != nil {
 		return nil, err
@@ -65,6 +66,10 @@ func ComputeBackupCheckpointPayloadDigest(request *agentpb.BackupCheckpointReque
 		writePoint(payload.ArtifactPrepared.PointId)
 		writeCheckpointUint64(&encoded, payload.ArtifactPrepared.StoredSizeBytes)
 		encoded.Write(payload.ArtifactPrepared.StoredSha256)
+	case *agentpb.BackupCheckpointRequest_UploadCompleted:
+		writePoint(payload.UploadCompleted.PointId)
+		writeCheckpointUint64(&encoded, payload.UploadCompleted.StoredSizeBytes)
+		encoded.Write(payload.UploadCompleted.StoredSha256)
 	case *agentpb.BackupCheckpointRequest_UploadVerified:
 		writePoint(payload.UploadVerified.PointId)
 		writeCheckpointUint64(&encoded, payload.UploadVerified.StoredSizeBytes)
@@ -124,7 +129,7 @@ func ValidateBackupCheckpointAck(
 	request *agentpb.BackupCheckpointRequest,
 ) (*agentpb.BackupCheckpointAck, error) {
 	if ack == nil || request == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint acknowledgement is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "backup checkpoint acknowledgement is invalid")
 	}
 	owned := proto.Clone(ack).(*agentpb.BackupCheckpointAck)
 	if err := RejectUnknown(owned); err != nil {
@@ -134,7 +139,7 @@ func ValidateBackupCheckpointAck(
 		ids.Validate(ids.KindStep, owned.StepId) != nil || owned.Sequence == 0 || owned.TaskId != request.TaskId ||
 		owned.AssignmentId != request.AssignmentId || owned.StepId != request.StepId ||
 		owned.Sequence != request.Sequence {
-		return nil, errs.New(errs.KindValidationFailed, "Backup checkpoint acknowledgement identity is invalid")
+		return nil, errs.New(errs.KindValidationFailed, "backup checkpoint acknowledgement identity is invalid")
 	}
 	return owned, nil
 }
@@ -153,6 +158,13 @@ func validateBackupCheckpointPayload(request *agentpb.BackupCheckpointRequest) e
 			payload.ArtifactPrepared.PointId,
 			payload.ArtifactPrepared.StoredSizeBytes,
 			payload.ArtifactPrepared.StoredSha256,
+		)
+	case *agentpb.BackupCheckpointRequest_UploadCompleted:
+		valid = request.Kind == agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED &&
+			payload.UploadCompleted != nil && validStored(
+			payload.UploadCompleted.PointId,
+			payload.UploadCompleted.StoredSizeBytes,
+			payload.UploadCompleted.StoredSha256,
 		)
 	case *agentpb.BackupCheckpointRequest_UploadVerified:
 		valid = request.Kind == agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_VERIFIED &&
@@ -198,7 +210,7 @@ func validateBackupCheckpointPayload(request *agentpb.BackupCheckpointRequest) e
 			payload.RemoteObjectAbsent != nil && validPoint(payload.RemoteObjectAbsent.PointId)
 	}
 	if !valid {
-		return errs.New(errs.KindValidationFailed, "Backup checkpoint kind or control payload is invalid")
+		return errs.New(errs.KindValidationFailed, "backup checkpoint kind or control payload is invalid")
 	}
 	return nil
 }

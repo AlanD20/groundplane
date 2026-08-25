@@ -65,6 +65,14 @@ func (service *taskAbortService) AbortTask(
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}
+		if current.Record.Type == etcd.TaskBackupPrune {
+			return etcd.IdempotencyResponse{}, errs.Newf(
+				errs.KindTaskNotAbortable,
+				"internal task %s of type %s is not operator-abortable",
+				taskID,
+				current.Record.Type,
+			)
+		}
 		switch current.Record.Status {
 		case etcd.TaskStatusAborted:
 			return taskAbortResponse(taskID)

@@ -405,6 +405,8 @@
           },
           "keep": {
             "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
             "type": "integer"
           },
           "key_created_at": {
@@ -464,6 +466,7 @@
           },
           "keep": {
             "format": "int64",
+            "maximum": 9007199254740991,
             "minimum": 1,
             "type": "integer"
           },
@@ -2506,6 +2509,25 @@
             "type": "string"
           },
           "type": {
+            "enum": [
+              "deploy",
+              "rollback",
+              "backup",
+              "backup_prune",
+              "restore",
+              "attach",
+              "detach",
+              "run",
+              "script",
+              "provision",
+              "create",
+              "update",
+              "remove",
+              "start",
+              "stop",
+              "destroy",
+              "rotate"
+            ],
             "type": "string"
           },
           "updated_at": {

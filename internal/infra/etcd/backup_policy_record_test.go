@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -44,13 +45,108 @@ func TestBackupPolicyRecordRoundTripsCompleteEnabledState(t *testing.T) {
 	}
 }
 
-// Rationale: invalid enabled records and duplicate source identities must never
-// become durable policy state.
+// Rationale: durable policy JSON must preserve the public retention maximum
+// without depending on machine word size and reject the next integer.
+func TestBackupPolicyRecordEnforcesMaximumPublicKeep(t *testing.T) {
+	t.Parallel()
+	record := BackupPolicyRecord{
+		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Enabled:       true,
+		Frequency:     "*-*-* 03:15:00",
+		Keep:          MaximumBackupPolicyKeep,
+		Encryption:    "none",
+		ConnectorID:   "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		SourceIDs:     []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+		UpdatedAt:     time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC),
+	}
+	encoded, err := encodeBackupPolicyRecord(record)
+	if err != nil {
+		t.Fatalf("encodeBackupPolicyRecord(maximum Keep) error = %v", err)
+	}
+	decoded, err := decodeBackupPolicyRecord(encoded)
+	if err != nil {
+		t.Fatalf("decodeBackupPolicyRecord(maximum Keep) error = %v", err)
+	}
+	if decoded.Keep != MaximumBackupPolicyKeep {
+		t.Fatalf("decoded Keep = %d, want %d", decoded.Keep, MaximumBackupPolicyKeep)
+	}
+	record.Keep++
+	if _, err := encodeBackupPolicyRecord(record); !errors.Is(
+		err, errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("encodeBackupPolicyRecord(Keep above maximum) error = %v", err)
+	}
+}
+
+// Rationale: a disabled durable singleton is either wholly unconfigured or a
+// complete retained configuration; every partial presence shape is corrupt.
+func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T) {
+	t.Parallel()
+	const (
+		frequencyField = 1 << iota
+		keepField
+		encryptionField
+		connectorField
+		sourcesField
+		allConfiguredFields = frequencyField | keepField | encryptionField | connectorField | sourcesField
+	)
+	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	base := BackupPolicyRecord{
+		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		UpdatedAt:     at,
+	}
+	if err := validateBackupPolicyRecord(base); err != nil {
+		t.Fatalf("validateBackupPolicyRecord(unconfigured disabled) error = %v", err)
+	}
+	for fields := 1; fields < allConfiguredFields; fields++ {
+		fields := fields
+		t.Run(fmt.Sprintf("fields_%05b", fields), func(t *testing.T) {
+			t.Parallel()
+			record := base
+			if fields&frequencyField != 0 {
+				record.Frequency = "*-*-* 03:15:00"
+			}
+			if fields&keepField != 0 {
+				record.Keep = 1
+			}
+			if fields&encryptionField != 0 {
+				record.Encryption = "none"
+			}
+			if fields&connectorField != 0 {
+				record.ConnectorID = "con_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+			}
+			if fields&sourcesField != 0 {
+				record.SourceIDs = []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"}
+			}
+			if err := validateBackupPolicyRecord(record); !errors.Is(
+				err,
+				errs.New(errs.KindValidationFailed, ""),
+			) {
+				t.Fatalf("validateBackupPolicyRecord(partial fields %05b) error = %v", fields, err)
+			}
+		})
+	}
+	configured := base
+	configured.Frequency = "*-*-* 03:15:00"
+	configured.Keep = 1
+	configured.Encryption = "none"
+	configured.ConnectorID = "con_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	configured.SourceIDs = []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"}
+	if err := validateBackupPolicyRecord(configured); err != nil {
+		t.Fatalf("validateBackupPolicyRecord(configured disabled) error = %v", err)
+	}
+}
+
+// Rationale: negative retention, invalid enabled records, and duplicate source
+// identities must never become durable policy state.
 func TestBackupPolicyRecordRejectsIncompleteEnabledAndDuplicateSources(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	sourceID := "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	for name, record := range map[string]BackupPolicyRecord{
+		"negative retention": {
+			EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Keep: -1, UpdatedAt: at,
+		},
 		"incomplete": {
 			EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Enabled: true, UpdatedAt: at,
 		},

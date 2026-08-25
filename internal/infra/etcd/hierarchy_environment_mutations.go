@@ -26,6 +26,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	}
 	if current.Record.ID != replacement.ID ||
 		current.Record.ProjectID != replacement.ProjectID ||
+		current.Record.NetworkPool != replacement.NetworkPool ||
 		current.Record.VolumeDir != replacement.VolumeDir ||
 		current.Record.ProvisioningState != replacement.ProvisioningState ||
 		current.Record.CreateTaskID != replacement.CreateTaskID ||
@@ -47,12 +48,30 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	projectAuthority, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{projectKey(current.Record.ProjectID)}, Revision: current.ReadRevision,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if len(projectAuthority.Values) != 1 || projectAuthority.Values[0] == nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
+	}
+	project, err := decodeProject(projectAuthority.Values[0].Value)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if project.ID != current.Record.ProjectID || project.Kind != ProjectKindTenant {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
+	}
 	renaming := current.Record.Name != replacement.Name
 	secondaryKeys := []string{
 		environmentNameKey(current.Record.ProjectID, current.Record.Name),
 		environmentOwnerKey(current.Record.ProjectID, current.Record.ID),
 		deletionTombstoneKey("environment", current.Record.ID),
 		deletionTombstoneKey("project", current.Record.ProjectID),
+		tenantKey(project.TenantID),
+		deletionTombstoneKey("tenant", project.TenantID),
 	}
 	if renaming {
 		secondaryKeys = append(secondaryKeys, environmentNameKey(replacement.ProjectID, replacement.Name))
@@ -82,7 +101,20 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if secondary.Values[3] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Project deletion is in progress")
 	}
-	if renaming && secondary.Values[4] != nil {
+	if secondary.Values[4] == nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindTenantNotFound, "tenant was not found")
+	}
+	tenant, err := decodeTenant(secondary.Values[4].Value)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if tenant.ID != project.TenantID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "environment Tenant authority is mismatched")
+	}
+	if secondary.Values[5] != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+	}
+	if renaming && secondary.Values[6] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindSlugConflict, "Environment name is already in use")
 	}
 	value, err := encodeEnvironment(replacement)
@@ -102,6 +134,9 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 		},
 		{Key: deletionTombstoneKey("environment", current.Record.ID)},
 		{Key: deletionTombstoneKey("project", current.Record.ProjectID)},
+		{Key: projectKey(project.ID), ModRevision: projectAuthority.Values[0].ModRevision},
+		{Key: tenantKey(tenant.ID), ModRevision: secondary.Values[4].ModRevision},
+		{Key: deletionTombstoneKey("tenant", tenant.ID)},
 	}
 	mutations := []Mutation{{Type: MutationPut, Key: environmentKey(current.Record.ID), Value: value}}
 	if renaming {
@@ -119,7 +154,13 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	plan, err := newIdempotencyMutationPlan(
 		conditions,
 		mutations,
-		classifyEnvironmentMutationConflict(current, replacement, renaming),
+		classifyEnvironmentMutationConflict(
+			current,
+			replacement,
+			projectAuthority.Values[0].ModRevision,
+			secondary.Values[4].ModRevision,
+			renaming,
+		),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -134,10 +175,12 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 func classifyEnvironmentMutationConflict(
 	current Versioned[EnvironmentRecord],
 	replacement EnvironmentRecord,
+	projectRevision int64,
+	tenantRevision int64,
 	renaming bool,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expected := 5
+		expected := 8
 		if renaming {
 			expected++
 		}
@@ -153,8 +196,15 @@ func classifyEnvironmentMutationConflict(
 		if values[4] != nil {
 			return errs.New(errs.KindResourceInUse, "Project deletion is in progress")
 		}
-		if renaming && values[5] != nil {
+		if values[7] != nil {
+			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+		}
+		if renaming && values[8] != nil {
 			return errs.Newf(errs.KindSlugConflict, "environment name %q already exists", replacement.Name)
+		}
+		if values[5] == nil || values[5].ModRevision != projectRevision ||
+			values[6] == nil || values[6].ModRevision != tenantRevision {
+			return errs.New(errs.KindStateConflict, "environment owning authority changed concurrently")
 		}
 		if values[0].ModRevision != current.Revision {
 			return stateConflict("environment", current.Record.ID)

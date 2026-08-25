@@ -95,7 +95,7 @@ func TestConnectorRoutesExposeRedactedListAndDetail(t *testing.T) {
 		ID: connectorID, EnvironmentID: environmentID, Name: "primary-backups",
 		Kind: core.ConnectorKindS3Compatible, Endpoint: "https://objects.example.test",
 		Bucket: "groundplane-backups", Prefix: "production/", Region: "auto", PathStyle: true,
-		Credentials: map[string]core.ConnectorCredential{
+		Credentials: map[core.ConnectorCredentialName]core.ConnectorCredential{
 			core.ConnectorCredentialAccessKey: {
 				Kind: core.ConnectorCredentialSecretRef, SecretRef: "S3_ACCESS_KEY",
 			},
@@ -122,7 +122,7 @@ func TestConnectorRoutesExposeRedactedListAndDetail(t *testing.T) {
 	if list.Code != http.StatusOK || json.Unmarshal(list.Body.Bytes(), &page) != nil ||
 		reader.listCalls != 1 || len(page.Items) != 1 || page.NextCursor != "next" ||
 		page.Items[0].PathStyle != true ||
-		page.Items[0].Credentials[core.ConnectorCredentialSecretKey].Kind != apiTypes.ConnectorCredentialDirect ||
+		page.Items[0].Credentials[string(core.ConnectorCredentialSecretKey)].Kind != apiTypes.ConnectorCredentialDirect ||
 		strings.Contains(list.Body.String(), "direct-secret") {
 		t.Fatalf("list response = %d/%s, calls %d, page %#v", list.Code, list.Body.String(), reader.listCalls, page)
 	}
@@ -211,7 +211,7 @@ func TestConnectorCreateRoutePassesCompleteTypedDecision(t *testing.T) {
 	server.Mux.ServeHTTP(response, request)
 	if response.Code != http.StatusCreated || mutator.calls != 1 ||
 		mutator.input.PathStyle == nil || *mutator.input.PathStyle ||
-		mutator.input.Credentials[core.ConnectorCredentialSecretKey].Value != "direct-secret" ||
+		mutator.input.Credentials[string(core.ConnectorCredentialSecretKey)].Value != "direct-secret" ||
 		mutator.key != "connector-create-key-0002" {
 		t.Fatalf(
 			"create response/input/key = %d/%s/%#v/%q",

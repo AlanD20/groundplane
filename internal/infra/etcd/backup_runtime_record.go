@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"filippo.io/age"
+	"github.com/oklog/ulid/v2"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ import (
 const (
 	maximumBackupRuntimeRecordBytes  = 256 * 1024
 	maximumBackupObjectKeyBytes      = 1024
-	maximumBackupPruneDispatchPoints = 12
+	maximumBackupPruneDispatchPoints = 11
 )
 
 type BackupRuntimeSourceKind string
@@ -54,17 +55,15 @@ const (
 	BackupOperationBackup   BackupOperationKind = "backup"
 	BackupOperationRestore  BackupOperationKind = "restore"
 	BackupOperationRotation BackupOperationKind = "rotation"
+	BackupOperationPrune    BackupOperationKind = "recovery_point_prune"
 	BackupOperationDeletion BackupOperationKind = "environment_deletion"
 )
 
 type BackupSourceTargetKind string
 
 const (
-	BackupSourceTargetAttach             BackupSourceTargetKind = "attach"
-	BackupSourceTargetVolume             BackupSourceTargetKind = "volume"
-	BackupSourceTargetBackingProject     BackupSourceTargetKind = "backing_project"
-	BackupSourceTargetBackingEnvironment BackupSourceTargetKind = "backing_environment"
-	BackupSourceTargetBackingService     BackupSourceTargetKind = "backing_service"
+	BackupSourceTargetAttach BackupSourceTargetKind = "attach"
+	BackupSourceTargetVolume BackupSourceTargetKind = "volume"
 )
 
 type BackupRunInitiator string
@@ -100,6 +99,21 @@ const (
 	BackupSourceAttemptOrphaned       BackupSourceAttemptState = "orphaned"
 )
 
+// BackupSourceAttemptPhase is the protected execution checkpoint within the
+// coarser operator-visible attempt State. It is intentionally closed so a
+// durable failure identifies the exact checkpoint that failed.
+type BackupSourceAttemptPhase string
+
+const (
+	BackupSourcePhaseCapture          BackupSourceAttemptPhase = "capture"
+	BackupSourcePhaseStaging          BackupSourceAttemptPhase = "staging"
+	BackupSourcePhaseUpload           BackupSourceAttemptPhase = "upload"
+	BackupSourcePhaseHeadVerification BackupSourceAttemptPhase = "head_verification"
+	BackupSourcePhasePointCommit      BackupSourceAttemptPhase = "point_commit"
+	BackupSourcePhaseCleanup          BackupSourceAttemptPhase = "cleanup"
+	BackupSourcePhaseRetention        BackupSourceAttemptPhase = "retention"
+)
+
 type BackupFailureCode string
 
 const (
@@ -132,8 +146,9 @@ const (
 type BackupPruneState string
 
 const (
-	BackupPrunePending  BackupPruneState = "pending"
-	BackupPruneAssigned BackupPruneState = "assigned"
+	BackupPrunePending        BackupPruneState = "pending"
+	BackupPruneAssigned       BackupPruneState = "assigned"
+	BackupPruneVerifiedAbsent BackupPruneState = "verified_absent"
 )
 
 type BackupRestoreState string
@@ -240,16 +255,36 @@ type BackupPostgresSourceSnapshot struct {
 	BackingServiceID           string `json:"backing_service_id"`
 	BackingServiceRevision     int64  `json:"backing_service_revision"`
 	AttachFactsRevision        int64  `json:"attach_facts_revision"`
+	Database                   string `json:"database"`
+	Role                       string `json:"role"`
+}
+
+type BackupVolumeServiceSnapshot struct {
+	ServiceID       string                     `json:"service_id"`
+	ServiceRevision int64                      `json:"service_revision"`
+	ComposeKey      string                     `json:"compose_key,omitempty"`
+	MountPaths      []string                   `json:"mount_paths,omitempty"`
+	PriorIntent     BackupServiceRuntimeIntent `json:"prior_intent"`
 }
 
 type BackupVolumeSourceSnapshot struct {
-	EnvironmentID  string `json:"environment_id"`
-	VolumeID       string `json:"volume_id"`
-	VolumeRevision int64  `json:"volume_revision"`
+	EnvironmentID       string                        `json:"environment_id"`
+	VolumeID            string                        `json:"volume_id"`
+	VolumeRevision      int64                         `json:"volume_revision"`
+	ArtifactID          string                        `json:"artifact_id,omitempty"`
+	ArtifactDigest      string                        `json:"artifact_digest,omitempty"`
+	ArtifactRevision    int64                         `json:"artifact_revision,omitempty"`
+	ProjectionRevision  int64                         `json:"projection_revision,omitempty"`
+	RenderGeneration    uint64                        `json:"render_generation,omitempty"`
+	ComposeVolumeKey    string                        `json:"compose_volume_key,omitempty"`
+	DockerVolumeName    string                        `json:"docker_volume_name,omitempty"`
+	AuthorizedVolumeDir string                        `json:"authorized_volume_dir,omitempty"`
+	Services            []BackupVolumeServiceSnapshot `json:"services"`
 }
 
 type BackupConfigSourceSnapshot struct {
-	ConfigSnapshotTaskID string `json:"config_snapshot_task_id"`
+	ConfigSnapshotID string `json:"config_snapshot_id"`
+	ReadRevision     int64  `json:"read_revision"`
 }
 
 type BackupRunSourceSnapshot struct {
@@ -259,54 +294,51 @@ type BackupRunSourceSnapshot struct {
 }
 
 type BackupRunSourceAttemptRecord struct {
-	Ordinal         uint32                   `json:"ordinal"`
-	SourceID        string                   `json:"source_id"`
-	Kind            BackupRuntimeSourceKind  `json:"kind"`
-	TargetID        string                   `json:"target_id"`
-	SourceRevision  int64                    `json:"source_revision"`
-	TargetRevision  int64                    `json:"target_revision"`
-	Snapshot        BackupRunSourceSnapshot  `json:"snapshot"`
-	Format          BackupRuntimeFormat      `json:"format"`
-	RecoveryPointID string                   `json:"recovery_point_id"`
-	ObjectKey       string                   `json:"object_key"`
-	ServiceCount    uint32                   `json:"service_count"`
-	State           BackupSourceAttemptState `json:"state"`
-	SizeBytes       int64                    `json:"size_bytes,omitempty"`
-	SHA256          string                   `json:"sha256,omitempty"`
-	FailureCode     BackupFailureCode        `json:"failure_code,omitempty"`
+	Ordinal                uint32                   `json:"ordinal"`
+	SourceID               string                   `json:"source_id"`
+	Kind                   BackupRuntimeSourceKind  `json:"kind"`
+	TargetID               string                   `json:"target_id"`
+	SourceRevision         int64                    `json:"source_revision"`
+	TargetRevision         int64                    `json:"target_revision"`
+	Snapshot               BackupRunSourceSnapshot  `json:"snapshot"`
+	Format                 BackupRuntimeFormat      `json:"format"`
+	RecoveryPointID        string                   `json:"recovery_point_id"`
+	RecoveryPointCreatedAt time.Time                `json:"recovery_point_created_at"`
+	ObjectKey              string                   `json:"object_key"`
+	State                  BackupSourceAttemptState `json:"state"`
+	Phase                  BackupSourceAttemptPhase `json:"phase"`
+	SizeBytes              int64                    `json:"size_bytes,omitempty"`
+	SHA256                 string                   `json:"sha256,omitempty"`
+	FailureCode            BackupFailureCode        `json:"failure_code,omitempty"`
 }
 
 type BackupRunRecord struct {
-	TaskID                       string                         `json:"task_id"`
-	OperationID                  string                         `json:"operation_id"`
-	RetryOfTaskID                string                         `json:"retry_of_task_id,omitempty"`
-	EnvironmentID                string                         `json:"environment_id"`
-	PolicyRevision               int64                          `json:"policy_revision"`
-	Initiator                    BackupRunInitiator             `json:"initiator"`
-	ScheduledAt                  *time.Time                     `json:"scheduled_at,omitempty"`
-	ConnectorID                  string                         `json:"connector_id"`
-	ConnectorRevision            int64                          `json:"connector_revision"`
-	ConnectorCredentialsRevision int64                          `json:"connector_credentials_revision"`
-	Encryption                   BackupRuntimeEncryption        `json:"encryption"`
-	BackupKeyRecordRevision      int64                          `json:"backup_key_record_revision,omitempty"`
-	BackupKeyValueRevision       int64                          `json:"backup_key_value_revision,omitempty"`
-	KeyEra                       int                            `json:"key_era,omitempty"`
-	Recipient                    string                         `json:"recipient,omitempty"`
-	State                        BackupRunState                 `json:"state"`
-	Sources                      []BackupRunSourceAttemptRecord `json:"sources"`
-	CreatedAt                    time.Time                      `json:"created_at"`
-	UpdatedAt                    time.Time                      `json:"updated_at"`
-}
-
-type BackupRunVolumeServiceRecord struct {
-	TaskID          string                     `json:"task_id"`
-	EnvironmentID   string                     `json:"environment_id"`
-	SourceID        string                     `json:"source_id"`
-	SourceOrdinal   uint32                     `json:"source_ordinal"`
-	ServiceOrdinal  uint32                     `json:"service_ordinal"`
-	ServiceID       string                     `json:"service_id"`
-	ServiceRevision int64                      `json:"service_revision"`
-	PriorIntent     BackupServiceRuntimeIntent `json:"prior_intent"`
+	TaskID                        string                         `json:"task_id"`
+	OperationID                   string                         `json:"operation_id"`
+	RetryOfTaskID                 string                         `json:"retry_of_task_id,omitempty"`
+	EnvironmentID                 string                         `json:"environment_id"`
+	PolicyRevision                int64                          `json:"policy_revision"`
+	RetentionKeep                 int64                          `json:"retention_keep"`
+	Initiator                     BackupRunInitiator             `json:"initiator"`
+	ScheduledAt                   *time.Time                     `json:"scheduled_at,omitempty"`
+	ConnectorID                   string                         `json:"connector_id"`
+	ConnectorRevision             int64                          `json:"connector_revision"`
+	ConnectorEndpoint             string                         `json:"connector_endpoint,omitempty"`
+	ConnectorBucket               string                         `json:"connector_bucket,omitempty"`
+	ConnectorPrefix               string                         `json:"connector_prefix,omitempty"`
+	ConnectorRegion               string                         `json:"connector_region,omitempty"`
+	ConnectorPathStyle            bool                           `json:"connector_path_style"`
+	ConnectorHasDirectCredentials bool                           `json:"connector_has_direct_credentials"`
+	ConnectorCredentialsRevision  int64                          `json:"connector_credentials_revision"`
+	Encryption                    BackupRuntimeEncryption        `json:"encryption"`
+	BackupKeyRecordRevision       int64                          `json:"backup_key_record_revision,omitempty"`
+	BackupKeyValueRevision        int64                          `json:"backup_key_value_revision,omitempty"`
+	KeyEra                        int                            `json:"key_era,omitempty"`
+	Recipient                     string                         `json:"recipient,omitempty"`
+	State                         BackupRunState                 `json:"state"`
+	Sources                       []BackupRunSourceAttemptRecord `json:"sources"`
+	CreatedAt                     time.Time                      `json:"created_at"`
+	UpdatedAt                     time.Time                      `json:"updated_at"`
 }
 
 type BackupArtifactEvidence struct {
@@ -315,20 +347,21 @@ type BackupArtifactEvidence struct {
 }
 
 type BackupRecoveryPointSnapshot struct {
-	ID            string                  `json:"id"`
-	EnvironmentID string                  `json:"environment_id"`
-	SourceID      string                  `json:"source_id"`
-	SourceKind    BackupRuntimeSourceKind `json:"source_kind"`
-	TargetID      string                  `json:"target_id"`
-	ConnectorID   string                  `json:"connector_id"`
-	ObjectKey     string                  `json:"object_key"`
-	SourceFormat  BackupRuntimeFormat     `json:"source_format"`
-	Encryption    BackupRuntimeEncryption `json:"encryption"`
-	KeyEra        int                     `json:"key_era,omitempty"`
-	Recipient     string                  `json:"recipient,omitempty"`
-	SizeBytes     int64                   `json:"size_bytes"`
-	SHA256        string                  `json:"sha256"`
-	CreatedAt     time.Time               `json:"created_at"`
+	ID              string                  `json:"id"`
+	EnvironmentID   string                  `json:"environment_id"`
+	SourceID        string                  `json:"source_id"`
+	SourceKind      BackupRuntimeSourceKind `json:"source_kind"`
+	TargetID        string                  `json:"target_id"`
+	ConnectorID     string                  `json:"connector_id"`
+	ConnectorPrefix string                  `json:"connector_prefix,omitempty"`
+	ObjectKey       string                  `json:"object_key"`
+	SourceFormat    BackupRuntimeFormat     `json:"source_format"`
+	Encryption      BackupRuntimeEncryption `json:"encryption"`
+	KeyEra          int                     `json:"key_era,omitempty"`
+	Recipient       string                  `json:"recipient,omitempty"`
+	SizeBytes       int64                   `json:"size_bytes"`
+	SHA256          string                  `json:"sha256"`
+	CreatedAt       time.Time               `json:"created_at"`
 }
 
 type BackupRecoveryPointRecord struct {
@@ -337,35 +370,48 @@ type BackupRecoveryPointRecord struct {
 }
 
 type BackupOrphanRecord struct {
-	Point     BackupRecoveryPointSnapshot `json:"point"`
-	TaskID    string                      `json:"task_id"`
-	State     BackupOrphanState           `json:"state"`
-	CreatedAt time.Time                   `json:"created_at"`
-	UpdatedAt time.Time                   `json:"updated_at"`
+	Point          BackupRecoveryPointSnapshot         `json:"point"`
+	TaskID         string                              `json:"task_id"`
+	Reconciliation BackupOrphanReconciliationAuthority `json:"reconciliation"`
+	State          BackupOrphanState                   `json:"state"`
+	CreatedAt      time.Time                           `json:"created_at"`
+	UpdatedAt      time.Time                           `json:"updated_at"`
+}
+
+type BackupOrphanReconciliationAuthority struct {
+	OperationID    string `json:"operation_id"`
+	PolicyRevision int64  `json:"policy_revision"`
+	RetentionKeep  int64  `json:"retention_keep"`
 }
 
 type BackupRetentionSweepRecord struct {
 	SourceID               string               `json:"source_id"`
 	TriggerRecoveryPointID string               `json:"trigger_recovery_point_id"`
-	Keep                   int                  `json:"keep"`
+	Keep                   int64                `json:"keep"`
 	Revision               int64                `json:"revision"`
+	SelectionRevision      int64                `json:"selection_revision,omitempty"`
 	Cursor                 string               `json:"cursor,omitempty"`
+	RetainedCount          int64                `json:"retained_count"`
+	PruneOperationID       string               `json:"prune_operation_id,omitempty"`
 	State                  BackupRetentionState `json:"state"`
 	CreatedAt              time.Time            `json:"created_at"`
 	UpdatedAt              time.Time            `json:"updated_at"`
 }
 
 type BackupRecoveryPointPruneRecord struct {
-	Point     BackupRecoveryPointSnapshot `json:"point"`
-	State     BackupPruneState            `json:"state"`
-	TaskID    string                      `json:"task_id,omitempty"`
-	CreatedAt time.Time                   `json:"created_at"`
-	UpdatedAt time.Time                   `json:"updated_at"`
+	Point         BackupRecoveryPointSnapshot `json:"point"`
+	PointRevision int64                       `json:"point_revision"`
+	OperationID   string                      `json:"operation_id"`
+	State         BackupPruneState            `json:"state"`
+	TaskID        string                      `json:"task_id,omitempty"`
+	CreatedAt     time.Time                   `json:"created_at"`
+	UpdatedAt     time.Time                   `json:"updated_at"`
 }
 
 type BackupRecoveryPointPruneDispatchRecord struct {
 	TaskID           string    `json:"task_id"`
-	ConnectorID      string    `json:"connector_id"`
+	OperationID      string    `json:"operation_id"`
+	EnvironmentID    string    `json:"environment_id"`
 	RecoveryPointIDs []string  `json:"recovery_point_ids"`
 	CreatedAt        time.Time `json:"created_at"`
 }
@@ -398,27 +444,29 @@ type BackupRestoreConfigProgress struct {
 }
 
 type BackupRestoreRecord struct {
-	TaskID                       string                       `json:"task_id"`
-	OperationID                  string                       `json:"operation_id"`
-	EnvironmentID                string                       `json:"environment_id"`
-	RecoveryPointRevision        int64                        `json:"recovery_point_revision"`
-	Point                        BackupRecoveryPointSnapshot  `json:"point"`
-	SourceRevision               int64                        `json:"source_revision"`
-	CurrentTarget                BackupRestoreTargetSnapshot  `json:"current_target"`
-	ConnectorRevision            int64                        `json:"connector_revision"`
-	ConnectorCredentialsRevision int64                        `json:"connector_credentials_revision"`
-	ExpectedKeyRecordRevision    int64                        `json:"expected_key_record_revision,omitempty"`
-	ExpectedKeyValueRevision     int64                        `json:"expected_key_value_revision,omitempty"`
-	UsesOldIdentity              bool                         `json:"uses_old_identity"`
-	Artifact                     *BackupArtifactEvidence      `json:"artifact,omitempty"`
-	StagedTreeManifestSHA256     string                       `json:"staged_tree_manifest_sha256,omitempty"`
-	State                        BackupRestoreState           `json:"state"`
-	MutationStarted              bool                         `json:"mutation_started"`
-	ServiceCount                 uint32                       `json:"service_count"`
-	ConfigProgress               *BackupRestoreConfigProgress `json:"config_progress,omitempty"`
-	Verification                 BackupVerificationState      `json:"verification"`
-	CreatedAt                    time.Time                    `json:"created_at"`
-	UpdatedAt                    time.Time                    `json:"updated_at"`
+	TaskID                        string                       `json:"task_id"`
+	OperationID                   string                       `json:"operation_id"`
+	EnvironmentID                 string                       `json:"environment_id"`
+	RestoreGenerationID           string                       `json:"restore_generation_id,omitempty"`
+	RecoveryPointRevision         int64                        `json:"recovery_point_revision"`
+	Point                         BackupRecoveryPointSnapshot  `json:"point"`
+	SourceRevision                int64                        `json:"source_revision"`
+	CurrentTarget                 BackupRestoreTargetSnapshot  `json:"current_target"`
+	ConnectorRevision             int64                        `json:"connector_revision"`
+	ConnectorHasDirectCredentials bool                         `json:"connector_has_direct_credentials"`
+	ConnectorCredentialsRevision  int64                        `json:"connector_credentials_revision"`
+	ExpectedKeyRecordRevision     int64                        `json:"expected_key_record_revision,omitempty"`
+	ExpectedKeyValueRevision      int64                        `json:"expected_key_value_revision,omitempty"`
+	UsesOldIdentity               bool                         `json:"uses_old_identity"`
+	Artifact                      *BackupArtifactEvidence      `json:"artifact,omitempty"`
+	StagedTreeManifestSHA256      string                       `json:"staged_tree_manifest_sha256,omitempty"`
+	State                         BackupRestoreState           `json:"state"`
+	MutationStarted               bool                         `json:"mutation_started"`
+	ServiceCount                  uint32                       `json:"service_count"`
+	ConfigProgress                *BackupRestoreConfigProgress `json:"config_progress,omitempty"`
+	Verification                  BackupVerificationState      `json:"verification"`
+	CreatedAt                     time.Time                    `json:"created_at"`
+	UpdatedAt                     time.Time                    `json:"updated_at"`
 }
 
 type BackupRestoreServiceRecord struct {
@@ -449,9 +497,15 @@ func validateBackupScheduleCursorRecord(record BackupScheduleCursorRecord) error
 		return err
 	}
 	if record.PolicyRevision <= 0 || validateBackupPolicyFrequency(record.Frequency) != nil ||
-		!validBackupRuntimeInstant(record.EnabledAt) || !validBackupRuntimeInstant(record.LastEvaluatedAt) ||
-		!validBackupRuntimeInstant(record.NextDueAt) || !validBackupRuntimeInstant(record.UpdatedAt) ||
-		record.LastEvaluatedAt.Before(record.EnabledAt) || !record.NextDueAt.After(record.LastEvaluatedAt) ||
+		!validBackupRuntimeInstant(
+			record.EnabledAt,
+		) || !validBackupRuntimeInstant(record.LastEvaluatedAt) ||
+		!validBackupRuntimeInstant(
+			record.NextDueAt,
+		) || !validBackupRuntimeInstant(record.UpdatedAt) ||
+		record.LastEvaluatedAt.Before(
+			record.EnabledAt,
+		) || !record.NextDueAt.After(record.LastEvaluatedAt) ||
 		record.UpdatedAt.Before(record.EnabledAt) {
 		return invalidBackupRuntimeRecord("backup schedule cursor is invalid")
 	}
@@ -470,7 +524,9 @@ func validateBackupDueOutcomeRecord(record BackupDueOutcomeRecord) error {
 		return err
 	}
 	if record.PolicyRevision <= 0 || !validBackupRuntimeInstant(record.ScheduledAt) ||
-		!validBackupRuntimeInstant(record.CreatedAt) || !validBackupRuntimeInstant(record.RetainUntil) ||
+		!validBackupRuntimeInstant(
+			record.CreatedAt,
+		) || !validBackupRuntimeInstant(record.RetainUntil) ||
 		record.ScheduledAt.After(record.CreatedAt) || !record.RetainUntil.After(record.CreatedAt) {
 		return invalidBackupRuntimeRecord("backup due outcome lifecycle is invalid")
 	}
@@ -492,7 +548,10 @@ func validateBackupDueOutcomeRecord(record BackupDueOutcomeRecord) error {
 func validateBackupOperationLockRecord(record BackupOperationLockRecord) error {
 	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(ids.KindTask, record.TaskID) != nil || !validBackupOperationKind(record.Kind) ||
+		validateStableID(
+			ids.KindTask,
+			record.TaskID,
+		) != nil || !validBackupOperationKind(record.Kind) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup operation lock is invalid")
 	}
@@ -515,13 +574,27 @@ func validateBackupRunRecord(record BackupRunRecord) error {
 	if validateStableID(ids.KindTask, record.TaskID) != nil ||
 		validateStableID(ids.KindOperation, record.OperationID) != nil ||
 		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindConnector, record.ConnectorID) != nil || record.PolicyRevision <= 0 ||
-		record.ConnectorRevision <= 0 || record.ConnectorCredentialsRevision <= 0 ||
-		!validBackupRunState(record.State) || !validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
+		validateStableID(
+			ids.KindConnector,
+			record.ConnectorID,
+		) != nil || record.PolicyRevision <= 0 || record.RetentionKeep <= 0 ||
+		record.RetentionKeep > MaximumBackupPolicyKeep ||
+		record.ConnectorRevision <= 0 || record.ConnectorCredentialsRevision < 0 ||
+		(record.ConnectorHasDirectCredentials != (record.ConnectorCredentialsRevision > 0)) ||
+		!validBackupRunState(
+			record.State,
+		) || !validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup run identity or lifecycle is invalid")
 	}
+	hasUploadEndpoint := record.ConnectorEndpoint != "" || record.ConnectorBucket != "" ||
+		record.ConnectorRegion != "" || record.ConnectorPathStyle
+	if hasUploadEndpoint && (record.ConnectorEndpoint == "" || strings.HasSuffix(record.ConnectorEndpoint, "/") ||
+		record.ConnectorBucket == "" || record.ConnectorRegion == "") {
+		return invalidBackupRuntimeRecord("backup run Connector upload authority is incomplete")
+	}
 	if record.RetryOfTaskID != "" {
-		if validateStableID(ids.KindTask, record.RetryOfTaskID) != nil || record.RetryOfTaskID == record.TaskID {
+		if validateStableID(ids.KindTask, record.RetryOfTaskID) != nil ||
+			record.RetryOfTaskID == record.TaskID {
 			return invalidBackupRuntimeRecord("backup run retry task is invalid")
 		}
 	}
@@ -547,7 +620,11 @@ func validateBackupRunRecord(record BackupRunRecord) error {
 		if source.Ordinal != uint32(index) {
 			return invalidBackupRuntimeRecord("backup run source ordinals are not contiguous")
 		}
-		if err := validateBackupRunSourceAttempt(record.EnvironmentID, source); err != nil {
+		if err := validateBackupRunSourceAttempt(
+			record.EnvironmentID,
+			record.ConnectorPrefix,
+			source,
+		); err != nil {
 			return err
 		}
 		if _, exists := seenSources[source.SourceID]; exists {
@@ -559,6 +636,10 @@ func validateBackupRunRecord(record BackupRunRecord) error {
 		seenSources[source.SourceID] = struct{}{}
 		seenPoints[source.RecoveryPointID] = struct{}{}
 		allSucceeded = allSucceeded && source.State == BackupSourceAttemptSucceeded
+		if source.Kind == BackupRuntimeSourceConfig &&
+			record.Encryption != BackupRuntimeEncryptionAge {
+			return invalidBackupRuntimeRecord("config backup requires age encryption")
+		}
 	}
 	if record.State == BackupRunCompleted && !allSucceeded {
 		return invalidBackupRuntimeRecord("completed backup run has an incomplete source")
@@ -583,6 +664,9 @@ func validateBackupRunAttemptTable(record BackupRunRecord) error {
 		}
 	}
 	if boundary < 0 {
+		if record.State == BackupRunRunning {
+			return nil
+		}
 		return invalidBackupRuntimeRecord("non-completed backup run has no remaining source")
 	}
 	boundarySource := record.Sources[boundary]
@@ -609,18 +693,26 @@ func validateBackupRunAttemptTable(record BackupRunRecord) error {
 		}
 	case BackupRunFailed:
 		if boundarySource.FailureCode == "" || !suffixAll(BackupSourceAttemptUnstarted) ||
-			!failedBackupSourceCheckpoint(boundarySource.State, boundarySource.FailureCode) ||
+			!failedBackupSourceCheckpoint(
+				boundarySource.State,
+				boundarySource.Phase,
+				boundarySource.FailureCode,
+			) ||
 			boundarySource.FailureCode == BackupFailureAborted ||
 			boundarySource.FailureCode == BackupFailureTimedOut {
 			return invalidBackupRuntimeRecord("failed backup run checkpoint is invalid")
 		}
 	case BackupRunAborted:
-		if boundarySource.State != BackupSourceAttemptFailed || boundarySource.FailureCode != BackupFailureAborted ||
+		if (boundarySource.State != BackupSourceAttemptFailed &&
+			boundarySource.State != BackupSourceAttemptOrphaned) ||
+			boundarySource.FailureCode != BackupFailureAborted ||
 			!suffixAll(BackupSourceAttemptUnstarted) {
 			return invalidBackupRuntimeRecord("aborted backup run checkpoint is invalid")
 		}
 	case BackupRunTimedOut:
-		if boundarySource.State != BackupSourceAttemptFailed || boundarySource.FailureCode != BackupFailureTimedOut ||
+		if (boundarySource.State != BackupSourceAttemptFailed &&
+			boundarySource.State != BackupSourceAttemptOrphaned) ||
+			boundarySource.FailureCode != BackupFailureTimedOut ||
 			!suffixAll(BackupSourceAttemptUnstarted) {
 			return invalidBackupRuntimeRecord("timed-out backup run checkpoint is invalid")
 		}
@@ -647,19 +739,37 @@ func validateBackupRunInitiator(record BackupRunRecord) error {
 
 func validateBackupRunSourceAttempt(
 	environmentID string,
+	connectorPrefix string,
 	record BackupRunSourceAttemptRecord,
 ) error {
-	if validateStableID(ids.KindBackupSource, record.SourceID) != nil || record.SourceRevision <= 0 ||
-		record.TargetRevision <= 0 || validateStableID(ids.KindRecoveryPoint, record.RecoveryPointID) != nil ||
+	if validateStableID(ids.KindBackupSource, record.SourceID) != nil ||
+		record.SourceRevision <= 0 ||
+		record.TargetRevision <= 0 ||
+		validateStableID(ids.KindRecoveryPoint, record.RecoveryPointID) != nil ||
+		!validBackupRuntimeInstant(record.RecoveryPointCreatedAt) ||
+		!recoveryPointIDMatchesInstant(record.RecoveryPointID, record.RecoveryPointCreatedAt) ||
 		!validBackupSourceAttemptState(record.State) ||
-		!validBackupObjectKey(record.ObjectKey, environmentID, record.SourceID, record.RecoveryPointID) {
+		!validBackupSourceAttemptPhase(record.Phase) ||
+		!validBackupObjectKey(
+			record.ObjectKey,
+			environmentID,
+			record.SourceID,
+			connectorPrefix,
+			record.RecoveryPointID,
+		) {
 		return invalidBackupRuntimeRecord("backup run source attempt is invalid")
 	}
-	if err := validateBackupSourceIdentity(record.Kind, record.TargetID, record.Format); err != nil {
+	if err := validateBackupSourceIdentity(
+		record.Kind,
+		record.TargetID,
+		record.Format,
+	); err != nil {
 		return err
 	}
 	if record.Kind == BackupRuntimeSourceConfig && record.TargetID != environmentID {
-		return invalidBackupRuntimeRecord("config backup source target does not match its Environment")
+		return invalidBackupRuntimeRecord(
+			"config backup source target does not match its Environment",
+		)
 	}
 	if err := validateBackupRunSourceSnapshot(
 		record.Kind,
@@ -674,16 +784,16 @@ func validateBackupRunSourceAttempt(
 		(record.SHA256 != "" && !validSHA256(record.SHA256)) {
 		return invalidBackupRuntimeRecord("backup run source artifact evidence is invalid")
 	}
-	if sourceAttemptRequiresArtifact(record.State) && (record.SizeBytes <= 0 || record.SHA256 == "") {
+	if sourceAttemptRequiresArtifact(record.State, record.Phase) &&
+		(record.SizeBytes <= 0 || record.SHA256 == "") {
 		return invalidBackupRuntimeRecord("backup run source state requires artifact evidence")
 	}
-	if sourceAttemptForbidsArtifact(record.State) && (record.SizeBytes != 0 || record.SHA256 != "") {
+	if sourceAttemptForbidsArtifact(record.State) &&
+		(record.SizeBytes != 0 || record.SHA256 != "") {
 		return invalidBackupRuntimeRecord("backup run source state cannot carry artifact evidence")
 	}
-	if record.Kind != BackupRuntimeSourceVolume && record.ServiceCount != 0 {
-		return invalidBackupRuntimeRecord("non-volume backup source cannot carry service checkpoints")
-	}
-	if !validBackupFailureCodeForAttempt(record.State, record.FailureCode) {
+	if !validBackupPhaseForAttemptState(record.State, record.Phase) ||
+		!validBackupFailureCodeForAttempt(record.State, record.Phase, record.FailureCode) {
 		return invalidBackupRuntimeRecord("backup source failure checkpoint is invalid")
 	}
 	return nil
@@ -716,23 +826,12 @@ func validateBackupRunSourceSnapshot(
 	case BackupRuntimeSourceConfig:
 		if snapshot.Config == nil || validateStableID(
 			ids.KindTask,
-			snapshot.Config.ConfigSnapshotTaskID,
-		) != nil {
+			snapshot.Config.ConfigSnapshotID,
+		) != nil || snapshot.Config.ReadRevision <= 0 {
 			return invalidBackupRuntimeRecord("config backup source snapshot is invalid")
 		}
 	default:
 		return invalidBackupRuntimeRecord("backup source snapshot kind is invalid")
-	}
-	return nil
-}
-
-func validateBackupRunVolumeServiceRecord(record BackupRunVolumeServiceRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindBackupSource, record.SourceID) != nil ||
-		validateStableID(ids.KindService, record.ServiceID) != nil || record.ServiceRevision <= 0 ||
-		!validBackupServiceRuntimeIntent(record.PriorIntent) {
-		return invalidBackupRuntimeRecord("backup run Volume service checkpoint is invalid")
 	}
 	return nil
 }
@@ -743,20 +842,49 @@ func validateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) err
 		validateStableID(ids.KindBackupSource, record.SourceID) != nil ||
 		validateStableID(ids.KindConnector, record.ConnectorID) != nil || record.SizeBytes <= 0 ||
 		!validSHA256(record.SHA256) || !validBackupRuntimeInstant(record.CreatedAt) ||
-		!validBackupObjectKey(record.ObjectKey, record.EnvironmentID, record.SourceID, record.ID) {
+		!recoveryPointIDMatchesInstant(record.ID, record.CreatedAt) ||
+		!validBackupObjectKey(
+			record.ObjectKey,
+			record.EnvironmentID,
+			record.SourceID,
+			record.ConnectorPrefix,
+			record.ID,
+		) {
 		return invalidBackupRuntimeRecord("recovery point snapshot is invalid")
 	}
-	if err := validateBackupSourceIdentity(record.SourceKind, record.TargetID, record.SourceFormat); err != nil {
+	if err := validateBackupSourceIdentity(
+		record.SourceKind,
+		record.TargetID,
+		record.SourceFormat,
+	); err != nil {
 		return err
 	}
 	if record.SourceKind == BackupRuntimeSourceConfig && record.TargetID != record.EnvironmentID {
-		return invalidBackupRuntimeRecord("config recovery point target does not match its Environment")
+		return invalidBackupRuntimeRecord(
+			"config recovery point target does not match its Environment",
+		)
+	}
+	if record.SourceKind == BackupRuntimeSourceConfig &&
+		record.Encryption != BackupRuntimeEncryptionAge {
+		return invalidBackupRuntimeRecord("config recovery point requires age encryption")
 	}
 	switch record.Encryption {
 	case BackupRuntimeEncryptionAge:
-		return validateBackupRuntimeEncryption(record.Encryption, 1, 1, record.KeyEra, record.Recipient)
+		return validateBackupRuntimeEncryption(
+			record.Encryption,
+			1,
+			1,
+			record.KeyEra,
+			record.Recipient,
+		)
 	case BackupRuntimeEncryptionNone:
-		return validateBackupRuntimeEncryption(record.Encryption, 0, 0, record.KeyEra, record.Recipient)
+		return validateBackupRuntimeEncryption(
+			record.Encryption,
+			0,
+			0,
+			record.KeyEra,
+			record.Recipient,
+		)
 	default:
 		return invalidBackupRuntimeRecord("recovery point encryption is invalid")
 	}
@@ -777,6 +905,10 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 		return err
 	}
 	if validateStableID(ids.KindTask, record.TaskID) != nil ||
+		validateStableID(ids.KindOperation, record.Reconciliation.OperationID) != nil ||
+		record.Reconciliation.PolicyRevision <= 0 ||
+		record.Reconciliation.RetentionKeep <= 0 ||
+		record.Reconciliation.RetentionKeep > MaximumBackupPolicyKeep ||
 		(record.State != BackupOrphanInspect && record.State != BackupOrphanDelete) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) ||
 		record.CreatedAt.Before(record.Point.CreatedAt) {
@@ -787,7 +919,10 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 
 func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error {
 	if validateStableID(ids.KindBackupSource, record.SourceID) != nil ||
-		validateStableID(ids.KindRecoveryPoint, record.TriggerRecoveryPointID) != nil || record.Keep <= 0 ||
+		validateStableID(
+			ids.KindRecoveryPoint,
+			record.TriggerRecoveryPointID,
+		) != nil || record.Keep <= 0 || record.Keep > MaximumBackupPolicyKeep ||
 		record.Revision <= 0 || !validBackupRetentionState(record.State) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup retention sweep is invalid")
@@ -795,8 +930,19 @@ func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error
 	if record.Cursor != "" && validateStableID(ids.KindRecoveryPoint, record.Cursor) != nil {
 		return invalidBackupRuntimeRecord("backup retention cursor is invalid")
 	}
-	if record.State == BackupRetentionPending && record.Cursor != "" {
-		return invalidBackupRuntimeRecord("pending backup retention sweep cannot carry a cursor")
+	if record.RetainedCount < 0 || record.RetainedCount > record.Keep {
+		return invalidBackupRuntimeRecord("backup retention retained count exceeds keep")
+	}
+	if record.State == BackupRetentionPending {
+		if record.SelectionRevision != 0 || record.Cursor != "" || record.RetainedCount != 0 ||
+			record.PruneOperationID != "" {
+			return invalidBackupRuntimeRecord("pending backup retention sweep contains progress")
+		}
+	} else if record.SelectionRevision <= 0 ||
+		validateStableID(ids.KindOperation, record.PruneOperationID) != nil {
+		return invalidBackupRuntimeRecord(
+			"active backup retention sweep requires a prune operation",
+		)
 	}
 	return nil
 }
@@ -805,7 +951,10 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 	if err := validateBackupRecoveryPointSnapshot(record.Point); err != nil {
 		return err
 	}
-	if !validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
+	if record.PointRevision <= 0 ||
+		validateStableID(ids.KindOperation, record.OperationID) != nil ||
+		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) ||
+		record.CreatedAt.Before(record.Point.CreatedAt) {
 		return invalidBackupRuntimeRecord("recovery point prune lifecycle is invalid")
 	}
 	switch record.State {
@@ -813,7 +962,7 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 		if record.TaskID != "" {
 			return invalidBackupRuntimeRecord("pending recovery point prune cannot carry a task id")
 		}
-	case BackupPruneAssigned:
+	case BackupPruneAssigned, BackupPruneVerifiedAbsent:
 		if validateStableID(ids.KindTask, record.TaskID) != nil {
 			return invalidBackupRuntimeRecord("assigned recovery point prune requires a task id")
 		}
@@ -823,9 +972,12 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 	return nil
 }
 
-func validateBackupRecoveryPointPruneDispatchRecord(record BackupRecoveryPointPruneDispatchRecord) error {
+func validateBackupRecoveryPointPruneDispatchRecord(
+	record BackupRecoveryPointPruneDispatchRecord,
+) error {
 	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindConnector, record.ConnectorID) != nil ||
+		validateStableID(ids.KindOperation, record.OperationID) != nil ||
+		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		!validBackupRuntimeInstant(record.CreatedAt) || len(record.RecoveryPointIDs) == 0 ||
 		len(record.RecoveryPointIDs) > maximumBackupPruneDispatchPoints {
 		return invalidBackupRuntimeRecord("recovery point prune dispatch is invalid")
@@ -848,7 +1000,9 @@ func validateBackupRestoreRecord(record BackupRestoreRecord) error {
 		validateStableID(ids.KindOperation, record.OperationID) != nil ||
 		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		record.RecoveryPointRevision <= 0 || record.SourceRevision <= 0 || record.ConnectorRevision <= 0 ||
-		record.ConnectorCredentialsRevision <= 0 || !validBackupRestoreState(record.State) ||
+		record.ConnectorCredentialsRevision < 0 ||
+		(record.ConnectorHasDirectCredentials != (record.ConnectorCredentialsRevision > 0)) ||
+		!validBackupRestoreState(record.State) ||
 		!validBackupVerificationState(record.Verification) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup restore identity or lifecycle is invalid")
@@ -862,16 +1016,28 @@ func validateBackupRestoreRecord(record BackupRestoreRecord) error {
 	if err := validateBackupRestoreTarget(record.Point, record.CurrentTarget); err != nil {
 		return err
 	}
+	if record.Point.SourceKind == BackupRuntimeSourceConfig {
+		if validateStableID(ids.KindConfig, record.RestoreGenerationID) != nil {
+			return invalidBackupRuntimeRecord("config restore generation id is invalid")
+		}
+	} else if record.RestoreGenerationID != "" {
+		return invalidBackupRuntimeRecord("non-config restore cannot carry a restore generation id")
+	}
 	if err := validateBackupRestoreKeyReferences(record); err != nil {
 		return err
 	}
 	if record.Artifact != nil {
-		if !validBackupArtifact(*record.Artifact) || record.Artifact.SizeBytes != record.Point.SizeBytes ||
+		if !validBackupArtifact(*record.Artifact) ||
+			record.Artifact.SizeBytes != record.Point.SizeBytes ||
 			record.Artifact.SHA256 != record.Point.SHA256 {
-			return invalidBackupRuntimeRecord("backup restore artifact evidence does not match its point")
+			return invalidBackupRuntimeRecord(
+				"backup restore artifact evidence does not match its point",
+			)
 		}
 	} else if restoreStateRequiresArtifact(record.State) {
-		return invalidBackupRuntimeRecord("backup restore state requires verified artifact evidence")
+		return invalidBackupRuntimeRecord(
+			"backup restore state requires verified artifact evidence",
+		)
 	}
 	if err := validateBackupRestoreStateTable(record); err != nil {
 		return err
@@ -904,8 +1070,10 @@ func validateBackupRestoreTarget(
 			return invalidBackupRuntimeRecord("volume restore target is invalid")
 		}
 	case BackupRuntimeSourceConfig:
-		if target.Config == nil || validateStableID(ids.KindEnvironment, target.Config.EnvironmentID) != nil ||
-			target.Config.EnvironmentRevision <= 0 || target.Config.EnvironmentID != point.TargetID {
+		if target.Config == nil ||
+			validateStableID(ids.KindEnvironment, target.Config.EnvironmentID) != nil ||
+			target.Config.EnvironmentRevision <= 0 ||
+			target.Config.EnvironmentID != point.TargetID {
 			return invalidBackupRuntimeRecord("config restore target is invalid")
 		}
 	default:
@@ -949,7 +1117,9 @@ func validateBackupRestoreStateTable(record BackupRestoreRecord) error {
 		}
 	}
 	if !allowed || record.MutationStarted != expectedMutation {
-		return invalidBackupRuntimeRecord("backup restore source state or mutation checkpoint is invalid")
+		return invalidBackupRuntimeRecord(
+			"backup restore source state or mutation checkpoint is invalid",
+		)
 	}
 	return nil
 }
@@ -957,19 +1127,23 @@ func validateBackupRestoreStateTable(record BackupRestoreRecord) error {
 func validateBackupRestoreVolumeManifest(record BackupRestoreRecord) error {
 	if record.Point.SourceKind != BackupRuntimeSourceVolume {
 		if record.StagedTreeManifestSHA256 != "" {
-			return invalidBackupRuntimeRecord("non-Volume restore cannot carry a staged-tree manifest")
+			return invalidBackupRuntimeRecord(
+				"non-Volume restore cannot carry a staged-tree manifest",
+			)
 		}
 		return nil
 	}
 	if record.StagedTreeManifestSHA256 != "" && !validSHA256(record.StagedTreeManifestSHA256) {
-		return invalidBackupRuntimeRecord("Volume restore staged-tree manifest is invalid")
+		return invalidBackupRuntimeRecord("volume restore staged-tree manifest is invalid")
 	}
 	switch record.State {
 	case BackupRestoreTreeValidated, BackupRestoreExchangeReady, BackupRestoreExchanged,
 		BackupRestoreConsumersRestored, BackupRestoreVerified, BackupRestoreCompleted,
 		BackupRestoreRecoveryRequired:
 		if record.StagedTreeManifestSHA256 == "" {
-			return invalidBackupRuntimeRecord("Volume restore state requires a staged-tree manifest")
+			return invalidBackupRuntimeRecord(
+				"Volume restore state requires a staged-tree manifest",
+			)
 		}
 	}
 	return nil
@@ -985,7 +1159,9 @@ func validateBackupRestoreKeyReferences(record BackupRestoreRecord) error {
 	}
 	if record.UsesOldIdentity {
 		if record.ExpectedKeyRecordRevision != 0 || record.ExpectedKeyValueRevision != 0 {
-			return invalidBackupRuntimeRecord("old-identity restore cannot carry current key revisions")
+			return invalidBackupRuntimeRecord(
+				"old-identity restore cannot carry current key revisions",
+			)
 		}
 		return nil
 	}
@@ -1005,6 +1181,12 @@ func validateBackupRestoreProgress(record BackupRestoreRecord) error {
 	if record.ConfigProgress != nil {
 		return invalidBackupRuntimeRecord("non-config restore cannot carry config progress")
 	}
+	if record.Point.SourceKind == BackupRuntimeSourceVolume &&
+		record.ServiceCount != uint32(len(record.CurrentTarget.Volume.Services)) {
+		return invalidBackupRuntimeRecord(
+			"volume restore service count does not match its snapshot",
+		)
+	}
 	return nil
 }
 
@@ -1016,14 +1198,19 @@ func validateBackupRestoreConfigProgress(
 		progress.NextValueChunkOrdinal > progress.ValueChunkCount {
 		return invalidBackupRuntimeRecord("config restore chunk cursor exceeds received chunks")
 	}
-	if progress.MaterializationGeneration == 0 || progress.CurrentEntryOrdinal != progress.FinalizedEntryCount ||
+	if progress.MaterializationGeneration == 0 ||
+		progress.CurrentEntryOrdinal != progress.FinalizedEntryCount ||
 		(progress.FinalizedEntryCount > 0 && progress.DescriptorChunkCount < progress.FinalizedEntryCount) ||
-		!optionalDigestMatchesCount(progress.DescriptorChainSHA256, progress.DescriptorChunkCount) ||
+		!optionalDigestMatchesCount(
+			progress.DescriptorChainSHA256,
+			progress.DescriptorChunkCount,
+		) ||
 		!optionalDigestMatchesCount(progress.StoredValueChainSHA256, progress.ValueChunkCount) ||
 		(progress.StoredManifestSHA256 != "" && !validSHA256(progress.StoredManifestSHA256)) {
 		return invalidBackupRuntimeRecord("config restore progress digest is invalid")
 	}
-	if progress.DeleteCursor != "" && validateStableID(ids.KindEnvEntry, progress.DeleteCursor) != nil {
+	if progress.DeleteCursor != "" &&
+		validateStableID(ids.KindEnvEntry, progress.DeleteCursor) != nil {
 		return invalidBackupRuntimeRecord("config restore delete cursor is invalid")
 	}
 	if configRestoreStateRequiresManifest(state) && progress.StoredManifestSHA256 == "" {
@@ -1058,7 +1245,9 @@ func validateBackupRestoreConfigProgress(
 	if (state == BackupRestoreCanonicalComplete || state == BackupRestoreMaterializing ||
 		state == BackupRestoreVerified || state == BackupRestoreCompleted ||
 		state == BackupRestoreRecoveryRequired) && progress.UpsertEntryOrdinal != progress.FinalizedEntryCount {
-		return invalidBackupRuntimeRecord("config restore canonical switch precedes complete upserts")
+		return invalidBackupRuntimeRecord(
+			"config restore canonical switch precedes complete upserts",
+		)
 	}
 	return nil
 }
@@ -1070,7 +1259,8 @@ func validateBackupRestoreVerification(record BackupRestoreRecord) error {
 			return invalidBackupRuntimeRecord("passed restore verification has an invalid state")
 		}
 	case BackupVerificationFailed:
-		if record.State != BackupRestoreFailedSafe && record.State != BackupRestoreRecoveryRequired {
+		if record.State != BackupRestoreFailedSafe &&
+			record.State != BackupRestoreRecoveryRequired {
 			return invalidBackupRuntimeRecord("failed restore verification has an invalid state")
 		}
 	case BackupVerificationPending:
@@ -1106,7 +1296,9 @@ func validateBackupKeyRotationRecord(record BackupKeyRotationRecord) error {
 	}
 	if record.State == BackupKeyRotationPrepared && (len(record.NextEncryptedIdentity) == 0 ||
 		len(record.NextEncryptedIdentity) > maximumBackupKeyCiphertextLen) {
-		return invalidBackupRuntimeRecord("prepared backup key rotation requires a wrapped identity")
+		return invalidBackupRuntimeRecord(
+			"prepared backup key rotation requires a wrapped identity",
+		)
 	}
 	if record.State == BackupKeyRotationApplied && len(record.NextEncryptedIdentity) != 0 {
 		return invalidBackupRuntimeRecord("applied backup key rotation retains a wrapped identity")
@@ -1116,22 +1308,64 @@ func validateBackupKeyRotationRecord(record BackupKeyRotationRecord) error {
 
 func validateBackupPostgresSnapshot(snapshot BackupPostgresSourceSnapshot) error {
 	if validateStableID(ids.KindEnvironment, snapshot.ConsumerEnvironmentID) != nil ||
-		validateStableID(ids.KindAttach, snapshot.AttachID) != nil || snapshot.AttachRevision <= 0 ||
+		validateStableID(
+			ids.KindAttach,
+			snapshot.AttachID,
+		) != nil || snapshot.AttachRevision <= 0 ||
 		validateStableID(ids.KindProject, snapshot.BackingProjectID) != nil ||
 		snapshot.BackingProjectRevision <= 0 ||
 		validateStableID(ids.KindEnvironment, snapshot.BackingEnvironmentID) != nil ||
 		snapshot.BackingEnvironmentRevision <= 0 ||
 		validateStableID(ids.KindService, snapshot.BackingServiceID) != nil ||
-		snapshot.BackingServiceRevision <= 0 || snapshot.AttachFactsRevision <= 0 {
+		snapshot.BackingServiceRevision <= 0 || snapshot.AttachFactsRevision <= 0 ||
+		!validBackupPostgresIdentity(snapshot.Database) || !validBackupPostgresIdentity(snapshot.Role) {
 		return invalidBackupRuntimeRecord("postgres source snapshot is invalid")
 	}
 	return nil
+}
+
+func validBackupPostgresIdentity(value string) bool {
+	if len(value) == 0 || len(value) > 63 || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, character := range []byte(value[1:]) {
+		if (character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') && character != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {
 	if validateStableID(ids.KindEnvironment, snapshot.EnvironmentID) != nil ||
 		validateStableID(ids.KindVolume, snapshot.VolumeID) != nil || snapshot.VolumeRevision <= 0 {
 		return invalidBackupRuntimeRecord("volume source snapshot is invalid")
+	}
+	hasProjectionAuthority := snapshot.ProjectionRevision != 0 || snapshot.RenderGeneration != 0 ||
+		snapshot.ComposeVolumeKey != "" || snapshot.DockerVolumeName != "" || snapshot.AuthorizedVolumeDir != ""
+	if hasProjectionAuthority && (snapshot.ProjectionRevision <= 0 || snapshot.RenderGeneration == 0 ||
+		snapshot.ComposeVolumeKey == "" || snapshot.DockerVolumeName != "gp_vol_"+snapshot.VolumeID ||
+		snapshot.AuthorizedVolumeDir == "") {
+		return invalidBackupRuntimeRecord("volume projection authority is incomplete")
+	}
+	hasArtifactAuthority := snapshot.ArtifactID != "" || snapshot.ArtifactDigest != "" || snapshot.ArtifactRevision != 0
+	if hasArtifactAuthority && (validateStableID(ids.KindConfig, snapshot.ArtifactID) != nil ||
+		!validSHA256(snapshot.ArtifactDigest) || snapshot.ArtifactRevision <= 0 || !hasProjectionAuthority) {
+		return invalidBackupRuntimeRecord("volume artifact authority is incomplete")
+	}
+	previousID := ""
+	for _, service := range snapshot.Services {
+		if validateStableID(ids.KindService, service.ServiceID) != nil ||
+			service.ServiceRevision <= 0 ||
+			!validBackupServiceRuntimeIntent(service.PriorIntent) ||
+			(previousID != "" && service.ServiceID <= previousID) {
+			return invalidBackupRuntimeRecord("volume service snapshots are invalid")
+		}
+		if hasProjectionAuthority && (service.ComposeKey == "" || len(service.MountPaths) == 0) {
+			return invalidBackupRuntimeRecord("volume service projection is incomplete")
+		}
+		previousID = service.ServiceID
 	}
 	return nil
 }
@@ -1143,15 +1377,18 @@ func validateBackupSourceIdentity(
 ) error {
 	switch kind {
 	case BackupRuntimeSourceAttach:
-		if validateStableID(ids.KindAttach, targetID) != nil || format != BackupRuntimeFormatPostgres {
+		if validateStableID(ids.KindAttach, targetID) != nil ||
+			format != BackupRuntimeFormatPostgres {
 			return invalidBackupRuntimeRecord("postgres backup source identity is invalid")
 		}
 	case BackupRuntimeSourceVolume:
-		if validateStableID(ids.KindVolume, targetID) != nil || format != BackupRuntimeFormatVolume {
+		if validateStableID(ids.KindVolume, targetID) != nil ||
+			format != BackupRuntimeFormatVolume {
 			return invalidBackupRuntimeRecord("volume backup source identity is invalid")
 		}
 	case BackupRuntimeSourceConfig:
-		if validateStableID(ids.KindEnvironment, targetID) != nil || format != BackupRuntimeFormatConfig {
+		if validateStableID(ids.KindEnvironment, targetID) != nil ||
+			format != BackupRuntimeFormatConfig {
 			return invalidBackupRuntimeRecord("config backup source identity is invalid")
 		}
 	default:
@@ -1169,7 +1406,8 @@ func validateBackupRuntimeEncryption(
 ) error {
 	switch encryption {
 	case BackupRuntimeEncryptionAge:
-		if keyRecordRevision <= 0 || keyValueRevision <= 0 || keyEra <= 0 || !validBackupRecipient(recipient) {
+		if keyRecordRevision <= 0 || keyValueRevision <= 0 || keyEra <= 0 ||
+			!validBackupRecipient(recipient) {
 			return invalidBackupRuntimeRecord("age backup encryption evidence is invalid")
 		}
 	case BackupRuntimeEncryptionNone:
@@ -1187,38 +1425,83 @@ func validBackupRecipient(value string) bool {
 	return err == nil && recipient.String() == value
 }
 
-func validBackupObjectKey(value string, environmentID string, sourceID string, recoveryPointID string) bool {
+func validBackupObjectKey(
+	value string,
+	environmentID string,
+	sourceID string,
+	connectorPrefix string,
+	recoveryPointID string,
+) bool {
 	if value == "" || len(value) > maximumBackupObjectKeyBytes || !utf8.ValidString(value) ||
-		strings.ContainsRune(value, '\x00') || strings.Contains(value, `\`) || strings.HasPrefix(value, "/") ||
+		strings.ContainsRune(
+			value,
+			'\x00',
+		) || strings.Contains(value, `\`) || strings.HasPrefix(value, "/") ||
 		path.Clean(value) != value {
 		return false
 	}
+	if connectorPrefix != "" && (!utf8.ValidString(connectorPrefix) ||
+		strings.HasPrefix(connectorPrefix, "/") || !strings.HasSuffix(connectorPrefix, "/") ||
+		strings.ContainsRune(connectorPrefix, '\x00') || strings.Contains(connectorPrefix, `\`) ||
+		path.Clean(strings.TrimSuffix(connectorPrefix, "/")) != strings.TrimSuffix(connectorPrefix, "/")) {
+		return false
+	}
 	suffix := environmentID + "/" + sourceID + "/" + recoveryPointID + "/artifact.bin"
-	return value == suffix || strings.HasSuffix(value, "/"+suffix)
+	return value == connectorPrefix+suffix
 }
 
-func validBackupFailureCodeForAttempt(state BackupSourceAttemptState, code BackupFailureCode) bool {
+func recoveryPointIDMatchesInstant(recoveryPointID string, instant time.Time) bool {
+	if validateStableID(ids.KindRecoveryPoint, recoveryPointID) != nil ||
+		!validBackupRuntimeInstant(instant) || instant.Nanosecond()%int(time.Millisecond) != 0 {
+		return false
+	}
+	parsed, err := ulid.ParseStrict(strings.TrimPrefix(recoveryPointID, string(ids.KindRecoveryPoint)+"_"))
+	if err != nil {
+		return false
+	}
+	return time.UnixMilli(int64(parsed.Time())).UTC().Equal(instant)
+}
+
+func validBackupFailureCodeForAttempt(
+	state BackupSourceAttemptState,
+	phase BackupSourceAttemptPhase,
+	code BackupFailureCode,
+) bool {
 	if code == "" {
 		return state != BackupSourceAttemptFailed
 	}
-	return failedBackupSourceCheckpoint(state, code)
+	return failedBackupSourceCheckpoint(state, phase, code)
 }
 
-func failedBackupSourceCheckpoint(state BackupSourceAttemptState, code BackupFailureCode) bool {
+func failedBackupSourceCheckpoint(
+	state BackupSourceAttemptState,
+	phase BackupSourceAttemptPhase,
+	code BackupFailureCode,
+) bool {
 	switch state {
 	case BackupSourceAttemptFailed:
-		return code == BackupFailureCapture || code == BackupFailureStaging || code == BackupFailureUpload ||
-			code == BackupFailureHeadVerification || code == BackupFailurePointCommit ||
-			code == BackupFailureAborted || code == BackupFailureTimedOut
+		return code == BackupFailureAborted || code == BackupFailureTimedOut ||
+			backupFailureCodeMatchesPhase(code, phase)
 	case BackupSourceAttemptOrphaned:
-		return code == BackupFailureHeadVerification || code == BackupFailurePointCommit
+		return code == BackupFailureAborted || code == BackupFailureTimedOut ||
+			backupFailureCodeMatchesPhase(code, phase)
 	case BackupSourceAttemptPointCommitted:
-		return code == BackupFailureRetention
+		return phase == BackupSourcePhaseRetention && code == BackupFailureRetention
 	case BackupSourceAttemptCleanupPending:
-		return code == BackupFailureCleanup
+		return phase == BackupSourcePhaseCleanup && code == BackupFailureCleanup
 	default:
 		return false
 	}
+}
+
+func backupFailureCodeMatchesPhase(code BackupFailureCode, phase BackupSourceAttemptPhase) bool {
+	return (code == BackupFailureCapture && phase == BackupSourcePhaseCapture) ||
+		(code == BackupFailureStaging && phase == BackupSourcePhaseStaging) ||
+		(code == BackupFailureUpload && phase == BackupSourcePhaseUpload) ||
+		(code == BackupFailureHeadVerification && phase == BackupSourcePhaseHeadVerification) ||
+		(code == BackupFailurePointCommit && phase == BackupSourcePhasePointCommit) ||
+		(code == BackupFailureCleanup && phase == BackupSourcePhaseCleanup) ||
+		(code == BackupFailureRetention && phase == BackupSourcePhaseRetention)
 }
 
 func validBackupArtifact(value BackupArtifactEvidence) bool {
@@ -1239,7 +1522,9 @@ func validBackupRuntimeLifecycle(createdAt time.Time, updatedAt time.Time) bool 
 }
 
 func validBackupOperationKind(kind BackupOperationKind) bool {
-	return kind == BackupOperationBackup || kind == BackupOperationRestore || kind == BackupOperationRotation ||
+	return kind == BackupOperationBackup || kind == BackupOperationRestore ||
+		kind == BackupOperationRotation ||
+		kind == BackupOperationPrune ||
 		kind == BackupOperationDeletion
 }
 
@@ -1250,12 +1535,6 @@ func validateBackupSourceTargetIdentity(kind BackupSourceTargetKind, stableID st
 		idKind = ids.KindAttach
 	case BackupSourceTargetVolume:
 		idKind = ids.KindVolume
-	case BackupSourceTargetBackingProject:
-		idKind = ids.KindProject
-	case BackupSourceTargetBackingEnvironment:
-		idKind = ids.KindEnvironment
-	case BackupSourceTargetBackingService:
-		idKind = ids.KindService
 	default:
 		return invalidBackupRuntimeRecord("backup source-target kind is invalid")
 	}
@@ -1287,11 +1566,57 @@ func validBackupSourceAttemptState(state BackupSourceAttemptState) bool {
 	}
 }
 
-func sourceAttemptRequiresArtifact(state BackupSourceAttemptState) bool {
-	switch state {
-	case BackupSourceAttemptStaged, BackupSourceAttemptPointCommitted, BackupSourceAttemptCleanupPending,
-		BackupSourceAttemptSucceeded, BackupSourceAttemptOrphaned:
+func validBackupSourceAttemptPhase(phase BackupSourceAttemptPhase) bool {
+	switch phase {
+	case BackupSourcePhaseCapture, BackupSourcePhaseStaging, BackupSourcePhaseUpload,
+		BackupSourcePhaseHeadVerification, BackupSourcePhasePointCommit,
+		BackupSourcePhaseCleanup, BackupSourcePhaseRetention:
 		return true
+	default:
+		return false
+	}
+}
+
+func validBackupPhaseForAttemptState(
+	state BackupSourceAttemptState,
+	phase BackupSourceAttemptPhase,
+) bool {
+	switch state {
+	case BackupSourceAttemptPending, BackupSourceAttemptCapturing, BackupSourceAttemptUnstarted:
+		return phase == BackupSourcePhaseCapture
+	case BackupSourceAttemptReady:
+		return phase == BackupSourcePhaseStaging
+	case BackupSourceAttemptStaged:
+		return phase == BackupSourcePhaseUpload ||
+			phase == BackupSourcePhaseHeadVerification || phase == BackupSourcePhasePointCommit
+	case BackupSourceAttemptOrphaned:
+		return phase == BackupSourcePhaseUpload || phase == BackupSourcePhaseHeadVerification ||
+			phase == BackupSourcePhasePointCommit
+	case BackupSourceAttemptPointCommitted:
+		return phase == BackupSourcePhaseRetention
+	case BackupSourceAttemptCleanupPending, BackupSourceAttemptSucceeded:
+		return phase == BackupSourcePhaseCleanup
+	case BackupSourceAttemptFailed:
+		return validBackupSourceAttemptPhase(phase)
+	default:
+		return false
+	}
+}
+
+func sourceAttemptRequiresArtifact(
+	state BackupSourceAttemptState,
+	phase BackupSourceAttemptPhase,
+) bool {
+	switch state {
+	case BackupSourceAttemptStaged,
+		BackupSourceAttemptPointCommitted,
+		BackupSourceAttemptCleanupPending,
+		BackupSourceAttemptSucceeded,
+		BackupSourceAttemptOrphaned:
+		return true
+	case BackupSourceAttemptFailed:
+		return phase == BackupSourcePhaseUpload || phase == BackupSourcePhaseHeadVerification ||
+			phase == BackupSourcePhasePointCommit
 	default:
 		return false
 	}
@@ -1314,7 +1639,8 @@ func activeBackupSourceAttemptState(state BackupSourceAttemptState) bool {
 }
 
 func validBackupRetentionState(state BackupRetentionState) bool {
-	return state == BackupRetentionPending || state == BackupRetentionScanning || state == BackupRetentionCompleted
+	return state == BackupRetentionPending || state == BackupRetentionScanning ||
+		state == BackupRetentionCompleted
 }
 
 func validBackupRestoreState(state BackupRestoreState) bool {
@@ -1392,7 +1718,11 @@ func corruptBackupRuntimeRecord() error {
 	return errs.New(errs.KindInternal, "backup runtime durable record is corrupt")
 }
 
-func encodeBackupRuntimeRecord[T any](kind string, record T, validate func(T) error) ([]byte, error) {
+func encodeBackupRuntimeRecord[T any](
+	kind string,
+	record T,
+	validate func(T) error,
+) ([]byte, error) {
 	if err := validate(record); err != nil {
 		return nil, err
 	}
@@ -1406,7 +1736,11 @@ func encodeBackupRuntimeRecord[T any](kind string, record T, validate func(T) er
 	return value, nil
 }
 
-func decodeBackupRuntimeRecord[T any](value []byte, kind string, validate func(T) error) (T, error) {
+func decodeBackupRuntimeRecord[T any](
+	value []byte,
+	kind string,
+	validate func(T) error,
+) (T, error) {
 	var zero T
 	if len(value) == 0 || len(value) > maximumBackupRuntimeRecordBytes {
 		return zero, corruptBackupRuntimeRecord()
@@ -1422,7 +1756,11 @@ func decodeBackupRuntimeRecord[T any](value []byte, kind string, validate func(T
 }
 
 func encodeBackupScheduleCursorRecord(record BackupScheduleCursorRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord("backup-schedule-cursor", record, validateBackupScheduleCursorRecord)
+	return encodeBackupRuntimeRecord(
+		"backup-schedule-cursor",
+		record,
+		validateBackupScheduleCursorRecord,
+	)
 }
 
 func encodeEnvironmentMutationEpochRecord(record EnvironmentMutationEpochRecord) ([]byte, error) {
@@ -1442,7 +1780,11 @@ func decodeEnvironmentMutationEpochRecord(value []byte) (EnvironmentMutationEpoc
 }
 
 func decodeBackupScheduleCursorRecord(value []byte) (BackupScheduleCursorRecord, error) {
-	return decodeBackupRuntimeRecord(value, "backup-schedule-cursor", validateBackupScheduleCursorRecord)
+	return decodeBackupRuntimeRecord(
+		value,
+		"backup-schedule-cursor",
+		validateBackupScheduleCursorRecord,
+	)
 }
 
 func encodeBackupDueOutcomeRecord(record BackupDueOutcomeRecord) ([]byte, error) {
@@ -1454,14 +1796,24 @@ func decodeBackupDueOutcomeRecord(value []byte) (BackupDueOutcomeRecord, error) 
 }
 
 func encodeBackupOperationLockRecord(record BackupOperationLockRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord("backup-operation-lock", record, validateBackupOperationLockRecord)
+	return encodeBackupRuntimeRecord(
+		"backup-operation-lock",
+		record,
+		validateBackupOperationLockRecord,
+	)
 }
 
 func decodeBackupOperationLockRecord(value []byte) (BackupOperationLockRecord, error) {
-	return decodeBackupRuntimeRecord(value, "backup-operation-lock", validateBackupOperationLockRecord)
+	return decodeBackupRuntimeRecord(
+		value,
+		"backup-operation-lock",
+		validateBackupOperationLockRecord,
+	)
 }
 
-func encodeBackupSourceTargetExclusionRecord(record BackupSourceTargetExclusionRecord) ([]byte, error) {
+func encodeBackupSourceTargetExclusionRecord(
+	record BackupSourceTargetExclusionRecord,
+) ([]byte, error) {
 	return encodeBackupRuntimeRecord(
 		"backup-source-target-exclusion",
 		record,
@@ -1469,7 +1821,9 @@ func encodeBackupSourceTargetExclusionRecord(record BackupSourceTargetExclusionR
 	)
 }
 
-func decodeBackupSourceTargetExclusionRecord(value []byte) (BackupSourceTargetExclusionRecord, error) {
+func decodeBackupSourceTargetExclusionRecord(
+	value []byte,
+) (BackupSourceTargetExclusionRecord, error) {
 	return decodeBackupRuntimeRecord(
 		value,
 		"backup-source-target-exclusion",
@@ -1483,22 +1837,6 @@ func encodeBackupRunRecord(record BackupRunRecord) ([]byte, error) {
 
 func decodeBackupRunRecord(value []byte) (BackupRunRecord, error) {
 	return decodeBackupRuntimeRecord(value, "backup-run", validateBackupRunRecord)
-}
-
-func encodeBackupRunVolumeServiceRecord(record BackupRunVolumeServiceRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord(
-		"backup-run-volume-service",
-		record,
-		validateBackupRunVolumeServiceRecord,
-	)
-}
-
-func decodeBackupRunVolumeServiceRecord(value []byte) (BackupRunVolumeServiceRecord, error) {
-	return decodeBackupRuntimeRecord(
-		value,
-		"backup-run-volume-service",
-		validateBackupRunVolumeServiceRecord,
-	)
 }
 
 func encodeBackupRecoveryPointRecord(record BackupRecoveryPointRecord) ([]byte, error) {
@@ -1518,19 +1856,35 @@ func decodeBackupOrphanRecord(value []byte) (BackupOrphanRecord, error) {
 }
 
 func encodeBackupRetentionSweepRecord(record BackupRetentionSweepRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord("backup-retention-sweep", record, validateBackupRetentionSweepRecord)
+	return encodeBackupRuntimeRecord(
+		"backup-retention-sweep",
+		record,
+		validateBackupRetentionSweepRecord,
+	)
 }
 
 func decodeBackupRetentionSweepRecord(value []byte) (BackupRetentionSweepRecord, error) {
-	return decodeBackupRuntimeRecord(value, "backup-retention-sweep", validateBackupRetentionSweepRecord)
+	return decodeBackupRuntimeRecord(
+		value,
+		"backup-retention-sweep",
+		validateBackupRetentionSweepRecord,
+	)
 }
 
 func encodeBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord("recovery-point-prune", record, validateBackupRecoveryPointPruneRecord)
+	return encodeBackupRuntimeRecord(
+		"recovery-point-prune",
+		record,
+		validateBackupRecoveryPointPruneRecord,
+	)
 }
 
 func decodeBackupRecoveryPointPruneRecord(value []byte) (BackupRecoveryPointPruneRecord, error) {
-	return decodeBackupRuntimeRecord(value, "recovery-point-prune", validateBackupRecoveryPointPruneRecord)
+	return decodeBackupRuntimeRecord(
+		value,
+		"recovery-point-prune",
+		validateBackupRecoveryPointPruneRecord,
+	)
 }
 
 func encodeBackupRecoveryPointPruneDispatchRecord(
@@ -1562,11 +1916,19 @@ func decodeBackupRestoreRecord(value []byte) (BackupRestoreRecord, error) {
 }
 
 func encodeBackupRestoreServiceRecord(record BackupRestoreServiceRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord("backup-restore-service", record, validateBackupRestoreServiceRecord)
+	return encodeBackupRuntimeRecord(
+		"backup-restore-service",
+		record,
+		validateBackupRestoreServiceRecord,
+	)
 }
 
 func decodeBackupRestoreServiceRecord(value []byte) (BackupRestoreServiceRecord, error) {
-	return decodeBackupRuntimeRecord(value, "backup-restore-service", validateBackupRestoreServiceRecord)
+	return decodeBackupRuntimeRecord(
+		value,
+		"backup-restore-service",
+		validateBackupRestoreServiceRecord,
+	)
 }
 
 func encodeBackupKeyRotationRecord(record BackupKeyRotationRecord) ([]byte, error) {

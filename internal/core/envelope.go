@@ -171,7 +171,7 @@ type ComponentSpec struct {
 type BackupSpec struct {
 	Enabled    bool               `yaml:"enabled"`
 	Frequency  string             `yaml:"frequency,omitempty"`
-	Keep       int                `yaml:"keep,omitempty"`
+	Keep       int64              `yaml:"keep,omitempty"`
 	Encryption string             `yaml:"encryption,omitempty"`
 	Connector  string             `yaml:"connector,omitempty"`
 	Sources    []BackupSourceSpec `yaml:"sources,omitempty"`

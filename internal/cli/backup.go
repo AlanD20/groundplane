@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -47,7 +48,7 @@ func newBackupCmd() *cobra.Command {
 
 	var connector string
 	var frequency string
-	var keep int
+	var keep string
 	var encryption string
 	var sources []string
 	var off bool
@@ -56,6 +57,10 @@ func newBackupCmd() *cobra.Command {
 		Short: "Set the backup policy",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			keepValue, err := parseBackupPolicyKeep(cmd, keep)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
 			if off {
 				if err := validateBackupPolicyOffFlags(cmd); err != nil {
@@ -101,7 +106,7 @@ func newBackupCmd() *cobra.Command {
 				cmd.Context(),
 				environmentID,
 				apiTypes.BackupPolicyReplacementRequest{
-					Enabled: true, Frequency: frequency, Keep: keep,
+					Enabled: true, Frequency: frequency, Keep: keepValue,
 					Encryption:  apiTypes.BackupEncryption(encryption),
 					ConnectorID: connectorID, Sources: resolvedSources,
 				},
@@ -115,7 +120,7 @@ func newBackupCmd() *cobra.Command {
 	set.Flags().StringVar(&connector, "connector", "", "Connector label, or stable id with --id")
 	set.Flags().
 		StringVar(&frequency, "frequency", "", "UTC daily or weekly expression, e.g. '*-*-* 03:15:00'")
-	set.Flags().IntVar(&keep, "keep", 0, "how many previous recovery points to retain")
+	set.Flags().StringVar(&keep, "keep", "", "how many previous recovery points to retain")
 	set.Flags().StringVar(&encryption, "encryption", "", "age | none")
 	set.Flags().
 		StringArrayVar(&sources, "source", nil, "repeatable: attach:<name|id> | volume:<name|id> | config")
@@ -209,6 +214,32 @@ func newBackupCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func parseBackupPolicyKeep(cmd *cobra.Command, raw string) (int64, error) {
+	if !cmd.Flags().Changed("keep") {
+		return 0, nil
+	}
+	if raw == "" || raw[0] < '1' || raw[0] > '9' {
+		return 0, invalidBackupPolicyKeep()
+	}
+	for index := 1; index < len(raw); index++ {
+		if raw[index] < '0' || raw[index] > '9' {
+			return 0, invalidBackupPolicyKeep()
+		}
+	}
+	keep, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || !apiTypes.ValidBackupPolicyKeep(keep) {
+		return 0, invalidBackupPolicyKeep()
+	}
+	return keep, nil
+}
+
+func invalidBackupPolicyKeep() error {
+	return errs.New(
+		errs.KindValidationFailed,
+		"backup policy keep must be a canonical base-10 integer between 1 and 9007199254740991",
+	)
 }
 
 func readAgeIdentity(path string) (string, error) {

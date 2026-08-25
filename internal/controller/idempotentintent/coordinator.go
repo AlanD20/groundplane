@@ -35,6 +35,16 @@ type ProtectedEvidence struct {
 	record infraetcd.ProtectedIntentRecord
 }
 
+// Destroy zeroizes the transient protected intent once publication or replay
+// has been resolved.
+func (evidence *ProtectedEvidence) Destroy() {
+	if evidence == nil {
+		return
+	}
+	clear(evidence.record.Ciphertext)
+	evidence.record.Ciphertext = nil
+}
+
 type Coordinator struct {
 	protector *secretvalue.Protector
 }

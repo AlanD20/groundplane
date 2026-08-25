@@ -203,6 +203,12 @@ func (service *backupPolicyService) SetBackupPolicy(
 			errs.KindInternal, "backup policy context is required",
 		)
 	}
+	if input.Keep < 1 || input.Keep > apiTypes.MaximumBackupPolicyKeep {
+		return apiTypes.BackupPolicyMutationResult{}, errs.New(
+			errs.KindValidationFailed,
+			"backup policy keep must be between 1 and 9007199254740991",
+		)
+	}
 	if len(input.Sources) > apiTypes.MaximumBackupPolicySources {
 		return apiTypes.BackupPolicyMutationResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -353,7 +359,7 @@ func backupPolicyIntent(
 		Body: idempotentintent.JSONBody(idempotentintent.Object(
 			idempotentintent.Field{Name: "enabled", Value: idempotentintent.Bool(input.Enabled)},
 			idempotentintent.Field{Name: "frequency", Value: idempotentintent.String(input.Frequency)},
-			idempotentintent.Field{Name: "keep", Value: idempotentintent.Integer(int64(input.Keep))},
+			idempotentintent.Field{Name: "keep", Value: idempotentintent.Integer(input.Keep)},
 			idempotentintent.Field{Name: "encryption", Value: idempotentintent.String(string(input.Encryption))},
 			idempotentintent.Field{Name: "connector_id", Value: idempotentintent.String(input.ConnectorID)},
 			idempotentintent.Field{Name: "sources", Value: idempotentintent.List(sources...)},

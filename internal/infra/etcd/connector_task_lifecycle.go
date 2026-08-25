@@ -51,7 +51,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if err != nil {
 		return connectorTaskChange{}, err
 	}
-	if stored == nil || len(stored.Values) != 3 {
+	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != 3 {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector retry evidence is incomplete")
 	}
 	if stored.Values[0] == nil || stored.Values[1] != nil || stored.Values[2] != nil {
@@ -74,7 +74,6 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorCredentialValueKey(connector.ID),
-			backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
 			environmentKey(connector.EnvironmentID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), connector.EnvironmentID),
 		},
@@ -83,7 +82,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if err != nil {
 		return connectorTaskChange{}, err
 	}
-	if dependencies == nil || len(dependencies.Values) != 6 {
+	if dependencies == nil || dependencies.ReadRevision != revision || len(dependencies.Values) != 5 {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector retry evidence is incomplete")
 	}
 	if dependencies.Values[0] == nil || string(dependencies.Values[0].Value) != connector.ID {
@@ -101,24 +100,19 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
 	}
 	clear(credentials.Ciphertext)
-	if err := requireConnectorReferencePrefixEmpty(
+	referenceConditions, err := requireConnectorReferencePrefixesEmpty(
 		ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
-	); err != nil {
+	)
+	if err != nil {
 		return connectorTaskChange{}, err
 	}
-	if dependencies.Values[3] != nil {
-		return connectorTaskChange{}, errs.New(
-			errs.KindResourceInUse,
-			"connector is referenced by an enabled backup policy",
-		)
-	}
-	if dependencies.Values[4] == nil {
+	if dependencies.Values[3] == nil {
 		return connectorTaskChange{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
-	if dependencies.Values[5] != nil {
+	if dependencies.Values[4] != nil {
 		return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "environment is being deleted")
 	}
-	environment, err := decodeEnvironment(dependencies.Values[4].Value)
+	environment, err := decodeEnvironment(dependencies.Values[3].Value)
 	if err != nil || environment.ID != connector.EnvironmentID {
 		return connectorTaskChange{}, corruptRecord()
 	}
@@ -132,7 +126,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if err != nil {
 		return connectorTaskChange{}, err
 	}
-	if parents == nil || len(parents.Values) != 2 {
+	if parents == nil || parents.ReadRevision != revision || len(parents.Values) != 2 {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector owner evidence is incomplete")
 	}
 	if parents.Values[0] == nil {
@@ -160,13 +154,13 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
-			{Key: backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
-			{Key: environmentKey(environment.ID), ModRevision: dependencies.Values[4].ModRevision},
+			{Key: environmentKey(environment.ID), ModRevision: dependencies.Values[3].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
 			{Key: projectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
 		},
 	}
+	change.conditions = append(change.conditions, referenceConditions...)
 	if project.TenantID != "" {
 		tenantFence, err := repository.store.GetMany(ctx, GetManyRequest{
 			Keys:     []string{deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)},
@@ -175,7 +169,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		if err != nil {
 			return connectorTaskChange{}, err
 		}
-		if tenantFence == nil || len(tenantFence.Values) != 1 {
+		if tenantFence == nil || tenantFence.ReadRevision != revision || len(tenantFence.Values) != 1 {
 			return connectorTaskChange{}, errs.New(errs.KindInternal, "connector tenant fence evidence is incomplete")
 		}
 		if tenantFence.Values[0] != nil {
@@ -238,7 +232,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	if err != nil {
 		return connectorTaskChange{}, err
 	}
-	if stored == nil || len(stored.Values) != 3 || stored.Values[0] == nil ||
+	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != 3 || stored.Values[0] == nil ||
 		stored.Values[1] == nil || stored.Values[2] == nil {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector deletion state is inconsistent")
 	}
@@ -277,14 +271,13 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorCredentialValueKey(connector.ID),
-			backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
 		},
 		Revision: revision,
 	})
 	if err != nil {
 		return connectorTaskChange{}, err
 	}
-	if dependencies == nil || len(dependencies.Values) != 4 {
+	if dependencies == nil || dependencies.ReadRevision != revision || len(dependencies.Values) != 3 {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector deletion evidence is incomplete")
 	}
 	if dependencies.Values[0] == nil || string(dependencies.Values[0].Value) != connector.ID {
@@ -302,16 +295,14 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
 	}
 	clear(credentials.Ciphertext)
-	if err := requireConnectorReferencePrefixEmpty(
-		ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
-	); err != nil {
-		return connectorTaskChange{}, err
-	}
-	if dependencies.Values[3] != nil {
-		return connectorTaskChange{}, errs.New(
-			errs.KindResourceInUse,
-			"connector is referenced by an enabled backup policy",
+	referenceConditions := []Condition(nil)
+	if terminalStatus == TaskStatusCompleted {
+		referenceConditions, err = requireConnectorReferencePrefixesEmpty(
+			ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
 		)
+		if err != nil {
+			return connectorTaskChange{}, err
+		}
 	}
 	change := connectorTaskChange{
 		applies: true,
@@ -331,13 +322,13 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
-			{Key: backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
 		},
 		mutations: []Mutation{
 			{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetConnector), task.Target)},
 			{Type: MutationDelete, Key: connectorRemovalIntentKey(task.ID)},
 		},
 	}
+	change.conditions = append(change.conditions, referenceConditions...)
 	if terminalStatus == TaskStatusCompleted {
 		change.mutations = append(change.mutations,
 			Mutation{Type: MutationDelete, Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
@@ -399,7 +390,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 	if err != nil {
 		return err
 	}
-	if stored == nil || len(stored.Values) != len(keys) {
+	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != len(keys) {
 		return errs.New(errs.KindInternal, "connector deletion replay evidence is incomplete")
 	}
 	if stored.Values[4] != nil || stored.Values[5] != nil {
@@ -413,16 +404,23 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 			return errs.New(errs.KindStateConflict, "connector deletion replay target is corrupt")
 		}
 	}
-	if err := requireConnectorReferencePrefixEmpty(
-		ctx, repository.store, task.Target, environmentID, revision,
-	); err != nil {
-		return err
-	}
 	if terminalStatus == TaskStatusCompleted {
-		for _, value := range stored.Values[:4] {
-			if value != nil {
-				return errs.New(errs.KindStateConflict, "completed connector deletion retained target state")
+		if _, err := requireConnectorReferencePrefixesEmpty(
+			ctx, repository.store, task.Target, environmentID, revision,
+		); err != nil {
+			return err
+		}
+		for index, value := range stored.Values[:4] {
+			if value == nil {
+				continue
 			}
+			if index == 2 {
+				ownerID := string(value.Value)
+				if validateStableID(ids.KindConnector, ownerID) == nil && ownerID != task.Target {
+					continue
+				}
+			}
+			return errs.New(errs.KindStateConflict, "completed connector deletion retained target state")
 		}
 		return nil
 	}

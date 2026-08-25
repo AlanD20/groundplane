@@ -50,7 +50,7 @@ type Observer struct {
 }
 
 func New() (*Observer, error) {
-	engine, err := client.New(client.WithHost(dockerSocketHost), client.WithAPIVersionNegotiation())
+	engine, err := client.New(client.WithHost(dockerSocketHost))
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
@@ -355,7 +355,7 @@ func containerHealth(state *container.State) (agentpb.ObservedContainerHealth, e
 	case "unhealthy":
 		return agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY, nil
 	default:
-		return 0, errs.New(errs.KindInternal, "Compose observation container health is unsupported")
+		return 0, errs.New(errs.KindInternal, "compose observation container health is unsupported")
 	}
 }
 
@@ -366,5 +366,5 @@ func operationError(ctx context.Context, operation string, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	return errs.Wrap(errs.KindInternal, fmt.Errorf("Compose observation: %s: %w", operation, err))
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("compose observation: %s: %w", operation, err))
 }

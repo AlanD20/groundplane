@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	commonconfig "github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,7 +34,20 @@ type RunnerHostPoolConfig struct {
 
 type RunnerAllocationConfig struct {
 	SystemPool netip.Prefix
+	RunnerPool netip.Prefix
 	HostPool   RunnerHostPoolConfig
+}
+
+func RunnerAllocationConfigFromPools(pools commonconfig.AllocationPools) RunnerAllocationConfig {
+	return RunnerAllocationConfig{
+		SystemPool: pools.System,
+		RunnerPool: pools.Runner.Network,
+		HostPool: RunnerHostPoolConfig{
+			HostUIDStart: pools.Runner.HostUID.First, HostUIDEnd: pools.Runner.HostUID.Last,
+			SubUIDStart: pools.Runner.SubUID.First, SubUIDEnd: pools.Runner.SubUID.Last,
+			SubGIDStart: pools.Runner.SubGID.First, SubGIDEnd: pools.Runner.SubGID.Last,
+		},
+	}
 }
 
 func (config RunnerHostPoolConfig) SlotCount() (uint32, error) {
@@ -56,17 +70,19 @@ func (config RunnerHostPoolConfig) SlotCount() (uint32, error) {
 }
 
 func (config RunnerAllocationConfig) Validate() (uint32, error) {
-	if !config.SystemPool.IsValid() || !config.SystemPool.Addr().Is4() ||
-		config.SystemPool != config.SystemPool.Masked() || config.SystemPool.Bits() > runnerSubnetBits {
-		return 0, errs.New(errs.KindValidationFailed, "runner system pool must be a canonical IPv4 pool")
+	if !config.SystemPool.IsValid() || !config.SystemPool.Addr().Is4() || config.SystemPool != config.SystemPool.Masked() ||
+		!config.RunnerPool.IsValid() || !config.RunnerPool.Addr().Is4() || config.RunnerPool != config.RunnerPool.Masked() ||
+		config.RunnerPool.Bits() <= config.SystemPool.Bits() || config.RunnerPool.Bits() > runnerSubnetBits ||
+		!config.SystemPool.Contains(config.RunnerPool.Addr()) {
+		return 0, errs.New(errs.KindValidationFailed, "runner network pool must be a canonical IPv4 child of the system pool")
 	}
 	slots, err := config.HostPool.SlotCount()
 	if err != nil {
 		return 0, err
 	}
-	networkSlots := uint64(1) << uint(runnerSubnetBits-config.SystemPool.Bits())
+	networkSlots := uint64(1) << uint(runnerSubnetBits-config.RunnerPool.Bits())
 	if networkSlots < uint64(slots) {
-		return 0, errs.New(errs.KindValidationFailed, "runner system pool is smaller than the host allocation pool")
+		return 0, errs.New(errs.KindValidationFailed, "runner network pool is smaller than the host allocation pool")
 	}
 	return slots, nil
 }
@@ -133,6 +149,9 @@ func encodeRunnerHostSlotRecord(record RunnerHostSlotRecord) ([]byte, error) {
 }
 
 func decodeRunnerHostSlotRecord(value []byte) (RunnerHostSlotRecord, error) {
+	if len(value) > maximumRunnerPersistenceBytes {
+		return RunnerHostSlotRecord{}, corruptRunnerHostSlotRecord()
+	}
 	record, err := decodeEnvelope[RunnerHostSlotRecord](value, "runner_host_slot")
 	if err != nil || validateRunnerHostSlotRecord(record) != nil {
 		return RunnerHostSlotRecord{}, corruptRunnerHostSlotRecord()
@@ -140,12 +159,24 @@ func decodeRunnerHostSlotRecord(value []byte) (RunnerHostSlotRecord, error) {
 	return record, nil
 }
 
+func decodeRunnerTenantQuota(value []byte) (RunnerTenantQuota, error) {
+	if len(value) > maximumRunnerPersistenceBytes {
+		return RunnerTenantQuota{}, corruptRunnerTenantQuota()
+	}
+	quota, err := decodeEnvelope[RunnerTenantQuota](value, "runner_tenant_quota")
+	if err != nil || validateRunnerTenantQuota(quota) != nil {
+		return RunnerTenantQuota{}, corruptRunnerTenantQuota()
+	}
+	return quota, nil
+}
+
 func corruptRunnerHostSlotRecord() error {
 	return errs.New(errs.KindInternal, "runner host slot record is corrupt")
 }
 
 type SystemPoolRegistry struct {
-	Reservations map[string]string `json:"reservations"`
+	RunnerNetworkPool string            `json:"runner_network_pool"`
+	Reservations      map[string]string `json:"reservations"`
 }
 
 func (registry SystemPoolRegistry) ReserveRunner(
@@ -156,7 +187,10 @@ func (registry SystemPoolRegistry) ReserveRunner(
 		return SystemPoolRegistry{}, netip.Prefix{}, errs.New(errs.KindValidationFailed, "runner id is invalid")
 	}
 	owner := runnerPoolOwner(runnerID)
-	reserved, err := registry.prefixes(root)
+	if registry.RunnerNetworkPool != root.String() {
+		return SystemPoolRegistry{}, netip.Prefix{}, errs.New(errs.KindStateConflict, "runner network pool is not reserved")
+	}
+	reserved, err := registry.runnerPrefixes(root)
 	if err != nil {
 		return SystemPoolRegistry{}, netip.Prefix{}, err
 	}
@@ -165,7 +199,10 @@ func (registry SystemPoolRegistry) ReserveRunner(
 		if parseErr != nil {
 			return SystemPoolRegistry{}, netip.Prefix{}, corruptSystemPoolRegistry()
 		}
-		next := SystemPoolRegistry{Reservations: make(map[string]string, len(registry.Reservations))}
+		next := SystemPoolRegistry{
+			RunnerNetworkPool: registry.RunnerNetworkPool,
+			Reservations:      make(map[string]string, len(registry.Reservations)),
+		}
 		for key, reservation := range registry.Reservations {
 			next.Reservations[key] = reservation
 		}
@@ -178,7 +215,10 @@ func (registry SystemPoolRegistry) ReserveRunner(
 			"runner network pool is exhausted",
 		)
 	}
-	next := SystemPoolRegistry{Reservations: make(map[string]string, len(registry.Reservations)+1)}
+	next := SystemPoolRegistry{
+		RunnerNetworkPool: registry.RunnerNetworkPool,
+		Reservations:      make(map[string]string, len(registry.Reservations)+1),
+	}
 	for key, value := range registry.Reservations {
 		next.Reservations[key] = value
 	}
@@ -187,6 +227,9 @@ func (registry SystemPoolRegistry) ReserveRunner(
 }
 
 func (registry SystemPoolRegistry) ReleaseRunner(runnerID string, subnet string) (SystemPoolRegistry, error) {
+	if err := validateRunnerPoolReservation(registry); err != nil {
+		return SystemPoolRegistry{}, err
+	}
 	owner := runnerPoolOwner(runnerID)
 	if registry.Reservations[owner] != subnet {
 		return SystemPoolRegistry{}, errs.New(
@@ -194,7 +237,10 @@ func (registry SystemPoolRegistry) ReleaseRunner(runnerID string, subnet string)
 			"runner network allocation does not match its owner",
 		)
 	}
-	next := SystemPoolRegistry{Reservations: make(map[string]string, len(registry.Reservations)-1)}
+	next := SystemPoolRegistry{
+		RunnerNetworkPool: registry.RunnerNetworkPool,
+		Reservations:      make(map[string]string, len(registry.Reservations)-1),
+	}
 	for key, value := range registry.Reservations {
 		if key != owner {
 			next.Reservations[key] = value
@@ -203,17 +249,55 @@ func (registry SystemPoolRegistry) ReleaseRunner(runnerID string, subnet string)
 	return next, nil
 }
 
-func (registry SystemPoolRegistry) prefixes(root netip.Prefix) ([]netip.Prefix, error) {
+func decodeSystemPoolRegistry(value []byte) (SystemPoolRegistry, error) {
+	if len(value) > maximumRunnerPersistenceBytes {
+		return SystemPoolRegistry{}, corruptSystemPoolRegistry()
+	}
+	registry, err := decodeEnvelope[SystemPoolRegistry](value, "system_pool_registry")
+	if err != nil || validateRunnerPoolReservation(registry) != nil {
+		return SystemPoolRegistry{}, corruptSystemPoolRegistry()
+	}
+	return registry, nil
+}
+
+func validateRunnerPoolReservation(registry SystemPoolRegistry) error {
+	runnerPool, err := ipam.ParseIPv4Prefix(registry.RunnerNetworkPool)
+	if err != nil || runnerPool.String() != registry.RunnerNetworkPool || runnerPool.Bits() > runnerSubnetBits ||
+		registry.Reservations == nil {
+		return corruptSystemPoolRegistry()
+	}
+	for owner, value := range registry.Reservations {
+		prefix, parseErr := ipam.ParseIPv4Prefix(value)
+		if strings.TrimSpace(owner) == "" || parseErr != nil || prefix.String() != value {
+			return corruptSystemPoolRegistry()
+		}
+		if strings.HasPrefix(owner, "runner/") {
+			if ids.Validate(ids.KindRunner, strings.TrimPrefix(owner, "runner/")) != nil ||
+				prefix.Bits() != runnerSubnetBits || !runnerPool.Contains(prefix.Addr()) {
+				return corruptSystemPoolRegistry()
+			}
+			continue
+		}
+		if prefix.Overlaps(runnerPool) {
+			return corruptSystemPoolRegistry()
+		}
+	}
+	return nil
+}
+
+func (registry SystemPoolRegistry) runnerPrefixes(root netip.Prefix) ([]netip.Prefix, error) {
 	if !root.IsValid() || !root.Addr().Is4() || root != root.Masked() {
-		return nil, errs.New(errs.KindValidationFailed, "system pool must be a canonical IPv4 pool")
+		return nil, errs.New(errs.KindValidationFailed, "runner pool must be a canonical IPv4 pool")
 	}
 	reserved := make([]netip.Prefix, 0, len(registry.Reservations))
 	for owner, value := range registry.Reservations {
-		if strings.TrimSpace(owner) == "" {
-			return nil, corruptSystemPoolRegistry()
+		if !strings.HasPrefix(owner, "runner/") {
+			continue
 		}
 		prefix, err := ipam.ParseIPv4Prefix(value)
-		if err != nil || prefix.String() != value || ipam.ValidateChild(root, prefix, reserved) != nil {
+		if err != nil || ids.Validate(ids.KindRunner, strings.TrimPrefix(owner, "runner/")) != nil ||
+			prefix.String() != value || prefix.Bits() != runnerSubnetBits ||
+			ipam.ValidateChild(root, prefix, reserved) != nil {
 			return nil, corruptSystemPoolRegistry()
 		}
 		reserved = append(reserved, prefix)
@@ -222,8 +306,33 @@ func (registry SystemPoolRegistry) prefixes(root netip.Prefix) ([]netip.Prefix, 
 }
 
 func validateSystemPoolRegistry(root netip.Prefix, registry SystemPoolRegistry) error {
-	_, err := registry.prefixes(root)
-	return err
+	if !root.IsValid() || !root.Addr().Is4() || root != root.Masked() || validateRunnerPoolReservation(registry) != nil {
+		return corruptSystemPoolRegistry()
+	}
+	runnerPool, err := ipam.ParseIPv4Prefix(registry.RunnerNetworkPool)
+	if err != nil || runnerPool.String() != registry.RunnerNetworkPool || runnerPool.Bits() <= root.Bits() ||
+		runnerPool.Bits() > runnerSubnetBits || !root.Contains(runnerPool.Addr()) {
+		return corruptSystemPoolRegistry()
+	}
+	reserved := make([]netip.Prefix, 0, len(registry.Reservations))
+	for owner, value := range registry.Reservations {
+		prefix, parseErr := ipam.ParseIPv4Prefix(value)
+		if strings.TrimSpace(owner) == "" || parseErr != nil || prefix.String() != value ||
+			ipam.ValidateChild(root, prefix, reserved) != nil {
+			return corruptSystemPoolRegistry()
+		}
+		runnerOwner := strings.HasPrefix(owner, "runner/")
+		if runnerOwner {
+			if ids.Validate(ids.KindRunner, strings.TrimPrefix(owner, "runner/")) != nil ||
+				prefix.Bits() != runnerSubnetBits || !runnerPool.Contains(prefix.Addr()) {
+				return corruptSystemPoolRegistry()
+			}
+		} else if prefix.Overlaps(runnerPool) {
+			return corruptSystemPoolRegistry()
+		}
+		reserved = append(reserved, prefix)
+	}
+	return nil
 }
 
 func runnerPoolOwner(runnerID string) string { return "runner/" + runnerID }

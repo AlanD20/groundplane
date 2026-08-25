@@ -24,10 +24,12 @@ func prepareConnectorCreation(
 			"Connector credentials must contain access_key and secret_key",
 		)
 	}
-	metadata := make(map[string]core.ConnectorCredential, 2)
+	metadata := make(map[core.ConnectorCredentialName]core.ConnectorCredential, 2)
 	direct := make(map[string]string, 2)
-	for _, name := range []string{core.ConnectorCredentialAccessKey, core.ConnectorCredentialSecretKey} {
-		credential, ok := input.Credentials[name]
+	for _, name := range []core.ConnectorCredentialName{
+		core.ConnectorCredentialAccessKey, core.ConnectorCredentialSecretKey,
+	} {
+		credential, ok := input.Credentials[string(name)]
 		if !ok {
 			clearConnectorDirectValues(direct)
 			return etcd.ConnectorRecord{}, nil, errs.New(
@@ -49,7 +51,7 @@ func prepareConnectorCreation(
 			continue
 		}
 		metadata[name] = core.ConnectorCredential{Kind: core.ConnectorCredentialDirect}
-		direct[name] = credential.Value
+		direct[string(name)] = credential.Value
 	}
 	record, err := etcd.NewConnectorRecord(core.Connector{
 		ID: connectorID, EnvironmentID: environmentID, Name: input.Name,
@@ -67,7 +69,7 @@ func connectorResponse(record etcd.ConnectorRecord) apiTypes.Connector {
 	connector := record.Connector
 	credentials := make(map[string]apiTypes.ConnectorCredential, len(connector.Credentials))
 	for name, credential := range connector.Credentials {
-		credentials[name] = apiTypes.ConnectorCredential{
+		credentials[string(name)] = apiTypes.ConnectorCredential{
 			Kind: apiTypes.ConnectorCredentialKind(credential.Kind), SecretRef: credential.SecretRef,
 		}
 	}

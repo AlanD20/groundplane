@@ -87,7 +87,10 @@ func loadEnvironmentMutationFence(
 		)
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return environmentMutationFenceEvidence{}, errs.New(errs.KindValidationFailed, "environment id is invalid")
+		return environmentMutationFenceEvidence{}, errs.New(
+			errs.KindValidationFailed,
+			"environment id is invalid",
+		)
 	}
 	if readRevision <= 0 {
 		return environmentMutationFenceEvidence{}, errs.New(
@@ -108,7 +111,10 @@ func loadEnvironmentMutationFence(
 	}
 	defer clearKeyValues(base.Values)
 	if base.Values[0] == nil {
-		return environmentMutationFenceEvidence{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
+		return environmentMutationFenceEvidence{}, errs.New(
+			errs.KindEnvironmentNotFound,
+			"environment was not found",
+		)
 	}
 	environment, err := decodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != environmentID {
@@ -152,7 +158,10 @@ func loadEnvironmentMutationFence(
 	}
 	defer clearKeyValues(projectRead.Values)
 	if projectRead.Values[0] == nil {
-		return environmentMutationFenceEvidence{}, errs.New(errs.KindProjectNotFound, "project was not found")
+		return environmentMutationFenceEvidence{}, errs.New(
+			errs.KindProjectNotFound,
+			"project was not found",
+		)
 	}
 	project, err := decodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
@@ -187,13 +196,21 @@ func loadEnvironmentMutationFence(
 			tenantKey(project.TenantID),
 			deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
 		}
-		tenantRead, readErr := readEnvironmentMutationFenceKeys(ctx, store, tenantKeys, readRevision)
+		tenantRead, readErr := readEnvironmentMutationFenceKeys(
+			ctx,
+			store,
+			tenantKeys,
+			readRevision,
+		)
 		if readErr != nil {
 			return environmentMutationFenceEvidence{}, readErr
 		}
 		defer clearKeyValues(tenantRead.Values)
 		if tenantRead.Values[0] == nil {
-			return environmentMutationFenceEvidence{}, errs.New(errs.KindTenantNotFound, "tenant was not found")
+			return environmentMutationFenceEvidence{}, errs.New(
+				errs.KindTenantNotFound,
+				"tenant was not found",
+			)
 		}
 		tenant, decodeErr := decodeTenant(tenantRead.Values[0].Value)
 		if decodeErr != nil || tenant.ID != project.TenantID {
@@ -227,9 +244,13 @@ func loadEnvironmentMutationFence(
 		environmentTombstoneCondition.modRevision = base.Values[3].ModRevision
 		environmentTombstoneCondition.kind = environmentMutationFenceOwnedDeletionTombstone
 	}
-	conditions = append(conditions,
+	conditions = append(
+		conditions,
 		environmentTombstoneCondition,
-		environmentMutationFenceCondition{key: projectKeys[1], kind: environmentMutationFenceProjectTombstone},
+		environmentMutationFenceCondition{
+			key:  projectKeys[1],
+			kind: environmentMutationFenceProjectTombstone,
+		},
 	)
 	if project.Kind == ProjectKindTenant {
 		conditions = append(conditions, environmentMutationFenceCondition{
@@ -277,12 +298,18 @@ func readEnvironmentMutationFenceKeys(
 		return nil, err
 	}
 	if result == nil || result.ReadRevision != readRevision || len(result.Values) != len(keys) {
-		return nil, errs.New(errs.KindInternal, "environment mutation fence fixed-revision read is incomplete")
+		return nil, errs.New(
+			errs.KindInternal,
+			"environment mutation fence fixed-revision read is incomplete",
+		)
 	}
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
 			clearKeyValues(result.Values)
-			return nil, errs.New(errs.KindInternal, "environment mutation fence fixed-revision read is corrupt")
+			return nil, errs.New(
+				errs.KindInternal,
+				"environment mutation fence fixed-revision read is corrupt",
+			)
 		}
 	}
 	return result, nil
@@ -306,7 +333,10 @@ func validateEnvironmentMutationFenceLock(
 ) (int64, error) {
 	if value == nil {
 		if owner != nil {
-			return 0, errs.New(errs.KindStateConflict, "environment persistence operation ownership changed")
+			return 0, errs.New(
+				errs.KindStateConflict,
+				"environment persistence operation ownership changed",
+			)
 		}
 		return 0, nil
 	}
@@ -315,10 +345,17 @@ func validateEnvironmentMutationFenceLock(
 		return 0, errs.New(errs.KindInternal, "environment operation lock is corrupt")
 	}
 	if owner == nil {
-		return 0, errs.New(errs.KindResourceInUse, "environment persistence operation is in progress")
+		return 0, errs.New(
+			errs.KindResourceInUse,
+			"environment persistence operation is in progress",
+		)
 	}
-	if lock.Kind != owner.Kind || lock.OperationID != owner.OperationID || lock.TaskID != owner.TaskID {
-		return 0, errs.New(errs.KindStateConflict, "environment persistence operation ownership changed")
+	if lock.Kind != owner.Kind || lock.OperationID != owner.OperationID ||
+		lock.TaskID != owner.TaskID {
+		return 0, errs.New(
+			errs.KindStateConflict,
+			"environment persistence operation ownership changed",
+		)
 	}
 	return value.ModRevision, nil
 }
@@ -346,11 +383,19 @@ func validateOwnedEnvironmentDeletionTombstone(
 
 func validateEnvironmentMutationFenceOwner(owner environmentMutationFenceOwner) error {
 	switch owner.Kind {
-	case BackupOperationBackup, BackupOperationRestore, BackupOperationRotation, BackupOperationDeletion:
+	case BackupOperationBackup,
+		BackupOperationRestore,
+		BackupOperationRotation,
+		BackupOperationPrune,
+		BackupOperationDeletion:
 	default:
-		return errs.New(errs.KindValidationFailed, "environment mutation fence operation kind is invalid")
+		return errs.New(
+			errs.KindValidationFailed,
+			"environment mutation fence operation kind is invalid",
+		)
 	}
-	if ids.Validate(ids.KindOperation, owner.OperationID) != nil || ids.Validate(ids.KindTask, owner.TaskID) != nil {
+	if ids.Validate(ids.KindOperation, owner.OperationID) != nil ||
+		ids.Validate(ids.KindTask, owner.TaskID) != nil {
 		return errs.New(errs.KindValidationFailed, "environment mutation fence owner is invalid")
 	}
 	return nil
@@ -382,12 +427,18 @@ func (evidence environmentMutationFenceEvidence) epochRewriteMutation() (Mutatio
 
 func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue) error {
 	if len(values) != len(evidence.conditions) {
-		return errs.New(errs.KindInternal, "environment mutation fence compare evidence is incomplete")
+		return errs.New(
+			errs.KindInternal,
+			"environment mutation fence compare evidence is incomplete",
+		)
 	}
 	for index, condition := range evidence.conditions {
 		value := values[index]
 		if value != nil && value.Key != condition.key {
-			return errs.New(errs.KindInternal, "environment mutation fence compare evidence is corrupt")
+			return errs.New(
+				errs.KindInternal,
+				"environment mutation fence compare evidence is corrupt",
+			)
 		}
 		switch condition.kind {
 		case environmentMutationFenceEnvironment:
@@ -396,7 +447,10 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue)
 			}
 			record, err := decodeEnvironment(value.Value)
 			if err != nil || record.ID != condition.stableID {
-				return errs.New(errs.KindInternal, "environment mutation fence environment is corrupt")
+				return errs.New(
+					errs.KindInternal,
+					"environment mutation fence environment is corrupt",
+				)
 			}
 			if value.ModRevision != condition.modRevision {
 				return stateConflict("environment", condition.stableID)
@@ -427,11 +481,17 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue)
 			environmentMutationFenceProjectTombstone,
 			environmentMutationFenceTenantTombstone:
 			if value != nil {
-				return errs.New(errs.KindResourceInUse, "environment hierarchy deletion is in progress")
+				return errs.New(
+					errs.KindResourceInUse,
+					"environment hierarchy deletion is in progress",
+				)
 			}
 		case environmentMutationFenceOwnedDeletionTombstone:
 			if evidence.owner == nil {
-				return errs.New(errs.KindInternal, "environment deletion tombstone owner is missing")
+				return errs.New(
+					errs.KindInternal,
+					"environment deletion tombstone owner is missing",
+				)
 			}
 			if err := validateOwnedEnvironmentDeletionTombstone(
 				value,
@@ -445,7 +505,10 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue)
 				return stateConflict("environment deletion tombstone", condition.stableID)
 			}
 		case environmentMutationFenceEpoch:
-			if _, err := decodeEnvironmentMutationFenceEpoch(value, condition.stableID); err != nil {
+			if _, err := decodeEnvironmentMutationFenceEpoch(
+				value,
+				condition.stableID,
+			); err != nil {
 				return err
 			}
 			if value.ModRevision != condition.modRevision {
@@ -471,7 +534,11 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue)
 			if value == nil {
 				return stateConflict("environment operation lock", condition.stableID)
 			}
-			if _, err := validateEnvironmentMutationFenceLock(value, condition.stableID, evidence.owner); err != nil {
+			if _, err := validateEnvironmentMutationFenceLock(
+				value,
+				condition.stableID,
+				evidence.owner,
+			); err != nil {
 				return err
 			}
 			if value.ModRevision != condition.modRevision {

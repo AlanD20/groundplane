@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	runnerPrefix            = "/v1/records/runners/"
-	runnerObservationPrefix = "/v1/runtime/observations/runners/"
+	runnerPrefix                 = "/v1/records/runners/"
+	runnerLifecyclePrefix        = "/v1/runtime/runner-lifecycles/"
+	runnerRuntimeOwnershipPrefix = "/v1/runtime/runner-ownership/"
+	runnerObservationPrefix      = "/v1/runtime/observations/runners/"
 )
 
 type RunnerFilter struct {
@@ -35,7 +37,293 @@ func newRunnerRepository(store hierarchyStore) (*RunnerRepository, error) {
 	return &RunnerRepository{store: store}, nil
 }
 
+func (repository *RunnerRepository) EnsureRunnerNetworkPool(
+	ctx context.Context,
+	config RunnerAllocationConfig,
+) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+	if _, err := config.Validate(); err != nil {
+		return err
+	}
+	result, err := repository.store.Get(ctx, systemPoolRegistryKey)
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return errs.New(errs.KindInternal, "system pool registry read is missing")
+	}
+	if result.Entry != nil {
+		return validateReservedRunnerNetworkPool(config, result.Entry.Value)
+	}
+	registry := SystemPoolRegistry{
+		RunnerNetworkPool: config.RunnerPool.String(), Reservations: map[string]string{},
+	}
+	value, err := encodeEnvelope("system_pool_registry", registry)
+	if err != nil {
+		return err
+	}
+	defer clear(value)
+	transaction, err := repository.store.Transact(ctx,
+		[]Condition{{Key: systemPoolRegistryKey}},
+		[]Mutation{{Type: MutationPut, Key: systemPoolRegistryKey, Value: value}},
+	)
+	if err != nil {
+		return err
+	}
+	if transaction.Succeeded {
+		return nil
+	}
+	if len(transaction.FailureReads) != 1 || transaction.FailureReads[0] == nil {
+		return errs.New(errs.KindInternal, "system pool bootstrap compare evidence is incomplete")
+	}
+	return validateReservedRunnerNetworkPool(config, transaction.FailureReads[0].Value)
+}
+
+func validateReservedRunnerNetworkPool(config RunnerAllocationConfig, value []byte) error {
+	if len(value) > maximumRunnerPersistenceBytes {
+		return corruptSystemPoolRegistry()
+	}
+	registry, err := decodeSystemPoolRegistry(value)
+	if err != nil || validateSystemPoolRegistry(config.SystemPool, registry) != nil {
+		return corruptSystemPoolRegistry()
+	}
+	if registry.RunnerNetworkPool != config.RunnerPool.String() {
+		return errs.New(errs.KindStateConflict, "configured runner network pool does not match its bootstrap reservation")
+	}
+	return nil
+}
+
+func (repository *RunnerRepository) AttestRunnerRuntimeOwnership(
+	ctx context.Context,
+	current Versioned[RunnerRecord],
+	containerID string,
+	ownership RunnerRuntimeOwnershipRecord,
+) (Versioned[RunnerRuntimeOwnershipRecord], error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, err
+	}
+	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || validateRunnerRecord(current.Record) != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, errs.New(errs.KindValidationFailed, "runner attestation target is invalid")
+	}
+	replacement, err := BindRunnerContainerID(current.Record, current.Record.CreateTaskID, containerID)
+	if err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, err
+	}
+	if validateRunnerRuntimeOwnership(ownership) != nil || ownership.RunnerID != current.Record.Desired.ID ||
+		ownership.RuntimeEpoch != replacement.RuntimeEpoch {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, errs.New(errs.KindValidationFailed, "runner runtime ownership does not match its lifecycle")
+	}
+	lifecycleValue, err := encodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
+	if err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, err
+	}
+	defer clear(lifecycleValue)
+	ownershipValue, err := encodeRunnerRuntimeOwnership(ownership)
+	if err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, err
+	}
+	defer clear(ownershipValue)
+	conditions := []Condition{
+		{Key: runnerKey(ownership.RunnerID), ModRevision: current.Revision},
+		{Key: runnerLifecycleKey(ownership.RunnerID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerRuntimeOwnershipKey(ownership.RunnerID)},
+		{Key: deletionTombstoneKey(string(DeletionTargetRunner), ownership.RunnerID)},
+	}
+	result, err := repository.store.Transact(ctx, conditions, []Mutation{
+		{Type: MutationPut, Key: runnerLifecycleKey(ownership.RunnerID), Value: lifecycleValue},
+		{Type: MutationPut, Key: runnerRuntimeOwnershipKey(ownership.RunnerID), Value: ownershipValue},
+	})
+	if err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, err
+	}
+	if result.Succeeded {
+		return Versioned[RunnerRuntimeOwnershipRecord]{
+			Record: ownership, Revision: result.Revision, ReadRevision: result.Revision,
+		}, nil
+	}
+	if len(result.FailureReads) != len(conditions) {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, errs.New(errs.KindInternal, "runner attestation compare evidence is incomplete")
+	}
+	if result.FailureReads[3] != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, errs.New(errs.KindResourceInUse, "runner deletion is in progress")
+	}
+	if result.FailureReads[1] != nil && result.FailureReads[2] != nil &&
+		sameRunnerRuntimeOwnershipBytes(result.FailureReads[1].Value, lifecycleValue) &&
+		sameRunnerRuntimeOwnershipBytes(result.FailureReads[2].Value, ownershipValue) {
+		stored, decodeErr := decodeRunnerRuntimeOwnership(result.FailureReads[2].Value)
+		if decodeErr != nil {
+			return Versioned[RunnerRuntimeOwnershipRecord]{}, decodeErr
+		}
+		return Versioned[RunnerRuntimeOwnershipRecord]{
+			Record: stored, Revision: result.FailureReads[2].ModRevision, ReadRevision: result.Revision,
+		}, nil
+	}
+	return Versioned[RunnerRuntimeOwnershipRecord]{}, stateConflict("runner runtime ownership", ownership.RunnerID)
+}
+
+func (repository *RunnerRepository) GetRunnerRuntimeOwnership(
+	ctx context.Context,
+	runnerID string,
+) (Versioned[RunnerRuntimeOwnershipRecord], bool, error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, false, err
+	}
+	if err := validateID(ids.KindRunner, runnerID); err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, false, err
+	}
+	result, err := repository.store.Get(ctx, runnerRuntimeOwnershipKey(runnerID))
+	if err != nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, false, err
+	}
+	if result == nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, false, errs.New(errs.KindInternal, "runner runtime ownership read is missing")
+	}
+	if result.Entry == nil {
+		return Versioned[RunnerRuntimeOwnershipRecord]{ReadRevision: result.ReadRevision}, false, nil
+	}
+	record, err := decodeRunnerRuntimeOwnership(result.Entry.Value)
+	if err != nil || record.RunnerID != runnerID {
+		return Versioned[RunnerRuntimeOwnershipRecord]{}, false, errs.New(errs.KindInternal, "runner runtime ownership is corrupt")
+	}
+	return Versioned[RunnerRuntimeOwnershipRecord]{
+		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
+	}, true, nil
+}
+
+func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
+	ctx context.Context,
+	current Versioned[RunnerRecord],
+) (Versioned[RunnerRecord], error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || validateRunnerRecord(current.Record) != nil ||
+		current.Record.ProvisioningState != RunnerProvisioningFailed || current.Record.ContainerID == "" {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindValidationFailed, "failed runner cleanup target is invalid")
+	}
+	evidence, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		runnerRuntimeOwnershipKey(current.Record.Desired.ID),
+		deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID),
+	}, Revision: current.ReadRevision})
+	if err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if evidence == nil || len(evidence.Values) != 2 || evidence.Values[0] == nil || evidence.Values[1] != nil {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindStateConflict, "failed runner cleanup ownership is unavailable")
+	}
+	ownership, err := decodeRunnerRuntimeOwnership(evidence.Values[0].Value)
+	if err != nil || ownership.RunnerID != current.Record.Desired.ID ||
+		ownership.RuntimeEpoch != current.Record.RuntimeEpoch {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindStateConflict, "failed runner cleanup ownership changed")
+	}
+	replacement, err := TakeRunnerRuntimeCleanupOwnership(current.Record)
+	if err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	lifecycleValue, err := encodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
+	if err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	defer clear(lifecycleValue)
+	conditions := []Condition{
+		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
+		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerRuntimeOwnershipKey(current.Record.Desired.ID), ModRevision: evidence.Values[0].ModRevision},
+		{Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID)},
+	}
+	result, err := repository.store.Transact(ctx, conditions, []Mutation{{
+		Type: MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: lifecycleValue,
+	}})
+	if err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if result.Succeeded {
+		replacement.LifecycleRevision = result.Revision
+		return Versioned[RunnerRecord]{
+			Record: replacement, Revision: current.Revision, ReadRevision: result.Revision,
+		}, nil
+	}
+	if len(result.FailureReads) != len(conditions) {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "failed runner cleanup compare evidence is incomplete")
+	}
+	if result.FailureReads[1] != nil && result.FailureReads[2] != nil && result.FailureReads[3] == nil &&
+		sameRunnerRuntimeOwnershipBytes(result.FailureReads[1].Value, lifecycleValue) &&
+		sameRunnerRuntimeOwnershipBytes(result.FailureReads[2].Value, evidence.Values[0].Value) {
+		replacement.LifecycleRevision = result.FailureReads[1].ModRevision
+		return Versioned[RunnerRecord]{
+			Record: replacement, Revision: current.Revision, ReadRevision: result.Revision,
+		}, nil
+	}
+	return Versioned[RunnerRecord]{}, stateConflict("failed runner cleanup ownership", current.Record.Desired.ID)
+}
+
+func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
+	ctx context.Context,
+	current Versioned[RunnerRecord],
+	expected RunnerRuntimeOwnershipRecord,
+) (int64, error) {
+	if err := validateContext(ctx); err != nil {
+		return 0, err
+	}
+	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || validateRunnerRecord(current.Record) != nil ||
+		validateRunnerRuntimeOwnership(expected) != nil || expected.RunnerID != current.Record.Desired.ID ||
+		current.Record.ContainerID == "" || current.Record.RuntimeEpoch <= expected.RuntimeEpoch {
+		return 0, errs.New(errs.KindValidationFailed, "runner runtime cleanup proof does not match its lifecycle")
+	}
+	expectedValue, err := encodeRunnerRuntimeOwnership(expected)
+	if err != nil {
+		return 0, err
+	}
+	defer clear(expectedValue)
+	lifecycleValue, err := encodeRunnerLifecycleRecord(current.Record.RunnerLifecycleRecord)
+	if err != nil {
+		return 0, err
+	}
+	defer clear(lifecycleValue)
+	evidence, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		runnerLifecycleKey(expected.RunnerID),
+		runnerRuntimeOwnershipKey(expected.RunnerID),
+		deletionTombstoneKey(string(DeletionTargetRunner), expected.RunnerID),
+	}, Revision: current.ReadRevision})
+	if err != nil {
+		return 0, err
+	}
+	if evidence == nil || len(evidence.Values) != 3 || evidence.Values[0] == nil || evidence.Values[1] == nil ||
+		evidence.Values[0].ModRevision != current.Record.LifecycleRevision ||
+		!sameRunnerRuntimeOwnershipBytes(evidence.Values[0].Value, lifecycleValue) ||
+		!sameRunnerRuntimeOwnershipBytes(evidence.Values[1].Value, expectedValue) {
+		return 0, errs.New(errs.KindStateConflict, "runner runtime cleanup ownership changed")
+	}
+	if evidence.Values[2] != nil {
+		tombstone, decodeErr := decodeRunnerDeletionTombstone(evidence.Values[2].Value)
+		if decodeErr != nil || tombstone.TargetID != expected.RunnerID {
+			return 0, errs.New(errs.KindStateConflict, "runner runtime cleanup tombstone changed")
+		}
+	} else if current.Record.ProvisioningState != RunnerProvisioningFailed {
+		return 0, errs.New(errs.KindStateConflict, "runner runtime cleanup lacks deletion ownership")
+	}
+	result, err := repository.store.Transact(ctx, []Condition{
+		{Key: runnerKey(expected.RunnerID), ModRevision: current.Revision},
+		{Key: runnerLifecycleKey(expected.RunnerID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerRuntimeOwnershipKey(expected.RunnerID), ModRevision: evidence.Values[1].ModRevision},
+		{Key: deletionTombstoneKey(string(DeletionTargetRunner), expected.RunnerID), ModRevision: keyValueRevision(evidence.Values[2])},
+	}, []Mutation{{Type: MutationDelete, Key: runnerRuntimeOwnershipKey(expected.RunnerID)}})
+	if err != nil {
+		return 0, err
+	}
+	if !result.Succeeded {
+		return 0, stateConflict("runner runtime cleanup ownership", expected.RunnerID)
+	}
+	return result.Revision, nil
+}
+
 func runnerKey(id string) string { return runnerPrefix + id }
+
+func runnerLifecycleKey(id string) string { return runnerLifecyclePrefix + id }
+
+func runnerRuntimeOwnershipKey(id string) string { return runnerRuntimeOwnershipPrefix + id }
 
 func runnerObservationKey(id string) string { return runnerObservationPrefix + id }
 
@@ -47,8 +335,63 @@ func runnerOwnerKey(kind RunnerOwnerKind, ownerID string, runnerID string) strin
 	return runnerOwnerPrefix(kind, ownerID) + runnerID
 }
 
+func runnerTenantSlugKey(tenantID string, slug string) string {
+	return "/v1/indexes/runners/by-slug/tenant/" + tenantID + "/" + encodeDynamicSegment(slug)
+}
+
 func runnerTenantCursorPrefix(tenantID string) string {
 	return "/v1/cursors/runners/by-tenant/" + tenantID + "/"
+}
+
+func (repository *RunnerRepository) ResolveRunner(
+	ctx context.Context,
+	tenantID string,
+	reference string,
+) (Versioned[RunnerRecord], error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if err := validateID(ids.KindTenant, tenantID); err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if ids.Validate(ids.KindRunner, reference) == nil {
+		current, err := repository.GetRunner(ctx, reference)
+		if err != nil {
+			return Versioned[RunnerRecord]{}, err
+		}
+		if current.Record.Desired.TenantID != tenantID {
+			return Versioned[RunnerRecord]{}, errs.New(errs.KindScopeUnauthorized, "Runner is outside the Tenant scope")
+		}
+		return current, nil
+	}
+	if reference == "" {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
+	}
+	index, err := repository.store.Get(ctx, runnerTenantSlugKey(tenantID, reference))
+	if err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if index == nil || index.Entry == nil {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
+	}
+	id := string(index.Entry.Value)
+	if ids.Validate(ids.KindRunner, id) != nil {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
+	}
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{runnerKey(id), runnerLifecycleKey(id)}, Revision: index.ReadRevision,
+	})
+	if err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if result == nil || len(result.Values) != 2 || result.Values[0] == nil || result.Values[1] == nil {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
+	}
+	record, err := decodeRunnerAggregate(result.Values[0], result.Values[1])
+	if err != nil || record.Desired.ID != id || record.Desired.TenantID != tenantID || record.Desired.Slug != reference {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
+	}
+	return Versioned[RunnerRecord]{Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision}, nil
 }
 
 type runnerParents struct {
@@ -88,6 +431,107 @@ func (repository *RunnerRepository) resolveRunnerParents(
 	return parents, nil
 }
 
+func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
+	ctx context.Context,
+	runnerID string,
+	slug string,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if ids.Validate(ids.KindRunner, runnerID) != nil || validateRunnerSlug(slug) != nil ||
+		marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
+		marker.Locator.Method != http.MethodPatch || marker.Locator.Route != "/runners/{id}" ||
+		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != IdempotencyReplayTargetRunner ||
+		marker.ReplayTarget.ID != runnerID || validateIdempotencyMarker(marker) != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "runner slug mutation is invalid")
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	existing, err := idempotency.Read(ctx, marker.Locator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if existing != nil {
+		return IdempotencyTransactionResult{
+			kind: idempotencyTransactionExisting, revision: existing.modRevision,
+			marker: cloneIdempotencyMarker(existing.marker),
+		}, nil
+	}
+	current, err := repository.GetRunner(ctx, runnerID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateRunnerMarkerScope(current.Record.Desired, marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	secondaryKeys := []string{
+		runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+		deletionTombstoneKey(string(DeletionTargetRunner), runnerID),
+	}
+	renaming := current.Record.Desired.Slug != slug
+	if renaming {
+		secondaryKeys = append(secondaryKeys, runnerTenantSlugKey(current.Record.Desired.TenantID, slug))
+	}
+	secondary, err := repository.store.GetMany(ctx, GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if secondary == nil || len(secondary.Values) != len(secondaryKeys) || secondary.Values[0] == nil ||
+		string(secondary.Values[0].Value) != runnerID {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner slug index is missing or mismatched")
+	}
+	if secondary.Values[1] != nil || current.Record.ProvisioningState == RunnerProvisioningProvisioning {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "runner mutation is in progress")
+	}
+	if renaming && secondary.Values[2] != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindSlugConflict, "runner slug is already in use")
+	}
+	replacement := cloneRunnerRecord(current.Record)
+	replacement.Desired.Slug = slug
+	value, err := encodeRunnerDesiredRecord(replacement.Desired)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(value)
+	conditions := []Condition{
+		{Key: runnerKey(runnerID), ModRevision: current.Revision},
+		{Key: runnerLifecycleKey(runnerID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug), ModRevision: secondary.Values[0].ModRevision},
+		{Key: deletionTombstoneKey(string(DeletionTargetRunner), runnerID)},
+	}
+	mutations := []Mutation{{Type: MutationPut, Key: runnerKey(runnerID), Value: value}}
+	if renaming {
+		conditions = append(conditions, Condition{Key: runnerTenantSlugKey(current.Record.Desired.TenantID, slug)})
+		mutations = append(mutations,
+			Mutation{Type: MutationDelete, Key: runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug)},
+			Mutation{Type: MutationPut, Key: runnerTenantSlugKey(current.Record.Desired.TenantID, slug), Value: []byte(runnerID)},
+		)
+	}
+	plan, err := newIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*KeyValue) error {
+		if len(values) != len(conditions) {
+			return errs.New(errs.KindInternal, "runner slug mutation compare evidence is incomplete")
+		}
+		if values[0] == nil {
+			return errs.New(errs.KindRunnerNotFound, "Runner was not found")
+		}
+		if values[3] != nil {
+			return errs.New(errs.KindResourceInUse, "runner mutation is in progress")
+		}
+		if renaming && values[4] != nil {
+			return errs.New(errs.KindSlugConflict, "runner slug is already in use")
+		}
+		return stateConflict("runner", runnerID)
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
 // CreateRunnerWithTask atomically publishes the provisioning Runner, its one
 // owner index, combined Tenant quota, exact host/network allocations, Task,
 // queue membership, and idempotency marker before any host effect can start.
@@ -99,6 +543,10 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	desired, err := NormalizeRunnerDesired(desired)
+	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	slotCount, err := config.Validate()
@@ -141,7 +589,7 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	systemPool, subnet, err := allocationState.system.Record.ReserveRunner(config.SystemPool, desired.ID)
+	systemPool, subnet, err := allocationState.system.Record.ReserveRunner(config.RunnerPool, desired.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -165,6 +613,8 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: values.reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: values.reference},
 		{Type: MutationPut, Key: runnerKey(desired.ID), Value: values.runner},
+		{Type: MutationPut, Key: runnerLifecycleKey(desired.ID), Value: values.lifecycle},
+		{Type: MutationPut, Key: runnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
 		{
 			Type: MutationPut, Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
 			Value: []byte(desired.ID),
@@ -201,7 +651,7 @@ func newRunnerTaskInitiation(
 }
 
 type runnerCreateValues struct {
-	runner, quota, host, system, task, reference []byte
+	runner, lifecycle, quota, host, system, task, reference []byte
 }
 
 func encodeRunnerCreateValues(
@@ -213,9 +663,14 @@ func encodeRunnerCreateValues(
 ) (runnerCreateValues, error) {
 	var result runnerCreateValues
 	var err error
-	result.runner, err = encodeRunnerRecord(record)
+	result.runner, err = encodeRunnerDesiredRecord(record.Desired)
 	if err != nil {
 		return result, err
+	}
+	result.lifecycle, err = encodeRunnerLifecycleRecord(record.RunnerLifecycleRecord)
+	if err != nil {
+		result.clear()
+		return runnerCreateValues{}, err
 	}
 	result.quota, err = encodeEnvelope("runner_tenant_quota", quota)
 	if err != nil {
@@ -247,6 +702,7 @@ func encodeRunnerCreateValues(
 
 func (values *runnerCreateValues) clear() {
 	clear(values.runner)
+	clear(values.lifecycle)
 	clear(values.quota)
 	clear(values.host)
 	clear(values.system)
@@ -261,6 +717,8 @@ type runnerCreateEvidence struct {
 	active          int
 	queue           int
 	runner          int
+	lifecycle       int
+	slug            int
 	owner           int
 	quota           int
 	system          int
@@ -296,6 +754,8 @@ func newRunnerCreateEvidence(
 	evidence.active = add(Condition{Key: taskActiveOperationKey(task.OperationID)})
 	evidence.queue = add(Condition{Key: taskQueueKey(task.Executor, task.ID)})
 	evidence.runner = add(Condition{Key: runnerKey(desired.ID)})
+	evidence.lifecycle = add(Condition{Key: runnerLifecycleKey(desired.ID)})
+	evidence.slug = add(Condition{Key: runnerTenantSlugKey(desired.TenantID, desired.Slug)})
 	evidence.owner = add(Condition{Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
 	evidence.quota = add(Condition{Key: runnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
 	evidence.system = add(Condition{Key: systemPoolRegistryKey, ModRevision: allocation.system.Revision})
@@ -334,8 +794,11 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 				return errs.New(errs.KindInternal, "runner creation collided with durable task state")
 			}
 		}
-		if values[evidence.runner] != nil || values[evidence.owner] != nil {
+		if values[evidence.runner] != nil || values[evidence.lifecycle] != nil || values[evidence.owner] != nil {
 			return errs.New(errs.KindStateConflict, "runner stable identity is already in use")
+		}
+		if values[evidence.slug] != nil {
+			return errs.New(errs.KindSlugConflict, "runner slug is already in use")
 		}
 		if revisionChanged(values[evidence.quota], evidence.allocation.quota.Revision) {
 			return stateConflict("runner tenant quota", evidence.desired.TenantID)
@@ -386,7 +849,7 @@ func validateRunnerCreateTask(desired RunnerDesiredRecord, task TaskRecord) erro
 }
 
 func runnerTaskOwner(desired RunnerDesiredRecord) (TaskOwner, error) {
-	if err := validateRunnerDesired(desired); err != nil {
+	if err := validateRunnerOwnership(desired); err != nil {
 		return TaskOwner{}, err
 	}
 	if desired.OwnerKind == RunnerOwnerTenant {
@@ -484,11 +947,45 @@ func (repository *RunnerRepository) GetRunner(ctx context.Context, id string) (V
 	if err := validateID(ids.KindRunner, id); err != nil {
 		return Versioned[RunnerRecord]{}, err
 	}
-	return getRecord(
-		ctx, repository.store, runnerKey(id), id, errs.KindRunnerNotFound,
-		decodeRunnerRecord,
-		func(record RunnerRecord) string { return record.Desired.ID },
-	)
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{runnerKey(id), runnerLifecycleKey(id)},
+	})
+	if err != nil {
+		return Versioned[RunnerRecord]{}, err
+	}
+	if result == nil || len(result.Values) != 2 {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner read is incomplete")
+	}
+	if result.Values[0] == nil && result.Values[1] == nil {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
+	}
+	if result.Values[0] == nil || result.Values[1] == nil {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is incomplete")
+	}
+	record, err := decodeRunnerAggregate(result.Values[0], result.Values[1])
+	if err != nil || record.Desired.ID != id {
+		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is corrupt")
+	}
+	return Versioned[RunnerRecord]{
+		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
+	}, nil
+}
+
+func decodeRunnerAggregate(desiredValue *KeyValue, lifecycleValue *KeyValue) (RunnerRecord, error) {
+	if desiredValue == nil || lifecycleValue == nil || desiredValue.ModRevision <= 0 || lifecycleValue.ModRevision <= 0 {
+		return RunnerRecord{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is incomplete")
+	}
+	desired, err := decodeRunnerDesiredRecord(desiredValue.Value)
+	if err != nil {
+		return RunnerRecord{}, err
+	}
+	lifecycle, err := decodeRunnerLifecycleRecord(lifecycleValue.Value)
+	if err != nil || lifecycle.RunnerID != desired.ID {
+		return RunnerRecord{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is corrupt")
+	}
+	return RunnerRecord{
+		Desired: desired, RunnerLifecycleRecord: lifecycle, LifecycleRevision: lifecycleValue.ModRevision,
+	}, nil
 }
 
 func (repository *RunnerRepository) ListRunners(
@@ -509,15 +1006,19 @@ func (repository *RunnerRepository) ListRunners(
 		if err := validateID(ids.KindProject, filter.ProjectID); err != nil {
 			return Page[RunnerRecord]{}, err
 		}
-		return listIndexPage(
+		page, err := listIndexPage(
 			ctx, repository.store, "runners", "project", filter.ProjectID,
 			runnerOwnerPrefix(RunnerOwnerProject, filter.ProjectID), runnerKey, ids.KindRunner, request,
-			decodeRunnerRecord,
+			decodeRunnerDesiredAggregate,
 			func(record RunnerRecord) string { return record.Desired.ID },
 			func(record RunnerRecord) bool {
 				return record.Desired.OwnerKind == RunnerOwnerProject && record.Desired.OwnerID == filter.ProjectID
 			},
 		)
+		if err != nil {
+			return Page[RunnerRecord]{}, err
+		}
+		return repository.hydrateRunnerPage(ctx, page)
 	}
 	return repository.listTenantRunners(ctx, filter.TenantID, request)
 }
@@ -548,7 +1049,7 @@ func (repository *RunnerRepository) listTenantRunners(
 	}
 	quota := RunnerTenantQuota{RunnerIDs: []string{}}
 	if read.Values[0] != nil {
-		quota, err = decodeEnvelope[RunnerTenantQuota](read.Values[0].Value, "runner_tenant_quota")
+		quota, err = decodeRunnerTenantQuota(read.Values[0].Value)
 		if err != nil || validateRunnerTenantQuota(quota) != nil {
 			return Page[RunnerRecord]{}, corruptRunnerTenantQuota()
 		}
@@ -583,7 +1084,7 @@ func (repository *RunnerRepository) listTenantRunners(
 			if value == nil {
 				return Page[RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
 			}
-			record, err := decodeRunnerRecord(value.Value)
+			record, err := decodeRunnerDesiredAggregate(value.Value)
 			if err != nil || record.Desired.ID != idsPage[index] || record.Desired.TenantID != tenantID {
 				return Page[RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
 			}
@@ -599,6 +1100,38 @@ func (repository *RunnerRepository) listTenantRunners(
 		if err != nil {
 			return Page[RunnerRecord]{}, err
 		}
+	}
+	return repository.hydrateRunnerPage(ctx, page)
+}
+
+func (repository *RunnerRepository) hydrateRunnerPage(
+	ctx context.Context,
+	page Page[RunnerRecord],
+) (Page[RunnerRecord], error) {
+	if len(page.Items) == 0 {
+		return page, nil
+	}
+	keys := make([]string, len(page.Items))
+	for index := range page.Items {
+		keys[index] = runnerLifecycleKey(page.Items[index].Record.Desired.ID)
+	}
+	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: page.Revision})
+	if err != nil {
+		return Page[RunnerRecord]{}, err
+	}
+	if result == nil || len(result.Values) != len(keys) {
+		return Page[RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is incomplete")
+	}
+	for index, value := range result.Values {
+		if value == nil {
+			return Page[RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is incomplete")
+		}
+		lifecycle, err := decodeRunnerLifecycleRecord(value.Value)
+		if err != nil || lifecycle.RunnerID != page.Items[index].Record.Desired.ID {
+			return Page[RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is corrupt")
+		}
+		page.Items[index].Record.RunnerLifecycleRecord = lifecycle
+		page.Items[index].Record.LifecycleRevision = value.ModRevision
 	}
 	return page, nil
 }
@@ -640,6 +1173,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	conditions := []Condition{
 		{Key: runnerObservationKey(record.RunnerID), ModRevision: expectedRevision},
 		{Key: runnerKey(record.RunnerID), ModRevision: current.Revision},
+		{Key: runnerLifecycleKey(record.RunnerID), ModRevision: current.Record.LifecycleRevision},
 		{Key: tenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetRunner), record.RunnerID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
@@ -739,29 +1273,26 @@ func (repository *RunnerRepository) getRunnerAllocationState(
 		quota: Versioned[RunnerTenantQuota]{
 			Record: RunnerTenantQuota{RunnerIDs: []string{}}, ReadRevision: result.ReadRevision,
 		},
-		system: Versioned[SystemPoolRegistry]{
-			Record: SystemPoolRegistry{Reservations: map[string]string{}}, ReadRevision: result.ReadRevision,
-		},
 	}
 	if result.Values[runnerAllocationQuotaIndex] != nil {
-		state.quota.Record, err = decodeEnvelope[RunnerTenantQuota](
-			result.Values[runnerAllocationQuotaIndex].Value, "runner_tenant_quota",
-		)
+		state.quota.Record, err = decodeRunnerTenantQuota(result.Values[runnerAllocationQuotaIndex].Value)
 		if err != nil || validateRunnerTenantQuota(state.quota.Record) != nil {
 			return runnerAllocationState{}, corruptRunnerTenantQuota()
 		}
 		state.quota.Revision = result.Values[runnerAllocationQuotaIndex].ModRevision
 	}
 	if result.Values[runnerAllocationSystemIndex] != nil {
-		state.system.Record, err = decodeEnvelope[SystemPoolRegistry](
-			result.Values[runnerAllocationSystemIndex].Value, "system_pool_registry",
-		)
-		if err != nil || validateSystemPoolRegistry(config.SystemPool, state.system.Record) != nil {
+		if len(result.Values[runnerAllocationSystemIndex].Value) > maximumRunnerPersistenceBytes {
+			return runnerAllocationState{}, corruptSystemPoolRegistry()
+		}
+		state.system.Record, err = decodeSystemPoolRegistry(result.Values[runnerAllocationSystemIndex].Value)
+		if err != nil || validateSystemPoolRegistry(config.SystemPool, state.system.Record) != nil ||
+			state.system.Record.RunnerNetworkPool != config.RunnerPool.String() {
 			return runnerAllocationState{}, corruptSystemPoolRegistry()
 		}
 		state.system.Revision = result.Values[runnerAllocationSystemIndex].ModRevision
-	} else if err := validateSystemPoolRegistry(config.SystemPool, state.system.Record); err != nil {
-		return runnerAllocationState{}, err
+	} else {
+		return runnerAllocationState{}, errs.New(errs.KindStateConflict, "runner network pool is not reserved at bootstrap")
 	}
 	firstFree := int64(-1)
 	owners := make(map[string]struct{}, slotCount)

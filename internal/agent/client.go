@@ -4,8 +4,10 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"strings"
 	"sync"
@@ -20,8 +22,17 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+)
+
+const (
+	agentChannelAgentMaximumReceiveMessageBytes = 5 * 1024 * 1024
+	agentChannelAgentMaximumSendMessageBytes    = 16 * 1024 * 1024
+	agentChannelReconnectInitialCeiling         = 100 * time.Millisecond
+	agentChannelReconnectMaximumCeiling         = 5 * time.Second
 )
 
 type agentStream interface {
@@ -32,6 +43,8 @@ type agentStream interface {
 
 type streamConnector func(context.Context, string) (agentStream, io.Closer, error)
 
+type reconnectWaiter func(context.Context, uint) error
+
 // Client owns one authenticated, single-use Controller stream. Identity and
 // credential material are deliberately private and are never logged.
 type Client struct {
@@ -41,6 +54,7 @@ type Client struct {
 	volumeRoot string
 	logger     *slog.Logger
 	connect    streamConnector
+	reconnect  reconnectWaiter
 
 	mu                     sync.Mutex
 	started                bool
@@ -84,6 +98,7 @@ func NewClient(
 		volumeRoot: volumeRoot,
 		logger:     logger,
 		connect:    connectGRPC,
+		reconnect:  waitForAgentChannelReconnect,
 	}
 	copy(client.token[:], token)
 	return client, nil
@@ -123,12 +138,47 @@ func (c *Client) Run(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return nil
 	}
+	if c.reconnect == nil {
+		return errs.New(errs.KindInternal, "agent: reconnect waiter is not configured")
+	}
+
+	var reconnectAttempt uint
+	for {
+		reconnect, runErr := c.runSession(ctx, &token)
+		if runErr != nil || !reconnect {
+			return runErr
+		}
+		c.logger.WarnContext(
+			ctx,
+			"agent channel interrupted; reconnecting",
+			"attempt",
+			reconnectAttempt+1,
+		)
+		if waitErr := c.reconnect(ctx, reconnectAttempt); waitErr != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return errs.New(errs.KindInternal, "agent: reconnect wait failed")
+		}
+		if reconnectAttempt < 63 {
+			reconnectAttempt++
+		}
+	}
+}
+
+func (c *Client) runSession(
+	ctx context.Context,
+	token *[agentprotocol.RawTokenBytes]byte,
+) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, nil
+	}
 
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, connection, err := c.connect(streamCtx, c.socketPath)
 	if err != nil {
-		return transportError(ctx, "agent: connect to Controller")
+		return agentChannelTransportResult(ctx, err, "agent: connect to Controller")
 	}
 	defer func() {
 		// Best effort: stream teardown cannot supersede the primary Run result.
@@ -138,27 +188,26 @@ func (c *Client) Run(ctx context.Context) error {
 	}()
 
 	authToken := append([]byte(nil), token[:]...)
-	clear(token[:])
 	authenticate := &agentpb.Authenticate{AgentId: c.agentID, Token: authToken}
 	message := &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Authenticate{Authenticate: authenticate}}
 	if err := stream.Send(message); err != nil {
 		clear(authToken)
 		authenticate.Token = nil
-		return transportError(ctx, "agent: send authentication")
+		return agentChannelTransportResult(ctx, err, "agent: send authentication")
 	}
 	clear(authToken)
 	authenticate.Token = nil
 
 	initial, err := stream.Recv()
 	if err != nil {
-		return transportError(ctx, "agent: receive initial configuration")
+		return agentChannelTransportResult(ctx, err, "agent: receive initial configuration")
 	}
 	config := initial.GetConfigUpdate().GetAgentConfig()
 	if config == nil {
-		return errs.New(errs.KindInternal, "agent: Controller did not send configuration first")
+		return false, errs.New(errs.KindInternal, "agent: Controller did not send configuration first")
 	}
 	if !validRuntimeConfig(config) {
-		return errs.New(errs.KindInternal, "agent: Controller sent invalid initial configuration")
+		return false, errs.New(errs.KindInternal, "agent: Controller sent invalid initial configuration")
 	}
 
 	pullInterval := time.Duration(config.PullIntervalSeconds) * time.Second
@@ -169,7 +218,7 @@ func (c *Client) Run(ctx context.Context) error {
 		<-workersDone
 	}()
 	if err := c.sendReady(stream); err != nil {
-		return transportError(ctx, "agent: send readiness")
+		return agentChannelTransportResult(ctx, err, "agent: send readiness")
 	}
 
 	ticker := time.NewTicker(pullInterval)
@@ -179,22 +228,22 @@ func (c *Client) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return false, nil
 		case <-ticker.C:
 			if err := c.sendReady(stream); err != nil {
-				return transportError(ctx, "agent: send readiness")
+				return agentChannelTransportResult(ctx, err, "agent: send readiness")
 			}
 		case result := <-received:
 			if result.err != nil {
-				return transportError(ctx, "agent: receive Controller message")
+				return agentChannelTransportResult(ctx, result.err, "agent: receive Controller message")
 			}
 			if update := result.message.GetConfigUpdate(); update != nil {
 				next := update.GetAgentConfig()
 				if !validRuntimeConfig(next) {
-					return errs.New(errs.KindInternal, "agent: Controller sent invalid live configuration")
+					return false, errs.New(errs.KindInternal, "agent: Controller sent invalid live configuration")
 				}
 				if c.pool.Capacity() != int(config.MaxConcurrentTasks) {
-					return errs.New(
+					return false, errs.New(
 						errs.KindStateConflict,
 						"agent: live configuration arrived before the worker pool drained",
 					)
@@ -207,36 +256,40 @@ func (c *Client) Run(ctx context.Context) error {
 				ticker.Reset(pullInterval)
 				receiveNext(streamCtx, stream, received)
 				if err := c.sendReady(stream); err != nil {
-					return transportError(ctx, "agent: send readiness after configuration update")
+					return agentChannelTransportResult(
+						ctx,
+						err,
+						"agent: send readiness after configuration update",
+					)
 				}
 				continue
 			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
-				return err
+				return false, err
 			}
 			if shutdown {
-				return nil
+				return false, nil
 			}
 			receiveNext(streamCtx, stream, received)
 		case output := <-c.pool.Outputs():
 			if output.Progress != nil {
 				if output.Result != nil {
-					return errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}
 				if err := c.sendTaskEvent(stream, *output.Progress); err != nil {
-					return transportError(ctx, "agent: send task event")
+					return agentChannelTransportResult(ctx, err, "agent: send task event")
 				}
 				continue
 			}
 			if output.Result == nil {
-				return errs.New(errs.KindInternal, "agent: worker returned an empty output")
+				return false, errs.New(errs.KindInternal, "agent: worker returned an empty output")
 			}
 			if err := c.sendTaskAck(stream, *output.Result); err != nil {
-				return transportError(ctx, "agent: send task acknowledgement")
+				return agentChannelTransportResult(ctx, err, "agent: send task acknowledgement")
 			}
 			if err := c.sendReady(stream); err != nil {
-				return transportError(ctx, "agent: send readiness")
+				return agentChannelTransportResult(ctx, err, "agent: send readiness")
 			}
 		}
 	}
@@ -412,6 +465,10 @@ func connectGRPC(ctx context.Context, socketPath string) (agentStream, io.Closer
 	connection, err := grpc.NewClient(
 		"passthrough:///groundplane-agent",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(agentChannelAgentMaximumReceiveMessageBytes),
+			grpc.MaxCallSendMsgSize(agentChannelAgentMaximumSendMessageBytes),
+		),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			var dialer net.Dialer
 			return dialer.DialContext(ctx, "unix", socketPath)
@@ -429,9 +486,43 @@ func connectGRPC(ctx context.Context, socketPath string) (agentStream, io.Closer
 	return stream, connection, nil
 }
 
-func transportError(ctx context.Context, message string) error {
+func agentChannelTransportResult(ctx context.Context, cause error, message string) (bool, error) {
 	if ctx.Err() != nil {
+		return false, nil
+	}
+	if errors.Is(cause, io.EOF) {
+		return true, nil
+	}
+	switch status.Code(cause) {
+	case codes.Canceled, codes.DeadlineExceeded, codes.Unavailable:
+		return true, nil
+	default:
+		return false, errs.New(errs.KindInternal, message)
+	}
+}
+
+func waitForAgentChannelReconnect(ctx context.Context, attempt uint) error {
+	delay := agentChannelReconnectDelay(attempt, rand.Uint64())
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
 		return nil
 	}
-	return errs.New(errs.KindInternal, message)
+}
+
+func agentChannelReconnectDelay(attempt uint, jitter uint64) time.Duration {
+	ceiling := agentChannelReconnectInitialCeiling
+	for current := uint(0); current < attempt && ceiling < agentChannelReconnectMaximumCeiling; current++ {
+		if ceiling > agentChannelReconnectMaximumCeiling/2 {
+			ceiling = agentChannelReconnectMaximumCeiling
+			break
+		}
+		ceiling *= 2
+	}
+	minimum := ceiling / 2
+	window := ceiling - minimum
+	return minimum + time.Duration(jitter%uint64(window+1))
 }

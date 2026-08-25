@@ -133,18 +133,20 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		},
 	}
 	input := etcd.AttachTaskRenderInput{
-		PlanID: ids.NewAt(ids.KindPlan, now, 10), AttachID: attachID,
+		PlanID: ids.NewAt(ids.KindPlan, now, 10), AttachID: attachID, AttachName: record.Name,
 		TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug,
 		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
 		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
 		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		BackingServiceID:    backingServiceID, AdapterKey: adapterKey,
+		BackingServiceID:    backingServiceID, BackingProjectID: record.BackingProjectID, AdapterKey: adapterKey,
 		BlueprintRevisionID: reader.revision.RevisionID, ArtifactID: ids.NewAt(ids.KindConfig, now, 21),
 		RenderGeneration: reader.projection.RenderGeneration,
 		Services:         append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Services...),
 		Networks:         append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Networks...),
 		Volumes:          append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Volumes...),
 		NetworkJoins:     []etcd.AttachTaskNetworkJoin{{NetworkID: networkID, ServiceIDs: []string{consumerServiceID}}},
+		ConsumerServiceIDs: append([]string(nil), record.ServiceIDs...),
+		GrantAttachIDs:     append([]string(nil), record.GrantAttachIDs...),
 	}
 	state := &attachPlanTestState{
 		attaches: attaches, service: etcd.Versioned[etcd.ServiceRecord]{Record: service},

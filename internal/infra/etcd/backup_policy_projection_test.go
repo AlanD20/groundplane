@@ -13,6 +13,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Rationale: the public projection must preserve the largest retention integer
+// represented exactly by every supported JSON consumer.
+func TestBackupPolicyProjectionPreservesMaximumPublicKeep(t *testing.T) {
+	t.Parallel()
+	projection := backupPolicyProjectionFromCandidate(backupPolicyReplacementCandidate{
+		Replacement: BackupPolicyRecord{Keep: MaximumBackupPolicyKeep},
+	})
+	if projection.Keep != MaximumBackupPolicyKeep {
+		t.Fatalf("projection Keep = %d, want %d", projection.Keep, MaximumBackupPolicyKeep)
+	}
+}
+
 // Rationale: an absent singleton is the accepted disabled and wholly
 // unconfigured state, not a not-found response or a synthetic durable record.
 func TestBackupPolicyProjectionUsesEffectiveDisabledAbsence(t *testing.T) {

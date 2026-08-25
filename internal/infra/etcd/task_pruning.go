@@ -14,10 +14,15 @@ const (
 )
 
 type taskPruneIntent struct {
-	TaskID                  string `json:"task_id"`
-	AttachPlanID            string `json:"attach_plan_id,omitempty"`
-	RemainingEvents         uint32 `json:"remaining_events"`
-	RemainingDeduplications uint32 `json:"remaining_deduplications"`
+	TaskID                                 string `json:"task_id"`
+	TaskRevision                           int64  `json:"task_revision"`
+	BackupCheckpointCursorsComplete        bool   `json:"backup_checkpoint_cursors_complete"`
+	BackupCheckpointDeduplicationsComplete bool   `json:"backup_checkpoint_deduplications_complete"`
+	TaskPrimaryDeleted                     bool   `json:"task_primary_deleted"`
+	BackupTerminalReceiptRevision          int64  `json:"backup_terminal_receipt_revision,omitempty"`
+	AttachPlanID                           string `json:"attach_plan_id,omitempty"`
+	RemainingEvents                        uint32 `json:"remaining_events"`
+	RemainingDeduplications                uint32 `json:"remaining_deduplications"`
 }
 
 func encodeTaskPruneIntent(intent taskPruneIntent) ([]byte, error) {
@@ -39,7 +44,11 @@ func decodeTaskPruneIntent(value []byte) (taskPruneIntent, error) {
 }
 
 func validateTaskPruneIntent(intent taskPruneIntent) error {
-	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
+	if ids.Validate(ids.KindTask, intent.TaskID) != nil || intent.TaskRevision <= 0 ||
+		(intent.BackupCheckpointDeduplicationsComplete &&
+			!intent.BackupCheckpointCursorsComplete) ||
+		(intent.TaskPrimaryDeleted && !intent.BackupCheckpointDeduplicationsComplete) ||
+		intent.BackupTerminalReceiptRevision < 0 ||
 		intent.RemainingEvents > MaximumTaskEvents ||
 		intent.RemainingDeduplications > MaximumTaskEvents {
 		return errs.New(errs.KindValidationFailed, "task prune intent is invalid")
@@ -52,7 +61,10 @@ func validateTaskPruneIntent(intent taskPruneIntent) error {
 
 // PruneExpiredTasks removes at most one complete expired Task journal. A
 // previously checkpointed intent is always resumed before another Task starts.
-func (repository *TaskRepository) PruneExpiredTasks(ctx context.Context, now time.Time) (int, error) {
+func (repository *TaskRepository) PruneExpiredTasks(
+	ctx context.Context,
+	now time.Time,
+) (int, error) {
 	if err := validateContext(ctx); err != nil {
 		return 0, err
 	}
@@ -118,7 +130,10 @@ func (repository *TaskRepository) beginTaskPrune(
 	ctx context.Context,
 	now time.Time,
 ) (Versioned[taskPruneIntent], bool, error) {
-	page, err := repository.store.Range(ctx, RangeRequest{Prefix: taskRetentionIndexPrefix, Limit: 1})
+	page, err := repository.store.Range(
+		ctx,
+		RangeRequest{Prefix: taskRetentionIndexPrefix, Limit: 1},
+	)
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, false, err
 	}
@@ -147,14 +162,16 @@ func (repository *TaskRepository) beginTaskPrune(
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, false, err
 	}
-	if taskResult == nil || taskResult.ReadRevision != page.ReadRevision || len(taskResult.Values) != 1 ||
+	if taskResult == nil || taskResult.ReadRevision != page.ReadRevision ||
+		len(taskResult.Values) != 1 ||
 		taskResult.Values[0] == nil {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	defer clearKeyValues(taskResult.Values)
 	taskValue := taskResult.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
-	if err != nil || task.ID != taskID || !isTerminalTaskStatus(task.Status) || task.RetainUntil == nil ||
+	if err != nil || task.ID != taskID || !isTerminalTaskStatus(task.Status) ||
+		task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(retainUntil) {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
@@ -171,6 +188,18 @@ func (repository *TaskRepository) beginTaskPrune(
 		routeRemovalIntentKey(task.ID),
 		entryRemovalIntentKey(task.ID),
 	}
+	environmentDeletionFenceStart := -1
+	var environmentDeletionFenceKeys []string
+	if task.Executor == TaskExecutorAgent && task.Type == TaskRemove &&
+		ids.Validate(ids.KindEnvironment, task.Target) == nil {
+		environmentDeletionFenceStart = len(companionKeys)
+		environmentDeletionFenceKeys = []string{
+			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+			environmentOperationLockKey(task.Target),
+			environmentDeletionIntentKey(task.OperationID),
+		}
+		companionKeys = append(companionKeys, environmentDeletionFenceKeys...)
+	}
 	ownerIndexStart := len(companionKeys)
 	ownerIndexKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
 	if err != nil {
@@ -181,6 +210,16 @@ func (repository *TaskRepository) beginTaskPrune(
 	if task.Type == TaskAttach || task.Type == TaskDetach {
 		planReferenceIndex = len(companionKeys)
 		companionKeys = append(companionKeys, attachTaskPlanReferenceKey(task.PlanID, task.ID))
+	}
+	backupPruneDispatchIndex := -1
+	if task.Type == TaskBackupPrune {
+		backupPruneDispatchIndex = len(companionKeys)
+		companionKeys = append(companionKeys, backupRecoveryPointPruneDispatchKey(task.ID))
+	}
+	backupTerminalReceiptIndex := -1
+	if task.Type == TaskBackup || task.Type == TaskBackupPrune {
+		backupTerminalReceiptIndex = len(companionKeys)
+		companionKeys = append(companionKeys, backupTerminalReceiptKey(task.ID))
 	}
 	companions, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: companionKeys, Revision: page.ReadRevision,
@@ -196,11 +235,29 @@ func (repository *TaskRepository) beginTaskPrune(
 	if companions.Values[0] != nil {
 		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
+	environmentDeletionBlocked := false
+	environmentDeletionOwnerTaskID := ""
+	if environmentDeletionFenceStart >= 0 {
+		environmentDeletionBlocked, environmentDeletionOwnerTaskID, err =
+			environmentDeletionTaskPruneFence(
+				task,
+				companions.Values[environmentDeletionFenceStart:ownerIndexStart],
+			)
+		if err != nil {
+			return Versioned[taskPruneIntent]{}, false, err
+		}
+	}
+	activeOperationCondition := Condition{Key: taskActiveOperationKey(task.OperationID)}
 	if companions.Values[1] != nil {
-		if _, decodeErr := decodeTaskReference(companions.Values[1].Value); decodeErr != nil {
+		activeTaskID, decodeErr := decodeTaskReference(companions.Values[1].Value)
+		if decodeErr != nil {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
-		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		if environmentDeletionBlocked || environmentDeletionOwnerTaskID == "" ||
+			activeTaskID != environmentDeletionOwnerTaskID {
+			return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		}
+		activeOperationCondition.ModRevision = companions.Values[1].ModRevision
 	}
 	if companions.Values[2] == nil || companions.Values[3] != nil {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
@@ -233,15 +290,61 @@ func (repository *TaskRepository) beginTaskPrune(
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
+	if backupPruneDispatchIndex >= 0 && companions.Values[backupPruneDispatchIndex] != nil {
+		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+	}
+	var backupReceiptCompanion backupTerminalReceiptPruneCompanion
+	if backupTerminalReceiptIndex >= 0 {
+		backupReceiptCompanion, err = prepareBackupTerminalReceiptPruneCompanion(
+			task,
+			taskValue.ModRevision,
+			companions.Values[backupTerminalReceiptIndex],
+		)
+		if err != nil {
+			return Versioned[taskPruneIntent]{}, false, err
+		}
+	}
+	if environmentDeletionFenceStart >= 0 {
+		if environmentDeletionBlocked {
+			conditions := []Condition{
+				{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+				{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
+			}
+			for index, key := range environmentDeletionFenceKeys {
+				conditions = append(conditions, Condition{
+					Key:         key,
+					ModRevision: companions.Values[environmentDeletionFenceStart+index].ModRevision,
+				})
+			}
+			transaction, transactErr := repository.store.Transact(
+				ctx,
+				conditions,
+				[]Mutation{{Type: MutationDelete, Key: retentionEntry.Key}},
+			)
+			if transactErr != nil {
+				return Versioned[taskPruneIntent]{}, false, transactErr
+			}
+			clearKeyValues(transaction.FailureReads)
+			if !transaction.Succeeded {
+				return Versioned[taskPruneIntent]{}, false, errs.New(
+					errs.KindStateConflict,
+					"task prune retained ownership changed",
+				)
+			}
+			return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		}
+	}
 	for index, key := range ownerIndexKeys {
 		value := companions.Values[ownerIndexStart+index]
-		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {
+		if value == nil || value.Key != key || value.ModRevision <= 0 ||
+			string(value.Value) != task.ID {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	intent := taskPruneIntent{
-		TaskID: task.ID, RemainingEvents: task.EventCount,
-		RemainingDeduplications: task.EventCount,
+		TaskID: task.ID, TaskRevision: taskValue.ModRevision, RemainingEvents: task.EventCount,
+		BackupTerminalReceiptRevision: backupReceiptCompanion.revision,
+		RemainingDeduplications:       task.EventCount,
 	}
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
@@ -266,13 +369,27 @@ func (repository *TaskRepository) beginTaskPrune(
 		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
 		{Key: markerKey},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID), ModRevision: companions.Values[2].ModRevision},
+		activeOperationCondition,
+		{
+			Key:         taskOperationIndexKey(task.OperationID, task.ID),
+			ModRevision: companions.Values[2].ModRevision,
+		},
 		{Key: taskPruneIntentKey(task.ID)},
 	}
+	for index, key := range environmentDeletionFenceKeys {
+		condition := Condition{Key: key}
+		value := companions.Values[environmentDeletionFenceStart+index]
+		if value != nil {
+			condition.ModRevision = value.ModRevision
+		}
+		conditions = append(conditions, condition)
+	}
+	if backupPruneDispatchIndex >= 0 {
+		conditions = append(conditions, Condition{Key: backupRecoveryPointPruneDispatchKey(task.ID)})
+	}
+	conditions = backupReceiptCompanion.appendStartCondition(conditions)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskPruneIntentKey(task.ID), Value: intentValue},
-		{Type: MutationDelete, Key: taskKey(task.ID)},
 		{Type: MutationDelete, Key: serviceLifecycleRenderInputKey(task.ID)},
 		{Type: MutationDelete, Key: retentionEntry.Key},
 		{Type: MutationDelete, Key: taskOperationIndexKey(task.OperationID, task.ID)},
@@ -285,19 +402,28 @@ func (repository *TaskRepository) beginTaskPrune(
 	componentCondition := Condition{Key: componentTaskIntentKey(task.ID)}
 	if companions.Values[4] != nil {
 		componentCondition.ModRevision = companions.Values[4].ModRevision
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: componentTaskIntentKey(task.ID)})
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationDelete, Key: componentTaskIntentKey(task.ID)},
+		)
 	}
 	conditions = append(conditions, componentCondition)
 	routeCondition := Condition{Key: routeRemovalIntentKey(task.ID)}
 	if companions.Values[5] != nil {
 		routeCondition.ModRevision = companions.Values[5].ModRevision
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: routeRemovalIntentKey(task.ID)})
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationDelete, Key: routeRemovalIntentKey(task.ID)},
+		)
 	}
 	conditions = append(conditions, routeCondition)
 	entryCondition := Condition{Key: entryRemovalIntentKey(task.ID)}
 	if companions.Values[6] != nil {
 		entryCondition.ModRevision = companions.Values[6].ModRevision
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: entryRemovalIntentKey(task.ID)})
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationDelete, Key: entryRemovalIntentKey(task.ID)},
+		)
 	}
 	conditions = append(conditions, entryCondition)
 	if planReferenceIndex >= 0 {
@@ -313,7 +439,10 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[taskPruneIntent]{}, false, errs.New(errs.KindStateConflict, "task prune start changed")
+		return Versioned[taskPruneIntent]{}, false, errs.New(
+			errs.KindStateConflict,
+			"task prune start changed",
+		)
 	}
 	return Versioned[taskPruneIntent]{
 		Record: intent, Revision: transaction.Revision, ReadRevision: transaction.Revision,
@@ -325,6 +454,24 @@ func (repository *TaskRepository) drainTaskPruneIntent(
 	current Versioned[taskPruneIntent],
 ) error {
 	var err error
+	for !current.Record.BackupCheckpointCursorsComplete {
+		current, err = repository.pruneTaskBackupCheckpointBatch(ctx, current, true)
+		if err != nil {
+			return err
+		}
+	}
+	for !current.Record.BackupCheckpointDeduplicationsComplete {
+		current, err = repository.pruneTaskBackupCheckpointBatch(ctx, current, false)
+		if err != nil {
+			return err
+		}
+	}
+	if !current.Record.TaskPrimaryDeleted {
+		current, err = repository.deleteTaskPrunePrimary(ctx, current)
+		if err != nil {
+			return err
+		}
+	}
 	for current.Record.RemainingEvents > 0 {
 		current, err = repository.pruneTaskSubordinateBatch(ctx, current, true)
 		if err != nil {
@@ -344,6 +491,150 @@ func (repository *TaskRepository) drainTaskPruneIntent(
 		return err
 	}
 	return repository.finishTaskPruneIntent(ctx, current)
+}
+
+func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
+	ctx context.Context,
+	current Versioned[taskPruneIntent],
+	cursors bool,
+) (Versioned[taskPruneIntent], error) {
+	prefix := backupCheckpointDedupTaskPrefix(current.Record.TaskID)
+	if cursors {
+		prefix = backupCheckpointCursorTaskPrefix(current.Record.TaskID)
+	}
+	page, err := repository.store.Range(ctx, RangeRequest{
+		Prefix: prefix,
+		Limit:  int64(maximumTaskPruneBatchRecords + 1),
+	})
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, err
+	}
+	if page == nil || page.ReadRevision <= 0 {
+		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+	}
+	defer clearKeyValueSlice(page.Values)
+	next := current.Record
+	if len(page.Values) == 0 {
+		if cursors {
+			next.BackupCheckpointCursorsComplete = true
+		} else {
+			next.BackupCheckpointDeduplicationsComplete = true
+		}
+		return repository.advanceTaskPruneIntent(
+			ctx,
+			current,
+			next,
+			[]Condition{{Key: prefix, Prefix: true}},
+			nil,
+		)
+	}
+	count := len(page.Values)
+	if count > maximumTaskPruneBatchRecords {
+		count = maximumTaskPruneBatchRecords
+	}
+	conditions := make([]Condition, 0, count)
+	mutations := make([]Mutation, 0, count)
+	for index := 0; index < count; index++ {
+		entry := page.Values[index]
+		if err := validateTaskBackupCheckpointPruneEntry(
+			current.Record.TaskID,
+			entry,
+			cursors,
+		); err != nil {
+			return Versioned[taskPruneIntent]{}, err
+		}
+		conditions = append(conditions, Condition{Key: entry.Key, ModRevision: entry.ModRevision})
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: entry.Key})
+	}
+	return repository.advanceTaskPruneIntent(ctx, current, next, conditions, mutations)
+}
+
+func (repository *TaskRepository) deleteTaskPrunePrimary(
+	ctx context.Context,
+	current Versioned[taskPruneIntent],
+) (Versioned[taskPruneIntent], error) {
+	next := current.Record
+	next.TaskPrimaryDeleted = true
+	return repository.advanceTaskPruneIntent(
+		ctx,
+		current,
+		next,
+		[]Condition{
+			{Key: taskKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
+			{Key: backupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
+			{Key: backupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
+		},
+		[]Mutation{{Type: MutationDelete, Key: taskKey(current.Record.TaskID)}},
+	)
+}
+
+func (repository *TaskRepository) advanceTaskPruneIntent(
+	ctx context.Context,
+	current Versioned[taskPruneIntent],
+	next taskPruneIntent,
+	conditions []Condition,
+	mutations []Mutation,
+) (Versioned[taskPruneIntent], error) {
+	intentValue, err := encodeTaskPruneIntent(next)
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, err
+	}
+	defer clear(intentValue)
+	conditions = append([]Condition{{
+		Key: taskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
+	}}, conditions...)
+	mutations = append(mutations, Mutation{
+		Type: MutationPut, Key: taskPruneIntentKey(current.Record.TaskID), Value: intentValue,
+	})
+	if len(conditions)+len(mutations) > maximumTransactionOperations {
+		return Versioned[taskPruneIntent]{}, errs.New(
+			errs.KindInternal,
+			"task prune batch exceeds transaction limit",
+		)
+	}
+	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, err
+	}
+	clearKeyValues(transaction.FailureReads)
+	if !transaction.Succeeded {
+		return Versioned[taskPruneIntent]{}, errs.New(
+			errs.KindStateConflict,
+			"task prune batch changed",
+		)
+	}
+	return Versioned[taskPruneIntent]{
+		Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
+	}, nil
+}
+
+func validateTaskBackupCheckpointPruneEntry(
+	taskID string,
+	entry KeyValue,
+	cursor bool,
+) error {
+	if entry.ModRevision <= 0 {
+		return corruptTaskPruneIntent()
+	}
+	if cursor {
+		record, err := decodeBackupCheckpointCursorRecord(entry.Value)
+		if err != nil || record.TaskID != taskID ||
+			backupCheckpointCursorKey(BackupCheckpointInput{
+				TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID,
+			}) != entry.Key {
+			return corruptTaskPruneIntent()
+		}
+		return nil
+	}
+	record, err := decodeBackupCheckpointDedupRecord(entry.Value)
+	if err != nil || record.TaskID != taskID ||
+		backupCheckpointDedupKey(BackupCheckpointInput{
+			TaskID: record.TaskID, AssignmentID: record.AssignmentID,
+			StepID: record.StepID, Sequence: record.Sequence,
+		}) != entry.Key {
+		return corruptTaskPruneIntent()
+	}
+	return nil
 }
 
 func (repository *TaskRepository) finishTaskPruneIntent(
@@ -375,7 +666,10 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 			}
 		} else {
 			inputKey := attachTaskRenderInputKey(current.Record.AttachPlanID)
-			inputResult, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{inputKey}})
+			inputResult, err := repository.store.GetMany(
+				ctx,
+				GetManyRequest{Keys: []string{inputKey}},
+			)
 			if err != nil {
 				return err
 			}
@@ -393,6 +687,11 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 			mutations = append(mutations, Mutation{Type: MutationDelete, Key: inputKey})
 		}
 	}
+	conditions, mutations = appendBackupTerminalReceiptPruneFinalization(
+		current.Record,
+		conditions,
+		mutations,
+	)
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return err
@@ -441,7 +740,10 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	conditions := make([]Condition, 1, count+1)
-	conditions[0] = Condition{Key: taskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision}
+	conditions[0] = Condition{
+		Key:         taskPruneIntentKey(current.Record.TaskID),
+		ModRevision: current.Revision,
+	}
 	mutations := make([]Mutation, 0, count+1)
 	for index := 0; index < count; index++ {
 		entry := page.Values[index]
@@ -466,7 +768,10 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 		Type: MutationPut, Key: taskPruneIntentKey(next.TaskID), Value: intentValue,
 	})
 	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		return Versioned[taskPruneIntent]{}, errs.New(errs.KindInternal, "task prune batch exceeds transaction limit")
+		return Versioned[taskPruneIntent]{}, errs.New(
+			errs.KindInternal,
+			"task prune batch exceeds transaction limit",
+		)
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -474,7 +779,10 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[taskPruneIntent]{}, errs.New(errs.KindStateConflict, "task prune batch changed")
+		return Versioned[taskPruneIntent]{}, errs.New(
+			errs.KindStateConflict,
+			"task prune batch changed",
+		)
 	}
 	return Versioned[taskPruneIntent]{
 		Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
@@ -497,7 +805,8 @@ func validateTaskPruneSubordinate(taskID string, entry KeyValue, events bool) er
 		return nil
 	}
 	record, err := decodeTaskEventDedupRecord(entry.Value)
-	if err != nil || record.Identity.TaskID != taskID || taskEventDedupKey(record.Identity) != entry.Key {
+	if err != nil || record.Identity.TaskID != taskID ||
+		taskEventDedupKey(record.Identity) != entry.Key {
 		return corruptTaskPruneIntent()
 	}
 	return nil

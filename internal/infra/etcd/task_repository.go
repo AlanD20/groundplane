@@ -319,8 +319,11 @@ func (repository *TaskRepository) verifyTaskOwnerPage(
 	if err != nil {
 		return Page[TaskRecord]{}, err
 	}
+	if indexes == nil {
+		return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
+	}
 	defer clearKeyValues(indexes.Values)
-	if indexes == nil || indexes.ReadRevision != page.Revision || len(indexes.Values) != len(keys) {
+	if indexes.ReadRevision != page.Revision || len(indexes.Values) != len(keys) {
 		return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
 	}
 	for index, value := range indexes.Values {

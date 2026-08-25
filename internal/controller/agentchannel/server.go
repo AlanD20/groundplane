@@ -12,6 +12,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -97,9 +98,7 @@ type MaterializationResolver interface {
 type BackupSecretSlotResolver interface {
 	ResolveBackupSecretSlots(
 		context.Context,
-		etcd.TaskRecord,
-		*agentpb.ExecutionPlan,
-		*agentpb.ExecutionStep,
+		backupsecret.Request,
 	) (map[agentpb.BackupSecretSlotPurpose][]byte, error)
 }
 
@@ -191,7 +190,11 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	}
 	authorization.Config = proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 
-	session, err := s.sessions.Open(stream.Context(), authenticate.AgentId, authorization.Generation)
+	session, err := s.sessions.Open(
+		stream.Context(),
+		authenticate.AgentId,
+		authorization.Generation,
+	)
 	if err != nil {
 		return status.Error(codes.FailedPrecondition, "agent session is not current")
 	}
@@ -261,7 +264,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					return status.Error(codes.InvalidArgument, "agent Ready is invalid")
 				}
 				if ready.Capacity > authorization.Config.MaxConcurrentTasks {
-					return status.Error(codes.InvalidArgument, "agent Ready capacity exceeds configuration")
+					return status.Error(
+						codes.InvalidArgument,
+						"agent Ready capacity exceeds configuration",
+					)
 				}
 				if err := session.RecordReady(s.now(), ready.Capacity, ready.Version); err != nil {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
@@ -287,9 +293,11 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					}
 					nextConfig := proto.Clone(currentConfig).(*agentpb.AgentConfig)
 					if err := stream.Send(&agentpb.ControllerMessage{
-						Payload: &agentpb.ControllerMessage_ConfigUpdate{ConfigUpdate: &agentpb.ConfigUpdate{
-							AgentConfig: proto.Clone(nextConfig).(*agentpb.AgentConfig),
-						}},
+						Payload: &agentpb.ControllerMessage_ConfigUpdate{
+							ConfigUpdate: &agentpb.ConfigUpdate{
+								AgentConfig: proto.Clone(nextConfig).(*agentpb.AgentConfig),
+							},
+						},
 					}); err != nil {
 						return err
 					}
@@ -343,7 +351,10 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				continue
 			}
 			if result.message.GetObservedState() != nil {
-				return status.Error(codes.Unimplemented, "authenticated agent message is not implemented")
+				return status.Error(
+					codes.Unimplemented,
+					"authenticated agent message is not implemented",
+				)
 			}
 			return status.Error(codes.InvalidArgument, "authenticated agent message is empty")
 		}
@@ -361,7 +372,10 @@ func (s *Server) recordTaskEvent(
 		return errs.New(errs.KindValidationFailed, "Agent Task event is invalid")
 	}
 	if len(event.Chunk) != 0 {
-		return status.Error(codes.Unimplemented, "ephemeral Task output streaming is not implemented")
+		return status.Error(
+			codes.Unimplemented,
+			"ephemeral Task output streaming is not implemented",
+		)
 	}
 	task, err := s.tasks.GetTask(ctx, event.TaskId)
 	if err != nil {
@@ -372,7 +386,10 @@ func (s *Server) recordTaskEvent(
 		return errs.New(errs.KindStateConflict, "Agent Task event plan hash does not match")
 	}
 	if task.Record.Status != etcd.TaskStatusRunning {
-		return errs.New(errs.KindStateConflict, "Agent Task event does not belong to a running Task")
+		return errs.New(
+			errs.KindStateConflict,
+			"Agent Task event does not belong to a running Task",
+		)
 	}
 	var state etcd.TaskEventState
 	switch event.State {
@@ -425,7 +442,11 @@ func (s *Server) dispatchReady(
 	}
 	remaining := capacity
 	for _, assignment := range recovered {
-		if err := validateAgentDispatchClaim(assignment, agentID, authorization.Generation); err != nil {
+		if err := validateAgentDispatchClaim(
+			assignment,
+			agentID,
+			authorization.Generation,
+		); err != nil {
 			return err
 		}
 		if delivered[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
@@ -453,7 +474,11 @@ func (s *Server) dispatchReady(
 		if !found {
 			return nil
 		}
-		if err := validateAgentDispatchClaim(assignment, agentID, authorization.Generation); err != nil {
+		if err := validateAgentDispatchClaim(
+			assignment,
+			agentID,
+			authorization.Generation,
+		); err != nil {
 			return err
 		}
 		if err := s.sendTaskAssignment(stream, assignment); err != nil {
@@ -465,12 +490,19 @@ func (s *Server) dispatchReady(
 	return nil
 }
 
-func validateAgentDispatchClaim(assignment etcd.TaskAssignment, agentID string, generation uint64) error {
+func validateAgentDispatchClaim(
+	assignment etcd.TaskAssignment,
+	agentID string,
+	generation uint64,
+) error {
 	record := assignment.Assignment.Record
 	if record.Executor != etcd.TaskExecutorAgent || record.AgentID != agentID ||
 		record.AgentGeneration != generation || record.TaskID != assignment.Task.Record.ID ||
 		ids.Validate(ids.KindAssignment, record.AssignmentID) != nil {
-		return errs.New(errs.KindInternal, "durable Agent Task claim does not match its dispatch session")
+		return errs.New(
+			errs.KindInternal,
+			"durable Agent Task claim does not match its dispatch session",
+		)
 	}
 	return nil
 }
@@ -489,9 +521,20 @@ func (s *Server) sendTaskAssignment(
 		return err
 	}
 	for _, step := range assignment.GetPlan().GetSteps() {
-		if step.GetBackupSourceCapture() != nil {
+		if step.GetBackupSourceCapture() != nil || step.GetBackupArtifactPrune() != nil {
 			if err := s.sendBackupSecretSlots(
-				stream.Context(), stream, claim.Task.Record, assignment.GetAssignmentId(), assignment.GetPlan(), step,
+				stream.Context(),
+				stream,
+				backupsecret.Request{
+					TaskID:          claim.Task.Record.ID,
+					AssignmentID:    claim.Assignment.Record.AssignmentID,
+					AgentID:         claim.Assignment.Record.AgentID,
+					AgentGeneration: claim.Assignment.Record.AgentGeneration,
+					Deadline:        claim.Assignment.Record.Deadline,
+					StepID:          step.GetStepId(),
+					Plan:            assignment.GetPlan(),
+					Step:            step,
+				},
 			); err != nil {
 				return err
 			}
@@ -532,16 +575,29 @@ func (s *Server) sendMaterialization(
 	}()
 	materialization := step.GetMaterializeFile()
 	header := &agentpb.MaterializationTransferHeader{
-		ArtifactId: materialization.GetArtifactId(), MaterializationId: materialization.GetMaterializationId(),
-		EnvironmentId: materialization.GetEnvironmentId(), RenderGeneration: plan.GetRenderGeneration(),
-		Destination: materialization.GetDestination(), ServiceId: materialization.GetServiceId(),
-		ServiceName: materialization.GetServiceName(),
-		OutputKind:  materialization.GetOutputKind(), Uid: materialization.GetUid(), Gid: materialization.GetGid(),
-		Mode: materialization.GetMode(), Length: materialization.GetLength(),
-		Sha256: append([]byte(nil), materialization.GetSha256()...),
+		ArtifactId:        materialization.GetArtifactId(),
+		MaterializationId: materialization.GetMaterializationId(),
+		EnvironmentId:     materialization.GetEnvironmentId(),
+		RenderGeneration:  plan.GetRenderGeneration(),
+		Destination:       materialization.GetDestination(),
+		ServiceId:         materialization.GetServiceId(),
+		ServiceName:       materialization.GetServiceName(),
+		OutputKind:        materialization.GetOutputKind(),
+		Uid:               materialization.GetUid(),
+		Gid:               materialization.GetGid(),
+		Mode:              materialization.GetMode(),
+		Length:            materialization.GetLength(),
+		Sha256:            append([]byte(nil), materialization.GetSha256()...),
 	}
-	headerMessage := materializationControllerMessage(task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId())
-	headerMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Header{Header: header}
+	headerMessage := materializationControllerMessage(
+		task.ID,
+		assignmentID,
+		plan.GetPlanHash(),
+		step.GetStepId(),
+	)
+	headerMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Header{
+		Header: header,
+	}
 	if err := stream.Send(headerMessage); err != nil {
 		return err
 	}
@@ -567,7 +623,9 @@ func (s *Server) sendMaterialization(
 			chunkMessage := materializationControllerMessage(
 				task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId(),
 			)
-			chunkMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Chunk{Chunk: chunk}
+			chunkMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_Chunk{
+				Chunk: chunk,
+			}
 			sendErr := stream.Send(chunkMessage)
 			clear(content)
 			chunk.Content = nil
@@ -579,7 +637,10 @@ func (s *Server) sendMaterialization(
 			if errors.Is(readErr, io.EOF) && remaining == 0 {
 				break
 			}
-			return errs.New(errs.KindInternal, "materialization source ended before its declared length")
+			return errs.New(
+				errs.KindInternal,
+				"materialization source ended before its declared length",
+			)
 		}
 	}
 	var extra [1]byte
@@ -593,7 +654,12 @@ func (s *Server) sendMaterialization(
 	if subtle.ConstantTimeCompare(digest, materialization.GetSha256()) != 1 {
 		return errs.New(errs.KindInternal, "materialization source digest does not match its plan")
 	}
-	endMessage := materializationControllerMessage(task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId())
+	endMessage := materializationControllerMessage(
+		task.ID,
+		assignmentID,
+		plan.GetPlanHash(),
+		step.GetStepId(),
+	)
 	endMessage.GetMaterializationTransfer().Record = &agentpb.MaterializationTransfer_End{
 		End: &agentpb.MaterializationTransferEnd{ChunkCount: sequence},
 	}
@@ -644,13 +710,23 @@ func (s *Server) taskAssignmentMessage(
 	}
 	if plan.PlanId != task.PlanID || !bytes.Equal(plan.PlanHash, planHash) ||
 		plan.RenderGeneration != uint64(task.RenderGeneration) || plan.TargetId != task.Target ||
-		!operationMatchesTask(plan.Operation, task.Type) || !stepSummariesMatch(plan.Steps, task.Steps) {
-		return nil, errs.New(errs.KindInternal, "resolved execution plan does not match its durable Task")
+		!operationMatchesTask(
+			plan.Operation,
+			task.Type,
+		) || !stepSummariesMatch(plan.Steps, task.Steps) {
+		return nil, errs.New(
+			errs.KindInternal,
+			"resolved execution plan does not match its durable Task",
+		)
 	}
 	return &agentpb.TaskAssignment{
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
-		Plan: plan, TimeoutSeconds: int32(task.TimeoutSeconds),
+		Plan: plan,
+		// Rationale: schema1's relative integer timeout cannot preserve the durable
+		// absolute deadline on redispatch. The final Agent Backup protocol replaces this wire shape;
+		// end-to-end Agent enforcement intentionally remains blocked on that replacement.
+		TimeoutSeconds: int32(task.TimeoutSeconds),
 	}, nil
 }
 
@@ -686,6 +762,8 @@ func operationMatchesTask(operation agentpb.PlanOperation, taskType etcd.TaskTyp
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
 	case etcd.TaskBackup:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP
+	case etcd.TaskBackupPrune:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE
 	default:
 		return false
 	}
@@ -697,7 +775,8 @@ func (s *Server) acknowledge(
 	agentGeneration uint64,
 	acknowledgement *agentpb.TaskAck,
 ) error {
-	if acknowledgement == nil || ids.Validate(ids.KindAssignment, acknowledgement.AssignmentId) != nil ||
+	if acknowledgement == nil ||
+		ids.Validate(ids.KindAssignment, acknowledgement.AssignmentId) != nil ||
 		len(acknowledgement.PlanHash) != 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
 	}
@@ -716,7 +795,10 @@ func (s *Server) acknowledge(
 	}
 	planHash, err := hex.DecodeString(task.Record.PlanHash)
 	if err != nil || !bytes.Equal(planHash, acknowledgement.PlanHash) {
-		return errs.New(errs.KindStateConflict, "Agent Task acknowledgement plan hash does not match")
+		return errs.New(
+			errs.KindStateConflict,
+			"Agent Task acknowledgement plan hash does not match",
+		)
 	}
 	var terminal etcd.TaskStatus
 	switch acknowledgement.Terminal {
@@ -729,7 +811,10 @@ func (s *Server) acknowledge(
 	case agentpb.TaskTerminal_TASK_TERMINAL_ABORTED:
 		terminal = etcd.TaskStatusAborted
 	default:
-		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement terminal state is invalid")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Agent Task acknowledgement terminal state is invalid",
+		)
 	}
 	if environmentCreation {
 		store, ok := s.tasks.(environmentCreationTaskStore)
@@ -773,11 +858,17 @@ func durableEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) etc
 func validateEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) error {
 	result := acknowledgement.GetEnvironmentDirectoryResult()
 	if result == nil {
-		return errs.New(errs.KindValidationFailed, "Agent Environment directory Task result is invalid")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Agent Environment directory Task result is invalid",
+		)
 	}
 	if acknowledgement.GetTerminal() == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED &&
 		(acknowledgement.GetExitCode() != 0 || result.GetFailedStepId() != "") {
-		return errs.New(errs.KindValidationFailed, "completed Agent Environment directory Task result is inconsistent")
+		return errs.New(
+			errs.KindValidationFailed,
+			"completed Agent Environment directory Task result is inconsistent",
+		)
 	}
 	return nil
 }
@@ -799,9 +890,16 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 	}
 	for index, project := range result.GetProjects() {
 		durable.Projects[index] = etcd.TaskObservedProjectSummary{
-			ProjectName: project.GetProjectName(), ObservedAt: project.GetObservedAt().AsTime().UTC(),
-			ContainerCount: uint32(len(project.GetContainers())), NetworkCount: uint32(len(project.GetNetworks())),
-			VolumeCount: uint32(len(project.GetVolumes())), CollisionCount: uint32(len(project.GetCollisions())),
+			ProjectName: project.GetProjectName(),
+			ObservedAt:  project.GetObservedAt().AsTime().UTC(),
+			ContainerCount: uint32(
+				len(project.GetContainers()),
+			),
+			NetworkCount: uint32(len(project.GetNetworks())),
+			VolumeCount: uint32(
+				len(project.GetVolumes()),
+			),
+			CollisionCount: uint32(len(project.GetCollisions())),
 		}
 	}
 	return durable
@@ -823,7 +921,10 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 		(acknowledgement.GetExitCode() != 0 || result.GetFailedStepId() != "" ||
 			result.GetDiagnostic() != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE ||
 			result.GetReconciliationRequired()) {
-		return errs.New(errs.KindValidationFailed, "completed Agent Compose Task result is inconsistent")
+		return errs.New(
+			errs.KindValidationFailed,
+			"completed Agent Compose Task result is inconsistent",
+		)
 	}
 	for _, project := range result.GetProjects() {
 		if project == nil || project.GetProjectName() == "" || project.GetObservedAt() == nil ||
@@ -836,7 +937,10 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 			if collision == nil ||
 				collision.GetKind() == agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_UNSPECIFIED ||
 				collision.GetName() == "" {
-				return errs.New(errs.KindValidationFailed, "Agent Compose Task collision is invalid")
+				return errs.New(
+					errs.KindValidationFailed,
+					"Agent Compose Task collision is invalid",
+				)
 			}
 		}
 	}
@@ -870,14 +974,20 @@ func taskStoreStatus(err error) error {
 
 func validateAuthenticate(message *agentpb.AgentMessage) (*agentpb.Authenticate, Token, error) {
 	if message == nil || message.GetAuthenticate() == nil {
-		return nil, Token{}, errs.New(errs.KindValidationFailed, "Authenticate must be the first Agent message")
+		return nil, Token{}, errs.New(
+			errs.KindValidationFailed,
+			"Authenticate must be the first Agent message",
+		)
 	}
 	authenticate := message.GetAuthenticate()
 	if err := ids.Validate(ids.KindAgent, authenticate.AgentId); err != nil {
 		return nil, Token{}, errs.New(errs.KindValidationFailed, "agent id is invalid")
 	}
 	if len(authenticate.Token) != tokenSize {
-		return nil, Token{}, errs.New(errs.KindValidationFailed, "agent token has an invalid length")
+		return nil, Token{}, errs.New(
+			errs.KindValidationFailed,
+			"agent token has an invalid length",
+		)
 	}
 
 	var token Token

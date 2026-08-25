@@ -224,17 +224,37 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 	if err != nil {
 		return apiTypes.Task{}, err
 	}
+	taskType, err := taskAPIType(record.Type, record.Actor)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
 	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() {
 		return apiTypes.Task{}, errs.New(errs.KindInternal, "task has an invalid durable timeline")
 	}
 	return apiTypes.Task{
 		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
-		PlanHash: record.PlanHash, Type: string(record.Type), Target: record.Target, Status: status,
+		PlanHash: record.PlanHash, Type: taskType, Target: record.Target, Status: status,
 		WorkspaceType: workspace, TenantID: record.Owner.TenantID, ProjectID: record.Owner.ProjectID,
 		EnvironmentID: record.Owner.EnvironmentID, Actor: actor,
 		CreatedAt: record.CreatedAt.UTC(), UpdatedAt: record.UpdatedAt.UTC(),
 		StartedAt: taskAPITime(record.StartedAt), FinishedAt: taskAPITime(record.FinishedAt),
 	}, nil
+}
+
+func taskAPIType(taskType etcd.TaskType, actor etcd.TaskActor) (string, error) {
+	switch taskType {
+	case etcd.TaskDeploy, etcd.TaskRollback, etcd.TaskBackup, etcd.TaskBackupPrune,
+		etcd.TaskRestore, etcd.TaskAttach, etcd.TaskDetach, etcd.TaskRun,
+		etcd.TaskScript, etcd.TaskProvision, etcd.TaskCreate, etcd.TaskUpdate,
+		etcd.TaskRemove, etcd.TaskStart, etcd.TaskStop, etcd.TaskDestroy,
+		etcd.TaskRotate:
+	default:
+		return "", errs.New(errs.KindInternal, "task has an invalid durable type")
+	}
+	if taskType == etcd.TaskBackupPrune && actor != etcd.TaskActorSystem {
+		return "", errs.New(errs.KindInternal, "backup_prune task has an invalid durable actor")
+	}
+	return string(taskType), nil
 }
 
 func taskListScope(request *taskListInput) (etcd.TaskListScope, error) {

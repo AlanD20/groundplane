@@ -357,7 +357,7 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 
 func environmentAPI(record etcd.EnvironmentRecord) apiTypes.Environment {
 	var createTaskID *string
-	if record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+	if record.CreateTaskID != "" {
 		value := record.CreateTaskID
 		createTaskID = &value
 	}

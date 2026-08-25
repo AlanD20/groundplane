@@ -23,6 +23,7 @@ type AttachTaskNetworkJoin struct {
 type AttachTaskRenderInput struct {
 	PlanID              string                       `json:"plan_id"`
 	AttachID            string                       `json:"attach_id"`
+	AttachName          string                       `json:"attach_name"`
 	TenantID            string                       `json:"tenant_id"`
 	TenantSlug          string                       `json:"tenant_slug"`
 	ProjectID           string                       `json:"project_id"`
@@ -31,6 +32,7 @@ type AttachTaskRenderInput struct {
 	EnvironmentName     string                       `json:"environment_name"`
 	AuthorizedVolumeDir string                       `json:"authorized_volume_dir"`
 	BackingServiceID    string                       `json:"backing_service_id"`
+	BackingProjectID    string                       `json:"backing_project_id"`
 	AdapterKey          string                       `json:"adapter_key"`
 	BlueprintRevisionID string                       `json:"blueprint_revision_id"`
 	ArtifactID          string                       `json:"artifact_id"`
@@ -39,6 +41,8 @@ type AttachTaskRenderInput struct {
 	Networks            []EnvironmentComposeIdentity `json:"networks,omitempty"`
 	Volumes             []EnvironmentComposeIdentity `json:"volumes,omitempty"`
 	NetworkJoins        []AttachTaskNetworkJoin      `json:"network_joins"`
+	ConsumerServiceIDs  []string                     `json:"consumer_service_ids"`
+	GrantAttachIDs      []string                     `json:"grant_attach_ids,omitempty"`
 }
 
 func (repository *AttachRepository) GetAttachTaskRenderInput(
@@ -95,10 +99,12 @@ func decodeAttachTaskRenderInput(value []byte) (AttachTaskRenderInput, error) {
 func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	if validateStableID(ids.KindPlan, input.PlanID) != nil ||
 		validateStableID(ids.KindAttach, input.AttachID) != nil ||
+		validateLabel("Attach name", input.AttachName) != nil ||
 		validateStableID(ids.KindTenant, input.TenantID) != nil ||
 		validateStableID(ids.KindProject, input.ProjectID) != nil ||
 		validateStableID(ids.KindEnvironment, input.EnvironmentID) != nil ||
 		validateStableID(ids.KindService, input.BackingServiceID) != nil ||
+		validateStableID(ids.KindProject, input.BackingProjectID) != nil ||
 		validateStableID(ids.KindTask, input.BlueprintRevisionID) != nil ||
 		validateStableID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input identity is invalid")
@@ -116,15 +122,25 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	if len(input.Services) == 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input has no consumer Services")
 	}
+	if len(input.ConsumerServiceIDs) == 0 ||
+		validateSortedStableIDs(input.ConsumerServiceIDs, ids.KindService, "Attach consumer service_ids") != nil ||
+		validateSortedStableIDs(input.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids") != nil {
+		return errs.New(errs.KindValidationFailed, "attach task removal evidence is invalid or unsorted")
+	}
+	serviceIDs := make(map[string]struct{}, len(input.Services))
+	for _, service := range input.Services {
+		serviceIDs[service.ID] = struct{}{}
+	}
+	for _, serviceID := range input.ConsumerServiceIDs {
+		if _, exists := serviceIDs[serviceID]; !exists {
+			return errs.New(errs.KindValidationFailed, "attach task removal evidence references an unknown service")
+		}
+	}
 	if err := validateEnvironmentComposeIdentities(ids.KindNetwork, input.Networks); err != nil {
 		return err
 	}
 	if err := validateEnvironmentComposeIdentities(ids.KindVolume, input.Volumes); err != nil {
 		return err
-	}
-	serviceIDs := make(map[string]struct{}, len(input.Services))
-	for _, service := range input.Services {
-		serviceIDs[service.ID] = struct{}{}
 	}
 	ownedNetworkIDs := make(map[string]struct{}, len(input.Networks))
 	for _, network := range input.Networks {
@@ -172,19 +188,22 @@ func validateAttachTaskRenderInputScope(
 		scope.ComposeProjection.Record.BlueprintRevisionID != scope.BlueprintRevision.Record.RevisionID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach render hierarchy is invalid")
 	}
-	if input.PlanID != task.PlanID || input.AttachID != record.ID ||
+	if input.PlanID != task.PlanID || input.AttachID != record.ID || input.AttachName != record.Name ||
 		input.TenantID != scope.Tenant.Record.ID || input.TenantSlug != scope.Tenant.Record.Slug ||
 		input.ProjectID != scope.Project.Record.ID || input.ProjectSlug != scope.Project.Record.Slug ||
 		input.EnvironmentID != scope.Environment.Record.ID || input.EnvironmentName != scope.Environment.Record.Name ||
 		input.AuthorizedVolumeDir != scope.Environment.Record.VolumeDir ||
 		input.BackingServiceID != scope.BackingService.Record.Desired.ID ||
+		input.BackingProjectID != record.BackingProjectID ||
 		input.AdapterKey != scope.BackingService.Record.Desired.Adapter ||
 		input.BlueprintRevisionID != scope.BlueprintRevision.Record.RevisionID ||
 		input.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
 		input.RenderGeneration != uint64(task.RenderGeneration) ||
 		!slices.Equal(input.Services, scope.ComposeProjection.Record.Services) ||
 		!slices.Equal(input.Networks, scope.ComposeProjection.Record.Networks) ||
-		!slices.Equal(input.Volumes, scope.ComposeProjection.Record.Volumes) {
+		!slices.Equal(input.Volumes, scope.ComposeProjection.Record.Volumes) ||
+		!slices.Equal(input.ConsumerServiceIDs, record.ServiceIDs) ||
+		!slices.Equal(input.GrantAttachIDs, record.GrantAttachIDs) {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input does not match its pinned desired state")
 	}
 	if task.Type == TaskAttach {

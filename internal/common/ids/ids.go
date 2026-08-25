@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -83,6 +84,19 @@ func Validate(kind Kind, value string) error {
 		return fmt.Errorf("invalid %s id", kind)
 	}
 	return nil
+}
+
+// Timestamp returns the exact UTC millisecond encoded by a stable id.
+// Rationale: allocation time is durable domain evidence for recovery points.
+func Timestamp(kind Kind, value string) (time.Time, error) {
+	if err := Validate(kind, value); err != nil {
+		return time.Time{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	parsed, err := ulid.ParseStrict(strings.TrimPrefix(value, string(kind)+"_"))
+	if err != nil {
+		return time.Time{}, errs.New(errs.KindValidationFailed, "stable id timestamp is invalid")
+	}
+	return ulid.Time(parsed.Time()).UTC(), nil
 }
 
 // NewAt is New with an explicit timestamp — for mock fixtures, which use

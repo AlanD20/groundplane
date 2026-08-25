@@ -370,6 +370,7 @@ func TestRegistryOpenRejectsInvalidInputsWithoutFencingCurrentSession(t *testing
 	}
 	defer current.Close()
 
+	//lint:ignore SA1012 This test verifies rejection without fencing the active session.
 	if _, err := registry.Open(nil, testAgentID, 8); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("nil-context Open() error = %v, want internal", err)
 	}

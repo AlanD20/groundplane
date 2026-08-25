@@ -37,6 +37,7 @@ type Event struct {
 type KeyValue struct {
 	Key         string
 	Value       []byte
+	Version     int64
 	ModRevision int64
 }
 
@@ -246,6 +247,7 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	result.Entry = &KeyValue{
 		Key:         logical,
 		Value:       append([]byte(nil), item.Value...),
+		Version:     item.Version,
 		ModRevision: item.ModRevision,
 	}
 	return result, nil
@@ -279,9 +281,11 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 		return nil, wrap(ctx, err)
 	}
 	if response.Header == nil {
+		clearGetManyResponseValues(response)
 		return nil, errs.New(errs.KindInternal, "etcd multi-get response is missing its revision")
 	}
 	if len(response.Responses) != len(request.Keys) {
+		clearGetManyResponseValues(response)
 		return nil, errs.New(errs.KindInternal, "etcd multi-get returned an unexpected response count")
 	}
 
@@ -293,6 +297,8 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 	for index, operation := range response.Responses {
 		rangeResponse := operation.GetResponseRange()
 		if rangeResponse == nil || len(rangeResponse.Kvs) > 1 {
+			clearKeyValues(result.Values)
+			clearGetManyResponseValues(response)
 			return nil, errs.New(errs.KindInternal, "etcd multi-get returned an invalid range response")
 		}
 		if len(rangeResponse.Kvs) == 0 {
@@ -300,19 +306,46 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 		}
 		item := rangeResponse.Kvs[0]
 		if string(item.Key) != physicalKeys[index] {
+			clearKeyValues(result.Values)
+			clearGetManyResponseValues(response)
 			return nil, errs.New(errs.KindInternal, "etcd multi-get returned an unexpected key")
 		}
 		logical, ok := s.logicalKey(string(item.Key))
 		if !ok {
+			clearKeyValues(result.Values)
+			clearGetManyResponseValues(response)
 			return nil, errs.New(errs.KindInternal, "etcd returned a key outside the configured prefix")
 		}
 		result.Values[index] = &KeyValue{
 			Key:         logical,
 			Value:       append([]byte(nil), item.Value...),
+			Version:     item.Version,
 			ModRevision: item.ModRevision,
 		}
 	}
 	return result, nil
+}
+
+// clearGetManyResponseValues releases response buffers on paths where no
+// caller can take ownership. Successful reads retain the Store's established
+// copy-out behavior and do not mutate the client response.
+func clearGetManyResponseValues(response *clientv3.TxnResponse) {
+	if response == nil {
+		return
+	}
+	for _, operation := range response.Responses {
+		rangeResponse := operation.GetResponseRange()
+		if rangeResponse == nil {
+			continue
+		}
+		for _, item := range rangeResponse.Kvs {
+			if item == nil {
+				continue
+			}
+			clear(item.Value)
+			item.Value = nil
+		}
+	}
 }
 
 func (s *store) Put(ctx context.Context, key string, value []byte) (int64, error) {
@@ -402,6 +435,7 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 		result.Values = append(result.Values, KeyValue{
 			Key:         key,
 			Value:       append([]byte(nil), item.Value...),
+			Version:     item.Version,
 			ModRevision: item.ModRevision,
 		})
 	}
@@ -603,6 +637,7 @@ func transactionFailureReads(
 		values[index] = &KeyValue{
 			Key:         strings.TrimPrefix(string(entry.Key), root),
 			Value:       append([]byte(nil), entry.Value...),
+			Version:     entry.Version,
 			ModRevision: entry.ModRevision,
 		}
 	}

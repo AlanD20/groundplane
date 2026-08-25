@@ -47,19 +47,12 @@ func (inbox *backupSecretSlotInbox) Register(assignment Assignment) error {
 	}
 	steps := make(map[string]map[agentpb.BackupSecretSlotPurpose]*backupSecretSlot)
 	for _, step := range assignment.Plan.GetSteps() {
-		capture := step.GetBackupSourceCapture()
-		if capture == nil {
+		purposes, reserved, err := backupSecretSlotPurposes(step)
+		if err != nil {
+			return err
+		}
+		if !reserved {
 			continue
-		}
-		purposes := []agentpb.BackupSecretSlotPurpose{
-			agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
-			agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
-		}
-		if capture.GetEncryption() == agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
-			purposes = append(
-				purposes,
-				agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_CURRENT_AGE_IDENTITY,
-			)
 		}
 		slots := make(map[agentpb.BackupSecretSlotPurpose]*backupSecretSlot, len(purposes))
 		for _, purpose := range purposes {
@@ -80,6 +73,26 @@ func (inbox *backupSecretSlotInbox) Register(assignment Assignment) error {
 		steps:        steps,
 	}
 	return nil
+}
+
+func backupSecretSlotPurposes(
+	step *agentpb.ExecutionStep,
+) ([]agentpb.BackupSecretSlotPurpose, bool, error) {
+	if step == nil {
+		return nil, false, errs.New(errs.KindInternal, "agent: Backup secret slot step is required")
+	}
+	if capture := step.GetBackupSourceCapture(); capture != nil {
+		if capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE &&
+			capture.GetEncryption() != agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE {
+			return nil, false, errs.New(errs.KindInternal, "agent: Backup source encryption is invalid")
+		}
+	} else if step.GetBackupArtifactPrune() == nil {
+		return nil, false, nil
+	}
+	return []agentpb.BackupSecretSlotPurpose{
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY,
+	}, true, nil
 }
 
 func (inbox *backupSecretSlotInbox) Accept(

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	sluggrammar "github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -128,7 +129,7 @@ func (service *Service) CreateTenant(
 // its stable identity without persistence. Atomic idempotent callers use this
 // exact constructor before building their same-transaction marker plan.
 func PrepareTenant(input CreateTenantInput) (core.Tenant, error) {
-	if err := validateSlug("tenant slug", input.Slug); err != nil {
+	if err := sluggrammar.Validate("tenant slug", input.Slug); err != nil {
 		return core.Tenant{}, err
 	}
 	name := input.Slug
@@ -177,7 +178,7 @@ func PrepareTenantEdit(current core.Tenant, input EditTenantInput) (core.Tenant,
 	if err := validateStableID(ids.KindTenant, replacement.ID); err != nil {
 		return core.Tenant{}, err
 	}
-	if err := validateSlug("tenant slug", replacement.Slug); err != nil {
+	if err := sluggrammar.Validate("tenant slug", replacement.Slug); err != nil {
 		return core.Tenant{}, err
 	}
 	if err := validateText("tenant name", replacement.Name); err != nil {
@@ -190,7 +191,7 @@ func PrepareTenantEdit(current core.Tenant, input EditTenantInput) (core.Tenant,
 }
 
 func ValidateTenantRenameInput(input RenameTenantInput) error {
-	return validateSlug("tenant slug", input.Slug)
+	return sluggrammar.Validate("tenant slug", input.Slug)
 }
 
 func PrepareTenantRename(current core.Tenant, input RenameTenantInput) (core.Tenant, error) {
@@ -241,7 +242,7 @@ func (service *Service) ResolveTenant(
 	if err := requireContext(ctx); err != nil {
 		return Versioned[core.Tenant]{}, err
 	}
-	if err := validateSlug("tenant slug", slug); err != nil {
+	if err := sluggrammar.Validate("tenant slug", slug); err != nil {
 		return Versioned[core.Tenant]{}, err
 	}
 	stored, err := service.repository.ResolveTenant(ctx, slug)
@@ -291,7 +292,7 @@ func (service *Service) RenameTenant(
 	if err := validateStableID(ids.KindTenant, id); err != nil {
 		return Versioned[core.Tenant]{}, err
 	}
-	if err := validateSlug("tenant slug", slug); err != nil {
+	if err := sluggrammar.Validate("tenant slug", slug); err != nil {
 		return Versioned[core.Tenant]{}, err
 	}
 	for attempt := range maximumRenameAttempts {
@@ -364,7 +365,7 @@ func PrepareProject(input CreateProjectInput) (core.Project, error) {
 	if err := validateStableID(ids.KindTenant, input.TenantID); err != nil {
 		return core.Project{}, err
 	}
-	if err := validateSlug("project slug", input.Slug); err != nil {
+	if err := sluggrammar.Validate("project slug", input.Slug); err != nil {
 		return core.Project{}, err
 	}
 	name := input.Slug
@@ -454,7 +455,7 @@ func (service *Service) ResolveProject(
 	if err := validateStableID(ids.KindTenant, tenantID); err != nil {
 		return Versioned[core.Project]{}, err
 	}
-	if err := validateSlug("project slug", slug); err != nil {
+	if err := sluggrammar.Validate("project slug", slug); err != nil {
 		return Versioned[core.Project]{}, err
 	}
 	stored, err := service.repository.ResolveTenantProject(ctx, tenantID, slug)
@@ -507,7 +508,7 @@ func (service *Service) RenameProject(
 	if err := validateStableID(ids.KindProject, id); err != nil {
 		return Versioned[core.Project]{}, err
 	}
-	if err := validateSlug("project slug", slug); err != nil {
+	if err := sluggrammar.Validate("project slug", slug); err != nil {
 		return Versioned[core.Project]{}, err
 	}
 	for attempt := range maximumRenameAttempts {
@@ -571,23 +572,6 @@ func validateOptionalText(field string, value string) error {
 	return validateText(field, value)
 }
 
-func validateSlug(field string, value string) error {
-	if len(value) == 0 || len(value) > 63 || value[0] == '-' || value[len(value)-1] == '-' {
-		return errs.Newf(errs.KindValidationFailed, "%s must be a lowercase ASCII label of 1-63 bytes", field)
-	}
-	previousHyphen := false
-	for index := range len(value) {
-		character := value[index]
-		isLetter := character >= 'a' && character <= 'z'
-		isDigit := character >= '0' && character <= '9'
-		if !isLetter && !isDigit && character != '-' || character == '-' && previousHyphen {
-			return errs.Newf(errs.KindValidationFailed, "%s must be a lowercase ASCII hyphen label", field)
-		}
-		previousHyphen = character == '-'
-	}
-	return nil
-}
-
 func validateStableID(kind ids.Kind, id string) error {
 	if err := ids.Validate(kind, id); err != nil {
 		return errs.New(errs.KindValidationFailed, err.Error())
@@ -643,7 +627,7 @@ func validateTenantVersion(stored Versioned[core.Tenant]) error {
 	if err := stored.Record.Validate(); err != nil {
 		return internalInvariant("repository returned an invalid tenant")
 	}
-	if err := validateSlug("tenant slug", stored.Record.Slug); err != nil {
+	if err := sluggrammar.Validate("tenant slug", stored.Record.Slug); err != nil {
 		return internalInvariant("repository returned a noncanonical tenant slug")
 	}
 	if err := validateOptionalText("tenant description", stored.Record.Description); err != nil {
@@ -684,7 +668,7 @@ func validateAnyProjectVersion(stored Versioned[core.Project]) error {
 	if err := stored.Record.Validate(); err != nil {
 		return internalInvariant("repository returned an invalid project")
 	}
-	if err := validateSlug("project slug", stored.Record.Slug); err != nil {
+	if err := sluggrammar.Validate("project slug", stored.Record.Slug); err != nil {
 		return internalInvariant("repository returned a noncanonical project slug")
 	}
 	if err := validateOptionalText("project description", stored.Record.Description); err != nil {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -55,8 +56,20 @@ type rootDocument struct {
 	Entries       map[string]core.EntrySpec        `yaml:"x-gp-entry,omitempty"`
 	Routes        []core.RouteSpec                 `yaml:"x-gp-routes,omitempty"`
 	Components    map[string]core.ComponentSpec    `yaml:"x-gp-components,omitempty"`
-	Backup        *core.BackupSpec                 `yaml:"x-gp-backup,omitempty"`
+	Backup        *authoredBackupSpec              `yaml:"x-gp-backup,omitempty"`
 	ReleaseGroups map[string]core.ReleaseGroupSpec `yaml:"x-gp-release-groups,omitempty"`
+}
+
+// authoredBackupSpec retains Keep presence long enough to distinguish an
+// omitted value on the disabled-unconfigured shape from an explicitly authored
+// zero. Presence is parser input evidence, not part of desired state.
+type authoredBackupSpec struct {
+	Enabled    bool                    `yaml:"enabled"`
+	Frequency  string                  `yaml:"frequency,omitempty"`
+	Keep       *int64                  `yaml:"keep,omitempty"`
+	Encryption string                  `yaml:"encryption,omitempty"`
+	Connector  string                  `yaml:"connector,omitempty"`
+	Sources    []core.BackupSourceSpec `yaml:"sources,omitempty"`
 }
 
 var rootGroundplaneFields = map[string]struct{}{
@@ -209,6 +222,10 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
 	}
+	backup, err := normalizeBackupSpec(authored.Backup)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
 
 	root.Content = composeNodes
 	compose, err := yaml.Marshal(document)
@@ -217,10 +234,34 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	}
 	extensions := Extensions{
 		Requires: authored.Requires, Attachments: authored.Attachments, Entries: authored.Entries,
-		Routes: authored.Routes, Components: authored.Components, Backup: authored.Backup,
+		Routes: authored.Routes, Components: authored.Components, Backup: backup,
 		ReleaseGroups: authored.ReleaseGroups,
 	}
 	return authored.Envelope, extensions, compose, nil
+}
+
+func normalizeBackupSpec(authored *authoredBackupSpec) (*core.BackupSpec, error) {
+	if authored == nil {
+		return nil, nil
+	}
+	unconfigured := authored.Frequency == "" && authored.Keep == nil && authored.Encryption == "" &&
+		authored.Connector == "" && len(authored.Sources) == 0
+	if !authored.Enabled && unconfigured {
+		return &core.BackupSpec{}, nil
+	}
+	configured := authored.Frequency != "" && authored.Keep != nil && authored.Encryption != "" &&
+		authored.Connector != "" && len(authored.Sources) != 0
+	if !configured {
+		return nil, validationError("Blueprint Backup configuration is incomplete")
+	}
+	if !apiTypes.ValidBackupPolicyKeep(*authored.Keep) {
+		return nil, validationError("Blueprint Backup keep must be between 1 and 9007199254740991")
+	}
+	return &core.BackupSpec{
+		Enabled: authored.Enabled, Frequency: authored.Frequency, Keep: *authored.Keep,
+		Encryption: authored.Encryption, Connector: authored.Connector,
+		Sources: append([]core.BackupSourceSpec(nil), authored.Sources...),
+	}, nil
 }
 
 func normalizeRoutes(routes []core.RouteSpec) ([]core.RouteSpec, error) {

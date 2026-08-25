@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -214,7 +215,10 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 		ctx := context.Background()
 		store, repository, tenantID, _ := newRunnerRepositoryFixture(t)
 		config := runnerTestAllocationConfig()
-		registry := SystemPoolRegistry{Reservations: map[string]string{}}
+		registry := SystemPoolRegistry{
+			RunnerNetworkPool: config.RunnerPool.String(),
+			Reservations:      map[string]string{},
+		}
 		for index := 0; index < 32; index++ {
 			prefix := netip.PrefixFrom(
 				netip.AddrFrom4([4]byte{10, 240, 0, byte(index * 8)}), runnerSubnetBits,
@@ -226,8 +230,9 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 			t.Fatalf("encode system pool error = %v", err)
 		}
 		defer clear(value)
+		current := mustOptionalKey(t, store, systemPoolRegistryKey)
 		result, err := store.Transact(ctx,
-			[]Condition{{Key: systemPoolRegistryKey}},
+			[]Condition{{Key: systemPoolRegistryKey, ModRevision: current.ModRevision}},
 			[]Mutation{{Type: MutationPut, Key: systemPoolRegistryKey, Value: value}},
 		)
 		if err != nil || !result.Succeeded {
@@ -237,8 +242,8 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 		task := runnerTestTask(desired, TaskCreate, 201, "runner-network-capacity-key")
 		if _, err := repository.CreateRunnerWithTask(
 			ctx, config, desired, task, runnerTestMarker(task, desired),
-		); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-			t.Fatalf("CreateRunnerWithTask(network exhausted) error = %v", err)
+		); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Fatalf("CreateRunnerWithTask(non-Runner overlap) error = %v", err)
 		}
 	})
 
@@ -266,6 +271,26 @@ func TestRunnerAllocationExhaustionAndCorruptionAreExplicit(t *testing.T) {
 			t.Fatalf("CreateRunnerWithTask(corrupt slot) error = %v", err)
 		}
 	})
+}
+
+func TestRunnerNetworkPoolBootstrapReservationIsExactAndReplayable(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, repository, _, _ := newRunnerRepositoryFixture(t)
+	config := runnerTestAllocationConfig()
+	if err := repository.EnsureRunnerNetworkPool(ctx, config); err != nil {
+		t.Fatalf("EnsureRunnerNetworkPool(replay) error = %v", err)
+	}
+	entry := mustOptionalKey(t, store, systemPoolRegistryKey)
+	registry, err := decodeSystemPoolRegistry(entry.Value)
+	if err != nil || registry.RunnerNetworkPool != config.RunnerPool.String() || registry.Reservations == nil {
+		t.Fatalf("bootstrap registry = %#v, %v", registry, err)
+	}
+	mismatch := config
+	mismatch.RunnerPool = netip.MustParsePrefix("10.242.0.0/16")
+	if err := repository.EnsureRunnerNetworkPool(ctx, mismatch); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("EnsureRunnerNetworkPool(mismatch) error = %v", err)
+	}
 }
 
 // Rationale: each Runner operation owns one exact route, operation key, 202
@@ -387,6 +412,15 @@ func TestRunnerObservationAndRemovalFinalizer(t *testing.T) {
 	retained, err := repository.GetRunner(ctx, desired.ID)
 	if err != nil || retained.Record.Allocation != ready.Record.Allocation {
 		t.Fatalf("Runner during removal = %#v, %v", retained, err)
+	}
+	ownership, found, err := repository.GetRunnerRuntimeOwnership(ctx, desired.ID)
+	if err != nil || !found {
+		t.Fatalf("GetRunnerRuntimeOwnership(remove) found/error = %t/%v", found, err)
+	}
+	if _, err := repository.DeleteRunnerRuntimeOwnershipAfterCleanup(
+		ctx, retained, ownership.Record,
+	); err != nil {
+		t.Fatalf("DeleteRunnerRuntimeOwnershipAfterCleanup() error = %v", err)
 	}
 	taskRepository, err := newTaskRepository(store)
 	if err != nil {
@@ -671,6 +705,9 @@ func TestRunnerCreationTerminalizationRequiresEveryAllocationFence(t *testing.T)
 			); err != nil || !found {
 				t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 			}
+			if test.status == TaskStatusCompleted {
+				runnerTestRecordReadinessProof(t, repository, task)
+			}
 			connectorDeletionDeleteKey(t, store, test.key(current.Record))
 			if _, err := tasks.AcknowledgeControllerTask(
 				ctx, task.ID, test.status, task.CreatedAt.Add(2*time.Second),
@@ -717,6 +754,9 @@ func TestRunnerCreationTerminalizationCASFencesAllocationRace(t *testing.T) {
 				ctx, task.CreatedAt.Add(time.Second),
 			); err != nil || !found {
 				t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
+			}
+			if status == TaskStatusCompleted {
+				runnerTestRecordReadinessProof(t, repository, task)
 			}
 			if _, err := tasks.AcknowledgeControllerTask(
 				ctx, task.ID, status, task.CreatedAt.Add(2*time.Second),
@@ -924,6 +964,9 @@ func runnerTestFinishCreate(
 	); err != nil || !found {
 		t.Fatalf("ClaimNextControllerTask(create) found/error = %v/%v", found, err)
 	}
+	if status == TaskStatusCompleted {
+		runnerTestRecordReadinessProof(t, repository, task)
+	}
 	terminal, err := taskRepository.AcknowledgeControllerTask(
 		ctx, task.ID, status, task.CreatedAt.Add(2*time.Second),
 	)
@@ -947,6 +990,34 @@ func runnerTestFinishCreate(
 	return finished
 }
 
+func runnerTestRecordReadinessProof(
+	t *testing.T,
+	repository *RunnerRepository,
+	task TaskRecord,
+) Versioned[RunnerReadinessProofRecord] {
+	t.Helper()
+	ctx := context.Background()
+	current, err := repository.GetRunner(ctx, task.Target)
+	if err != nil {
+		t.Fatalf("GetRunner(readiness) error = %v", err)
+	}
+	if current.Record.ContainerID == "" {
+		containerID := strings.Repeat("a", runnerContainerIDEncodedLength)
+		ownership := runnerTestRuntimeOwnership(current.Record.Desired.ID, current.Record.RuntimeEpoch+1)
+		if _, err := repository.AttestRunnerRuntimeOwnership(ctx, current, containerID, ownership); err != nil {
+			t.Fatalf("AttestRunnerRuntimeOwnership(readiness) error = %v", err)
+		}
+	}
+	proof, err := repository.RecordRunnerReadinessProof(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("RecordRunnerReadinessProof() error = %v", err)
+	}
+	if proof.Record.TaskID != task.ID || proof.Record.RunnerID != task.Target {
+		t.Fatalf("Runner readiness proof = %#v", proof.Record)
+	}
+	return proof
+}
+
 func assertRunnerCreateAggregate(
 	t *testing.T,
 	store *memoryHierarchyStore,
@@ -966,6 +1037,7 @@ func assertRunnerCreateAggregate(
 		taskActiveOperationKey(task.OperationID),
 		taskQueueKey(task.Executor, task.ID),
 		runnerKey(record.Desired.ID),
+		runnerLifecycleKey(record.Desired.ID),
 		runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 		runnerTenantQuotaKey(record.Desired.TenantID),
 		runnerHostSlotKey(record.Allocation.Slot),
@@ -1006,6 +1078,7 @@ func assertRunnerRetryAggregate(
 		taskActiveOperationKey(task.OperationID),
 		taskQueueKey(task.Executor, task.ID),
 		runnerKey(runner.Record.Desired.ID),
+		runnerLifecycleKey(runner.Record.Desired.ID),
 		markerKey,
 	}
 	stored, err := store.GetMany(context.Background(), GetManyRequest{Keys: keys, Revision: runner.ReadRevision})
@@ -1013,14 +1086,18 @@ func assertRunnerRetryAggregate(
 		t.Fatalf("GetMany(retry aggregate) = %#v, %v", stored, err)
 	}
 	for index, value := range stored.Values {
-		if value == nil || value.ModRevision != runner.Revision {
-			t.Fatalf("retry aggregate key %s = %#v, want retry revision %d", keys[index], value, runner.Revision)
+		wantRevision := runner.Record.LifecycleRevision
+		if index == 4 {
+			wantRevision = runner.Revision
+		}
+		if value == nil || value.ModRevision != wantRevision {
+			t.Fatalf("retry aggregate key %s = %#v, want revision %d", keys[index], value, wantRevision)
 		}
 	}
 	allocation, err := (&RunnerRepository{store: store}).readRunnerAllocationEvidence(
 		context.Background(), runner.Record, runner.ReadRevision,
 	)
-	if err != nil || allocation.owner == nil || allocation.quota == nil || allocation.host == nil ||
+	if err != nil || allocation.owner == nil || allocation.slug == nil || allocation.quota == nil || allocation.host == nil ||
 		allocation.system == nil {
 		t.Fatalf("readRunnerAllocationEvidence(retry) = %#v, %v", allocation, err)
 	}
@@ -1130,6 +1207,9 @@ func newRunnerRepositoryFixture(
 	if err != nil {
 		t.Fatalf("newRunnerRepository() error = %v", err)
 	}
+	if err := repository.EnsureRunnerNetworkPool(context.Background(), runnerTestAllocationConfig()); err != nil {
+		t.Fatalf("EnsureRunnerNetworkPool() error = %v", err)
+	}
 	return store, repository, tenantID, projectID
 }
 
@@ -1183,10 +1263,10 @@ func (store *runnerTransactionAuditStore) Transact(
 
 func runnerMutationsTerminalize(mutations []Mutation, runnerID string) bool {
 	for _, mutation := range mutations {
-		if mutation.Type != MutationPut || mutation.Key != runnerKey(runnerID) {
+		if mutation.Type != MutationPut || mutation.Key != runnerLifecycleKey(runnerID) {
 			continue
 		}
-		record, err := decodeRunnerRecord(mutation.Value)
+		record, err := decodeRunnerLifecycleRecord(mutation.Value)
 		if err == nil && record.ProvisioningState != RunnerProvisioningProvisioning {
 			return true
 		}
@@ -1215,7 +1295,8 @@ func seedRunnerHostSlots(t *testing.T, store *memoryHierarchyStore, slots uint32
 
 func runnerTestAllocationConfig() RunnerAllocationConfig {
 	return RunnerAllocationConfig{
-		SystemPool: netip.MustParsePrefix("10.240.0.0/24"),
+		SystemPool: netip.MustParsePrefix("10.128.0.0/9"),
+		RunnerPool: netip.MustParsePrefix("10.240.0.0/16"),
 		HostPool: RunnerHostPoolConfig{
 			HostUIDStart: 200000, HostUIDEnd: 200007,
 			SubUIDStart: 300000, SubUIDEnd: 824287,
@@ -1226,7 +1307,6 @@ func runnerTestAllocationConfig() RunnerAllocationConfig {
 
 func runnerTestAllocationConfigWithSlots(slots uint32) RunnerAllocationConfig {
 	config := runnerTestAllocationConfig()
-	config.SystemPool = netip.MustParsePrefix("10.240.0.0/16")
 	config.HostPool.HostUIDEnd = config.HostPool.HostUIDStart + slots - 1
 	config.HostPool.SubUIDEnd = config.HostPool.SubUIDStart + slots*runnerSubordinateBlockSize - 1
 	config.HostPool.SubGIDEnd = config.HostPool.SubGIDStart + slots*runnerSubordinateBlockSize - 1
@@ -1245,11 +1325,21 @@ func runnerTestDesired(
 	ownerID string,
 	tenantID string,
 ) RunnerDesiredRecord {
+	runnerID := ids.NewAt(ids.KindRunner, taskJournalTime(), runnerDesiredEntropyBase+int64(offset))
 	return RunnerDesiredRecord{
-		ID:        ids.NewAt(ids.KindRunner, taskJournalTime(), runnerDesiredEntropyBase+int64(offset)),
+		ID:        runnerID,
+		Slug:      "runner-" + strings.ToLower(strings.TrimPrefix(runnerID, "run_")),
 		OwnerKind: ownerKind, OwnerID: ownerID, TenantID: tenantID,
-		Labels: []string{"self-hosted", "linux"},
+		GitHubURL: runnerTestGitHubURL(ownerKind), Labels: []string{"qa-workload"},
+		ImageRef: RunnerImageRef + strings.Repeat("0", 64),
 	}
+}
+
+func runnerTestGitHubURL(ownerKind RunnerOwnerKind) string {
+	if ownerKind == RunnerOwnerProject {
+		return "https://github.com/aland20/groundplane"
+	}
+	return "https://github.com/aland20"
 }
 
 func runnerTestTask(desired RunnerDesiredRecord, taskType TaskType, offset int, key string) TaskRecord {

@@ -13,7 +13,10 @@ import (
 // protected replacement fits the fixed 96-operation etcd transaction budget.
 // The worst case is an enabled Connector move that creates era 1 and selects
 // only Attach/Volume sources: 24 fixed operations plus 6 per source.
-const MaximumBackupPolicySources = 12
+const (
+	MaximumBackupPolicySources       = 12
+	MaximumBackupPolicyKeep    int64 = 9_007_199_254_740_991
+)
 
 // BackupPolicySourceSelection is the stable-id form accepted by the human API
 // after label resolution. It carries no persistence revisions or indexes.
@@ -27,7 +30,7 @@ type BackupPolicyReplacementInput struct {
 	EnvironmentID string
 	Enabled       bool
 	Frequency     string
-	Keep          int
+	Keep          int64
 	Encryption    string
 	ConnectorID   string
 	Sources       []BackupPolicySourceSelection
@@ -379,7 +382,7 @@ func validateBackupPolicyReplacementInput(
 	configured := input.Frequency != "" || input.Keep != 0 || input.Encryption != "" ||
 		input.ConnectorID != "" || len(input.Sources) != 0
 	if input.Enabled || configured {
-		if input.Frequency == "" || input.Keep <= 0 ||
+		if input.Frequency == "" || input.Keep <= 0 || input.Keep > MaximumBackupPolicyKeep ||
 			(input.Encryption != "age" && input.Encryption != "none") ||
 			input.ConnectorID == "" || len(input.Sources) == 0 {
 			return errs.New(errs.KindValidationFailed, "configured backup policy is incomplete")

@@ -237,8 +237,8 @@ func (s *Server) routes() {
 	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.environmentDelete)
 
 	// environment singleton sub-resources
-	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
 	mux.HandleFunc("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
+	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
 	s.jsonRoute("POST /api/v1/environments/{id}/rotate-key", s.acceptTask)
 	mux.HandleFunc("POST /api/v1/environments/{id}/export-key", s.notImplemented)

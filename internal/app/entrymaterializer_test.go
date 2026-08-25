@@ -25,8 +25,9 @@ func TestRunEntryMaterializerRejectsMalformedFrameBeforeFilesystemAccess(t *test
 func TestRunEntryMaterializerRequiresOwnedInput(t *testing.T) {
 	// Rationale: a nil context or source would bypass the helper's explicit
 	// stream ownership and cancellation contract.
+	var nilOperationContext context.Context
 	if err := RunEntryMaterializer(
-		nil,
+		nilOperationContext,
 		io.NopCloser(strings.NewReader("")),
 	); !errors.Is(
 		err,

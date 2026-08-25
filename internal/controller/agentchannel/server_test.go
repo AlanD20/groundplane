@@ -55,6 +55,41 @@ type fakePlanResolver struct {
 	err  error
 }
 
+// Rationale: the Agent channel must preserve every closed Task/plan operation
+// pairing while rejecting a plan sealed for another Task type.
+func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testing.T) {
+	pairs := []struct {
+		taskType  etcd.TaskType
+		operation agentpb.PlanOperation
+	}{
+		{taskType: etcd.TaskDeploy, operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY},
+		{taskType: etcd.TaskRollback, operation: agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK},
+		{taskType: etcd.TaskStart, operation: agentpb.PlanOperation_PLAN_OPERATION_START},
+		{taskType: etcd.TaskStop, operation: agentpb.PlanOperation_PLAN_OPERATION_STOP},
+		{taskType: etcd.TaskDestroy, operation: agentpb.PlanOperation_PLAN_OPERATION_DESTROY},
+		{taskType: etcd.TaskRemove, operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE},
+		{taskType: etcd.TaskCreate, operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE},
+		{taskType: etcd.TaskUpdate, operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE},
+		{taskType: etcd.TaskBackup, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP},
+		{taskType: etcd.TaskBackupPrune, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE},
+	}
+	for _, pair := range pairs {
+		if !operationMatchesTask(pair.operation, pair.taskType) {
+			t.Errorf("operationMatchesTask(%s, %q) = false, want true", pair.operation, pair.taskType)
+		}
+	}
+	for _, pair := range pairs {
+		for _, other := range pairs {
+			if pair.taskType == other.taskType {
+				continue
+			}
+			if operationMatchesTask(pair.operation, other.taskType) {
+				t.Errorf("operationMatchesTask(%s, %q) = true for cross-pair with %q", pair.operation, other.taskType, pair.taskType)
+			}
+		}
+	}
+}
+
 func (resolver *fakePlanResolver) ResolveExecutionPlan(
 	context.Context,
 	etcd.TaskRecord,

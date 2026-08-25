@@ -171,6 +171,27 @@ func TestIsComparesKindAndWrapPreservesCause(t *testing.T) {
 	}
 }
 
+// Rationale: a failed operation remains the diagnostic primary when cleanup
+// also fails, while the public boundary receives exactly one domain Error.
+func TestWrapJoinedPreservesPrimaryAndCleanupCauses(t *testing.T) {
+	primary := errors.New("primary private failure")
+	cleanup := errors.New("cleanup private failure")
+	wrapped := WrapJoined(KindInternal, primary, nil, cleanup)
+	if !errors.Is(wrapped, primary) || !errors.Is(wrapped, cleanup) {
+		t.Fatalf("joined error did not preserve causes: %v", wrapped)
+	}
+	var domainError *Error
+	if !errors.As(wrapped, &domainError) || domainError != wrapped {
+		t.Fatalf("joined error is not one outer Error: %#v", wrapped)
+	}
+	if got := wrapped.Error(); strings.Index(got, primary.Error()) > strings.Index(got, cleanup.Error()) {
+		t.Fatalf("cleanup preceded primary in diagnostics: %q", got)
+	}
+	if problem := wrapped.ToProblem(); strings.Contains(problem.Detail, "private") {
+		t.Fatalf("joined private causes leaked publicly: %#v", problem)
+	}
+}
+
 // Rationale: KindOf and class helpers must inspect wrapped chains without
 // inventing a classification for ordinary errors.
 func TestKindOfAndClassHelpersInspectChains(t *testing.T) {

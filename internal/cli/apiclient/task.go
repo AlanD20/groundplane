@@ -108,7 +108,11 @@ func (c *Client) ListTasks(
 			return apiTypes.Page[apiTypes.Task]{}, err
 		}
 	}
-	return taskPageFromGenerated(*parsed), nil
+	page, err := taskPageFromGenerated(*parsed)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
+	return page, nil
 }
 
 func (c *Client) ListActivity(
@@ -147,7 +151,11 @@ func (c *Client) ListActivity(
 			return apiTypes.Page[apiTypes.Task]{}, err
 		}
 	}
-	return taskPageFromGenerated(*parsed), nil
+	page, err := taskPageFromGenerated(*parsed)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Task]{}, err
+	}
+	return page, nil
 }
 
 func taskListParams(options TaskListOptions) (*generated.TaskListParams, error) {
@@ -174,7 +182,7 @@ func taskListParams(options TaskListOptions) (*generated.TaskListParams, error) 
 	return params, nil
 }
 
-func taskPageFromGenerated(parsed generated.PageTask) apiTypes.Page[apiTypes.Task] {
+func taskPageFromGenerated(parsed generated.PageTask) (apiTypes.Page[apiTypes.Task], error) {
 	items := []generated.Task(nil)
 	if parsed.Items != nil {
 		items = *parsed.Items
@@ -184,9 +192,13 @@ func taskPageFromGenerated(parsed generated.PageTask) apiTypes.Page[apiTypes.Tas
 		page.NextCursor = *parsed.NextCursor
 	}
 	for index, item := range items {
-		page.Items[index] = taskFromGenerated(item)
+		task, err := taskFromGenerated(item)
+		if err != nil {
+			return apiTypes.Page[apiTypes.Task]{}, err
+		}
+		page.Items[index] = task
 	}
-	return page
+	return page, nil
 }
 
 func (c *Client) ShowTask(ctx context.Context, id string) (apiTypes.Task, error) {
@@ -211,12 +223,19 @@ func (c *Client) ShowTask(ctx context.Context, id string) (apiTypes.Task, error)
 			return apiTypes.Task{}, err
 		}
 	}
-	return taskFromGenerated(*parsed), nil
+	task, err := taskFromGenerated(*parsed)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
+	return task, nil
 }
 
-func taskFromGenerated(task generated.Task) apiTypes.Task {
+func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
+	if !task.Type.Valid() {
+		return apiTypes.Task{}, errs.New(errs.KindInternal, "apiclient: Task response has unknown type")
+	}
 	result := apiTypes.Task{
-		ID: task.Id, OperationID: task.OperationId, Type: task.Type, Target: task.Target,
+		ID: task.Id, OperationID: task.OperationId, Type: string(task.Type), Target: task.Target,
 		Status: apiTypes.TaskStatus(task.Status), WorkspaceType: apiTypes.TaskWorkspaceType(task.WorkspaceType),
 		Actor: apiTypes.TaskActor(task.Actor), CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
 		StartedAt: task.StartedAt, FinishedAt: task.FinishedAt,
@@ -244,7 +263,7 @@ func taskFromGenerated(task generated.Task) apiTypes.Task {
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 // StreamTaskEvents follows one Task until its authoritative status is

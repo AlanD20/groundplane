@@ -82,6 +82,133 @@ func TestSealRejectsNonCanonicalAgeRecipient(t *testing.T) {
 	}
 }
 
+// Rationale: one internal prune Task may delete ordered points from different
+// Connectors, so each step must remain independently executable under its own
+// assignment/step-fenced S3 credential slots.
+func TestSealAndValidateBackupPrunePlanAcrossConnectors(t *testing.T) {
+	plan := validBackupPrunePlan()
+	sealed, err := Seal(plan)
+	if err != nil {
+		t.Fatalf("Seal(Backup prune) error = %v", err)
+	}
+	if _, err := Validate(sealed); err != nil {
+		t.Fatalf("Validate(Backup prune) error = %v", err)
+	}
+	first := sealed.Steps[0].GetBackupArtifactPrune()
+	second := sealed.Steps[1].GetBackupArtifactPrune()
+	if first.ConnectorId == second.ConnectorId {
+		t.Fatal("backup prune fixture did not exercise different Connectors")
+	}
+}
+
+// Rationale: the private prune step is a closed control payload. Credentials,
+// age identities, provider responses, and generic parameter maps must not gain
+// a field in the machine contract.
+func TestBackupArtifactPruneDescriptorIsClosed(t *testing.T) {
+	descriptor := (&agentpb.BackupArtifactPrune{}).ProtoReflect().Descriptor()
+	want := []protoreflect.Name{
+		"ordinal", "prune_operation_id", "prune_revision", "point_id", "point_revision",
+		"source_id", "source_revision", "environment_id", "environment_revision",
+		"connector_id", "connector_revision", "connector_endpoint", "connector_bucket",
+		"connector_prefix", "connector_region", "connector_addressing", "protected_object_key",
+		"stored_size_bytes", "stored_sha256",
+	}
+	if descriptor.Fields().Len() != len(want) {
+		t.Fatalf("BackupArtifactPrune fields = %d, want %d", descriptor.Fields().Len(), len(want))
+	}
+	for _, name := range want {
+		if descriptor.Fields().ByName(name) == nil {
+			t.Fatalf("BackupArtifactPrune missing %q", name)
+		}
+	}
+}
+
+// Rationale: prune ordering, point uniqueness, immutable revisions, Connector
+// decisions, exact object evidence, and the 30-minute per-point budget must all
+// fail closed before an Agent can receive the plan.
+func TestSealRejectsMalformedBackupPrunePlan(t *testing.T) {
+	checks := []struct {
+		name   string
+		mutate func(*agentpb.ExecutionPlan)
+	}{
+		{name: "no steps", mutate: func(plan *agentpb.ExecutionPlan) { plan.Steps = nil }},
+		{name: "too many steps", mutate: func(plan *agentpb.ExecutionPlan) {
+			for len(plan.Steps) <= MaximumBackupPrunePoints {
+				plan.Steps = append(plan.Steps, plan.Steps[0])
+			}
+		}},
+		{name: "render generation", mutate: func(plan *agentpb.ExecutionPlan) { plan.RenderGeneration = 1 }},
+		{name: "wrong target", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.TargetId = "env_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		}},
+		{name: "wrong step timeout", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].TimeoutSeconds = MaximumBackupPruneStepTimeoutSeconds - 1
+		}},
+		{name: "ordinal gap", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[1].GetBackupArtifactPrune().Ordinal = 3
+		}},
+		{name: "duplicate point", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[1].GetBackupArtifactPrune().PointId = plan.Steps[0].GetBackupArtifactPrune().PointId
+		}},
+		{name: "different prune operation", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[1].GetBackupArtifactPrune().PruneOperationId = "op_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		}},
+		{name: "zero prune revision", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().PruneRevision = 0
+		}},
+		{name: "bad endpoint", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().ConnectorEndpoint += "?query=forbidden"
+		}},
+		{name: "bad bucket", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().ConnectorBucket = "INVALID"
+		}},
+		{name: "bad prefix", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().ConnectorPrefix = "not-normalized"
+		}},
+		{name: "empty region", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().ConnectorRegion = ""
+		}},
+		{name: "unspecified addressing", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().ConnectorAddressing =
+				agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_UNSPECIFIED
+		}},
+		{name: "wrong protected object key", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().ProtectedObjectKey = "another/object"
+		}},
+		{name: "zero stored size", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[0].GetBackupArtifactPrune().StoredSizeBytes = 0
+		}},
+		{name: "short stored digest", mutate: func(plan *agentpb.ExecutionPlan) {
+			prune := plan.Steps[0].GetBackupArtifactPrune()
+			prune.StoredSha256 = prune.StoredSha256[:31]
+		}},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			plan := validBackupPrunePlan()
+			check.mutate(plan)
+			if _, err := Seal(plan); err == nil {
+				t.Fatal("Seal(malformed Backup prune) error = nil")
+			}
+		})
+	}
+}
+
+// Rationale: Backup capture and prune are different closed procedures. A plan
+// cannot change the operation enum while retaining the other operation's step.
+func TestSealRejectsBackupAndPruneStepOperationMismatch(t *testing.T) {
+	prune := validBackupPrunePlan()
+	prune.Operation = agentpb.PlanOperation_PLAN_OPERATION_BACKUP
+	if _, err := Seal(prune); err == nil {
+		t.Fatal("Seal(Backup operation with prune step) error = nil")
+	}
+	backup := validBackupPlan(t)
+	backup.Operation = agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE
+	if _, err := Seal(backup); err == nil {
+		t.Fatal("Seal(Backup prune operation with capture step) error = nil")
+	}
+}
+
 // Rationale: checkpoint acknowledgements are deliberately incapable of
 // smuggling result data: they echo only the exact assignment delivery tuple.
 func TestBackupCheckpointDescriptorClosesAssignmentIdentity(t *testing.T) {
@@ -93,8 +220,11 @@ func TestBackupCheckpointDescriptorClosesAssignmentIdentity(t *testing.T) {
 			t.Fatalf("BackupCheckpointRequest missing %q", name)
 		}
 	}
-	if request.Oneofs().ByName("payload") == nil || request.Oneofs().ByName("payload").Fields().Len() != 11 {
+	if request.Oneofs().ByName("payload") == nil || request.Oneofs().ByName("payload").Fields().Len() != 12 {
 		t.Fatalf("BackupCheckpointRequest payload variants = %v", request.Oneofs().ByName("payload"))
+	}
+	if request.Fields().ByName("upload_completed") == nil {
+		t.Fatal("BackupCheckpointRequest missing upload_completed")
 	}
 	ack := (&agentpb.BackupCheckpointAck{}).ProtoReflect().Descriptor()
 	if ack.Fields().Len() != 4 {
@@ -104,6 +234,25 @@ func TestBackupCheckpointDescriptorClosesAssignmentIdentity(t *testing.T) {
 		if ack.Fields().ByName(name) == nil {
 			t.Fatalf("BackupCheckpointAck missing %q", name)
 		}
+	}
+}
+
+// Rationale: artifact-prepared is the durable pre-Put intent, but the private
+// checkpoint carries only the point and immutable byte evidence. Object
+// identity stays pinned in the run record rather than entering Agent traffic.
+func TestBackupArtifactPreparedCheckpointClosesPrePutIntentEvidence(t *testing.T) {
+	descriptor := (&agentpb.BackupArtifactPreparedCheckpoint{}).ProtoReflect().Descriptor()
+	if descriptor.Fields().Len() != 3 {
+		t.Fatalf("BackupArtifactPreparedCheckpoint fields = %d, want 3", descriptor.Fields().Len())
+	}
+	for _, name := range []protoreflect.Name{"point_id", "stored_size_bytes", "stored_sha256"} {
+		if descriptor.Fields().ByName(name) == nil {
+			t.Fatalf("BackupArtifactPreparedCheckpoint missing %q", name)
+		}
+	}
+	request := validBackupCheckpointRequest()
+	if _, err := ValidateBackupCheckpointRequest(request, request.Sequence); err != nil {
+		t.Fatalf("ValidateBackupCheckpointRequest(artifact prepared) error = %v", err)
 	}
 }
 
@@ -126,6 +275,37 @@ func TestValidateBackupCheckpointRequestAndAck(t *testing.T) {
 	}
 	if _, err := ValidateBackupCheckpointAck(ack, request); err != nil {
 		t.Fatalf("ValidateBackupCheckpointAck() error = %v", err)
+	}
+}
+
+// Rationale: a config restore generation is a stable Controller-owned config
+// identity distinct from the Task attempt carried by the checkpoint envelope.
+func TestValidateBackupConfigGenerationCheckpointsRequireConfigIdentity(t *testing.T) {
+	requests := []*agentpb.BackupCheckpointRequest{
+		validBackupConfigGenerationStagedCheckpointRequest(),
+		validBackupConfigGenerationActivatedCheckpointRequest(),
+	}
+	for _, request := range requests {
+		digest, err := ComputeBackupCheckpointPayloadDigest(request)
+		if err != nil {
+			t.Fatalf("ComputeBackupCheckpointPayloadDigest(config generation) error = %v", err)
+		}
+		request.ControlPayloadSha256 = digest
+		if _, err := ValidateBackupCheckpointRequest(request, request.Sequence); err != nil {
+			t.Fatalf("ValidateBackupCheckpointRequest(config generation) error = %v", err)
+		}
+
+		switch payload := request.Payload.(type) {
+		case *agentpb.BackupCheckpointRequest_ConfigGenerationStaged:
+			payload.ConfigGenerationStaged.RestoreGenerationId = request.TaskId
+		case *agentpb.BackupCheckpointRequest_ConfigGenerationActivated:
+			payload.ConfigGenerationActivated.RestoreGenerationId = request.TaskId
+		default:
+			t.Fatalf("unexpected config generation payload %T", request.Payload)
+		}
+		if _, err := ComputeBackupCheckpointPayloadDigest(request); err == nil {
+			t.Fatal("Task identity accepted as restore generation")
+		}
 	}
 }
 
@@ -159,6 +339,80 @@ func TestComputeBackupCheckpointPayloadDigestUsesVersionOneGrammar(t *testing.T)
 	want := sha256.Sum256(encoded.Bytes())
 	if !bytes.Equal(digest, want[:]) {
 		t.Fatalf("checkpoint digest = %x, want %x", digest, want)
+	}
+}
+
+// Rationale: Put success is durable orphan evidence before Head starts. Its
+// digest must use the existing protobuf-independent v1 grammar without
+// changing any previously assigned checkpoint kind.
+func TestComputeBackupCheckpointPayloadDigestUploadCompletedUsesVersionOneGrammar(t *testing.T) {
+	request := validUploadCompletedCheckpointRequest()
+	digest, err := ComputeBackupCheckpointPayloadDigest(request)
+	if err != nil {
+		t.Fatalf("ComputeBackupCheckpointPayloadDigest(upload completed) error = %v", err)
+	}
+	var encoded bytes.Buffer
+	encoded.WriteString("groundplane.backup.checkpoint.v1")
+	encoded.WriteByte(0)
+	if err := binary.Write(
+		&encoded,
+		binary.BigEndian,
+		uint32(agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED),
+	); err != nil {
+		t.Fatalf("encode kind: %v", err)
+	}
+	pointID := request.GetUploadCompleted().PointId
+	if err := binary.Write(&encoded, binary.BigEndian, uint32(len(pointID))); err != nil {
+		t.Fatalf("encode point length: %v", err)
+	}
+	encoded.WriteString(pointID)
+	if err := binary.Write(&encoded, binary.BigEndian, request.GetUploadCompleted().StoredSizeBytes); err != nil {
+		t.Fatalf("encode stored size: %v", err)
+	}
+	encoded.Write(request.GetUploadCompleted().StoredSha256)
+	want := sha256.Sum256(encoded.Bytes())
+	if !bytes.Equal(digest, want[:]) {
+		t.Fatalf("upload-completed checkpoint digest = %x, want %x", digest, want)
+	}
+	request.ControlPayloadSha256 = digest
+	if _, err := ValidateBackupCheckpointRequest(request, request.Sequence); err != nil {
+		t.Fatalf("ValidateBackupCheckpointRequest(upload completed) error = %v", err)
+	}
+}
+
+// Rationale: upload-completed is useful as orphan evidence only when it names
+// one canonical point and exact non-empty immutable-object size/digest facts.
+func TestValidateBackupCheckpointRequestRejectsMalformedUploadCompleted(t *testing.T) {
+	checks := []struct {
+		name   string
+		mutate func(*agentpb.BackupCheckpointRequest)
+	}{
+		{name: "kind mismatch", mutate: func(request *agentpb.BackupCheckpointRequest) {
+			request.Kind = agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_VERIFIED
+		}},
+		{name: "bad point", mutate: func(request *agentpb.BackupCheckpointRequest) {
+			request.GetUploadCompleted().PointId = "rp_invalid"
+		}},
+		{name: "zero stored size", mutate: func(request *agentpb.BackupCheckpointRequest) {
+			request.GetUploadCompleted().StoredSizeBytes = 0
+		}},
+		{name: "short stored digest", mutate: func(request *agentpb.BackupCheckpointRequest) {
+			request.GetUploadCompleted().StoredSha256 = request.GetUploadCompleted().StoredSha256[:31]
+		}},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			request := validUploadCompletedCheckpointRequest()
+			check.mutate(request)
+			digest, err := ComputeBackupCheckpointPayloadDigest(request)
+			if err == nil {
+				request.ControlPayloadSha256 = digest
+				_, err = ValidateBackupCheckpointRequest(request, request.Sequence)
+			}
+			if err == nil {
+				t.Fatal("malformed upload-completed checkpoint error = nil")
+			}
+		})
 	}
 }
 
@@ -231,7 +485,7 @@ func validBackupPlan(t *testing.T) *agentpb.ExecutionPlan {
 				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE, KeyEra: 2,
 				AgeRecipient: recipient,
 				Source: &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
-					BackingServiceId: "bks_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 14,
+					BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 14,
 					Database: "application", Role: "application_owner",
 				}},
 			}),
@@ -284,6 +538,98 @@ func validBackupCheckpointRequest() *agentpb.BackupCheckpointRequest {
 	}
 	request.ControlPayloadSha256 = digest
 	return request
+}
+
+func validUploadCompletedCheckpointRequest() *agentpb.BackupCheckpointRequest {
+	return &agentpb.BackupCheckpointRequest{
+		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", Sequence: 2,
+		Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED,
+		Payload: &agentpb.BackupCheckpointRequest_UploadCompleted{
+			UploadCompleted: &agentpb.BackupUploadCompletedCheckpoint{
+				PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", StoredSizeBytes: 4096,
+				StoredSha256: bytes.Repeat([]byte{3}, 32),
+			},
+		},
+	}
+}
+
+func validBackupPrunePlan() *agentpb.ExecutionPlan {
+	const pruneOperationID = "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	return &agentpb.ExecutionPlan{
+		Schema: SchemaVersion, PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE, TargetId: testBackupEnvironmentID,
+		Steps: []*agentpb.ExecutionStep{
+			backupPruneStep(
+				"step_01ARZ3NDEKTSV4RRFFQ69G5FAV", 1, pruneOperationID,
+				"rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				testBackupConnectorID, "https://objects.example.test", "groundplane-backups", "production/",
+				agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
+			),
+			backupPruneStep(
+				"step_01ARZ3NDEKTSV4RRFFQ69G5FAW", 2, pruneOperationID,
+				"rp_01ARZ3NDEKTSV4RRFFQ69G5FAW", "spt_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+				"con_01ARZ3NDEKTSV4RRFFQ69G5FAW", "https://archive.example.test", "groundplane-archive",
+				"archive/", agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_VIRTUAL_HOSTED_STYLE,
+			),
+		},
+	}
+}
+
+func backupPruneStep(
+	stepID string,
+	ordinal uint32,
+	operationID string,
+	pointID string,
+	sourceID string,
+	connectorID string,
+	endpoint string,
+	bucket string,
+	prefix string,
+	addressing agentpb.BackupS3Addressing,
+) *agentpb.ExecutionStep {
+	return &agentpb.ExecutionStep{
+		StepId: stepID, TimeoutSeconds: MaximumBackupPruneStepTimeoutSeconds,
+		Payload: &agentpb.ExecutionStep_BackupArtifactPrune{BackupArtifactPrune: &agentpb.BackupArtifactPrune{
+			Ordinal: ordinal, PruneOperationId: operationID, PruneRevision: uint64(100 + ordinal),
+			PointId: pointID, PointRevision: uint64(200 + ordinal),
+			SourceId: sourceID, SourceRevision: uint64(300 + ordinal),
+			EnvironmentId: testBackupEnvironmentID, EnvironmentRevision: 400,
+			ConnectorId: connectorID, ConnectorRevision: uint64(500 + ordinal),
+			ConnectorEndpoint: endpoint, ConnectorBucket: bucket, ConnectorPrefix: prefix,
+			ConnectorRegion: "auto", ConnectorAddressing: addressing,
+			ProtectedObjectKey: prefix + testBackupEnvironmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
+			StoredSizeBytes:    4096, StoredSha256: bytes.Repeat([]byte{byte(ordinal)}, sha256.Size),
+		}},
+	}
+}
+
+func validBackupConfigGenerationStagedCheckpointRequest() *agentpb.BackupCheckpointRequest {
+	return &agentpb.BackupCheckpointRequest{
+		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", Sequence: 3,
+		Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_STAGED,
+		Payload: &agentpb.BackupCheckpointRequest_ConfigGenerationStaged{
+			ConfigGenerationStaged: &agentpb.BackupConfigGenerationStagedCheckpoint{
+				PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", RestoreGenerationId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				EntryGenerationManifestSha256: bytes.Repeat([]byte{4}, 32),
+			},
+		},
+	}
+}
+
+func validBackupConfigGenerationActivatedCheckpointRequest() *agentpb.BackupCheckpointRequest {
+	return &agentpb.BackupCheckpointRequest{
+		TaskId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", AssignmentId: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", Sequence: 4,
+		Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_ACTIVATED,
+		Payload: &agentpb.BackupCheckpointRequest_ConfigGenerationActivated{
+			ConfigGenerationActivated: &agentpb.BackupConfigGenerationActivatedCheckpoint{
+				PointId: "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV", RestoreGenerationId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				RenderGeneration: 17,
+			},
+		},
+	}
 }
 
 func backupStep(stepID string, capture *agentpb.BackupSourceCapture) *agentpb.ExecutionStep {

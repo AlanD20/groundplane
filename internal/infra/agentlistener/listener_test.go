@@ -16,7 +16,7 @@ func TestListenAtCreatesRestrictedConnectableSocket(t *testing.T) {
 	// ancestors retain the accepted least-privilege modes.
 	t.Parallel()
 
-	hostRoot := t.TempDir()
+	hostRoot := shortUDSTestDir(t)
 	if err := os.Mkdir(filepath.Join(hostRoot, "run"), 0o755); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestListenAtRefusesUntrustedExistingPaths(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			hostRoot := t.TempDir()
+			hostRoot := shortUDSTestDir(t)
 			test.prepare(t, hostRoot)
 			if listener, err := listenAt(context.Background(), hostRoot, uint32(os.Geteuid())); err == nil {
 				listener.Close()
@@ -106,7 +106,7 @@ func TestListenAtHonorsCancellationBeforeCreatingRuntime(t *testing.T) {
 	// partial runtime hierarchy behind.
 	t.Parallel()
 
-	hostRoot := t.TempDir()
+	hostRoot := shortUDSTestDir(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	listener, err := listenAt(ctx, hostRoot, uint32(os.Geteuid()))
@@ -120,6 +120,20 @@ func TestListenAtHonorsCancellationBeforeCreatingRuntime(t *testing.T) {
 
 func runtimeSocketName() string {
 	return filepath.ToSlash(agentprotocol.SocketPath[1:])
+}
+
+func shortUDSTestDir(t *testing.T) string {
+	t.Helper()
+	directory, err := os.MkdirTemp("/tmp", "gp-uds-")
+	if err != nil {
+		t.Fatalf("create short Unix socket directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(directory); err != nil {
+			t.Errorf("remove short Unix socket directory: %v", err)
+		}
+	})
+	return directory
 }
 
 func assertSocketMode(t *testing.T, name string, want os.FileMode, socket bool) {

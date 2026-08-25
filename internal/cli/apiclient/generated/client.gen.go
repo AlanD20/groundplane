@@ -114,6 +114,69 @@ func (e TaskActor) Valid() bool {
 	}
 }
 
+// Defines values for TaskType.
+const (
+	TaskTypeAttach      TaskType = "attach"
+	TaskTypeBackup      TaskType = "backup"
+	TaskTypeBackupPrune TaskType = "backup_prune"
+	TaskTypeCreate      TaskType = "create"
+	TaskTypeDeploy      TaskType = "deploy"
+	TaskTypeDestroy     TaskType = "destroy"
+	TaskTypeDetach      TaskType = "detach"
+	TaskTypeProvision   TaskType = "provision"
+	TaskTypeRemove      TaskType = "remove"
+	TaskTypeRestore     TaskType = "restore"
+	TaskTypeRollback    TaskType = "rollback"
+	TaskTypeRotate      TaskType = "rotate"
+	TaskTypeRun         TaskType = "run"
+	TaskTypeScript      TaskType = "script"
+	TaskTypeStart       TaskType = "start"
+	TaskTypeStop        TaskType = "stop"
+	TaskTypeUpdate      TaskType = "update"
+)
+
+// Valid indicates whether the value is a known member of the TaskType enum.
+func (e TaskType) Valid() bool {
+	switch e {
+	case TaskTypeAttach:
+		return true
+	case TaskTypeBackup:
+		return true
+	case TaskTypeBackupPrune:
+		return true
+	case TaskTypeCreate:
+		return true
+	case TaskTypeDeploy:
+		return true
+	case TaskTypeDestroy:
+		return true
+	case TaskTypeDetach:
+		return true
+	case TaskTypeProvision:
+		return true
+	case TaskTypeRemove:
+		return true
+	case TaskTypeRestore:
+		return true
+	case TaskTypeRollback:
+		return true
+	case TaskTypeRotate:
+		return true
+	case TaskTypeRun:
+		return true
+	case TaskTypeScript:
+		return true
+	case TaskTypeStart:
+		return true
+	case TaskTypeStop:
+		return true
+	case TaskTypeUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskWorkspaceType.
 const (
 	TaskWorkspaceTypePlatform TaskWorkspaceType = "platform"
@@ -985,13 +1048,16 @@ type Task struct {
 	Steps         *[]TaskStep       `json:"steps,omitempty"`
 	Target        string            `json:"target"`
 	TenantId      *string           `json:"tenant_id,omitempty"`
-	Type          string            `json:"type"`
+	Type          TaskType          `json:"type"`
 	UpdatedAt     time.Time         `json:"updated_at"`
 	WorkspaceType TaskWorkspaceType `json:"workspace_type"`
 }
 
 // TaskActor defines model for Task.Actor.
 type TaskActor string
+
+// TaskType defines model for Task.Type.
+type TaskType string
 
 // TaskWorkspaceType defines model for Task.WorkspaceType.
 type TaskWorkspaceType string

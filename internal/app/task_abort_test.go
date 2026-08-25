@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -10,11 +11,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type fakeTaskAbortRepository struct {
-	task       etcd.TaskRecord
-	assignment etcd.TaskAssignment
+	task              etcd.TaskRecord
+	assignment        etcd.TaskAssignment
+	abortPendingCalls int
 }
 
 func (repository *fakeTaskAbortRepository) GetTask(
@@ -36,8 +39,36 @@ func (repository *fakeTaskAbortRepository) AbortPendingTask(
 	_ string,
 	_ time.Time,
 ) (etcd.Versioned[etcd.TaskRecord], error) {
+	repository.abortPendingCalls++
 	repository.task.Status = etcd.TaskStatusAborted
 	return etcd.Versioned[etcd.TaskRecord]{Record: repository.task}, nil
+}
+
+func TestTaskAbortServiceRejectsInternalBackupPruneBeforeMutation(t *testing.T) {
+	// Rationale: backup pruning is observable internal maintenance, so the
+	// generic operator abort surface must fail before it changes journal state.
+	t.Parallel()
+	taskID := ids.NewAt(ids.KindTask, time.Date(2026, 8, 24, 15, 0, 0, 0, time.UTC), 101)
+	repository := &fakeTaskAbortRepository{task: etcd.TaskRecord{
+		ID: taskID, Type: etcd.TaskBackupPrune, Status: etcd.TaskStatusPending,
+	}}
+	service, err := newTaskAbortService(
+		repository,
+		&fakeTaskAbortAgentChannel{terminal: make(chan error, 1)},
+		&fakeTaskAbortControllerRunner{repository: repository},
+	)
+	if err != nil {
+		t.Fatalf("newTaskAbortService() error = %v", err)
+	}
+	if _, err := service.AbortTask(context.Background(), taskID, "abort-prune-key"); !errors.Is(
+		err,
+		errs.New(errs.KindTaskNotAbortable, ""),
+	) {
+		t.Fatalf("AbortTask(backup_prune) error = %v, want task.not_abortable", err)
+	}
+	if repository.abortPendingCalls != 0 || repository.task.Status != etcd.TaskStatusPending {
+		t.Fatalf("backup_prune mutation calls/status = %d/%s", repository.abortPendingCalls, repository.task.Status)
+	}
 }
 
 type fakeTaskAbortAgentChannel struct {

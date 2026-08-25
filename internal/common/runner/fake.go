@@ -29,7 +29,7 @@ func NewFake() *FakeRunner {
 }
 
 func (f *FakeRunner) Run(ctx context.Context, opts RunCmdOpts) (Result, error) {
-	res, runErr, runFunc, _ := f.record(opts)
+	res, runFunc, _, runErr := f.record(opts)
 	if runFunc != nil {
 		return runFunc(ctx, opts)
 	}
@@ -72,7 +72,7 @@ func (f *FakeRunner) StreamPostgresDump(
 	if err := ctx.Err(); err != nil {
 		return Result{ExitCode: -1}, err
 	}
-	res, runErr, _, streamPostgresDumpFunc := f.record(opts)
+	res, _, streamPostgresDumpFunc, runErr := f.record(opts)
 	if streamPostgresDumpFunc != nil {
 		return streamPostgresDumpFunc(ctx, command, sink)
 	}
@@ -162,15 +162,15 @@ func (f *FakeRunner) record(
 	opts RunCmdOpts,
 ) (
 	Result,
-	error,
 	func(context.Context, RunCmdOpts) (Result, error),
 	func(context.Context, PostgresDumpCommand, BinarySink) (Result, error),
+	error,
 ) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Calls = append(f.Calls, cloneOpts(opts))
 	res := cloneResult(f.Results[opts.Name])
-	return res, f.Errors[opts.Name], f.RunFunc, f.StreamPostgresDumpFunc
+	return res, f.RunFunc, f.StreamPostgresDumpFunc, f.Errors[opts.Name]
 }
 
 func cloneOpts(opts RunCmdOpts) RunCmdOpts {

@@ -15,7 +15,7 @@ import (
 func TestBackupConfigRestoreEntryRecordRoundTrip(t *testing.T) {
 	now := testBackupConfigTime()
 	record := BackupConfigRestoreEntryRecord{
-		TaskID: ids.NewAt(ids.KindTask, now, 1), EntryOrdinal: 4,
+		RestoreGenerationID: ids.NewAt(ids.KindConfig, now, 1), EntryOrdinal: 4,
 		EntryID: ids.NewAt(ids.KindEnvEntry, now, 2), ValueGenerationID: ids.NewAt(ids.KindConfig, now, 3),
 		Secret:           false,
 		DescriptorLength: 27, DescriptorSHA256: testBackupConfigSHA256([]byte("descriptor")),
@@ -41,7 +41,7 @@ func TestBackupConfigRestoreEntryRecordRoundTrip(t *testing.T) {
 func TestBackupConfigRestoreDescriptorChunkRoundTrip(t *testing.T) {
 	content := []byte("validated descriptor")
 	record := BackupConfigRestoreDescriptorChunkRecord{
-		TaskID: ids.NewAt(ids.KindTask, testBackupConfigTime(), 1), EntryOrdinal: 1,
+		RestoreGenerationID: ids.NewAt(ids.KindConfig, testBackupConfigTime(), 1), EntryOrdinal: 1,
 		EntryID:           ids.NewAt(ids.KindEnvEntry, testBackupConfigTime(), 2),
 		ValueGenerationID: ids.NewAt(ids.KindConfig, testBackupConfigTime(), 3), Secret: false,
 		ChunkOrdinal: 0, Offset: 0, Length: uint32(len(content)),
@@ -55,9 +55,11 @@ func TestBackupConfigRestoreDescriptorChunkRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeBackupConfigRestoreDescriptorChunkRecord() error = %v", err)
 	}
-	if restored.TaskID != record.TaskID || restored.EntryOrdinal != record.EntryOrdinal ||
-		restored.ChunkOrdinal != record.ChunkOrdinal || restored.Offset != record.Offset ||
-		restored.Length != record.Length || restored.SHA256 != record.SHA256 ||
+	if restored.RestoreGenerationID != record.RestoreGenerationID || restored.EntryOrdinal != record.EntryOrdinal ||
+		restored.EntryID != record.EntryID || restored.ValueGenerationID != record.ValueGenerationID ||
+		restored.Secret != record.Secret || restored.ChunkOrdinal != record.ChunkOrdinal ||
+		restored.Offset != record.Offset || restored.Length != record.Length ||
+		restored.SHA256 != record.SHA256 ||
 		!bytes.Equal(restored.Content, record.Content) {
 		t.Fatalf("restored descriptor chunk = %#v, want %#v", restored, record)
 	}
@@ -69,7 +71,7 @@ func TestBackupConfigRestoreProtectedValueChunkRoundTrip(t *testing.T) {
 	plaintext := bytes.Repeat([]byte("restored-secret"), 3179)
 	ciphertext := []byte("protected-restored-secret")
 	record := BackupConfigRestoreValueChunkRecord{
-		TaskID: ids.NewAt(ids.KindTask, testBackupConfigTime(), 1), EntryOrdinal: 1,
+		RestoreGenerationID: ids.NewAt(ids.KindConfig, testBackupConfigTime(), 1), EntryOrdinal: 1,
 		EntryID:           ids.NewAt(ids.KindEnvEntry, testBackupConfigTime(), 2),
 		ValueGenerationID: ids.NewAt(ids.KindConfig, testBackupConfigTime(), 3), Secret: true,
 		Storage: BackupConfigChunkStorageControllerProtected,
@@ -92,8 +94,15 @@ func TestBackupConfigRestoreProtectedValueChunkRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeBackupConfigRestoreValueChunkRecord() error = %v", err)
 	}
-	if restored.Plain != nil || restored.Protected == nil ||
-		!bytes.Equal(restored.Protected.Ciphertext, ciphertext) {
+	if restored.RestoreGenerationID != record.RestoreGenerationID || restored.EntryOrdinal != record.EntryOrdinal ||
+		restored.EntryID != record.EntryID || restored.ValueGenerationID != record.ValueGenerationID ||
+		restored.Secret != record.Secret || restored.ChunkOrdinal != record.ChunkOrdinal ||
+		restored.Storage != record.Storage || restored.Plain != nil || restored.Protected == nil ||
+		restored.Protected.EnvelopeVersion != record.Protected.EnvelopeVersion ||
+		restored.Protected.Cipher != record.Protected.Cipher ||
+		restored.Protected.DigestAlgorithm != record.Protected.DigestAlgorithm ||
+		restored.Protected.CiphertextSHA256 != record.Protected.CiphertextSHA256 ||
+		!bytes.Equal(restored.Protected.Ciphertext, record.Protected.Ciphertext) {
 		t.Fatalf("restored protected value chunk = %#v", restored)
 	}
 }
@@ -105,7 +114,7 @@ func TestBackupConfigRestoreValueChunkRejectsStorageOutsideEntryClass(t *testing
 	now := testBackupConfigTime()
 	tests := map[string]BackupConfigRestoreValueChunkRecord{
 		"secret plaintext": {
-			TaskID: ids.NewAt(ids.KindTask, now, 1), EntryID: ids.NewAt(ids.KindEnvEntry, now, 2),
+			RestoreGenerationID: ids.NewAt(ids.KindConfig, now, 1), EntryID: ids.NewAt(ids.KindEnvEntry, now, 2),
 			ValueGenerationID: ids.NewAt(ids.KindConfig, now, 3),
 			Secret:            true, Storage: BackupConfigChunkStoragePlain,
 			Plain: &BackupConfigPlainChunkPayload{
@@ -113,7 +122,7 @@ func TestBackupConfigRestoreValueChunkRejectsStorageOutsideEntryClass(t *testing
 			},
 		},
 		"plain protected": {
-			TaskID: ids.NewAt(ids.KindTask, now, 1), EntryID: ids.NewAt(ids.KindEnvEntry, now, 2),
+			RestoreGenerationID: ids.NewAt(ids.KindConfig, now, 1), EntryID: ids.NewAt(ids.KindEnvEntry, now, 2),
 			ValueGenerationID: ids.NewAt(ids.KindConfig, now, 3),
 			Storage:           BackupConfigChunkStorageControllerProtected,
 			Protected: &BackupConfigProtectedChunkPayload{
@@ -138,7 +147,7 @@ func TestBackupConfigRestoreValueChunkRejectsStorageOutsideEntryClass(t *testing
 func TestBackupConfigRestoreEntryRequiresFreshValueGenerationIdentity(t *testing.T) {
 	now := testBackupConfigTime()
 	record := BackupConfigRestoreEntryRecord{
-		TaskID: ids.NewAt(ids.KindTask, now, 1), EntryID: ids.NewAt(ids.KindEnvEntry, now, 2),
+		RestoreGenerationID: ids.NewAt(ids.KindConfig, now, 1), EntryID: ids.NewAt(ids.KindEnvEntry, now, 2),
 		DescriptorLength: 1, DescriptorSHA256: testBackupConfigSHA256([]byte("d")), DescriptorChunks: 1,
 		PlainValueSHA256: testBackupConfigSHA256(nil),
 	}
@@ -154,11 +163,11 @@ func TestBackupConfigRestoreEntryRequiresFreshValueGenerationIdentity(t *testing
 // final digest that authorizes canonical apply.
 func TestBackupConfigRestoreEntryRejectsImpossibleChunkSummary(t *testing.T) {
 	record := BackupConfigRestoreEntryRecord{
-		TaskID:            ids.NewAt(ids.KindTask, testBackupConfigTime(), 1),
-		EntryID:           ids.NewAt(ids.KindEnvEntry, testBackupConfigTime(), 2),
-		ValueGenerationID: ids.NewAt(ids.KindConfig, testBackupConfigTime(), 3),
-		DescriptorLength:  MaximumBackupConfigChunkPayloadBytes + 1,
-		DescriptorSHA256:  testBackupConfigSHA256([]byte("descriptor")), DescriptorChunks: 1,
+		RestoreGenerationID: ids.NewAt(ids.KindConfig, testBackupConfigTime(), 1),
+		EntryID:             ids.NewAt(ids.KindEnvEntry, testBackupConfigTime(), 2),
+		ValueGenerationID:   ids.NewAt(ids.KindConfig, testBackupConfigTime(), 3),
+		DescriptorLength:    MaximumBackupConfigChunkPayloadBytes + 1,
+		DescriptorSHA256:    testBackupConfigSHA256([]byte("descriptor")), DescriptorChunks: 1,
 		PlainValueSHA256: testBackupConfigSHA256(nil),
 	}
 	if _, err := encodeBackupConfigRestoreEntryRecord(
@@ -174,28 +183,227 @@ func TestBackupConfigRestoreEntryRejectsImpossibleChunkSummary(t *testing.T) {
 // Rationale: zero-padded runtime keys preserve artifact order while the two
 // uniqueness fences reject duplicate Entry ids and normalized destinations.
 func TestBackupConfigRestoreKeysAreCanonical(t *testing.T) {
-	taskID := ids.NewAt(ids.KindTask, testBackupConfigTime(), 1)
+	restoreGenerationID := ids.NewAt(ids.KindConfig, testBackupConfigTime(), 1)
 	entryID := ids.NewAt(ids.KindEnvEntry, testBackupConfigTime(), 2)
 	entrySuffix := "/00000000000000000009"
-	if got := backupConfigRestoreEntryKey(taskID, 9); got !=
-		"/v1/runtime/config-restore-entries/"+taskID+entrySuffix {
+	if got, err := backupConfigRestoreEntryKey(restoreGenerationID, 9); err != nil || got !=
+		"/v1/runtime/config-restore-entries/"+restoreGenerationID+entrySuffix {
 		t.Fatalf("restore Entry key = %q", got)
 	}
-	if got := backupConfigRestoreDescriptorChunkKey(taskID, 9, 4); got !=
-		"/v1/runtime/config-restore-descriptors/"+taskID+entrySuffix+"/0000000004" {
+	if got, err := backupConfigRestoreDescriptorChunkKey(restoreGenerationID, 9, 4); err != nil || got !=
+		"/v1/runtime/config-restore-descriptors/"+restoreGenerationID+entrySuffix+"/0000000004" {
 		t.Fatalf("restore descriptor key = %q", got)
 	}
-	if got := backupConfigRestoreValueChunkKey(taskID, 9, 4); got !=
-		"/v1/runtime/config-restore-values/"+taskID+entrySuffix+"/0000000004" {
+	if got, err := backupConfigRestoreValueChunkKey(restoreGenerationID, 9, 4); err != nil || got !=
+		"/v1/runtime/config-restore-values/"+restoreGenerationID+entrySuffix+"/0000000004" {
 		t.Fatalf("restore value key = %q", got)
 	}
-	if got := backupConfigRestoreEntryIdentityKey(taskID, entryID); got !=
-		"/v1/runtime/config-restore-identities/"+taskID+"/id/"+entryID {
+	if got, err := backupConfigRestoreEntryIdentityKey(restoreGenerationID, entryID); err != nil || got !=
+		"/v1/runtime/config-restore-identities/"+restoreGenerationID+"/id/"+entryID {
 		t.Fatalf("restore Entry identity key = %q", got)
 	}
-	if got := backupConfigRestoreDestinationKey(taskID, "secrets/app token"); got !=
-		"/v1/runtime/config-restore-identities/"+taskID+"/destination/~c2VjcmV0cy9hcHAgdG9rZW4" {
+	if got, err := backupConfigRestoreDestinationKey(restoreGenerationID, "secrets/app token"); err != nil || got !=
+		"/v1/runtime/config-restore-identities/"+restoreGenerationID+
+			"/destination/~c2VjcmV0cy9hcHAgdG9rZW4" {
 		t.Fatalf("restore destination key = %q", got)
+	}
+}
+
+// Rationale: the private restore generation and each immutable per-Entry value
+// generation are separate identities; aliasing them would make cleanup and
+// activation authorities indistinguishable after retry.
+func TestBackupConfigRestoreRecordsRejectRestoreGenerationAsValueGeneration(t *testing.T) {
+	now := testBackupConfigTime()
+	restoreGenerationID := ids.NewAt(ids.KindConfig, now, 1)
+	entryID := ids.NewAt(ids.KindEnvEntry, now, 2)
+	content := []byte("value")
+	tests := map[string]func() error{
+		"Entry": func() error {
+			_, err := encodeBackupConfigRestoreEntryRecord(BackupConfigRestoreEntryRecord{
+				RestoreGenerationID: restoreGenerationID, EntryID: entryID,
+				ValueGenerationID: restoreGenerationID,
+				DescriptorLength:  1, DescriptorSHA256: testBackupConfigSHA256([]byte("d")),
+				DescriptorChunks: 1, PlainValueSHA256: testBackupConfigSHA256(nil),
+			})
+			return err
+		},
+		"descriptor": func() error {
+			_, err := encodeBackupConfigRestoreDescriptorChunkRecord(BackupConfigRestoreDescriptorChunkRecord{
+				RestoreGenerationID: restoreGenerationID, EntryID: entryID,
+				ValueGenerationID: restoreGenerationID,
+				Length:            uint32(len(content)), SHA256: testBackupConfigSHA256(content), Content: content,
+			})
+			return err
+		},
+		"value": func() error {
+			_, err := encodeBackupConfigRestoreValueChunkRecord(BackupConfigRestoreValueChunkRecord{
+				RestoreGenerationID: restoreGenerationID, EntryID: entryID,
+				ValueGenerationID: restoreGenerationID, Storage: BackupConfigChunkStoragePlain,
+				Plain: &BackupConfigPlainChunkPayload{
+					ContentLength: uint32(len(content)), ContentSHA256: testBackupConfigSHA256(content),
+					Content: content,
+				},
+			})
+			return err
+		},
+	}
+	for name, run := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := run(); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("encode colliding restore identity error = %v, want validation", err)
+			}
+		})
+	}
+}
+
+// Rationale: exact record replay must remain valid, while a restore batch may
+// not reuse an ordinal, Entry id, normalized destination, or value-generation
+// identity for a different staged Entry.
+func TestBackupConfigRestoreBatchIdentitiesPreserveExactReplayAndRejectDuplicates(t *testing.T) {
+	now := testBackupConfigTime()
+	restoreGenerationID := ids.NewAt(ids.KindConfig, now, 1)
+	first := BackupConfigRestoreEntryRecord{
+		RestoreGenerationID: restoreGenerationID, EntryOrdinal: 1,
+		EntryID:           ids.NewAt(ids.KindEnvEntry, now, 2),
+		ValueGenerationID: ids.NewAt(ids.KindConfig, now, 3),
+		DescriptorLength:  1, DescriptorSHA256: testBackupConfigSHA256([]byte("d")), DescriptorChunks: 1,
+		PlainValueSHA256: testBackupConfigSHA256(nil),
+	}
+	replayValue, err := encodeBackupConfigRestoreEntryRecord(first)
+	if err != nil {
+		t.Fatalf("encodeBackupConfigRestoreEntryRecord() error = %v", err)
+	}
+	replay, err := decodeBackupConfigRestoreEntryRecord(replayValue)
+	if err != nil || replay != first {
+		t.Fatalf("decode exact replay = %#v, %v, want %#v", replay, err, first)
+	}
+	if err := validateBackupConfigRestoreBatchIdentities(
+		restoreGenerationID,
+		[]BackupConfigRestoreEntryRecord{replay},
+		[]string{"env/API_TOKEN"},
+	); err != nil {
+		t.Fatalf("validate exact replay identities error = %v", err)
+	}
+	second := BackupConfigRestoreEntryRecord{
+		RestoreGenerationID: restoreGenerationID, EntryOrdinal: 2,
+		EntryID:           ids.NewAt(ids.KindEnvEntry, now, 4),
+		ValueGenerationID: ids.NewAt(ids.KindConfig, now, 5),
+	}
+	tests := map[string]struct {
+		mutate      func(*BackupConfigRestoreEntryRecord)
+		destination string
+	}{
+		"ordinal": {
+			mutate:      func(record *BackupConfigRestoreEntryRecord) { record.EntryOrdinal = first.EntryOrdinal },
+			destination: "env/SECOND",
+		},
+		"Entry id": {
+			mutate:      func(record *BackupConfigRestoreEntryRecord) { record.EntryID = first.EntryID },
+			destination: "env/SECOND",
+		},
+		"destination": {
+			mutate:      func(*BackupConfigRestoreEntryRecord) {},
+			destination: "env/API_TOKEN",
+		},
+		"value generation": {
+			mutate: func(record *BackupConfigRestoreEntryRecord) {
+				record.ValueGenerationID = first.ValueGenerationID
+			},
+			destination: "env/SECOND",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := second
+			test.mutate(&candidate)
+			if err := validateBackupConfigRestoreBatchIdentities(
+				restoreGenerationID,
+				[]BackupConfigRestoreEntryRecord{first, candidate},
+				[]string{"env/API_TOKEN", test.destination},
+			); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("duplicate %s error = %v, want validation", name, err)
+			}
+		})
+	}
+}
+
+// Rationale: a persisted record that aliases restore and value generations is
+// corrupt durable state, even if the envelope and both cfg_ identifiers are
+// otherwise syntactically valid.
+func TestBackupConfigRestoreDecoderRejectsCollidingGenerationIdentities(t *testing.T) {
+	now := testBackupConfigTime()
+	restoreGenerationID := ids.NewAt(ids.KindConfig, now, 1)
+	record := BackupConfigRestoreEntryRecord{
+		RestoreGenerationID: restoreGenerationID, EntryOrdinal: 1,
+		EntryID: ids.NewAt(ids.KindEnvEntry, now, 2), ValueGenerationID: ids.NewAt(ids.KindConfig, now, 3),
+		DescriptorLength: 1, DescriptorSHA256: testBackupConfigSHA256([]byte("d")), DescriptorChunks: 1,
+		PlainValueSHA256: testBackupConfigSHA256(nil),
+	}
+	encoded, err := encodeBackupConfigRestoreEntryRecord(record)
+	if err != nil {
+		t.Fatalf("encodeBackupConfigRestoreEntryRecord() error = %v", err)
+	}
+	malformed := bytes.Replace(
+		encoded,
+		[]byte(record.ValueGenerationID),
+		[]byte(record.RestoreGenerationID),
+		1,
+	)
+	if _, err := decodeBackupConfigRestoreEntryRecord(malformed); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
+		t.Fatalf("decode colliding generation identities error = %v, want internal", err)
+	}
+}
+
+// Rationale: the private generation is a Controller-owned config identity,
+// never an execution-attempt Task identity that would change on retry.
+func TestBackupConfigRestoreRejectsTaskIdentityAsGeneration(t *testing.T) {
+	taskID := ids.NewAt(ids.KindTask, testBackupConfigTime(), 1)
+	if _, err := backupConfigRestoreEntryKey(taskID, 0); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("Task-keyed restore Entry error = %v, want validation", err)
+	}
+	record := BackupConfigRestoreEntryRecord{
+		RestoreGenerationID: taskID,
+		EntryID:             ids.NewAt(ids.KindEnvEntry, testBackupConfigTime(), 2),
+		ValueGenerationID:   ids.NewAt(ids.KindConfig, testBackupConfigTime(), 3),
+		DescriptorLength:    1,
+		DescriptorSHA256:    testBackupConfigSHA256([]byte("d")),
+		DescriptorChunks:    1,
+		PlainValueSHA256:    testBackupConfigSHA256(nil),
+	}
+	if _, err := encodeBackupConfigRestoreEntryRecord(record); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("Task-owned restore generation error = %v, want validation", err)
+	}
+}
+
+// Rationale: retry changes the current Task owner only on bounded restore
+// authority. Unbounded staged children must retain one generation identity and
+// contain no attempt-scoped field that would require rewriting them.
+func TestBackupConfigRestoreStagingExcludesAttemptOwnership(t *testing.T) {
+	record := BackupConfigRestoreEntryRecord{
+		RestoreGenerationID: ids.NewAt(ids.KindConfig, testBackupConfigTime(), 1),
+		EntryID:             ids.NewAt(ids.KindEnvEntry, testBackupConfigTime(), 2),
+		ValueGenerationID:   ids.NewAt(ids.KindConfig, testBackupConfigTime(), 3),
+		DescriptorLength:    1,
+		DescriptorSHA256:    testBackupConfigSHA256([]byte("d")),
+		DescriptorChunks:    1,
+		PlainValueSHA256:    testBackupConfigSHA256(nil),
+	}
+	encoded, err := encodeBackupConfigRestoreEntryRecord(record)
+	if err != nil {
+		t.Fatalf("encodeBackupConfigRestoreEntryRecord() error = %v", err)
+	}
+	if bytes.Contains(encoded, []byte(`"task_id"`)) ||
+		!bytes.Contains(encoded, []byte(`"restore_generation_id"`)) {
+		t.Fatalf("restore staging ownership shape = %s", encoded)
 	}
 }
 

@@ -211,11 +211,11 @@ func (service *connectorCreationService) createConnectorOnce(
 	}
 	credentialNames := make([]string, 0, len(record.Connector.Credentials))
 	for name := range record.Connector.Credentials {
-		credentialNames = append(credentialNames, name)
+		credentialNames = append(credentialNames, string(name))
 	}
 	sort.Strings(credentialNames)
 	for _, name := range credentialNames {
-		credential := record.Connector.Credentials[name]
+		credential := record.Connector.Credentials[core.ConnectorCredentialName(name)]
 		if credential.Kind != core.ConnectorCredentialSecretRef {
 			continue
 		}

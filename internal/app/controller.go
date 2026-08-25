@@ -140,6 +140,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
+	if err := bootstrapRunnerNetworkPool(ctx, store, cfg); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: reserve Runner network pool: %w", err)
+	}
 	tasks, err := etcd.NewTaskRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -426,7 +430,23 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize materialization value resolver: %w", err)
 	}
-	agentRuntime := newAgentChannelRuntime(authenticator, tasks, planResolver, materializationResolver)
+	backupSecretEvidence, err := etcd.NewBackupSecretResolutionReader(store)
+	if err != nil {
+		// Rationale: initialization is already failing; store shutdown is
+		// best-effort and must not replace the primary typed error.
+		_ = store.Close()
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	backupSecrets, err := controller.NewBackupSecretResolver(backupSecretEvidence, intentProtector)
+	if err != nil {
+		// Rationale: initialization is already failing; store shutdown is
+		// best-effort and must not replace the primary typed error.
+		_ = store.Close()
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	agentRuntime := newAgentChannelRuntime(
+		authenticator, tasks, planResolver, materializationResolver, backupSecrets,
+	)
 	staleTasks, err := newStaleAgentTaskMaintenance(agents, agentRuntime.registry, tasks)
 	if err != nil {
 		_ = store.Close()

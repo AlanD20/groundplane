@@ -98,11 +98,13 @@ func buildAttachTaskRenderInput(
 	}
 	return etcd.AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: record.ID,
+		AttachName: record.Name,
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
 		EnvironmentID: record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
 		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir,
 		BackingServiceID:    record.BackingServiceID,
+		BackingProjectID:    record.BackingProjectID,
 		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
 		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
 		ArtifactID:          artifactID,
@@ -111,6 +113,8 @@ func buildAttachTaskRenderInput(
 		Networks:            cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Networks),
 		Volumes:             cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Volumes),
 		NetworkJoins:        joins,
+		ConsumerServiceIDs:  append([]string(nil), record.ServiceIDs...),
+		GrantAttachIDs:      append([]string(nil), record.GrantAttachIDs...),
 	}, nil
 }
 

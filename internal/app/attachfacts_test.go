@@ -25,7 +25,9 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProtector() error = %v", err)
 	}
-	repository := &attachFactTestRepository{records: make(map[string]etcd.Versioned[etcd.AttachRecord])}
+	repository := &attachFactTestRepository{
+		records: make(map[string]etcd.Versioned[etcd.AttachRecord]),
+	}
 	service, err := NewAttachFactService(repository, protector)
 	if err != nil {
 		t.Fatalf("NewAttachFactService() error = %v", err)
@@ -50,7 +52,11 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		[]AttachGrantFactParams{{
 			AttachID: grantID,
 			Params: adapters.FactParams{
-				Host: "postgres", Port: "5432", Database: "reporting", Role: "app", Password: password,
+				Host:     "postgres",
+				Port:     "5432",
+				Database: "reporting",
+				Role:     "app",
+				Password: password,
 			},
 		}},
 	)
@@ -123,8 +129,27 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		now,
 		20,
 	)
-	repository.records["api-db"] = etcd.Versioned[etcd.AttachRecord]{Record: owner, Revision: 11, ReadRevision: 11}
+	repository.records["api-db"] = etcd.Versioned[etcd.AttachRecord]{
+		Record:       owner,
+		Revision:     11,
+		ReadRevision: 11,
+	}
 	repository.records[ownerID] = repository.records["api-db"]
+	// Rationale: Backup preparation may reveal only the exact private database
+	// and role captured by this ready Attach at the repository revision.
+	var backupIdentity etcd.BackupPostgresIdentity
+	err = service.ResolveBackupIdentity(
+		ctx,
+		repository.records[ownerID],
+		repository.facts,
+		func(identity etcd.BackupPostgresIdentity) error {
+			backupIdentity = identity
+			return nil
+		},
+	)
+	if err != nil || backupIdentity.Database != "appdb" || backupIdentity.Role != "app" {
+		t.Fatalf("ResolveBackupIdentity() = %#v, %v", backupIdentity, err)
+	}
 	repository.records["reporting-db"] = etcd.Versioned[etcd.AttachRecord]{
 		Record:       grant,
 		Revision:     12,
@@ -213,10 +238,16 @@ func (repository *attachFactTestRepository) ResolveAttach(
 ) (etcd.Versioned[etcd.AttachRecord], error) {
 	record, ok := repository.records[reference]
 	if !ok {
-		return etcd.Versioned[etcd.AttachRecord]{}, errs.New(errs.KindAttachNotFound, "Attach was not found")
+		return etcd.Versioned[etcd.AttachRecord]{}, errs.New(
+			errs.KindAttachNotFound,
+			"Attach was not found",
+		)
 	}
 	if record.Record.EnvironmentID != environmentID {
-		return etcd.Versioned[etcd.AttachRecord]{}, errs.New(errs.KindScopeUnauthorized, "Attach scope mismatch")
+		return etcd.Versioned[etcd.AttachRecord]{}, errs.New(
+			errs.KindScopeUnauthorized,
+			"Attach scope mismatch",
+		)
 	}
 	return record, nil
 }
