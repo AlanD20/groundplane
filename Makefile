@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke proto api generate console console-toolchain console-verify console-release-smoke clean test tidy ci
+.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
@@ -61,7 +61,7 @@ console-toolchain:
 	node -e 'if (require("./console/package.json").packageManager !== "npm@$(NPM_VERSION)") process.exit(1)'
 
 console: console-toolchain
-	cd console && npm ci && npm run build
+	cd console && npm ci && npm test && npm run build
 	$(MAKE) console-verify
 
 console-verify:
@@ -103,18 +103,53 @@ test:
 tidy:
 	go mod tidy
 
+backupstage-host-acceptance-compile:
+	@test "$$(go env GOOS)" = linux || { echo "backupstage host acceptance requires Linux" >&2; exit 1; }
+	go test -race -tags backupstage_mount_acceptance -run '^$$' ./internal/infra/backupstage
+
+backupstage-host-acceptance:
+	@set -eu; \
+		test "$$(go env GOOS)" = linux || { echo "backupstage host acceptance requires Linux" >&2; exit 1; }; \
+		if test "$$(id -u)" = 0; then \
+			go test -tags backupstage_mount_acceptance -count=1 -race ./internal/infra/backupstage; \
+		else \
+			sudo -n env "PATH=$$PATH" go test -tags backupstage_mount_acceptance -count=1 -race \
+				./internal/infra/backupstage; \
+	fi
+
+s3compatible-minio-acceptance-compile:
+	@test "$$(go env GOOS)" = linux || { echo "S3-compatible MinIO acceptance requires Linux" >&2; exit 1; }
+	go test -race -tags s3compatible_minio_acceptance -run '^$$' ./internal/infra/s3compatible
+
+s3compatible-minio-acceptance:
+	@set -eu; \
+		test "$$(go env GOOS)" = linux || { echo "S3-compatible MinIO acceptance requires Linux" >&2; exit 1; }; \
+		test -n "$${GROUNDPLANE_MINIO_ENDPOINT:-}" || { echo "GROUNDPLANE_MINIO_ENDPOINT is required" >&2; exit 1; }; \
+		test -n "$${GROUNDPLANE_MINIO_BUCKET:-}" || { echo "GROUNDPLANE_MINIO_BUCKET is required" >&2; exit 1; }; \
+		test -n "$${GROUNDPLANE_MINIO_ACCESS_KEY:-}" || { echo "GROUNDPLANE_MINIO_ACCESS_KEY is required" >&2; exit 1; }; \
+		test -n "$${GROUNDPLANE_MINIO_SECRET_KEY:-}" || { echo "GROUNDPLANE_MINIO_SECRET_KEY is required" >&2; exit 1; }; \
+		go test -race -count=1 -tags s3compatible_minio_acceptance \
+			-run '^TestMinIOLiveBackupObjectLifecycle$$' ./internal/infra/s3compatible
+
 # ci mirrors docs/standards.md, section 14, exactly — a task is
 # not complete until this passes locally, same as the CI pipeline. The
 # `go generate` line is commented out until proto/agentpb and an
 # OpenAPI-generated client actually exist to regenerate.
+architecture-check:
+	go test ./internal/architecturecheck -count=1
+	go run ./cmd/architecture-check -root . -baseline architecture-baseline.json
+
 ci: console | $(BIN_DIR)
 	$(MAKE) generate
 	git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
 	go mod tidy && git diff --exit-code go.mod go.sum
 	test -z "$$(gofmt -l .)"
 	test -z "$$(golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./console/)"
+	$(MAKE) architecture-check
+	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...
 	go vet -tags groundplane_console ./...
 	go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
+	$(MAKE) backupstage-host-acceptance
 	go build -tags groundplane_console -o $(BIN_DIR)/controller ./cmd/controller
 	$(MAKE) console-release-smoke
 	$(MAKE) agent-image-smoke
