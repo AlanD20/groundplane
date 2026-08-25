@@ -8,6 +8,7 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/distribution/reference v0.6.0
+	github.com/gowebpki/jcs v1.0.1
 	github.com/jedib0t/go-pretty/v6 v6.5.9
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.1
