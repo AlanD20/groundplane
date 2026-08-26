@@ -7,6 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
 	"testing"
 )
 
@@ -63,5 +67,65 @@ func TestOpenAPIEndpointServesCodeFirstDocument(t *testing.T) {
 	}
 	if !bytes.Equal(response.Body.Bytes(), want) {
 		t.Fatal("served OpenAPI differs from code-first generation bytes")
+	}
+}
+
+// Rationale: the committed document is the input to both client generators,
+// so it must be byte-identical to the deterministic live Huma API object.
+func TestCommittedOpenAPIMatchesCodeFirstDocument(t *testing.T) {
+	t.Parallel()
+	want, err := New(nil, nil, Options{}).OpenAPIDocument()
+	if err != nil {
+		t.Fatalf("OpenAPIDocument() error = %v", err)
+	}
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test source path")
+	}
+	got, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "openapi.json"))
+	if err != nil {
+		t.Fatalf("read committed OpenAPI: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("committed openapi.json has generation drift; run make api")
+	}
+}
+
+// Rationale: every human API failure has one closed five-member schema; Huma
+// extensions must not widen generated clients beyond the authoritative tuple.
+func TestOpenAPIProblemSchemaIsExact(t *testing.T) {
+	t.Parallel()
+	document, err := New(nil, nil, Options{}).OpenAPIDocument()
+	if err != nil {
+		t.Fatalf("OpenAPIDocument() error = %v", err)
+	}
+	var contract struct {
+		Components struct {
+			Schemas map[string]struct {
+				AdditionalProperties *bool                      `json:"additionalProperties"`
+				Properties           map[string]json.RawMessage `json:"properties"`
+				Required             []string                   `json:"required"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(document, &contract); err != nil {
+		t.Fatalf("decode OpenAPI: %v", err)
+	}
+	schema := contract.Components.Schemas["Error"]
+	if schema.AdditionalProperties == nil || *schema.AdditionalProperties {
+		t.Fatalf("Error.additionalProperties = %v, want false", schema.AdditionalProperties)
+	}
+	properties := make([]string, 0, len(schema.Properties))
+	for name := range schema.Properties {
+		properties = append(properties, name)
+	}
+	slices.Sort(properties)
+	wantProperties := []string{"code", "detail", "status", "title", "type"}
+	if !slices.Equal(properties, wantProperties) {
+		t.Fatalf("Error properties = %v, want %v", properties, wantProperties)
+	}
+	wantRequired := []string{"type", "title", "status", "detail", "code"}
+	if !slices.Equal(schema.Required, wantRequired) {
+		t.Fatalf("Error required = %v, want %v", schema.Required, wantRequired)
 	}
 }

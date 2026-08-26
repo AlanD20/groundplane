@@ -4,5 +4,10 @@ output: internal/cli/apiclient/generated/client.gen.go
 generate:
   client: true
   models: true
+additional-imports:
+  - alias: problemresponse
+    package: github.com/AlanD20/groundplane/internal/common/problemresponse
 output-options:
   response-type-suffix: Response
+  user-templates:
+    client-with-responses.tmpl: internal/cli/apiclient/templates/client-with-responses.tmpl

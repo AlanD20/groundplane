@@ -218,11 +218,11 @@ func (e *Error) ToProblem() Problem {
 		}
 	}
 	return Problem{
-		Type:    ProblemType,
-		Title:   title,
-		Status:  value.Status,
-		Detail:  detail,
-		Code:    value.Code,
+		Type:   ProblemType,
+		Title:  title,
+		Status: value.Status,
+		Detail: detail,
+		Code:   value.Code,
 	}
 }
 

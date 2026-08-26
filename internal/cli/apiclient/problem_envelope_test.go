@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/problemresponse"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -38,7 +39,27 @@ func TestResponseProblemRejectsInvalidEnvelope(t *testing.T) {
 		},
 		"oversized body": {
 			mediaType: "application/problem+json",
-			body:      bytes.Repeat([]byte("x"), maximumProblemResponseBytes+1),
+			body:      bytes.Repeat([]byte("x"), int(problemresponse.MaximumBytes)+1),
+		},
+		"missing member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`,"code":"storage.unavailable"`), nil, 1),
+		},
+		"null member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`"detail":"storage offline"`), []byte(`"detail":null`), 1),
+		},
+		"invalid member type": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`"status":503`), []byte(`"status":"503"`), 1),
+		},
+		"unknown member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`}`), []byte(`,"details":{}}`), 1),
+		},
+		"duplicate member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`"code":`), []byte(`"code":"future.error","code":`), 1),
 		},
 	}
 	for name, test := range tests {

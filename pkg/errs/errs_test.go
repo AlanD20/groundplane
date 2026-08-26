@@ -283,11 +283,11 @@ func TestErrorOutputsIgnoreEmbeddedProblemMutation(t *testing.T) {
 	cause := errors.New("private storage credential")
 	domainError := Wrap(KindStorageUnavailable, cause)
 	domainError.Problem = Problem{
-		Type:    "https://attacker.invalid/problem",
-		Title:   "mutated title",
-		Status:  200,
-		Detail:  "mutated public detail",
-		Code:    Code("mutated.code"),
+		Type:   "https://attacker.invalid/problem",
+		Title:  "mutated title",
+		Status: 200,
+		Detail: "mutated public detail",
+		Code:   Code("mutated.code"),
 	}
 
 	if domainError.Kind() != KindStorageUnavailable || domainError.Class() != ClassRetryable ||

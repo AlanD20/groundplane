@@ -50,6 +50,7 @@ func TestHumaResponseDoesNotLeakWrappedCause(t *testing.T) {
 	if problem.Code != errs.CodeStorageUnavailable || problem.Status != http.StatusServiceUnavailable {
 		t.Fatalf("problem tuple = %#v", problem)
 	}
+	assertExactProblemMembers(t, response.Body.Bytes())
 }
 
 // Rationale: opaque 500 diagnostics passed directly to New are as private as
@@ -77,6 +78,7 @@ func TestHumaResponseDoesNotLeakNewInternalMessage(t *testing.T) {
 	if problem.Title != "Internal Server Error" || problem.Detail != "Internal Server Error" {
 		t.Fatalf("problem = %#v", problem)
 	}
+	assertExactProblemMembers(t, response.Body.Bytes())
 }
 
 // Rationale: framework-created request errors must serialize the HTTP status
@@ -100,6 +102,7 @@ func TestHumaFrameworkErrorUsesHTTPStatusTitle(t *testing.T) {
 	if problem.Title != http.StatusText(response.Code) {
 		t.Fatalf("title = %q, want %q; problem = %#v", problem.Title, http.StatusText(response.Code), problem)
 	}
+	assertExactProblemMembers(t, response.Body.Bytes())
 }
 
 // Rationale: Huma detail errors can contain parser internals or request data;
@@ -121,6 +124,22 @@ func TestRequestProblemDoesNotLeakRawDetailErrors(t *testing.T) {
 func adversarialProblemAPI() (*http.ServeMux, huma.API) {
 	configureProblemResponses()
 	mux := http.NewServeMux()
-	api := humago.NewWithPrefix(mux, "/api/v1", huma.DefaultConfig("adversarial", "1.0.0"))
+	api := humago.NewWithPrefix(mux, "/api/v1", problemAPIConfig("adversarial", "1.0.0"))
 	return mux, api
+}
+
+func assertExactProblemMembers(t *testing.T, encoded []byte) {
+	t.Helper()
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &members); err != nil {
+		t.Fatalf("decode problem members: %v", err)
+	}
+	for _, name := range []string{"type", "title", "status", "detail", "code"} {
+		if _, exists := members[name]; !exists {
+			t.Fatalf("problem is missing %q: %s", name, encoded)
+		}
+	}
+	if len(members) != 5 {
+		t.Fatalf("problem members = %v, want exact RFC 7807 extension tuple", members)
+	}
 }

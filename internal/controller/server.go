@@ -126,11 +126,7 @@ type taskQueries interface {
 func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	configureProblemResponses()
 	mux := http.NewServeMux()
-	config := huma.DefaultConfig("Groundplane API", version.Value)
-	config.OpenAPIPath = ""
-	config.DocsPath = ""
-	config.SchemasPath = ""
-	config.RejectUnknownQueryParameters = true
+	config := problemAPIConfig("Groundplane API", version.Value)
 
 	s := &Server{
 		Store:                 store,

@@ -27,12 +27,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/problemresponse"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const idempotencyKeyHeader = "Idempotency-Key"
-
-const maximumProblemResponseBytes = 1 << 20
 
 var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
 
@@ -373,22 +372,13 @@ func splitEventStreamLines(data []byte, atEOF bool) (advance int, token []byte, 
 }
 
 func responseProblem(method, path string, resp *http.Response) error {
-	mediaType, _, mediaTypeErr := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if mediaTypeErr != nil || mediaType != "application/problem+json" {
-		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
-	}
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maximumProblemResponseBytes+1))
-	if readErr != nil || len(body) > maximumProblemResponseBytes {
-		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
+	body, err := problemresponse.Read(resp)
+	if err != nil {
+		return err
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	var problem errs.Problem
-	if err := decoder.Decode(&problem); err != nil || problem.Status != resp.StatusCode {
-		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
+	problem, ok := problemresponse.Decode(body)
+	if !ok || problem.Status != resp.StatusCode {
 		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
 	}
 	domainError, ok := errs.FromProblem(problem)
