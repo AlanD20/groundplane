@@ -12,23 +12,17 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
+	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
-type EnvironmentReader interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	ListEnvironments(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.EnvironmentRecord], error)
-}
-
 type EnvironmentMutator interface {
 	CreateEnvironment(
 		context.Context,
-		hierarchy.CreateEnvironmentInput,
+		environmentcapability.CreateEnvironmentInput,
 		string,
 	) (etcd.IdempotencyResponse, error)
 }
@@ -58,6 +52,11 @@ type environmentEditInput struct {
 	ID             string `path:"id"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	Body           apiTypes.EnvironmentEdit
+}
+
+type environmentDeleteInput struct {
+	ID  string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Key string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type environmentOutput struct {
@@ -128,7 +127,6 @@ func (s *Server) registerEnvironments() {
 		s.renameEnvironment,
 		"EnvironmentRename",
 	)
-
 	for _, pattern := range []string{
 		"POST /api/v1/environments",
 		"POST /api/v1/environments/{id}/rename",
@@ -223,9 +221,9 @@ func (s *Server) createEnvironment(
 	return s.environmentMutationResponse(response, "create"), nil
 }
 
-func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, error) {
+func decodeEnvironmentCreate(body []byte) (environmentcapability.CreateEnvironmentInput, error) {
 	if !utf8.Valid(body) {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(
+		return environmentcapability.CreateEnvironmentInput{}, errs.New(
 			errs.KindMalformedRequest,
 			"Environment creation body is not valid UTF-8",
 		)
@@ -233,37 +231,37 @@ func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, err
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	opening, err := decoder.Token()
 	if err != nil {
-		return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
+		return environmentcapability.CreateEnvironmentInput{}, projectCreateJSONError(err)
 	}
 	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(
+		return environmentcapability.CreateEnvironmentInput{}, errs.New(
 			errs.KindMalformedRequest,
 			"Environment creation body must be an object",
 		)
 	}
-	input := hierarchy.CreateEnvironmentInput{}
+	input := environmentcapability.CreateEnvironmentInput{}
 	seen := make(map[string]struct{}, 3)
 	for decoder.More() {
 		token, err := decoder.Token()
 		if err != nil {
-			return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
+			return environmentcapability.CreateEnvironmentInput{}, projectCreateJSONError(err)
 		}
 		member, ok := token.(string)
 		if !ok {
-			return hierarchy.CreateEnvironmentInput{}, errs.New(
+			return environmentcapability.CreateEnvironmentInput{}, errs.New(
 				errs.KindMalformedRequest,
 				"Environment creation member name is invalid",
 			)
 		}
 		if _, duplicate := seen[member]; duplicate {
-			return hierarchy.CreateEnvironmentInput{}, errs.New(
+			return environmentcapability.CreateEnvironmentInput{}, errs.New(
 				errs.KindMalformedRequest,
 				"Environment creation body contains a duplicate member",
 			)
 		}
 		seen[member] = struct{}{}
 		if member != "project_id" && member != "name" && member != "network_pool" {
-			return hierarchy.CreateEnvironmentInput{}, errs.New(
+			return environmentcapability.CreateEnvironmentInput{}, errs.New(
 				errs.KindMalformedRequest,
 				"Environment creation body contains an unknown member",
 			)
@@ -272,12 +270,12 @@ func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, err
 		if err := decoder.Decode(&value); err != nil {
 			var typeError *json.UnmarshalTypeError
 			if errors.As(err, &typeError) {
-				return hierarchy.CreateEnvironmentInput{}, errs.New(
+				return environmentcapability.CreateEnvironmentInput{}, errs.New(
 					errs.KindValidationFailed,
 					"Environment creation members must be strings",
 				)
 			}
-			return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
+			return environmentcapability.CreateEnvironmentInput{}, projectCreateJSONError(err)
 		}
 		if member == "project_id" {
 			input.ProjectID = value
@@ -289,10 +287,10 @@ func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, err
 	}
 	closing, err := decoder.Token()
 	if err != nil {
-		return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
+		return environmentcapability.CreateEnvironmentInput{}, projectCreateJSONError(err)
 	}
 	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
-		return hierarchy.CreateEnvironmentInput{}, errs.New(
+		return environmentcapability.CreateEnvironmentInput{}, errs.New(
 			errs.KindMalformedRequest,
 			"Environment creation body is malformed",
 		)
@@ -301,10 +299,10 @@ func decodeEnvironmentCreate(body []byte) (hierarchy.CreateEnvironmentInput, err
 		if err == nil {
 			err = errors.New("trailing JSON value")
 		}
-		return hierarchy.CreateEnvironmentInput{}, projectCreateJSONError(err)
+		return environmentcapability.CreateEnvironmentInput{}, projectCreateJSONError(err)
 	}
-	if err := hierarchy.ValidateEnvironmentCreateInput(input); err != nil {
-		return hierarchy.CreateEnvironmentInput{}, err
+	if err := environmentcapability.ValidateEnvironmentCreateInput(input); err != nil {
+		return environmentcapability.CreateEnvironmentInput{}, err
 	}
 	return input, nil
 }
@@ -313,14 +311,11 @@ func (s *Server) listEnvironments(
 	ctx context.Context,
 	request *environmentListInput,
 ) (*environmentPageOutput, error) {
-	if s.environments == nil {
-		return nil, errs.New(errs.KindInternal, "Environment reader is not configured")
-	}
-	pageRequest, err := environmentListRequest(request.Project, request.Limit, request.Cursor)
-	if err != nil {
-		return nil, normalizeProjectError(err)
-	}
-	page, err := s.environments.ListEnvironments(ctx, request.Project, pageRequest)
+	page, err := s.environments.List(ctx, environmentcapability.ListInput{
+		ProjectID: request.Project,
+		Limit:     request.Limit,
+		Cursor:    request.Cursor,
+	})
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -328,7 +323,7 @@ func (s *Server) listEnvironments(
 		Items: make([]apiTypes.Environment, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
-		response.Items[index] = environmentResponse(item.Record)
+		response.Items[index] = environmentReadResponse(item)
 	}
 	return &environmentPageOutput{Body: response}, nil
 }
@@ -337,43 +332,26 @@ func (s *Server) showEnvironment(
 	ctx context.Context,
 	request *environmentShowInput,
 ) (*environmentOutput, error) {
-	if s.environments == nil {
-		return nil, errs.New(errs.KindInternal, "Environment reader is not configured")
-	}
-	stored, err := s.environments.GetEnvironment(ctx, request.ID)
+	result, err := s.environments.Get(ctx, environmentcapability.GetInput{ID: request.ID})
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &environmentOutput{Body: environmentResponse(stored.Record)}, nil
+	return &environmentOutput{Body: environmentReadResponse(result)}, nil
 }
 
-func environmentListRequest(projectID string, limit int, cursor string) (etcd.PageRequest, error) {
-	if err := ids.Validate(ids.KindProject, projectID); err != nil {
-		return etcd.PageRequest{}, errs.New(
-			errs.KindValidationFailed,
-			"Environment list requires a stable project id",
-		)
-	}
-	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(
-			errs.KindValidationFailed,
-			"Environment list limit must be a positive integer",
-		)
-	}
-	return etcd.PageRequest{Cursor: cursor, Limit: limit}, nil
-}
-
-func environmentResponse(record etcd.EnvironmentRecord) apiTypes.Environment {
-	var createTaskID *string
-	if record.ProvisioningState != etcd.EnvironmentProvisioningReady {
-		value := record.CreateTaskID
-		createTaskID = &value
-	}
+func environmentReadResponse(result environmentcapability.Environment) apiTypes.Environment {
 	return apiTypes.Environment{
-		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name,
-		NetworkPool: record.NetworkPool, VolumeDir: record.VolumeDir,
-		ProvisioningState: apiTypes.EnvironmentProvisioningState(record.ProvisioningState),
-		CreateTaskID:      createTaskID,
+		ID: result.ID, ProjectID: result.ProjectID, Name: result.Name,
+		NetworkPool: result.NetworkPool, VolumeDir: result.VolumeDir,
+		ProvisioningState: apiTypes.EnvironmentProvisioningState(result.ProvisioningState),
+		CreateTaskID:      result.CreateTaskID,
+		DeletionTaskID:    result.DeletionTaskID,
+		NetworkCapacity: apiTypes.EnvironmentNetworkCapacity{
+			TotalAddresses:     result.NetworkCapacity.TotalAddresses,
+			AllocatedAddresses: result.NetworkCapacity.AllocatedAddresses,
+			AvailableAddresses: result.NetworkCapacity.AvailableAddresses,
+			ZoneCount:          result.NetworkCapacity.ZoneCount,
+		},
 	}
 }
 

@@ -486,6 +486,7 @@ func (s *Server) showTenant(ctx context.Context, request *tenantShowInput) (*ten
 func tenantAPI(record core.Tenant) apiTypes.Tenant {
 	return apiTypes.Tenant{
 		ID: record.ID, Slug: record.Slug, Name: record.Name, Description: record.Description,
+		DeletionTaskID: record.DeletionTaskID,
 	}
 }
 

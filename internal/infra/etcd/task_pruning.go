@@ -175,6 +175,15 @@ func (repository *TaskRepository) beginTaskPrune(
 		!task.RetainUntil.Equal(retainUntil) {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
+	stop, err := repository.prepareHierarchyDeletionTaskPruneBoundary(
+		ctx, task, taskValue.ModRevision, retentionEntry, page.ReadRevision, now,
+	)
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, false, err
+	}
+	if stop {
+		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+	}
 	markerKey, err := idempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
@@ -832,13 +841,4 @@ func (repository *TaskRepository) verifyTaskPrunePrefixEmpty(
 		return corruptTaskPruneIntent()
 	}
 	return nil
-}
-
-func taskPruneConflict(err error) bool {
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStateConflict
-}
-
-func corruptTaskPruneIntent() error {
-	return errs.New(errs.KindInternal, "task prune state is corrupt")
 }

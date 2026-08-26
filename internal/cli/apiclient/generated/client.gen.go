@@ -622,14 +622,16 @@ type Environment struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Environment.json
-	Schema            *string `json:"$schema,omitempty"`
-	CreateTaskId      *string `json:"create_task_id"`
-	Id                string  `json:"id"`
-	Name              string  `json:"name"`
-	NetworkPool       string  `json:"network_pool"`
-	ProjectId         string  `json:"project_id"`
-	ProvisioningState string  `json:"provisioning_state"`
-	VolumeDir         string  `json:"volume_dir"`
+	Schema            *string                    `json:"$schema,omitempty"`
+	CreateTaskId      *string                    `json:"create_task_id"`
+	DeletionTaskId    *string                    `json:"deletion_task_id"`
+	Id                string                     `json:"id"`
+	Name              string                     `json:"name"`
+	NetworkCapacity   EnvironmentNetworkCapacity `json:"network_capacity"`
+	NetworkPool       string                     `json:"network_pool"`
+	ProjectId         string                     `json:"project_id"`
+	ProvisioningState string                     `json:"provisioning_state"`
+	VolumeDir         string                     `json:"volume_dir"`
 }
 
 // EnvironmentCreate defines model for EnvironmentCreate.
@@ -650,6 +652,14 @@ type EnvironmentEdit struct {
 	// Examples: /api/v1/EnvironmentEdit.json
 	Schema      *string `json:"$schema,omitempty"`
 	NetworkPool string  `json:"network_pool"`
+}
+
+// EnvironmentNetworkCapacity defines model for EnvironmentNetworkCapacity.
+type EnvironmentNetworkCapacity struct {
+	AllocatedAddresses int64 `json:"allocated_addresses"`
+	AvailableAddresses int64 `json:"available_addresses"`
+	TotalAddresses     int64 `json:"total_addresses"`
+	ZoneCount          int64 `json:"zone_count"`
 }
 
 // EnvironmentPage defines model for EnvironmentPage.
@@ -678,6 +688,15 @@ type Error struct {
 	Status int64  `json:"status"`
 	Title  string `json:"title"`
 	Type   string `json:"type"`
+}
+
+// HierarchyDeleteOutputBody defines model for HierarchyDeleteOutputBody.
+type HierarchyDeleteOutputBody struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/HierarchyDeleteOutputBody.json
+	Schema *string `json:"$schema,omitempty"`
+	TaskId string  `json:"task_id"`
 }
 
 // Host defines model for Host.
@@ -901,13 +920,14 @@ type Project struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Project.json
-	Schema      *string `json:"$schema,omitempty"`
-	Description string  `json:"description"`
-	Id          string  `json:"id"`
-	Kind        string  `json:"kind"`
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
-	TenantId    *string `json:"tenant_id,omitempty"`
+	Schema         *string `json:"$schema,omitempty"`
+	DeletionTaskId *string `json:"deletion_task_id"`
+	Description    string  `json:"description"`
+	Id             string  `json:"id"`
+	Kind           string  `json:"kind"`
+	Name           string  `json:"name"`
+	Slug           string  `json:"slug"`
+	TenantId       *string `json:"tenant_id,omitempty"`
 }
 
 // ProjectCreate defines model for ProjectCreate.
@@ -1411,11 +1431,12 @@ type Tenant struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Tenant.json
-	Schema      *string `json:"$schema,omitempty"`
-	Description string  `json:"description"`
-	Id          string  `json:"id"`
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
+	Schema         *string `json:"$schema,omitempty"`
+	DeletionTaskId *string `json:"deletion_task_id"`
+	Description    string  `json:"description"`
+	Id             string  `json:"id"`
+	Name           string  `json:"name"`
+	Slug           string  `json:"slug"`
 }
 
 // TenantCreate defines model for TenantCreate.
@@ -1654,6 +1675,11 @@ type EnvironmentCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// EnvironmentDeleteParams defines parameters for EnvironmentDelete.
+type EnvironmentDeleteParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentEditParams defines parameters for EnvironmentEdit.
 type EnvironmentEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -1687,6 +1713,11 @@ type ProjectListParams struct {
 
 // ProjectCreateParams defines parameters for ProjectCreate.
 type ProjectCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ProjectDeleteParams defines parameters for ProjectDelete.
+type ProjectDeleteParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -1876,6 +1907,11 @@ type TenantListParams struct {
 
 // TenantCreateParams defines parameters for TenantCreate.
 type TenantCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// TenantDeleteParams defines parameters for TenantDelete.
+type TenantDeleteParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -2386,6 +2422,11 @@ type ClientInterface interface {
 	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
 	EnvironmentCreate(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// EnvironmentDelete Delete a Environment
+	//
+	// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+	EnvironmentDelete(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// EnvironmentShow Show an environment
 	//
 	// Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
@@ -2468,6 +2509,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /projects (the `ProjectCreate` operationId).
 	ProjectCreate(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProjectDelete Delete a Project
+	//
+	// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+	ProjectDelete(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ProjectShow Show a project
 	//
@@ -2820,6 +2866,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /tenants (the `TenantCreate` operationId).
 	TenantCreate(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TenantDelete Delete a Tenant
+	//
+	// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+	TenantDelete(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TenantShow Show a tenant
 	//
@@ -3432,6 +3483,21 @@ func (c *Client) EnvironmentCreate(ctx context.Context, params *EnvironmentCreat
 	return c.Client.Do(req)
 }
 
+// EnvironmentDelete Delete a Environment
+//
+// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+func (c *Client) EnvironmentDelete(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentDeleteRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // EnvironmentShow Show an environment
 //
 // Corresponds with GET /environments/{id} (the `EnvironmentShow` operationId).
@@ -3635,6 +3701,21 @@ func (c *Client) ProjectCreateWithBody(ctx context.Context, params *ProjectCreat
 // Corresponds with POST /projects (the `ProjectCreate` operationId).
 func (c *Client) ProjectCreate(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewProjectCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProjectDelete Delete a Project
+//
+// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+func (c *Client) ProjectDelete(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProjectDeleteRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4567,6 +4648,21 @@ func (c *Client) TenantCreateWithBody(ctx context.Context, params *TenantCreateP
 // Corresponds with POST /tenants (the `TenantCreate` operationId).
 func (c *Client) TenantCreate(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTenantCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TenantDelete Delete a Tenant
+//
+// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+func (c *Client) TenantDelete(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTenantDeleteRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6249,6 +6345,53 @@ func NewEnvironmentCreateRequestWithBody(server string, params *EnvironmentCreat
 	return req, nil
 }
 
+// NewEnvironmentDeleteRequest constructs an http.Request for the EnvironmentDelete method
+func NewEnvironmentDeleteRequest(server string, id string, params *EnvironmentDeleteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewEnvironmentShowRequest constructs an http.Request for the EnvironmentShow method
 func NewEnvironmentShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -6699,6 +6842,53 @@ func NewProjectCreateRequestWithBody(server string, params *ProjectCreateParams,
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewProjectDeleteRequest constructs an http.Request for the ProjectDelete method
+func NewProjectDeleteRequest(server string, id string, params *ProjectDeleteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/projects/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -9027,6 +9217,53 @@ func NewTenantCreateRequestWithBody(server string, params *TenantCreateParams, c
 	return req, nil
 }
 
+// NewTenantDeleteRequest constructs an http.Request for the TenantDelete method
+func NewTenantDeleteRequest(server string, id string, params *TenantDeleteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewTenantShowRequest constructs an http.Request for the TenantShow method
 func NewTenantShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -9806,6 +10043,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /environments (the `EnvironmentCreate` operationId).
 	EnvironmentCreateWithResponse(ctx context.Context, params *EnvironmentCreateParams, body EnvironmentCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentCreateResponse, error)
 
+	// EnvironmentDeleteWithResponse Delete a Environment
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+	EnvironmentDeleteWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error)
+
 	// EnvironmentShowWithResponse Show an environment
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -9896,6 +10140,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /projects (the `ProjectCreate` operationId).
 	ProjectCreateWithResponse(ctx context.Context, params *ProjectCreateParams, body ProjectCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectCreateResponse, error)
+
+	// ProjectDeleteWithResponse Delete a Project
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+	ProjectDeleteWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error)
 
 	// ProjectShowWithResponse Show a project
 	//
@@ -10304,6 +10555,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /tenants (the `TenantCreate` operationId).
 	TenantCreateWithResponse(ctx context.Context, params *TenantCreateParams, body TenantCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*TenantCreateResponse, error)
+
+	// TenantDeleteWithResponse Delete a Tenant
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+	TenantDeleteWithResponse(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error)
 
 	// TenantShowWithResponse Show a tenant
 	//
@@ -11770,6 +12028,54 @@ func (r EnvironmentCreateResponse) ContentType() string {
 	return ""
 }
 
+type EnvironmentDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *HierarchyDeleteOutputBody
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EnvironmentDeleteResponse) GetJSON202() *HierarchyDeleteOutputBody {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentDeleteResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentDeleteResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentDeleteResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type EnvironmentShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -12231,6 +12537,54 @@ func (r ProjectCreateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ProjectCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ProjectDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *HierarchyDeleteOutputBody
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ProjectDeleteResponse) GetJSON202() *HierarchyDeleteOutputBody {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ProjectDeleteResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ProjectDeleteResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ProjectDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ProjectDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ProjectDeleteResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -14469,6 +14823,54 @@ func (r TenantCreateResponse) ContentType() string {
 	return ""
 }
 
+type TenantDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *HierarchyDeleteOutputBody
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r TenantDeleteResponse) GetJSON202() *HierarchyDeleteOutputBody {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TenantDeleteResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TenantDeleteResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TenantDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TenantDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TenantDeleteResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type TenantShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15371,6 +15773,19 @@ func (c *ClientWithResponses) EnvironmentCreateWithResponse(ctx context.Context,
 	return ParseEnvironmentCreateResponse(rsp)
 }
 
+// EnvironmentDeleteWithResponse Delete a Environment
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /environments/{id} (the `EnvironmentDelete` operationId).
+func (c *ClientWithResponses) EnvironmentDeleteWithResponse(ctx context.Context, id string, params *EnvironmentDeleteParams, reqEditors ...RequestEditorFn) (*EnvironmentDeleteResponse, error) {
+	rsp, err := c.EnvironmentDelete(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentDeleteResponse(rsp)
+}
+
 // EnvironmentShowWithResponse Show an environment
 //
 // Returns a wrapper object for the known response body format(s).
@@ -15538,6 +15953,19 @@ func (c *ClientWithResponses) ProjectCreateWithResponse(ctx context.Context, par
 		return nil, err
 	}
 	return ParseProjectCreateResponse(rsp)
+}
+
+// ProjectDeleteWithResponse Delete a Project
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /projects/{id} (the `ProjectDelete` operationId).
+func (c *ClientWithResponses) ProjectDeleteWithResponse(ctx context.Context, id string, params *ProjectDeleteParams, reqEditors ...RequestEditorFn) (*ProjectDeleteResponse, error) {
+	rsp, err := c.ProjectDelete(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProjectDeleteResponse(rsp)
 }
 
 // ProjectShowWithResponse Show a project
@@ -16294,6 +16722,19 @@ func (c *ClientWithResponses) TenantCreateWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseTenantCreateResponse(rsp)
+}
+
+// TenantDeleteWithResponse Delete a Tenant
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /tenants/{id} (the `TenantDelete` operationId).
+func (c *ClientWithResponses) TenantDeleteWithResponse(ctx context.Context, id string, params *TenantDeleteParams, reqEditors ...RequestEditorFn) (*TenantDeleteResponse, error) {
+	rsp, err := c.TenantDelete(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTenantDeleteResponse(rsp)
 }
 
 // TenantShowWithResponse Show a tenant
@@ -17499,6 +17940,39 @@ func ParseEnvironmentCreateResponse(rsp *http.Response) (*EnvironmentCreateRespo
 	return response, nil
 }
 
+// ParseEnvironmentDeleteResponse parses an HTTP response from a EnvironmentDeleteWithResponse call
+func ParseEnvironmentDeleteResponse(rsp *http.Response) (*EnvironmentDeleteResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest HierarchyDeleteOutputBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseEnvironmentShowResponse parses an HTTP response from a EnvironmentShowWithResponse call
 func ParseEnvironmentShowResponse(rsp *http.Response) (*EnvironmentShowResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -17856,6 +18330,39 @@ func ParseProjectCreateResponse(rsp *http.Response) (*ProjectCreateResponse, err
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseProjectDeleteResponse parses an HTTP response from a ProjectDeleteWithResponse call
+func ParseProjectDeleteResponse(rsp *http.Response) (*ProjectDeleteResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ProjectDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest HierarchyDeleteOutputBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -19593,6 +20100,39 @@ func ParseTenantCreateResponse(rsp *http.Response) (*TenantCreateResponse, error
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseTenantDeleteResponse parses an HTTP response from a TenantDeleteWithResponse call
+func ParseTenantDeleteResponse(rsp *http.Response) (*TenantDeleteResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TenantDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest HierarchyDeleteOutputBody
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

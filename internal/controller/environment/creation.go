@@ -1,4 +1,4 @@
-package app
+package environment
 
 import (
 	"context"
@@ -9,11 +9,12 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -48,7 +49,7 @@ type environmentCreationEvidence struct {
 }
 
 type environmentCreationIdempotency interface {
-	Prepare(context.Context, hierarchy.CreateEnvironmentInput) (environmentCreationEvidence, error)
+	Prepare(context.Context, CreateEnvironmentInput) (environmentCreationEvidence, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
@@ -72,7 +73,7 @@ type durableEnvironmentCreationIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableEnvironmentCreationIdempotency(
+func NewDurableCreationIdempotency(
 	coordinator *idempotentintent.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEnvironmentCreationIdempotency, error) {
@@ -84,7 +85,7 @@ func newDurableEnvironmentCreationIdempotency(
 
 func (service *durableEnvironmentCreationIdempotency) Prepare(
 	ctx context.Context,
-	input hierarchy.CreateEnvironmentInput,
+	input CreateEnvironmentInput,
 ) (environmentCreationEvidence, error) {
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: http.MethodPost, Route: environmentCreationRoute,
@@ -144,7 +145,7 @@ type environmentCreationService struct {
 	now             func() time.Time
 }
 
-func newEnvironmentCreationService(
+func NewCreationService(
 	volumeRoot string,
 	environmentPool string,
 	repository environmentCreationRepository,
@@ -153,7 +154,7 @@ func newEnvironmentCreationService(
 	if repository == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Environment creation service is not configured")
 	}
-	if _, err := controllerpkg.NewTaskPlanResolver(volumeRoot); err != nil {
+	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
 		return nil, err
 	}
 	root, err := ipam.ParseIPv4Prefix(environmentPool)
@@ -168,7 +169,7 @@ func newEnvironmentCreationService(
 
 func (service *environmentCreationService) CreateEnvironment(
 	ctx context.Context,
-	input hierarchy.CreateEnvironmentInput,
+	input CreateEnvironmentInput,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
@@ -189,10 +190,10 @@ func (service *environmentCreationService) CreateEnvironment(
 
 func (service *environmentCreationService) createEnvironmentOnce(
 	ctx context.Context,
-	input hierarchy.CreateEnvironmentInput,
+	input CreateEnvironmentInput,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	if err := hierarchy.ValidateEnvironmentCreateInput(input); err != nil {
+	if err := ValidateEnvironmentCreateInput(input); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	evidence, err := service.idempotency.Prepare(ctx, input)
@@ -346,10 +347,10 @@ func newEnvironmentCreationTask(
 	}
 	planID := ids.New(ids.KindPlan)
 	stepID := ids.New(ids.KindStep)
-	plan, err := controllerpkg.BuildPlan(controllerpkg.PlanBuildInput{
-		VolumeRoot: volumeRoot, PlanID: planID, RenderGeneration: 1,
+	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
+		Schema: 1, PlanId: planID, RenderGeneration: 1,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
-		TargetID:  environment.ID,
+		TargetId:  environment.ID,
 		Steps: []*agentpb.ExecutionStep{{
 			StepId: stepID, TimeoutSeconds: uint32(environmentCreationTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
@@ -362,6 +363,9 @@ func newEnvironmentCreationTask(
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
+	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
+		return etcd.TaskRecord{}, err
+	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation),
 		Owner: owner, Actor: etcd.TaskActorOperator,
@@ -369,7 +373,7 @@ func newEnvironmentCreationTask(
 		PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash), RenderGeneration: 1,
 		Type: etcd.TaskCreate, Target: environment.ID,
 		Params: map[string]string{
-			controllerpkg.EnvironmentCreateVolumeDirectoryParam: environment.VolumeDir,
+			taskcontract.EnvironmentCreateVolumeDirectoryParam: environment.VolumeDir,
 		},
 		Steps:          []etcd.TaskStepRecord{{ID: stepID}},
 		TimeoutSeconds: environmentCreationTimeoutSeconds,

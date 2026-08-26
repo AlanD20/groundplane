@@ -155,6 +155,32 @@ func (c *Client) EditEnvironment(
 	return generatedEnvironmentBody(http.MethodPatch, path, response.Body, response.JSON200)
 }
 
+func (c *Client) DeleteEnvironment(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/environments/" + id
+	params := &generated.EnvironmentDeleteParams{IdempotencyKey: ids.NewULID()}
+	response, err := client.EnvironmentDeleteWithResponse(ctx, id, params)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	parsed := response.JSON202
+	if parsed == nil {
+		parsed = &generated.HierarchyDeleteOutputBody{}
+		if err := decodeSingleJSON(http.MethodDelete, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.TaskAccepted{}, err
+		}
+	}
+	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
+}
+
 func (c *Client) ApplyEnvironmentBlueprint(
 	ctx context.Context,
 	id string,
@@ -193,12 +219,23 @@ func environmentFromGenerated(environment generated.Environment) apiTypes.Enviro
 	if environment.CreateTaskId != nil {
 		createTaskID = environment.CreateTaskId
 	}
+	var deletionTaskID *string
+	if environment.DeletionTaskId != nil {
+		deletionTaskID = environment.DeletionTaskId
+	}
 	return apiTypes.Environment{
 		ID: environment.Id, ProjectID: environment.ProjectId, Name: environment.Name,
 		NetworkPool:       environment.NetworkPool,
 		VolumeDir:         environment.VolumeDir,
 		ProvisioningState: apiTypes.EnvironmentProvisioningState(environment.ProvisioningState),
 		CreateTaskID:      createTaskID,
+		DeletionTaskID:    deletionTaskID,
+		NetworkCapacity: apiTypes.EnvironmentNetworkCapacity{
+			TotalAddresses:     environment.NetworkCapacity.TotalAddresses,
+			AllocatedAddresses: environment.NetworkCapacity.AllocatedAddresses,
+			AvailableAddresses: environment.NetworkCapacity.AvailableAddresses,
+			ZoneCount:          environment.NetworkCapacity.ZoneCount,
+		},
 	}
 }
 

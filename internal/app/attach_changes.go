@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -134,7 +135,7 @@ func (service *attachMutationService) renameAttachOnce(
 		ctx, environment, project, current, request.Name, marker,
 	)
 	if mutationErr != nil {
-		if !isUnknownEnvironmentChangeOutcome(mutationErr) {
+		if !isUnknownAttachChangeOutcome(mutationErr) {
 			return etcd.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
@@ -196,4 +197,12 @@ func attachAPIFactSets(factSets []etcd.AttachFactSetMetadata) []apiTypes.AttachF
 		response[setIndex] = apiTypes.AttachFactSet{GrantAttachID: set.GrantAttachID, Facts: facts}
 	}
 	return response
+}
+
+func isUnknownAttachChangeOutcome(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
 }

@@ -1,4 +1,4 @@
-package app
+package environment
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ipam"
-	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -24,19 +23,16 @@ const (
 
 type environmentChangeRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	MutateEnvironmentIdempotent(
-		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.EnvironmentRecord,
-		etcd.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-	ReplaceEnvironmentPoolIdempotent(
-		context.Context,
-		netip.Prefix,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.EnvironmentRecord,
-		etcd.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+	MutateEnvironmentIdempotent(context.Context, etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	ReplaceEnvironmentPoolIdempotent(context.Context, netip.Prefix, etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+}
+
+// environmentCapacityRepository supplies the fixed revision used to seal a
+// mutation response into protected idempotency evidence.
+type environmentCapacityRepository interface {
+	ListZoneSubnetReservationsAtRevision(context.Context, string, int64) ([]string, error)
 }
 
 type environmentChangeEvidence struct {
@@ -45,24 +41,14 @@ type environmentChangeEvidence struct {
 }
 
 type environmentChangeIdempotency interface {
-	PrepareEdit(context.Context, string, hierarchy.EditEnvironmentInput) (environmentChangeEvidence, error)
-	PrepareRename(context.Context, string, hierarchy.RenameEnvironmentInput) (environmentChangeEvidence, error)
-	ResolveExisting(
-		context.Context,
-		etcd.IdempotencyLocator,
-		environmentChangeEvidence,
-	) (idempotentintent.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		environmentChangeEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		etcd.IdempotencyLocator,
-		environmentChangeEvidence,
-		error,
-	) (idempotentintent.Resolution, error)
+	PrepareEdit(context.Context, string, EditEnvironmentInput) (environmentChangeEvidence, error)
+	PrepareRename(context.Context, string, RenameEnvironmentInput) (environmentChangeEvidence, error)
+	ResolveExisting(context.Context, etcd.IdempotencyLocator,
+		environmentChangeEvidence) (idempotentintent.Resolution, bool, error)
+	ResolveKnown(context.Context, environmentChangeEvidence,
+		etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
+	ResolveUnknown(context.Context, etcd.IdempotencyLocator,
+		environmentChangeEvidence, error) (idempotentintent.Resolution, error)
 }
 
 type durableEnvironmentChangeIdempotency struct {
@@ -70,7 +56,7 @@ type durableEnvironmentChangeIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableEnvironmentChangeIdempotency(
+func NewDurableChangeIdempotency(
 	coordinator *idempotentintent.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEnvironmentChangeIdempotency, error) {
@@ -83,7 +69,7 @@ func newDurableEnvironmentChangeIdempotency(
 func (service *durableEnvironmentChangeIdempotency) PrepareEdit(
 	ctx context.Context,
 	id string,
-	input hierarchy.EditEnvironmentInput,
+	input EditEnvironmentInput,
 ) (environmentChangeEvidence, error) {
 	return service.prepare(ctx, http.MethodPatch, environmentEditRoute, id, idempotentintent.Object(
 		idempotentintent.Field{Name: "network_pool", Value: idempotentintent.String(input.NetworkPool)},
@@ -93,7 +79,7 @@ func (service *durableEnvironmentChangeIdempotency) PrepareEdit(
 func (service *durableEnvironmentChangeIdempotency) PrepareRename(
 	ctx context.Context,
 	id string,
-	input hierarchy.RenameEnvironmentInput,
+	input RenameEnvironmentInput,
 ) (environmentChangeEvidence, error) {
 	return service.prepare(ctx, http.MethodPost, environmentRenameRoute, id, idempotentintent.Object(
 		idempotentintent.Field{Name: "name", Value: idempotentintent.String(input.Name)},
@@ -155,17 +141,19 @@ func (service *durableEnvironmentChangeIdempotency) ResolveUnknown(
 
 type environmentChangeService struct {
 	repository      environmentChangeRepository
+	capacity        environmentCapacityRepository
 	idempotency     environmentChangeIdempotency
 	environmentPool netip.Prefix
 	now             func() time.Time
 }
 
-func newEnvironmentChangeService(
+func NewChangeService(
 	environmentPool string,
 	repository environmentChangeRepository,
+	capacity environmentCapacityRepository,
 	idempotency environmentChangeIdempotency,
 ) (*environmentChangeService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || capacity == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Environment change service is not configured")
 	}
 	root, err := ipam.ParseIPv4Prefix(environmentPool)
@@ -173,17 +161,17 @@ func newEnvironmentChangeService(
 		return nil, errs.New(errs.KindInternal, "Environment change pool root is invalid")
 	}
 	return &environmentChangeService{
-		repository: repository, idempotency: idempotency, environmentPool: root, now: time.Now,
+		repository: repository, capacity: capacity, idempotency: idempotency, environmentPool: root, now: time.Now,
 	}, nil
 }
 
 func (service *environmentChangeService) EditEnvironment(
 	ctx context.Context,
 	id string,
-	input hierarchy.EditEnvironmentInput,
+	input EditEnvironmentInput,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	if err := hierarchy.ValidateEnvironmentEditInput(input); err != nil {
+	if err := ValidateEnvironmentEditInput(input); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	return service.changeEnvironment(
@@ -192,7 +180,7 @@ func (service *environmentChangeService) EditEnvironment(
 			return service.idempotency.PrepareEdit(ctx, id, input)
 		},
 		func(current etcd.EnvironmentRecord) (etcd.EnvironmentRecord, error) {
-			networkPool, err := hierarchy.PrepareEnvironmentEdit(current.NetworkPool, input)
+			networkPool, err := PrepareEnvironmentEdit(current.NetworkPool, input)
 			if err != nil {
 				return etcd.EnvironmentRecord{}, err
 			}
@@ -216,10 +204,10 @@ func (service *environmentChangeService) EditEnvironment(
 func (service *environmentChangeService) RenameEnvironment(
 	ctx context.Context,
 	id string,
-	input hierarchy.RenameEnvironmentInput,
+	input RenameEnvironmentInput,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	if err := hierarchy.ValidateEnvironmentRenameInput(input); err != nil {
+	if err := ValidateEnvironmentRenameInput(input); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	return service.changeEnvironment(
@@ -228,7 +216,7 @@ func (service *environmentChangeService) RenameEnvironment(
 			return service.idempotency.PrepareRename(ctx, id, input)
 		},
 		func(current etcd.EnvironmentRecord) (etcd.EnvironmentRecord, error) {
-			name, err := hierarchy.PrepareEnvironmentRename(current.Name, input)
+			name, err := PrepareEnvironmentRename(current.Name, input)
 			if err != nil {
 				return etcd.EnvironmentRecord{}, err
 			}
@@ -314,7 +302,15 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	responseBody, err := json.Marshal(environmentAPI(replacement))
+	subnets, err := service.capacity.ListZoneSubnetReservationsAtRevision(ctx, id, current.ReadRevision)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	capacity, err := ProjectNetworkCapacity(replacement.NetworkPool, subnets)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	responseBody, err := json.Marshal(environmentAPI(replacement, capacity))
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -355,9 +351,12 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 	}
 }
 
-func environmentAPI(record etcd.EnvironmentRecord) apiTypes.Environment {
+func environmentAPI(
+	record etcd.EnvironmentRecord,
+	capacity NetworkCapacity,
+) apiTypes.Environment {
 	var createTaskID *string
-	if record.CreateTaskID != "" {
+	if record.ProvisioningState != etcd.EnvironmentProvisioningReady && record.CreateTaskID != "" {
 		value := record.CreateTaskID
 		createTaskID = &value
 	}
@@ -366,6 +365,12 @@ func environmentAPI(record etcd.EnvironmentRecord) apiTypes.Environment {
 		NetworkPool: record.NetworkPool, VolumeDir: record.VolumeDir,
 		ProvisioningState: apiTypes.EnvironmentProvisioningState(record.ProvisioningState),
 		CreateTaskID:      createTaskID,
+		DeletionTaskID:    nil,
+		NetworkCapacity: apiTypes.EnvironmentNetworkCapacity{
+			TotalAddresses:     capacity.TotalAddresses,
+			AllocatedAddresses: capacity.AllocatedAddresses,
+			AvailableAddresses: capacity.AvailableAddresses, ZoneCount: capacity.ZoneCount,
+		},
 	}
 }
 

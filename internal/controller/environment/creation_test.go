@@ -1,4 +1,4 @@
-package app
+package environment
 
 import (
 	"bytes"
@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
@@ -80,7 +81,7 @@ type fakeEnvironmentCreationIdempotency struct {
 
 func (idempotency *fakeEnvironmentCreationIdempotency) Prepare(
 	context.Context,
-	hierarchy.CreateEnvironmentInput,
+	CreateEnvironmentInput,
 ) (environmentCreationEvidence, error) {
 	return idempotency.evidence, nil
 }
@@ -127,18 +128,18 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 	idempotency := &fakeEnvironmentCreationIdempotency{
 		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	}
-	service, err := newEnvironmentCreationService(
+	service, err := NewCreationService(
 		"/var/lib/groundplane/vol",
 		"10.0.0.0/8",
 		repository,
 		idempotency,
 	)
 	if err != nil {
-		t.Fatalf("newEnvironmentCreationService() error = %v", err)
+		t.Fatalf("NewCreationService() error = %v", err)
 	}
 	now := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
-	response, err := service.CreateEnvironment(context.Background(), hierarchy.CreateEnvironmentInput{
+	response, err := service.CreateEnvironment(context.Background(), CreateEnvironmentInput{
 		ProjectID: environmentCreationTestProjectID, Name: "production", NetworkPool: "10.200.0.0/16",
 	}, "environment-create-key-0001")
 	if err != nil {
@@ -184,13 +185,24 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 			t.Fatalf("component[%d] initial state = %#v", index, component)
 		}
 	}
-	resolver, err := controllerpkg.NewTaskPlanResolver(repository.volumeRoot)
+	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
+		Schema: 1, PlanId: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, TargetId: task.Target,
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
+				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
+					EnvironmentId:     task.Target,
+					ExpectedVolumeDir: task.Params[taskcontract.EnvironmentCreateVolumeDirectoryParam],
+				},
+			},
+		}},
+	})
 	if err != nil {
-		t.Fatalf("NewTaskPlanResolver() error = %v", err)
+		t.Fatalf("Seal() error = %v", err)
 	}
-	plan, err := resolver.ResolveExecutionPlan(context.Background(), task)
-	if err != nil {
-		t.Fatalf("ResolveExecutionPlan() error = %v", err)
+	if err := executionplan.AuthorizeVolumeDirectories(plan, repository.volumeRoot); err != nil {
+		t.Fatalf("AuthorizeVolumeDirectories() error = %v", err)
 	}
 	storedHash, err := hex.DecodeString(task.PlanHash)
 	if err != nil || !bytes.Equal(storedHash, plan.PlanHash) {

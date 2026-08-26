@@ -1,0 +1,132 @@
+package etcd
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+func (repository *HierarchyDeletionRepository) readHierarchyDeletionPrimary(
+	ctx context.Context,
+	key string,
+	action HierarchyDeletionAction,
+) (*KeyValue, error) {
+	result, err := repository.store.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.Entry == nil || result.Entry.Key != key {
+		if result != nil && result.Entry != nil {
+			clear(result.Entry.Value)
+		}
+		return nil, errs.New(errs.KindStateConflict, "hierarchy deletion finalizer target changed")
+	}
+	if result.Entry.ModRevision != action.TargetRevision {
+		original, err := hierarchyDeletionOriginalRootValue(action, result.Entry.Value)
+		if err != nil {
+			clear(result.Entry.Value)
+			return nil, errs.New(errs.KindStateConflict, "hierarchy deletion finalizer target changed")
+		}
+		clear(result.Entry.Value)
+		result.Entry.Value = original
+	}
+	return result.Entry, nil
+}
+
+func hierarchyDeletionOriginalRootValue(action HierarchyDeletionAction, value []byte) ([]byte, error) {
+	switch action.ActionKind {
+	case HierarchyDeletionTenantFinalize:
+		record, err := decodeTenant(value)
+		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
+			return nil, corruptHierarchyDeletion()
+		}
+		record.DeletionTaskID = ""
+		return encodeTenant(record)
+	case HierarchyDeletionProjectFinalize, HierarchyDeletionBackingServiceFinalize:
+		record, err := decodeProject(value)
+		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
+			return nil, corruptHierarchyDeletion()
+		}
+		record.DeletionTaskID = ""
+		return encodeProject(record)
+	case HierarchyDeletionEnvironmentFinalize:
+		record, err := decodeEnvironment(value)
+		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
+			return nil, corruptHierarchyDeletion()
+		}
+		record.DeletionTaskID = ""
+		return encodeEnvironment(record)
+	default:
+		return nil, errs.New(errs.KindStateConflict, "hierarchy deletion finalizer target changed")
+	}
+}
+
+func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDelete(
+	ctx context.Context,
+	action HierarchyDeletionAction,
+	primary *KeyValue,
+	indexKeys []string,
+) (hierarchyDeletionControllerEffects, error) {
+	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: indexKeys})
+	if err != nil {
+		return hierarchyDeletionControllerEffects{}, err
+	}
+	if indexes == nil || len(indexes.Values) != len(indexKeys) {
+		if indexes != nil {
+			clearKeyValues(indexes.Values)
+		}
+		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+	}
+	defer clearKeyValues(indexes.Values)
+	conditions := []Condition{{Key: primary.Key, ModRevision: primary.ModRevision}}
+	mutations := make([]Mutation, 0, len(indexKeys)+1)
+	for index, key := range indexKeys {
+		value := indexes.Values[index]
+		if value == nil || value.Key != key || (index < 2 && string(value.Value) != action.TargetID) {
+			return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		}
+		conditions = append(conditions, Condition{Key: key, ModRevision: value.ModRevision})
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+	}
+	mutations = append(mutations, Mutation{Type: MutationDelete, Key: primary.Key})
+	return hierarchyDeletionControllerEffects{
+		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
+	}, nil
+}
+
+func (repository *HierarchyDeletionRepository) requireHierarchyDeletionPrefixesEmpty(
+	ctx context.Context,
+	prefixes []string,
+) (int64, error) {
+	revision := int64(0)
+	for _, prefix := range prefixes {
+		page, err := repository.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
+		if err != nil {
+			return 0, err
+		}
+		if page == nil || len(page.Values) != 0 || (revision != 0 && page.ReadRevision != revision) {
+			if page != nil {
+				clearRangeValues(page.Values)
+			}
+			return 0, errs.New(errs.KindStateConflict, "hierarchy deletion finalizer retained descendants")
+		}
+		revision = page.ReadRevision
+	}
+	return revision, nil
+}
+
+func hierarchyDeletionConnectorReferencePrefixes(connectorID string) []string {
+	return []string{
+		backupPolicyConnectorReferencePrefix(connectorID),
+		backupRecoveryPointConnectorPrefix + connectorID + "/",
+		backupOrphanConnectorPrefix + connectorID + "/",
+	}
+}
+
+func clearRunnerAllocationEvidence(evidence runnerAllocationEvidence) {
+	for _, value := range []*KeyValue{evidence.owner, evidence.slug, evidence.quota, evidence.host, evidence.system} {
+		if value != nil {
+			clear(value.Value)
+		}
+	}
+}

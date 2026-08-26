@@ -20,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,9 +29,9 @@ import (
 )
 
 const (
-	EnvironmentCreateVolumeDirectoryParam = "expected_volume_dir"
-	EnvironmentBlueprintArtifactParam     = "compose_artifact_id"
-	EnvironmentRemoveVolumeDirectoryParam = "remove_volume_dir"
+	EnvironmentCreateVolumeDirectoryParam = taskcontract.EnvironmentCreateVolumeDirectoryParam
+	EnvironmentBlueprintArtifactParam     = taskcontract.EnvironmentBlueprintArtifactParam
+	EnvironmentRemoveVolumeDirectoryParam = taskcontract.EnvironmentRemoveVolumeDirectoryParam
 )
 
 // ExecutionPlan is what internal/controller/renderer.go ultimately

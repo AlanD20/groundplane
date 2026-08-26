@@ -137,6 +137,7 @@ func (repository *EtcdRepository) RenameProject(
 func tenantToEtcd(record core.Tenant) etcdinfra.TenantRecord {
 	return etcdinfra.TenantRecord{
 		ID: record.ID, Slug: record.Slug, Name: record.Name, Description: record.Description,
+		DeletionTaskID: deletionTaskIDValue(record.DeletionTaskID),
 	}
 }
 
@@ -144,7 +145,8 @@ func tenantFromEtcd(stored etcdinfra.Versioned[etcdinfra.TenantRecord]) Versione
 	return Versioned[core.Tenant]{
 		Record: core.Tenant{
 			ID: stored.Record.ID, Slug: stored.Record.Slug, Name: stored.Record.Name,
-			Description: stored.Record.Description,
+			Description:    stored.Record.Description,
+			DeletionTaskID: deletionTaskIDPointer(stored.Record.DeletionTaskID),
 		},
 		Revision: stored.Revision, ReadRevision: stored.ReadRevision,
 	}
@@ -152,27 +154,43 @@ func tenantFromEtcd(stored etcdinfra.Versioned[etcdinfra.TenantRecord]) Versione
 
 func projectToEtcd(record core.Project) etcdinfra.ProjectRecord {
 	return etcdinfra.ProjectRecord{
-		ID:          record.ID,
-		TenantID:    record.TenantID,
-		Slug:        record.Slug,
-		Name:        record.Name,
-		Description: record.Description,
-		Kind:        etcdinfra.ProjectKind(record.Kind),
+		ID:             record.ID,
+		TenantID:       record.TenantID,
+		Slug:           record.Slug,
+		Name:           record.Name,
+		Description:    record.Description,
+		Kind:           etcdinfra.ProjectKind(record.Kind),
+		DeletionTaskID: deletionTaskIDValue(record.DeletionTaskID),
 	}
 }
 
 func projectFromEtcd(stored etcdinfra.Versioned[etcdinfra.ProjectRecord]) Versioned[core.Project] {
 	return Versioned[core.Project]{
 		Record: core.Project{
-			ID:          stored.Record.ID,
-			TenantID:    stored.Record.TenantID,
-			Slug:        stored.Record.Slug,
-			Name:        stored.Record.Name,
-			Description: stored.Record.Description,
-			Kind:        core.ProjectKind(stored.Record.Kind),
+			ID:             stored.Record.ID,
+			TenantID:       stored.Record.TenantID,
+			Slug:           stored.Record.Slug,
+			Name:           stored.Record.Name,
+			Description:    stored.Record.Description,
+			Kind:           core.ProjectKind(stored.Record.Kind),
+			DeletionTaskID: deletionTaskIDPointer(stored.Record.DeletionTaskID),
 		},
 		Revision: stored.Revision, ReadRevision: stored.ReadRevision,
 	}
+}
+
+func deletionTaskIDPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func deletionTaskIDValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func pageRequestToEtcd(request PageRequest) etcdinfra.PageRequest {

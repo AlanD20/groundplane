@@ -9,8 +9,8 @@
     {"path": "console/src/features/environment/environment-page.tsx", "lines": 4005},
     {"path": "console/src/features/platform-component/platform-component-page.tsx", "lines": 684},
     {"path": "console/src/lib/mock-data.ts", "lines": 1316},
-    {"path": "console/src/lib/store.tsx", "lines": 3250},
-    {"path": "console/src/lib/types.ts", "lines": 605},
+    {"path": "console/src/lib/store.tsx", "lines": 3251},
+    {"path": "console/src/lib/types.ts", "lines": 608},
     {"path": "internal/app/attach_mutations.go", "lines": 1178},
     {"path": "internal/app/controller.go", "lines": 1223},
     {"path": "internal/app/environment_blueprint.go", "lines": 1333},
@@ -27,7 +27,6 @@
     {"path": "internal/controller/idempotentintent/intent.go", "lines": 647},
     {"path": "internal/controller/localagent/localagent.go", "lines": 967},
     {"path": "internal/controller/localagent/localagent_test.go", "lines": 1236},
-    {"path": "internal/core/model.go", "lines": 617},
     {"path": "internal/infra/backupstage/backupstage_linux.go", "lines": 2908},
     {"path": "internal/infra/backupstage/backupstage_linux_root_test.go", "lines": 2593},
     {"path": "internal/infra/docker/composehelper/composehelper.go", "lines": 644},
@@ -74,8 +73,8 @@
     {"path": "pkg/api/types.go", "lines": 836}
   ],
   "frozen_totals": [
-    {"path": "internal/app", "lines": 17770},
-    {"path": "internal/infra/etcd", "lines": 54269}
+    {"path": "internal/app", "lines": 16804},
+    {"path": "internal/infra/etcd", "lines": 60604}
   ],
   "legacy_findings": [
   {

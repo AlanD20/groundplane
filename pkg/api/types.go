@@ -20,12 +20,12 @@ import "time"
 // grammar for the full internal shape) ---
 
 type Tenant struct {
-	ID          string `json:"id"`
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	ID             string  `json:"id"`
+	Slug           string  `json:"slug"`
+	Name           string  `json:"name"`
+	Description    string  `json:"description"`
+	DeletionTaskID *string `json:"deletion_task_id"`
 }
-
 type TenantCreate struct {
 	Slug        string  `json:"slug"`
 	Name        *string `json:"name,omitempty"`
@@ -47,14 +47,14 @@ type TenantPage struct {
 }
 
 type Project struct {
-	ID          string `json:"id"`
-	TenantID    string `json:"tenant_id,omitempty"`
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Kind        string `json:"kind"` // "tenant" | "backing"
+	ID             string  `json:"id"`
+	TenantID       string  `json:"tenant_id,omitempty"`
+	Slug           string  `json:"slug"`
+	Name           string  `json:"name"`
+	Description    string  `json:"description"`
+	Kind           string  `json:"kind"` // "tenant" | "backing"
+	DeletionTaskID *string `json:"deletion_task_id"`
 }
-
 type ProjectCreate struct {
 	TenantID    string  `json:"tenant_id"`
 	Slug        string  `json:"slug"`
@@ -92,14 +92,14 @@ type Environment struct {
 	VolumeDir         string                       `json:"volume_dir"`
 	ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
 	CreateTaskID      *string                      `json:"create_task_id"`
+	DeletionTaskID    *string                      `json:"deletion_task_id"`
+	NetworkCapacity   EnvironmentNetworkCapacity   `json:"network_capacity"`
 }
-
 type EnvironmentCreate struct {
 	ProjectID   string `json:"project_id"`
 	Name        string `json:"name"`
 	NetworkPool string `json:"network_pool"`
 }
-
 type EnvironmentEdit struct {
 	NetworkPool string `json:"network_pool"`
 }

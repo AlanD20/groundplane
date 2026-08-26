@@ -8,12 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
+	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
 type fakeEnvironmentMutator struct {
-	input          hierarchy.CreateEnvironmentInput
+	input          environmentcapability.CreateEnvironmentInput
 	idempotencyKey string
 	response       etcd.IdempotencyResponse
 	calls          int
@@ -21,7 +21,7 @@ type fakeEnvironmentMutator struct {
 
 func (mutator *fakeEnvironmentMutator) CreateEnvironment(
 	_ context.Context,
-	input hierarchy.CreateEnvironmentInput,
+	input environmentcapability.CreateEnvironmentInput,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
 	mutator.calls++

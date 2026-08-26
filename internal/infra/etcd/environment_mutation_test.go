@@ -78,6 +78,48 @@ func TestHierarchyEnvironmentIdempotentRenameMovesOnlyScopedName(t *testing.T) {
 	}
 }
 
+// Rationale: Environment names are scoped labels, so a duplicate rename must
+// use the name-conflict contract rather than the slug-conflict contract.
+func TestHierarchyEnvironmentRenameReturnsNameConflict(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repository, _, _, current := environmentMutationTestHierarchy(t, newMemoryHierarchyStore())
+	project, err := repository.GetProject(ctx, current.Record.ProjectID)
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	duplicate, err := NewProvisioningEnvironment(
+		environmentpath.DefaultVolumeRoot,
+		project.Record,
+		hierarchyTestID(ids.KindEnvironment, 615),
+		"staging",
+		"10.60.0.0/16",
+		hierarchyTestID(ids.KindTask, 616),
+		time.Date(2026, 8, 22, 16, 30, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
+	}
+	if _, err := repository.CreateEnvironment(ctx, duplicate); err != nil {
+		t.Fatalf("CreateEnvironment(duplicate target) error = %v", err)
+	}
+	current, err = repository.GetEnvironment(ctx, current.Record.ID)
+	if err != nil {
+		t.Fatalf("GetEnvironment() error = %v", err)
+	}
+	replacement := current.Record
+	replacement.Name = duplicate.Name
+	_, err = repository.MutateEnvironmentIdempotent(
+		ctx,
+		current,
+		replacement,
+		environmentMutationTestMarker(current.Record.ID, "environment-rename-name-conflict-0001"),
+	)
+	if !isKind(err, errs.KindNameConflict) {
+		t.Fatalf("MutateEnvironmentIdempotent(name conflict) error = %v", err)
+	}
+}
+
 func TestHierarchyEnvironmentMutationRejectsProvisioningChanges(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

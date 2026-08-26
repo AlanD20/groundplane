@@ -115,7 +115,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 	}
 	if renaming && secondary.Values[6] != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindSlugConflict, "Environment name is already in use")
+		return IdempotencyTransactionResult{}, errs.New(errs.KindNameConflict, "Environment name is already in use")
 	}
 	value, err := encodeEnvironment(replacement)
 	if err != nil {
@@ -200,7 +200,7 @@ func classifyEnvironmentMutationConflict(
 			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 		}
 		if renaming && values[8] != nil {
-			return errs.Newf(errs.KindSlugConflict, "environment name %q already exists", replacement.Name)
+			return errs.Newf(errs.KindNameConflict, "environment name %q already exists", replacement.Name)
 		}
 		if values[5] == nil || values[5].ModRevision != projectRevision ||
 			values[6] == nil || values[6].ModRevision != tenantRevision {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
+	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
@@ -21,10 +21,12 @@ const (
 	environmentRouteTaskID    = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
+// Rationale: Environment list and detail routes must translate the composed
+// capability projection into the public API without persistence DTO leakage.
 func TestEnvironmentReadRoutesExposeProvisioningProjection(t *testing.T) {
 	t.Parallel()
-	stub := &environmentRouteStub{record: EnvironmentRecordForRouteTest(etcd.EnvironmentProvisioningReady)}
-	server := New(nil, nil, Options{Environments: stub})
+	stub := &environmentRouteStub{environment: environmentForRouteTest(environmentcapability.Ready)}
+	server := New(nil, nil, Options{Environments: environmentcapability.NewReader(stub)})
 
 	listRequest := httptest.NewRequest(
 		http.MethodGet,
@@ -46,7 +48,7 @@ func TestEnvironmentReadRoutesExposeProvisioningProjection(t *testing.T) {
 		t.Fatalf("ready Environment projection = %#v", page.Items)
 	}
 
-	stub.record = EnvironmentRecordForRouteTest(etcd.EnvironmentProvisioningFailed)
+	stub.environment = environmentForRouteTest(environmentcapability.Failed)
 	showRequest := httptest.NewRequest(http.MethodGet, "/api/v1/environments/"+environmentRouteID, nil)
 	showResponse := httptest.NewRecorder()
 	server.Mux.ServeHTTP(showResponse, showRequest)
@@ -60,6 +62,8 @@ func TestEnvironmentReadRoutesExposeProvisioningProjection(t *testing.T) {
 	}
 }
 
+// Rationale: rename input must remain strict while forwarding exactly one
+// idempotency key to the Environment mutation capability.
 func TestEnvironmentRenameRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 	t.Parallel()
 	stub := &environmentRouteStub{renameResponse: etcd.IdempotencyResponse{
@@ -102,6 +106,8 @@ func TestEnvironmentRenameRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 	}
 }
 
+// Rationale: edit input must reject unknown, duplicate, absent, trailing, and
+// unsupported-media bodies before invoking the Environment mutation.
 func TestEnvironmentEditRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 	t.Parallel()
 	stub := &environmentRouteStub{editResponse: etcd.IdempotencyResponse{
@@ -168,24 +174,29 @@ func TestEnvironmentEditRouteIsStrictAndForwardsIdempotency(t *testing.T) {
 	}
 }
 
-func EnvironmentRecordForRouteTest(state etcd.EnvironmentProvisioningState) etcd.EnvironmentRecord {
-	return etcd.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
+func environmentForRouteTest(state environmentcapability.ProvisioningState) environmentcapability.Environment {
+	var createTaskID *string
+	if state != environmentcapability.Ready {
+		taskID := environmentRouteTaskID
+		createTaskID = &taskID
+	}
+	return environmentcapability.Environment{NetworkPool: "10.40.0.0/16",
 		ID: environmentRouteID, ProjectID: environmentRouteProjectID, Name: "production",
 		VolumeDir:         "/var/lib/groundplane/vol/platform/" + environmentRouteProjectID + "/" + environmentRouteID,
-		ProvisioningState: state, CreateTaskID: environmentRouteTaskID,
+		ProvisioningState: state, CreateTaskID: createTaskID,
 	}
 }
 
 type environmentRouteStub struct {
-	record         etcd.EnvironmentRecord
+	environment    environmentcapability.Environment
 	listProjectID  string
-	listRequest    etcd.PageRequest
+	listRequest    environmentcapability.PageRequest
 	renameID       string
-	renameInput    hierarchy.RenameEnvironmentInput
+	renameInput    environmentcapability.RenameEnvironmentInput
 	renameKey      string
 	renameResponse etcd.IdempotencyResponse
 	editID         string
-	editInput      hierarchy.EditEnvironmentInput
+	editInput      environmentcapability.EditEnvironmentInput
 	editKey        string
 	editResponse   etcd.IdempotencyResponse
 	editCalls      int
@@ -194,27 +205,24 @@ type environmentRouteStub struct {
 func (stub *environmentRouteStub) GetEnvironment(
 	_ context.Context,
 	_ string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return etcd.Versioned[etcd.EnvironmentRecord]{Record: stub.record, Revision: 1, ReadRevision: 1}, nil
+) (environmentcapability.Environment, error) {
+	return stub.environment, nil
 }
 
 func (stub *environmentRouteStub) ListEnvironments(
 	_ context.Context,
 	projectID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.EnvironmentRecord], error) {
+	request environmentcapability.PageRequest,
+) (environmentcapability.Page, error) {
 	stub.listProjectID = projectID
 	stub.listRequest = request
-	return etcd.Page[etcd.EnvironmentRecord]{
-		Items:    []etcd.Versioned[etcd.EnvironmentRecord]{{Record: stub.record, Revision: 1, ReadRevision: 1}},
-		Revision: 1,
-	}, nil
+	return environmentcapability.Page{Items: []environmentcapability.Environment{stub.environment}}, nil
 }
 
 func (stub *environmentRouteStub) RenameEnvironment(
 	_ context.Context,
 	id string,
-	input hierarchy.RenameEnvironmentInput,
+	input environmentcapability.RenameEnvironmentInput,
 	key string,
 ) (etcd.IdempotencyResponse, error) {
 	stub.renameID = id
@@ -226,7 +234,7 @@ func (stub *environmentRouteStub) RenameEnvironment(
 func (stub *environmentRouteStub) EditEnvironment(
 	_ context.Context,
 	id string,
-	input hierarchy.EditEnvironmentInput,
+	input environmentcapability.EditEnvironmentInput,
 	key string,
 ) (etcd.IdempotencyResponse, error) {
 	stub.editCalls++

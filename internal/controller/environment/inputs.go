@@ -1,4 +1,4 @@
-package hierarchy
+package environment
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -14,7 +14,7 @@ type CreateEnvironmentInput struct {
 }
 
 func ValidateEnvironmentCreateInput(input CreateEnvironmentInput) error {
-	if err := validateStableID(ids.KindProject, input.ProjectID); err != nil {
+	if err := ids.Validate(ids.KindProject, input.ProjectID); err != nil {
 		return errs.New(errs.KindValidationFailed, "environment project_id is invalid")
 	}
 	if err := sluggrammar.Validate("environment name", input.Name); err != nil {

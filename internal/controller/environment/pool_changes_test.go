@@ -1,4 +1,4 @@
-package app
+package environment
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -56,14 +55,14 @@ func TestEnvironmentPoolEditReplaysBeforeLookupAndPropagatesMismatch(t *testing.
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			repository := &fakeEnvironmentPoolChangeRepository{}
-			service, err := newEnvironmentChangeService("10.0.0.0/8", repository, test.idempotency)
+			service, err := NewChangeService("10.0.0.0/8", repository, repository, test.idempotency)
 			if err != nil {
-				t.Fatalf("newEnvironmentChangeService() error = %v", err)
+				t.Fatalf("NewChangeService() error = %v", err)
 			}
 			got, err := service.EditEnvironment(
 				context.Background(),
 				environmentPoolChangeTestID,
-				hierarchy.EditEnvironmentInput{NetworkPool: "10.40.0.0/15"},
+				EditEnvironmentInput{NetworkPool: "10.40.0.0/15"},
 				"environment-edit-replay-0001",
 			)
 			if test.wantKind != 0 {
@@ -96,14 +95,14 @@ func TestEnvironmentPoolEditResolvesUnknownTransactionOutcomeToExactReplay(t *te
 			Kind: idempotentintent.ResolutionReplay, Response: want,
 		},
 	}
-	service, err := newEnvironmentChangeService("10.0.0.0/8", repository, idempotency)
+	service, err := NewChangeService("10.0.0.0/8", repository, repository, idempotency)
 	if err != nil {
-		t.Fatalf("newEnvironmentChangeService() error = %v", err)
+		t.Fatalf("NewChangeService() error = %v", err)
 	}
 	got, err := service.EditEnvironment(
 		context.Background(),
 		environmentPoolChangeTestID,
-		hierarchy.EditEnvironmentInput{NetworkPool: "10.40.0.0/15"},
+		EditEnvironmentInput{NetworkPool: "10.40.0.0/15"},
 		"environment-edit-unknown-0001",
 	)
 	if err != nil || !reflect.DeepEqual(got, want) || repository.getCalls != 1 ||
@@ -140,6 +139,14 @@ func (repository *fakeEnvironmentPoolChangeRepository) GetEnvironment(
 ) (etcd.Versioned[etcd.EnvironmentRecord], error) {
 	repository.getCalls++
 	return repository.current, nil
+}
+
+func (repository *fakeEnvironmentPoolChangeRepository) ListZoneSubnetReservationsAtRevision(
+	context.Context,
+	string,
+	int64,
+) ([]string, error) {
+	return []string{}, nil
 }
 
 func (repository *fakeEnvironmentPoolChangeRepository) MutateEnvironmentIdempotent(
@@ -180,7 +187,7 @@ type fakeEnvironmentPoolChangeIdempotency struct {
 func (idempotency *fakeEnvironmentPoolChangeIdempotency) PrepareEdit(
 	context.Context,
 	string,
-	hierarchy.EditEnvironmentInput,
+	EditEnvironmentInput,
 ) (environmentChangeEvidence, error) {
 	return idempotency.evidence, nil
 }
@@ -188,7 +195,7 @@ func (idempotency *fakeEnvironmentPoolChangeIdempotency) PrepareEdit(
 func (idempotency *fakeEnvironmentPoolChangeIdempotency) PrepareRename(
 	context.Context,
 	string,
-	hierarchy.RenameEnvironmentInput,
+	RenameEnvironmentInput,
 ) (environmentChangeEvidence, error) {
 	return idempotency.evidence, nil
 }

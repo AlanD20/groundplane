@@ -24,6 +24,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
+	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
@@ -33,6 +34,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	environmentetcd "github.com/AlanD20/groundplane/internal/infra/etcd/environment"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
@@ -95,15 +97,7 @@ type ownedStore interface {
 	Close() error
 }
 
-// NewController performs every piece of this binary's DI wiring, once,
-// explicitly — including adapter and component registration
-// (postgres16.Register(), valkey9.Register(), manual.Register(),
-// and all five component registrations), which replaces the
-// init()-based self-registration architecture.md originally sketched:
-// this project bans init() globals (docs/standards.md, section 11), so
-// the "one package + one registration line" extensibility promise is
-// kept by putting the registration line here instead of behind a blank
-// import's side effect.
+// NewController constructs the Controller composition root.
 func NewController(ctx context.Context, configPath string) (*Controller, error) {
 	registerAdapters()
 	registerComponents()
@@ -457,6 +451,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release operation service: %w", err)
+	}
+	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, idempotency, intentCoordinator)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
 	}
 	backupPolicyIdempotency, err := newDurableBackupPolicyIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -825,40 +824,27 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Project change service: %w", err)
 	}
-	environmentChangeIdempotency, err := newDurableEnvironmentChangeIdempotency(intentCoordinator, idempotency)
+	environmentChangeIdempotency, err := environmentcapability.NewDurableChangeIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment change idempotency: %w", err)
 	}
-	environmentChanges, err := newEnvironmentChangeService(
+	environmentChanges, err := environmentcapability.NewChangeService(
 		cfg.EnvironmentPool,
 		hierarchyRecords,
+		zoneRecords,
 		environmentChangeIdempotency,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment change service: %w", err)
 	}
-	environmentDeletionIdempotency, err := newDurableEnvironmentDeletionIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Environment deletion idempotency: %w", err)
-	}
-	environmentDeletions, err := newEnvironmentDeletionService(
-		hierarchyRecords,
-		planResolver,
-		environmentDeletionIdempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Environment deletion service: %w", err)
-	}
-	environmentCreationIdempotency, err := newDurableEnvironmentCreationIdempotency(intentCoordinator, idempotency)
+	environmentCreationIdempotency, err := environmentcapability.NewDurableCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment creation idempotency: %w", err)
 	}
-	environmentMutations, err := newEnvironmentCreationService(
+	environmentMutations, err := environmentcapability.NewCreationService(
 		cfg.Storage.VolumeRoot,
 		cfg.EnvironmentPool,
 		hierarchyRecords,
@@ -971,7 +957,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
 	}
-	controllerTaskRunner, err := controllertask.New(tasks, controllerTaskHandler, tick, logger)
+	hierarchyTaskDispatcher, err := newHierarchyDeletionTaskDispatcher(controllerTaskHandler, hierarchyDeletions)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize hierarchy deletion Task dispatcher: %w", err)
+	}
+	controllerTaskRunner, err := controllertask.New(tasks, hierarchyTaskDispatcher, tick, logger)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()
@@ -1020,11 +1012,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 
 	srv := controller.New(store, logger, controller.Options{
 		Host: hostReads, Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
-		Projects:              hierarchyService,
-		ProjectMutations:      projectMutations,
-		ProjectChanges:        projectChanges,
-		BackingServices:       backingServiceReads,
-		Environments:          hierarchyRecords,
+		Projects:         hierarchyService,
+		ProjectMutations: projectMutations,
+		ProjectChanges:   projectChanges,
+		BackingServices:  backingServiceReads,
+		Environments: environmentcapability.NewEtcdReader(
+			environmentetcd.NewRepository(hierarchyRecords, zoneRecords),
+		),
 		Services:              serviceReads,
 		ServiceMutations:      serviceMutations,
 		Zones:                 networkCapability,
@@ -1051,7 +1045,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,
-		EnvironmentDeletions:  environmentDeletions,
+		HierarchyDeletions:    hierarchyDeletions,
 		AttachMutations:       attachMutations,
 		AttachFacts:           attachFactReads,
 		TaskMutations:         taskMutations,
@@ -1075,9 +1069,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}, nil
 }
 
-// registerAdapters is the ONE explicit registration point — the
-// extensibility seam's actual "one line" per adapter, called from here
-// instead of relying on package-import side effects.
 func registerAdapters() {
 	if _, registered := adapters.Get("postgres:16"); !registered {
 		postgres16.Register()

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -143,6 +142,9 @@ func validateTenant(record TenantRecord) error {
 	if record.Description != "" && !utf8.ValidString(record.Description) {
 		return errs.New(errs.KindValidationFailed, "tenant description must be valid UTF-8")
 	}
+	if record.DeletionTaskID != "" && ids.Validate(ids.KindTask, record.DeletionTaskID) != nil {
+		return errs.New(errs.KindValidationFailed, "tenant deletion_task_id is invalid")
+	}
 	return nil
 }
 
@@ -158,6 +160,9 @@ func validateProject(record ProjectRecord) error {
 	}
 	if record.Description != "" && !utf8.ValidString(record.Description) {
 		return errs.New(errs.KindValidationFailed, "project description must be valid UTF-8")
+	}
+	if record.DeletionTaskID != "" && ids.Validate(ids.KindTask, record.DeletionTaskID) != nil {
+		return errs.New(errs.KindValidationFailed, "project deletion_task_id is invalid")
 	}
 	switch record.Kind {
 	case ProjectKindTenant:
@@ -195,6 +200,9 @@ func validateEnvironment(record EnvironmentRecord) error {
 	if err := validateEnvironmentProvisioning(record); err != nil {
 		return err
 	}
+	if record.DeletionTaskID != "" && ids.Validate(ids.KindTask, record.DeletionTaskID) != nil {
+		return errs.New(errs.KindValidationFailed, "environment deletion_task_id is invalid")
+	}
 	_, offset := record.CreatedAt.Zone()
 	if record.CreatedAt.IsZero() || offset != 0 {
 		return errs.New(errs.KindValidationFailed, "environment created_at must be a non-zero UTC timestamp")
@@ -212,24 +220,6 @@ func encodeEnvelope[T any](kind string, record T) ([]byte, error) {
 
 func encodeTenant(record TenantRecord) ([]byte, error)   { return encodeEnvelope("tenant", record) }
 func encodeProject(record ProjectRecord) ([]byte, error) { return encodeEnvelope("project", record) }
-func encodeEnvironment(record EnvironmentRecord) ([]byte, error) {
-	type environmentData struct {
-		ID                string                       `json:"id"`
-		ProjectID         string                       `json:"project_id"`
-		Name              string                       `json:"name"`
-		NetworkPool       string                       `json:"network_pool"`
-		VolumeDir         string                       `json:"volume_dir"`
-		ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
-		CreateTaskID      string                       `json:"create_task_id"`
-		CreatedAt         string                       `json:"created_at"`
-	}
-	return encodeEnvelope("environment", environmentData{
-		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, NetworkPool: record.NetworkPool,
-		VolumeDir: record.VolumeDir, ProvisioningState: record.ProvisioningState,
-		CreateTaskID: record.CreateTaskID, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
-	})
-}
-
 func decodeTenant(value []byte) (TenantRecord, error) {
 	record, err := decodeEnvelope[TenantRecord](value, "tenant")
 	if err != nil {
@@ -248,36 +238,6 @@ func decodeProject(value []byte) (ProjectRecord, error) {
 	}
 	if err := validateProject(record); err != nil {
 		return ProjectRecord{}, corruptRecord()
-	}
-	return record, nil
-}
-
-func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
-	type environmentData struct {
-		ID                string                       `json:"id"`
-		ProjectID         string                       `json:"project_id"`
-		Name              string                       `json:"name"`
-		NetworkPool       string                       `json:"network_pool"`
-		VolumeDir         string                       `json:"volume_dir"`
-		ProvisioningState EnvironmentProvisioningState `json:"provisioning_state"`
-		CreateTaskID      string                       `json:"create_task_id"`
-		CreatedAt         string                       `json:"created_at"`
-	}
-	data, err := decodeEnvelope[environmentData](value, "environment")
-	if err != nil {
-		return EnvironmentRecord{}, err
-	}
-	createdAt, err := time.Parse(time.RFC3339Nano, data.CreatedAt)
-	if err != nil || data.CreatedAt != createdAt.UTC().Format(time.RFC3339Nano) {
-		return EnvironmentRecord{}, errs.New(errs.KindInternal, "environment record has an invalid created_at")
-	}
-	record := EnvironmentRecord{
-		ID: data.ID, ProjectID: data.ProjectID, Name: data.Name, NetworkPool: data.NetworkPool,
-		VolumeDir: data.VolumeDir, ProvisioningState: data.ProvisioningState,
-		CreateTaskID: data.CreateTaskID, CreatedAt: createdAt,
-	}
-	if err := validateEnvironment(record); err != nil {
-		return EnvironmentRecord{}, corruptRecord()
 	}
 	return record, nil
 }

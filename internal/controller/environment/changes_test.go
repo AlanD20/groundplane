@@ -1,4 +1,4 @@
-package app
+package environment
 
 import (
 	"testing"
@@ -19,12 +19,16 @@ func TestEnvironmentAPIProjectionPreservesImmutableIdentity(t *testing.T) {
 		NetworkPool:       "10.40.0.0/16",
 		VolumeDir:         "/var/lib/groundplane/vol/platform/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ProvisioningState: etcd.EnvironmentProvisioningReady,
+		CreateTaskID:      "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 	}
 
-	projected := environmentAPI(record)
+	projected := environmentAPI(record, NetworkCapacity{
+		TotalAddresses: 65536, AvailableAddresses: 65536,
+	})
 	if projected.ID != record.ID || projected.ProjectID != record.ProjectID ||
 		projected.Name != record.Name || projected.NetworkPool != record.NetworkPool ||
-		projected.VolumeDir != record.VolumeDir || projected.CreateTaskID != nil {
+		projected.VolumeDir != record.VolumeDir || projected.CreateTaskID != nil ||
+		projected.NetworkCapacity.TotalAddresses != 65536 {
 		t.Fatalf("environmentAPI() = %#v", projected)
 	}
 }

@@ -197,7 +197,11 @@ func newEnvironmentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/environments/"+id)
+			accepted, err := fromContext(cmd).Client.DeleteEnvironment(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	})
 
@@ -241,8 +245,13 @@ func environmentFields(environment apiTypes.Environment) map[string]any {
 	return map[string]any{
 		"id": environment.ID, "project_id": environment.ProjectID, "name": environment.Name,
 		"network_pool": environment.NetworkPool, "volume_dir": environment.VolumeDir,
-		"provisioning_state": environment.ProvisioningState,
-		"create_task_id":     environment.CreateTaskID,
+		"provisioning_state":  environment.ProvisioningState,
+		"create_task_id":      environment.CreateTaskID,
+		"deletion_task_id":    environment.DeletionTaskID,
+		"total_addresses":     environment.NetworkCapacity.TotalAddresses,
+		"allocated_addresses": environment.NetworkCapacity.AllocatedAddresses,
+		"available_addresses": environment.NetworkCapacity.AvailableAddresses,
+		"zone_count":          environment.NetworkCapacity.ZoneCount,
 	}
 }
 

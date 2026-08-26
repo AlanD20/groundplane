@@ -342,6 +342,7 @@ func projectAPI(record core.Project) apiTypes.Project {
 	return apiTypes.Project{
 		ID: record.ID, TenantID: record.TenantID, Slug: record.Slug,
 		Name: record.Name, Description: record.Description, Kind: string(record.Kind),
+		DeletionTaskID: record.DeletionTaskID,
 	}
 }
 

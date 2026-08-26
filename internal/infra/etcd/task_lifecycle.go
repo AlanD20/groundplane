@@ -268,6 +268,11 @@ func (repository *TaskRepository) retryTask(
 			"backup retry requires its atomic domain retry protocol",
 		)
 	}
+	if source.Record.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
+		return repository.retryHierarchyDeletionTask(
+			ctx, source, retryTaskID, actor, provided, marker,
+		)
+	}
 	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -808,8 +813,10 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			if err != nil {
 				return taskClaimCandidate{}, false, err
 			}
+			hierarchyChild := task.Executor == TaskExecutorAgent &&
+				task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion
 			if task.ID != taskID || task.Executor != executor || task.Status != TaskStatusPending ||
-				task.idempotencyMarker == nil {
+				task.idempotencyMarker == nil && !hierarchyChild {
 				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
 			}
 			environmentID, materializes, err := taskEnvironmentWriter(task)
@@ -1214,6 +1221,20 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if task.Executor != executor {
 			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task execution authority changed")
+		}
+		if task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
+			if executor == TaskExecutorController {
+				return repository.acknowledgeHierarchyDeletionControllerTask(
+					ctx, taskID, terminalStatus, terminalAt,
+				)
+			}
+			if result == nil {
+				return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion Agent Task requires a result")
+			}
+			return repository.acknowledgeHierarchyDeletionAgentTask(
+				ctx, agentID, agentGeneration, taskID, assignmentID,
+				terminalStatus, *result, terminalAt,
+			)
 		}
 		if task.Type == TaskBackup || task.Type == TaskBackupPrune {
 			if executor != TaskExecutorAgent || result == nil {
@@ -3182,37 +3203,4 @@ func prepareTerminalTaskMarker(
 		return IdempotencyMarker{}, "", "", err
 	}
 	return marker, markerKey, retentionKey, nil
-}
-
-func validateTaskLifecycleCompanions(task TaskRecord, activeValue *KeyValue, markerValue *KeyValue) error {
-	activeTaskID, err := decodeTaskReference(activeValue.Value)
-	if err != nil || activeTaskID != task.ID {
-		return errs.New(errs.KindInternal, "active-operation record does not match its Task")
-	}
-	marker, err := decodeIdempotencyMarker(markerValue.Value, *task.idempotencyMarker)
-	if err != nil {
-		return err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID {
-		return errs.New(errs.KindInternal, "task idempotency marker is not pending for its Task")
-	}
-	return nil
-}
-
-func hydrateTerminalTaskMarker(
-	prepared IdempotencyMarker,
-	persisted []byte,
-) (IdempotencyMarker, error) {
-	existing, err := decodeIdempotencyMarker(persisted, prepared.Locator)
-	if err != nil {
-		return IdempotencyMarker{}, err
-	}
-	prepared.Intent = existing.Intent
-	prepared.Response = existing.Response
-	prepared.CreatedAt = existing.CreatedAt
-	prepared.ReplayTarget = cloneIdempotencyReplayTarget(existing.ReplayTarget)
-	return prepared, nil
 }

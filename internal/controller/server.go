@@ -14,6 +14,7 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/version"
+	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -40,7 +41,7 @@ type Server struct {
 	projectMutations      ProjectMutator
 	projectChanges        ProjectChanger
 	backingServices       BackingServiceReader
-	environments          EnvironmentReader
+	environments          *environmentcapability.Reader
 	services              ServiceReader
 	serviceMutations      ServiceMutator
 	releaseGroups         ReleaseGroupReader
@@ -67,7 +68,7 @@ type Server struct {
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
-	environmentDeletions  EnvironmentDeleter
+	hierarchyDeletions    HierarchyDeletionService
 	attachMutations       AttachMutator
 	attachFacts           AttachFactReader
 	taskMutations         TaskRetrier
@@ -89,7 +90,7 @@ type Options struct {
 	ProjectMutations      ProjectMutator
 	ProjectChanges        ProjectChanger
 	BackingServices       BackingServiceReader
-	Environments          EnvironmentReader
+	Environments          *environmentcapability.Reader
 	Services              ServiceReader
 	ServiceMutations      ServiceMutator
 	ReleaseGroups         ReleaseGroupReader
@@ -116,7 +117,7 @@ type Options struct {
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
-	EnvironmentDeletions  EnvironmentDeleter
+	HierarchyDeletions    HierarchyDeletionService
 	AttachMutations       AttachMutator
 	AttachFacts           AttachFactReader
 	TaskMutations         TaskRetrier
@@ -178,7 +179,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
-		environmentDeletions:  options.EnvironmentDeletions,
+		hierarchyDeletions:    options.HierarchyDeletions,
 		attachMutations:       options.AttachMutations,
 		attachFacts:           options.AttachFacts,
 		taskMutations:         options.TaskMutations,
@@ -195,6 +196,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerProjects()
 	s.registerBackingServices()
 	s.registerEnvironments()
+	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions)
 	s.registerEnvironmentBlueprints()
 	s.registerServices()
 	s.registerReleaseGroups()
@@ -231,20 +233,9 @@ func (s *Server) routes() {
 	// is never loaded from a generated file or maintained as a parallel route table.
 	mux.HandleFunc("GET /openapi.json", s.openAPI)
 
-	// Tenant reads and synchronous mutations are typed Huma operations.
-	// Destructive delete remains a Task route until the accepted parent-cascade
-	// contract has a durable executor.
-	mux.HandleFunc("DELETE /api/v1/tenants/{id}", s.acceptTask)
-
-	// Project reads and synchronous mutations are typed Huma operations.
-	// Destructive delete remains a Task route until the accepted parent-cascade
-	// contract has a durable executor.
-	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.acceptTask)
-
 	// environment (?project=). Typed list/show/create/rename operations are
 	// registered through Huma after the legacy mux surface is assembled.
 	s.streamRoute("GET /api/v1/environments/{id}/logs", s.notImplemented)
-	mux.HandleFunc("DELETE /api/v1/environments/{id}", s.environmentDelete)
 
 	// environment singleton sub-resources
 	mux.HandleFunc("POST /api/v1/environments/{id}/backup-run", s.acceptTask)

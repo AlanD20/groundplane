@@ -30,8 +30,10 @@ func TestEnvironmentOpenAPIContainsServingOperations(t *testing.T) {
 		t.Fatalf("decode OpenAPI: %v", err)
 	}
 	want := map[string]map[string]string{
-		"/environments":                {"get": "environment.list", "post": "environment.create"},
-		"/environments/{id}":           {"get": "environment.show", "patch": "environment.edit"},
+		"/environments": {"get": "environment.list", "post": "environment.create"},
+		"/environments/{id}": {
+			"get": "environment.show", "patch": "environment.edit", "delete": "environment.delete",
+		},
 		"/environments/{id}/blueprint": {"put": "environment.apply"},
 		"/environments/{id}/rename":    {"post": "environment.rename"},
 	}
