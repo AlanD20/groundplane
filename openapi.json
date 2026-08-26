@@ -705,6 +705,30 @@
         },
         "type": "object"
       },
+      "DeployRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/DeployRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Entry": {
         "additionalProperties": false,
         "properties": {
@@ -1255,6 +1279,25 @@
         ],
         "type": "object"
       },
+      "OptionalNullableString": {
+        "additionalProperties": false,
+        "properties": {
+          "Present": {
+            "type": "boolean"
+          },
+          "Value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "Present",
+          "Value"
+        ],
+        "type": "object"
+      },
       "PageAgent": {
         "additionalProperties": false,
         "properties": {
@@ -1278,6 +1321,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1308,6 +1355,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1338,6 +1389,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1368,6 +1423,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1398,6 +1457,78 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageReleaseGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageReleaseGroup.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseGroup"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PageReleaseSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageReleaseSummary.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseSummary"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1428,6 +1559,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1458,6 +1593,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1488,6 +1627,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1518,6 +1661,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1548,6 +1695,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1578,6 +1729,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1608,6 +1763,10 @@
           },
           "next_cursor": {
             "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -1753,6 +1912,526 @@
         "required": [
           "slug"
         ],
+        "type": "object"
+      },
+      "ReleaseAttempt": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "retry_of": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "started_at"
+        ],
+        "type": "object"
+      },
+      "ReleaseDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseDetail.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseAttempt"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "current_successful": {
+            "type": "boolean"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "group_member_ordinal": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "group_operation_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "operation_kind": {
+            "type": "string"
+          },
+          "originating_task_id": {
+            "type": "string"
+          },
+          "prior_serving_release_id": {
+            "type": "string"
+          },
+          "prior_successful_release_id": {
+            "type": "string"
+          },
+          "render_input_digest": {
+            "type": "string"
+          },
+          "rollback_material": {
+            "$ref": "#/components/schemas/ReleaseRollbackMaterial"
+          },
+          "rollback_source_release_id": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "serving": {
+            "type": "boolean"
+          },
+          "slot": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "render_input_digest",
+          "originating_task_id",
+          "attempts",
+          "id",
+          "environment_id",
+          "service_id",
+          "operation_id",
+          "operation_kind",
+          "image",
+          "tag",
+          "strategy",
+          "on_failure",
+          "state",
+          "created_at",
+          "serving",
+          "current_successful"
+        ],
+        "type": "object"
+      },
+      "ReleaseGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroup.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "service_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "environment_id",
+          "name",
+          "service_ids",
+          "order",
+          "on_failure"
+        ],
+        "type": "object"
+      },
+      "ReleaseGroupAddRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroupAddRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "service_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "environment_id",
+          "name",
+          "service_ids"
+        ],
+        "type": "object"
+      },
+      "ReleaseGroupDeployRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroupDeployRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ReleaseGroupEditRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroupEditRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "service_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tag": {
+            "$ref": "#/components/schemas/OptionalNullableString"
+          }
+        },
+        "type": "object"
+      },
+      "ReleaseGroupMemberRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "release_id": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_id",
+          "release_id"
+        ],
+        "type": "object"
+      },
+      "ReleaseGroupMutationAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroupMutationAccepted.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "release_group_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "release_group_id"
+        ],
+        "type": "object"
+      },
+      "ReleaseGroupTaskAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroupTaskAccepted.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "release_group_operation_id": {
+            "type": "string"
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseGroupMemberRelease"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "release_group_operation_id",
+          "releases"
+        ],
+        "type": "object"
+      },
+      "ReleaseRollbackMaterial": {
+        "additionalProperties": false,
+        "properties": {
+          "expired_at": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ReleaseSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "current_successful": {
+            "type": "boolean"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "group_member_ordinal": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "group_operation_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "operation_kind": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "serving": {
+            "type": "boolean"
+          },
+          "slot": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "environment_id",
+          "service_id",
+          "operation_id",
+          "operation_kind",
+          "image",
+          "tag",
+          "strategy",
+          "on_failure",
+          "state",
+          "created_at",
+          "serving",
+          "current_successful"
+        ],
+        "type": "object"
+      },
+      "ReleaseTaskAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseTaskAccepted.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "operation_id",
+          "release_id"
+        ],
+        "type": "object"
+      },
+      "RollbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RollbackRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Route": {
@@ -2122,6 +2801,9 @@
               "null"
             ]
           },
+          "current_successful_release_id": {
+            "type": "string"
+          },
           "depends_on": {
             "additionalProperties": {
               "$ref": "#/components/schemas/ServiceDependency"
@@ -2184,6 +2866,9 @@
             "type": "string"
           },
           "runtime_intent": {
+            "type": "string"
+          },
+          "serving_release_id": {
             "type": "string"
           },
           "strategy": {
@@ -5293,6 +5978,538 @@
         ]
       }
     },
+    "/release-groups": {
+      "get": {
+        "operationId": "release-group.list",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment_id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageReleaseGroup"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List release groups",
+        "tags": [
+          "Release Group"
+        ]
+      },
+      "post": {
+        "operationId": "release-group.add",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseGroupAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGroup"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Add a release group",
+        "tags": [
+          "Release Group"
+        ]
+      }
+    },
+    "/release-groups/{id}": {
+      "delete": {
+        "operationId": "release-group.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^rg_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGroupMutationAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Remove a release group",
+        "tags": [
+          "Release Group"
+        ]
+      },
+      "get": {
+        "operationId": "release-group.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^rg_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGroup"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a release group",
+        "tags": [
+          "Release Group"
+        ]
+      },
+      "patch": {
+        "operationId": "release-group.edit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^rg_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseGroupEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGroup"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Edit a release group",
+        "tags": [
+          "Release Group"
+        ]
+      }
+    },
+    "/release-groups/{id}/deploy": {
+      "post": {
+        "operationId": "release-group.deploy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^rg_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseGroupDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGroupTaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Deploy a release group",
+        "tags": [
+          "Release Group"
+        ]
+      }
+    },
+    "/release-groups/{id}/rollback": {
+      "post": {
+        "operationId": "release-group.rollback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^rg_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGroupTaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Roll back a release group",
+        "tags": [
+          "Release Group"
+        ]
+      }
+    },
+    "/releases": {
+      "get": {
+        "operationId": "release.list",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment_id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "service_id",
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageReleaseSummary"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List releases",
+        "tags": [
+          "Release"
+        ]
+      }
+    },
+    "/releases/{id}": {
+      "get": {
+        "operationId": "release.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^dep_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseDetail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show a release",
+        "tags": [
+          "Release"
+        ]
+      }
+    },
     "/routes": {
       "get": {
         "operationId": "route.list",
@@ -6371,6 +7588,76 @@
         ]
       }
     },
+    "/services/{id}/deploy": {
+      "post": {
+        "operationId": "service.deploy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseTaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Deploy a service",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
     "/services/{id}/destroy": {
       "post": {
         "operationId": "service.destroy",
@@ -6426,6 +7713,76 @@
           }
         },
         "summary": "Destroy service runtime",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/services/{id}/rollback": {
+      "post": {
+        "operationId": "service.rollback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseTaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Roll back a service",
         "tags": [
           "Service"
         ]

@@ -548,52 +548,6 @@ type Connector struct {
 	Credentials   map[ConnectorCredentialName]ConnectorCredential `yaml:"credentials"           json:"credentials"`
 }
 
-// DeployStatus is the release ledger's task-driven state machine. See
-// blueprint.md, "x-gp-release":
-//
-//	pending -> running -> candidate_healthy -> switching -> active
-//	                          |                    |
-//	                          v                    v
-//	                       failed       failed -> switch_back or leave_active
-//
-// superseded/aborted/timed_out are also terminal outcomes. The
-// Controller writes `active` only after the Agent acknowledges the
-// health gate and slot switch; a failed or timed-out task never becomes
-// the current release.
-type DeployStatus string
-
-const (
-	DeployPending          DeployStatus = "pending"
-	DeployRunning          DeployStatus = "running"
-	DeployCandidateHealthy DeployStatus = "candidate_healthy"
-	DeploySwitching        DeployStatus = "switching"
-	DeployActive           DeployStatus = "active"
-	DeployFailed           DeployStatus = "failed"
-	DeploySuperseded       DeployStatus = "superseded"
-	DeployAborted          DeployStatus = "aborted"
-	DeployTimedOut         DeployStatus = "timed_out"
-)
-
-// ReleaseRecord is one per-service deploy/rollback record — the release
-// ledger is per logical service, never one environment-wide field.
-// Rollback's target is the most recent record whose Tag differs from
-// the current one. See blueprint.md, "x-gp-release" for the full field
-// set (this mirrors it exactly).
-type ReleaseRecord struct {
-	DeploymentID string       `yaml:"deployment_id"          json:"deployment_id"` // dep_<ulid>
-	ServiceID    string       `yaml:"service_id"             json:"service_id"`
-	Image        string       `yaml:"image"                  json:"image"`
-	Tag          string       `yaml:"tag"                    json:"tag"`
-	Digest       string       `yaml:"digest,omitempty"       json:"digest,omitempty"`
-	Strategy     Strategy     `yaml:"strategy"               json:"strategy"`
-	Slot         string       `yaml:"slot,omitempty"         json:"slot,omitempty"` // "blue" | "green"; empty for recreate
-	OnFailure    OnFailure    `yaml:"on_failure"             json:"on_failure"`
-	TaskID       string       `yaml:"task_id"                json:"task_id"`
-	Status       DeployStatus `yaml:"status"                 json:"status"`
-	StartedAt    time.Time    `yaml:"started_at"             json:"started_at"`
-	CompletedAt  *time.Time   `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
-}
-
 // ReleaseGroup makes multi-service coordination EXPLICIT — never
 // inferred from shared image names or service names. One task lock and
 // one group-level failure policy; each member still keeps its own

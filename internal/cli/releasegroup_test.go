@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"testing"
@@ -13,12 +14,12 @@ func TestReleaseGroupAddDefaultsOnFailure(t *testing.T) {
 	// request body rather than leaving default behavior to a handler.
 	t.Parallel()
 
-	body := `{"environment":"production","name":"realtime","on_failure":"switch_back","order":null,"services":["api","worker"]}`
+	body := `{"environment_id":"env_01J00000000000000000000000","name":"realtime","on_failure":"switch_back","order":null,"service_ids":["svc_01J00000000000000000000000","svc_01J00000000000000000000001"]}`
 	server := exactRequestServer(t, http.MethodPost, "/api/v1/release-groups", body, http.StatusCreated, `{}`)
 	defer server.Close()
 
-	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{Environment: "production"},
-		"add", "realtime", "--service", "api", "--service", "worker")
+	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{Environment: "env_01J00000000000000000000000", AsID: true},
+		"add", "realtime", "--services", "svc_01J00000000000000000000000,svc_01J00000000000000000000001")
 }
 
 func TestReleaseGroupEditOmitsUnchangedOnFailure(t *testing.T) {
@@ -26,10 +27,12 @@ func TestReleaseGroupEditOmitsUnchangedOnFailure(t *testing.T) {
 	// must never overwrite it when the operator edits another field.
 	t.Parallel()
 
-	server := exactRequestServer(t, http.MethodPatch, "/api/v1/release-groups/realtime", `{}`, http.StatusOK, `{}`)
-	defer server.Close()
-
-	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{}, "edit", "realtime")
+	command := newReleaseGroupCmd()
+	command.SetContext(context.WithValue(context.Background(), appKey{}, &App{Scope: Scope{}}))
+	command.SetArgs([]string{"edit", "realtime"})
+	if err := command.Execute(); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Execute() error = %v, want validation failure", err)
+	}
 }
 
 func TestReleaseGroupEditSendsChangedOnFailure(t *testing.T) {
@@ -38,11 +41,12 @@ func TestReleaseGroupEditSendsChangedOnFailure(t *testing.T) {
 	t.Parallel()
 
 	body := `{"on_failure":"leave_active"}`
-	server := exactRequestServer(t, http.MethodPatch, "/api/v1/release-groups/realtime", body, http.StatusOK, `{}`)
+	groupID := "rg_01J00000000000000000000000"
+	server := exactRequestServer(t, http.MethodPatch, "/api/v1/release-groups/"+groupID, body, http.StatusOK, `{}`)
 	defer server.Close()
 
-	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{},
-		"edit", "realtime", "--on-failure", "leave_active")
+	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{AsID: true},
+		"edit", groupID, "--on-failure", "leave_active")
 }
 
 func TestReleaseGroupOnFailureRejectsInvalidValue(t *testing.T) {

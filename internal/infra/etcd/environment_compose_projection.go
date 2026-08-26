@@ -298,6 +298,35 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	return clone
 }
 
+func validateEnvironmentDependencyPlans(
+	services []EnvironmentComposeIdentity,
+	deploy core.ServiceDependencyPhasePlan,
+	rollback core.ServiceDependencyPhasePlan,
+) error {
+	names := make([]string, len(services))
+	for index, service := range services {
+		names[index] = service.Name
+	}
+	for _, selected := range []struct {
+		phase core.ServiceLifecyclePhase
+		plan  core.ServiceDependencyPhasePlan
+	}{
+		{phase: core.ServiceLifecycleDeploy, plan: deploy},
+		{phase: core.ServiceLifecycleRollback, plan: rollback},
+	} {
+		if selected.plan.Phase == "" && len(selected.plan.OrderedServices) == 0 && len(selected.plan.Edges) == 0 {
+			continue
+		}
+		if selected.plan.Phase != selected.phase {
+			return errs.New(errs.KindValidationFailed, "Environment dependency projection phase is invalid")
+		}
+		if err := core.ValidateServiceDependencyPhasePlan(names, selected.plan); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateEnvironmentComposeIdentities(kind ids.Kind, values []EnvironmentComposeIdentity) error {
 	previousName := ""
 	idsSeen := make(map[string]struct{}, len(values))

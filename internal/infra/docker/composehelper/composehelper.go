@@ -150,6 +150,9 @@ func Execute(
 	if apply := step.GetCaddyConfigApply(); apply != nil {
 		return executeCaddyConfigApply(ctx, taskRunner, owned.TimeoutSeconds, artifact, apply)
 	}
+	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyProbe() != nil || step.GetServiceProxyCompensate() != nil {
+		return executeServiceProxy(ctx, taskRunner, owned.TimeoutSeconds, owned.Plan, artifact, step)
+	}
 	commands, err := commandsFor(owned, step, artifact)
 	if err != nil {
 		return nil, err
@@ -179,11 +182,15 @@ func Execute(
 			}, nil
 		}
 	}
-	return &agentpb.ComposeHelperResponse{
+	response := &agentpb.ComposeHelperResponse{
 		Schema:     SchemaVersion,
 		Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-	}, nil
+	}
+	if compensate := step.GetServiceRecreateCompensate(); compensate != nil {
+		response.RecreateEvidence = &agentpb.ServiceRecreateEvidence{ServiceId: compensate.ServiceId, ReleaseId: compensate.PriorReleaseId, ArtifactId: compensate.ArtifactId, Compensated: true, Target: compensate.PriorTarget}
+	}
+	return response, nil
 }
 
 func validateRequest(
@@ -229,6 +236,16 @@ func validateRequest(
 		artifactID = ""
 	case *agentpb.ExecutionStep_CaddyConfigApply:
 		artifactID = payload.CaddyConfigApply.ArtifactId
+	case *agentpb.ExecutionStep_ComposeWorkloadApply:
+		artifactID = payload.ComposeWorkloadApply.ArtifactId
+	case *agentpb.ExecutionStep_ServiceProxySwitch:
+		artifactID = payload.ServiceProxySwitch.CandidateArtifactId
+	case *agentpb.ExecutionStep_ServiceProxyProbe:
+		artifactID = payload.ServiceProxyProbe.CandidateArtifactId
+	case *agentpb.ExecutionStep_ServiceProxyCompensate:
+		artifactID = payload.ServiceProxyCompensate.CandidateArtifactId
+	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
+		artifactID = payload.ServiceRecreateCompensate.ArtifactId
 	default:
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}
@@ -537,6 +554,12 @@ func commandsFor(
 		commands = append(commands, validation)
 		mutation := base
 		mutation.Args = append(append([]string(nil), prefix...), "up", "--detach")
+		if apply.ForceRecreate {
+			mutation.Args = append(mutation.Args, "--force-recreate")
+		}
+		if apply.NoDependencies {
+			mutation.Args = append(mutation.Args, "--no-deps")
+		}
 		if apply.FullReconcile {
 			mutation.Args = append(mutation.Args, "--remove-orphans")
 		} else {
@@ -544,6 +567,25 @@ func commandsFor(
 		}
 		commands = append(commands, mutation)
 		return commands, nil
+	}
+	if compensate := step.GetServiceRecreateCompensate(); compensate != nil {
+		validation := base
+		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
+		mutation := base
+		mutation.Args = append(append([]string(nil), prefix...), "up", "--detach", "--force-recreate", "--no-deps", "--remove-orphans")
+		mutation.Args = append(mutation.Args, serviceNames(artifact, []string{compensate.ServiceId})...)
+		return []runner.RunCmdOpts{validation, mutation}, nil
+	}
+	if apply := step.GetComposeWorkloadApply(); apply != nil {
+		validation := base
+		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
+		mutation := base
+		mutation.Args = append(append([]string(nil), prefix...), "up", "--detach")
+		if apply.EnsureProxy {
+			mutation.Args = append(mutation.Args, releaseProxyName(artifact, apply.ServiceId))
+		}
+		mutation.Args = append(mutation.Args, releaseWorkloadName(artifact, apply.ServiceId, apply.Target))
+		return []runner.RunCmdOpts{validation, mutation}, nil
 	}
 	mutation := base
 	switch payload := step.Payload.(type) {
@@ -565,15 +607,37 @@ func commandsFor(
 }
 
 func serviceNames(artifact *agentpb.ComposeArtifact, selected []string) []string {
-	namesByID := make(map[string]string, len(artifact.Services))
+	selectedIDs := make(map[string]struct{}, len(selected))
+	for _, serviceID := range selected {
+		selectedIDs[serviceID] = struct{}{}
+	}
+	names := make([]string, 0, len(selected)*3)
 	for _, service := range artifact.Services {
-		namesByID[service.ServiceId] = service.ComposeName
+		if _, ok := selectedIDs[service.ServiceId]; ok {
+			names = append(names, service.ComposeName)
+		}
 	}
-	names := make([]string, len(selected))
-	for index, serviceID := range selected {
-		names[index] = namesByID[serviceID]
-	}
+	sort.Strings(names)
 	return names
+}
+
+func releaseWorkloadName(artifact *agentpb.ComposeArtifact, serviceID, target string) string {
+	for _, service := range artifact.GetServices() {
+		if target == "singleton" && service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
+			service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT && service.GetSlot() == target {
+			return service.GetComposeName()
+		}
+	}
+	return ""
+}
+
+func recreateSingletonName(artifact *agentpb.ComposeArtifact, serviceID string) string {
+	for _, service := range artifact.GetServices() {
+		if service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
+			return service.GetComposeName()
+		}
+	}
+	return ""
 }
 
 func validateResponse(response *agentpb.ComposeHelperResponse) error {
@@ -589,16 +653,34 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 			response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
 			return errs.New(errs.KindValidationFailed, "completed Compose helper response is inconsistent")
 		}
+		if response.ProxyEvidence != nil && (response.ProxyEvidence.ServiceId == "" ||
+			!validRuntimeTarget(response.ProxyEvidence.Target) ||
+			response.ProxyEvidence.ProxyGeneration == 0 || len(response.ProxyEvidence.ConfigSha256) != sha256.Size ||
+			response.ProxyEvidence.ReleaseId == "") {
+			return errs.New(errs.KindValidationFailed, "completed Compose helper proxy evidence is invalid")
+		}
+		if response.RecreateEvidence != nil && (response.RecreateEvidence.ServiceId == "" || response.RecreateEvidence.ReleaseId == "" || response.RecreateEvidence.ArtifactId == "" || !validRuntimeTarget(response.RecreateEvidence.Target)) {
+			return errs.New(errs.KindValidationFailed, "completed Compose helper recreate evidence is invalid")
+		}
 	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED:
 		if response.ExitCode <= 0 ||
 			(response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED &&
-				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED) {
+				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED &&
+				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_CONFIG_REJECTED &&
+				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED) {
 			return errs.New(errs.KindValidationFailed, "failed Compose helper response is inconsistent")
+		}
+		if response.ProxyEvidence != nil || response.RecreateEvidence != nil {
+			return errs.New(errs.KindValidationFailed, "failed Compose helper response carries release evidence")
 		}
 	default:
 		return errs.New(errs.KindValidationFailed, "Compose helper response outcome is unsupported")
 	}
 	return nil
+}
+
+func validRuntimeTarget(value string) bool {
+	return value == "singleton" || value == "blue" || value == "green"
 }
 
 func frame(encoded []byte) ([]byte, error) {

@@ -3,10 +3,12 @@ package agent
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -34,6 +36,8 @@ type composeStepResult struct {
 	Diagnostic             agentpb.ComposeHelperDiagnostic
 	MutationAttempted      bool
 	ReconciliationRequired bool
+	ProxyEvidence          *agentpb.ServiceProxyEvidence
+	RecreateEvidence       *agentpb.ServiceRecreateEvidence
 }
 
 func NewComposeRuntime(helper ComposeHelper, observer ComposeObserver) (*ComposeRuntime, error) {
@@ -84,9 +88,94 @@ func (runtime *ComposeRuntime) executeStep(
 		return runtime.mutate(ctx, assignment, step, payload.CaddyConfigApply.GetArtifactId(), nil)
 	case *agentpb.ExecutionStep_WaitHealthy:
 		return runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy)
+	case *agentpb.ExecutionStep_ComposeWorkloadApply:
+		return runtime.mutate(ctx, assignment, step, payload.ComposeWorkloadApply.GetArtifactId(), nil)
+	case *agentpb.ExecutionStep_WaitWorkloadHealthy:
+		return runtime.waitWorkloadHealthy(ctx, assignment.Plan, payload.WaitWorkloadHealthy)
+	case *agentpb.ExecutionStep_ServiceProxySwitch, *agentpb.ExecutionStep_ServiceProxyProbe, *agentpb.ExecutionStep_ServiceProxyCompensate:
+		return runtime.proxyProcedure(ctx, assignment, step)
+	case *agentpb.ExecutionStep_ServiceRecreateAcknowledge:
+		value := payload.ServiceRecreateAcknowledge
+		return runtime.observeRecreate(ctx, assignment.Plan, value.ArtifactId, "", value.ServiceId, value.ReleaseId, "")
+	case *agentpb.ExecutionStep_ServiceRecreateProbe:
+		value := payload.ServiceRecreateProbe
+		return runtime.observeRecreate(ctx, assignment.Plan, value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, value.CandidateReleaseId, value.PriorReleaseId)
+	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
+		return runtime.mutate(ctx, assignment, step, payload.ServiceRecreateCompensate.ArtifactId, nil)
 	default:
 		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
+}
+
+func (runtime *ComposeRuntime) proxyProcedure(ctx context.Context, assignment Assignment, step *agentpb.ExecutionStep) (composeStepResult, error) {
+	result := composeStepResult{MutationAttempted: step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil}
+	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
+		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
+		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.StepId,
+		TimeoutSeconds: remainingSeconds(ctx, step.TimeoutSeconds),
+	})
+	if err != nil {
+		result.ReconciliationRequired = true
+		return result, err
+	}
+	result.ExitCode, result.Diagnostic = response.GetExitCode(), response.GetDiagnostic()
+	if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
+		result.ReconciliationRequired = true
+		return result, errs.Newf(errs.KindRequestFailed, "agent: release proxy procedure failed with diagnostic %s", response.GetDiagnostic().String())
+	}
+	if response.ProxyEvidence != nil {
+		result.ProxyEvidence = proto.Clone(response.ProxyEvidence).(*agentpb.ServiceProxyEvidence)
+	}
+	return result, nil
+}
+
+func (runtime *ComposeRuntime) waitWorkloadHealthy(ctx context.Context, plan *agentpb.ExecutionPlan, wait *agentpb.WaitWorkloadHealthy) (composeStepResult, error) {
+	result := composeStepResult{}
+	artifact := composeArtifact(plan, wait.ArtifactId)
+	role, slot := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, wait.Target
+	if wait.Target == "singleton" {
+		role, slot = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, ""
+	}
+	name := releaseRuntimeComposeName(artifact, wait.ServiceId, slot, role)
+	if name == "" {
+		return result, errs.New(errs.KindInternal, "agent: release workload is missing from the plan")
+	}
+	ticker := time.NewTicker(composeHealthPollInterval)
+	defer ticker.Stop()
+	for {
+		observed, err := runtime.observer.Observe(ctx, plan, wait.ArtifactId)
+		if err != nil {
+			result.ReconciliationRequired = true
+			return result, err
+		}
+		result.Observed = observed
+		convergence, err := evaluateComposeConvergence(artifact, observed, []string{name})
+		if err != nil {
+			result.ReconciliationRequired = true
+			return result, err
+		}
+		if convergence.Ready {
+			return result, nil
+		}
+		select {
+		case <-ctx.Done():
+			result.ReconciliationRequired = true
+			return result, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func releaseRuntimeComposeName(artifact *agentpb.ComposeArtifact, serviceID, slot string, role agentpb.ComposeServiceRole) string {
+	if artifact == nil {
+		return ""
+	}
+	for _, service := range artifact.Services {
+		if service.ServiceId == serviceID && service.Slot == slot && service.Role == role {
+			return service.ComposeName
+		}
+	}
+	return ""
 }
 
 func (runtime *ComposeRuntime) removeManagedNetwork(
@@ -124,7 +213,99 @@ func (runtime *ComposeRuntime) removeManagedNetwork(
 		result.ReconciliationRequired = true
 		return result, errs.New(errs.KindInternal, "agent: Compose helper returned an inconsistent success response")
 	}
+	if response.RecreateEvidence != nil {
+		result.RecreateEvidence = proto.Clone(response.RecreateEvidence).(*agentpb.ServiceRecreateEvidence)
+	}
 	return result, nil
+}
+
+func (runtime *ComposeRuntime) observeRecreate(
+	ctx context.Context,
+	plan *agentpb.ExecutionPlan,
+	candidateArtifactID, priorArtifactID, serviceID, candidateReleaseID, priorReleaseID string,
+) (composeStepResult, error) {
+	result := composeStepResult{}
+	candidate := composeArtifact(plan, candidateArtifactID)
+	prior := composeArtifact(plan, priorArtifactID)
+	ticker := time.NewTicker(composeHealthPollInterval)
+	defer ticker.Stop()
+	for {
+		observed, err := runtime.observer.Observe(ctx, plan, candidateArtifactID)
+		if err != nil {
+			result.ReconciliationRequired = true
+			return result, err
+		}
+		result.Observed = observed
+		releaseID, err := observedRecreateRelease(observed, serviceID)
+		if err != nil {
+			result.ReconciliationRequired = true
+			return result, err
+		}
+		artifact, expectedReleaseID := candidate, candidateReleaseID
+		if releaseID != candidateReleaseID {
+			if priorArtifactID == "" || releaseID != priorArtifactLabel(priorReleaseID) {
+				result.ReconciliationRequired = true
+				return result, errs.New(errs.KindStateConflict, "agent: recreate probe observed an unsealed release lineage")
+			}
+			artifact, expectedReleaseID = prior, priorReleaseID
+		}
+		name := releaseRuntimeComposeName(artifact, serviceID, "", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON)
+		if name == "" {
+			result.ReconciliationRequired = true
+			return result, errs.New(errs.KindInternal, "agent: recreate singleton is missing from the plan")
+		}
+		convergence, err := evaluateComposeConvergence(artifact, observed, []string{name})
+		if err != nil {
+			result.ReconciliationRequired = true
+			return result, err
+		}
+		if convergence.Ready {
+			result.RecreateEvidence = &agentpb.ServiceRecreateEvidence{ServiceId: serviceID, ReleaseId: expectedReleaseID, ArtifactId: artifact.ArtifactId, Compensated: expectedReleaseID == priorReleaseID, Target: "singleton"}
+			return result, nil
+		}
+		select {
+		case <-ctx.Done():
+			result.ReconciliationRequired = true
+			return result, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func observedRecreateRelease(observed *agentpb.ObservedProject, serviceID string) (string, error) {
+	found, releaseID := false, ""
+	for _, container := range observed.GetContainers() {
+		if container.GetServiceId() != serviceID {
+			continue
+		}
+		role, candidate := "", ""
+		for _, label := range container.GetLabels() {
+			switch label.GetKey() {
+			case "com.groundplane.runtime-role":
+				role = label.GetValue()
+			case "com.groundplane.release-id":
+				candidate = label.GetValue()
+			}
+		}
+		if role == "proxy" {
+			continue
+		}
+		if role != "singleton" || found || candidate != releaseID && found {
+			return "", errs.New(errs.KindStateConflict, "agent: recreate singleton labels are inconsistent")
+		}
+		found, releaseID = true, candidate
+	}
+	if !found {
+		return "", errs.New(errs.KindStateConflict, "agent: recreate singleton is not observed")
+	}
+	return releaseID, nil
+}
+
+func priorArtifactLabel(value string) string {
+	if value == "baseline" {
+		return ""
+	}
+	return value
 }
 
 func (runtime *ComposeRuntime) mutate(
@@ -166,6 +347,9 @@ func (runtime *ComposeRuntime) mutate(
 	if observeErr != nil {
 		result.ReconciliationRequired = true
 		return result, observeErr
+	}
+	if response.RecreateEvidence != nil {
+		result.RecreateEvidence = proto.Clone(response.RecreateEvidence).(*agentpb.ServiceRecreateEvidence)
 	}
 	if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
 		result.ReconciliationRequired = true
@@ -257,20 +441,22 @@ func composeNamesForServiceIDs(
 	if len(serviceIDs) == 0 {
 		return nil, nil
 	}
-	byID := make(map[string]string, len(artifact.GetServices()))
-	for _, service := range artifact.GetServices() {
-		if service != nil {
-			byID[service.GetServiceId()] = service.GetComposeName()
-		}
-	}
-	names := make([]string, 0, len(serviceIDs))
+	selected := make(map[string]struct{}, len(serviceIDs))
 	for _, serviceID := range serviceIDs {
-		name := byID[serviceID]
-		if name == "" {
-			return nil, errs.Newf(errs.KindInternal, "agent: service id %s is missing from the artifact", serviceID)
-		}
-		names = append(names, name)
+		selected[serviceID] = struct{}{}
 	}
+	names := make([]string, 0, len(serviceIDs)*2)
+	for _, service := range artifact.GetServices() {
+		if service != nil && service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			if _, ok := selected[service.GetServiceId()]; ok {
+				names = append(names, service.GetComposeName())
+			}
+		}
+	}
+	if len(names) == 0 {
+		return nil, errs.New(errs.KindInternal, "agent: selected services are missing from the artifact")
+	}
+	sort.Strings(names)
 	return names, nil
 }
 

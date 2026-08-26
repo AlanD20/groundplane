@@ -11,6 +11,7 @@ const (
 	TaskResourceConnector             = "connector"
 	TaskResourceBackingZone           = "backing_zone"
 	TaskResourceService               = "service"
+	TaskResourceReleaseGroup          = "release_group"
 	TaskComposeArtifactParam          = "compose_artifact_id"
 	TaskEntryEnvironmentParam         = "entry_environment_id"
 	TaskEntryTenantSlugParam          = "entry_tenant_slug"

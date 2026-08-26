@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -22,6 +23,9 @@ const (
 	composeLabelRenderGen     = "com.groundplane.render-generation"
 	composeLabelServiceID     = "com.groundplane.service-id"
 	composeLabelTenantID      = "com.groundplane.tenant-id"
+	composeLabelReleaseID     = "com.groundplane.release-id"
+	composeLabelSlot          = "com.groundplane.slot"
+	composeLabelRuntimeRole   = "com.groundplane.runtime-role"
 	composeResourceExtension  = "x-gp-resource"
 	composeNetworkExtension   = "x-gp-network"
 )
@@ -38,6 +42,17 @@ type ComposeRenderInput struct {
 	AuthorizedVolumeDir string
 	Identities          ComposeIdentitySnapshot
 	ExternalNetworks    []ComposeResourceIdentity
+	Releases            map[string]ComposeReleaseIdentity
+}
+
+type ComposeReleaseIdentity struct {
+	ReleaseID              string
+	Target                 domain.WorkloadTarget
+	Image                  string
+	ServingReleaseID       string
+	ServingTarget          domain.WorkloadTarget
+	ServingProxyGeneration uint64
+	Strategy               domain.Strategy
 }
 
 // RenderCompose converts one parsed, normalized owned-resource project into the Agent's immutable artifact.
@@ -77,45 +92,15 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 	projectName := "gp-" + strings.ToLower(input.EnvironmentID)
 	rendered := *input.Project
 	rendered.Name = projectName
-	rendered.Services = make(composetypes.Services, len(serviceNames))
+	rendered.Services = make(composetypes.Services, len(serviceNames)*3)
 	rendered.DisabledServices = nil
 	rendered.Networks = make(composetypes.Networks, len(ownedNetworkNames)+len(externalNetworkNames))
 	rendered.Volumes = make(composetypes.Volumes, len(volumeNames))
 
-	services := make([]*agentpb.ComposeService, 0, len(serviceNames))
-	for _, name := range serviceNames {
-		service, exists := input.Project.Services[name]
-		if !exists {
-			service = input.Project.DisabledServices[name]
-		}
-		serviceID := serviceIDs[name]
-		labels, expectedLabels, err := composeOwnershipLabels(service.Labels, "service", serviceID, input)
-		if err != nil {
-			return nil, err
-		}
-		extensions, err := composeResourceExtensions(service.Extensions, "service", serviceID, input.EnvironmentID)
-		if err != nil {
-			return nil, err
-		}
-		replicas := service.GetScale()
-		if replicas <= 0 {
-			return nil, errs.New(errs.KindNotImplemented, "zero-replica compose services cannot be represented")
-		}
-		if uint64(replicas) > uint64(1<<32-1) {
-			return nil, errs.New(errs.KindValidationFailed, "compose service replicas exceed the execution contract")
-		}
-		service.Labels = labels
-		service.Extensions = extensions
-		rendered.Services[name] = service
-		services = append(services, &agentpb.ComposeService{
-			ServiceId:        serviceID,
-			ComposeName:      name,
-			ExpectedLabels:   expectedLabels,
-			ExpectedReplicas: uint32(replicas),
-			HasHealthcheck:   service.HealthCheck != nil && !service.HealthCheck.Disable,
-		})
+	services, err := renderServiceProxyTopology(&rendered, input, serviceNames, serviceIDs)
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(services, func(i, j int) bool { return services[i].ServiceId < services[j].ServiceId })
 
 	networks := make([]*agentpb.ComposeNetwork, 0, len(ownedNetworkNames))
 	for _, name := range ownedNetworkNames {
@@ -219,6 +204,18 @@ func validateComposeRenderInput(input ComposeRenderInput) error {
 	if !filepath.IsAbs(input.AuthorizedVolumeDir) ||
 		filepath.Clean(input.AuthorizedVolumeDir) != input.AuthorizedVolumeDir {
 		return errs.New(errs.KindInternal, "compose authorized volume directory is invalid")
+	}
+	for serviceID, release := range input.Releases {
+		if ids.Validate(ids.KindService, serviceID) != nil ||
+			(release.ReleaseID != "" && ids.Validate(ids.KindDeployment, release.ReleaseID) != nil) ||
+			(release.Strategy != domain.StrategyBlueGreen && release.Strategy != domain.StrategyRecreate) ||
+			release.Target.Validate() != nil || release.ServingTarget.Validate() != nil {
+			return errs.New(errs.KindInternal, "compose release identity is invalid")
+		}
+		expected, err := domain.TargetFor(release.Strategy, release.Target.Slot())
+		if err != nil || expected != release.Target {
+			return errs.New(errs.KindInternal, "compose release workload topology is invalid")
+		}
 	}
 	return nil
 }

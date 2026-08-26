@@ -153,6 +153,8 @@ message ComposeTaskResult {
   string failed_step_id = 2;
   ComposeHelperDiagnostic diagnostic = 3;
   bool reconciliation_required = 4;
+  repeated ServiceProxyEvidence proxy_evidence = 5;
+  repeated ServiceRecreateEvidence recreate_evidence = 6;
 }
 
 message EnvironmentDirectoryTaskResult {
@@ -283,6 +285,17 @@ message ComposeService {
   repeated LabelPair expected_labels = 3;
   uint32 expected_replicas = 4;
   bool has_healthcheck = 5;
+  ComposeServiceRole role = 6;
+  string slot = 7;
+  bytes proxy_config_json = 8;
+  bytes proxy_config_sha256 = 9;
+}
+
+enum ComposeServiceRole {
+  COMPOSE_SERVICE_ROLE_UNSPECIFIED = 0;
+  COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT = 1;
+  COMPOSE_SERVICE_ROLE_STABLE_PROXY = 2;
+  COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON = 3;
 }
 
 message ComposeNetwork {
@@ -321,7 +334,25 @@ message ExecutionStep {
     CaddyConfigApply caddy_config_apply = 13;
     BackupSourceCapture backup_source_capture = 14;
     BackupArtifactPrune backup_artifact_prune = 15;
+    ComposeWorkloadApply compose_workload_apply = 16;
+    WaitWorkloadHealthy wait_workload_healthy = 17;
+    ServiceProxySwitch service_proxy_switch = 18;
+    ServiceProxyProbe service_proxy_probe = 19;
+    ServiceProxyCompensate service_proxy_compensate = 20;
+    ServiceRecreateAcknowledge service_recreate_acknowledge = 21;
+    ServiceRecreateProbe service_recreate_probe = 22;
+    ServiceRecreateCompensate service_recreate_compensate = 23;
   }
+  ExecutionStepPolicy policy = 30;
+  string prerequisite_step_id = 31;
+}
+
+enum ExecutionStepPolicy {
+  EXECUTION_STEP_POLICY_UNSPECIFIED = 0;
+  EXECUTION_STEP_POLICY_RELEASE_FORWARD = 1;
+  EXECUTION_STEP_POLICY_RELEASE_COMPENSATE = 2;
+  EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE = 3;
+  EXECUTION_STEP_POLICY_RELEASE_RECOVERY_COMPENSATE = 4;
 }
 
 // BackupSourceCapture is one immutable source attempt in policy order. It
@@ -625,6 +656,8 @@ message ComposeApply {
   string artifact_id = 1;
   repeated string service_ids = 2;
   bool full_reconcile = 3;
+  bool force_recreate = 4;
+  bool no_dependencies = 5;
 }
 
 message ComposeStop {
@@ -642,6 +675,101 @@ message ComposeRemove {
 message WaitHealthy {
   string artifact_id = 1;
   repeated string service_ids = 2;
+}
+
+message ComposeWorkloadApply {
+  string artifact_id = 1;
+  string service_id = 2;
+  string target = 3;
+  bool ensure_proxy = 4;
+}
+
+message WaitWorkloadHealthy {
+  string artifact_id = 1;
+  string service_id = 2;
+  string target = 3;
+}
+
+message ServiceProxySwitch {
+  string candidate_artifact_id = 1;
+  string service_id = 2;
+  string from_target = 3;
+  string to_target = 4;
+  uint64 proxy_generation = 5;
+  bytes config_json = 6;
+  bytes config_sha256 = 7;
+  string release_id = 8;
+  string prior_artifact_id = 9;
+}
+
+message ServiceProxyProbe {
+  string candidate_artifact_id = 1;
+  string service_id = 2;
+  string expected_target = 3;
+  uint64 proxy_generation = 4;
+  bytes config_json = 5;
+  bytes config_sha256 = 6;
+  string release_id = 7;
+  string alternate_target = 8;
+  uint64 alternate_proxy_generation = 9;
+  bytes alternate_config_json = 10;
+  bytes alternate_config_sha256 = 11;
+  string alternate_release_id = 12;
+  string prior_artifact_id = 13;
+}
+
+message ServiceProxyCompensate {
+  string candidate_artifact_id = 1;
+  string service_id = 2;
+  string candidate_target = 3;
+  string prior_target = 4;
+  uint64 proxy_generation = 5;
+  bytes config_json = 6;
+  bytes config_sha256 = 7;
+  string prior_release_id = 8;
+  bool enabled = 9;
+  string prior_artifact_id = 10;
+}
+
+message ServiceProxyEvidence {
+  string service_id = 1;
+  string target = 2;
+  uint64 proxy_generation = 3;
+  bytes config_sha256 = 4;
+  string release_id = 5;
+  bool compensated = 6;
+}
+
+message ServiceRecreateAcknowledge {
+  string artifact_id = 1;
+  string service_id = 2;
+  string release_id = 3;
+}
+
+message ServiceRecreateProbe {
+  string candidate_artifact_id = 1;
+  string prior_artifact_id = 2;
+  string service_id = 3;
+  string candidate_release_id = 4;
+  string prior_release_id = 5;
+}
+
+message ServiceRecreateCompensate {
+  string artifact_id = 1;
+  string service_id = 2;
+  string candidate_release_id = 3;
+  string prior_release_id = 4;
+  bool enabled = 5;
+  string candidate_artifact_id = 6;
+  string prior_target = 7;
+}
+
+message ServiceRecreateEvidence {
+  string service_id = 1;
+  string release_id = 2;
+  string artifact_id = 3;
+  bool compensated = 4;
+  string target = 5;
 }
 
 message EnvironmentDirectoryCreate {
@@ -717,6 +845,8 @@ message ComposeHelperResponse {
   ComposeHelperOutcome outcome = 2;
   int32 exit_code = 3;
   ComposeHelperDiagnostic diagnostic = 4;
+  ServiceProxyEvidence proxy_evidence = 5;
+  ServiceRecreateEvidence recreate_evidence = 6;
 }
 
 enum ComposeHelperOutcome {

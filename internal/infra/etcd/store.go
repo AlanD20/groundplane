@@ -56,6 +56,7 @@ type RangeRequest struct {
 	StartExclusive string
 	Limit          int64
 	Revision       int64
+	Descending     bool
 }
 
 // RangeResult is a deterministic key-ascending range page. ReadRevision is
@@ -391,6 +392,7 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 		return nil, err
 	}
 	start := physicalPrefix
+	rangeEnd := clientv3.GetPrefixRangeEnd(physicalPrefix)
 	if request.StartExclusive != "" {
 		if !strings.HasPrefix(request.StartExclusive, request.Prefix) {
 			return nil, errs.New(errs.KindValidationFailed, "etcd range start must be within its prefix")
@@ -399,13 +401,21 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 		if err != nil {
 			return nil, err
 		}
-		start = physicalStart + "\x00"
+		if request.Descending {
+			rangeEnd = physicalStart
+		} else {
+			start = physicalStart + "\x00"
+		}
+	}
+	direction := clientv3.SortAscend
+	if request.Descending {
+		direction = clientv3.SortDescend
 	}
 
 	options := []clientv3.OpOption{
-		clientv3.WithRange(clientv3.GetPrefixRangeEnd(physicalPrefix)),
+		clientv3.WithRange(rangeEnd),
 		clientv3.WithLimit(request.Limit),
-		clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend),
+		clientv3.WithSort(clientv3.SortByKey, direction),
 	}
 	if request.Revision > 0 {
 		options = append(options, clientv3.WithRev(request.Revision))

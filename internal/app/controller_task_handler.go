@@ -100,6 +100,12 @@ func (handler *controllerTaskHandler) Execute(
 			return errs.New(errs.KindValidationFailed, "Controller Task Service lifecycle is invalid")
 		}
 		return nil
+	case etcd.TaskResourceReleaseGroup:
+		if (task.Type != etcd.TaskCreate && task.Type != etcd.TaskUpdate && task.Type != etcd.TaskRemove) ||
+			ids.Validate(ids.KindReleaseGroup, task.Target) != nil || len(task.Params) != 1 {
+			return errs.New(errs.KindValidationFailed, "controller Task release group mutation is invalid")
+		}
+		return nil
 	case etcd.TaskResourceBackingZone:
 		return handler.backingZones.Execute(ctx, task)
 	default:

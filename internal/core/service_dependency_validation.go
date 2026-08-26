@@ -42,6 +42,16 @@ func (plans ServiceDependencyPlans) Clone() ServiceDependencyPlans {
 	return plans
 }
 
+func (plans ServiceDependencyPlans) Equal(other ServiceDependencyPlans) bool {
+	return serviceDependencyPhasePlansEqual(plans.DeployDependencyPlan, other.DeployDependencyPlan) &&
+		serviceDependencyPhasePlansEqual(plans.RollbackDependencyPlan, other.RollbackDependencyPlan)
+}
+
+func serviceDependencyPhasePlansEqual(left, right ServiceDependencyPhasePlan) bool {
+	return left.Phase == right.Phase && slices.Equal(left.OrderedServices, right.OrderedServices) &&
+		slices.Equal(left.Edges, right.Edges)
+}
+
 // ValidEnvironmentComposeName is the closed durable-name rule shared by
 // applied projections and immutable task render inputs.
 func ValidEnvironmentComposeName(value string) bool {
@@ -98,10 +108,7 @@ func ValidateServiceDependencyPhasePlan(serviceNames []string, plan ServiceDepen
 	positions := make(map[string]int, len(plan.OrderedServices))
 	for index, name := range plan.OrderedServices {
 		if _, exists := nodes[name]; !exists {
-			return errs.New(
-				errs.KindValidationFailed,
-				"Service dependency phase plan order references an unrelated Service",
-			)
+			return errs.New(errs.KindValidationFailed, "Service dependency phase plan order references an unrelated Service")
 		}
 		if _, duplicate := positions[name]; duplicate {
 			return errs.New(errs.KindValidationFailed, "Service dependency phase plan order duplicates a Service")

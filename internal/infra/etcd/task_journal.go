@@ -122,6 +122,23 @@ type TaskObservedProjectSummary struct {
 	CollisionCount uint32    `json:"collision_count"`
 }
 
+type TaskProxyEvidence struct {
+	ServiceID       string `json:"service_id"`
+	Target          string `json:"target"`
+	ProxyGeneration uint64 `json:"proxy_generation"`
+	ConfigSHA256    string `json:"config_sha256"`
+	ReleaseID       string `json:"release_id"`
+	Compensated     bool   `json:"compensated"`
+}
+
+type TaskRecreateEvidence struct {
+	ServiceID   string `json:"service_id"`
+	ReleaseID   string `json:"release_id"`
+	ArtifactID  string `json:"artifact_id"`
+	Compensated bool   `json:"compensated"`
+	Target      string `json:"target"`
+}
+
 type TaskResultRecord struct {
 	Kind                   TaskResultKind               `json:"kind"`
 	ExitCode               int32                        `json:"exit_code"`
@@ -129,6 +146,8 @@ type TaskResultRecord struct {
 	Diagnostic             TaskResultDiagnostic         `json:"diagnostic"`
 	ReconciliationRequired bool                         `json:"reconciliation_required"`
 	Projects               []TaskObservedProjectSummary `json:"projects,omitempty"`
+	ProxyEvidence          []TaskProxyEvidence          `json:"proxy_evidence,omitempty"`
+	RecreateEvidence       []TaskRecreateEvidence       `json:"recreate_evidence,omitempty"`
 }
 
 type TaskTerminalAssignmentRecord struct {
@@ -256,6 +275,8 @@ type taskResultData struct {
 	Diagnostic             TaskResultDiagnostic             `json:"diagnostic"`
 	ReconciliationRequired bool                             `json:"reconciliation_required"`
 	Projects               []taskObservedProjectSummaryData `json:"projects,omitempty"`
+	ProxyEvidence          []TaskProxyEvidence              `json:"proxy_evidence,omitempty"`
+	RecreateEvidence       []TaskRecreateEvidence           `json:"recreate_evidence,omitempty"`
 }
 
 type taskObservedProjectSummaryData struct {
@@ -656,7 +677,33 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			return errs.New(errs.KindValidationFailed, "task result project count exceeds its limit")
 		}
 	}
+	if len(result.ProxyEvidence) > 32 {
+		return errs.New(errs.KindValidationFailed, "task result has too much proxy evidence")
+	}
+	for index, evidence := range result.ProxyEvidence {
+		if ids.Validate(ids.KindService, evidence.ServiceID) != nil || !validReleaseEvidenceTarget(evidence.Target) ||
+			evidence.ProxyGeneration == 0 ||
+			!validSHA256(evidence.ConfigSHA256) || evidence.ReleaseID == "" ||
+			(index > 0 && result.ProxyEvidence[index-1].ServiceID >= evidence.ServiceID) {
+			return errs.New(errs.KindValidationFailed, "task result proxy evidence is invalid or unsorted")
+		}
+	}
+	if len(result.RecreateEvidence) > 32 {
+		return errs.New(errs.KindValidationFailed, "task result has too much recreate evidence")
+	}
+	for index, evidence := range result.RecreateEvidence {
+		if ids.Validate(ids.KindService, evidence.ServiceID) != nil || !validReleaseEvidenceTarget(evidence.Target) ||
+			(evidence.ReleaseID != "baseline" && ids.Validate(ids.KindDeployment, evidence.ReleaseID) != nil) ||
+			ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil ||
+			(index > 0 && result.RecreateEvidence[index-1].ServiceID >= evidence.ServiceID) {
+			return errs.New(errs.KindValidationFailed, "task result recreate evidence is invalid or unsorted")
+		}
+	}
 	return nil
+}
+
+func validReleaseEvidenceTarget(value string) bool {
+	return value == "singleton" || value == "blue" || value == "green"
 }
 
 func validateTaskTimeline(record TaskRecord) error {
@@ -1011,7 +1058,9 @@ func taskResultToData(result *TaskResultRecord) *taskResultData {
 	data := &taskResultData{
 		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
 		Diagnostic: result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
-		Projects: make([]taskObservedProjectSummaryData, len(result.Projects)),
+		Projects:         make([]taskObservedProjectSummaryData, len(result.Projects)),
+		ProxyEvidence:    append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
+		RecreateEvidence: append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
 	}
 	for index, project := range result.Projects {
 		data.Projects[index] = taskObservedProjectSummaryData{
@@ -1030,7 +1079,9 @@ func taskResultFromData(data *taskResultData) (*TaskResultRecord, error) {
 	result := &TaskResultRecord{
 		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
 		Diagnostic: data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
-		Projects: make([]TaskObservedProjectSummary, len(data.Projects)),
+		Projects:         make([]TaskObservedProjectSummary, len(data.Projects)),
+		ProxyEvidence:    append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
+		RecreateEvidence: append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
 	}
 	for index, project := range data.Projects {
 		observedAt, err := parseCanonicalTimestamp(project.ObservedAt)
@@ -1101,6 +1152,8 @@ func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	}
 	cloned := *result
 	cloned.Projects = append([]TaskObservedProjectSummary(nil), result.Projects...)
+	cloned.ProxyEvidence = append([]TaskProxyEvidence(nil), result.ProxyEvidence...)
+	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
 	return &cloned
 }
 

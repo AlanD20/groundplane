@@ -79,6 +79,7 @@ type TaskPlanResolver struct {
 	services         attachPlanServiceReader
 	attachIdentities attachPlanIdentityResolver
 	componentCatalog []components.Registration
+	releases         *etcd.ReleaseLedger
 }
 
 type blueprintPlanStateReader interface {
@@ -122,6 +123,9 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
+	if task.Type == etcd.TaskDeploy || task.Type == etcd.TaskRollback {
+		return resolver.resolveReleasePlan(ctx, task)
+	}
 	if task.Type == etcd.TaskStart || task.Type == etcd.TaskStop || task.Type == etcd.TaskDestroy {
 		return resolver.resolveServiceLifecyclePlan(ctx, task)
 	}
@@ -448,13 +452,44 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhase(
 	phase core.ServiceLifecyclePhase,
 	transform environmentComposeTransform,
 ) (*agentpb.ComposeArtifact, error) {
+	return resolver.renderPinnedEnvironmentArtifactForPhaseWithReleases(
+		ctx, task, identity, revisionID, artifactID, projection, phase, transform, nil,
+	)
+}
+
+func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactWithReleases(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	identity pinnedEnvironmentIdentity,
+	revisionID string,
+	artifactID string,
+	projection etcd.EnvironmentComposeProjection,
+	transform environmentComposeTransform,
+	releases map[string]ComposeReleaseIdentity,
+) (*agentpb.ComposeArtifact, error) {
+	return resolver.renderPinnedEnvironmentArtifactForPhaseWithReleases(
+		ctx, task, identity, revisionID, artifactID, projection, "", transform, releases,
+	)
+}
+
+func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithReleases(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	identity pinnedEnvironmentIdentity,
+	revisionID string,
+	artifactID string,
+	projection etcd.EnvironmentComposeProjection,
+	phase core.ServiceLifecyclePhase,
+	transform environmentComposeTransform,
+	releases map[string]ComposeReleaseIdentity,
+) (*agentpb.ComposeArtifact, error) {
 	parsed, err := resolver.parsePinnedEnvironmentBlueprint(ctx, identity, revisionID)
 	if err != nil {
 		return nil, err
 	}
 	if len(parsed.Extensions.Requires) != 0 || len(parsed.Extensions.Attachments) != 0 ||
 		len(parsed.Extensions.Entries) != 0 || parsed.Extensions.Backup != nil ||
-		len(parsed.Extensions.ReleaseGroups) != 0 || len(parsed.Project.Configs) != 0 ||
+		(len(parsed.Extensions.ReleaseGroups) != 0 && releases == nil) || len(parsed.Project.Configs) != 0 ||
 		len(parsed.Project.Secrets) != 0 {
 		return nil, errs.New(errs.KindNotImplemented, "Blueprint materialized resources are not yet executable")
 	}
@@ -494,6 +529,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhase(
 		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
 		Identities:          composeIdentitySnapshotFromProjection(projection),
 		ExternalNetworks:    externalNetworks,
+		Releases:            releases,
 	})
 }
 

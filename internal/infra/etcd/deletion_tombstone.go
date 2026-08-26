@@ -15,15 +15,16 @@ import (
 type DeletionTargetKind string
 
 const (
-	DeletionTargetTenant      DeletionTargetKind = "tenant"
-	DeletionTargetProject     DeletionTargetKind = "project"
-	DeletionTargetEnvironment DeletionTargetKind = "environment"
-	DeletionTargetEntry       DeletionTargetKind = "entry"
-	DeletionTargetRoute       DeletionTargetKind = "route"
-	DeletionTargetScript      DeletionTargetKind = "script"
-	DeletionTargetSecret      DeletionTargetKind = "secret"
-	DeletionTargetConnector   DeletionTargetKind = "connector"
-	DeletionTargetZone        DeletionTargetKind = "zone"
+	DeletionTargetTenant       DeletionTargetKind = "tenant"
+	DeletionTargetProject      DeletionTargetKind = "project"
+	DeletionTargetEnvironment  DeletionTargetKind = "environment"
+	DeletionTargetEntry        DeletionTargetKind = "entry"
+	DeletionTargetRoute        DeletionTargetKind = "route"
+	DeletionTargetScript       DeletionTargetKind = "script"
+	DeletionTargetSecret       DeletionTargetKind = "secret"
+	DeletionTargetConnector    DeletionTargetKind = "connector"
+	DeletionTargetZone         DeletionTargetKind = "zone"
+	DeletionTargetReleaseGroup DeletionTargetKind = "release_group"
 )
 
 // DeletionPhase records which authority may advance a destructive operation.
@@ -640,6 +641,8 @@ func validateDeletionTarget(kind DeletionTargetKind, id string) error {
 		expected = ids.KindConnector
 	case DeletionTargetZone:
 		expected = ids.KindNetwork
+	case DeletionTargetReleaseGroup:
+		expected = ids.KindReleaseGroup
 	default:
 		return errs.New(errs.KindValidationFailed, "deletion target kind is invalid")
 	}

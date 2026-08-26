@@ -340,6 +340,15 @@ func (repository *TaskRepository) retryTask(
 		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
 	}
+	releaseChange, err := repository.prepareReleaseTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if releaseChange.applies {
+		conditions = append(conditions, releaseChange.conditions...)
+		mutations = append(mutations, releaseChange.mutations...)
+	}
+	defer releaseChange.clear()
 	attachChange, err := repository.prepareAttachTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -381,6 +390,15 @@ func (repository *TaskRepository) retryTask(
 		mutations = append(mutations, scriptChange.mutations...)
 	}
 	defer clearScriptTaskChange(scriptChange)
+	releaseGroupChange, err := repository.prepareReleaseGroupTaskRetry(ctx, source.Record, retry, source.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if releaseGroupChange.applies {
+		conditions = append(conditions, releaseGroupChange.conditions...)
+		mutations = append(mutations, releaseGroupChange.mutations...)
+	}
+	defer clearReleaseGroupTaskChange(releaseGroupChange)
 	routeChange, err := repository.prepareRemovalTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -456,6 +474,7 @@ func (repository *TaskRepository) retryTask(
 		len(componentChange.conditions),
 		len(connectorChange.conditions),
 		len(runnerChange.conditions),
+		len(releaseChange.conditions),
 	)
 	environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 		ctx,
@@ -513,11 +532,12 @@ func classifyTaskRetryConflict(
 	componentConditions int,
 	connectorConditions int,
 	runnerConditions int,
+	releaseConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		expectedValues := 5 + attachConditions + environmentConditions + secretConditions +
 			scriptConditions + routeConditions + serviceConditions + backingZoneConditions + componentConditions +
-			connectorConditions + runnerConditions
+			connectorConditions + runnerConditions + releaseConditions
 		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "task retry compare evidence is incomplete")
 		}
@@ -1296,6 +1316,25 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
+				if task.Params[TaskReleasePublicationParam] != "" {
+					headRead, err := repository.store.GetMany(ctx, GetManyRequest{
+						Keys: []string{releaseOperationKey(task.OperationID)}, Revision: primaryAndAssignment.ReadRevision,
+					})
+					if err != nil || headRead == nil || len(headRead.Values) != 1 || headRead.Values[0] == nil {
+						return Versioned[TaskRecord]{}, corruptReleaseRecord()
+					}
+					head, err := decodeReleaseRecord[ReleaseOperationHead](headRead.Values[0].Value, "release-operation")
+					if err != nil || repository.validateReleaseTerminalMembers(
+						ctx, task, head, terminalStatus, primaryAndAssignment.ReadRevision,
+					) != nil {
+						return Versioned[TaskRecord]{}, corruptReleaseRecord()
+					}
+				}
 				if err := repository.validateRemovalTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
@@ -1348,6 +1387,18 @@ func (repository *TaskRepository) acknowledgeTask(
 		terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
+		}
+		if executor == TaskExecutorAgent && task.Params[TaskReleasePublicationParam] != "" {
+			processed, err := repository.finalizeReleaseTaskBatch(
+				ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,
+				primaryAndAssignment.ReadRevision,
+			)
+			if err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+			if processed {
+				continue
+			}
 		}
 		if environmentRemoval && terminalStatus == TaskStatusCompleted {
 			processed, err := repository.finalizeEnvironmentBlueprintRevisionBatch(ctx, task, terminalAt)
@@ -1573,6 +1624,24 @@ func (repository *TaskRepository) acknowledgeTask(
 		if scriptChange.applies {
 			conditions = append(conditions, scriptChange.conditions...)
 			mutations = append(mutations, scriptChange.mutations...)
+		}
+		releaseGroupChange, err := repository.prepareReleaseGroupTaskAcknowledgement(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearScriptTaskChange(scriptChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		defer clearReleaseGroupTaskChange(releaseGroupChange)
+		if releaseGroupChange.applies {
+			conditions = append(conditions, releaseGroupChange.conditions...)
+			mutations = append(mutations, releaseGroupChange.mutations...)
 		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
@@ -2342,6 +2411,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
+			if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			if err := repository.validateRemovalTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
@@ -2553,6 +2627,26 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
 			return Versioned[TaskRecord]{}, err
+		}
+		releaseGroupChange, err := repository.prepareReleaseGroupTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearScriptTaskChange(scriptChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		defer clearReleaseGroupTaskChange(releaseGroupChange)
+		if releaseGroupChange.applies {
+			conditions = append(conditions, releaseGroupChange.conditions...)
+			mutations = append(mutations, releaseGroupChange.mutations...)
 		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,

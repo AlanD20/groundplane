@@ -7,6 +7,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
+func openAPISchema[T any](registry huma.Registry, name string) *huma.Schema {
+	return registry.Schema(reflect.TypeFor[T](), true, name)
+}
+
 func connectorCreateRequestSchema(registry huma.Registry) *huma.Schema {
 	reference := registry.Schema(
 		reflect.TypeFor[apiTypes.ConnectorCreateRequest](),

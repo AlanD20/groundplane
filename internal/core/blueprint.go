@@ -468,8 +468,8 @@ func validateReleaseGroupShape(
 	if strings.IndexFunc(name, unicode.IsControl) >= 0 {
 		return fmt.Errorf("release group %q: map key must not contain control characters", name)
 	}
-	if len(services) < 2 {
-		return fmt.Errorf("release group %s: at least two services are required", name)
+	if len(services) < 2 || len(services) > 32 {
+		return fmt.Errorf("release group %s: between 2 and 32 services are required", name)
 	}
 
 	members := make(map[string]struct{}, len(services))

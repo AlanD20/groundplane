@@ -7,11 +7,64 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"gopkg.in/yaml.v3"
 )
+
+func TestRenderComposePortlessRecreateGroupMemberIsSingleton(t *testing.T) {
+	serviceID := composeIdentityTestID(ids.KindService, 31)
+	project := &composetypes.Project{Services: composetypes.Services{"worker": composetypes.ServiceConfig{Image: "example/worker:previous"}}}
+	input := composeRenderTestInput(project)
+	input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "worker"}}
+	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
+		ReleaseID: composeIdentityTestID(ids.KindDeployment, 32), Image: "example/worker:next", Strategy: domain.StrategyRecreate,
+		Target: domain.WorkloadSingleton, ServingTarget: domain.WorkloadSingleton,
+		ServingReleaseID: "baseline", ServingProxyGeneration: 1,
+	}}
+	artifact, err := RenderCompose(input)
+	if err != nil {
+		t.Fatalf("RenderCompose() error = %v", err)
+	}
+	if len(artifact.Services) != 1 || artifact.Services[0].ComposeName != "worker" ||
+		artifact.Services[0].Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
+		t.Fatalf("portless recreate services = %#v, want one singleton", artifact.Services)
+	}
+	labels := labelPairMap(artifact.Services[0].ExpectedLabels)
+	if labels[composeLabelRuntimeRole] != "singleton" || labels[composeLabelReleaseID] != input.Releases[serviceID].ReleaseID {
+		t.Fatalf("portless recreate labels = %#v", labels)
+	}
+}
+
+func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing.T) {
+	serviceID := composeIdentityTestID(ids.KindService, 33)
+	project := &composetypes.Project{Services: composetypes.Services{"api": composetypes.ServiceConfig{Image: "example/api:previous", Expose: []string{"8080"}}}}
+	input := composeRenderTestInput(project)
+	input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "api"}}
+	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
+		ReleaseID: composeIdentityTestID(ids.KindDeployment, 34), Image: "example/api:next", Strategy: domain.StrategyRecreate,
+		Target: domain.WorkloadSingleton, ServingTarget: domain.WorkloadBlue,
+		ServingReleaseID: "baseline", ServingProxyGeneration: 1,
+	}}
+	artifact, err := RenderCompose(input)
+	if err != nil {
+		t.Fatalf("RenderCompose() error = %v", err)
+	}
+	roles, candidate := map[agentpb.ComposeServiceRole]int{}, false
+	for _, service := range artifact.Services {
+		roles[service.Role]++
+		if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
+			candidate = labelPairMap(service.ExpectedLabels)[composeLabelReleaseID] == input.Releases[serviceID].ReleaseID
+		}
+	}
+	if roles[agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY] != 1 ||
+		roles[agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON] != 1 ||
+		roles[agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT] != 0 || !candidate {
+		t.Fatalf("addressable recreate roles = %#v candidate=%v", roles, candidate)
+	}
+}
 
 // Rationale: rendering must preserve native Compose fields and profile-disabled services while adding only generated
 // identity and ownership data.

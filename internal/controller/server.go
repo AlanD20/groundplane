@@ -43,6 +43,10 @@ type Server struct {
 	environments          EnvironmentReader
 	services              ServiceReader
 	serviceMutations      ServiceMutator
+	releaseGroups         ReleaseGroupReader
+	releaseGroupMutations ReleaseGroupMutator
+	releases              ReleaseReader
+	releaseOperations     ReleaseOperator
 	zones                 ZoneReader
 	zoneMutations         ZoneMutator
 	routeReads            RouteReader
@@ -88,6 +92,10 @@ type Options struct {
 	Environments          EnvironmentReader
 	Services              ServiceReader
 	ServiceMutations      ServiceMutator
+	ReleaseGroups         ReleaseGroupReader
+	ReleaseGroupMutations ReleaseGroupMutator
+	Releases              ReleaseReader
+	ReleaseOperations     ReleaseOperator
 	Zones                 ZoneReader
 	ZoneMutations         ZoneMutator
 	Routes                RouteReader
@@ -146,6 +154,10 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		environments:          options.Environments,
 		services:              options.Services,
 		serviceMutations:      options.ServiceMutations,
+		releaseGroups:         options.ReleaseGroups,
+		releaseGroupMutations: options.ReleaseGroupMutations,
+		releases:              options.Releases,
+		releaseOperations:     options.ReleaseOperations,
 		zones:                 options.Zones,
 		zoneMutations:         options.ZoneMutations,
 		routeReads:            options.Routes,
@@ -185,6 +197,8 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerEnvironments()
 	s.registerEnvironmentBlueprints()
 	s.registerServices()
+	s.registerReleaseGroups()
+	s.registerReleases()
 	s.registerZones()
 	s.registerRoutes()
 	s.registerScripts()
@@ -244,18 +258,9 @@ func (s *Server) routes() {
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
 	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
-	s.jsonRoute("POST /api/v1/services/{id}/deploy", s.acceptTask) // {tag?, strategy?, on_failure?}
-	s.jsonRoute("POST /api/v1/services/{id}/rollback", s.acceptTask)
 	s.streamRoute("GET /api/v1/services/{id}/logs", s.notImplemented)
 
-	// release-group (?environment=)
-	mux.HandleFunc("GET /api/v1/release-groups", s.notImplemented)
-	s.jsonRoute("POST /api/v1/release-groups", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/release-groups/{id}", s.notImplemented)
-	s.jsonRoute("PATCH /api/v1/release-groups/{id}", s.notImplemented)
-	mux.HandleFunc("DELETE /api/v1/release-groups/{id}", s.acceptTask)
-	s.jsonRoute("POST /api/v1/release-groups/{id}/deploy", s.acceptTask)
-	s.jsonRoute("POST /api/v1/release-groups/{id}/rollback", s.acceptTask)
+	// Release Group metadata is registered as typed Huma operations.
 
 	// Zone reads and synchronous creation are typed Huma operations. Task-backed
 	// removal remains explicit; Zone fields are immutable and have no PATCH.

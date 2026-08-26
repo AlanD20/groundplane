@@ -41,13 +41,19 @@ const (
 	CodeStorageUnavailable  Code = "storage.unavailable"
 
 	// --- not-found additions required by the durable record catalog ---
-	CodeZoneNotFound         Code = "zone.not_found"
-	CodeRouteNotFound        Code = "route.not_found"
-	CodeVolumeNotFound       Code = "volume.not_found"
-	CodeEntryNotFound        Code = "entry.not_found"
-	CodeScriptNotFound       Code = "script.not_found"
-	CodeReleaseNotFound      Code = "release.not_found"
-	CodeBackupSourceNotFound Code = "backup_source.not_found"
+	CodeZoneNotFound              Code = "zone.not_found"
+	CodeRouteNotFound             Code = "route.not_found"
+	CodeVolumeNotFound            Code = "volume.not_found"
+	CodeEntryNotFound             Code = "entry.not_found"
+	CodeScriptNotFound            Code = "script.not_found"
+	CodeReleaseNotFound           Code = "release.not_found"
+	CodeReleaseRecoveryRequired   Code = "release.recovery_required"
+	CodeReleaseDeadlineTooShort   Code = "release.deadline_too_short"
+	CodeReleasePlanTooLarge       Code = "release.plan_too_large"
+	CodeReleaseGroupTagRequired   Code = "release_group.tag_required"
+	CodeRollbackNoPreviousRelease Code = "rollback.no_previous_release"
+	CodeRollbackSourceExpired     Code = "rollback.source_expired"
+	CodeBackupSourceNotFound      Code = "backup_source.not_found"
 
 	// --- declared-deferred / not-yet-implemented product surface ---
 	CodeStrategyNotImplemented Code = "strategy.not_implemented"
@@ -114,6 +120,12 @@ const (
 	KindEntryNotFound
 	KindScriptNotFound
 	KindReleaseNotFound
+	KindReleaseRecoveryRequired
+	KindReleaseDeadlineTooShort
+	KindReleasePlanTooLarge
+	KindReleaseGroupTagRequired
+	KindRollbackNoPreviousRelease
+	KindRollbackSourceExpired
 	KindBackupSourceNotFound
 	KindStrategyNotImplemented
 	KindRotationNotImplemented
@@ -174,6 +186,12 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindEntryNotFound:               {CodeEntryNotFound, ClassNotFound, 404},
 	KindScriptNotFound:              {CodeScriptNotFound, ClassNotFound, 404},
 	KindReleaseNotFound:             {CodeReleaseNotFound, ClassNotFound, 404},
+	KindReleaseRecoveryRequired:     {CodeReleaseRecoveryRequired, ClassConflict, 409},
+	KindReleaseDeadlineTooShort:     {CodeReleaseDeadlineTooShort, ClassValidation, 422},
+	KindReleasePlanTooLarge:         {CodeReleasePlanTooLarge, ClassValidation, 422},
+	KindReleaseGroupTagRequired:     {CodeReleaseGroupTagRequired, ClassValidation, 422},
+	KindRollbackNoPreviousRelease:   {CodeRollbackNoPreviousRelease, ClassConflict, 409},
+	KindRollbackSourceExpired:       {CodeRollbackSourceExpired, ClassConflict, 409},
 	KindBackupSourceNotFound:        {CodeBackupSourceNotFound, ClassNotFound, 404},
 	KindStrategyNotImplemented:      {CodeStrategyNotImplemented, ClassValidation, 422},
 	KindRotationNotImplemented:      {CodeRotationNotImplemented, ClassValidation, 422},

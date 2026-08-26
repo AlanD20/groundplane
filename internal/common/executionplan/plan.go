@@ -46,6 +46,7 @@ const (
 	labelProjectID     = "com.groundplane.project-id"
 	labelReleaseID     = "com.groundplane.release-id"
 	labelRenderGen     = "com.groundplane.render-generation"
+	labelRuntimeRole   = "com.groundplane.runtime-role"
 	labelServiceID     = "com.groundplane.service-id"
 	labelSlot          = "com.groundplane.slot"
 	labelTenantID      = "com.groundplane.tenant-id"
@@ -476,10 +477,11 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 			validateID(ids.KindComponent, service.ServiceId) != nil) {
 			return errs.New(errs.KindValidationFailed, "Compose artifact service id is invalid")
 		}
-		if previous >= service.ServiceId {
-			return errs.New(errs.KindValidationFailed, "Compose artifact services must be uniquely sorted by id")
+		identity := service.ServiceId + "\x00" + service.ComposeName
+		if previous >= identity {
+			return errs.New(errs.KindValidationFailed, "Compose artifact services must be uniquely sorted by id and name")
 		}
-		previous = service.ServiceId
+		previous = identity
 		if err := validateComposeName(service.ComposeName); err != nil {
 			return err
 		}
@@ -488,6 +490,28 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		}
 		if err := validateLabels(plan, artifact, "service", service.ServiceId, service.ExpectedLabels); err != nil {
 			return err
+		}
+		switch service.Role {
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED:
+			if service.Slot != "" || len(service.ProxyConfigJson) != 0 || len(service.ProxyConfigSha256) != 0 {
+				return errs.New(errs.KindValidationFailed, "ordinary Compose service carries release runtime metadata")
+			}
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
+			if service.Slot != "blue" && service.Slot != "green" || len(service.ProxyConfigJson) != 0 || len(service.ProxyConfigSha256) != 0 {
+				return errs.New(errs.KindValidationFailed, "workload slot service metadata is invalid")
+			}
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON:
+			if service.Slot != "" || len(service.ProxyConfigJson) != 0 || len(service.ProxyConfigSha256) != 0 {
+				return errs.New(errs.KindValidationFailed, "recreate singleton service metadata is invalid")
+			}
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
+			digest := sha256.Sum256(service.ProxyConfigJson)
+			if service.Slot != "" || len(service.ProxyConfigJson) == 0 || len(service.ProxyConfigSha256) != sha256.Size ||
+				subtle.ConstantTimeCompare(service.ProxyConfigSha256, digest[:]) != 1 {
+				return errs.New(errs.KindValidationFailed, "stable proxy service metadata is invalid")
+			}
+		default:
+			return errs.New(errs.KindValidationFailed, "Compose service runtime role is unsupported")
 		}
 	}
 	return nil
@@ -549,8 +573,11 @@ func validateLabels(
 	values := make(map[string]string, len(pairs))
 	previous := ""
 	for _, pair := range pairs {
-		if pair == nil || pair.Key <= previous || !validLabelKey(pair.Key) || !utf8.ValidString(pair.Value) {
+		if pair == nil {
 			return errs.New(errs.KindValidationFailed, "expected ownership labels are invalid or unsorted")
+		}
+		if pair.Key <= previous || !validLabelKey(pair.Key) || !utf8.ValidString(pair.Value) {
+			return errs.Newf(errs.KindValidationFailed, "expected ownership label %q after %q is invalid or unsorted", pair.Key, previous)
 		}
 		previous = pair.Key
 		values[pair.Key] = pair.Value
@@ -588,6 +615,11 @@ func validateLabels(
 				continue
 			}
 			return errs.New(errs.KindValidationFailed, "expected slot label is invalid")
+		case labelRuntimeRole:
+			if value == "slot" || value == "proxy" || value == "singleton" {
+				continue
+			}
+			return errs.New(errs.KindValidationFailed, "expected runtime role label is invalid")
 		default:
 			continue
 		}
@@ -616,6 +648,10 @@ func validateStep(
 		if payload.ComposeApply.FullReconcile == (len(selected) != 0) {
 			return errs.New(errs.KindValidationFailed, "Compose apply selection is inconsistent")
 		}
+		if payload.ComposeApply.FullReconcile && (payload.ComposeApply.ForceRecreate || payload.ComposeApply.NoDependencies) ||
+			payload.ComposeApply.NoDependencies && !payload.ComposeApply.ForceRecreate {
+			return errs.New(errs.KindValidationFailed, "Compose apply replacement options are inconsistent")
+		}
 		return validateSelection(payload.ComposeApply.ArtifactId, selected, artifacts, false)
 	case *agentpb.ExecutionStep_ComposeStop:
 		if payload.ComposeStop == nil || payload.ComposeStop.GraceSeconds == 0 ||
@@ -642,6 +678,22 @@ func validateStep(
 			return errs.New(errs.KindValidationFailed, "health wait payload is empty")
 		}
 		return validateSelection(payload.WaitHealthy.ArtifactId, payload.WaitHealthy.ServiceIds, artifacts, true)
+	case *agentpb.ExecutionStep_ComposeWorkloadApply:
+		return validateReleaseWorkloadStep(operation, payload.ComposeWorkloadApply.GetArtifactId(), payload.ComposeWorkloadApply.GetServiceId(), payload.ComposeWorkloadApply.GetTarget(), artifacts)
+	case *agentpb.ExecutionStep_WaitWorkloadHealthy:
+		return validateReleaseWorkloadStep(operation, payload.WaitWorkloadHealthy.GetArtifactId(), payload.WaitWorkloadHealthy.GetServiceId(), payload.WaitWorkloadHealthy.GetTarget(), artifacts)
+	case *agentpb.ExecutionStep_ServiceProxySwitch:
+		return validateServiceProxySwitch(operation, payload.ServiceProxySwitch, artifacts)
+	case *agentpb.ExecutionStep_ServiceProxyProbe:
+		return validateServiceProxyProbe(operation, payload.ServiceProxyProbe, artifacts)
+	case *agentpb.ExecutionStep_ServiceProxyCompensate:
+		return validateServiceProxyCompensate(operation, payload.ServiceProxyCompensate, artifacts)
+	case *agentpb.ExecutionStep_ServiceRecreateAcknowledge:
+		return validateServiceRecreateAcknowledge(operation, payload.ServiceRecreateAcknowledge, artifacts)
+	case *agentpb.ExecutionStep_ServiceRecreateProbe:
+		return validateServiceRecreateProbe(operation, payload.ServiceRecreateProbe, artifacts)
+	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
+		return validateServiceRecreateCompensate(operation, payload.ServiceRecreateCompensate, artifacts)
 	case *agentpb.ExecutionStep_EnvironmentDirectoryCreate:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE ||
 			payload.EnvironmentDirectoryCreate == nil ||
@@ -1178,7 +1230,7 @@ func validOperation(operation agentpb.PlanOperation) bool {
 func validLabelKey(key string) bool {
 	switch key {
 	case labelEnvironmentID, labelKind, labelManaged, labelPlanID, labelProjectID,
-		labelReleaseID, labelRenderGen, labelServiceID, labelSlot, labelTenantID:
+		labelReleaseID, labelRenderGen, labelRuntimeRole, labelServiceID, labelSlot, labelTenantID:
 		return true
 	default:
 		return false

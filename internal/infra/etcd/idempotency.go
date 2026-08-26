@@ -56,15 +56,16 @@ type IdempotencyLocator struct {
 type IdempotencyReplayTargetKind string
 
 const (
-	IdempotencyReplayTargetAttach    IdempotencyReplayTargetKind = "attach"
-	IdempotencyReplayTargetConnector IdempotencyReplayTargetKind = "connector"
-	IdempotencyReplayTargetEntry     IdempotencyReplayTargetKind = "entry"
-	IdempotencyReplayTargetRoute     IdempotencyReplayTargetKind = "route"
-	IdempotencyReplayTargetRunner    IdempotencyReplayTargetKind = "runner"
-	IdempotencyReplayTargetScript    IdempotencyReplayTargetKind = "script"
-	IdempotencyReplayTargetSecret    IdempotencyReplayTargetKind = "secret"
-	IdempotencyReplayTargetZone      IdempotencyReplayTargetKind = "zone"
-	IdempotencyReplayTargetService   IdempotencyReplayTargetKind = "service"
+	IdempotencyReplayTargetAttach       IdempotencyReplayTargetKind = "attach"
+	IdempotencyReplayTargetConnector    IdempotencyReplayTargetKind = "connector"
+	IdempotencyReplayTargetEntry        IdempotencyReplayTargetKind = "entry"
+	IdempotencyReplayTargetRoute        IdempotencyReplayTargetKind = "route"
+	IdempotencyReplayTargetRunner       IdempotencyReplayTargetKind = "runner"
+	IdempotencyReplayTargetScript       IdempotencyReplayTargetKind = "script"
+	IdempotencyReplayTargetReleaseGroup IdempotencyReplayTargetKind = "release_group"
+	IdempotencyReplayTargetSecret       IdempotencyReplayTargetKind = "secret"
+	IdempotencyReplayTargetZone         IdempotencyReplayTargetKind = "zone"
+	IdempotencyReplayTargetService      IdempotencyReplayTargetKind = "service"
 )
 
 type IdempotencyReplayTarget struct {
@@ -288,6 +289,10 @@ func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
 		}
 	case IdempotencyReplayTargetScript:
 		if ids.Validate(ids.KindScript, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetReleaseGroup:
+		if ids.Validate(ids.KindReleaseGroup, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
 	case IdempotencyReplayTargetSecret:

@@ -47,9 +47,10 @@ type LogConfig struct {
 // hold (this file + the controller age key) are exported with the DR
 // bundle. See mvp.md, "Everything is etcd (locked)".
 type ControllerConfig struct {
-	EnvironmentPool string `yaml:"environment_pool"`
-	SystemPool      string `yaml:"system_pool"`
-	Etcd            struct {
+	EnvironmentPool         string `yaml:"environment_pool"`
+	SystemPool              string `yaml:"system_pool"`
+	ReleaseExecutionTimeout string `yaml:"release_execution_timeout"`
+	Etcd                    struct {
 		Endpoints []string `yaml:"endpoints"`
 		KeyPrefix string   `yaml:"key_prefix"`
 	} `yaml:"etcd"`
@@ -102,6 +103,7 @@ func DefaultControllerConfig() ControllerConfig {
 	c.Etcd.KeyPrefix = "/groundplane/"
 	c.Listen.HTTP = "127.0.0.1:8080"
 	c.Scheduler.TickInterval = "30s"
+	c.ReleaseExecutionTimeout = "15h"
 	c.Storage.VolumeRoot = environmentpath.DefaultVolumeRoot
 	c.Agent.Runtime.PullIntervalSeconds = 2
 	c.Agent.Runtime.MaxConcurrentTasks = 3
@@ -188,6 +190,13 @@ func (c ControllerConfig) Validate() error {
 	if tick <= 0 {
 		return fmt.Errorf("config: controller scheduler.tick_interval must be positive")
 	}
+	releaseTimeout, err := time.ParseDuration(c.ReleaseExecutionTimeout)
+	if err != nil {
+		return fmt.Errorf("config: controller release_execution_timeout: %w", err)
+	}
+	if releaseTimeout < 40*time.Minute || releaseTimeout > 24*time.Hour {
+		return fmt.Errorf("config: controller release_execution_timeout must be between 40m and 24h")
+	}
 	if err := environmentpath.ValidateRoot(c.Storage.VolumeRoot); err != nil {
 		return fmt.Errorf("config: controller storage.volume_root: %w", err)
 	}
@@ -201,6 +210,17 @@ func (c ControllerConfig) Validate() error {
 		return fmt.Errorf("config: controller age_key_path must be absolute")
 	}
 	return validateLog("controller", c.Log)
+}
+
+// ParsedReleaseExecutionTimeout returns the validated bound for one Release
+// execution attempt. Validate must still be called before constructing runtime
+// services; this method keeps duration parsing inside the one config reader.
+func (c ControllerConfig) ParsedReleaseExecutionTimeout() (time.Duration, error) {
+	value, err := time.ParseDuration(c.ReleaseExecutionTimeout)
+	if err != nil || value < 40*time.Minute || value > 24*time.Hour {
+		return 0, fmt.Errorf("config: controller release_execution_timeout must be between 40m and 24h")
+	}
+	return value, nil
 }
 
 // AllocationPools parses and validates the required machine allocation roots.

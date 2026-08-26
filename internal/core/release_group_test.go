@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestOnFailureWithDefault(t *testing.T) {
 	// Rationale: every omitted service or group policy must resolve to the
@@ -115,6 +118,12 @@ func TestReleaseGroupSpecValidate(t *testing.T) {
 			wantError: true,
 		},
 		{
+			name:      "more than thirty two members",
+			groupName: "realtime",
+			spec:      ReleaseGroupSpec{Services: makeReleaseGroupMembers(33)},
+			wantError: true,
+		},
+		{
 			name:      "blank member",
 			groupName: "realtime",
 			spec:      ReleaseGroupSpec{Services: []string{"api", " "}},
@@ -184,4 +193,12 @@ func TestReleaseGroupSpecValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func makeReleaseGroupMembers(count int) []string {
+	members := make([]string, count)
+	for index := range members {
+		members[index] = fmt.Sprintf("service-%02d", index)
+	}
+	return members
 }

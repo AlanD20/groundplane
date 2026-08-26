@@ -187,18 +187,32 @@ func newServiceCmd() *cobra.Command {
 		Short: "Deploy a service (tag defaults to the current tag — the redeploy case)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := "/api/v1/services/" + target(fromContext(cmd), args[0]) + "/deploy"
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			path := "/api/v1/services/" + serviceID + "/deploy"
+			body := map[string]string{}
+			if deployTag != "" {
+				body["tag"] = deployTag
+			}
+			if deployStrategy != "" {
+				body["strategy"] = deployStrategy
+			}
+			if deployOnFailure != "" {
+				body["on_failure"] = deployOnFailure
+			}
 			return runAction(
 				cmd,
 				path,
-				map[string]string{"tag": deployTag, "strategy": deployStrategy, "on_failure": deployOnFailure},
+				body,
 			)
 		},
 	}
 	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag (defaults to the current tag)")
 	deploy.Flags().
 		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling (rolling is declared-deferred)")
-	deploy.Flags().StringVar(&deployOnFailure, "on-failure", "", "switch-back | leave-active (defaults to switch-back)")
+	deploy.Flags().StringVar(&deployOnFailure, "on-failure", "", "switch_back | leave_active (defaults to the Service declaration)")
 	cmd.AddCommand(deploy)
 
 	var rollbackTag string
@@ -207,8 +221,16 @@ func newServiceCmd() *cobra.Command {
 		Short: "Roll back a service (defaults to the pre-selected previous tag)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := "/api/v1/services/" + target(fromContext(cmd), args[0]) + "/rollback"
-			return runAction(cmd, path, map[string]string{"tag": rollbackTag})
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			path := "/api/v1/services/" + serviceID + "/rollback"
+			body := map[string]string{}
+			if rollbackTag != "" {
+				body["tag"] = rollbackTag
+			}
+			return runAction(cmd, path, body)
 		},
 	}
 	rollback.Flags().StringVar(&rollbackTag, "tag", "", "explicit tag (overrides the auto-selected previous tag)")

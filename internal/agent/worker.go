@@ -182,6 +182,10 @@ func (p *WorkerPool) runWorker(runCtx context.Context) {
 }
 
 func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservation) {
+	if isReleaseExecution(reservation.assignment.Plan) {
+		p.executeRelease(runCtx, reservation)
+		return
+	}
 	err := reservation.ctx.Err()
 	planHash := hashForPlan(reservation.assignment.Plan)
 	exitCode := int32(0)
@@ -301,6 +305,25 @@ func composeTaskResult(
 		result.Projects = append(result.Projects, projects[name])
 	}
 	return result
+}
+
+func isReleaseExecution(plan *agentpb.ExecutionPlan) bool {
+	if plan == nil || (plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_DEPLOY &&
+		plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK) {
+		return false
+	}
+	for _, step := range plan.Steps {
+		if step == nil {
+			continue
+		}
+		switch step.Policy {
+		case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE:
+			return true
+		}
+	}
+	return false
 }
 
 func terminalFor(taskCtx context.Context, err error) TaskTerminal {

@@ -808,6 +808,8 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 		FailedStepID: result.GetFailedStepId(), Diagnostic: diagnostic,
 		ReconciliationRequired: result.GetReconciliationRequired(),
 		Projects:               make([]etcd.TaskObservedProjectSummary, len(result.GetProjects())),
+		ProxyEvidence:          make([]etcd.TaskProxyEvidence, len(result.GetProxyEvidence())),
+		RecreateEvidence:       make([]etcd.TaskRecreateEvidence, len(result.GetRecreateEvidence())),
 	}
 	for index, project := range result.GetProjects() {
 		durable.Projects[index] = etcd.TaskObservedProjectSummary{
@@ -823,12 +825,22 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 			CollisionCount: uint32(len(project.GetCollisions())),
 		}
 	}
+	for index, evidence := range result.GetProxyEvidence() {
+		durable.ProxyEvidence[index] = etcd.TaskProxyEvidence{
+			ServiceID: evidence.GetServiceId(), Target: evidence.GetTarget(),
+			ProxyGeneration: evidence.GetProxyGeneration(), ConfigSHA256: hex.EncodeToString(evidence.GetConfigSha256()),
+			ReleaseID: evidence.GetReleaseId(), Compensated: evidence.GetCompensated(),
+		}
+	}
+	for index, evidence := range result.GetRecreateEvidence() {
+		durable.RecreateEvidence[index] = etcd.TaskRecreateEvidence{ServiceID: evidence.GetServiceId(), ReleaseID: evidence.GetReleaseId(), ArtifactID: evidence.GetArtifactId(), Compensated: evidence.GetCompensated(), Target: evidence.GetTarget()}
+	}
 	return durable
 }
 
 func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 	result := acknowledgement.GetComposeResult()
-	if result == nil || len(result.GetProjects()) > 64 {
+	if result == nil || len(result.GetProjects()) > 64 || len(result.GetProxyEvidence()) > 32 || len(result.GetRecreateEvidence()) > 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Compose Task result is invalid")
 	}
 	switch result.GetDiagnostic() {
@@ -865,7 +877,30 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 			}
 		}
 	}
+	previousServiceID := ""
+	for _, evidence := range result.GetProxyEvidence() {
+		if evidence == nil || ids.Validate(ids.KindService, evidence.GetServiceId()) != nil ||
+			!validAgentReleaseTarget(evidence.GetTarget()) || evidence.GetProxyGeneration() == 0 ||
+			len(evidence.GetConfigSha256()) != sha256.Size || evidence.GetReleaseId() == "" ||
+			evidence.GetServiceId() <= previousServiceID {
+			return errs.New(errs.KindValidationFailed, "Agent Compose Task proxy evidence is invalid or unsorted")
+		}
+		previousServiceID = evidence.GetServiceId()
+	}
+	previousServiceID = ""
+	for _, evidence := range result.GetRecreateEvidence() {
+		if evidence == nil || ids.Validate(ids.KindService, evidence.GetServiceId()) != nil ||
+			(evidence.GetReleaseId() != "baseline" && ids.Validate(ids.KindDeployment, evidence.GetReleaseId()) != nil) ||
+			ids.Validate(ids.KindConfig, evidence.GetArtifactId()) != nil || !validAgentReleaseTarget(evidence.GetTarget()) || evidence.GetServiceId() <= previousServiceID {
+			return errs.New(errs.KindValidationFailed, "Agent Compose Task recreate evidence is invalid or unsorted")
+		}
+		previousServiceID = evidence.GetServiceId()
+	}
 	return nil
+}
+
+func validAgentReleaseTarget(value string) bool {
+	return value == "singleton" || value == "blue" || value == "green"
 }
 
 func taskStoreStatus(err error) error {

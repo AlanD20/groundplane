@@ -543,6 +543,17 @@ type ConnectorCredentialInput1 struct {
 	Value string `json:"value"`
 }
 
+// DeployRequest defines model for DeployRequest.
+type DeployRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/DeployRequest.json
+	Schema    *string `json:"$schema,omitempty"`
+	OnFailure *string `json:"on_failure,omitempty"`
+	Strategy  *string `json:"strategy,omitempty"`
+	Tag       *string `json:"tag,omitempty"`
+}
+
 // Entry defines model for Entry.
 type Entry struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -725,6 +736,12 @@ type HostResource struct {
 	UsedPct int64  `json:"used_pct"`
 }
 
+// OptionalNullableString defines model for OptionalNullableString.
+type OptionalNullableString struct {
+	Present bool    `json:"Present"`
+	Value   *string `json:"Value"`
+}
+
 // PageAgent defines model for PageAgent.
 type PageAgent struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -733,6 +750,7 @@ type PageAgent struct {
 	Schema     *string  `json:"$schema,omitempty"`
 	Items      *[]Agent `json:"items"`
 	NextCursor *string  `json:"next_cursor,omitempty"`
+	Revision   *int64   `json:"revision,omitempty"`
 }
 
 // PageAttach defines model for PageAttach.
@@ -743,6 +761,7 @@ type PageAttach struct {
 	Schema     *string   `json:"$schema,omitempty"`
 	Items      *[]Attach `json:"items"`
 	NextCursor *string   `json:"next_cursor,omitempty"`
+	Revision   *int64    `json:"revision,omitempty"`
 }
 
 // PageBackingService defines model for PageBackingService.
@@ -753,6 +772,7 @@ type PageBackingService struct {
 	Schema     *string           `json:"$schema,omitempty"`
 	Items      *[]BackingService `json:"items"`
 	NextCursor *string           `json:"next_cursor,omitempty"`
+	Revision   *int64            `json:"revision,omitempty"`
 }
 
 // PageConnector defines model for PageConnector.
@@ -763,6 +783,7 @@ type PageConnector struct {
 	Schema     *string      `json:"$schema,omitempty"`
 	Items      *[]Connector `json:"items"`
 	NextCursor *string      `json:"next_cursor,omitempty"`
+	Revision   *int64       `json:"revision,omitempty"`
 }
 
 // PageEntry defines model for PageEntry.
@@ -773,6 +794,29 @@ type PageEntry struct {
 	Schema     *string  `json:"$schema,omitempty"`
 	Items      *[]Entry `json:"items"`
 	NextCursor *string  `json:"next_cursor,omitempty"`
+	Revision   *int64   `json:"revision,omitempty"`
+}
+
+// PageReleaseGroup defines model for PageReleaseGroup.
+type PageReleaseGroup struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageReleaseGroup.json
+	Schema     *string         `json:"$schema,omitempty"`
+	Items      *[]ReleaseGroup `json:"items"`
+	NextCursor *string         `json:"next_cursor,omitempty"`
+	Revision   *int64          `json:"revision,omitempty"`
+}
+
+// PageReleaseSummary defines model for PageReleaseSummary.
+type PageReleaseSummary struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageReleaseSummary.json
+	Schema     *string           `json:"$schema,omitempty"`
+	Items      *[]ReleaseSummary `json:"items"`
+	NextCursor *string           `json:"next_cursor,omitempty"`
+	Revision   *int64            `json:"revision,omitempty"`
 }
 
 // PageRoute defines model for PageRoute.
@@ -783,6 +827,7 @@ type PageRoute struct {
 	Schema     *string  `json:"$schema,omitempty"`
 	Items      *[]Route `json:"items"`
 	NextCursor *string  `json:"next_cursor,omitempty"`
+	Revision   *int64   `json:"revision,omitempty"`
 }
 
 // PageScript defines model for PageScript.
@@ -793,6 +838,7 @@ type PageScript struct {
 	Schema     *string   `json:"$schema,omitempty"`
 	Items      *[]Script `json:"items"`
 	NextCursor *string   `json:"next_cursor,omitempty"`
+	Revision   *int64    `json:"revision,omitempty"`
 }
 
 // PageSecret defines model for PageSecret.
@@ -803,6 +849,7 @@ type PageSecret struct {
 	Schema     *string   `json:"$schema,omitempty"`
 	Items      *[]Secret `json:"items"`
 	NextCursor *string   `json:"next_cursor,omitempty"`
+	Revision   *int64    `json:"revision,omitempty"`
 }
 
 // PageService defines model for PageService.
@@ -813,6 +860,7 @@ type PageService struct {
 	Schema     *string    `json:"$schema,omitempty"`
 	Items      *[]Service `json:"items"`
 	NextCursor *string    `json:"next_cursor,omitempty"`
+	Revision   *int64     `json:"revision,omitempty"`
 }
 
 // PageTask defines model for PageTask.
@@ -823,6 +871,7 @@ type PageTask struct {
 	Schema     *string `json:"$schema,omitempty"`
 	Items      *[]Task `json:"items"`
 	NextCursor *string `json:"next_cursor,omitempty"`
+	Revision   *int64  `json:"revision,omitempty"`
 }
 
 // PageVolume defines model for PageVolume.
@@ -833,6 +882,7 @@ type PageVolume struct {
 	Schema     *string   `json:"$schema,omitempty"`
 	Items      *[]Volume `json:"items"`
 	NextCursor *string   `json:"next_cursor,omitempty"`
+	Revision   *int64    `json:"revision,omitempty"`
 }
 
 // PageZone defines model for PageZone.
@@ -843,6 +893,7 @@ type PageZone struct {
 	Schema     *string `json:"$schema,omitempty"`
 	Items      *[]Zone `json:"items"`
 	NextCursor *string `json:"next_cursor,omitempty"`
+	Revision   *int64  `json:"revision,omitempty"`
 }
 
 // Project defines model for Project.
@@ -897,6 +948,174 @@ type ProjectRename struct {
 	// Examples: /api/v1/ProjectRename.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// ReleaseAttempt defines model for ReleaseAttempt.
+type ReleaseAttempt struct {
+	Id        string  `json:"id"`
+	RetryOf   *string `json:"retry_of,omitempty"`
+	StartedAt string  `json:"started_at"`
+	TaskId    string  `json:"task_id"`
+}
+
+// ReleaseDetail defines model for ReleaseDetail.
+type ReleaseDetail struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseDetail.json
+	Schema                   *string                  `json:"$schema,omitempty"`
+	Attempts                 *[]ReleaseAttempt        `json:"attempts"`
+	CompletedAt              *string                  `json:"completed_at,omitempty"`
+	CreatedAt                string                   `json:"created_at"`
+	CurrentSuccessful        bool                     `json:"current_successful"`
+	Digest                   *string                  `json:"digest,omitempty"`
+	EnvironmentId            string                   `json:"environment_id"`
+	GroupMemberOrdinal       *int32                   `json:"group_member_ordinal,omitempty"`
+	GroupOperationId         *string                  `json:"group_operation_id,omitempty"`
+	Id                       string                   `json:"id"`
+	Image                    string                   `json:"image"`
+	OnFailure                string                   `json:"on_failure"`
+	OperationId              string                   `json:"operation_id"`
+	OperationKind            string                   `json:"operation_kind"`
+	OriginatingTaskId        string                   `json:"originating_task_id"`
+	PriorServingReleaseId    *string                  `json:"prior_serving_release_id,omitempty"`
+	PriorSuccessfulReleaseId *string                  `json:"prior_successful_release_id,omitempty"`
+	RenderInputDigest        string                   `json:"render_input_digest"`
+	RollbackMaterial         *ReleaseRollbackMaterial `json:"rollback_material,omitempty"`
+	RollbackSourceReleaseId  *string                  `json:"rollback_source_release_id,omitempty"`
+	ServiceId                string                   `json:"service_id"`
+	Serving                  bool                     `json:"serving"`
+	Slot                     *string                  `json:"slot,omitempty"`
+	State                    string                   `json:"state"`
+	Strategy                 string                   `json:"strategy"`
+	Tag                      string                   `json:"tag"`
+}
+
+// ReleaseGroup defines model for ReleaseGroup.
+type ReleaseGroup struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroup.json
+	Schema        *string   `json:"$schema,omitempty"`
+	EnvironmentId string    `json:"environment_id"`
+	Id            string    `json:"id"`
+	Name          string    `json:"name"`
+	OnFailure     string    `json:"on_failure"`
+	Order         *[]string `json:"order"`
+	ServiceIds    *[]string `json:"service_ids"`
+	Tag           *string   `json:"tag,omitempty"`
+}
+
+// ReleaseGroupAddRequest defines model for ReleaseGroupAddRequest.
+type ReleaseGroupAddRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroupAddRequest.json
+	Schema        *string   `json:"$schema,omitempty"`
+	EnvironmentId string    `json:"environment_id"`
+	Name          string    `json:"name"`
+	OnFailure     *string   `json:"on_failure,omitempty"`
+	Order         *[]string `json:"order,omitempty"`
+	ServiceIds    *[]string `json:"service_ids"`
+	Tag           *string   `json:"tag,omitempty"`
+}
+
+// ReleaseGroupDeployRequest defines model for ReleaseGroupDeployRequest.
+type ReleaseGroupDeployRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroupDeployRequest.json
+	Schema *string `json:"$schema,omitempty"`
+	Tag    *string `json:"tag,omitempty"`
+}
+
+// ReleaseGroupEditRequest defines model for ReleaseGroupEditRequest.
+type ReleaseGroupEditRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroupEditRequest.json
+	Schema     *string                 `json:"$schema,omitempty"`
+	Name       *string                 `json:"name,omitempty"`
+	OnFailure  *string                 `json:"on_failure,omitempty"`
+	Order      *[]string               `json:"order,omitempty"`
+	ServiceIds *[]string               `json:"service_ids,omitempty"`
+	Tag        *OptionalNullableString `json:"tag,omitempty"`
+}
+
+// ReleaseGroupMemberRelease defines model for ReleaseGroupMemberRelease.
+type ReleaseGroupMemberRelease struct {
+	ReleaseId string `json:"release_id"`
+	ServiceId string `json:"service_id"`
+}
+
+// ReleaseGroupMutationAccepted defines model for ReleaseGroupMutationAccepted.
+type ReleaseGroupMutationAccepted struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroupMutationAccepted.json
+	Schema         *string `json:"$schema,omitempty"`
+	ReleaseGroupId string  `json:"release_group_id"`
+	TaskId         string  `json:"task_id"`
+}
+
+// ReleaseGroupTaskAccepted defines model for ReleaseGroupTaskAccepted.
+type ReleaseGroupTaskAccepted struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroupTaskAccepted.json
+	Schema                  *string                      `json:"$schema,omitempty"`
+	ReleaseGroupOperationId string                       `json:"release_group_operation_id"`
+	Releases                *[]ReleaseGroupMemberRelease `json:"releases"`
+	TaskId                  string                       `json:"task_id"`
+}
+
+// ReleaseRollbackMaterial defines model for ReleaseRollbackMaterial.
+type ReleaseRollbackMaterial struct {
+	ExpiredAt *string `json:"expired_at,omitempty"`
+	Revision  int64   `json:"revision"`
+	Status    string  `json:"status"`
+}
+
+// ReleaseSummary defines model for ReleaseSummary.
+type ReleaseSummary struct {
+	CompletedAt        *string `json:"completed_at,omitempty"`
+	CreatedAt          string  `json:"created_at"`
+	CurrentSuccessful  bool    `json:"current_successful"`
+	Digest             *string `json:"digest,omitempty"`
+	EnvironmentId      string  `json:"environment_id"`
+	GroupMemberOrdinal *int32  `json:"group_member_ordinal,omitempty"`
+	GroupOperationId   *string `json:"group_operation_id,omitempty"`
+	Id                 string  `json:"id"`
+	Image              string  `json:"image"`
+	OnFailure          string  `json:"on_failure"`
+	OperationId        string  `json:"operation_id"`
+	OperationKind      string  `json:"operation_kind"`
+	ServiceId          string  `json:"service_id"`
+	Serving            bool    `json:"serving"`
+	Slot               *string `json:"slot,omitempty"`
+	State              string  `json:"state"`
+	Strategy           string  `json:"strategy"`
+	Tag                string  `json:"tag"`
+}
+
+// ReleaseTaskAccepted defines model for ReleaseTaskAccepted.
+type ReleaseTaskAccepted struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseTaskAccepted.json
+	Schema      *string `json:"$schema,omitempty"`
+	OperationId string  `json:"operation_id"`
+	ReleaseId   string  `json:"release_id"`
+	TaskId      string  `json:"task_id"`
+}
+
+// RollbackRequest defines model for RollbackRequest.
+type RollbackRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RollbackRequest.json
+	Schema *string `json:"$schema,omitempty"`
+	Tag    *string `json:"tag,omitempty"`
 }
 
 // Route defines model for Route.
@@ -1025,29 +1244,31 @@ type Service struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Service.json
-	Schema           *string                       `json:"$schema,omitempty"`
-	Adapter          *string                       `json:"adapter,omitempty"`
-	Aliases          *map[string]*[]string         `json:"aliases,omitempty"`
-	BackingNetworkId *string                       `json:"backing_network_id,omitempty"`
-	Command          *[]string                     `json:"command,omitempty"`
-	DependsOn        *map[string]ServiceDependency `json:"depends_on,omitempty"`
-	EnvironmentId    string                        `json:"environment_id"`
-	Expose           *[]string                     `json:"expose,omitempty"`
-	FactsPrefix      *string                       `json:"facts_prefix,omitempty"`
-	Healthcheck      *ServiceHealthcheck           `json:"healthcheck,omitempty"`
-	Id               string                        `json:"id"`
-	Image            string                        `json:"image"`
-	Label            *string                       `json:"label,omitempty"`
-	Logging          *ServiceLogging               `json:"logging,omitempty"`
-	Mounts           *[]ServiceMount               `json:"mounts,omitempty"`
-	Name             string                        `json:"name"`
-	OnFailure        *string                       `json:"on_failure,omitempty"`
-	Replicas         *int64                        `json:"replicas,omitempty"`
-	Resources        *ServiceResources             `json:"resources,omitempty"`
-	Restart          *string                       `json:"restart,omitempty"`
-	RuntimeIntent    string                        `json:"runtime_intent"`
-	Strategy         *string                       `json:"strategy,omitempty"`
-	Zones            *[]string                     `json:"zones,omitempty"`
+	Schema                     *string                       `json:"$schema,omitempty"`
+	Adapter                    *string                       `json:"adapter,omitempty"`
+	Aliases                    *map[string]*[]string         `json:"aliases,omitempty"`
+	BackingNetworkId           *string                       `json:"backing_network_id,omitempty"`
+	Command                    *[]string                     `json:"command,omitempty"`
+	CurrentSuccessfulReleaseId *string                       `json:"current_successful_release_id,omitempty"`
+	DependsOn                  *map[string]ServiceDependency `json:"depends_on,omitempty"`
+	EnvironmentId              string                        `json:"environment_id"`
+	Expose                     *[]string                     `json:"expose,omitempty"`
+	FactsPrefix                *string                       `json:"facts_prefix,omitempty"`
+	Healthcheck                *ServiceHealthcheck           `json:"healthcheck,omitempty"`
+	Id                         string                        `json:"id"`
+	Image                      string                        `json:"image"`
+	Label                      *string                       `json:"label,omitempty"`
+	Logging                    *ServiceLogging               `json:"logging,omitempty"`
+	Mounts                     *[]ServiceMount               `json:"mounts,omitempty"`
+	Name                       string                        `json:"name"`
+	OnFailure                  *string                       `json:"on_failure,omitempty"`
+	Replicas                   *int64                        `json:"replicas,omitempty"`
+	Resources                  *ServiceResources             `json:"resources,omitempty"`
+	Restart                    *string                       `json:"restart,omitempty"`
+	RuntimeIntent              string                        `json:"runtime_intent"`
+	ServingReleaseId           *string                       `json:"serving_release_id,omitempty"`
+	Strategy                   *string                       `json:"strategy,omitempty"`
+	Zones                      *[]string                     `json:"zones,omitempty"`
 }
 
 // ServiceCreate defines model for ServiceCreate.
@@ -1479,6 +1700,46 @@ type ProjectRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ReleaseGroupListParams defines parameters for ReleaseGroupList.
+type ReleaseGroupListParams struct {
+	EnvironmentId string  `form:"environment_id" json:"environment_id"`
+	Limit         *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor        *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ReleaseGroupAddParams defines parameters for ReleaseGroupAdd.
+type ReleaseGroupAddParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ReleaseGroupRemoveParams defines parameters for ReleaseGroupRemove.
+type ReleaseGroupRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ReleaseGroupEditParams defines parameters for ReleaseGroupEdit.
+type ReleaseGroupEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ReleaseGroupDeployParams defines parameters for ReleaseGroupDeploy.
+type ReleaseGroupDeployParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ReleaseGroupRollbackParams defines parameters for ReleaseGroupRollback.
+type ReleaseGroupRollbackParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ReleaseListParams defines parameters for ReleaseList.
+type ReleaseListParams struct {
+	EnvironmentId string  `form:"environment_id" json:"environment_id"`
+	ServiceId     *string `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Limit         *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor        *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // RouteListParams defines parameters for RouteList.
 type RouteListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -1558,8 +1819,18 @@ type ServiceEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ServiceDeployParams defines parameters for ServiceDeploy.
+type ServiceDeployParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ServiceDestroyParams defines parameters for ServiceDestroy.
 type ServiceDestroyParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ServiceRollbackParams defines parameters for ServiceRollback.
+type ServiceRollbackParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -1685,6 +1956,15 @@ type ProjectEditJSONRequestBody = ProjectEdit
 // ProjectRenameJSONRequestBody defines body for ProjectRename for application/json ContentType.
 type ProjectRenameJSONRequestBody = ProjectRename
 
+// ReleaseGroupAddJSONRequestBody defines body for ReleaseGroupAdd for application/json ContentType.
+type ReleaseGroupAddJSONRequestBody = ReleaseGroupAddRequest
+
+// ReleaseGroupEditJSONRequestBody defines body for ReleaseGroupEdit for application/json ContentType.
+type ReleaseGroupEditJSONRequestBody = ReleaseGroupEditRequest
+
+// ReleaseGroupDeployJSONRequestBody defines body for ReleaseGroupDeploy for application/json ContentType.
+type ReleaseGroupDeployJSONRequestBody = ReleaseGroupDeployRequest
+
 // RouteCreateJSONRequestBody defines body for RouteCreate for application/json ContentType.
 type RouteCreateJSONRequestBody = RouteCreate
 
@@ -1705,6 +1985,12 @@ type ServiceCreateJSONRequestBody = ServiceCreate
 
 // ServiceEditJSONRequestBody defines body for ServiceEdit for application/json ContentType.
 type ServiceEditJSONRequestBody = ServiceEdit
+
+// ServiceDeployJSONRequestBody defines body for ServiceDeploy for application/json ContentType.
+type ServiceDeployJSONRequestBody = DeployRequest
+
+// ServiceRollbackJSONRequestBody defines body for ServiceRollback for application/json ContentType.
+type ServiceRollbackJSONRequestBody = RollbackRequest
 
 // TenantCreateJSONRequestBody defines body for TenantCreate for application/json ContentType.
 type TenantCreateJSONRequestBody = TenantCreate
@@ -2216,6 +2502,78 @@ type ClientInterface interface {
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRename(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ReleaseGroupList List release groups
+	//
+	// Corresponds with GET /release-groups (the `ReleaseGroupList` operationId).
+	ReleaseGroupList(ctx context.Context, params *ReleaseGroupListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupAddWithBody Add a release group
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+	ReleaseGroupAddWithBody(ctx context.Context, params *ReleaseGroupAddParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupAdd Add a release group
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+	ReleaseGroupAdd(ctx context.Context, params *ReleaseGroupAddParams, body ReleaseGroupAddJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupRemove Remove a release group
+	//
+	// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+	ReleaseGroupRemove(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupShow Show a release group
+	//
+	// Corresponds with GET /release-groups/{id} (the `ReleaseGroupShow` operationId).
+	ReleaseGroupShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupEditWithBody Edit a release group
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+	ReleaseGroupEditWithBody(ctx context.Context, id string, params *ReleaseGroupEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupEdit Edit a release group
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+	ReleaseGroupEdit(ctx context.Context, id string, params *ReleaseGroupEditParams, body ReleaseGroupEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupDeployWithBody Deploy a release group
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+	ReleaseGroupDeployWithBody(ctx context.Context, id string, params *ReleaseGroupDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupDeploy Deploy a release group
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+	ReleaseGroupDeploy(ctx context.Context, id string, params *ReleaseGroupDeployParams, body ReleaseGroupDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupRollback Roll back a release group
+	//
+	// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+	ReleaseGroupRollback(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseList List releases
+	//
+	// Corresponds with GET /releases (the `ReleaseList` operationId).
+	ReleaseList(ctx context.Context, params *ReleaseListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseShow Show a release
+	//
+	// Corresponds with GET /releases/{id} (the `ReleaseShow` operationId).
+	ReleaseShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// RouteList List routes
 	//
 	// Corresponds with GET /routes (the `RouteList` operationId).
@@ -2374,10 +2732,38 @@ type ClientInterface interface {
 	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
 	ServiceEdit(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ServiceDeployWithBody Deploy a service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+	ServiceDeployWithBody(ctx context.Context, id string, params *ServiceDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceDeploy Deploy a service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+	ServiceDeploy(ctx context.Context, id string, params *ServiceDeployParams, body ServiceDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ServiceDestroy Destroy service runtime
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceRollbackWithBody Roll back a service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+	ServiceRollbackWithBody(ctx context.Context, id string, params *ServiceRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceRollback Roll back a service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+	ServiceRollback(ctx context.Context, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceStart Start a service
 	//
@@ -3342,6 +3728,198 @@ func (c *Client) ProjectRename(ctx context.Context, id string, params *ProjectRe
 	return c.Client.Do(req)
 }
 
+// ReleaseGroupList List release groups
+//
+// Corresponds with GET /release-groups (the `ReleaseGroupList` operationId).
+func (c *Client) ReleaseGroupList(ctx context.Context, params *ReleaseGroupListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupAddWithBody Add a release group
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+func (c *Client) ReleaseGroupAddWithBody(ctx context.Context, params *ReleaseGroupAddParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupAddRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupAdd Add a release group
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+func (c *Client) ReleaseGroupAdd(ctx context.Context, params *ReleaseGroupAddParams, body ReleaseGroupAddJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupAddRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupRemove Remove a release group
+//
+// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+func (c *Client) ReleaseGroupRemove(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupRemoveRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupShow Show a release group
+//
+// Corresponds with GET /release-groups/{id} (the `ReleaseGroupShow` operationId).
+func (c *Client) ReleaseGroupShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupEditWithBody Edit a release group
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+func (c *Client) ReleaseGroupEditWithBody(ctx context.Context, id string, params *ReleaseGroupEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupEdit Edit a release group
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+func (c *Client) ReleaseGroupEdit(ctx context.Context, id string, params *ReleaseGroupEditParams, body ReleaseGroupEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupDeployWithBody Deploy a release group
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+func (c *Client) ReleaseGroupDeployWithBody(ctx context.Context, id string, params *ReleaseGroupDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupDeployRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupDeploy Deploy a release group
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+func (c *Client) ReleaseGroupDeploy(ctx context.Context, id string, params *ReleaseGroupDeployParams, body ReleaseGroupDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupDeployRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupRollback Roll back a release group
+//
+// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+func (c *Client) ReleaseGroupRollback(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupRollbackRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseList List releases
+//
+// Corresponds with GET /releases (the `ReleaseList` operationId).
+func (c *Client) ReleaseList(ctx context.Context, params *ReleaseListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseShow Show a release
+//
+// Corresponds with GET /releases/{id} (the `ReleaseShow` operationId).
+func (c *Client) ReleaseShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // RouteList List routes
 //
 // Corresponds with GET /routes (the `RouteList` operationId).
@@ -3760,11 +4338,79 @@ func (c *Client) ServiceEdit(ctx context.Context, id string, params *ServiceEdit
 	return c.Client.Do(req)
 }
 
+// ServiceDeployWithBody Deploy a service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+func (c *Client) ServiceDeployWithBody(ctx context.Context, id string, params *ServiceDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceDeployRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceDeploy Deploy a service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+func (c *Client) ServiceDeploy(ctx context.Context, id string, params *ServiceDeployParams, body ServiceDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceDeployRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ServiceDestroy Destroy service runtime
 //
 // Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 func (c *Client) ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceDestroyRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceRollbackWithBody Roll back a service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+func (c *Client) ServiceRollbackWithBody(ctx context.Context, id string, params *ServiceRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceRollbackRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceRollback Roll back a service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+func (c *Client) ServiceRollback(ctx context.Context, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceRollbackRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6224,6 +6870,501 @@ func NewProjectRenameRequestWithBody(server string, id string, params *ProjectRe
 	return req, nil
 }
 
+// NewReleaseGroupListRequest constructs an http.Request for the ReleaseGroupList method
+func NewReleaseGroupListRequest(server string, params *ReleaseGroupListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment_id", params.EnvironmentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReleaseGroupAddRequest calls the generic ReleaseGroupAdd builder with application/json body
+func NewReleaseGroupAddRequest(server string, params *ReleaseGroupAddParams, body ReleaseGroupAddJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReleaseGroupAddRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewReleaseGroupAddRequestWithBody constructs an http.Request for the ReleaseGroupAdd method, with any body, and a specified content type
+func NewReleaseGroupAddRequestWithBody(server string, params *ReleaseGroupAddParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewReleaseGroupRemoveRequest constructs an http.Request for the ReleaseGroupRemove method
+func NewReleaseGroupRemoveRequest(server string, id string, params *ReleaseGroupRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewReleaseGroupShowRequest constructs an http.Request for the ReleaseGroupShow method
+func NewReleaseGroupShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReleaseGroupEditRequest calls the generic ReleaseGroupEdit builder with application/json body
+func NewReleaseGroupEditRequest(server string, id string, params *ReleaseGroupEditParams, body ReleaseGroupEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReleaseGroupEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewReleaseGroupEditRequestWithBody constructs an http.Request for the ReleaseGroupEdit method, with any body, and a specified content type
+func NewReleaseGroupEditRequestWithBody(server string, id string, params *ReleaseGroupEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewReleaseGroupDeployRequest calls the generic ReleaseGroupDeploy builder with application/json body
+func NewReleaseGroupDeployRequest(server string, id string, params *ReleaseGroupDeployParams, body ReleaseGroupDeployJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReleaseGroupDeployRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewReleaseGroupDeployRequestWithBody constructs an http.Request for the ReleaseGroupDeploy method, with any body, and a specified content type
+func NewReleaseGroupDeployRequestWithBody(server string, id string, params *ReleaseGroupDeployParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups/%s/deploy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewReleaseGroupRollbackRequest constructs an http.Request for the ReleaseGroupRollback method
+func NewReleaseGroupRollbackRequest(server string, id string, params *ReleaseGroupRollbackParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups/%s/rollback", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewReleaseListRequest constructs an http.Request for the ReleaseList method
+func NewReleaseListRequest(server string, params *ReleaseListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/releases")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment_id", params.EnvironmentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.ServiceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "service_id", *params.ServiceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReleaseShowRequest constructs an http.Request for the ReleaseShow method
+func NewReleaseShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/releases/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewRouteListRequest constructs an http.Request for the RouteList method
 func NewRouteListRequest(server string, params *RouteListParams) (*http.Request, error) {
 	var err error
@@ -7239,6 +8380,66 @@ func NewServiceEditRequestWithBody(server string, id string, params *ServiceEdit
 	return req, nil
 }
 
+// NewServiceDeployRequest calls the generic ServiceDeploy builder with application/json body
+func NewServiceDeployRequest(server string, id string, params *ServiceDeployParams, body ServiceDeployJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceDeployRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceDeployRequestWithBody constructs an http.Request for the ServiceDeploy method, with any body, and a specified content type
+func NewServiceDeployRequestWithBody(server string, id string, params *ServiceDeployParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/deploy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewServiceDestroyRequest constructs an http.Request for the ServiceDestroy method
 func NewServiceDestroyRequest(server string, id string, params *ServiceDestroyParams) (*http.Request, error) {
 	var err error
@@ -7269,6 +8470,66 @@ func NewServiceDestroyRequest(server string, id string, params *ServiceDestroyPa
 	if err != nil {
 		return nil, err
 	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewServiceRollbackRequest calls the generic ServiceRollback builder with application/json body
+func NewServiceRollbackRequest(server string, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewServiceRollbackRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewServiceRollbackRequestWithBody constructs an http.Request for the ServiceRollback method, with any body, and a specified content type
+func NewServiceRollbackRequestWithBody(server string, id string, params *ServiceRollbackParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/rollback", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -8671,6 +9932,90 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /projects/{id}/rename (the `ProjectRename` operationId).
 	ProjectRenameWithResponse(ctx context.Context, id string, params *ProjectRenameParams, body ProjectRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*ProjectRenameResponse, error)
 
+	// ReleaseGroupListWithResponse List release groups
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /release-groups (the `ReleaseGroupList` operationId).
+	ReleaseGroupListWithResponse(ctx context.Context, params *ReleaseGroupListParams, reqEditors ...RequestEditorFn) (*ReleaseGroupListResponse, error)
+
+	// ReleaseGroupAddWithBodyWithResponse Add a release group
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+	ReleaseGroupAddWithBodyWithResponse(ctx context.Context, params *ReleaseGroupAddParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupAddResponse, error)
+
+	// ReleaseGroupAddWithResponse Add a release group
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+	ReleaseGroupAddWithResponse(ctx context.Context, params *ReleaseGroupAddParams, body ReleaseGroupAddJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupAddResponse, error)
+
+	// ReleaseGroupRemoveWithResponse Remove a release group
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+	ReleaseGroupRemoveWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error)
+
+	// ReleaseGroupShowWithResponse Show a release group
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /release-groups/{id} (the `ReleaseGroupShow` operationId).
+	ReleaseGroupShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ReleaseGroupShowResponse, error)
+
+	// ReleaseGroupEditWithBodyWithResponse Edit a release group
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+	ReleaseGroupEditWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupEditResponse, error)
+
+	// ReleaseGroupEditWithResponse Edit a release group
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+	ReleaseGroupEditWithResponse(ctx context.Context, id string, params *ReleaseGroupEditParams, body ReleaseGroupEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupEditResponse, error)
+
+	// ReleaseGroupDeployWithBodyWithResponse Deploy a release group
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+	ReleaseGroupDeployWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupDeployResponse, error)
+
+	// ReleaseGroupDeployWithResponse Deploy a release group
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+	ReleaseGroupDeployWithResponse(ctx context.Context, id string, params *ReleaseGroupDeployParams, body ReleaseGroupDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupDeployResponse, error)
+
+	// ReleaseGroupRollbackWithResponse Roll back a release group
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+	ReleaseGroupRollbackWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error)
+
+	// ReleaseListWithResponse List releases
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /releases (the `ReleaseList` operationId).
+	ReleaseListWithResponse(ctx context.Context, params *ReleaseListParams, reqEditors ...RequestEditorFn) (*ReleaseListResponse, error)
+
+	// ReleaseShowWithResponse Show a release
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /releases/{id} (the `ReleaseShow` operationId).
+	ReleaseShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ReleaseShowResponse, error)
+
 	// RouteListWithResponse List routes
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -8853,12 +10198,40 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /services/{id} (the `ServiceEdit` operationId).
 	ServiceEditWithResponse(ctx context.Context, id string, params *ServiceEditParams, body ServiceEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceEditResponse, error)
 
+	// ServiceDeployWithBodyWithResponse Deploy a service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+	ServiceDeployWithBodyWithResponse(ctx context.Context, id string, params *ServiceDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceDeployResponse, error)
+
+	// ServiceDeployWithResponse Deploy a service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+	ServiceDeployWithResponse(ctx context.Context, id string, params *ServiceDeployParams, body ServiceDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceDeployResponse, error)
+
 	// ServiceDestroyWithResponse Destroy service runtime
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
+
+	// ServiceRollbackWithBodyWithResponse Roll back a service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+	ServiceRollbackWithBodyWithResponse(ctx context.Context, id string, params *ServiceRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceRollbackResponse, error)
+
+	// ServiceRollbackWithResponse Roll back a service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+	ServiceRollbackWithResponse(ctx context.Context, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceRollbackResponse, error)
 
 	// ServiceStartWithResponse Start a service
 	//
@@ -11022,6 +12395,473 @@ func (r ProjectRenameResponse) ContentType() string {
 	return ""
 }
 
+type ReleaseGroupListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageReleaseGroup
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReleaseGroupListResponse) GetJSON200() *PageReleaseGroup {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ReleaseGroupAddResponse201Headers the declared response headers of an HTTP 201 response for ReleaseGroupAdd
+type ReleaseGroupAddResponse201Headers struct {
+	ContentType *string
+}
+
+type ReleaseGroupAddResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ReleaseGroup
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ReleaseGroupAddResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ReleaseGroupAddResponse) GetJSON201() *ReleaseGroup {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupAddResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupAddResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupAddResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupAddResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupAddResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ReleaseGroupRemoveResponse202Headers the declared response headers of an HTTP 202 response for ReleaseGroupRemove
+type ReleaseGroupRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type ReleaseGroupRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *ReleaseGroupMutationAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ReleaseGroupRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ReleaseGroupRemoveResponse) GetJSON202() *ReleaseGroupMutationAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReleaseGroupShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ReleaseGroup
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReleaseGroupShowResponse) GetJSON200() *ReleaseGroup {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ReleaseGroupEditResponse200Headers the declared response headers of an HTTP 200 response for ReleaseGroupEdit
+type ReleaseGroupEditResponse200Headers struct {
+	ContentType *string
+}
+
+type ReleaseGroupEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ReleaseGroup
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ReleaseGroupEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReleaseGroupEditResponse) GetJSON200() *ReleaseGroup {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ReleaseGroupDeployResponse202Headers the declared response headers of an HTTP 202 response for ReleaseGroupDeploy
+type ReleaseGroupDeployResponse202Headers struct {
+	ContentType *string
+}
+
+type ReleaseGroupDeployResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *ReleaseGroupTaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ReleaseGroupDeployResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ReleaseGroupDeployResponse) GetJSON202() *ReleaseGroupTaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupDeployResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupDeployResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupDeployResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupDeployResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupDeployResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ReleaseGroupRollbackResponse202Headers the declared response headers of an HTTP 202 response for ReleaseGroupRollback
+type ReleaseGroupRollbackResponse202Headers struct {
+	ContentType *string
+}
+
+type ReleaseGroupRollbackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *ReleaseGroupTaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ReleaseGroupRollbackResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ReleaseGroupRollbackResponse) GetJSON202() *ReleaseGroupTaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupRollbackResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupRollbackResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupRollbackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupRollbackResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReleaseListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageReleaseSummary
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReleaseListResponse) GetJSON200() *PageReleaseSummary {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReleaseShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ReleaseDetail
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReleaseShowResponse) GetJSON200() *ReleaseDetail {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type RouteListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -12004,6 +13844,61 @@ func (r ServiceEditResponse) ContentType() string {
 	return ""
 }
 
+// ServiceDeployResponse202Headers the declared response headers of an HTTP 202 response for ServiceDeploy
+type ServiceDeployResponse202Headers struct {
+	ContentType *string
+}
+
+type ServiceDeployResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *ReleaseTaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ServiceDeployResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ServiceDeployResponse) GetJSON202() *ReleaseTaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceDeployResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceDeployResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceDeployResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceDeployResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceDeployResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // ServiceDestroyResponse202Headers the declared response headers of an HTTP 202 response for ServiceDestroy
 type ServiceDestroyResponse202Headers struct {
 	ContentType *string
@@ -12053,6 +13948,61 @@ func (r ServiceDestroyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ServiceDestroyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ServiceRollbackResponse202Headers the declared response headers of an HTTP 202 response for ServiceRollback
+type ServiceRollbackResponse202Headers struct {
+	ContentType *string
+}
+
+type ServiceRollbackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *ReleaseTaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ServiceRollbackResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ServiceRollbackResponse) GetJSON202() *ReleaseTaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceRollbackResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceRollbackResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceRollbackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceRollbackResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -13655,6 +15605,162 @@ func (c *ClientWithResponses) ProjectRenameWithResponse(ctx context.Context, id 
 	return ParseProjectRenameResponse(rsp)
 }
 
+// ReleaseGroupListWithResponse List release groups
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /release-groups (the `ReleaseGroupList` operationId).
+func (c *ClientWithResponses) ReleaseGroupListWithResponse(ctx context.Context, params *ReleaseGroupListParams, reqEditors ...RequestEditorFn) (*ReleaseGroupListResponse, error) {
+	rsp, err := c.ReleaseGroupList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupListResponse(rsp)
+}
+
+// ReleaseGroupAddWithBodyWithResponse Add a release group
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+func (c *ClientWithResponses) ReleaseGroupAddWithBodyWithResponse(ctx context.Context, params *ReleaseGroupAddParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupAddResponse, error) {
+	rsp, err := c.ReleaseGroupAddWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupAddResponse(rsp)
+}
+
+// ReleaseGroupAddWithResponse Add a release group
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /release-groups (the `ReleaseGroupAdd` operationId).
+func (c *ClientWithResponses) ReleaseGroupAddWithResponse(ctx context.Context, params *ReleaseGroupAddParams, body ReleaseGroupAddJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupAddResponse, error) {
+	rsp, err := c.ReleaseGroupAdd(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupAddResponse(rsp)
+}
+
+// ReleaseGroupRemoveWithResponse Remove a release group
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /release-groups/{id} (the `ReleaseGroupRemove` operationId).
+func (c *ClientWithResponses) ReleaseGroupRemoveWithResponse(ctx context.Context, id string, params *ReleaseGroupRemoveParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRemoveResponse, error) {
+	rsp, err := c.ReleaseGroupRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupRemoveResponse(rsp)
+}
+
+// ReleaseGroupShowWithResponse Show a release group
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /release-groups/{id} (the `ReleaseGroupShow` operationId).
+func (c *ClientWithResponses) ReleaseGroupShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ReleaseGroupShowResponse, error) {
+	rsp, err := c.ReleaseGroupShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupShowResponse(rsp)
+}
+
+// ReleaseGroupEditWithBodyWithResponse Edit a release group
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+func (c *ClientWithResponses) ReleaseGroupEditWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupEditResponse, error) {
+	rsp, err := c.ReleaseGroupEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupEditResponse(rsp)
+}
+
+// ReleaseGroupEditWithResponse Edit a release group
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /release-groups/{id} (the `ReleaseGroupEdit` operationId).
+func (c *ClientWithResponses) ReleaseGroupEditWithResponse(ctx context.Context, id string, params *ReleaseGroupEditParams, body ReleaseGroupEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupEditResponse, error) {
+	rsp, err := c.ReleaseGroupEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupEditResponse(rsp)
+}
+
+// ReleaseGroupDeployWithBodyWithResponse Deploy a release group
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+func (c *ClientWithResponses) ReleaseGroupDeployWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupDeployResponse, error) {
+	rsp, err := c.ReleaseGroupDeployWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupDeployResponse(rsp)
+}
+
+// ReleaseGroupDeployWithResponse Deploy a release group
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
+func (c *ClientWithResponses) ReleaseGroupDeployWithResponse(ctx context.Context, id string, params *ReleaseGroupDeployParams, body ReleaseGroupDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupDeployResponse, error) {
+	rsp, err := c.ReleaseGroupDeploy(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupDeployResponse(rsp)
+}
+
+// ReleaseGroupRollbackWithResponse Roll back a release group
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+func (c *ClientWithResponses) ReleaseGroupRollbackWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error) {
+	rsp, err := c.ReleaseGroupRollback(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupRollbackResponse(rsp)
+}
+
+// ReleaseListWithResponse List releases
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /releases (the `ReleaseList` operationId).
+func (c *ClientWithResponses) ReleaseListWithResponse(ctx context.Context, params *ReleaseListParams, reqEditors ...RequestEditorFn) (*ReleaseListResponse, error) {
+	rsp, err := c.ReleaseList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseListResponse(rsp)
+}
+
+// ReleaseShowWithResponse Show a release
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /releases/{id} (the `ReleaseShow` operationId).
+func (c *ClientWithResponses) ReleaseShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ReleaseShowResponse, error) {
+	rsp, err := c.ReleaseShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseShowResponse(rsp)
+}
+
 // RouteListWithResponse List routes
 //
 // Returns a wrapper object for the known response body format(s).
@@ -13993,6 +16099,32 @@ func (c *ClientWithResponses) ServiceEditWithResponse(ctx context.Context, id st
 	return ParseServiceEditResponse(rsp)
 }
 
+// ServiceDeployWithBodyWithResponse Deploy a service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+func (c *ClientWithResponses) ServiceDeployWithBodyWithResponse(ctx context.Context, id string, params *ServiceDeployParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceDeployResponse, error) {
+	rsp, err := c.ServiceDeployWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceDeployResponse(rsp)
+}
+
+// ServiceDeployWithResponse Deploy a service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/deploy (the `ServiceDeploy` operationId).
+func (c *ClientWithResponses) ServiceDeployWithResponse(ctx context.Context, id string, params *ServiceDeployParams, body ServiceDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceDeployResponse, error) {
+	rsp, err := c.ServiceDeploy(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceDeployResponse(rsp)
+}
+
 // ServiceDestroyWithResponse Destroy service runtime
 //
 // Returns a wrapper object for the known response body format(s).
@@ -14004,6 +16136,32 @@ func (c *ClientWithResponses) ServiceDestroyWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseServiceDestroyResponse(rsp)
+}
+
+// ServiceRollbackWithBodyWithResponse Roll back a service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+func (c *ClientWithResponses) ServiceRollbackWithBodyWithResponse(ctx context.Context, id string, params *ServiceRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ServiceRollbackResponse, error) {
+	rsp, err := c.ServiceRollbackWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceRollbackResponse(rsp)
+}
+
+// ServiceRollbackWithResponse Roll back a service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /services/{id}/rollback (the `ServiceRollback` operationId).
+func (c *ClientWithResponses) ServiceRollbackWithResponse(ctx context.Context, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceRollbackResponse, error) {
+	rsp, err := c.ServiceRollback(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceRollbackResponse(rsp)
 }
 
 // ServiceStartWithResponse Start a service
@@ -15828,6 +17986,368 @@ func ParseProjectRenameResponse(rsp *http.Response) (*ProjectRenameResponse, err
 	return response, nil
 }
 
+// ParseReleaseGroupListResponse parses an HTTP response from a ReleaseGroupListWithResponse call
+func ParseReleaseGroupListResponse(rsp *http.Response) (*ReleaseGroupListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageReleaseGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReleaseGroupAddResponse parses an HTTP response from a ReleaseGroupAddWithResponse call
+func ParseReleaseGroupAddResponse(rsp *http.Response) (*ReleaseGroupAddResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupAddResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ReleaseGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ReleaseGroupAddResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseReleaseGroupRemoveResponse parses an HTTP response from a ReleaseGroupRemoveWithResponse call
+func ParseReleaseGroupRemoveResponse(rsp *http.Response) (*ReleaseGroupRemoveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ReleaseGroupMutationAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ReleaseGroupRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseReleaseGroupShowResponse parses an HTTP response from a ReleaseGroupShowWithResponse call
+func ParseReleaseGroupShowResponse(rsp *http.Response) (*ReleaseGroupShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReleaseGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReleaseGroupEditResponse parses an HTTP response from a ReleaseGroupEditWithResponse call
+func ParseReleaseGroupEditResponse(rsp *http.Response) (*ReleaseGroupEditResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReleaseGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ReleaseGroupEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseReleaseGroupDeployResponse parses an HTTP response from a ReleaseGroupDeployWithResponse call
+func ParseReleaseGroupDeployResponse(rsp *http.Response) (*ReleaseGroupDeployResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupDeployResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ReleaseGroupTaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ReleaseGroupDeployResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseReleaseGroupRollbackResponse parses an HTTP response from a ReleaseGroupRollbackWithResponse call
+func ParseReleaseGroupRollbackResponse(rsp *http.Response) (*ReleaseGroupRollbackResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupRollbackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ReleaseGroupTaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ReleaseGroupRollbackResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseReleaseListResponse parses an HTTP response from a ReleaseListWithResponse call
+func ParseReleaseListResponse(rsp *http.Response) (*ReleaseListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageReleaseSummary
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReleaseShowResponse parses an HTTP response from a ReleaseShowWithResponse call
+func ParseReleaseShowResponse(rsp *http.Response) (*ReleaseShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReleaseDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseRouteListResponse parses an HTTP response from a RouteListWithResponse call
 func ParseRouteListResponse(rsp *http.Response) (*RouteListResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -16585,6 +19105,52 @@ func ParseServiceEditResponse(rsp *http.Response) (*ServiceEditResponse, error) 
 	return response, nil
 }
 
+// ParseServiceDeployResponse parses an HTTP response from a ServiceDeployWithResponse call
+func ParseServiceDeployResponse(rsp *http.Response) (*ServiceDeployResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceDeployResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ReleaseTaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ServiceDeployResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseServiceDestroyResponse parses an HTTP response from a ServiceDestroyWithResponse call
 func ParseServiceDestroyResponse(rsp *http.Response) (*ServiceDestroyResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -16618,6 +19184,52 @@ func ParseServiceDestroyResponse(rsp *http.Response) (*ServiceDestroyResponse, e
 	switch {
 	case rsp.StatusCode == 202:
 		var headers ServiceDestroyResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceRollbackResponse parses an HTTP response from a ServiceRollbackWithResponse call
+func ParseServiceRollbackResponse(rsp *http.Response) (*ServiceRollbackResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceRollbackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ReleaseTaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ServiceRollbackResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

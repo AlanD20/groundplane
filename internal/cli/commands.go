@@ -20,6 +20,7 @@ func addCommands(root *cobra.Command, deps Dependencies) {
 		newVolumeCmd(),
 		newEntryCmd(),
 		newScriptCmd(),
+		newReleaseCmd(),
 		newReleaseGroupCmd(),
 		newBackupCmd(),
 		newComponentCmd(),

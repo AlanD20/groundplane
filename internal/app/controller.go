@@ -34,6 +34,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
+	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -168,6 +169,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy repository: %w", err)
+	}
+	releaseGroups, err := etcdreleasegroup.New(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize release group repository: %w", err)
+	}
+	releaseLedger, err := etcd.NewReleaseLedger(store, tasks)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize release ledger: %w", err)
 	}
 	if err := hierarchyRecords.ValidateEnvironmentVolumeDirs(ctx, cfg.Storage.VolumeRoot); err != nil {
 		_ = store.Close()
@@ -386,6 +397,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize execution plan resolver: %w", err)
 	}
+	if err := planResolver.EnableReleasePlans(releaseLedger); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize release plan resolver: %w", err)
+	}
 	materializationResolver, err := controller.NewTaskMaterializationResolver(
 		hierarchyRecords,
 		entryValues,
@@ -422,6 +437,26 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	releaseGroupMutations, err := newReleaseGroupMutationService(
+		releaseGroups, hierarchyRecords, tasks, idempotency, intentCoordinator,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize release group mutation service: %w", err)
+	}
+	releaseExecutionTimeout, err := cfg.ParsedReleaseExecutionTimeout()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize release execution timeout: %w", err)
+	}
+	releaseOperations, err := newReleaseOperationService(
+		releaseLedger, serviceRecords, releaseGroups, idempotency, intentCoordinator,
+		planResolver, releaseExecutionTimeout,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize release operation service: %w", err)
 	}
 	backupPolicyIdempotency, err := newDurableBackupPolicyIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -996,6 +1031,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ZoneMutations:         networkCapability,
 		Routes:                networkCapability,
 		RouteMutations:        networkCapability,
+		ReleaseGroups:         releaseGroups,
+		ReleaseGroupMutations: releaseGroupMutations,
+		Releases:              releaseLedger,
+		ReleaseOperations:     releaseOperations,
 		Scripts:               scriptReads,
 		ScriptMutations:       scriptMutations,
 		Entries:               entryReads,
