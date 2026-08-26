@@ -12,11 +12,12 @@ package core
 
 import (
 	"fmt"
-	"net/netip"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/AlanD20/groundplane/internal/common/dnsname"
 )
 
 // Document is implemented by every top-level Blueprint document.
@@ -298,11 +299,11 @@ func (r Route) Validate() error {
 	}
 	switch r.Exposure {
 	case "public":
-		if !validRouteHost(r.Host) {
+		if !dnsname.Valid(r.Host) {
 			return fmt.Errorf("route: public exposure requires a lowercase ASCII DNS host")
 		}
 	case "internal":
-		if r.Host != "" && !validRouteHost(r.Host) {
+		if r.Host != "" && !dnsname.Valid(r.Host) {
 			return fmt.Errorf("route: host must be a lowercase ASCII DNS host")
 		}
 	default:
@@ -314,26 +315,6 @@ func (r Route) Validate() error {
 		)
 	}
 	return nil
-}
-
-func validRouteHost(host string) bool {
-	if host == "" || len(host) > 253 || strings.HasSuffix(host, ".") || strings.ToLower(host) != host {
-		return false
-	}
-	if _, err := netip.ParseAddr(host); err == nil {
-		return false
-	}
-	for _, label := range strings.Split(host, ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, character := range label {
-			if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func validRoutePath(path string) bool {

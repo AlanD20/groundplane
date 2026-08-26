@@ -12,27 +12,14 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/dotenv"
 
+	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// RenderCorefile renders CoreDNS's config from platform DNS settings
-// plus every environment's Caddy split-horizon static entries. Must be
-// validated (dry-run parse) before the Agent reloads CoreDNS — an
-// invalid Corefile is rejected while the old instance keeps serving
-// (zero-downtime, per mvp.md's "DNS resolver (locked)").
-func RenderCorefile(zones []DNSZoneEntry, forwarders []DNSForwarder, tailnetDelegation bool) ([]byte, error) {
-	return nil, errs.New(errs.KindNotImplemented, "CoreDNS renderer is not implemented")
-}
-
-type DNSZoneEntry struct {
-	Host string
-	IP   string
-}
-
-type DNSForwarder struct {
-	Domain    string
-	Resolvers []string
+// RenderCorefile is the canonical Controller render boundary for CoreDNS.
+func RenderCorefile(input coredns.CoreDNSRenderInput) ([]byte, error) {
+	return coredns.RenderCorefile(input)
 }
 
 // EnvFileName is the canonical, id-based all-services env file name for
