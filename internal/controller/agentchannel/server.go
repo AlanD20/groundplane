@@ -61,7 +61,6 @@ type TaskStore interface {
 		time.Time,
 	) (etcd.Versioned[etcd.TaskRecord], error)
 }
-
 type environmentCreationTaskStore interface {
 	AcknowledgeEnvironmentCreation(
 		context.Context,
@@ -767,84 +766,6 @@ func operationMatchesTask(operation agentpb.PlanOperation, taskType etcd.TaskTyp
 	default:
 		return false
 	}
-}
-
-func (s *Server) acknowledge(
-	ctx context.Context,
-	agentID string,
-	agentGeneration uint64,
-	acknowledgement *agentpb.TaskAck,
-) error {
-	if acknowledgement == nil ||
-		ids.Validate(ids.KindAssignment, acknowledgement.AssignmentId) != nil ||
-		len(acknowledgement.PlanHash) != 32 {
-		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
-	}
-	task, err := s.tasks.GetTask(ctx, acknowledgement.TaskId)
-	if err != nil {
-		return err
-	}
-	environmentCreation := task.Record.Type == etcd.TaskCreate &&
-		ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
-	if environmentCreation {
-		if err := validateEnvironmentDirectoryTaskResult(acknowledgement); err != nil {
-			return err
-		}
-	} else if err := validateComposeTaskResult(acknowledgement); err != nil {
-		return err
-	}
-	planHash, err := hex.DecodeString(task.Record.PlanHash)
-	if err != nil || !bytes.Equal(planHash, acknowledgement.PlanHash) {
-		return errs.New(
-			errs.KindStateConflict,
-			"Agent Task acknowledgement plan hash does not match",
-		)
-	}
-	var terminal etcd.TaskStatus
-	switch acknowledgement.Terminal {
-	case agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED:
-		terminal = etcd.TaskStatusCompleted
-	case agentpb.TaskTerminal_TASK_TERMINAL_FAILED:
-		terminal = etcd.TaskStatusFailed
-	case agentpb.TaskTerminal_TASK_TERMINAL_TIMED_OUT:
-		terminal = etcd.TaskStatusTimedOut
-	case agentpb.TaskTerminal_TASK_TERMINAL_ABORTED:
-		terminal = etcd.TaskStatusAborted
-	default:
-		return errs.New(
-			errs.KindValidationFailed,
-			"Agent Task acknowledgement terminal state is invalid",
-		)
-	}
-	if environmentCreation {
-		store, ok := s.tasks.(environmentCreationTaskStore)
-		if !ok {
-			return errs.New(errs.KindInternal, "Environment creation Task store is not configured")
-		}
-		_, err = store.AcknowledgeEnvironmentCreation(
-			ctx,
-			agentID,
-			agentGeneration,
-			acknowledgement.TaskId,
-			acknowledgement.AssignmentId,
-			task.Record.Target,
-			terminal,
-			durableEnvironmentDirectoryTaskResult(acknowledgement),
-			s.now().UTC(),
-		)
-	} else {
-		_, err = s.tasks.AcknowledgeTask(
-			ctx,
-			agentID,
-			agentGeneration,
-			acknowledgement.TaskId,
-			acknowledgement.AssignmentId,
-			terminal,
-			durableComposeTaskResult(acknowledgement),
-			s.now().UTC(),
-		)
-	}
-	return err
 }
 
 func durableEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {

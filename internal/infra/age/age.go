@@ -470,9 +470,20 @@ func loadIdentityOwnedBy(root *os.Root, name string, expectedUID uint32) (*age.X
 	if len(contents) > maxIdentitySize {
 		return nil, errs.New(errs.KindInternal, "age: controller key exceeds size limit")
 	}
-	identity, err := age.ParseX25519Identity(strings.TrimSpace(string(contents)))
+	identities, err := age.ParseIdentities(bytes.NewReader(contents))
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("age: parse controller key: %w", err))
+	}
+	if len(identities) != 1 {
+		return nil, errs.Newf(
+			errs.KindInternal,
+			"age: controller key contains %d identities, want exactly one",
+			len(identities),
+		)
+	}
+	identity, ok := identities[0].(*age.X25519Identity)
+	if !ok {
+		return nil, errs.New(errs.KindInternal, "age: controller key is not an X25519 identity")
 	}
 	return identity, nil
 }

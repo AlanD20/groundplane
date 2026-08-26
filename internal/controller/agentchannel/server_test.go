@@ -167,6 +167,44 @@ func (store *fakeTaskStore) AcknowledgeTask(
 	return task, nil
 }
 
+// Rationale: Environment removal executes the same directory runtime as
+// Environment creation, so its terminal acknowledgement must not be rejected
+// as a missing Compose result after the directory step has completed.
+func TestAcknowledgeEnvironmentRemovalAcceptsDirectoryResult(t *testing.T) {
+	t.Parallel()
+	now := testTime()
+	taskID := ids.NewAt(ids.KindTask, now, 91)
+	assignmentID := ids.NewAt(ids.KindAssignment, now, 92)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 93)
+	planHash := sha256.Sum256([]byte("environment-removal-plan"))
+	store := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{
+		taskID: {Record: etcd.TaskRecord{
+			ID: taskID, Type: etcd.TaskRemove, Target: environmentID,
+			PlanHash: hex.EncodeToString(planHash[:]), Status: etcd.TaskStatusRunning,
+		}},
+	}}
+	server := &Server{tasks: store, now: func() time.Time { return now }}
+
+	err := server.acknowledge(context.Background(), testAgentID, 1, &agentpb.TaskAck{
+		TaskId: taskID, AssignmentId: assignmentID, PlanHash: planHash[:],
+		Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
+		Result: &agentpb.TaskAck_EnvironmentDirectoryResult{
+			EnvironmentDirectoryResult: &agentpb.EnvironmentDirectoryTaskResult{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("acknowledge(Environment remove) error = %v", err)
+	}
+	if store.ackTaskID != taskID || store.ackAssignmentID != assignmentID ||
+		store.ackTerminal != etcd.TaskStatusCompleted ||
+		store.ackResult.Kind != etcd.TaskResultEnvironmentDirectory {
+		t.Fatalf(
+			"acknowledgement = %q/%q/%q/%#v",
+			store.ackTaskID, store.ackAssignmentID, store.ackTerminal, store.ackResult,
+		)
+	}
+}
+
 func (a *pausedAuthenticator) Authenticate(ctx context.Context, _ string, _ Token) (Authorization, error) {
 	close(a.entered)
 	select {

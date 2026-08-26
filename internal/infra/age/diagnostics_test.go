@@ -33,6 +33,47 @@ func TestReadControllerRecipientReadsExistingIdentity(t *testing.T) {
 	}
 }
 
+// Rationale: the packaged host bootstrap uses age-keygen's standard identity
+// file, including its creation and public-key comments; Controller startup and
+// local diagnostics must consume that file without rewriting the secret key.
+func TestControllerKeyLoadsStandardAgeKeygenIdentityFile(t *testing.T) {
+	directory := secureTempDir(t)
+	identity, err := filippoage.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity: %v", err)
+	}
+	path := filepath.Join(directory, "controller.age")
+	contents := "# created: 2026-08-26T12:00:00Z\n# public key: " +
+		identity.Recipient().String() + "\n" + identity.String() + "\n"
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write age-keygen identity file: %v", err)
+	}
+
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatalf("open identity directory: %v", err)
+	}
+	defer root.Close()
+	loaded, err := loadIdentityOwnedBy(root, filepath.Base(path), uint32(os.Getuid()))
+	if err != nil {
+		t.Fatalf("loadIdentityOwnedBy() error = %v", err)
+	}
+	controllerKey := &ControllerKey{identity: loaded}
+	const plaintext = "controller-key-round-trip"
+	ciphertext, err := controllerKey.Wrap([]byte(plaintext))
+	if err != nil {
+		t.Fatalf("ControllerKey.Wrap() error = %v", err)
+	}
+	got, err := controllerKey.Unwrap(ciphertext)
+	if err != nil || string(got) != plaintext {
+		t.Fatalf("ControllerKey.Unwrap() = %q, %v", got, err)
+	}
+	recipient, err := readControllerRecipient(context.Background(), path, uint32(os.Getuid()))
+	if err != nil || recipient != identity.Recipient().String() {
+		t.Fatalf("readControllerRecipient() = %q, %v", recipient, err)
+	}
+}
+
 // Rationale: a missing diagnostic input must not bootstrap either the key or
 // its absent parent directory.
 func TestReadControllerRecipientDoesNotCreateMissingInput(t *testing.T) {

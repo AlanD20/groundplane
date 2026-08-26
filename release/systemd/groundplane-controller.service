@@ -1,0 +1,19 @@
+[Unit]
+Description=Groundplane Controller
+Wants=network-online.target
+After=network-online.target docker.service etcd.service
+Requires=docker.service etcd.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/install -d -m 0700 /run/groundplane/controller
+ExecStart=/usr/local/libexec/groundplane/controller
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+RuntimeDirectory=groundplane
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=restart
+
+[Install]
+WantedBy=multi-user.target

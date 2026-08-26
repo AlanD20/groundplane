@@ -88,6 +88,39 @@ func TestWorkerPoolReturnsEnvironmentDirectoryResultOnly(t *testing.T) {
 	<-done
 }
 
+// Rationale: Environment removal has a generic remove operation shared by
+// other resources, so its directory result must be selected from the typed
+// step rather than from the operation alone.
+func TestWorkerPoolReturnsEnvironmentDirectoryResultForRemoval(t *testing.T) {
+	helper := &fakeEnvironmentDirectoryHelper{response: &agentpb.EnvironmentDirectoryHelperResponse{
+		Schema: environmentDirectoryHelperSchema,
+	}}
+	directories, err := NewEnvironmentDirectoryRuntime(helper)
+	if err != nil {
+		t.Fatalf("NewEnvironmentDirectoryRuntime() error = %v", err)
+	}
+	pool := NewWorkerPoolWithRuntimes(
+		1, "/var/lib/groundplane/vol", nil, testLogger(), nil, directories, nil,
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		pool.Run(ctx)
+		close(done)
+	}()
+	assignment := environmentDirectoryRemovalAssignment(t)
+	if err := pool.Submit(ctx, assignment); err != nil {
+		t.Fatalf("Submit() error = %v", err)
+	}
+	result := nextWorkerResult(t, pool)
+	if result.Terminal != TaskTerminalCompleted || result.ExitCode != 0 ||
+		result.EnvironmentDirectory == nil || result.Compose != nil {
+		t.Fatalf("result = %#v", result)
+	}
+	cancel()
+	<-done
+}
+
 func TestSendTaskAckPreservesEnvironmentDirectoryResultVariant(t *testing.T) {
 	stream := newFakeStream()
 	client := &Client{}
@@ -114,6 +147,33 @@ func environmentDirectoryAssignment(t *testing.T) Assignment {
 			StepId: workerTestStepID, TimeoutSeconds: 30,
 			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
 				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
+					EnvironmentId:     "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+					ExpectedVolumeDir: "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Seal() error = %v", err)
+	}
+	return Assignment{
+		AssignmentID: workerTestAssignmentID,
+		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Plan: plan, Timeout: time.Minute,
+	}
+}
+
+func environmentDirectoryRemovalAssignment(t *testing.T) Assignment {
+	t.Helper()
+	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
+		Schema: executionplan.SchemaVersion,
+		PlanId: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
+		TargetId:  "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: workerTestStepID, TimeoutSeconds: 30,
+			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryRemove{
+				EnvironmentDirectoryRemove: &agentpb.EnvironmentDirectoryRemove{
 					EnvironmentId:     "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 					ExpectedVolumeDir: "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 				},

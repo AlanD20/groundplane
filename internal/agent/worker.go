@@ -190,8 +190,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	reconciliationRequired := false
 	mutationAttempted := false
 	projects := make(map[string]*agentpb.ObservedProject)
-	environmentDirectoryTask := reservation.assignment.Plan.Operation ==
-		agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
+	environmentDirectoryTask := isEnvironmentDirectoryTask(reservation.assignment.Plan)
 	for _, step := range reservation.assignment.Plan.Steps {
 		if err != nil {
 			break
@@ -383,7 +382,7 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 				TaskID:       reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
 				Terminal: TaskTerminalAborted,
 			}
-			if reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
+			if isEnvironmentDirectoryTask(reservation.assignment.Plan) {
 				result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{}
 			} else {
 				result.Compose = &agentpb.ComposeTaskResult{
@@ -395,6 +394,18 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 			return
 		}
 	}
+}
+
+func isEnvironmentDirectoryTask(plan *agentpb.ExecutionPlan) bool {
+	if plan == nil {
+		return false
+	}
+	for _, step := range plan.GetSteps() {
+		if step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Abort cancels queued or active work because ownership starts at Submit.
