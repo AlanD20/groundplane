@@ -211,13 +211,12 @@ func TestKindOfAndClassHelpersInspectChains(t *testing.T) {
 	}
 }
 
-// Rationale: JSON serialization is a public boundary and must emit only the
-// canonical RFC problem fields plus safe structured extensions.
+// Rationale: JSON serialization is a public boundary and must emit exactly
+// the canonical RFC problem fields.
 func TestProblemJSONContainsOnlyRFC7807Fields(t *testing.T) {
 	err := New(
 		KindAttachNotFound,
 		"attach missing",
-		WithDetails(map[string]any{"attach_id": "att_123"}),
 	)
 	encoded, marshalErr := json.Marshal(err)
 	if marshalErr != nil {
@@ -227,10 +226,16 @@ func TestProblemJSONContainsOnlyRFC7807Fields(t *testing.T) {
 	if decodeErr := json.Unmarshal(encoded, &body); decodeErr != nil {
 		t.Fatalf("decode error JSON: %v", decodeErr)
 	}
-	for _, forbidden := range []string{"kind", "class", "op", "err", "cause"} {
-		if _, exists := body[forbidden]; exists {
-			t.Errorf("error JSON exposes %q", forbidden)
+	expectedFields := map[string]struct{}{
+		"type": {}, "title": {}, "status": {}, "detail": {}, "code": {},
+	}
+	for field := range body {
+		if _, expected := expectedFields[field]; !expected {
+			t.Errorf("error JSON exposes unexpected field %q", field)
 		}
+	}
+	if len(body) != len(expectedFields) {
+		t.Fatalf("problem JSON fields = %v, want exactly %v", body, expectedFields)
 	}
 	if body["type"] != ProblemType || body["code"] != string(CodeAttachNotFound) ||
 		body["status"] != float64(404) || body["detail"] != "attach missing" {
@@ -242,7 +247,7 @@ func TestProblemJSONContainsOnlyRFC7807Fields(t *testing.T) {
 // class-derived status, and descriptor identity form an exact closed tuple.
 func TestFromProblemAcceptsOnlyExactCatalogTuples(t *testing.T) {
 	for kind := Kind(1); kind < kindLimit; kind++ {
-		source := New(kind, "detail", WithDetails(map[string]any{"safe": true})).ToProblem()
+		source := New(kind, "detail").ToProblem()
 		got, ok := FromProblem(source)
 		if !ok || got.Kind() != kind {
 			t.Errorf("FromProblem(%d) = %#v, %t", kind, got, ok)
@@ -283,7 +288,6 @@ func TestErrorOutputsIgnoreEmbeddedProblemMutation(t *testing.T) {
 		Status:  200,
 		Detail:  "mutated public detail",
 		Code:    Code("mutated.code"),
-		Details: map[string]any{"secret": "mutated detail"},
 	}
 
 	if domainError.Kind() != KindStorageUnavailable || domainError.Class() != ClassRetryable ||
@@ -297,7 +301,7 @@ func TestErrorOutputsIgnoreEmbeddedProblemMutation(t *testing.T) {
 
 	problem := domainError.ToProblem()
 	if problem.Type != ProblemType || problem.Code != CodeStorageUnavailable || problem.Status != 503 ||
-		problem.Detail != "Service Unavailable" || strings.Contains(fmt.Sprint(problem.Details), "mutated") {
+		problem.Detail != "Service Unavailable" {
 		t.Fatalf("canonical problem projection = %#v", problem)
 	}
 	encoded, err := json.Marshal(domainError)

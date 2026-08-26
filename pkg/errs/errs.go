@@ -44,39 +44,24 @@ const ProblemType = "about:blank"
 // Problem is the public RFC 7807 representation. It is a transport DTO, not
 // an error type; only *Error implements error.
 type Problem struct {
-	Type    string         `json:"type"`
-	Title   string         `json:"title"`
-	Status  int            `json:"status"`
-	Detail  string         `json:"detail"`
-	Code    Code           `json:"code"`
-	Details map[string]any `json:"details,omitempty"`
+	Type   string `json:"type"`
+	Title  string `json:"title"`
+	Status int    `json:"status"`
+	Detail string `json:"detail"`
+	Code   Code   `json:"code"`
 }
 
-// Option is closed to this package so callers can attach approved
-// presentation metadata without overriding Kind, Code, Class, or status.
+// Option is closed to this package so callers can attach an approved
+// presentation title without overriding Kind, Code, Class, or status.
 type Option interface {
 	apply(*Error)
 	errorOption()
 }
 
-type detailsOption map[string]any
-
-func (option detailsOption) apply(target *Error) { target.details = cloneDetails(option) }
-func (detailsOption) errorOption()               {}
-
 type titleOption string
 
 func (option titleOption) apply(target *Error) { target.title = string(option) }
 func (titleOption) errorOption()               {}
-
-// WithDetails attaches structured metadata rendered into the RFC 7807
-// response's extension members (never into `detail`, which stays a
-// human string). map[string]any is the one approved `any` use in this
-// package — the same stdlib-driven exception as json.Decoder.Decode,
-// since Details is opaque metadata, not a model field or a validator.
-func WithDetails(details map[string]any) Option {
-	return detailsOption(details)
-}
 
 // WithTitle changes only the RFC 7807 presentation title. It cannot alter the
 // machine identity, class, or status.
@@ -93,7 +78,6 @@ type Error struct {
 	kind    Kind
 	message string
 	title   string
-	details map[string]any
 	err     error
 }
 
@@ -239,7 +223,6 @@ func (e *Error) ToProblem() Problem {
 		Status:  value.Status,
 		Detail:  detail,
 		Code:    value.Code,
-		Details: cloneDetails(e.details),
 	}
 }
 
@@ -260,7 +243,7 @@ func FromProblem(problem Problem) (*Error, bool) {
 	if !ok {
 		return nil, false
 	}
-	result := New(kind, problem.Detail, WithTitle(problem.Title), WithDetails(problem.Details))
+	result := New(kind, problem.Detail, WithTitle(problem.Title))
 	return result, true
 }
 
@@ -277,17 +260,6 @@ func normalizeKind(kind Kind) Kind {
 		return KindInternal
 	}
 	return kind
-}
-
-func cloneDetails(details map[string]any) map[string]any {
-	if details == nil {
-		return nil
-	}
-	cloned := make(map[string]any, len(details))
-	for key, value := range details {
-		cloned[key] = value
-	}
-	return cloned
 }
 
 // IsNotFound and IsRetryable classify any error (not just *Error) by

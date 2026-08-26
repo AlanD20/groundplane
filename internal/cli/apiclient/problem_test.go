@@ -26,14 +26,14 @@ func TestResponseProblemReconstructsExactKind(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			source := errs.New(test.kind, "detail", errs.WithDetails(map[string]any{"safe": "value"})).ToProblem()
+			source := errs.New(test.kind, "detail").ToProblem()
 			err := responseProblem(http.MethodPost, "/api/v1/resources", problemHTTPResponse(test.status, source))
 			if !errors.Is(err, errs.New(test.kind, "")) {
 				t.Fatalf("response error = %v", err)
 			}
 			var domainError *errs.Error
-			if !errors.As(err, &domainError) || domainError.ToProblem().Details["safe"] != "value" {
-				t.Fatalf("response details = %#v", domainError)
+			if !errors.As(err, &domainError) || domainError.ToProblem() != source {
+				t.Fatalf("response problem = %#v, want %#v", domainError, source)
 			}
 		})
 	}
