@@ -4242,14 +4242,7 @@
                 }
               }
             },
-            "description": "Accepted",
-            "headers": {
-              "Content-Type": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+            "description": "Accepted"
           },
           "default": {
             "content": {

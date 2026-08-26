@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -32,22 +33,83 @@ type EntryRemovalMaterializationResolver interface {
 	) ([]byte, error)
 }
 
-// EntryRemovalTaskProcedureIDs are allocated once before durable publication.
-// Materialization and step ids correspond by index to the canonical,
-// destination-sorted removal procedure derived from the pinned intent.
-type EntryRemovalTaskProcedureIDs struct {
+type entryRemovalTaskProcedureIDs struct {
 	ArtifactID string
 }
 
-// PrepareEntryRemovalTask resolves generated Environment bytes only long
-// enough to pin their metadata. Removal outputs always pin the empty digest.
-// The resulting Task contains every input needed for restart reconstruction.
-func (resolver *TaskPlanResolver) PrepareEntryRemovalTask(
+type EntryRemovalPlanner struct {
+	plans     *TaskPlanResolver
+	materials EntryRemovalMaterializationResolver
+}
+
+func NewEntryRemovalPlanner(
+	plans *TaskPlanResolver,
+	materials EntryRemovalMaterializationResolver,
+) (*EntryRemovalPlanner, error) {
+	if plans == nil || materials == nil {
+		return nil, errs.New(errs.KindInternal, "entry removal planner is not configured")
+	}
+	return &EntryRemovalPlanner{plans: plans, materials: materials}, nil
+}
+
+func (planner *EntryRemovalPlanner) PrepareEntryRemoval(
+	ctx context.Context,
+	request entrycapability.RemovalPlanRequest,
+) (entrycapability.RemovalTaskPlan, error) {
+	if planner == nil || planner.plans == nil || planner.plans.blueprints == nil ||
+		ids.Validate(ids.KindTask, request.TaskID) != nil || ids.Validate(ids.KindPlan, request.PlanID) != nil ||
+		ids.Validate(ids.KindEnvEntry, request.EntryID) != nil ||
+		ids.Validate(ids.KindEnvironment, request.EnvironmentID) != nil ||
+		ids.Validate(ids.KindConfig, request.ArtifactID) != nil || request.EntryRevision <= 0 ||
+		request.ProjectionRevision <= 0 || request.CreatedAt.IsZero() ||
+		request.Identity.EnvironmentID != request.EnvironmentID ||
+		request.Identity.ProjectID == "" || request.Identity.ProjectSlug == "" ||
+		request.Identity.EnvironmentName == "" || request.Identity.AuthorizedVolumeDir == "" {
+		return entrycapability.RemovalTaskPlan{}, errs.New(errs.KindInternal, "entry removal plan request is invalid")
+	}
+	projection, found, err := planner.plans.blueprints.GetEnvironmentComposeProjection(ctx, request.EnvironmentID)
+	if err != nil {
+		return entrycapability.RemovalTaskPlan{}, err
+	}
+	if !found || projection.Revision != request.ProjectionRevision {
+		return entrycapability.RemovalTaskPlan{}, errs.New(errs.KindStateConflict, "entry removal projection changed")
+	}
+	intent, err := etcd.NewEntryRemovalIntent(
+		request.TaskID, request.EnvironmentID, request.EntryID, request.EntryRevision, &projection, request.CreatedAt,
+	)
+	if err != nil {
+		return entrycapability.RemovalTaskPlan{}, err
+	}
+	owner := etcd.TaskOwner{
+		WorkspaceType: etcd.TaskWorkspacePlatform,
+		ProjectID:     request.Identity.ProjectID, EnvironmentID: request.Identity.EnvironmentID,
+	}
+	if request.Identity.TenantID != "" {
+		owner.WorkspaceType = etcd.TaskWorkspaceTenant
+		owner.TenantID = request.Identity.TenantID
+	}
+	task := etcd.TaskRecord{
+		ID: request.TaskID, PlanID: request.PlanID, Executor: etcd.TaskExecutorAgent,
+		Type: etcd.TaskRemove, Target: request.EntryID, TimeoutSeconds: 120,
+		Status: etcd.TaskStatusPending, CreatedAt: request.CreatedAt, Owner: owner,
+	}
+	prepared, err := planner.plans.prepareEntryRemovalTask(
+		ctx, task, intent, entryRemovalTaskProcedureIDs{ArtifactID: request.ArtifactID},
+		planner.materials, request.Identity,
+	)
+	if err != nil {
+		return entrycapability.RemovalTaskPlan{}, err
+	}
+	return entryRemovalTaskPlan(prepared)
+}
+
+func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	intent etcd.EntryRemovalIntent,
-	procedure EntryRemovalTaskProcedureIDs,
+	procedure entryRemovalTaskProcedureIDs,
 	materials EntryRemovalMaterializationResolver,
+	identity entrycapability.RemovalEnvironmentIdentity,
 ) (etcd.TaskRecord, error) {
 	templates, err := entryRemovalMaterializationTemplates(intent)
 	if err != nil {
@@ -55,13 +117,19 @@ func (resolver *TaskPlanResolver) PrepareEntryRemovalTask(
 	}
 	if ids.Validate(ids.KindConfig, procedure.ArtifactID) != nil || intent.CandidateProjection == nil ||
 		intent.CandidateProjection.RenderGeneration > math.MaxInt32 {
-		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Entry removal procedure ids are invalid")
+		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "entry removal procedure ids are invalid")
 	}
 	task.Params = map[string]string{
 		etcd.TaskEntryEnvironmentParam:           intent.EnvironmentID,
 		etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
 		etcd.EnvironmentBlueprintRevisionParam:   intent.CandidateProjection.BlueprintRevisionID,
 		etcd.TaskComposeArtifactParam:            procedure.ArtifactID,
+		etcd.TaskEntryTenantSlugParam:            identity.TenantSlug,
+		etcd.TaskEntryProjectSlugParam:           identity.ProjectSlug,
+		etcd.TaskEntryEnvironmentNameParam:       identity.EnvironmentName,
+		etcd.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
+		etcd.TaskEntryCloudflareComponentParam:   "",
+		etcd.TaskEntryCloudflareRevisionParam:    "0",
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = make([]etcd.TaskStepRecord, len(templates))
@@ -72,16 +140,16 @@ func (resolver *TaskPlanResolver) PrepareEntryRemovalTask(
 		materializationID := ids.New(ids.KindConfig)
 		stepID := ids.New(ids.KindStep)
 		if ids.Validate(ids.KindConfig, materializationID) != nil || ids.Validate(ids.KindStep, stepID) != nil {
-			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Entry removal procedure ids are invalid")
+			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "entry removal procedure ids are invalid")
 		}
 		if _, duplicate := seenMaterializations[materializationID]; duplicate {
 			return etcd.TaskRecord{}, errs.New(
 				errs.KindValidationFailed,
-				"Entry removal materialization id is duplicated",
+				"entry removal materialization id is duplicated",
 			)
 		}
 		if _, duplicate := seenSteps[stepID]; duplicate {
-			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Entry removal step id is duplicated")
+			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "entry removal step id is duplicated")
 		}
 		seenMaterializations[materializationID] = struct{}{}
 		seenSteps[stepID] = struct{}{}
@@ -93,7 +161,7 @@ func (resolver *TaskPlanResolver) PrepareEntryRemovalTask(
 			if materials == nil {
 				return etcd.TaskRecord{}, errs.New(
 					errs.KindInternal,
-					"Entry removal materialization resolver is unavailable",
+					"entry removal materialization resolver is unavailable",
 				)
 			}
 			content, err = materials.ResolveTaskMaterializationSource(ctx, intent.EnvironmentID, reference.Source)
@@ -120,20 +188,126 @@ func (resolver *TaskPlanResolver) PrepareEntryRemovalTask(
 	return task, nil
 }
 
+func entryRemovalTaskPlan(task etcd.TaskRecord) (entrycapability.RemovalTaskPlan, error) {
+	plan := entrycapability.RemovalTaskPlan{
+		Executor: entrycapability.RemovalExecutorAgent, PlanHash: task.PlanHash,
+		RenderGeneration:    task.RenderGeneration,
+		EnvironmentID:       task.Params[etcd.TaskEntryEnvironmentParam],
+		BlueprintRevisionID: task.Params[etcd.EnvironmentBlueprintRevisionParam],
+		ArtifactID:          task.Params[etcd.TaskComposeArtifactParam], TimeoutSeconds: task.TimeoutSeconds,
+		Identity: entrycapability.RemovalEnvironmentIdentity{
+			TenantID: task.Owner.TenantID, TenantSlug: task.Params[etcd.TaskEntryTenantSlugParam],
+			ProjectID: task.Owner.ProjectID, ProjectSlug: task.Params[etcd.TaskEntryProjectSlugParam],
+			EnvironmentID:       task.Owner.EnvironmentID,
+			EnvironmentName:     task.Params[etcd.TaskEntryEnvironmentNameParam],
+			AuthorizedVolumeDir: task.Params[etcd.TaskEntryAuthorizedVolumeDirParam],
+		},
+		Steps:            make([]entrycapability.RemovalStep, len(task.Steps)),
+		Materializations: make([]entrycapability.RemovalMaterialization, len(task.Materializations)),
+	}
+	for index, step := range task.Steps {
+		plan.Steps[index] = entrycapability.RemovalStep{ID: step.ID}
+	}
+	for index, materialization := range task.Materializations {
+		converted, err := entryRemovalMaterialization(materialization)
+		if err != nil {
+			return entrycapability.RemovalTaskPlan{}, err
+		}
+		plan.Materializations[index] = converted
+	}
+	return plan, nil
+}
+
+func entryRemovalMaterialization(
+	input etcd.TaskMaterializationRecord,
+) (entrycapability.RemovalMaterialization, error) {
+	source := entrycapability.RemovalSource{Kind: entrycapability.RemovalSourceKind(input.Source.Kind)}
+	if input.Source.Kind == etcd.TaskMaterializationSourceGeneratedEnvironment {
+		if input.Source.GeneratedEnvironment == nil {
+			return entrycapability.RemovalMaterialization{}, errs.New(
+				errs.KindInternal, "entry removal generated source is incomplete",
+			)
+		}
+		generated := &entrycapability.RemovalGeneratedEnvironment{
+			FormatVersion: input.Source.GeneratedEnvironment.FormatVersion,
+			Values:        make([]entrycapability.RemovalGeneratedValue, len(input.Source.GeneratedEnvironment.Values)),
+		}
+		for index, value := range input.Source.GeneratedEnvironment.Values {
+			storage, err := entryRemovalValueStorage(value.Value.Storage)
+			if err != nil {
+				return entrycapability.RemovalMaterialization{}, err
+			}
+			generated.Values[index] = entrycapability.RemovalGeneratedValue{
+				Name: value.Name, EntryID: value.Value.EntryID,
+				ValueGenerationID: value.Value.ValueGenerationID,
+				Storage:           storage,
+			}
+		}
+		source.GeneratedEnvironment = generated
+	} else if input.Source.Kind != etcd.TaskMaterializationSourceRemoval {
+		return entrycapability.RemovalMaterialization{}, errs.New(
+			errs.KindInternal, "entry removal source kind is invalid",
+		)
+	}
+	outputKind, err := entryRemovalOutputKind(input.OutputKind)
+	if err != nil {
+		return entrycapability.RemovalMaterialization{}, err
+	}
+	return entrycapability.RemovalMaterialization{
+		StepID: input.StepID, MaterializationID: input.MaterializationID,
+		EnvironmentID: input.EnvironmentID, Destination: input.Destination,
+		ServiceID: input.ServiceID, ServiceName: input.ServiceName,
+		OutputKind: outputKind, UID: input.UID, GID: input.GID,
+		Mode: input.Mode, Length: input.Length, SHA256: input.SHA256, Source: source,
+	}, nil
+}
+
+func entryRemovalValueStorage(input etcd.TaskEntryValueStorage) (entrycapability.RemovalValueStorage, error) {
+	switch input {
+	case etcd.TaskEntryValueStoragePlain:
+		return entrycapability.RemovalValueStoragePlain, nil
+	case etcd.TaskEntryValueStorageSecret:
+		return entrycapability.RemovalValueStorageSecret, nil
+	default:
+		return "", errs.New(errs.KindInternal, "durable Entry removal value storage is invalid")
+	}
+}
+
+func entryRemovalOutputKind(
+	input etcd.TaskMaterializationOutputKind,
+) (entrycapability.RemovalOutputKind, error) {
+	switch input {
+	case etcd.TaskMaterializationOutputGeneratedEnvironment:
+		return entrycapability.RemovalOutputGeneratedEnvironment, nil
+	case etcd.TaskMaterializationOutputPlainFile:
+		return entrycapability.RemovalOutputPlainFile, nil
+	case etcd.TaskMaterializationOutputSecretFile:
+		return entrycapability.RemovalOutputSecretFile, nil
+	case etcd.TaskMaterializationOutputRemoveGeneratedEnv:
+		return entrycapability.RemovalOutputRemoveGeneratedEnv, nil
+	case etcd.TaskMaterializationOutputRemovePlainFile:
+		return entrycapability.RemovalOutputRemovePlainFile, nil
+	case etcd.TaskMaterializationOutputRemoveSecretFile:
+		return entrycapability.RemovalOutputRemoveSecretFile, nil
+	default:
+		return "", errs.New(errs.KindInternal, "durable Entry removal output kind is invalid")
+	}
+}
+
 func (resolver *TaskPlanResolver) resolveEntryRemovalPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
 	reader, ok := resolver.blueprints.(entryRemovalPlanStateReader)
 	if !ok {
-		return nil, errs.New(errs.KindInternal, "Entry removal plan state reader is unavailable")
+		return nil, errs.New(errs.KindInternal, "entry removal plan state reader is unavailable")
 	}
 	stored, found, err := reader.GetEntryRemovalIntent(ctx, task.ID)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		return nil, errs.New(errs.KindInternal, "Entry removal intent is missing")
+		return nil, errs.New(errs.KindInternal, "entry removal intent is missing")
 	}
 	return resolver.buildEntryRemovalPlan(ctx, task, stored.Record)
 }
@@ -147,7 +321,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		task.Type != etcd.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
 		task.ID != intent.TaskID || task.Target != intent.EntryID || !task.CreatedAt.Equal(intent.CreatedAt) ||
 		intent.Status != etcd.TaskStatusPending || intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
-		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 4 {
+		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 10 {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection
@@ -182,33 +356,14 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		}
 	}
 
-	environment, err := resolver.blueprints.GetEnvironment(ctx, intent.EnvironmentID)
+	identity, err := pinnedEntryRemovalIdentity(task, intent)
 	if err != nil {
 		return nil, err
-	}
-	project, err := resolver.blueprints.GetProject(ctx, environment.Record.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	tenant, err := resolver.blueprints.GetTenant(ctx, project.Record.TenantID)
-	if err != nil {
-		return nil, err
-	}
-	if environment.Record.ID != intent.EnvironmentID ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
-		project.Record.ID != environment.Record.ProjectID || project.Record.Kind != etcd.ProjectKindTenant ||
-		tenant.Record.ID != project.Record.TenantID {
-		return nil, errs.New(errs.KindInternal, "Entry removal Environment hierarchy is invalid")
 	}
 	artifact, err := resolver.renderPinnedEnvironmentArtifact(
 		ctx,
 		task,
-		pinnedEnvironmentIdentity{
-			TenantID: tenant.Record.ID, TenantSlug: tenant.Record.Slug,
-			ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
-			EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
-			AuthorizedVolumeDir: environment.Record.VolumeDir,
-		},
+		identity,
 		revisionID,
 		artifactID,
 		candidate,
@@ -225,13 +380,40 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	})
 }
 
+func pinnedEntryRemovalIdentity(
+	task etcd.TaskRecord,
+	intent etcd.EntryRemovalIntent,
+) (pinnedEnvironmentIdentity, error) {
+	identity := pinnedEnvironmentIdentity{
+		TenantID: task.Owner.TenantID, TenantSlug: task.Params[etcd.TaskEntryTenantSlugParam],
+		ProjectID: task.Owner.ProjectID, ProjectSlug: task.Params[etcd.TaskEntryProjectSlugParam],
+		EnvironmentID:       task.Owner.EnvironmentID,
+		EnvironmentName:     task.Params[etcd.TaskEntryEnvironmentNameParam],
+		AuthorizedVolumeDir: task.Params[etcd.TaskEntryAuthorizedVolumeDirParam],
+	}
+	validWorkspace := task.Owner.WorkspaceType == etcd.TaskWorkspaceTenant &&
+		ids.Validate(ids.KindTenant, identity.TenantID) == nil && identity.TenantSlug != ""
+	if identity.TenantID == "" {
+		validWorkspace = task.Owner.WorkspaceType == etcd.TaskWorkspacePlatform && identity.TenantSlug == ""
+	}
+	if !validWorkspace || ids.Validate(ids.KindProject, identity.ProjectID) != nil ||
+		ids.Validate(
+			ids.KindEnvironment,
+			identity.EnvironmentID,
+		) != nil || identity.EnvironmentID != intent.EnvironmentID ||
+		identity.ProjectSlug == "" || identity.EnvironmentName == "" || identity.AuthorizedVolumeDir == "" {
+		return pinnedEnvironmentIdentity{}, errs.New(errs.KindInternal, "durable Entry removal identity is invalid")
+	}
+	return identity, nil
+}
+
 func entryRemovalMaterializationTemplates(
 	intent etcd.EntryRemovalIntent,
 ) ([]etcd.TaskMaterializationRecord, error) {
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
 		intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID {
-		return nil, errs.New(errs.KindInternal, "Entry removal projection is unavailable")
+		return nil, errs.New(errs.KindInternal, "entry removal projection is unavailable")
 	}
 	var removed *etcd.EntryRecord
 	for index := range intent.CurrentProjection.Entries {
@@ -242,11 +424,11 @@ func entryRemovalMaterializationTemplates(
 		}
 	}
 	if removed == nil || removed.EnvironmentID != intent.EnvironmentID {
-		return nil, errs.New(errs.KindInternal, "Entry removal target is absent from its pinned projection")
+		return nil, errs.New(errs.KindInternal, "entry removal target is absent from its pinned projection")
 	}
 	for _, record := range intent.CandidateProjection.Entries {
 		if record.Entry.ID == intent.EntryID {
-			return nil, errs.New(errs.KindInternal, "Entry removal candidate retained its target")
+			return nil, errs.New(errs.KindInternal, "entry removal candidate retained its target")
 		}
 	}
 	if removed.Entry.Kind == core.EntryKindFile {
@@ -262,11 +444,12 @@ func entryRemovalMaterializationTemplates(
 		return []etcd.TaskMaterializationRecord{{
 			EnvironmentID: intent.EnvironmentID, Destination: removed.Entry.Path,
 			OutputKind: kind, UID: *removed.Entry.UID, GID: *removed.Entry.GID, Mode: uint32(mode),
+			SHA256: hex.EncodeToString(sha256.New().Sum(nil)),
 			Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
 		}}, nil
 	}
 	if removed.Entry.Kind != core.EntryKindEnv {
-		return nil, errs.New(errs.KindInternal, "Entry removal target kind is invalid")
+		return nil, errs.New(errs.KindInternal, "entry removal target kind is invalid")
 	}
 	scopes := append([]string(nil), removed.Entry.Exposure...)
 	if removed.Entry.ExposesAll() {
@@ -275,7 +458,7 @@ func entryRemovalMaterializationTemplates(
 		sort.Strings(scopes)
 		for index, scope := range scopes {
 			if scope == "all" || scope == "" || index > 0 && scope == scopes[index-1] {
-				return nil, errs.New(errs.KindInternal, "Entry removal exposure is invalid")
+				return nil, errs.New(errs.KindInternal, "entry removal exposure is invalid")
 			}
 		}
 	}
@@ -314,7 +497,7 @@ func entryRemovalEnvironmentTemplate(
 		if reference.ServiceID == "" {
 			return etcd.TaskMaterializationRecord{}, errs.New(
 				errs.KindInternal,
-				"Entry removal exposure Service is absent from its pinned projection",
+				"entry removal exposure Service is absent from its pinned projection",
 			)
 		}
 		reference.Destination = ServiceEnvFileName(intent.EnvironmentID, scope)
@@ -342,12 +525,13 @@ func entryRemovalEnvironmentTemplate(
 		if values[index].Name == values[index-1].Name {
 			return etcd.TaskMaterializationRecord{}, errs.New(
 				errs.KindInternal,
-				"Entry removal generated Environment contains a duplicate key",
+				"entry removal generated Environment contains a duplicate key",
 			)
 		}
 	}
 	if scope != "all" && len(values) == 0 {
 		reference.OutputKind = etcd.TaskMaterializationOutputRemoveGeneratedEnv
+		reference.SHA256 = hex.EncodeToString(sha256.New().Sum(nil))
 		reference.Source = etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval}
 		return reference, nil
 	}

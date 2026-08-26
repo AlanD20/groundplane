@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -173,13 +174,13 @@ type entryEditService struct {
 type entryMutationService struct {
 	creation *entryCreationService
 	edit     *entryEditService
-	deletion *entryDeletionService
+	deletion *entrycontroller.RemovalService
 }
 
 func newEntryMutationService(
 	creation *entryCreationService,
 	edit *entryEditService,
-	deletion *entryDeletionService,
+	deletion *entrycontroller.RemovalService,
 ) (*entryMutationService, error) {
 	if creation == nil || edit == nil || deletion == nil {
 		return nil, errs.New(errs.KindInternal, "Entry mutation service is not configured")
@@ -189,10 +190,9 @@ func newEntryMutationService(
 
 func (service *entryMutationService) RemoveEntry(
 	ctx context.Context,
-	entryID string,
-	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	return service.deletion.RemoveEntry(ctx, entryID, idempotencyKey)
+	request entrycontroller.RemoveRequest,
+) (entrycontroller.RemovalOutcome, error) {
+	return service.deletion.RemoveEntry(ctx, request)
 }
 
 func (service *entryMutationService) CreateEntry(

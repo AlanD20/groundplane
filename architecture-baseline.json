@@ -74,8 +74,8 @@
     {"path": "pkg/api/types.go", "lines": 836}
   ],
   "frozen_totals": [
-    {"path": "internal/app", "lines": 21199},
-    {"path": "internal/infra/etcd", "lines": 54253}
+    {"path": "internal/app", "lines": 20645},
+    {"path": "internal/infra/etcd", "lines": 54254}
   ],
   "legacy_findings": [
   {

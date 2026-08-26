@@ -13,16 +13,11 @@ import (
 // applied-projection candidate, and publishes the Task that owns finalization.
 // The Entry and every immutable generation remain visible until success.
 func (repository *EntryRepository) BeginEntryDeletionWithTask(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	ctx context.Context, environment Versioned[EnvironmentRecord], project Versioned[ProjectRecord],
 	entry Versioned[EntryRecord],
 	projection *Versioned[EnvironmentComposeProjection],
 	cloudflare *Versioned[ComponentRecord],
-	tombstone DeletionTombstoneRecord,
-	intent EntryRemovalIntent,
-	task TaskRecord,
-	marker IdempotencyMarker,
+	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -39,7 +34,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err := validateEntryDeletionProjection(projection, intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEntryDeletionCloudflareComponent(cloudflare, intent); err != nil {
+	if err := validateEntryDeletionCloudflareComponent(cloudflare, intent, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateEntryRemovalTaskOwner(task, intent); err != nil {
@@ -55,7 +50,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		task.Target != entry.Record.Entry.ID || task.Status != TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"Entry deletion Task, intent, and tombstone do not match",
+			"entry deletion Task, intent, and tombstone do not match",
 		)
 	}
 	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetEntry, ID: entry.Record.Entry.ID}
@@ -66,7 +61,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
-			"Entry deletion marker does not match its Task",
+			"entry deletion marker does not match its Task",
 		)
 	}
 
@@ -222,17 +217,24 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 }
 
 func validateEntryDeletionCloudflareComponent(
-	component *Versioned[ComponentRecord],
-	intent EntryRemovalIntent,
+	component *Versioned[ComponentRecord], intent EntryRemovalIntent, task TaskRecord,
 ) error {
+	expectedID, expectedRevision, err := entryRemovalCloudflareFence(task)
+	if err != nil {
+		return err
+	}
 	if component == nil {
+		if expectedID != "" || expectedRevision != 0 {
+			return errs.New(errs.KindValidationFailed, "entry deletion Cloudflare fence is invalid")
+		}
 		return nil
 	}
 	record := component.Record
 	if component.Revision <= 0 || component.ReadRevision < component.Revision ||
 		validateComponentRecord(record) != nil || record.Desired.Owner != core.ComponentOwnerEnvironment ||
-		record.Desired.OwnerID != intent.EnvironmentID || record.Desired.Kind != core.ComponentKindEdgeCloudflare {
-		return errs.New(errs.KindValidationFailed, "Entry deletion Cloudflare Component is invalid")
+		record.Desired.OwnerID != intent.EnvironmentID || record.Desired.Kind != core.ComponentKindEdgeCloudflare ||
+		record.Desired.ID != expectedID || component.Revision != expectedRevision {
+		return errs.New(errs.KindValidationFailed, "entry deletion Cloudflare Component is invalid")
 	}
 	if !record.Desired.Enabled {
 		return nil
@@ -243,35 +245,31 @@ func validateEntryDeletionCloudflareComponent(
 		return errs.New(errs.KindInternal, "enabled Cloudflare Component token reference is invalid")
 	}
 	if entryID == intent.EntryID {
-		return errs.New(errs.KindResourceInUse, "Entry is the enabled Cloudflare Tunnel token")
+		return errs.New(errs.KindResourceInUse, "entry is the enabled Cloudflare Tunnel token")
 	}
 	return nil
 }
 
 func validateEntryDeletionProjection(
-	projection *Versioned[EnvironmentComposeProjection],
-	intent EntryRemovalIntent,
+	projection *Versioned[EnvironmentComposeProjection], intent EntryRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
 		if projection != nil {
-			return errs.New(errs.KindValidationFailed, "Entry deletion projection is unexpected")
+			return errs.New(errs.KindValidationFailed, "entry deletion projection is unexpected")
 		}
 		return nil
 	}
 	if projection == nil || projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
 		projection.Revision != intent.CurrentProjectionRevision ||
 		!sameEntryRemovalProjection(projection.Record, *intent.CurrentProjection) {
-		return errs.New(errs.KindStateConflict, "Entry applied projection changed before deletion")
+		return errs.New(errs.KindStateConflict, "entry applied projection changed before deletion")
 	}
 	return nil
 }
 
 func classifyEntryDeletionStartConflict(
-	entry Versioned[EntryRecord],
-	projection *Versioned[EnvironmentComposeProjection],
-	cloudflare *Versioned[ComponentRecord],
-	ownerRevision int64,
-	operationID string,
+	entry Versioned[EntryRecord], projection *Versioned[EnvironmentComposeProjection],
+	cloudflare *Versioned[ComponentRecord], ownerRevision int64, operationID string,
 	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
@@ -282,7 +280,7 @@ func classifyEntryDeletionStartConflict(
 		domainCount++
 		expected := domainCount + len(fence.conditions)
 		if len(values) != expected {
-			return errs.New(errs.KindInternal, "Entry deletion compare evidence is incomplete")
+			return errs.New(errs.KindInternal, "entry deletion compare evidence is incomplete")
 		}
 		if values[2] != nil {
 			activeTaskID, err := decodeTaskReference(values[2].Value)
@@ -298,54 +296,51 @@ func classifyEntryDeletionStartConflict(
 		}
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {
-				return errs.New(errs.KindInternal, "Entry deletion collided with durable Task state")
+				return errs.New(errs.KindInternal, "entry deletion collided with durable Task state")
 			}
 		}
 		if values[4] == nil {
-			return errs.New(errs.KindEntryNotFound, "Entry was not found")
+			return errs.New(errs.KindEntryNotFound, "entry was not found")
 		}
 		if values[4].ModRevision != entry.Revision {
 			return stateConflict("entry", entry.Record.Entry.ID)
 		}
 		if values[5] == nil || string(values[5].Value) != entry.Record.Entry.ID {
-			return errs.New(errs.KindInternal, "Entry owner index changed or is corrupt")
+			return errs.New(errs.KindInternal, "entry owner index changed or is corrupt")
 		}
 		if values[5].ModRevision != ownerRevision {
 			return stateConflict("entry", entry.Record.Entry.ID)
 		}
 		if values[6] != nil || values[7] != nil {
-			return errs.New(errs.KindResourceInUse, "Entry deletion is already in progress")
+			return errs.New(errs.KindResourceInUse, "entry deletion is already in progress")
 		}
 		position := 8
 		if projection != nil {
 			if values[position] == nil || values[position].ModRevision != projection.Revision {
-				return stateConflict("Environment projection", entry.Record.EnvironmentID)
+				return stateConflict("environment projection", entry.Record.EnvironmentID)
 			}
 			position++
 			if values[position] != nil {
-				return errs.New(errs.KindResourceInUse, "Environment reconciliation is in progress")
+				return errs.New(errs.KindResourceInUse, "environment reconciliation is in progress")
 			}
 			position++
 		}
 		if cloudflare == nil {
 			if values[position] != nil {
-				return stateConflict("Cloudflare Component", entry.Record.EnvironmentID)
+				return stateConflict("cloudflare Component", entry.Record.EnvironmentID)
 			}
 		} else if values[position] == nil || values[position].ModRevision != cloudflare.Revision {
-			return stateConflict("Cloudflare Component", cloudflare.Record.Desired.ID)
+			return stateConflict("cloudflare Component", cloudflare.Record.Desired.ID)
 		}
 		if conflict := fence.classifyCAS(values[domainCount:]); conflict != nil {
 			return conflict
 		}
-		return errs.New(errs.KindStateConflict, "Entry deletion state changed")
+		return errs.New(errs.KindStateConflict, "entry deletion state changed")
 	}
 }
 
 func loadEntryTaskInitiationTenantAtRevision(
-	ctx context.Context,
-	store hierarchyStore,
-	project Versioned[ProjectRecord],
-	readRevision int64,
+	ctx context.Context, store hierarchyStore, project Versioned[ProjectRecord], readRevision int64,
 ) (*Versioned[TenantRecord], error) {
 	if project.Record.Kind == ProjectKindBacking {
 		return nil, nil

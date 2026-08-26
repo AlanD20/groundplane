@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,7 +37,7 @@ type EntryMutator interface {
 		apiTypes.EntryEditRequest,
 		string,
 	) (etcd.IdempotencyResponse, error)
-	RemoveEntry(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	RemoveEntry(context.Context, entrycapability.RemoveRequest) (entrycapability.RemovalOutcome, error)
 }
 
 type entryCreateInput struct {
@@ -81,6 +82,10 @@ type entryMutationOutput struct {
 	Status      int
 	ContentType string `header:"Content-Type"`
 	Body        func(huma.Context)
+}
+
+type entryRemoveOutput struct {
+	Body apiTypes.TaskAccepted
 }
 
 func (s *Server) registerEntries() {
@@ -175,7 +180,7 @@ func (s *Server) createEntry(
 	request *entryCreateInput,
 ) (*entryMutationOutput, error) {
 	if s.entryMutations == nil {
-		return nil, errs.New(errs.KindInternal, "Entry mutator is not configured")
+		return nil, errs.New(errs.KindInternal, "entry mutator is not configured")
 	}
 	defer clear(request.RawBody)
 	input, err := decodeEntryCreate(request.RawBody)
@@ -202,7 +207,7 @@ func (s *Server) editEntry(
 	request *entryEditInput,
 ) (*entryMutationOutput, error) {
 	if s.entryMutations == nil {
-		return nil, errs.New(errs.KindInternal, "Entry mutator is not configured")
+		return nil, errs.New(errs.KindInternal, "entry mutator is not configured")
 	}
 	defer clear(request.RawBody)
 	input, err := decodeEntryEdit(request.RawBody)
@@ -227,27 +232,21 @@ func (s *Server) editEntry(
 func (s *Server) removeEntry(
 	ctx context.Context,
 	request *entryRemoveInput,
-) (*entryMutationOutput, error) {
+) (*entryRemoveOutput, error) {
 	if s.entryMutations == nil {
-		return nil, errs.New(errs.KindInternal, "Entry mutator is not configured")
+		return nil, errs.New(errs.KindInternal, "entry mutator is not configured")
 	}
-	response, err := s.entryMutations.RemoveEntry(ctx, request.ID, request.IdempotencyKey)
+	outcome, err := s.entryMutations.RemoveEntry(ctx, entrycapability.RemoveRequest{
+		EntryID: request.ID, IdempotencyKey: request.IdempotencyKey,
+	})
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &entryMutationOutput{
-		Status: response.Status, ContentType: response.ContentKind,
-		Body: func(ctx huma.Context) {
-			ctx.SetStatus(response.Status)
-			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
-				s.Logger.Error("controller: write Entry removal response", slog.Any("error", writeErr))
-			}
-		},
-	}, nil
+	return &entryRemoveOutput{Body: apiTypes.TaskAccepted{TaskID: outcome.TaskID}}, nil
 }
 
 func decodeEntryEdit(body []byte) (apiTypes.EntryEditRequest, error) {
-	members, err := decodeEntryJSONObject(body, "Entry edit")
+	members, err := decodeEntryJSONObject(body, "entry edit")
 	if err != nil {
 		return apiTypes.EntryEditRequest{}, err
 	}
@@ -255,14 +254,14 @@ func decodeEntryEdit(body []byte) (apiTypes.EntryEditRequest, error) {
 	for name := range members {
 		if name != "source" && name != "exposure" {
 			return apiTypes.EntryEditRequest{}, errs.New(
-				errs.KindMalformedRequest, "Entry edit body contains an unknown member",
+				errs.KindMalformedRequest, "entry edit body contains an unknown member",
 			)
 		}
 	}
 	for _, required := range []string{"source", "exposure"} {
 		if _, present := members[required]; !present {
 			return apiTypes.EntryEditRequest{}, errs.Newf(
-				errs.KindValidationFailed, "Entry edit requires %s", required,
+				errs.KindValidationFailed, "entry edit requires %s", required,
 			)
 		}
 	}
@@ -278,7 +277,7 @@ func decodeEntryEdit(body []byte) (apiTypes.EntryEditRequest, error) {
 }
 
 func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
-	members, err := decodeEntryJSONObject(body, "Entry creation")
+	members, err := decodeEntryJSONObject(body, "entry creation")
 	if err != nil {
 		return apiTypes.EntryCreateRequest{}, err
 	}
@@ -291,7 +290,7 @@ func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
 		if _, ok := allowed[name]; !ok {
 			return apiTypes.EntryCreateRequest{}, errs.New(
 				errs.KindMalformedRequest,
-				"Entry creation body contains an unknown member",
+				"entry creation body contains an unknown member",
 			)
 		}
 	}
@@ -299,7 +298,7 @@ func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
 		if _, present := members[required]; !present {
 			return apiTypes.EntryCreateRequest{}, errs.Newf(
 				errs.KindValidationFailed,
-				"Entry creation requires %s",
+				"entry creation requires %s",
 				required,
 			)
 		}
@@ -338,7 +337,7 @@ func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
 }
 
 func decodeEntrySource(body []byte) (apiTypes.EntrySource, error) {
-	members, err := decodeEntryJSONObject(body, "Entry source")
+	members, err := decodeEntryJSONObject(body, "entry source")
 	if err != nil {
 		return apiTypes.EntrySource{}, err
 	}
@@ -350,12 +349,12 @@ func decodeEntrySource(body []byte) (apiTypes.EntrySource, error) {
 		if _, ok := allowed[name]; !ok {
 			return apiTypes.EntrySource{}, errs.New(
 				errs.KindMalformedRequest,
-				"Entry source contains an unknown member",
+				"entry source contains an unknown member",
 			)
 		}
 	}
 	if _, present := members["kind"]; !present {
-		return apiTypes.EntrySource{}, errs.New(errs.KindValidationFailed, "Entry source kind is required")
+		return apiTypes.EntrySource{}, errs.New(errs.KindValidationFailed, "entry source kind is required")
 	}
 	source := apiTypes.EntrySource{}
 	for name, target := range map[string]*string{
@@ -427,12 +426,12 @@ func decodeEntryJSONObject(body []byte, label string) (map[string]json.RawMessag
 
 func decodeEntryJSONMember[T any](raw json.RawMessage, target *T) error {
 	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return errs.New(errs.KindValidationFailed, "Entry request member must not be null")
+		return errs.New(errs.KindValidationFailed, "entry request member must not be null")
 	}
 	if err := json.Unmarshal(raw, target); err != nil {
 		var typeError *json.UnmarshalTypeError
 		if errors.As(err, &typeError) {
-			return errs.New(errs.KindValidationFailed, "Entry request member has an invalid type")
+			return errs.New(errs.KindValidationFailed, "entry request member has an invalid type")
 		}
 		return errs.Wrap(errs.KindMalformedRequest, err)
 	}
@@ -448,7 +447,7 @@ func clearEntryJSONMembers(members map[string]json.RawMessage) {
 
 func (s *Server) listEntries(ctx context.Context, request *entryListInput) (*entryPageOutput, error) {
 	if s.entries == nil {
-		return nil, errs.New(errs.KindInternal, "Entry reader is not configured")
+		return nil, errs.New(errs.KindInternal, "entry reader is not configured")
 	}
 	page, err := s.entries.ListEntries(ctx, request.Environment, etcd.PageRequest{
 		Limit: request.Limit, Cursor: request.Cursor,
@@ -467,7 +466,7 @@ func (s *Server) listEntries(ctx context.Context, request *entryListInput) (*ent
 
 func (s *Server) showEntry(ctx context.Context, request *entryShowInput) (*entryOutput, error) {
 	if s.entries == nil {
-		return nil, errs.New(errs.KindInternal, "Entry reader is not configured")
+		return nil, errs.New(errs.KindInternal, "entry reader is not configured")
 	}
 	stored, err := s.entries.GetEntry(ctx, request.ID)
 	if err != nil {
@@ -478,7 +477,7 @@ func (s *Server) showEntry(ctx context.Context, request *entryShowInput) (*entry
 
 func (s *Server) revealEntry(ctx context.Context, request *entryShowInput) (*entryValueOutput, error) {
 	if s.entries == nil {
-		return nil, errs.New(errs.KindInternal, "Entry reader is not configured")
+		return nil, errs.New(errs.KindInternal, "entry reader is not configured")
 	}
 	value, err := s.entries.RevealEntry(ctx, request.ID)
 	if err != nil {
@@ -515,7 +514,7 @@ func entryResponse(record etcd.EntryRecord) apiTypes.Entry {
 func (s *Server) rejectEntryQuery(ctx huma.Context, next func(huma.Context)) {
 	requestURL := ctx.URL()
 	if len(requestURL.Query()) != 0 {
-		s.writeEntryProblem(ctx, "Entry request query is invalid")
+		s.writeEntryProblem(ctx, "entry request query is invalid")
 		return
 	}
 	next(ctx)
@@ -525,7 +524,7 @@ func (s *Server) rejectEntryDeleteBody(ctx huma.Context, next func(huma.Context)
 	var probe [1]byte
 	count, err := ctx.BodyReader().Read(probe[:])
 	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeEntryProblem(ctx, "Entry removal body is not allowed")
+		s.writeEntryProblem(ctx, "entry removal body is not allowed")
 		return
 	}
 	next(ctx)
@@ -536,17 +535,17 @@ func (s *Server) validateEntryListQuery(ctx huma.Context, next func(huma.Context
 	query := requestURL.Query()
 	for key, values := range query {
 		if key != "environment" && key != "limit" && key != "cursor" {
-			s.writeEntryProblem(ctx, "Entry list query is invalid")
+			s.writeEntryProblem(ctx, "entry list query is invalid")
 			return
 		}
 		if len(values) != 1 {
-			s.writeEntryProblem(ctx, "Entry list query contains duplicate values")
+			s.writeEntryProblem(ctx, "entry list query contains duplicate values")
 			return
 		}
 	}
 	environments, present := query["environment"]
 	if !present || len(environments) != 1 || environments[0] == "" {
-		s.writeEntryProblem(ctx, "Entry list requires one Environment selector")
+		s.writeEntryProblem(ctx, "entry list requires one Environment selector")
 		return
 	}
 	next(ctx)

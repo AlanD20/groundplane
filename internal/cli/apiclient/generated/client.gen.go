@@ -9990,11 +9990,6 @@ func (r EntryCreateResponse) ContentType() string {
 	return ""
 }
 
-// EntryRemoveResponse202Headers the declared response headers of an HTTP 202 response for EntryRemove
-type EntryRemoveResponse202Headers struct {
-	ContentType *string
-}
-
 type EntryRemoveResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -10002,8 +9997,6 @@ type EntryRemoveResponse struct {
 	JSON202 *TaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers202 the parsed response headers for an HTTP 202 response
-	Headers202 *EntryRemoveResponse202Headers
 }
 
 // GetJSON202 returns the response for an HTTP 202 `application/json` response
@@ -15047,19 +15040,6 @@ func ParseEntryRemoveResponse(rsp *http.Response) (*EntryRemoveResponse, error) 
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
-	}
-
-	switch {
-	case rsp.StatusCode == 202:
-		var headers EntryRemoveResponse202Headers
-		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
-			var value string
-			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			}
-			headers.ContentType = &value
-		}
-		response.Headers202 = &headers
 	}
 
 	return response, nil

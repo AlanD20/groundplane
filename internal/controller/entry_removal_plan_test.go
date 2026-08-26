@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -56,15 +57,16 @@ func TestTaskPlanResolverRebuildsFileEntryRemoval(t *testing.T) {
 	_, _, _, _, catalog := componentPlanProjectionInput(t)
 	catalog[0].Environment = routeRemovalPlanCaddyRenderer{}
 	resolver.componentCatalog = catalog
-	prepared, err := resolver.PrepareEntryRemovalTask(
+	prepared, err := resolver.prepareEntryRemovalTask(
 		context.Background(), task, intent,
-		EntryRemovalTaskProcedureIDs{
+		entryRemovalTaskProcedureIDs{
 			ArtifactID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 		entryRemovalMaterializationResolverFake{},
+		entryRemovalIdentityFromReader(reader),
 	)
 	if err != nil {
-		t.Fatalf("PrepareEntryRemovalTask() error = %v", err)
+		t.Fatalf("prepareEntryRemovalTask() error = %v", err)
 	}
 	reader.intent = intent
 	first, err := resolver.ResolveExecutionPlan(context.Background(), prepared)
@@ -77,12 +79,55 @@ func TestTaskPlanResolverRebuildsFileEntryRemoval(t *testing.T) {
 	}
 	materialization := first.Steps[0].GetMaterializeFile()
 	if !bytes.Equal(first.PlanHash, second.PlanHash) || hex.EncodeToString(first.PlanHash) != prepared.PlanHash ||
-		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || first.TargetId != intent.EntryID ||
+		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || second.Operation != first.Operation ||
+		first.TargetId != intent.EntryID || second.TargetId != first.TargetId ||
 		len(first.Artifacts) != 1 || len(first.Steps) != 1 || materialization == nil ||
+		len(second.Steps) != 1 || second.Steps[0].StepId != first.Steps[0].StepId ||
+		first.Steps[0].StepId != prepared.Steps[0].ID ||
 		materialization.Destination != "config/app.yaml" || materialization.Uid != 1000 ||
 		materialization.Gid != 1001 || materialization.Mode != 0o600 ||
 		materialization.OutputKind != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_SECRET_FILE {
 		t.Fatalf("resolved Entry removal plans = %#v / %#v", first, second)
+	}
+}
+
+// Rationale: immutable Blueprint metadata must be reparsed with the labels
+// sealed at publication, so later hierarchy renames cannot strand a queued or
+// retried Agent removal after Controller restart.
+func TestTaskPlanResolverRebuildsEntryRemovalAfterHierarchyRename(t *testing.T) {
+	t.Parallel()
+	reader, intent, task := entryRemovalPlanTestState(t, core.EnvEntry{
+		Kind: core.EntryKindFile, Path: "config/runtime.env", UID: uint32Pointer(1000), GID: uint32Pointer(1000),
+		Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"api"},
+	}, nil)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	if err != nil {
+		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+	}
+	_, _, _, _, catalog := componentPlanProjectionInput(t)
+	catalog[0].Environment = routeRemovalPlanCaddyRenderer{}
+	resolver.componentCatalog = catalog
+	identity := entryRemovalIdentityFromReader(reader)
+	prepared, err := resolver.prepareEntryRemovalTask(
+		context.Background(), task, intent,
+		entryRemovalTaskProcedureIDs{ArtifactID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+		entryRemovalMaterializationResolverFake{}, identity,
+	)
+	if err != nil {
+		t.Fatalf("prepareEntryRemovalTask() error = %v", err)
+	}
+	reader.intent = intent
+	reader.tenant.Slug = "renamed-tenant"
+	reader.project.Slug = "renamed-project"
+	reader.environment.Name = "renamed-environment"
+	first, err := resolver.ResolveExecutionPlan(context.Background(), prepared)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan(after rename) error = %v", err)
+	}
+	second, err := resolver.ResolveExecutionPlan(context.Background(), prepared)
+	if err != nil || !bytes.Equal(first.PlanHash, second.PlanHash) ||
+		hex.EncodeToString(first.PlanHash) != prepared.PlanHash {
+		t.Fatalf("reconstructed plans after rename = %#v/%#v/%v", first, second, err)
 	}
 }
 
@@ -134,6 +179,74 @@ func TestEntryRemovalMaterializationTemplatesCloseEnvironmentScopes(t *testing.T
 				t.Fatalf("generated values = %#v", values)
 			}
 		})
+	}
+}
+
+// Rationale: durable Entry removal records cross a capability boundary, so
+// every closed output and storage variant must be translated explicitly and
+// future variants must fail closed instead of passing through by string cast.
+func TestEntryRemovalMaterializationConvertsClosedKinds(t *testing.T) {
+	t.Parallel()
+	outputs := []struct {
+		input etcd.TaskMaterializationOutputKind
+		want  entrycapability.RemovalOutputKind
+	}{
+		{
+			input: etcd.TaskMaterializationOutputGeneratedEnvironment,
+			want:  entrycapability.RemovalOutputGeneratedEnvironment,
+		},
+		{input: etcd.TaskMaterializationOutputPlainFile, want: entrycapability.RemovalOutputPlainFile},
+		{input: etcd.TaskMaterializationOutputSecretFile, want: entrycapability.RemovalOutputSecretFile},
+		{
+			input: etcd.TaskMaterializationOutputRemoveGeneratedEnv,
+			want:  entrycapability.RemovalOutputRemoveGeneratedEnv,
+		},
+		{input: etcd.TaskMaterializationOutputRemovePlainFile, want: entrycapability.RemovalOutputRemovePlainFile},
+		{input: etcd.TaskMaterializationOutputRemoveSecretFile, want: entrycapability.RemovalOutputRemoveSecretFile},
+	}
+	for _, test := range outputs {
+		converted, err := entryRemovalMaterialization(etcd.TaskMaterializationRecord{
+			OutputKind: test.input,
+			Source:     etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
+		})
+		if err != nil || converted.OutputKind != test.want {
+			t.Fatalf("entryRemovalMaterialization(%q) = %q, %v", test.input, converted.OutputKind, err)
+		}
+	}
+	for _, storage := range []struct {
+		input etcd.TaskEntryValueStorage
+		want  entrycapability.RemovalValueStorage
+	}{
+		{input: etcd.TaskEntryValueStoragePlain, want: entrycapability.RemovalValueStoragePlain},
+		{input: etcd.TaskEntryValueStorageSecret, want: entrycapability.RemovalValueStorageSecret},
+	} {
+		converted, err := entryRemovalMaterialization(generatedEntryRemovalMaterialization(storage.input))
+		if err != nil || converted.Source.GeneratedEnvironment.Values[0].Storage != storage.want {
+			t.Fatalf("entryRemovalMaterialization(storage %q) = %#v, %v", storage.input, converted, err)
+		}
+	}
+	if _, err := entryRemovalMaterialization(etcd.TaskMaterializationRecord{
+		OutputKind: "future",
+		Source:     etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
+	}); err == nil {
+		t.Fatal("entryRemovalMaterialization(invalid output) error = nil")
+	}
+	if _, err := entryRemovalMaterialization(generatedEntryRemovalMaterialization("future")); err == nil {
+		t.Fatal("entryRemovalMaterialization(invalid storage) error = nil")
+	}
+}
+
+func generatedEntryRemovalMaterialization(storage etcd.TaskEntryValueStorage) etcd.TaskMaterializationRecord {
+	return etcd.TaskMaterializationRecord{
+		OutputKind: etcd.TaskMaterializationOutputGeneratedEnvironment,
+		Source: etcd.TaskMaterializationSource{
+			Kind: etcd.TaskMaterializationSourceGeneratedEnvironment,
+			GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{
+				Values: []etcd.TaskGeneratedEnvironmentEntryReference{{
+					Value: etcd.TaskEntryValueReference{Storage: storage},
+				}},
+			},
+		},
 	}
 }
 
@@ -190,8 +303,21 @@ func entryRemovalPlanTestState(
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, at, 31), Executor: etcd.TaskExecutorAgent,
 		PlanID: ids.NewAt(ids.KindPlan, at, 32), Type: etcd.TaskRemove, Target: removed.ID,
 		TimeoutSeconds: 120, Status: etcd.TaskStatusPending, CreatedAt: at,
+		Owner: etcd.TaskOwner{
+			WorkspaceType: etcd.TaskWorkspaceTenant, TenantID: baseReader.tenant.ID,
+			ProjectID: baseReader.project.ID, EnvironmentID: baseReader.environment.ID,
+		},
 	}
 	return reader, intent, task
+}
+
+func entryRemovalIdentityFromReader(reader *entryRemovalPlanReader) entrycapability.RemovalEnvironmentIdentity {
+	return entrycapability.RemovalEnvironmentIdentity{
+		TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug,
+		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
+		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
+		AuthorizedVolumeDir: reader.environment.VolumeDir,
+	}
 }
 
 func uint32Pointer(value uint32) *uint32 {

@@ -23,6 +23,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
+	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
@@ -655,22 +656,19 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry edit service: %w", err)
 	}
-	entryDeletionRepository, err := newDurableEntryDeletionRepository(entryCreationRepository, componentRecords)
+	entryRemovalPlanner, err := controller.NewEntryRemovalPlanner(planResolver, materializationResolver)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry deletion repositories: %w", err)
+		return nil, fmt.Errorf("controller: initialize Entry removal planner: %w", err)
 	}
-	entryDeletionIdempotency, err := newDurableEntryDeletionIdempotency(intentCoordinator, idempotency)
+	entryRemovalRepository, err := entrycontroller.NewEtcdRepository(
+		entryCreationRepository.hierarchy, entryCreationRepository.entries,
+		componentRecords, intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry deletion idempotency: %w", err)
+		return nil, fmt.Errorf("controller: initialize Entry deletion persistence: %w", err)
 	}
-	entryDeletions, err := newEntryDeletionService(
-		entryDeletionRepository,
-		planResolver,
-		materializationResolver,
-		entryDeletionIdempotency,
-	)
+	entryDeletions, err := entrycontroller.NewRemovalService(entryRemovalRepository, entryRemovalPlanner)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry deletion service: %w", err)

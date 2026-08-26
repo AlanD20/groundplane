@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -28,17 +29,17 @@ type fakeEntryReader struct {
 }
 
 type fakeEntryMutator struct {
-	input      apiTypes.EntryCreateRequest
-	key        string
-	response   etcd.IdempotencyResponse
-	called     bool
-	editID     string
-	editInput  apiTypes.EntryEditRequest
-	editKey    string
-	editCalled bool
-	removeID   string
-	removeKey  string
-	removeCall bool
+	input          apiTypes.EntryCreateRequest
+	key            string
+	response       etcd.IdempotencyResponse
+	removeResponse entrycapability.RemovalOutcome
+	called         bool
+	editID         string
+	editInput      apiTypes.EntryEditRequest
+	editKey        string
+	editCalled     bool
+	removeRequest  entrycapability.RemoveRequest
+	removeCall     bool
 }
 
 func (mutator *fakeEntryMutator) CreateEntry(
@@ -67,13 +68,11 @@ func (mutator *fakeEntryMutator) EditEntry(
 
 func (mutator *fakeEntryMutator) RemoveEntry(
 	_ context.Context,
-	id string,
-	key string,
-) (etcd.IdempotencyResponse, error) {
+	request entrycapability.RemoveRequest,
+) (entrycapability.RemovalOutcome, error) {
 	mutator.removeCall = true
-	mutator.removeID = id
-	mutator.removeKey = key
-	return mutator.response, nil
+	mutator.removeRequest = request
+	return mutator.removeResponse, nil
 }
 
 func (fake *fakeEntryReader) GetEntry(
@@ -258,10 +257,7 @@ func TestEntryEditRoutePreservesProtectedMutationResponse(t *testing.T) {
 func TestEntryRemoveRouteUsesProtectedMutation(t *testing.T) {
 	entryID := "ev_" + ids.NewULID()
 	taskID := "tsk_" + ids.NewULID()
-	mutator := &fakeEntryMutator{response: etcd.IdempotencyResponse{
-		Status: http.StatusAccepted, ContentKind: "application/json",
-		Body: []byte(`{"task_id":"` + taskID + `"}`),
-	}}
+	mutator := &fakeEntryMutator{removeResponse: entrycapability.RemovalOutcome{TaskID: taskID}}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{EntryMutations: mutator})
 	request := httptest.NewRequest(http.MethodDelete, "/api/v1/entries/"+entryID, nil)
 	request.Header.Set("Idempotency-Key", "entry-remove-key-0001")
@@ -275,8 +271,9 @@ func TestEntryRemoveRouteUsesProtectedMutation(t *testing.T) {
 			response.Code, response.Header().Get("Content-Type"), response.Body.Bytes(),
 		)
 	}
-	if !mutator.removeCall || mutator.removeID != entryID || mutator.removeKey != "entry-remove-key-0001" {
-		t.Fatalf("RemoveEntry() id/key = %q/%q", mutator.removeID, mutator.removeKey)
+	if !mutator.removeCall || mutator.removeRequest.EntryID != entryID ||
+		mutator.removeRequest.IdempotencyKey != "entry-remove-key-0001" {
+		t.Fatalf("RemoveEntry() request = %#v", mutator.removeRequest)
 	}
 	var accepted apiTypes.TaskAccepted
 	if err := json.Unmarshal(response.Body.Bytes(), &accepted); err != nil {
