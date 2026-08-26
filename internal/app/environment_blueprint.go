@@ -367,6 +367,16 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	currentServices, err := service.listBlueprintServices(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	serviceChanges, err := prepareEnvironmentBlueprintServiceChanges(
+		environmentID, desiredServices, currentServices,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	currentRoutes, err := service.listBlueprintRoutes(ctx, environmentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -392,6 +402,12 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			"Blueprint omits an existing Route; remove it explicitly before apply",
 		)
 	}
+	routeChanges, err := prepareEnvironmentBlueprintRouteChanges(
+		environmentID, reconciledRoutes.Current, currentRoutes,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	currentComponents, err := service.listBlueprintComponents(ctx, environmentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -400,7 +416,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	_, pinnedComponents, effectiveComponents, err := service.prepareBlueprintComponents(
+	componentPreparation, pinnedComponents, effectiveComponents, err := service.prepareBlueprintComponents(
 		ctx,
 		environmentID,
 		taskID,

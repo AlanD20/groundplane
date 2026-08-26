@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: Attach creation must publish metadata, every ownership index, and encrypted facts in one revision.
@@ -892,7 +895,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 		t.Fatalf("encodeEnvironmentBlueprintManifest() error = %v", err)
 	}
 	defer clear(manifestValue)
-	manifestRevision, err := store.Put(
+	_, err = store.Put(
 		ctx,
 		environmentBlueprintManifestKey(environment.Record.ID, blueprintRevision.RevisionID),
 		manifestValue,
@@ -915,6 +918,22 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 			{ID: service.Record.Desired.ID, Name: service.Record.Desired.Name},
 		},
 	}
+	canonicalYAML := []byte("services:\n  api:\n    image: example/api:1\n")
+	digest := sha256.Sum256(canonicalYAML)
+	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId:          ids.NewAt(ids.KindConfig, testAttachTime, 11),
+		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:             environment.Record.ID,
+		ProjectName:         "gp-" + strings.ToLower(environment.Record.ID),
+		CanonicalYaml:       canonicalYAML,
+		YamlSha256:          digest[:],
+		AuthorizedVolumeDir: environment.Record.VolumeDir,
+		Services:            []*agentpb.ComposeService{{ServiceId: service.Record.Desired.ID, ComposeName: "api"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal Environment Compose artifact: %v", err)
+	}
+	defer clear(projection.ComposeArtifact)
 	projectionValue, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
@@ -928,10 +947,87 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	if err != nil {
 		t.Fatalf("Put(Environment Compose projection) error = %v", err)
 	}
+	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection)
+	if err != nil {
+		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
+	}
+	intentCiphertext := []byte("blueprint-intent-" + environment.Record.ID)
+	intentDigest := sha256.Sum256(intentCiphertext)
+	claim := EnvironmentBlueprintStageClaim{
+		DescriptorID:  strings.TrimPrefix(ids.NewAt(ids.KindTask, testAttachTime, 12), "task_"),
+		EnvironmentID: environment.Record.ID, RevisionID: blueprintRevision.RevisionID,
+		TaskID: ids.NewAt(ids.KindTask, testAttachTime, 13),
+		Locator: IdempotencyLocator{
+			ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+			Method: http.MethodPost, Route: "/blueprints", Key: "attach-blueprint-" + environment.Record.ID,
+		},
+		Intent: ProtectedIntentRecord{
+			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
+			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: intentCiphertext,
+		},
+		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1,
+		ProjectionSchema: 1, CreatedAt: testAttachTime,
+	}
+	streams, err := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
+		Claim: claim, Blueprint: &blueprintRevision, Projection: projection,
+		DependencyDigest: dependencyDigest,
+	})
+	if err != nil {
+		t.Fatalf("buildEnvironmentBlueprintStreams() error = %v", err)
+	}
+	defer clear(streams.Audit)
+	defer clear(streams.Projection)
+	rootValue, err := encodeEnvironmentBlueprintSeal(environmentBlueprintSealFromDescriptor(streams.Descriptor))
+	if err != nil {
+		t.Fatalf("encodeEnvironmentBlueprintSeal() error = %v", err)
+	}
+	defer clear(rootValue)
+	rootRevision, err := store.Put(
+		ctx,
+		environmentBlueprintRootKey(environment.Record.ID, blueprintRevision.RevisionID),
+		rootValue,
+	)
+	if err != nil {
+		t.Fatalf("Put(Blueprint root) error = %v", err)
+	}
+	for _, family := range []struct {
+		id    uint8
+		value []byte
+	}{
+		{id: EnvironmentBlueprintChunkAudit, value: streams.Audit},
+		{id: EnvironmentBlueprintChunkProjection, value: streams.Projection},
+	} {
+		for index := uint32(0); index < chunkCount32(len(family.value)); index++ {
+			from := int(index) * EnvironmentBlueprintChunkBytes
+			to := from + EnvironmentBlueprintChunkBytes
+			if to > len(family.value) {
+				to = len(family.value)
+			}
+			data := family.value[from:to]
+			chunkValue, encodeErr := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
+				Family: family.id, Sequence: index, LogicalOffset: uint64(from),
+				LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
+			})
+			if encodeErr != nil {
+				t.Fatalf("encodeEnvironmentBlueprintChunk() error = %v", encodeErr)
+			}
+			if _, putErr := store.Put(ctx, environmentBlueprintChunkKeyFor(
+				environment.Record.ID, blueprintRevision.RevisionID, family.id, index,
+			), chunkValue); putErr != nil {
+				clear(chunkValue)
+				t.Fatalf("Put(Blueprint chunk) error = %v", putErr)
+			}
+			clear(chunkValue)
+		}
+	}
+	environment, err = hierarchy.GetEnvironment(ctx, environment.Record.ID)
+	if err != nil {
+		t.Fatalf("GetEnvironment(after projection) error = %v", err)
+	}
 	return AttachCreateScope{
 		Tenant: tenantVersion, Project: project, Environment: environment,
 		BlueprintRevision: Versioned[EnvironmentBlueprintRevision]{
-			Record: blueprintRevision, Revision: manifestRevision, ReadRevision: manifestRevision,
+			Record: blueprintRevision, Revision: rootRevision, ReadRevision: rootRevision,
 		},
 		ComposeProjection: Versioned[EnvironmentComposeProjection]{
 			Record: projection, Revision: projectionRevision, ReadRevision: projectionRevision,
