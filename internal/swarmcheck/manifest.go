@@ -504,7 +504,8 @@ func validAuditRole(value AuditRole) bool {
 }
 
 func validFingerprint[T ~string](value T) bool {
-	return validHexIdentifier(value, 40, 64)
+	raw := string(value)
+	return raw == strings.ToLower(raw) && validHexIdentifier(value, 40, 64)
 }
 
 func validHexIdentifier[T ~string](value T, lengths ...int) bool {

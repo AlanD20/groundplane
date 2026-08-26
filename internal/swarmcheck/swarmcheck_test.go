@@ -44,6 +44,17 @@ func validWritingManifest() Manifest {
 	}
 }
 
+// Rationale: signer identity must have one canonical representation before byte-for-byte evidence comparison.
+func TestManifestRejectsNoncanonicalFingerprintCase(t *testing.T) {
+	manifest := validWritingManifest()
+	uppercase := Fingerprint(strings.Repeat("A", 40))
+	manifest.PrimarySigner = uppercase
+	manifest.Base.SignerFingerprint = uppercase
+	if err := ValidateManifest(manifest); err == nil {
+		t.Fatal("manifest accepted a noncanonical uppercase signing fingerprint")
+	}
+}
+
 // Rationale: leases must remain segment-aware and disjoint from the compiled primary-only policy.
 func TestPrimaryOnlyAndSegmentAwareLeases(t *testing.T) {
 	manifest := validWritingManifest()

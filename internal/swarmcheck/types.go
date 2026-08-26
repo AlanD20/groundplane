@@ -14,7 +14,7 @@ type Lane string
 // Identity is a validated actor identity.
 type Identity string
 
-// Fingerprint is a validated Git signing-key fingerprint.
+// Fingerprint is a validated lowercase Git signing-key fingerprint.
 type Fingerprint string
 
 // Digest is a validated lowercase SHA-256 digest.
