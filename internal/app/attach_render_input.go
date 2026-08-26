@@ -40,7 +40,7 @@ func buildAttachTaskRenderInput(
 		record.EnvironmentID != scope.Environment.Record.ID ||
 		scope.BlueprintRevision.Record.EnvironmentID != record.EnvironmentID ||
 		scope.ComposeProjection.Record.EnvironmentID != record.EnvironmentID ||
-		scope.ComposeProjection.Record.BlueprintRevisionID != scope.BlueprintRevision.Record.RevisionID ||
+		scope.ComposeProjection.Record.RevisionID != scope.BlueprintRevision.Record.RevisionID ||
 		scope.BackingProject.Record.Kind != etcd.ProjectKindBacking ||
 		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
@@ -111,7 +111,7 @@ func buildAttachTaskRenderInput(
 		RenderGeneration:       scope.ComposeProjection.Record.RenderGeneration,
 		Services:               cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Services),
 		Networks:               cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Networks),
-		Volumes:                cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Volumes),
+		Volumes:                slices.Clone(scope.ComposeProjection.Record.Volumes),
 		NetworkJoins:           joins,
 		ConsumerServiceIDs:     append([]string(nil), record.ServiceIDs...),
 		GrantAttachIDs:         append([]string(nil), record.GrantAttachIDs...),

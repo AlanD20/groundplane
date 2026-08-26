@@ -21,8 +21,12 @@ type EnvironmentDirectoryRuntime struct {
 }
 
 type environmentDirectoryStepResult struct {
-	ExitCode     int32
-	FailedStepID string
+	ExitCode       int32
+	FailedStepID   string
+	NextCursor     []byte
+	MutationCount  uint32
+	Complete       bool
+	ResponseSHA256 []byte
 }
 
 func NewEnvironmentDirectoryRuntime(
@@ -49,7 +53,7 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 		return environmentDirectoryStepResult{}, err
 	}
 	if step.GetEnvironmentDirectoryCreate() == nil && step.GetEnvironmentDirectoryRemove() == nil &&
-		step.GetManagedVolumeDirectoriesEnsure() == nil {
+		step.GetManagedVolumeDirectoriesEnsure() == nil && step.GetManagedVolumeDirectoryRemove() == nil {
 		return environmentDirectoryStepResult{}, errs.New(
 			errs.KindInternal,
 			"agent: Environment directory runtime received an unsupported step",
@@ -73,6 +77,14 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 	}
 	result := environmentDirectoryStepResult{
 		ExitCode: response.ExitCode, FailedStepID: response.FailedStepId,
+		NextCursor: append([]byte(nil), response.NextCursor...), MutationCount: response.MutationCount,
+		Complete: response.Complete, ResponseSHA256: append([]byte(nil), response.ResponseSha256...),
+	}
+	if step.GetManagedVolumeDirectoryRemove() != nil && response.ExitCode == 0 {
+		if response.MutationCount > 128 || len(response.ResponseSha256) != 32 ||
+			(response.Complete && len(response.NextCursor) != 0) || (!response.Complete && len(response.NextCursor) == 0) {
+			return result, errs.New(errs.KindInternal, "agent: managed volume directory helper returned invalid progress")
+		}
 	}
 	if response.ExitCode == 0 {
 		if response.FailedStepId != "" {

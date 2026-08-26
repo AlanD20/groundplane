@@ -163,6 +163,14 @@ type durableServiceMutationIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
+func (service *durableServiceMutationIdempotency) MatchesStaged(
+	ctx context.Context,
+	evidence serviceMutationEvidence,
+	existing etcd.ProtectedIntentRecord,
+) (bool, error) {
+	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
+}
+
 func newDurableServiceMutationIdempotency(
 	coordinator *idempotentintent.Coordinator,
 	repository *etcd.IdempotencyRepository,

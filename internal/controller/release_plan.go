@@ -94,7 +94,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	for _, member := range input.Members {
 		if member.Render.PlanID != task.PlanID || member.Render.ArtifactID != first.ArtifactID ||
 			member.Render.EnvironmentID != first.EnvironmentID ||
-			member.Render.Projection.BlueprintRevisionID != first.Projection.BlueprintRevisionID ||
+			member.Render.Projection.RevisionID != first.Projection.RevisionID ||
 			member.Render.Projection.RenderGeneration != first.Projection.RenderGeneration ||
 			!member.Render.ServiceDependencyPlans.Equal(first.ServiceDependencyPlans) {
 			return nil, errs.New(errs.KindInternal, "release render inputs do not share one frozen projection")
@@ -115,7 +115,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			EnvironmentID: first.EnvironmentID, EnvironmentName: first.EnvironmentName,
 			AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 		},
-		first.Projection.BlueprintRevisionID, first.ArtifactID, first.Projection,
+		first.Projection.RevisionID, first.ArtifactID, first.Projection,
 		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
 			selected := make(map[string]struct{}, len(images))
 			for name := range images {
@@ -184,7 +184,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 				EnvironmentID: first.EnvironmentID, EnvironmentName: first.EnvironmentName,
 				AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 			},
-			first.Projection.BlueprintRevisionID, priorArtifactID, first.Projection,
+			first.Projection.RevisionID, priorArtifactID, first.Projection,
 			func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
 				for name, image := range priorImages {
 					service, active := project.Services[name]

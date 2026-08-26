@@ -142,8 +142,8 @@ func TestBackupPolicySetResolvesLabelsAndPreservesSourceOrder(t *testing.T) {
 		case "/api/v1/volumes":
 			assertBackupPolicyEnvironmentQuery(t, request)
 			writeBackupPolicyTestResponse(t, writer, http.StatusOK, fmt.Sprintf(
-				`{"items":[{"id":%q,"name":"uploads"}],"next_cursor":""}`,
-				backupPolicyVolumeID,
+				`{"items":[{"id":%q,"environment_id":%q,"slug":"uploads","key":"uploads"}],"next_cursor":""}`,
+				backupPolicyVolumeID, backupPolicyTestEnvironmentID,
 			))
 		case "/api/v1/environments/" + backupPolicyTestEnvironmentID + "/backup-policy":
 			assertBackupPolicySetRequest(t, request, true, true, 7)

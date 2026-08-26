@@ -21,10 +21,18 @@ func ValidateEnvironmentBlueprintAvailability(parsed blueprintparser.Result) err
 		}
 	}
 	for _, volume := range parsed.Project.Volumes {
-		if volume.External || (volume.Driver != "" && volume.Driver != "local") || len(volume.DriverOpts) != 0 ||
-			len(volume.Extensions) != 0 {
+		if bool(volume.External) || (volume.Driver != "" && volume.Driver != "local") || len(volume.DriverOpts) != 0 ||
+			!onlyVolumeSlugExtension(volume.Extensions) {
 			return errs.New(errs.KindValidationFailed, "Blueprint volume runtime is not managed by Groundplane")
 		}
 	}
 	return nil
+}
+
+func onlyVolumeSlugExtension(extensions map[string]any) bool {
+	if len(extensions) == 0 {
+		return true
+	}
+	_, exists := extensions[composeVolumeSlugExtension]
+	return exists && len(extensions) == 1
 }

@@ -41,10 +41,10 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		PriorImage: "registry.example/api:previous", Strategy: domain.StrategyRecreate,
 		PriorStrategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton,
 		PriorTarget: domain.WorkloadSingleton,
-		TenantID: tenantID, TenantSlug: "tenant", ProjectID: projectID, ProjectSlug: "project",
+		TenantID:    tenantID, TenantSlug: "tenant", ProjectID: projectID, ProjectSlug: "project",
 		EnvironmentID: environmentID, EnvironmentName: "production", AuthorizedVolumeDir: "/var/lib/groundplane/volumes",
 		Projection: EnvironmentComposeProjection{
-			EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 11), RenderGeneration: 1,
+			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 11), RenderGeneration: 1,
 			Services:               []EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
 			ServiceDependencyPlans: core.ServiceDependencyPlans{},
 		},

@@ -30,10 +30,10 @@ func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.
 		}},
 	}
 	projection := EnvironmentComposeProjection{
-		EnvironmentID:       ids.NewAt(ids.KindEnvironment, at, 3),
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, at, 4),
-		RenderGeneration:    1,
-		Services:            services,
+		EnvironmentID:    ids.NewAt(ids.KindEnvironment, at, 3),
+		RevisionID:       ids.NewAt(ids.KindTask, at, 4),
+		RenderGeneration: 1,
+		Services:         services,
 		ServiceDependencyPlans: core.ServiceDependencyPlans{
 			DeployDependencyPlan: deploy, RollbackDependencyPlan: rollback,
 		},

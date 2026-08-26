@@ -349,14 +349,6 @@ type Route struct {
 	Exposure        string `yaml:"exposure"                   json:"exposure"` // "public" | "internal"
 }
 
-// Volume is persistent storage owned by an Environment, named and
-// referenced by service mounts; the bind mount is
-// <volume_dir>/<name> and cannot traverse outside it.
-type Volume struct {
-	ID   string `yaml:"id"   json:"id"` // vol_<ulid>
-	Name string `yaml:"name" json:"name"`
-}
-
 // Script is a first-class per-environment concept, executed against a
 // service as a task; When doubles as a deploy/rollback hook. See mvp.md,
 // "Scripts".

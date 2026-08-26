@@ -2,7 +2,7 @@ package etcd
 
 import (
 	"context"
-	"errors"
+	"crypto/sha256"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,11 +11,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
-func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t *testing.T) {
-	// Rationale: desired bytes, current pointer, Task indexes, queue membership,
-	// and idempotency evidence must become visible at one etcd revision.
+func TestEnvironmentBlueprintPublishesSealedRevisionAndTaskAuthority(t *testing.T) {
+	// Rationale: publication must select an already sealed desired revision and
+	// advance the head, Task queue, and Environment mutation epoch atomically.
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
 	repository, err := newHierarchyRepository(store)
@@ -38,16 +40,13 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 		},
 	}
 	routeChanges := environmentBlueprintTestRouteChanges(t, repository, desiredProjection)
-	result, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, 0, revision,
-		desiredProjection, zoneChanges, serviceChanges, routeChanges, ComponentTaskPreparation{}, task, marker,
+	result := publishEnvironmentBlueprintTestRevision(
+		t, repository, project, environment, 0, revision, desiredProjection,
+		zoneChanges, serviceChanges, routeChanges, ComponentTaskPreparation{}, task, marker,
 	)
-	if err != nil {
-		t.Fatalf("ApplyEnvironmentBlueprintWithTask() error = %v", err)
-	}
 	outcome, _, conflict, classifyErr := result.Classify()
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
-		t.Fatalf("apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+		t.Fatalf("publication outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 
 	head, found, err := repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
@@ -59,8 +58,8 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 		string(stored.Record.Files[0].Content) != "services: {}\n" {
 		t.Fatalf("GetEnvironmentBlueprintRevision() = %#v, %v, %v", stored, found, err)
 	}
-	if head.Revision != stored.Revision || head.ReadRevision != stored.ReadRevision {
-		t.Fatalf("head and revision were not published at one MVCC revision: %#v / %#v", head, stored)
+	if stored.Revision >= head.Revision {
+		t.Fatalf("sealed revision MVCC revision = %d, want before head publication %d", stored.Revision, head.Revision)
 	}
 	assertEnvironmentBlueprintZoneRevision(t, store, desiredProjection, head.Revision)
 	serviceRepository, err := newServiceRepository(store)
@@ -80,119 +79,18 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 		t.Fatalf("newRouteRepository() error = %v", err)
 	}
 	route, err := routeRepository.GetRoute(ctx, routeChanges[0].Record.Desired.ID)
-	if err != nil || route.Record.Desired.TargetServiceID != desiredProjection.Services[0].ID ||
-		route.Revision != head.Revision {
+	if err != nil || route.Record.Desired.TargetServiceID != desiredProjection.Services[0].ID || route.Revision != head.Revision {
 		t.Fatalf("GetRoute() = %#v, %v", route, err)
 	}
 	projection, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
-	if err != nil || !found || projection.Record.BlueprintRevisionID != task.ID ||
-		projection.Record.RenderGeneration != 1 || projection.Revision != head.Revision {
+	if err != nil || !found || projection.Record.RevisionID != task.ID ||
+		projection.Record.RenderGeneration != 1 {
 		t.Fatalf("GetEnvironmentComposeProjection() = %#v, %v, %v", projection, found, err)
 	}
-	assertEnvironmentBlueprintValue(t, store, taskKey(task.ID))
-	assertEnvironmentBlueprintValue(t, store, taskQueueKey(task.Executor, task.ID))
+	assertEnvironmentBlueprintTaskAuthority(t, store, environment.Record.ID, task, head.Revision)
 }
 
-func TestEnvironmentBlueprintApplyPublishesComponentCandidateAtomically(t *testing.T) {
-	// Rationale: a clean-start Blueprint must publish its new Zone, reserved
-	// Caddy address, immutable candidate, active fence, and Task at one revision.
-	ctx := context.Background()
-	store := newMemoryHierarchyStore()
-	repository, err := newHierarchyRepository(store)
-	if err != nil {
-		t.Fatalf("newHierarchyRepository() error = %v", err)
-	}
-	project, environment := createEnvironmentBlueprintOwners(t, repository)
-	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 25)
-	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	zoneChanges := environmentBlueprintTestZoneChanges(t, repository, projection)
-	serviceChanges := environmentBlueprintTestServiceChanges(t, repository, projection)
-	routeChanges := environmentBlueprintTestRouteChanges(t, repository, projection)
-	components, err := newComponentRepository(store)
-	if err != nil {
-		t.Fatalf("newComponentRepository() error = %v", err)
-	}
-	componentRecord, err := NewComponentRecord(core.Component{
-		ID: ids.NewAt(ids.KindComponent, task.CreatedAt, 80), Owner: core.ComponentOwnerEnvironment,
-		OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy,
-	})
-	if err != nil {
-		t.Fatalf("NewComponentRecord() error = %v", err)
-	}
-	current, err := components.CreateEnvironmentComponent(ctx, environment, project, componentRecord)
-	if err != nil {
-		t.Fatalf("CreateEnvironmentComponent() error = %v", err)
-	}
-	preparation, err := repository.PrepareEnvironmentComponentTask(
-		ctx,
-		task.ID,
-		environment.Record.ID,
-		zoneChanges,
-		[]EnvironmentComponentCandidateInput{{
-			Current: current,
-			Candidate: core.Component{
-				ID: current.Record.Desired.ID, Owner: core.ComponentOwnerEnvironment,
-				OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-				Config:            map[string]any{"zone_id": zoneChanges[0].Record.Desired.ID},
-				GeneratedServices: []string{ids.NewAt(ids.KindService, task.CreatedAt, 81)},
-			},
-		}},
-		task.CreatedAt,
-	)
-	if err != nil {
-		t.Fatalf("PrepareEnvironmentComponentTask() error = %v", err)
-	}
-	result, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx,
-		project,
-		environment,
-		0,
-		revision,
-		projection,
-		zoneChanges,
-		serviceChanges,
-		routeChanges,
-		preparation,
-		task,
-		environmentBlueprintTestMarker(task, environment.Record.ID),
-	)
-	if err != nil {
-		t.Fatalf("ApplyEnvironmentBlueprintWithTask() error = %v", err)
-	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	head, found, err := repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
-	if err != nil || !found {
-		t.Fatalf("GetEnvironmentBlueprintHead() = %#v, %v, %v", head, found, err)
-	}
-	for _, key := range []string{
-		componentTaskIntentKey(task.ID),
-		componentTaskActiveEnvironmentKey(environment.Record.ID),
-		componentAddressRegistryKey(zoneChanges[0].Record.Desired.ID),
-	} {
-		value, getErr := store.Get(ctx, key)
-		if getErr != nil || value.Entry == nil || value.Entry.ModRevision != head.Revision {
-			t.Fatalf("atomic Component key %q = %#v, %v", key, value, getErr)
-		}
-	}
-	active, err := components.GetComponent(ctx, current.Record.Desired.ID)
-	if err != nil || active.Record.Desired.Enabled || active.Revision != current.Revision {
-		t.Fatalf("active Component changed before Task success = %#v, %v", active, err)
-	}
-	intentValue, err := store.Get(ctx, componentTaskIntentKey(task.ID))
-	if err != nil || intentValue.Entry == nil {
-		t.Fatalf("Get(Component intent) = %#v, %v", intentValue, err)
-	}
-	intent, err := decodeComponentTaskIntent(intentValue.Entry.Value)
-	if err != nil || intent.Candidates[0].Candidate.Runtime.PinnedIPv4 == "" {
-		t.Fatalf("Component intent = %#v, %v", intent, err)
-	}
-}
-
-func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testing.T) {
+func TestEnvironmentBlueprintPublicationPreservesOldRevisionWhenHeadAdvances(t *testing.T) {
 	// Rationale: a queued Task must reconstruct its sealed input after restart
 	// even when a later successful apply changes current desired state.
 	ctx := context.Background()
@@ -204,20 +102,17 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	firstTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 30)
 	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {old: {}}\n")
 	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
-	firstZoneChanges := environmentBlueprintTestZoneChanges(t, repository, firstProjection)
-	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
-	firstRouteChanges := environmentBlueprintTestRouteChanges(t, repository, firstProjection)
-	firstResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, 0, first, firstProjection, firstZoneChanges, firstServiceChanges,
-		firstRouteChanges, ComponentTaskPreparation{}, firstTask,
+	firstZones := environmentBlueprintTestZoneChanges(t, repository, firstProjection)
+	firstServices := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
+	firstRoutes := environmentBlueprintTestRouteChanges(t, repository, firstProjection)
+	firstResult := publishEnvironmentBlueprintTestRevision(
+		t, repository, project, environment, 0, first, firstProjection,
+		firstZones, firstServices, firstRoutes, ComponentTaskPreparation{}, firstTask,
 		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
 	)
-	if err != nil {
-		t.Fatalf("first apply error = %v", err)
-	}
 	if outcome, _, conflict, classifyErr := firstResult.Classify(); classifyErr != nil || conflict != nil ||
 		outcome != IdempotencyKnownApplied {
-		t.Fatalf("first apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+		t.Fatalf("first publication outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	head, found, err := repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
 	if err != nil || !found {
@@ -225,24 +120,22 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	}
 
 	secondTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 40)
+	secondTask.RenderGeneration = 2
 	second := environmentBlueprintTestRevision(environment.Record.ID, secondTask, "services: {new: {}}\n")
 	secondProjection := firstProjection
-	secondProjection.BlueprintRevisionID = secondTask.ID
+	secondProjection.RevisionID = secondTask.ID
 	secondProjection.RenderGeneration = 2
-	secondZoneChanges := environmentBlueprintTestZoneChanges(t, repository, secondProjection)
-	secondServiceChanges := environmentBlueprintTestServiceChanges(t, repository, secondProjection)
-	secondRouteChanges := environmentBlueprintTestRouteChanges(t, repository, secondProjection)
-	secondResult, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, secondProjection, secondZoneChanges, secondServiceChanges,
-		secondRouteChanges, ComponentTaskPreparation{}, secondTask,
+	secondZones := environmentBlueprintTestZoneChanges(t, repository, secondProjection)
+	secondServices := environmentBlueprintTestServiceChanges(t, repository, secondProjection)
+	secondRoutes := environmentBlueprintTestRouteChanges(t, repository, secondProjection)
+	secondResult := publishEnvironmentBlueprintTestRevision(
+		t, repository, project, environment, head.Revision, second, secondProjection,
+		secondZones, secondServices, secondRoutes, ComponentTaskPreparation{}, secondTask,
 		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
 	)
-	if err != nil {
-		t.Fatalf("second apply error = %v", err)
-	}
 	if outcome, _, conflict, classifyErr := secondResult.Classify(); classifyErr != nil || conflict != nil ||
 		outcome != IdempotencyKnownApplied {
-		t.Fatalf("second apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+		t.Fatalf("second publication outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 
 	old, found, err := repository.GetEnvironmentBlueprintRevision(ctx, environment.Record.ID, firstTask.ID)
@@ -253,60 +146,80 @@ func TestEnvironmentBlueprintApplyPreservesOldRevisionWhenHeadAdvances(t *testin
 	if err != nil || !found || current.Record.RevisionID != secondTask.ID {
 		t.Fatalf("current head = %#v, %v, %v", current, found, err)
 	}
+	assertEnvironmentBlueprintTaskAuthority(t, repository.store, environment.Record.ID, secondTask, current.Revision)
 }
 
-// Rationale: Blueprint replacement must never turn omission into an implicit
-// destructive service or stateful-volume operation.
-func TestEnvironmentBlueprintApplyRejectsOwnedResourceOmission(t *testing.T) {
-	ctx := context.Background()
-	repository, err := newHierarchyRepository(newMemoryHierarchyStore())
-	if err != nil {
-		t.Fatalf("newHierarchyRepository() error = %v", err)
-	}
-	project, environment := createEnvironmentBlueprintOwners(t, repository)
-	firstTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 50)
-	first := environmentBlueprintTestRevision(environment.Record.ID, firstTask, "services: {api: {}}\n")
-	firstProjection := environmentBlueprintTestProjection(environment.Record.ID, firstTask, 1)
-	firstZoneChanges := environmentBlueprintTestZoneChanges(t, repository, firstProjection)
-	firstServiceChanges := environmentBlueprintTestServiceChanges(t, repository, firstProjection)
-	firstRouteChanges := environmentBlueprintTestRouteChanges(t, repository, firstProjection)
-	result, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx,
+func publishEnvironmentBlueprintTestRevision(
+	t *testing.T,
+	repository *HierarchyRepository,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	expectedHeadRevision int64,
+	revision EnvironmentBlueprintRevision,
+	projection EnvironmentComposeProjection,
+	zoneChanges []EnvironmentBlueprintZoneChange,
+	serviceChanges []EnvironmentBlueprintServiceChange,
+	routeChanges []EnvironmentBlueprintRouteChange,
+	componentPreparation ComponentTaskPreparation,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) IdempotencyTransactionResult {
+	t.Helper()
+	claim := stageEnvironmentBlueprintForPublicationTest(
+		t, repository, expectedHeadRevision, revision, projection, marker,
+	)
+	result, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+		context.Background(),
 		project,
 		environment,
-		0,
-		first,
-		firstProjection,
-		firstZoneChanges,
-		firstServiceChanges,
-		firstRouteChanges,
-		ComponentTaskPreparation{},
-		firstTask,
-		environmentBlueprintTestMarker(firstTask, environment.Record.ID),
+		expectedHeadRevision,
+		claim,
+		EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: revision.EnvironmentID,
+			RevisionID:    revision.RevisionID,
+		},
+		projection,
+		zoneChanges,
+		serviceChanges,
+		routeChanges,
+		componentPreparation,
+		task,
+		marker,
 	)
 	if err != nil {
-		t.Fatalf("first apply error = %v", err)
+		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
 	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
-		outcome != IdempotencyKnownApplied {
-		t.Fatalf("first apply outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+	return result
+}
+
+func assertEnvironmentBlueprintTaskAuthority(
+	t *testing.T,
+	store hierarchyStore,
+	environmentID string,
+	task TaskRecord,
+	wantRevision int64,
+) {
+	t.Helper()
+	stored, err := store.Get(context.Background(), taskKey(task.ID))
+	if err != nil || stored.Entry == nil || stored.Entry.ModRevision != wantRevision {
+		t.Fatalf("Task authority = %#v, %v; want revision %d", stored, err, wantRevision)
 	}
-	head, found, err := repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
-	if err != nil || !found {
-		t.Fatalf("head = %#v, %v, %v", head, found, err)
+	decoded, err := decodeTaskRecord(stored.Entry.Value)
+	if err != nil || decoded.ID != task.ID ||
+		decoded.Params[EnvironmentDesiredRevisionParam] != task.ID {
+		t.Fatalf("decoded Task authority = %#v, %v", decoded, err)
 	}
-	secondTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 60)
-	second := environmentBlueprintTestRevision(environment.Record.ID, secondTask, "services: {}\n")
-	omitted := environmentBlueprintTestProjection(environment.Record.ID, secondTask, 2)
-	omitted.Services = nil
-	omittedZoneChanges := environmentBlueprintTestZoneChanges(t, repository, omitted)
-	_, err = repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, head.Revision, second, omitted, omittedZoneChanges, nil, nil,
-		ComponentTaskPreparation{}, secondTask,
-		environmentBlueprintTestMarker(secondTask, environment.Record.ID),
-	)
-	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-		t.Fatalf("omitting apply error = %v, want resource.in_use", err)
+	queued, err := store.Get(context.Background(), taskQueueKey(task.Executor, task.ID))
+	if err != nil || queued.Entry == nil || queued.Entry.ModRevision != wantRevision {
+		t.Fatalf("Task queue authority = %#v, %v; want revision %d", queued, err, wantRevision)
+	}
+	epoch, err := store.Get(context.Background(), environmentMutationEpochKey(environmentID))
+	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != wantRevision {
+		t.Fatalf("Environment mutation epoch = %#v, %v; want revision %d", epoch, err, wantRevision)
+	}
+	decodedEpoch, err := decodeEnvironmentMutationEpochRecord(epoch.Entry.Value)
+	if err != nil || decodedEpoch.EnvironmentID != environmentID {
+		t.Fatalf("decoded Environment mutation epoch = %#v, %v", decodedEpoch, err)
 	}
 }
 
@@ -363,7 +276,7 @@ func environmentBlueprintTestTask(
 		PlanHash: strings.Repeat("a", 64), RenderGeneration: 1,
 		Type: TaskUpdate, Target: environment.ID,
 		Params: map[string]string{
-			EnvironmentBlueprintRevisionParam:   taskID,
+			EnvironmentDesiredRevisionParam:     taskID,
 			TaskMaterializationEnvironmentParam: environment.ID,
 		},
 		Steps:          []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, at, seed+4)}},
@@ -392,18 +305,41 @@ func environmentBlueprintTestProjection(
 	task TaskRecord,
 	generation uint64,
 ) EnvironmentComposeProjection {
-	return EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: task.ID, RenderGeneration: generation,
+	projection := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: task.ID, RenderGeneration: generation,
 		Services: []EnvironmentComposeIdentity{{
 			ID: ids.NewAt(ids.KindService, task.CreatedAt, 70), Name: "api",
 		}},
 		Networks: []EnvironmentComposeIdentity{{
 			ID: ids.NewAt(ids.KindNetwork, task.CreatedAt, 71), Name: "default",
 		}},
-		Volumes: []EnvironmentComposeIdentity{{
-			ID: ids.NewAt(ids.KindVolume, task.CreatedAt, 72), Name: "app-data",
+		Volumes: []EnvironmentVolumeIdentity{{
+			ID: ids.NewAt(ids.KindVolume, task.CreatedAt, 72), Slug: "app-data", Key: "app-data",
 		}},
 	}
+	canonicalYAML := []byte("services: {}\n")
+	yamlDigest := sha256.Sum256(canonicalYAML)
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId:          ids.NewAt(ids.KindConfig, task.CreatedAt, 73),
+		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:             environmentID,
+		ProjectName:         "groundplane-test",
+		CanonicalYaml:       canonicalYAML,
+		YamlSha256:          yamlDigest[:],
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
+		Services: []*agentpb.ComposeService{{
+			ServiceId: projection.Services[0].ID, ComposeName: projection.Services[0].Name,
+		}},
+		Volumes: []*agentpb.ComposeVolume{{
+			VolumeId: projection.Volumes[0].ID, ComposeName: projection.Volumes[0].Key,
+		}},
+	}
+	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		panic(err)
+	}
+	projection.ComposeArtifact = value
+	return projection
 }
 
 func environmentBlueprintTestMarker(task TaskRecord, environmentID string) IdempotencyMarker {

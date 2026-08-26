@@ -12,6 +12,7 @@ const (
 	TaskResourceBackingZone              = "backing_zone"
 	TaskResourceService                  = "service"
 	TaskResourceReleaseGroup             = "release_group"
+	TaskResourceVolume                   = "volume"
 	TaskResourceHierarchyDeletion        = "hierarchy_deletion"
 	TaskHierarchyDeletionOperationParam  = "hierarchy_deletion_operation_id"
 	TaskHierarchyDeletionTargetKindParam = "hierarchy_deletion_target_kind"

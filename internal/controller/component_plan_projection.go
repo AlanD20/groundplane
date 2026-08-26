@@ -31,7 +31,7 @@ func projectPinnedEnvironmentComponents(
 	identities := ComposeIdentitySnapshot{
 		Services: authored,
 		Networks: composeResourceIdentities(projection.Networks),
-		Volumes:  composeResourceIdentities(projection.Volumes),
+		Volumes:  composeVolumeResourceIdentities(projection.Volumes),
 	}
 	zones, err := ProjectZoneProjection(
 		project,
@@ -179,6 +179,14 @@ func composeResourceIdentities(values []etcd.EnvironmentComposeIdentity) []Compo
 	result := make([]ComposeResourceIdentity, len(values))
 	for index, value := range values {
 		result[index] = ComposeResourceIdentity{ID: value.ID, Name: value.Name}
+	}
+	return result
+}
+
+func composeVolumeResourceIdentities(values []etcd.EnvironmentVolumeIdentity) []ComposeResourceIdentity {
+	result := make([]ComposeResourceIdentity, len(values))
+	for index, value := range values {
+		result[index] = ComposeResourceIdentity{ID: value.ID, Name: value.Key}
 	}
 	return result
 }

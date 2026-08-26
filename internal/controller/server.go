@@ -65,6 +65,7 @@ type Server struct {
 	backupPolicies        BackupPolicyReader
 	backupPolicyMutations BackupPolicyMutator
 	volumes               VolumeReader
+	volumeMutations       VolumeMutator
 	environmentMutations  EnvironmentMutator
 	environmentChanges    EnvironmentChanger
 	environmentBlueprints EnvironmentBlueprintMutator
@@ -114,6 +115,7 @@ type Options struct {
 	BackupPolicies        BackupPolicyReader
 	BackupPolicyMutations BackupPolicyMutator
 	Volumes               VolumeReader
+	VolumeMutations       VolumeMutator
 	EnvironmentMutations  EnvironmentMutator
 	EnvironmentChanges    EnvironmentChanger
 	EnvironmentBlueprints EnvironmentBlueprintMutator
@@ -176,6 +178,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		backupPolicies:        options.BackupPolicies,
 		backupPolicyMutations: options.BackupPolicyMutations,
 		volumes:               options.Volumes,
+		volumeMutations:       options.VolumeMutations,
 		environmentMutations:  options.EnvironmentMutations,
 		environmentChanges:    options.EnvironmentChanges,
 		environmentBlueprints: options.EnvironmentBlueprints,
@@ -258,12 +261,8 @@ func (s *Server) routes() {
 
 	// Route reads, mutations, and task-backed removal are typed Huma operations.
 
-	// Volume metadata remains explicit. Script reads and protected metadata
-	// mutations are typed Huma operations; run and removal remain task placeholders.
-	s.jsonRoute("POST /api/v1/volumes", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/volumes/{id}", s.notImplemented)
-	s.jsonRoute("PATCH /api/v1/volumes/{id}", s.notImplemented)
-	mux.HandleFunc("DELETE /api/v1/volumes/{id}", s.acceptTask)
+	// Volume reads, protected identity mutations, fixed-revision impact, and
+	// confirmed removal are registered as typed Huma operations below.
 	// Entry reads, protected mutations, and explicit reveal are typed Huma operations.
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 

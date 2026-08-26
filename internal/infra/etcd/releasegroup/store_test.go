@@ -244,7 +244,7 @@ func seedEnvironmentAndServices(store *memoryStore, environmentID string, servic
 	store.put(environmentOwnerKey(projectID, environmentID), []byte(environmentID))
 	store.put(environmentMutationEpochKey(environmentID), mustDurableValue("environment-mutation-epoch", epochRecord{EnvironmentID: environmentID}))
 	projection := infraetcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: blueprintRevisionID, RenderGeneration: 1,
+		EnvironmentID: environmentID, RevisionID: blueprintRevisionID, RenderGeneration: 1,
 		Services: make([]infraetcd.EnvironmentComposeIdentity, len(serviceIDs)),
 	}
 	for index, serviceID := range serviceIDs {

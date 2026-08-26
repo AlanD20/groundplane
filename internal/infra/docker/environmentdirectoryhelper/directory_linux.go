@@ -22,15 +22,6 @@ func (Creator) Create(ctx context.Context, volumeRoot string, volumeDirectory st
 	return createDirectories(ctx, volumeRoot, volumeDirectory, 0)
 }
 
-func (Creator) EnsureManagedVolumes(
-	ctx context.Context,
-	volumeRoot string,
-	volumeDirectory string,
-	composeNames []string,
-) error {
-	return ensureManagedVolumeDirectories(ctx, volumeRoot, volumeDirectory, composeNames, 0)
-}
-
 func (Creator) Remove(ctx context.Context, volumeRoot string, volumeDirectory string) error {
 	return removeDirectory(ctx, volumeRoot, volumeDirectory, 0)
 }
@@ -117,112 +108,8 @@ func openDirectoryAt(parentFD int, name string) (int, error) {
 	return unix.Openat2(parentFD, name, &unix.OpenHow{
 		Flags: uint64(unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NOFOLLOW),
 		Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_MAGICLINKS |
-			unix.RESOLVE_NO_SYMLINKS,
+			unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_XDEV,
 	})
-}
-
-func ensureManagedVolumeDirectories(
-	ctx context.Context,
-	volumeRoot string,
-	volumeDirectory string,
-	composeNames []string,
-	expectedUID uint32,
-) error {
-	if ctx == nil {
-		return errs.New(errs.KindInternal, "Managed volume directory context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	scope, err := environmentpath.Parse(volumeRoot, volumeDirectory)
-	if err != nil {
-		return err
-	}
-	rootFD, err := unix.Open(volumeRoot, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-	if err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("open Environment volume root: %w", err))
-	}
-	if err := validateDirectory(rootFD, expectedUID); err != nil {
-		_ = unix.Close(rootFD)
-		return err
-	}
-	components := []string{scope.TenantID, scope.ProjectID, scope.EnvironmentID}
-	if scope.ProjectKind == environmentpath.ProjectKindBacking {
-		components[0] = "platform"
-	}
-	parentFD := rootFD
-	for _, component := range components {
-		nextFD, openErr := openDirectoryAt(parentFD, component)
-		closeErr := unix.Close(parentFD)
-		if openErr != nil {
-			return errs.Wrap(errs.KindInternal, fmt.Errorf("open Environment directory: %w", openErr))
-		}
-		if closeErr != nil {
-			_ = unix.Close(nextFD)
-			return errs.Wrap(errs.KindInternal, closeErr)
-		}
-		if err := validateDirectory(nextFD, expectedUID); err != nil {
-			_ = unix.Close(nextFD)
-			return err
-		}
-		parentFD = nextFD
-	}
-	for _, composeName := range composeNames {
-		if err := ctx.Err(); err != nil {
-			_ = unix.Close(parentFD)
-			return err
-		}
-		volumeFD, openErr := openOrCreateManagedVolumeDirectory(parentFD, composeName, expectedUID)
-		if openErr != nil {
-			_ = unix.Close(parentFD)
-			return openErr
-		}
-		if closeErr := unix.Close(volumeFD); closeErr != nil {
-			_ = unix.Close(parentFD)
-			return errs.Wrap(errs.KindInternal, closeErr)
-		}
-	}
-	if err := unix.Close(parentFD); err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	return nil
-}
-
-func openOrCreateManagedVolumeDirectory(parentFD int, name string, expectedUID uint32) (int, error) {
-	fd, err := openDirectoryAt(parentFD, name)
-	created := false
-	if errors.Is(err, syscall.ENOENT) {
-		mkdirErr := unix.Mkdirat(parentFD, name, 0o755)
-		if mkdirErr != nil && !errors.Is(mkdirErr, syscall.EEXIST) {
-			return -1, errs.Wrap(errs.KindInternal, fmt.Errorf("create managed volume directory: %w", mkdirErr))
-		}
-		created = mkdirErr == nil
-		fd, err = openDirectoryAt(parentFD, name)
-	}
-	if err != nil {
-		return -1, errs.Wrap(errs.KindInternal, fmt.Errorf("open managed volume directory: %w", err))
-	}
-	if created {
-		if err := unix.Fchmod(fd, 0o755); err != nil {
-			_ = unix.Close(fd)
-			return -1, errs.Wrap(errs.KindInternal, fmt.Errorf("secure managed volume directory: %w", err))
-		}
-	}
-	if err := validateManagedVolumeDirectory(fd, expectedUID); err != nil {
-		_ = unix.Close(fd)
-		return -1, err
-	}
-	if created {
-		if err := unix.Fsync(fd); err != nil {
-			_ = unix.Close(fd)
-			return -1, errs.Wrap(errs.KindInternal, err)
-		}
-		if err := unix.Fsync(parentFD); err != nil {
-			_ = unix.Close(fd)
-			return -1, errs.Wrap(errs.KindInternal, err)
-		}
-	}
-	return fd, nil
 }
 
 func validateDirectory(fd int, expectedUID uint32) error {
@@ -232,17 +119,6 @@ func validateDirectory(fd int, expectedUID uint32) error {
 	}
 	if stat.Mode&unix.S_IFMT != unix.S_IFDIR || stat.Mode&0o777 != 0o700 || stat.Uid != expectedUID {
 		return errs.New(errs.KindValidationFailed, "Environment directory must be owner-owned mode 0700")
-	}
-	return nil
-}
-
-func validateManagedVolumeDirectory(fd int, expectedUID uint32) error {
-	var stat unix.Stat_t
-	if err := unix.Fstat(fd, &stat); err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	if stat.Mode&unix.S_IFMT != unix.S_IFDIR || stat.Mode&0o777 != 0o755 || stat.Uid != expectedUID {
-		return errs.New(errs.KindValidationFailed, "Managed volume directory must be owner-owned mode 0755")
 	}
 	return nil
 }

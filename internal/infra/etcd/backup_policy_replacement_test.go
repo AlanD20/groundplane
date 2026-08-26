@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: one protected replacement must publish ordered sources, the
@@ -350,8 +353,11 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 		{name: "source identity index", key: func(candidate backupPolicyReplacementCandidate) string {
 			return candidate.Sources[0].IdentityIndex.Key
 		}},
-		{name: "target owner index", key: func(candidate backupPolicyReplacementCandidate) string {
-			return candidate.Sources[0].TargetOwnerIndex.Key
+		{name: "volume projection root", key: func(candidate backupPolicyReplacementCandidate) string {
+			return environmentBlueprintRootKey(
+				candidate.Replacement.EnvironmentID,
+				candidate.Sources[0].Volume.Projection.Record.RevisionID,
+			)
 		}},
 		{name: "connector owner index", key: func(candidate backupPolicyReplacementCandidate) string {
 			return candidate.ConnectorOwnerIndex.Key
@@ -371,8 +377,7 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 				context.Background(), candidate,
 				backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-index-race-0001"),
 			)
-			if err != nil || result.kind != idempotencyTransactionConflict ||
-				!isKind(result.conflict, errs.KindInternal) {
+			if err != nil || result.kind != idempotencyTransactionConflict || result.conflict == nil {
 				t.Fatalf("replaceBackupPolicyProtected(index corruption) = %#v, %v", result, err)
 			}
 		})
@@ -508,10 +513,6 @@ func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) 
 	for index := range candidate.Sources {
 		sourceID := ids.NewAt(ids.KindBackupSource, candidate.Replacement.UpdatedAt, int64(2600+index))
 		volumeID := ids.NewAt(ids.KindVolume, candidate.Replacement.UpdatedAt, int64(2700+index))
-		volume, err := NewVolumeRecord(fixture.environment.Record.ID, volumeID, "volume-"+sourceID)
-		if err != nil {
-			t.Fatalf("NewVolumeRecord() error = %v", err)
-		}
 		record := BackupSourceRecord{
 			ID: sourceID, EnvironmentID: fixture.environment.Record.ID,
 			Kind: core.BackupSourceVolume, TargetID: volumeID,
@@ -526,12 +527,9 @@ func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) 
 		}, IdentityIndex: &KeyValue{
 			Key:   backupSourceIdentityKey(fixture.environment.Record.ID, record.Kind, record.TargetID),
 			Value: []byte(sourceID), ModRevision: 1,
-		}, Volume: &Versioned[VolumeRecord]{
-			Record: volume, Revision: 1, ReadRevision: 1,
-		}, TargetOwnerIndex: &KeyValue{
-			Key:   volumeOwnerKey(fixture.environment.Record.ID, volumeID),
-			Value: []byte(volumeID), ModRevision: 1,
-		}}
+		}, Volume: syntheticBackupPolicyVolumeEvidence(
+			fixture.environment.Record.ID, volumeID, candidate.Replacement.UpdatedAt, int64(2800+index),
+		)}
 	}
 	if _, err := fixture.repository.replaceBackupPolicyProtected(
 		context.Background(), candidate,
@@ -599,33 +597,12 @@ func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backup
 		t, store, configSource, nil, nil,
 	)}
 	if includeVolume {
-		volume, err := NewVolumeRecord(
-			environment.Record.ID,
-			ids.NewAt(ids.KindVolume, now, 2400),
-			"backup-data",
+		volume := EnvironmentVolumeIdentity{
+			ID: ids.NewAt(ids.KindVolume, now, 2400), Slug: "backup-data", Key: "backup-data",
+		}
+		createdVolume := seedBackupPolicyVolumeProjection(
+			t, store, environment, project, volume, 2401,
 		)
-		if err != nil {
-			t.Fatalf("NewVolumeRecord() error = %v", err)
-		}
-		volumeValue, err := encodeVolumeRecord(volume)
-		if err != nil {
-			t.Fatalf("encodeVolumeRecord() error = %v", err)
-		}
-		defer clear(volumeValue)
-		transaction, err := store.Transact(
-			context.Background(),
-			[]Condition{{Key: volumeKey(volume.ID)}, {Key: volumeOwnerKey(environment.Record.ID, volume.ID)}},
-			[]Mutation{
-				{Type: MutationPut, Key: volumeKey(volume.ID), Value: volumeValue},
-				{Type: MutationPut, Key: volumeOwnerKey(environment.Record.ID, volume.ID), Value: []byte(volume.ID)},
-			},
-		)
-		if err != nil || !transaction.Succeeded {
-			t.Fatalf("seed Volume = %#v, %v", transaction, err)
-		}
-		createdVolume := Versioned[VolumeRecord]{
-			Record: volume, Revision: transaction.Revision, ReadRevision: transaction.Revision,
-		}
 		volumeSource, err := repository.EnsureBackupSource(
 			context.Background(), environment, project, core.BackupSourceVolume, volume.ID,
 		)
@@ -762,7 +739,7 @@ func backupPolicyReplacementSourceEvidence(
 	store *memoryHierarchyStore,
 	source Versioned[BackupSourceRecord],
 	attach *Versioned[AttachRecord],
-	volume *Versioned[VolumeRecord],
+	volume *backupVolumeProjectionEvidence,
 ) backupPolicySourceEvidence {
 	t.Helper()
 	evidence := backupPolicySourceEvidence{
@@ -783,12 +760,81 @@ func backupPolicyReplacementSourceEvidence(
 			t, store, attachOwnerKey(source.Record.EnvironmentID, attach.Record.ID),
 		)
 	}
-	if volume != nil {
-		evidence.TargetOwnerIndex = mustBackupPolicyIndex(
-			t, store, volumeOwnerKey(source.Record.EnvironmentID, volume.Record.ID),
-		)
+	return evidence
+}
+
+func seedBackupPolicyVolumeProjection(
+	t *testing.T,
+	store *memoryHierarchyStore,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	volume EnvironmentVolumeIdentity,
+	seed int64,
+) backupVolumeProjectionEvidence {
+	t.Helper()
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, seed)
+	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+	projection.Volumes = []EnvironmentVolumeIdentity{volume}
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
+		t.Fatal(err)
+	}
+	artifact.Volumes = []*agentpb.ComposeVolume{{VolumeId: volume.ID, ComposeName: volume.Key}}
+	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
+	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
+	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
+	headValue, err := encodeTaskReference(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.Transact(context.Background(), []Condition{{
+		Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: 0,
+	}}, []Mutation{{
+		Type: MutationPut, Key: environmentBlueprintHeadKey(environment.Record.ID), Value: headValue,
+	}})
+	clear(headValue)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("publish backup Volume fixture = %#v, %v", result, err)
+	}
+	evidence, err := loadBackupVolumeProjectionEvidence(
+		context.Background(), store, environment.Record.ID, volume.ID, result.Revision,
+	)
+	if err != nil {
+		t.Fatalf("load backup Volume fixture = %v", err)
 	}
 	return evidence
+}
+
+func syntheticBackupPolicyVolumeEvidence(
+	environmentID string,
+	volumeID string,
+	at time.Time,
+	seed int64,
+) *backupVolumeProjectionEvidence {
+	revisionID := ids.NewAt(ids.KindTask, at, seed)
+	return &backupVolumeProjectionEvidence{
+		Projection: Versioned[EnvironmentComposeProjection]{
+			Record: EnvironmentComposeProjection{
+				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+				Volumes: []EnvironmentVolumeIdentity{{
+					ID: volumeID, Slug: "volume-" + volumeID, Key: "volume-" + volumeID,
+				}},
+			},
+			Revision: 1, ReadRevision: 1,
+		},
+		ProjectionRoot: 1, DependencyDigest: strings.Repeat("a", 64),
+		Volume: EnvironmentVolumeIdentity{
+			ID: volumeID, Slug: "volume-" + volumeID, Key: "volume-" + volumeID,
+		},
+	}
 }
 
 func mustBackupPolicyIndex(t *testing.T, store *memoryHierarchyStore, key string) *KeyValue {

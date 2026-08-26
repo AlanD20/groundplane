@@ -285,10 +285,10 @@ func seedComponentRetryProjection(
 		return components[left].Desired.Kind < components[right].Desired.Kind
 	})
 	projection := EnvironmentComposeProjection{
-		EnvironmentID:       task.Target,
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, task.CreatedAt, 1282),
-		RenderGeneration:    uint64(task.RenderGeneration),
-		Components:          components,
+		EnvironmentID:    task.Target,
+		RevisionID:       ids.NewAt(ids.KindTask, task.CreatedAt, 1282),
+		RenderGeneration: uint64(task.RenderGeneration),
+		Components:       components,
 	}
 	value, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {

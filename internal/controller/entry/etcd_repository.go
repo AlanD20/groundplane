@@ -451,7 +451,7 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 		task.Params = map[string]string{
 			etcd.TaskEntryEnvironmentParam:           plan.EnvironmentID,
 			etcd.TaskMaterializationEnvironmentParam: plan.EnvironmentID,
-			etcd.EnvironmentBlueprintRevisionParam:   plan.BlueprintRevisionID,
+			etcd.EnvironmentDesiredRevisionParam:     plan.BlueprintRevisionID,
 			etcd.TaskComposeArtifactParam:            plan.ArtifactID,
 			etcd.TaskEntryTenantSlugParam:            identity.TenantSlug,
 			etcd.TaskEntryProjectSlugParam:           identity.ProjectSlug,

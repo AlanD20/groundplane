@@ -271,9 +271,8 @@ func TestBackupRuntimeRecordsRejectAmbiguousState(t *testing.T) {
 	}
 
 	run := testBackupRun(createdAt, updatedAt, recipient)
-	run.Sources[0].Snapshot.Volume = &BackupVolumeSourceSnapshot{
-		EnvironmentID: testBackupEnvironmentID, VolumeID: testBackupVolumeID, VolumeRevision: 1,
-	}
+	volume := testBackupVolumeSourceSnapshot(1)
+	run.Sources[0].Snapshot.Volume = &volume
 	if _, err := encodeBackupRunRecord(
 		run,
 	); !errors.Is(
@@ -788,10 +787,14 @@ func TestBackupVolumeServiceSnapshotRequiresStableIDOrder(t *testing.T) {
 	first := ids.NewAt(ids.KindService, createdAt, 1)
 	second := ids.NewAt(ids.KindService, createdAt, 2)
 	snapshot := BackupVolumeSourceSnapshot{
-		EnvironmentID: testBackupEnvironmentID, VolumeID: testBackupVolumeID, VolumeRevision: 7,
+		EnvironmentID: testBackupEnvironmentID, EnvironmentRevision: 6,
+		VolumeID: testBackupVolumeID, DesiredRevisionID: testBackupTaskID,
+		ProjectionRoot: 7, DependencyDigest: testBackupDigest, RenderGeneration: 1,
+		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + testBackupVolumeID,
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		Services: []BackupVolumeServiceSnapshot{
-			{ServiceID: first, ServiceRevision: 8, PriorIntent: BackupServiceIntentRunning},
-			{ServiceID: second, ServiceRevision: 9, PriorIntent: BackupServiceIntentStopped},
+			{ServiceID: first, ServiceRevision: 8, ComposeKey: "first", MountPaths: []string{"/first"}, PriorIntent: BackupServiceIntentRunning},
+			{ServiceID: second, ServiceRevision: 9, ComposeKey: "second", MountPaths: []string{"/second"}, PriorIntent: BackupServiceIntentStopped},
 		},
 	}
 	if err := validateBackupVolumeSnapshot(snapshot); err != nil {
@@ -990,21 +993,13 @@ func testBackupRestore(
 	updatedAt time.Time,
 ) BackupRestoreRecord {
 	return BackupRestoreRecord{
-		TaskID:                testBackupTaskID,
-		OperationID:           testBackupOperationID,
-		EnvironmentID:         testBackupEnvironmentID,
-		RecoveryPointRevision: 20,
-		Point:                 point,
-		SourceRevision:        21,
-		CurrentTarget: BackupRestoreTargetSnapshot{Volume: &BackupVolumeSourceSnapshot{
-			EnvironmentID:  testBackupEnvironmentID,
-			VolumeID:       testBackupVolumeID,
-			VolumeRevision: 22,
-			Services: []BackupVolumeServiceSnapshot{{
-				ServiceID: testBackupServiceID, ServiceRevision: 23,
-				PriorIntent: BackupServiceIntentRunning,
-			}},
-		}},
+		TaskID:                        testBackupTaskID,
+		OperationID:                   testBackupOperationID,
+		EnvironmentID:                 testBackupEnvironmentID,
+		RecoveryPointRevision:         20,
+		Point:                         point,
+		SourceRevision:                21,
+		CurrentTarget:                 BackupRestoreTargetSnapshot{Volume: ptrTestBackupVolumeSourceSnapshot(22)},
 		ConnectorRevision:             23,
 		ConnectorHasDirectCredentials: true,
 		ConnectorCredentialsRevision:  24,
@@ -1022,4 +1017,23 @@ func testBackupRestore(
 		CreatedAt:                createdAt,
 		UpdatedAt:                updatedAt,
 	}
+}
+
+func testBackupVolumeSourceSnapshot(revision int64) BackupVolumeSourceSnapshot {
+	return BackupVolumeSourceSnapshot{
+		EnvironmentID: testBackupEnvironmentID, EnvironmentRevision: revision,
+		VolumeID: testBackupVolumeID, DesiredRevisionID: testBackupTaskID,
+		ProjectionRoot: revision + 1, DependencyDigest: testBackupDigest, RenderGeneration: 1,
+		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + testBackupVolumeID,
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
+		Services: []BackupVolumeServiceSnapshot{{
+			ServiceID: testBackupServiceID, ServiceRevision: revision + 2,
+			ComposeKey: "database", MountPaths: []string{"/data"}, PriorIntent: BackupServiceIntentRunning,
+		}},
+	}
+}
+
+func ptrTestBackupVolumeSourceSnapshot(revision int64) *BackupVolumeSourceSnapshot {
+	snapshot := testBackupVolumeSourceSnapshot(revision)
+	return &snapshot
 }

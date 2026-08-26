@@ -41,6 +41,11 @@ func (reader environmentRemovalPlanReader) GetEnvironmentComposeProjection(
 ) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, false, nil
 }
+func (reader environmentRemovalPlanReader) GetEnvironmentComposeProjectionRevision(
+	context.Context, string, string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, false, nil
+}
 
 // Rationale: deleting an Environment that never received a Blueprint must remain restart-safe and remove only its
 // Controller-authorized directory without inventing an empty Compose artifact.

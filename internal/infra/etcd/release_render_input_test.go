@@ -39,7 +39,7 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 		AuthorizedVolumeDir: "/var/lib/groundplane/volumes",
 	}
 	input.Projection = EnvironmentComposeProjection{
-		EnvironmentID: input.EnvironmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 9), RenderGeneration: 1,
+		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 9), RenderGeneration: 1,
 		Services:               []EnvironmentComposeIdentity{{ID: apiID, Name: "api"}, {ID: workerID, Name: "worker"}},
 		ServiceDependencyPlans: projectionPlans,
 	}
@@ -105,7 +105,7 @@ func portlessReleaseRenderInput(strategy domain.Strategy) ReleaseRenderInput {
 		AuthorizedVolumeDir: "/var/lib/groundplane/volumes",
 	}
 	input.Projection = EnvironmentComposeProjection{
-		EnvironmentID: input.EnvironmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 8), RenderGeneration: 1,
+		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 8), RenderGeneration: 1,
 		Services: []EnvironmentComposeIdentity{{ID: serviceID, Name: "worker"}},
 	}
 	return input

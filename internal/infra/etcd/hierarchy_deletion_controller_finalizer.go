@@ -101,8 +101,6 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionControlle
 	switch action.ActionKind {
 	case HierarchyDeletionScriptRemove:
 		return repository.prepareHierarchyDeletionScriptFinalizer(ctx, action)
-	case HierarchyDeletionVolumeFinalize:
-		return repository.prepareHierarchyDeletionVolumeFinalizer(ctx, action)
 	case HierarchyDeletionConnectorFinalize:
 		return repository.prepareHierarchyDeletionConnectorFinalizer(ctx, action)
 	case HierarchyDeletionProjectSecretRemove:
@@ -188,23 +186,6 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	keys := []string{scriptOwnerKey(record.EnvironmentID, action.TargetID), scriptNameKey(record.EnvironmentID, record.Desired.Name)}
-	return repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
-}
-
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionVolumeFinalizer(
-	ctx context.Context,
-	action HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, volumeKey(action.TargetID), action)
-	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
-	}
-	defer clear(primary.Value)
-	record, err := decodeVolumeRecord(primary.Value)
-	if err != nil || record.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
-	}
-	keys := []string{volumeOwnerKey(record.EnvironmentID, action.TargetID), volumeNameKey(record.EnvironmentID, record.Name)}
 	return repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 }
 

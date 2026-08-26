@@ -90,7 +90,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 			EnvironmentName:     input.EnvironmentName,
 			AuthorizedVolumeDir: input.AuthorizedVolumeDir,
 		},
-		input.Projection.BlueprintRevisionID,
+		input.Projection.RevisionID,
 		input.ArtifactID,
 		input.Projection,
 		phase,

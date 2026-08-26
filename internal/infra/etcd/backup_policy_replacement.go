@@ -22,7 +22,7 @@ type backupPolicySourceEvidence struct {
 	EnvironmentIndex *KeyValue
 	IdentityIndex    *KeyValue
 	Attach           *Versioned[AttachRecord]
-	Volume           *Versioned[VolumeRecord]
+	Volume           *backupVolumeProjectionEvidence
 	TargetOwnerIndex *KeyValue
 }
 
@@ -63,6 +63,7 @@ const (
 	backupPolicyCompareSourceIdentityIndex
 	backupPolicyCompareAttach
 	backupPolicyCompareVolume
+	backupPolicyCompareVolumeRoot
 	backupPolicyCompareTargetOwnerIndex
 	backupPolicyCompareTargetTombstone
 	backupPolicyCompareConnector
@@ -369,15 +370,13 @@ func validatebackupPolicySourceEvidence(
 		}
 	case "volume":
 		if evidence.Volume == nil || evidence.Attach != nil ||
-			validateVolumeRecord(evidence.Volume.Record) != nil ||
-			!validReplacementRevision(evidence.Volume.Revision, evidence.Volume.ReadRevision) ||
-			evidence.Volume.Record.ID != evidence.Source.Record.TargetID ||
-			evidence.Volume.Record.EnvironmentID != environmentID ||
-			!validBackupPolicyIndex(
-				evidence.TargetOwnerIndex,
-				volumeOwnerKey(environmentID, evidence.Volume.Record.ID),
-				evidence.Volume.Record.ID,
-			) {
+			evidence.TargetOwnerIndex != nil ||
+			!validReplacementRevision(evidence.Volume.Projection.Revision, evidence.Volume.Projection.ReadRevision) ||
+			evidence.Volume.ProjectionRoot <= 0 ||
+			evidence.Volume.Volume.ID != evidence.Source.Record.TargetID ||
+			evidence.Volume.Projection.Record.EnvironmentID != environmentID ||
+			evidence.Volume.Projection.Record.RevisionID == "" ||
+			!validSHA256(evidence.Volume.DependencyDigest) {
 			return errs.New(errs.KindValidationFailed, "volume backup source evidence is invalid")
 		}
 	default:
@@ -586,21 +585,18 @@ func prepareBackupPolicyReplacement(
 		case "volume":
 			plan.compare(
 				backupPolicyCompareVolume,
-				source.Volume.Record.ID,
-				volumeKey(source.Volume.Record.ID),
-				source.Volume.Revision,
+				source.Volume.Volume.ID,
+				environmentBlueprintHeadKey(source.Source.Record.EnvironmentID),
+				source.Volume.Projection.Revision,
 			)
 			plan.compare(
-				backupPolicyCompareTargetOwnerIndex,
-				source.Volume.Record.ID,
-				source.TargetOwnerIndex.Key,
-				source.TargetOwnerIndex.ModRevision,
-			)
-			plan.compare(
-				backupPolicyCompareTargetTombstone,
-				source.Volume.Record.ID,
-				deletionTombstoneKey("volume", source.Volume.Record.ID),
-				0,
+				backupPolicyCompareVolumeRoot,
+				source.Volume.Volume.ID,
+				environmentBlueprintRootKey(
+					source.Source.Record.EnvironmentID,
+					source.Volume.Projection.Record.RevisionID,
+				),
+				source.Volume.ProjectionRoot,
 			)
 		}
 	}

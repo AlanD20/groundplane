@@ -443,7 +443,7 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 		validParams = cloudflareErr == nil && intent.CandidateProjection != nil && len(task.Params) == 10 &&
 			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
-			task.Params[EnvironmentBlueprintRevisionParam] == intent.CandidateProjection.BlueprintRevisionID &&
+			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
 			validateStableID(ids.KindConfig, task.Params[TaskComposeArtifactParam]) == nil &&
 			task.Params[TaskEntryProjectSlugParam] != "" && task.Params[TaskEntryEnvironmentNameParam] != "" &&
 			task.Params[TaskEntryAuthorizedVolumeDirParam] != "" &&

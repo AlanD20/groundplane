@@ -80,7 +80,9 @@ func validManagedVolumeDirectoryPlan() *agentpb.ExecutionPlan {
 		Steps: []*agentpb.ExecutionStep{{
 			StepId: testStepID, TimeoutSeconds: 30,
 			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
-				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{ArtifactId: testArtifact},
+				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
+					ArtifactId: testArtifact, VolumeIds: []string{testManagedVolumeID}, IntentSha256: make([]byte, 32),
+				},
 			},
 		}},
 	}

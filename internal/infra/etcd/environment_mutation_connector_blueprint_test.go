@@ -242,21 +242,26 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 13060)
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	zones := environmentBlueprintTestZoneChanges(t, base, projection)
-	services := environmentBlueprintTestServiceChanges(t, base, projection)
-	routes := environmentBlueprintTestRouteChanges(t, base, projection)
+	zoneChanges := environmentBlueprintTestZoneChanges(t, base, projection)
+	serviceChanges := environmentBlueprintTestServiceChanges(t, base, projection)
+	routeChanges := environmentBlueprintTestRouteChanges(t, base, projection)
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
+	claim := stageEnvironmentBlueprintForPublicationTest(t, base, 0, revision, projection, marker)
 	audited := &entryMutationRevisionAuditStore{hierarchyStore: store}
 	repository, err := newHierarchyRepository(audited)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, 0, revision, projection, zones, services, routes,
-		ComponentTaskPreparation{}, task, marker,
+	first, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+		ctx, project, environment, 0, claim,
+		EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: revision.EnvironmentID,
+			RevisionID:    revision.RevisionID,
+		},
+		projection, zoneChanges, serviceChanges, routeChanges, ComponentTaskPreparation{}, task, marker,
 	)
 	if err != nil {
-		t.Fatalf("ApplyEnvironmentBlueprintWithTask() error = %v", err)
+		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
 	}
 	if outcome, _, conflict, classifyErr := first.Classify(); classifyErr != nil ||
 		conflict != nil ||
@@ -289,12 +294,16 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 		environment.Record.ID,
 		environmentMutationFenceTestOwner(serviceRecordTestTime(), 13061),
 	)
-	replayed, err := repository.ApplyEnvironmentBlueprintWithTask(
-		ctx, project, environment, 0, revision, projection, zones, services, routes,
-		ComponentTaskPreparation{}, task, marker,
+	replayed, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+		ctx, project, environment, 0, claim,
+		EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: revision.EnvironmentID,
+			RevisionID:    revision.RevisionID,
+		},
+		projection, zoneChanges, serviceChanges, routeChanges, ComponentTaskPreparation{}, task, marker,
 	)
 	if err != nil {
-		t.Fatalf("ApplyEnvironmentBlueprintWithTask(replay) error = %v", err)
+		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(replay) error = %v", err)
 	}
 	outcome, existing, conflict, classifyErr := replayed.Classify()
 	defer clear(existing.Intent.Ciphertext)
@@ -325,9 +334,11 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 13070)
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	zones := environmentBlueprintTestZoneChanges(t, base, projection)
-	services := environmentBlueprintTestServiceChanges(t, base, projection)
-	routes := environmentBlueprintTestRouteChanges(t, base, projection)
+	zoneChanges := environmentBlueprintTestZoneChanges(t, base, projection)
+	serviceChanges := environmentBlueprintTestServiceChanges(t, base, projection)
+	routeChanges := environmentBlueprintTestRouteChanges(t, base, projection)
+	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
+	claim := stageEnvironmentBlueprintForPublicationTest(t, base, 0, revision, projection, marker)
 	racing := &entryVolumeEpochRaceStore{hierarchyStore: store}
 	racing.beforeTransact = func() {
 		advanceEnvironmentMutationFenceEpoch(t, store, environment.Record.ID)
@@ -336,22 +347,26 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := repository.ApplyEnvironmentBlueprintWithTask(
+	result, err := repository.PublishEnvironmentDesiredRevisionWithTask(
 		ctx,
 		project,
 		environment,
 		0,
-		revision,
+		claim,
+		EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: revision.EnvironmentID,
+			RevisionID:    revision.RevisionID,
+		},
 		projection,
-		zones,
-		services,
-		routes,
+		zoneChanges,
+		serviceChanges,
+		routeChanges,
 		ComponentTaskPreparation{},
 		task,
-		environmentBlueprintTestMarker(task, environment.Record.ID),
+		marker,
 	)
 	if err != nil {
-		t.Fatalf("ApplyEnvironmentBlueprintWithTask(epoch race) error = %v", err)
+		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(epoch race) error = %v", err)
 	}
 	outcome, _, conflict, classifyErr := result.Classify()
 	if classifyErr != nil || outcome != IdempotencyKnownConflict ||
@@ -360,8 +375,6 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 	}
 	for _, key := range []string{
 		environmentBlueprintHeadKey(environment.Record.ID),
-		environmentBlueprintManifestKey(environment.Record.ID, task.ID),
-		environmentComposeProjectionKey(environment.Record.ID),
 		taskKey(task.ID),
 	} {
 		stored, getErr := store.Get(ctx, key)
@@ -414,6 +427,13 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 			t.Fatal(err)
 		}
 		project, environment := createEnvironmentBlueprintOwners(t, repository)
+		task := environmentBlueprintTestTask(t, project.Record, environment.Record, 70)
+		revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
+		projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+		marker := environmentBlueprintTestMarker(task, environment.Record.ID)
+		claim := stageEnvironmentBlueprintForPublicationTest(
+			t, repository, 0, revision, projection, marker,
+		)
 		putEnvironmentMutationFenceTestLock(
 			t,
 			store,
@@ -423,25 +443,26 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 				13010,
 			),
 		)
-		task := environmentBlueprintTestTask(t, project.Record, environment.Record, 70)
-		revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-		projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-		_, err = repository.ApplyEnvironmentBlueprintWithTask(
+		_, err = repository.PublishEnvironmentDesiredRevisionWithTask(
 			context.Background(),
 			project,
 			environment,
 			0,
-			revision,
+			claim,
+			EnvironmentDesiredRevisionIdentity{
+				EnvironmentID: revision.EnvironmentID,
+				RevisionID:    revision.RevisionID,
+			},
 			projection,
-			environmentBlueprintTestZoneChanges(t, repository, projection),
-			environmentBlueprintTestServiceChanges(t, repository, projection),
-			environmentBlueprintTestRouteChanges(t, repository, projection),
+			nil,
+			nil,
+			nil,
 			ComponentTaskPreparation{},
 			task,
-			environmentBlueprintTestMarker(task, environment.Record.ID),
+			marker,
 		)
 		if !isKind(err, errs.KindResourceInUse) {
-			t.Fatalf("ApplyEnvironmentBlueprintWithTask() error = %v", err)
+			t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
 		}
 	})
 }

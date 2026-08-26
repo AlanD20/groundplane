@@ -28,7 +28,7 @@ const (
 	dockerSocketPath    = "/var/run/docker.sock"
 	helperArgument      = "environment-directory-helper"
 	cleanupTimeout      = 30 * time.Second
-	maximumHelperStdout = 64 * 1024
+	maximumHelperStdout = 768 * 1024
 	maximumHelperStderr = 32 * 1024
 )
 

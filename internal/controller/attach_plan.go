@@ -132,11 +132,11 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	}
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID:          current.Record.EnvironmentID,
-		BlueprintRevisionID:    renderInput.Record.BlueprintRevisionID,
+		RevisionID:             renderInput.Record.BlueprintRevisionID,
 		RenderGeneration:       renderInput.Record.RenderGeneration,
 		Services:               append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Services...),
 		Networks:               append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Networks...),
-		Volumes:                append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Volumes...),
+		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), renderInput.Record.Volumes...),
 		ServiceDependencyPlans: renderInput.Record.ServiceDependencyPlans.Clone(),
 	}
 	artifact, err := resolver.renderPinnedEnvironmentArtifact(

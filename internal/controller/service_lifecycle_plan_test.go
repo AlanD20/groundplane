@@ -57,7 +57,7 @@ func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {
 
 func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *testing.T) {
 	t.Parallel()
-	reader, _ := blueprintPlanTestState()
+	reader, _ := blueprintPlanTestState(t)
 	const (
 		apiID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		migrateID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
@@ -108,7 +108,7 @@ networks:
 	if err != nil {
 		t.Fatalf("buildServiceLifecyclePlan() error = %v", err)
 	}
-	reader.projection.BlueprintRevisionID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+	reader.projection.RevisionID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 	secondResolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints(restart) error = %v", err)

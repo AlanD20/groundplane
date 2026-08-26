@@ -51,7 +51,7 @@ type BackupVolumeExecutionAuthority struct {
 	ArtifactID          string
 	ArtifactDigest      string
 	ArtifactRevision    int64
-	ProjectionRevision  int64
+	ProjectionRoot      int64
 	RenderGeneration    uint64
 	ComposeVolumeKey    string
 	DockerVolumeName    string
@@ -93,7 +93,7 @@ func BackupRunUploadAuthorities(run etcd.BackupRunRecord) []BackupSourceUploadAu
 				ArtifactID:          volume.ArtifactID,
 				ArtifactDigest:      volume.ArtifactDigest,
 				ArtifactRevision:    volume.ArtifactRevision,
-				ProjectionRevision:  volume.ProjectionRevision,
+				ProjectionRoot:      volume.ProjectionRoot,
 				RenderGeneration:    volume.RenderGeneration,
 				ComposeVolumeKey:    volume.ComposeVolumeKey,
 				DockerVolumeName:    volume.DockerVolumeName,
@@ -267,13 +267,13 @@ func validateBackupRunUploadAuthorities(
 			if authority.Volume == nil || authority.Volume.ArtifactID != volume.ArtifactID ||
 				authority.Volume.ArtifactDigest != volume.ArtifactDigest ||
 				authority.Volume.ArtifactRevision != volume.ArtifactRevision ||
-				authority.Volume.ProjectionRevision != volume.ProjectionRevision ||
+				authority.Volume.ProjectionRoot != volume.ProjectionRoot ||
 				authority.Volume.RenderGeneration != volume.RenderGeneration ||
 				authority.Volume.ComposeVolumeKey != volume.ComposeVolumeKey ||
 				authority.Volume.DockerVolumeName != volume.DockerVolumeName ||
 				authority.Volume.AuthorizedVolumeDir != volume.AuthorizedVolumeDir ||
 				authority.Volume.ArtifactID == "" || len(authority.Volume.ArtifactDigest) != 64 ||
-				authority.Volume.ArtifactRevision <= 0 || authority.Volume.ProjectionRevision <= 0 ||
+				authority.Volume.ArtifactRevision <= 0 || authority.Volume.ProjectionRoot <= 0 ||
 				authority.Volume.RenderGeneration == 0 ||
 				authority.Volume.ComposeVolumeKey == "" || authority.Volume.DockerVolumeName == "" ||
 				authority.Volume.AuthorizedVolumeDir == "" ||

@@ -15,7 +15,6 @@ import (
 
 	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
-	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -90,52 +89,6 @@ func Validate(plan *agentpb.ExecutionPlan) (*agentpb.ExecutionPlan, error) {
 		return nil, errs.New(errs.KindValidationFailed, "execution plan hash does not match its contents")
 	}
 	return owned, nil
-}
-
-// AuthorizeVolumeDirectories applies daemon-owned host policy after generic
-// plan validation. The trusted root never enters the sealed plan or its hash.
-func AuthorizeVolumeDirectories(plan *agentpb.ExecutionPlan, volumeRoot string) error {
-	if plan == nil {
-		return errs.New(errs.KindValidationFailed, "execution plan is required")
-	}
-	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
-		return err
-	}
-	for _, artifact := range plan.Artifacts {
-		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT {
-			continue
-		}
-		scope, err := environmentpath.Parse(volumeRoot, artifact.AuthorizedVolumeDir)
-		if err != nil || scope.EnvironmentID != artifact.OwnerId {
-			return errs.New(
-				errs.KindValidationFailed,
-				"authorized environment volume directory is outside its trusted owner policy",
-			)
-		}
-	}
-	for _, step := range plan.Steps {
-		create := step.GetEnvironmentDirectoryCreate()
-		if create != nil {
-			scope, err := environmentpath.Parse(volumeRoot, create.ExpectedVolumeDir)
-			if err != nil || scope.EnvironmentID != create.EnvironmentId || create.EnvironmentId != plan.TargetId {
-				return errs.New(
-					errs.KindValidationFailed,
-					"environment directory is outside its trusted owner policy",
-				)
-			}
-		}
-		remove := step.GetEnvironmentDirectoryRemove()
-		if remove != nil {
-			scope, err := environmentpath.Parse(volumeRoot, remove.ExpectedVolumeDir)
-			if err != nil || scope.EnvironmentID != remove.EnvironmentId || remove.EnvironmentId != plan.TargetId {
-				return errs.New(
-					errs.KindValidationFailed,
-					"environment directory removal is outside its trusted owner policy",
-				)
-			}
-		}
-	}
-	return nil
 }
 
 // RejectUnknown rejects unknown fields and map values recursively in a
@@ -247,6 +200,12 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 				errs.KindValidationFailed,
 				"environment directory removal does not identify the plan target",
 			)
+		}
+		if remove := step.GetManagedVolumeRemove(); remove != nil && remove.VolumeId != plan.TargetId {
+			return errs.New(errs.KindValidationFailed, "managed Volume removal does not identify the plan target")
+		}
+		if remove := step.GetManagedVolumeDirectoryRemove(); remove != nil && remove.VolumeId != plan.TargetId {
+			return errs.New(errs.KindValidationFailed, "managed Volume directory removal does not identify the plan target")
 		}
 		if _, duplicate := stepIDs[step.StepId]; duplicate {
 			return errs.New(errs.KindValidationFailed, "execution plan step ids must be unique")
@@ -540,29 +499,6 @@ func validateNetworks(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 	return nil
 }
 
-func validateVolumes(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) error {
-	previous := ""
-	for _, volume := range artifact.Volumes {
-		if volume == nil || validateID(ids.KindVolume, volume.VolumeId) != nil {
-			return errs.New(errs.KindValidationFailed, "Compose artifact volume id is invalid")
-		}
-		if previous >= volume.VolumeId {
-			return errs.New(errs.KindValidationFailed, "Compose artifact volumes must be uniquely sorted by id")
-		}
-		previous = volume.VolumeId
-		if err := validateComposeName(volume.ComposeName); err != nil {
-			return err
-		}
-		if err := validateComposeName(volume.DockerName); err != nil {
-			return err
-		}
-		if err := validateLabels(plan, artifact, "volume", volume.VolumeId, volume.ExpectedLabels); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func validateLabels(
 	plan *agentpb.ExecutionPlan,
 	artifact *agentpb.ComposeArtifact,
@@ -709,22 +645,56 @@ func validateStep(
 		}
 		return nil
 	case *agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure:
-		if payload.ManagedVolumeDirectoriesEnsure == nil || !operationCreatesManagedVolumes(operation) {
+		ensure := payload.ManagedVolumeDirectoriesEnsure
+		if ensure == nil || !operationCreatesManagedVolumes(operation) || len(ensure.IntentSha256) != sha256.Size ||
+			len(ensure.VolumeIds) == 0 {
 			return errs.New(errs.KindValidationFailed, "managed volume directory ensure payload is invalid")
 		}
-		artifact := artifacts[payload.ManagedVolumeDirectoriesEnsure.ArtifactId]
+		artifact := artifacts[ensure.ArtifactId]
 		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 			len(artifact.Volumes) == 0 {
 			return errs.New(errs.KindValidationFailed, "managed volume directory artifact is invalid")
 		}
-		composeNames := make(map[string]struct{}, len(artifact.Volumes))
+		available := make(map[string]struct{}, len(artifact.Volumes))
 		for _, volume := range artifact.Volumes {
-			if _, duplicate := composeNames[volume.ComposeName]; duplicate {
-				return errs.New(errs.KindValidationFailed, "managed volume directory names must be unique")
+			available[volume.VolumeId] = struct{}{}
+		}
+		previous := ""
+		for _, volumeID := range ensure.VolumeIds {
+			if validateID(ids.KindVolume, volumeID) != nil || volumeID <= previous {
+				return errs.New(errs.KindValidationFailed, "managed volume directory ids are invalid or unsorted")
 			}
-			composeNames[volume.ComposeName] = struct{}{}
+			if _, exists := available[volumeID]; !exists {
+				return errs.New(errs.KindValidationFailed, "managed volume directory id is absent from its artifact")
+			}
+			previous = volumeID
 		}
 		return nil
+	case *agentpb.ExecutionStep_ManagedVolumeRemove:
+		remove := payload.ManagedVolumeRemove
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil ||
+			validateID(ids.KindVolume, remove.VolumeId) != nil ||
+			remove.DockerName != "gp_vol_"+strings.ToLower(remove.VolumeId) {
+			return errs.New(errs.KindValidationFailed, "managed Volume remove payload is invalid")
+		}
+		return nil
+	case *agentpb.ExecutionStep_ManagedVolumeDirectoryRemove:
+		remove := payload.ManagedVolumeDirectoryRemove
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil ||
+			validateID(ids.KindVolume, remove.VolumeId) != nil || !validManagedVolumeComposeKey(remove.ComposeKey) ||
+			len(remove.IntentSha256) != sha256.Size || len(remove.Cursor) > maximumVolumeTraversalCursorBytes {
+			return errs.New(errs.KindValidationFailed, "managed Volume directory remove payload is invalid")
+		}
+		artifact := artifacts[remove.ArtifactId]
+		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT {
+			return errs.New(errs.KindValidationFailed, "managed Volume directory remove artifact is invalid")
+		}
+		for _, volume := range artifact.Volumes {
+			if volume != nil && volume.VolumeId == remove.VolumeId && volume.ComposeName == remove.ComposeKey {
+				return nil
+			}
+		}
+		return errs.New(errs.KindValidationFailed, "managed Volume directory remove volume is not in its artifact")
 	case *agentpb.ExecutionStep_MaterializeFile:
 		return validateMaterializeFile(renderGeneration, payload.MaterializeFile, artifacts)
 	case *agentpb.ExecutionStep_AdapterProcedure:
@@ -1018,18 +988,6 @@ func validAdapterIdentity(value string, required bool) bool {
 		return false
 	}
 	return true
-}
-
-func operationCreatesManagedVolumes(operation agentpb.PlanOperation) bool {
-	switch operation {
-	case agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
-		agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
-		agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,
-		agentpb.PlanOperation_PLAN_OPERATION_START:
-		return true
-	default:
-		return false
-	}
 }
 
 func validateMaterializeFile(

@@ -276,9 +276,9 @@ func routeDeletionTestProjection(
 ) Versioned[EnvironmentComposeProjection] {
 	t.Helper()
 	projection := EnvironmentComposeProjection{
-		EnvironmentID:       route.Record.EnvironmentID,
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, serviceRecordTestTime().Add(time.Hour), 1120),
-		RenderGeneration:    2,
+		EnvironmentID:    route.Record.EnvironmentID,
+		RevisionID:       ids.NewAt(ids.KindTask, serviceRecordTestTime().Add(time.Hour), 1120),
+		RenderGeneration: 2,
 		Routes: []EnvironmentRouteIdentity{{
 			ID: route.Record.Desired.ID, Host: route.Record.Desired.Host, Path: route.Record.Desired.Path,
 		}},

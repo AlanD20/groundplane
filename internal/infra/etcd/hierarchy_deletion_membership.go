@@ -260,7 +260,6 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		{targetKind: "route", actionKind: HierarchyDeletionRouteRemove, ownerPrefix: routeOwnerPrefix, primaryKey: routeKey, stableIDKind: ids.KindRoute, validateOwner: validateHierarchyDeletionRouteOwner},
 		{targetKind: "component", actionKind: HierarchyDeletionComponentRemove, ownerPrefix: componentEnvironmentOwnerPrefix, primaryKey: componentKey, stableIDKind: ids.KindComponent, validateOwner: validateHierarchyDeletionComponentOwner},
 		{targetKind: "script", actionKind: HierarchyDeletionScriptRemove, ownerPrefix: scriptOwnerPrefix, primaryKey: scriptKey, stableIDKind: ids.KindScript, validateOwner: validateHierarchyDeletionScriptOwner, controller: true},
-		{targetKind: "volume", actionKind: HierarchyDeletionVolumeAgentCleanup, ownerPrefix: volumeOwnerPrefix, primaryKey: volumeKey, stableIDKind: ids.KindVolume, validateOwner: validateHierarchyDeletionVolumeOwner},
 		{targetKind: "zone", actionKind: HierarchyDeletionZoneRemove, ownerPrefix: zoneOwnerPrefix, primaryKey: zoneKey, stableIDKind: ids.KindNetwork, validateOwner: validateHierarchyDeletionZoneOwner},
 		{targetKind: "connector", actionKind: HierarchyDeletionConnectorFinalize, ownerPrefix: connectorEnvironmentPrefix, primaryKey: connectorRecordKey, stableIDKind: ids.KindConnector, validateOwner: validateHierarchyDeletionConnectorOwner, controller: true},
 	}
@@ -279,17 +278,6 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 				)
 				detach.fixedInputDigest = grant.fixedInputDigest
 				nodes = append(nodes, detach)
-			}
-			continue
-		}
-		if descriptor.actionKind == HierarchyDeletionVolumeAgentCleanup {
-			for _, cleanup := range part {
-				nodes = append(nodes, cleanup)
-				nodes = append(nodes, hierarchyDeletionControllerNode(
-					"volume:"+cleanup.TargetID+":finalize", "volume", cleanup.TargetID,
-					HierarchyDeletionVolumeFinalize, cleanup.TargetRevision, []string{cleanup.NodeID}, "volume.finalize",
-					cleanup.fixedInputDigest,
-				))
 			}
 			continue
 		}
@@ -514,8 +502,6 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 		key = environmentKey(targetID)
 	case "script":
 		key = scriptKey(targetID)
-	case "volume":
-		key = volumeKey(targetID)
 	case "connector":
 		key = connectorRecordKey(targetID)
 	case "runner":

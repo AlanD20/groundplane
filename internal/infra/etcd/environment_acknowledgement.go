@@ -539,7 +539,6 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		serviceOwnerPrefix(environmentID),
 		routeOwnerPrefix(environmentID),
 		entryOwnerCollectionPrefix(environmentID),
-		volumeOwnerPrefix(environmentID),
 		scriptOwnerPrefix(environmentID),
 		attachOwnerPrefix(environmentID),
 		componentEnvironmentOwnerPrefix(environmentID),

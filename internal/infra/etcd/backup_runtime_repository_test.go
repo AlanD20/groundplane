@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -4808,39 +4809,10 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	}
 }
 
-// Rationale: an exact pinned Volume revision with undecodable bytes is durable
-// corruption; a valid record whose identity drifted remains a retryable conflict.
+// Rationale: corrupt normalized authority is durable corruption, while a
+// changed desired-head/root/runtime fence is a retryable conflict.
 func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	t.Parallel()
-	source := BackupRunSourceAttemptRecord{
-		TargetID: testBackupVolumeID, TargetRevision: 71,
-	}
-	snapshot := BackupVolumeSourceSnapshot{EnvironmentID: testBackupEnvironmentID}
-	corrupt := []*KeyValue{{
-		Key: volumeKey(source.TargetID), Value: []byte(`{"invalid":`), ModRevision: source.TargetRevision,
-	}}
-	if err := validateBackupVolumePublicationEvidence(corrupt, source, snapshot); !errors.Is(
-		err,
-		errs.New(errs.KindInternal, ""),
-	) {
-		t.Fatalf("pinned Volume decode corruption error = %v", err)
-	}
-	driftedValue, err := encodeVolumeRecord(VolumeRecord{
-		ID: source.TargetID, EnvironmentID: testBackupBackingEnvironmentID, Name: "data",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(driftedValue)
-	drifted := []*KeyValue{{
-		Key: volumeKey(source.TargetID), Value: driftedValue, ModRevision: source.TargetRevision,
-	}}
-	if err := validateBackupVolumePublicationEvidence(drifted, source, snapshot); !errors.Is(
-		err,
-		errs.New(errs.KindStateConflict, ""),
-	) {
-		t.Fatalf("pinned Volume semantic drift error = %v", err)
-	}
 	_, store, run := newBackupRuntimeRepositoryFixture(t)
 	environmentValue := mustOptionalKey(t, store, environmentKey(run.EnvironmentID))
 	if environmentValue == nil {
@@ -4850,43 +4822,45 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectionRevision := int64(72)
-	projectionValue, err := encodeEnvironmentComposeProjection(EnvironmentComposeProjection{
-		EnvironmentID:       environment.ID,
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, run.CreatedAt, 8101),
-		RenderGeneration:    1,
-		Volumes: []EnvironmentComposeIdentity{{
-			ID: source.TargetID, Name: "data",
-		}},
+	revisionID := ids.NewAt(ids.KindTask, run.CreatedAt, 8101)
+	headValue, err := encodeTaskReference(revisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(headValue)
+	digest := sha256.Sum256([]byte("normalized Volume projection"))
+	sealValue, err := encodeEnvironmentBlueprintSeal(EnvironmentBlueprintSeal{
+		EnvironmentID: environment.ID, RevisionID: revisionID,
+		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
+		AuditChunks: 1, AuditBytes: 1, AuditSHA256: digest,
+		ProjectionChunks: 1, ProjectionBytes: 1, ProjectionSHA256: digest,
+		ProjectionResources: 1, DependencyDigest: digest,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clear(projectionValue)
-	volumeValue, err := encodeVolumeRecord(VolumeRecord{
-		ID: source.TargetID, EnvironmentID: environment.ID, Name: "data",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(volumeValue)
+	defer clear(sealValue)
+	source := BackupRunSourceAttemptRecord{TargetID: testBackupVolumeID, TargetRevision: 71}
+	rootRevision := int64(72)
 	projectionSnapshot := BackupVolumeSourceSnapshot{
-		EnvironmentID: environment.ID, VolumeID: source.TargetID,
-		ProjectionRevision: projectionRevision, RenderGeneration: 1,
+		EnvironmentID: environment.ID, EnvironmentRevision: environmentValue.ModRevision,
+		VolumeID: source.TargetID, DesiredRevisionID: revisionID, ProjectionRoot: rootRevision,
+		DependencyDigest: hex.EncodeToString(digest[:]), RenderGeneration: 1,
 		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + source.TargetID,
 		AuthorizedVolumeDir: environment.VolumeDir,
 	}
 	projectionEvidence := []*KeyValue{
-		{Key: volumeKey(source.TargetID), Value: volumeValue, ModRevision: source.TargetRevision},
 		{Key: environmentKey(environment.ID), Value: environmentValue.Value, ModRevision: environmentValue.ModRevision},
-		{Key: environmentComposeProjectionKey(environment.ID), Value: projectionValue, ModRevision: projectionRevision},
+		{Key: environmentBlueprintHeadKey(environment.ID), Value: headValue, ModRevision: source.TargetRevision},
+		{Key: environmentBlueprintRootKey(environment.ID, revisionID), Value: sealValue, ModRevision: rootRevision},
 	}
 	for _, test := range []struct {
 		name   string
 		offset int
 	}{
-		{name: "Environment", offset: 1},
-		{name: "projection", offset: 2},
+		{name: "Environment", offset: 0},
+		{name: "desired head", offset: 1},
+		{name: "projection root", offset: 2},
 	} {
 		t.Run(test.name+" decode corruption", func(t *testing.T) {
 			values := append([]*KeyValue(nil), projectionEvidence...)
@@ -4929,30 +4903,22 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	serviceVolumeValue, err := encodeVolumeRecord(VolumeRecord{
-		ID: source.TargetID, EnvironmentID: service.EnvironmentID, Name: "data",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(serviceVolumeValue)
-	serviceSnapshot := BackupVolumeSourceSnapshot{
-		EnvironmentID: service.EnvironmentID, VolumeID: source.TargetID,
-		Services: []BackupVolumeServiceSnapshot{{
-			ServiceID: service.Desired.ID, ServiceRevision: serviceValue.ModRevision,
-			PriorIntent: BackupServiceRuntimeIntent(service.Runtime.RuntimeIntent),
-		}},
-	}
-	corruptService := []*KeyValue{
-		{Key: volumeKey(source.TargetID), Value: serviceVolumeValue, ModRevision: source.TargetRevision},
-		{Key: serviceKey(service.Desired.ID), Value: []byte(`{"invalid":`), ModRevision: serviceValue.ModRevision},
-	}
+	serviceSnapshot := projectionSnapshot
+	serviceSnapshot.Services = []BackupVolumeServiceSnapshot{{
+		ServiceID: service.Desired.ID, ServiceRevision: serviceValue.ModRevision,
+		ComposeKey: "database", MountPaths: []string{"/data"},
+		PriorIntent: BackupServiceRuntimeIntent(service.Runtime.RuntimeIntent),
+	}}
+	corruptService := append([]*KeyValue(nil), projectionEvidence...)
+	corruptService = append(corruptService,
+		&KeyValue{Key: serviceKey(service.Desired.ID), Value: []byte(`{"invalid":`), ModRevision: serviceValue.ModRevision},
+	)
 	if err := validateBackupVolumePublicationEvidence(
 		corruptService, source, serviceSnapshot,
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("pinned Service decode corruption error = %v", err)
 	}
-	corruptService[1].ModRevision++
+	corruptService[3].ModRevision++
 	if err := validateBackupVolumePublicationEvidence(
 		corruptService, source, serviceSnapshot,
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {

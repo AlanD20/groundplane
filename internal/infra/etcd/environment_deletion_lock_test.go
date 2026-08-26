@@ -791,12 +791,6 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 			},
 		},
 		{
-			name: "volume",
-			key: func(fixture *environmentDeletionLockFixture) string {
-				return volumeOwnerPrefix(fixture.environment.Record.ID) + "retained"
-			},
-		},
-		{
 			name: "script",
 			key: func(fixture *environmentDeletionLockFixture) string {
 				return scriptOwnerPrefix(fixture.environment.Record.ID) + "retained"

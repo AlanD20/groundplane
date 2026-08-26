@@ -160,7 +160,7 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 		},
 		ComposeProjection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
 			Record: etcd.EnvironmentComposeProjection{
-				EnvironmentID: fixture.environmentID, BlueprintRevisionID: fixture.revisionID,
+				EnvironmentID: fixture.environmentID, RevisionID: fixture.revisionID,
 				RenderGeneration: 4,
 				Services: []etcd.EnvironmentComposeIdentity{
 					{ID: fixture.apiID, Name: "api"}, {ID: fixture.workerID, Name: "worker"},

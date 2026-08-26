@@ -429,16 +429,24 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	if selection.Kind == core.BackupSourceConfig {
 		return nil
 	}
+	if selection.Kind == core.BackupSourceVolume {
+		evidence, err := loadBackupVolumeProjectionEvidence(
+			ctx, repository.store, environmentID, selection.TargetID, 0,
+		)
+		if err != nil {
+			return err
+		}
+		if evidence.Projection.Record.EnvironmentID != environmentID {
+			return errs.New(errs.KindScopeUnauthorized, "backup policy source belongs to another environment")
+		}
+		return nil
+	}
 	primaryKey := ""
 	ownerKey := ""
 	notFound := errs.KindAttachNotFound
 	if selection.Kind == core.BackupSourceAttach {
 		primaryKey = attachKey(selection.TargetID)
 		ownerKey = attachOwnerKey(environmentID, selection.TargetID)
-	} else {
-		primaryKey = volumeKey(selection.TargetID)
-		ownerKey = volumeOwnerKey(environmentID, selection.TargetID)
-		notFound = errs.KindVolumeNotFound
 	}
 	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 		primaryKey,
@@ -457,12 +465,6 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	ownerEnvironmentID := ""
 	if selection.Kind == core.BackupSourceAttach {
 		record, decodeErr := decodeAttachRecord(result.Values[0].Value)
-		if decodeErr != nil || record.ID != selection.TargetID {
-			return corruptRecord()
-		}
-		ownerEnvironmentID = record.EnvironmentID
-	} else {
-		record, decodeErr := decodeVolumeRecord(result.Values[0].Value)
 		if decodeErr != nil || record.ID != selection.TargetID {
 			return corruptRecord()
 		}
@@ -494,8 +496,6 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	}
 	if record.Kind == core.BackupSourceAttach {
 		keys = append(keys, attachKey(record.TargetID), attachOwnerKey(record.EnvironmentID, record.TargetID))
-	} else if record.Kind == core.BackupSourceVolume {
-		keys = append(keys, volumeKey(record.TargetID), volumeOwnerKey(record.EnvironmentID, record.TargetID))
 	}
 	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -521,6 +521,16 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	if record.Kind == core.BackupSourceConfig {
 		return evidence, nil
 	}
+	if record.Kind == core.BackupSourceVolume {
+		volume, volumeErr := loadBackupVolumeProjectionEvidence(
+			ctx, repository.store, record.EnvironmentID, record.TargetID, revision,
+		)
+		if volumeErr != nil {
+			return backupPolicySourceEvidence{}, volumeErr
+		}
+		evidence.Volume = &volume
+		return evidence, nil
+	}
 	if result.Values[3] == nil || result.Values[4] == nil ||
 		string(result.Values[4].Value) != record.TargetID {
 		return backupPolicySourceEvidence{}, corruptRecord()
@@ -533,14 +543,6 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 		}
 		evidence.Attach = &Versioned[AttachRecord]{
 			Record: attach, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
-		}
-	} else {
-		volume, decodeErr := decodeVolumeRecord(result.Values[3].Value)
-		if decodeErr != nil || volume.ID != record.TargetID || volume.EnvironmentID != record.EnvironmentID {
-			return backupPolicySourceEvidence{}, corruptRecord()
-		}
-		evidence.Volume = &Versioned[VolumeRecord]{
-			Record: volume, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
 	return evidence, nil

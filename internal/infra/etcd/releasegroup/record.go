@@ -198,7 +198,7 @@ func decodeService(value []byte) (infraetcd.ServiceRecord, error) {
 func decodeComposeProjection(value []byte) (infraetcd.EnvironmentComposeProjection, error) {
 	projection, err := decodeDurable[infraetcd.EnvironmentComposeProjection](value, "environment-compose-projection")
 	if err != nil || ids.Validate(ids.KindEnvironment, projection.EnvironmentID) != nil ||
-		ids.Validate(ids.KindTask, projection.BlueprintRevisionID) != nil || projection.RenderGeneration == 0 {
+		ids.Validate(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
 		return infraetcd.EnvironmentComposeProjection{}, corruptRecord()
 	}
 	return projection, nil

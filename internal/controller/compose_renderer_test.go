@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -143,7 +144,7 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 	if len(artifact.Networks) != 1 || artifact.Networks[0].DockerName != "gp_net_"+networkID {
 		t.Fatalf("network artifact projection = %#v", artifact.Networks)
 	}
-	if len(artifact.Volumes) != 1 || artifact.Volumes[0].DockerName != "gp_vol_"+volumeID {
+	if len(artifact.Volumes) != 1 || artifact.Volumes[0].DockerName != "gp_vol_"+strings.ToLower(volumeID) {
 		t.Fatalf("volume artifact projection = %#v", artifact.Volumes)
 	}
 
@@ -173,7 +174,7 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 		t.Fatalf("consumer claimed ownership of external network: %#v", document.Networks["shared"])
 	}
 	volume := document.Volumes["data"]
-	if volume.Name != "gp_vol_"+volumeID || volume.Driver != "local" ||
+	if volume.Name != "gp_vol_"+strings.ToLower(volumeID) || volume.Driver != "local" ||
 		volume.DriverOpts["type"] != "none" || volume.DriverOpts["o"] != "bind" ||
 		volume.DriverOpts["device"] != input.AuthorizedVolumeDir+"/data" ||
 		volume.Labels["example.storage"] != "persistent" || volume.Resource.ID != volumeID {

@@ -122,7 +122,7 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 	task.Params = map[string]string{
 		etcd.TaskEntryEnvironmentParam:           intent.EnvironmentID,
 		etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		etcd.EnvironmentBlueprintRevisionParam:   intent.CandidateProjection.BlueprintRevisionID,
+		etcd.EnvironmentDesiredRevisionParam:     intent.CandidateProjection.RevisionID,
 		etcd.TaskComposeArtifactParam:            procedure.ArtifactID,
 		etcd.TaskEntryTenantSlugParam:            identity.TenantSlug,
 		etcd.TaskEntryProjectSlugParam:           identity.ProjectSlug,
@@ -193,7 +193,7 @@ func entryRemovalTaskPlan(task etcd.TaskRecord) (entrycapability.RemovalTaskPlan
 		Executor: entrycapability.RemovalExecutorAgent, PlanHash: task.PlanHash,
 		RenderGeneration:    task.RenderGeneration,
 		EnvironmentID:       task.Params[etcd.TaskEntryEnvironmentParam],
-		BlueprintRevisionID: task.Params[etcd.EnvironmentBlueprintRevisionParam],
+		BlueprintRevisionID: task.Params[etcd.EnvironmentDesiredRevisionParam],
 		ArtifactID:          task.Params[etcd.TaskComposeArtifactParam], TimeoutSeconds: task.TimeoutSeconds,
 		Identity: entrycapability.RemovalEnvironmentIdentity{
 			TenantID: task.Owner.TenantID, TenantSlug: task.Params[etcd.TaskEntryTenantSlugParam],
@@ -325,11 +325,11 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection
-	revisionID := task.Params[etcd.EnvironmentBlueprintRevisionParam]
+	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[etcd.TaskComposeArtifactParam]
 	if task.Params[etcd.TaskEntryEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[etcd.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
-		revisionID != candidate.BlueprintRevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
+		revisionID != candidate.RevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
 		ids.Validate(ids.KindConfig, artifactID) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task parameters are invalid")
 	}

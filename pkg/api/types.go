@@ -384,11 +384,6 @@ type Attach struct {
 	Status               string          `json:"status"`
 }
 
-type Volume struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
 type Script struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`

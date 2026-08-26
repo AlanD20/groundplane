@@ -99,63 +99,6 @@ func (c *Client) SetBackupPolicy(
 	return backupPolicyFromGenerated(*parsed), nil
 }
 
-func (c *Client) ListVolumes(
-	ctx context.Context,
-	environmentID string,
-	limit int,
-	cursor string,
-) (apiTypes.Page[apiTypes.Volume], error) {
-	client, err := c.generatedHumanClient()
-	if err != nil {
-		return apiTypes.Page[apiTypes.Volume]{}, err
-	}
-	params := &generated.VolumeListParams{Environment: environmentID}
-	if limit != 0 {
-		value := int64(limit)
-		params.Limit = &value
-	}
-	if cursor != "" {
-		params.Cursor = &cursor
-	}
-	response, err := client.VolumeListWithResponse(ctx, params)
-	if err != nil {
-		return apiTypes.Page[apiTypes.Volume]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/volumes", err)
-	}
-	if err := generatedResponseError(
-		http.MethodGet,
-		"/api/v1/volumes",
-		response.HTTPResponse,
-		response.Body,
-		http.StatusOK,
-	); err != nil {
-		return apiTypes.Page[apiTypes.Volume]{}, err
-	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.PageVolume{}
-		if err := decodeSingleJSON(
-			http.MethodGet,
-			"/api/v1/volumes",
-			bytes.NewReader(response.Body),
-			parsed,
-		); err != nil {
-			return apiTypes.Page[apiTypes.Volume]{}, err
-		}
-	}
-	items := []generated.Volume(nil)
-	if parsed.Items != nil {
-		items = *parsed.Items
-	}
-	page := apiTypes.Page[apiTypes.Volume]{Items: make([]apiTypes.Volume, len(items))}
-	if parsed.NextCursor != nil {
-		page.NextCursor = *parsed.NextCursor
-	}
-	for index, item := range items {
-		page.Items[index] = apiTypes.Volume{ID: item.Id, Name: item.Name}
-	}
-	return page, nil
-}
-
 func backupPolicyFromGenerated(policy generated.BackupPolicy) apiTypes.BackupPolicy {
 	converted := apiTypes.BackupPolicy{
 		Enabled: policy.Enabled,

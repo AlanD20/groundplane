@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"slices"
 	"time"
 
@@ -1496,10 +1497,10 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 		case BackupRuntimeSourceVolume:
 			snapshot := source.Snapshot.Volume
-			keys := []string{volumeKey(source.TargetID)}
-			if snapshot.ProjectionRevision > 0 {
-				keys = append(keys, environmentKey(snapshot.EnvironmentID),
-					environmentComposeProjectionKey(snapshot.EnvironmentID))
+			keys := []string{
+				environmentKey(snapshot.EnvironmentID),
+				environmentBlueprintHeadKey(snapshot.EnvironmentID),
+				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 			}
 			for _, service := range snapshot.Services {
 				keys = append(keys, serviceKey(service.ServiceID))
@@ -1519,20 +1520,20 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				return nil, nil, err
 			}
 			clearKeyValues(read.Values)
-			if err := addCondition(volumeKey(source.TargetID), source.TargetRevision); err != nil {
+			if err := addCondition(environmentKey(snapshot.EnvironmentID), snapshot.EnvironmentRevision); err != nil {
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, err
 			}
-			if snapshot.ProjectionRevision > 0 {
-				if err := addCondition(
-					environmentComposeProjectionKey(
-						snapshot.EnvironmentID,
-					),
-					snapshot.ProjectionRevision,
-				); err != nil {
-					clearBackupRuntimeMutations(mutations)
-					return nil, nil, err
-				}
+			if err := addCondition(environmentBlueprintHeadKey(snapshot.EnvironmentID), source.TargetRevision); err != nil {
+				clearBackupRuntimeMutations(mutations)
+				return nil, nil, err
+			}
+			if err := addCondition(
+				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
+				snapshot.ProjectionRoot,
+			); err != nil {
+				clearBackupRuntimeMutations(mutations)
+				return nil, nil, err
 			}
 			for _, service := range snapshot.Services {
 				if err := addCondition(
@@ -1664,53 +1665,24 @@ func validateBackupVolumePublicationEvidence(
 	source BackupRunSourceAttemptRecord,
 	snapshot BackupVolumeSourceSnapshot,
 ) error {
-	offset := 1
-	if snapshot.ProjectionRevision > 0 {
-		offset = 3
-	}
-	if len(values) != len(snapshot.Services)+offset || values[0] == nil ||
-		values[0].ModRevision != source.TargetRevision {
+	const offset = 3
+	if len(values) != len(snapshot.Services)+offset || values[0] == nil || values[1] == nil || values[2] == nil ||
+		values[0].ModRevision != snapshot.EnvironmentRevision ||
+		values[1].ModRevision != source.TargetRevision || values[2].ModRevision != snapshot.ProjectionRoot {
 		return errs.New(errs.KindStateConflict, "volume backup publication evidence changed")
 	}
-	volume, err := decodeVolumeRecord(values[0].Value)
-	if err != nil {
+	environment, environmentErr := decodeEnvironment(values[0].Value)
+	revisionID, headErr := decodeTaskReference(values[1].Value)
+	seal, sealErr := decodeEnvironmentBlueprintSeal(values[2].Value)
+	if environmentErr != nil || headErr != nil || sealErr != nil {
 		return corruptBackupRuntimeRecord()
 	}
-	if volume.ID != source.TargetID ||
-		volume.EnvironmentID != snapshot.EnvironmentID {
-		return errs.New(errs.KindStateConflict, "volume backup publication evidence changed")
-	}
-	serviceKeys := map[string]string(nil)
-	if snapshot.ProjectionRevision > 0 {
-		if values[1] == nil || values[2] == nil {
-			return errs.New(errs.KindStateConflict, "volume projection evidence changed")
-		}
-		if values[2].ModRevision != snapshot.ProjectionRevision {
-			return errs.New(errs.KindStateConflict, "volume projection evidence changed")
-		}
-		environment, environmentErr := decodeEnvironment(values[1].Value)
-		projection, projectionErr := decodeEnvironmentComposeProjection(values[2].Value)
-		if environmentErr != nil || projectionErr != nil {
-			return corruptBackupRuntimeRecord()
-		}
-		if environment.ID != snapshot.EnvironmentID ||
-			environment.VolumeDir != snapshot.AuthorizedVolumeDir ||
-			projection.EnvironmentID != snapshot.EnvironmentID ||
-			projection.RenderGeneration != snapshot.RenderGeneration {
-			return errs.New(errs.KindStateConflict, "volume projection evidence changed")
-		}
-		volumeKeyMatches := false
-		serviceKeys = make(map[string]string, len(projection.Services))
-		for _, identity := range projection.Volumes {
-			volumeKeyMatches = volumeKeyMatches ||
-				identity.ID == volume.ID && identity.Name == snapshot.ComposeVolumeKey
-		}
-		for _, identity := range projection.Services {
-			serviceKeys[identity.ID] = identity.Name
-		}
-		if !volumeKeyMatches || snapshot.DockerVolumeName != "gp_vol_"+volume.ID {
-			return errs.New(errs.KindStateConflict, "volume Compose identity changed")
-		}
+	if environment.ID != snapshot.EnvironmentID || environment.VolumeDir != snapshot.AuthorizedVolumeDir ||
+		revisionID != snapshot.DesiredRevisionID || seal.EnvironmentID != snapshot.EnvironmentID ||
+		seal.RevisionID != snapshot.DesiredRevisionID || seal.RenderGeneration != snapshot.RenderGeneration ||
+		hex.EncodeToString(seal.DependencyDigest[:]) != snapshot.DependencyDigest ||
+		snapshot.VolumeID != source.TargetID || snapshot.DockerVolumeName != "gp_vol_"+source.TargetID {
+		return errs.New(errs.KindStateConflict, "volume projection evidence changed")
 	}
 	for index, expected := range snapshot.Services {
 		value := values[index+offset]
@@ -1723,19 +1695,8 @@ func validateBackupVolumePublicationEvidence(
 		}
 		if service.Desired.ID != expected.ServiceID ||
 			service.EnvironmentID != snapshot.EnvironmentID ||
-			string(service.Runtime.RuntimeIntent) != string(expected.PriorIntent) ||
-			(snapshot.ProjectionRevision > 0 && serviceKeys[service.Desired.ID] != expected.ComposeKey) {
+			string(service.Runtime.RuntimeIntent) != string(expected.PriorIntent) {
 			return errs.New(errs.KindStateConflict, "volume service publication evidence changed")
-		}
-		mountPaths := make([]string, 0)
-		for _, mount := range service.Desired.Mounts {
-			if mount.Volume == volume.Name {
-				mountPaths = append(mountPaths, mount.Mount)
-			}
-		}
-		if snapshot.ProjectionRevision > 0 &&
-			!equalBackupMountPaths(mountPaths, expected.MountPaths) {
-			return errs.New(errs.KindStateConflict, "volume mount projection changed")
 		}
 	}
 	return nil

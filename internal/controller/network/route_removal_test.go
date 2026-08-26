@@ -331,7 +331,7 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 	task.Params = map[string]string{
 		etcd.TaskRouteEnvironmentParam:               intent.EnvironmentID,
 		etcd.TaskMaterializationEnvironmentParam:     intent.EnvironmentID,
-		etcd.EnvironmentBlueprintRevisionParam:       intent.CandidateProjection.BlueprintRevisionID,
+		etcd.EnvironmentDesiredRevisionParam:         intent.CandidateProjection.RevisionID,
 		controller.EnvironmentBlueprintArtifactParam: procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
@@ -345,7 +345,7 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 		Source: etcd.TaskMaterializationSource{
 			Kind: etcd.TaskMaterializationSourceComponentFile,
 			ComponentFile: &etcd.TaskComponentFileValueReference{
-				RevisionID: intent.CandidateProjection.BlueprintRevisionID, ComponentID: componentID,
+				RevisionID: intent.CandidateProjection.RevisionID, ComponentID: componentID,
 				Path: controller.RouteRemovalCaddyfilePath, RouteRemovalTaskID: task.ID,
 			},
 		},
@@ -467,8 +467,8 @@ func TestRouteRemovalSelectsAgentCaddyPlanForAppliedRoute(t *testing.T) {
 	}
 	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
 		Record: etcd.EnvironmentComposeProjection{
-			EnvironmentID:       repository.environment.Record.ID,
-			BlueprintRevisionID: ids.NewAt(ids.KindTask, at, 22), RenderGeneration: 7,
+			EnvironmentID: repository.environment.Record.ID,
+			RevisionID:    ids.NewAt(ids.KindTask, at, 22), RenderGeneration: 7,
 			Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
 			Routes: []etcd.EnvironmentRouteIdentity{{
 				ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,
@@ -518,8 +518,8 @@ func TestRouteRemovalPropagatesCaddyPlannerError(t *testing.T) {
 	}
 	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
 		Record: etcd.EnvironmentComposeProjection{
-			EnvironmentID:       repository.environment.Record.ID,
-			BlueprintRevisionID: ids.NewAt(ids.KindTask, at, 32), RenderGeneration: 9,
+			EnvironmentID: repository.environment.Record.ID,
+			RevisionID:    ids.NewAt(ids.KindTask, at, 32), RenderGeneration: 9,
 			Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
 			Routes: []etcd.EnvironmentRouteIdentity{{
 				ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,

@@ -49,3 +49,9 @@ The first path is C01-lite Host health. Read `features/host-health.md` and run:
 ```sh
 .agents/skills/verify-groundplane/scripts/host-health-ssh.sh
 ```
+
+For the managed Volume vertical, read `features/volume-lifecycle.md` and run
+the named script only after a test Environment is already provisioned. This
+journey mutates only the explicitly supplied Volume slugs and removes the
+verified Volume through its normal fixed-revision confirmation flow; it never
+creates or deletes Tenant, Project, or Environment state.

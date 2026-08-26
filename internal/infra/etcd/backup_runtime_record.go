@@ -269,16 +269,18 @@ type BackupVolumeServiceSnapshot struct {
 
 type BackupVolumeSourceSnapshot struct {
 	EnvironmentID       string                        `json:"environment_id"`
+	EnvironmentRevision int64                         `json:"environment_revision"`
 	VolumeID            string                        `json:"volume_id"`
-	VolumeRevision      int64                         `json:"volume_revision"`
+	DesiredRevisionID   string                        `json:"desired_revision_id"`
+	ProjectionRoot      int64                         `json:"projection_root_revision"`
+	DependencyDigest    string                        `json:"dependency_digest"`
 	ArtifactID          string                        `json:"artifact_id,omitempty"`
 	ArtifactDigest      string                        `json:"artifact_digest,omitempty"`
 	ArtifactRevision    int64                         `json:"artifact_revision,omitempty"`
-	ProjectionRevision  int64                         `json:"projection_revision,omitempty"`
-	RenderGeneration    uint64                        `json:"render_generation,omitempty"`
-	ComposeVolumeKey    string                        `json:"compose_volume_key,omitempty"`
-	DockerVolumeName    string                        `json:"docker_volume_name,omitempty"`
-	AuthorizedVolumeDir string                        `json:"authorized_volume_dir,omitempty"`
+	RenderGeneration    uint64                        `json:"render_generation"`
+	ComposeVolumeKey    string                        `json:"compose_volume_key"`
+	DockerVolumeName    string                        `json:"docker_volume_name"`
+	AuthorizedVolumeDir string                        `json:"authorized_volume_dir"`
 	Services            []BackupVolumeServiceSnapshot `json:"services"`
 }
 
@@ -820,7 +822,7 @@ func validateBackupRunSourceSnapshot(
 	case BackupRuntimeSourceVolume:
 		if snapshot.Volume == nil || validateBackupVolumeSnapshot(*snapshot.Volume) != nil ||
 			snapshot.Volume.EnvironmentID != environmentID || snapshot.Volume.VolumeID != targetID ||
-			snapshot.Volume.VolumeRevision != targetRevision {
+			targetRevision <= 0 {
 			return invalidBackupRuntimeRecord("volume backup source snapshot is invalid")
 		}
 	case BackupRuntimeSourceConfig:
@@ -1339,19 +1341,17 @@ func validBackupPostgresIdentity(value string) bool {
 
 func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {
 	if validateStableID(ids.KindEnvironment, snapshot.EnvironmentID) != nil ||
-		validateStableID(ids.KindVolume, snapshot.VolumeID) != nil || snapshot.VolumeRevision <= 0 {
-		return invalidBackupRuntimeRecord("volume source snapshot is invalid")
-	}
-	hasProjectionAuthority := snapshot.ProjectionRevision != 0 || snapshot.RenderGeneration != 0 ||
-		snapshot.ComposeVolumeKey != "" || snapshot.DockerVolumeName != "" || snapshot.AuthorizedVolumeDir != ""
-	if hasProjectionAuthority && (snapshot.ProjectionRevision <= 0 || snapshot.RenderGeneration == 0 ||
+		validateStableID(ids.KindVolume, snapshot.VolumeID) != nil ||
+		validateStableID(ids.KindTask, snapshot.DesiredRevisionID) != nil ||
+		snapshot.EnvironmentRevision <= 0 || snapshot.ProjectionRoot <= 0 ||
+		!validSHA256(snapshot.DependencyDigest) || snapshot.RenderGeneration == 0 ||
 		snapshot.ComposeVolumeKey == "" || snapshot.DockerVolumeName != "gp_vol_"+snapshot.VolumeID ||
-		snapshot.AuthorizedVolumeDir == "") {
-		return invalidBackupRuntimeRecord("volume projection authority is incomplete")
+		snapshot.AuthorizedVolumeDir == "" {
+		return invalidBackupRuntimeRecord("volume source snapshot is invalid")
 	}
 	hasArtifactAuthority := snapshot.ArtifactID != "" || snapshot.ArtifactDigest != "" || snapshot.ArtifactRevision != 0
 	if hasArtifactAuthority && (validateStableID(ids.KindConfig, snapshot.ArtifactID) != nil ||
-		!validSHA256(snapshot.ArtifactDigest) || snapshot.ArtifactRevision <= 0 || !hasProjectionAuthority) {
+		!validSHA256(snapshot.ArtifactDigest) || snapshot.ArtifactRevision <= 0) {
 		return invalidBackupRuntimeRecord("volume artifact authority is incomplete")
 	}
 	previousID := ""
@@ -1362,7 +1362,7 @@ func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {
 			(previousID != "" && service.ServiceID <= previousID) {
 			return invalidBackupRuntimeRecord("volume service snapshots are invalid")
 		}
-		if hasProjectionAuthority && (service.ComposeKey == "" || len(service.MountPaths) == 0) {
+		if service.ComposeKey == "" || len(service.MountPaths) == 0 {
 			return invalidBackupRuntimeRecord("volume service projection is incomplete")
 		}
 		previousID = service.ServiceID

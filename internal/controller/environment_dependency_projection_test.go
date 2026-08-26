@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
 func TestBuildEnvironmentComposeProjectionFreezesAlwaysForReleasePhases(t *testing.T) {
@@ -29,20 +30,15 @@ func TestBuildEnvironmentComposeProjectionFreezesAlwaysForReleasePhases(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection, err := BuildEnvironmentComposeProjection(
-		"",
-		"",
-		1,
-		snapshot,
-		nil,
-		nil,
-		nil,
-		core.ServiceDependencyPlans{
+	projection := etcd.EnvironmentComposeProjection{
+		Services: []etcd.EnvironmentComposeIdentity{
+			{ID: snapshot.Services[0].ID, Name: snapshot.Services[0].Name},
+			{ID: snapshot.Services[1].ID, Name: snapshot.Services[1].Name},
+			{ID: snapshot.Services[2].ID, Name: snapshot.Services[2].Name},
+		},
+		ServiceDependencyPlans: core.ServiceDependencyPlans{
 			DeployDependencyPlan: deploy, RollbackDependencyPlan: rollback,
 		},
-	)
-	if err != nil {
-		t.Fatalf("BuildEnvironmentComposeProjection() error = %v", err)
 	}
 	frozenDeploy, frozenRollback := projection.DeployDependencyPlan, projection.RollbackDependencyPlan
 	if frozenDeploy.Phase != core.ServiceLifecycleDeploy || frozenRollback.Phase != core.ServiceLifecycleRollback ||

@@ -54,7 +54,7 @@ func hierarchyDeletionAgentProcedure(action HierarchyDeletionActionKind) string 
 		HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup", HierarchyDeletionServiceRemove: "service.remove",
 		HierarchyDeletionEntryRemove: "entry.remove", HierarchyDeletionRouteRemove: "route.remove",
 		HierarchyDeletionComponentRemove: "component.remove", HierarchyDeletionMaterializationRemove: "materialization.remove",
-		HierarchyDeletionVolumeAgentCleanup: "volume.cleanup", HierarchyDeletionZoneRemove: "zone.remove",
+		HierarchyDeletionZoneRemove:    "zone.remove",
 		HierarchyDeletionNetworkRemove: "network.remove", HierarchyDeletionRecoveryPointRemove: "recovery-point.remove",
 		HierarchyDeletionOrphanObjectRemove:        "orphan-object.remove",
 		HierarchyDeletionBackingRuntimeReconstruct: "backing.runtime-reconstruct",
@@ -65,7 +65,7 @@ func hierarchyDeletionControllerFinalizer(action HierarchyDeletionActionKind) st
 	return map[HierarchyDeletionActionKind]string{
 		HierarchyDeletionScriptRemove: "script.remove", HierarchyDeletionReleaseGroupRemove: "release-group.remove",
 		HierarchyDeletionReleaseFinalize: "release.finalize", HierarchyDeletionBackupPolicyFinalize: "backup-policy.finalize",
-		HierarchyDeletionKeyMaterialRemove: "key-material.remove", HierarchyDeletionVolumeFinalize: "volume.finalize",
+		HierarchyDeletionKeyMaterialRemove:  "key-material.remove",
 		HierarchyDeletionReservationRelease: "reservation.release", HierarchyDeletionConnectorFinalize: "connector.finalize",
 		HierarchyDeletionEnvironmentFinalize: "environment.finalize", HierarchyDeletionRunnerLocalRemove: "runner.remove",
 		HierarchyDeletionProjectSecretRemove: "secret.remove", HierarchyDeletionBackingServiceFinalize: "backing.finalize",
@@ -116,14 +116,6 @@ func validateHierarchyDeletionComponentOwner(value []byte, id, owner string) err
 func validateHierarchyDeletionScriptOwner(value []byte, id, owner string) error {
 	record, err := decodeScriptRecord(value)
 	if err != nil || record.Desired.ID != id || record.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
-	}
-	return nil
-}
-
-func validateHierarchyDeletionVolumeOwner(value []byte, id, owner string) error {
-	record, err := decodeVolumeRecord(value)
-	if err != nil || record.ID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}
 	return nil

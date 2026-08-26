@@ -497,7 +497,8 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			if snapshot == nil {
 				return "", nil, nil, errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
 			}
-			dynamic.add(volumeKey(source.TargetID))
+			dynamic.add(environmentBlueprintHeadKey(snapshot.EnvironmentID))
+			dynamic.add(environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID))
 			for _, service := range snapshot.Services {
 				dynamic.add(serviceKey(service.ServiceID))
 			}
@@ -689,8 +690,12 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 		if snapshot == nil {
 			return errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
 		}
-		keys := make([]*KeyValue, 0, len(snapshot.Services)+1)
-		keys = append(keys, result.Values[dynamic.index[volumeKey(source.TargetID)]])
+		keys := make([]*KeyValue, 0, len(snapshot.Services)+3)
+		keys = append(keys,
+			result.Values[dynamic.index[environmentKey(snapshot.EnvironmentID)]],
+			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.EnvironmentID)]],
+			result.Values[dynamic.index[environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],
+		)
 		for _, service := range snapshot.Services {
 			keys = append(keys, result.Values[dynamic.index[serviceKey(service.ServiceID)]])
 		}

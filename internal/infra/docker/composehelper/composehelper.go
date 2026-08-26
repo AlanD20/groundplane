@@ -144,8 +144,8 @@ func Execute(
 	if err != nil {
 		return nil, err
 	}
-	if remove := step.GetManagedNetworkRemove(); remove != nil {
-		return executeManagedNetworkRemove(ctx, taskRunner, owned.TimeoutSeconds, remove)
+	if response, handled, removeErr := executeManagedRemove(ctx, taskRunner, owned.TimeoutSeconds, step); handled {
+		return response, removeErr
 	}
 	if apply := step.GetCaddyConfigApply(); apply != nil {
 		return executeCaddyConfigApply(ctx, taskRunner, owned.TimeoutSeconds, artifact, apply)
@@ -232,7 +232,7 @@ func validateRequest(
 		artifactID = payload.ComposeStop.ArtifactId
 	case *agentpb.ExecutionStep_ComposeRemove:
 		artifactID = payload.ComposeRemove.ArtifactId
-	case *agentpb.ExecutionStep_ManagedNetworkRemove:
+	case *agentpb.ExecutionStep_ManagedNetworkRemove, *agentpb.ExecutionStep_ManagedVolumeRemove:
 		artifactID = ""
 	case *agentpb.ExecutionStep_CaddyConfigApply:
 		artifactID = payload.CaddyConfigApply.ArtifactId

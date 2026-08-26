@@ -160,7 +160,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Key: planReferenceKey},
 		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
-			Key:         environmentBlueprintManifestKey(record.EnvironmentID, renderInput.BlueprintRevisionID),
+			Key:         environmentBlueprintRootKey(record.EnvironmentID, renderInput.BlueprintRevisionID),
 			ModRevision: scope.BlueprintRevision.Revision,
 		},
 		{
@@ -440,7 +440,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: planReferenceKey},
 		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
-			Key:         environmentBlueprintManifestKey(current.Record.EnvironmentID, renderInput.BlueprintRevisionID),
+			Key:         environmentBlueprintRootKey(current.Record.EnvironmentID, renderInput.BlueprintRevisionID),
 			ModRevision: scope.BlueprintRevision.Revision,
 		},
 		{

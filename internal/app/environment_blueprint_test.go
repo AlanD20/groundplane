@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -18,7 +19,7 @@ func TestEnvironmentBlueprintIntentManifestIsCanonical(t *testing.T) {
 		Files:         []core.BlueprintFile{{Path: "blueprint.yaml", Content: []byte("services: {}\n")}},
 		Interpolation: map[string]string{"ZED": "2", "ALPHA": "1"},
 	}
-	manifest, err := environmentBlueprintIntentManifest(bundle)
+	manifest, err := desiredrevision.IntentManifest(bundle)
 	if err != nil {
 		t.Fatalf("environmentBlueprintIntentManifest() error = %v", err)
 	}

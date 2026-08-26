@@ -54,8 +54,6 @@ const (
 	HierarchyDeletionBackupPolicyFinalize      HierarchyDeletionActionKind = "backup-policy.finalize"
 	HierarchyDeletionKeyMaterialRemove         HierarchyDeletionActionKind = "key-material.remove"
 	HierarchyDeletionMaterializationRemove     HierarchyDeletionActionKind = "materialization.remove"
-	HierarchyDeletionVolumeAgentCleanup        HierarchyDeletionActionKind = "volume.agent-cleanup"
-	HierarchyDeletionVolumeFinalize            HierarchyDeletionActionKind = "volume.finalize"
 	HierarchyDeletionZoneRemove                HierarchyDeletionActionKind = "zone.remove"
 	HierarchyDeletionNetworkRemove             HierarchyDeletionActionKind = "network.remove"
 	HierarchyDeletionReservationRelease        HierarchyDeletionActionKind = "reservation.release"

@@ -80,7 +80,7 @@ func TestBackupPolicyTypedPreparationCommitsStableProjection(t *testing.T) {
 	for _, source := range prepared.candidate.Sources {
 		if source.Source.ReadRevision != fixedRevision ||
 			(source.Attach != nil && source.Attach.ReadRevision != fixedRevision) ||
-			(source.Volume != nil && source.Volume.ReadRevision != fixedRevision) {
+			(source.Volume != nil && source.Volume.Projection.ReadRevision != fixedRevision) {
 			t.Fatalf("prepared source evidence does not share revision %d", fixedRevision)
 		}
 	}
@@ -211,29 +211,27 @@ func TestBackupPolicyTypedPreparationRejectsForeignTargetBeforeCatalogCreation(t
 	t.Parallel()
 	fixture := newBackupPolicyReplacementFixture(t, false)
 	otherEnvironmentID := ids.NewAt(ids.KindEnvironment, fixture.now, 2900)
-	volume, err := NewVolumeRecord(
-		otherEnvironmentID,
-		ids.NewAt(ids.KindVolume, fixture.now, 2901),
-		"foreign-data",
-	)
+	hierarchy, err := newHierarchyRepository(fixture.store)
 	if err != nil {
-		t.Fatalf("NewVolumeRecord() error = %v", err)
+		t.Fatal(err)
 	}
-	value, err := encodeVolumeRecord(volume)
-	if err != nil {
-		t.Fatalf("encodeVolumeRecord() error = %v", err)
-	}
-	defer clear(value)
-	transaction, err := fixture.store.Transact(context.Background(), []Condition{
-		{Key: volumeKey(volume.ID)},
-		{Key: volumeOwnerKey(otherEnvironmentID, volume.ID)},
-	}, []Mutation{
-		{Type: MutationPut, Key: volumeKey(volume.ID), Value: value},
-		{Type: MutationPut, Key: volumeOwnerKey(otherEnvironmentID, volume.ID), Value: []byte(volume.ID)},
+	otherEnvironment, err := hierarchy.CreateEnvironment(context.Background(), EnvironmentRecord{
+		ID: otherEnvironmentID, ProjectID: fixture.project.Record.ID,
+		Name: "foreign", NetworkPool: "10.241.0.0/24",
+		VolumeDir: "/var/lib/groundplane/vol/" + fixture.project.Record.TenantID + "/" +
+			fixture.project.Record.ID + "/" + otherEnvironmentID,
+		ProvisioningState: EnvironmentProvisioningReady,
+		CreateTaskID:      ids.NewAt(ids.KindTask, fixture.now, 2902), CreatedAt: fixture.now,
 	})
-	if err != nil || !transaction.Succeeded {
-		t.Fatalf("seed foreign Volume = %#v, %v", transaction, err)
+	if err != nil {
+		t.Fatalf("CreateEnvironment(foreign) error = %v", err)
 	}
+	volume := EnvironmentVolumeIdentity{
+		ID: ids.NewAt(ids.KindVolume, fixture.now, 2901), Slug: "foreign-data", Key: "foreign-data",
+	}
+	seedBackupPolicyVolumeProjection(
+		t, fixture.store, otherEnvironment, fixture.project, volume, 2903,
+	)
 	_, err = fixture.repository.PrepareBackupPolicyReplacement(
 		context.Background(),
 		BackupPolicyReplacementInput{
@@ -247,7 +245,7 @@ func TestBackupPolicyTypedPreparationRejectsForeignTargetBeforeCatalogCreation(t
 			}},
 		},
 	)
-	if !isKind(err, errs.KindScopeUnauthorized) {
+	if !isKind(err, errs.KindVolumeNotFound) {
 		t.Fatalf("PrepareBackupPolicyReplacement(foreign) error = %v", err)
 	}
 	index, readErr := fixture.store.Get(context.Background(), backupSourceIdentityKey(
@@ -260,9 +258,9 @@ func TestBackupPolicyTypedPreparationRejectsForeignTargetBeforeCatalogCreation(t
 	}
 }
 
-// Rationale: selected source ownership is part of the same final CAS as the
-// policy, so an owner-index change after preparation must lose atomically.
-func TestBackupPolicyTypedReplacementFencesSourceOwnerRace(t *testing.T) {
+// Rationale: the selected desired head is part of the same final CAS as the
+// policy, so a head change after preparation must lose atomically.
+func TestBackupPolicyTypedReplacementFencesDesiredHeadRace(t *testing.T) {
 	t.Parallel()
 	fixture := newBackupPolicyReplacementFixture(t, true)
 	volumeSource := fixture.sources[0].Source.Record
@@ -284,21 +282,23 @@ func TestBackupPolicyTypedReplacementFencesSourceOwnerRace(t *testing.T) {
 		t.Fatalf("PrepareBackupPolicyReplacement() error = %v", err)
 	}
 	defer prepared.Destroy()
+	headValue, err := encodeTaskReference(ids.NewAt(ids.KindTask, fixture.now, 3001))
+	if err != nil {
+		t.Fatal(err)
+	}
 	deleted, err := fixture.store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationDelete,
-		Key:  volumeOwnerKey(fixture.environment.Record.ID, volumeSource.TargetID),
+		Type: MutationPut, Key: environmentBlueprintHeadKey(fixture.environment.Record.ID), Value: headValue,
 	}})
 	if err != nil || !deleted.Succeeded {
-		t.Fatalf("delete Volume owner index = %#v, %v", deleted, err)
+		t.Fatalf("advance Volume desired head = %#v, %v", deleted, err)
 	}
 	result, err := fixture.repository.ReplaceBackupPolicyProtected(
 		context.Background(),
 		prepared,
 		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-owner-race-0001"),
 	)
-	if err != nil || result.kind != idempotencyTransactionConflict ||
-		!isKind(result.conflict, errs.KindInternal) {
-		t.Fatalf("ReplaceBackupPolicyProtected(owner race) = %#v, %v", result, err)
+	if err != nil || result.kind != idempotencyTransactionConflict || result.conflict == nil {
+		t.Fatalf("ReplaceBackupPolicyProtected(head race) = %#v, %v", result, err)
 	}
 }
 
@@ -445,9 +445,9 @@ func TestMaximumBackupPolicySourcesMatchesWorstCaseAtomicBudget(t *testing.T) {
 		t.Fatalf("prepareBackupPolicyReplacement(maximum) error = %v", err)
 	}
 	marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-budget-0001")
-	if operations := backupPolicyReplacementOperationCount(plan, marker); operations != 96 ||
+	if operations := backupPolicyReplacementOperationCount(plan, marker); operations != 84 ||
 		operations > maximumTransactionOperations {
-		t.Fatalf("maximum source operation budget = %d, want 96 <= %d", operations, maximumTransactionOperations)
+		t.Fatalf("maximum source operation budget = %d, want 84 <= %d", operations, maximumTransactionOperations)
 	}
 	candidate.Sources = backupPolicyBudgetVolumeEvidence(
 		t,
@@ -463,9 +463,9 @@ func TestMaximumBackupPolicySourcesMatchesWorstCaseAtomicBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareBackupPolicyReplacement(above maximum) error = %v", err)
 	}
-	if operations := backupPolicyReplacementOperationCount(above, marker); operations != 102 ||
-		operations <= maximumTransactionOperations {
-		t.Fatalf("above-maximum operation budget = %d, want 102 > %d", operations, maximumTransactionOperations)
+	if operations := backupPolicyReplacementOperationCount(above, marker); operations != 89 ||
+		operations > maximumTransactionOperations {
+		t.Fatalf("above-public-maximum operation budget = %d, want 89 <= %d", operations, maximumTransactionOperations)
 	}
 
 	audit := &backupPolicyPreparationAuditStore{memoryHierarchyStore: fixture.store}
@@ -538,10 +538,6 @@ func backupPolicyBudgetVolumeEvidence(
 	for index := range evidence {
 		sourceID := ids.NewAt(ids.KindBackupSource, now, int64(3300+index))
 		volumeID := ids.NewAt(ids.KindVolume, now, int64(3400+index))
-		volume, err := NewVolumeRecord(environmentID, volumeID, "budget-volume-"+sourceID)
-		if err != nil {
-			t.Fatalf("NewVolumeRecord() error = %v", err)
-		}
 		record := BackupSourceRecord{
 			ID: sourceID, EnvironmentID: environmentID, Kind: core.BackupSourceVolume,
 			TargetID: volumeID, CreatedAt: now,
@@ -555,10 +551,7 @@ func backupPolicyBudgetVolumeEvidence(
 				Key:   backupSourceIdentityKey(environmentID, record.Kind, record.TargetID),
 				Value: []byte(sourceID), ModRevision: 1,
 			},
-			Volume: &Versioned[VolumeRecord]{Record: volume, Revision: 1, ReadRevision: 1},
-			TargetOwnerIndex: &KeyValue{
-				Key: volumeOwnerKey(environmentID, volumeID), Value: []byte(volumeID), ModRevision: 1,
-			},
+			Volume: syntheticBackupPolicyVolumeEvidence(environmentID, volumeID, now, int64(3500+index)),
 		}
 	}
 	return evidence

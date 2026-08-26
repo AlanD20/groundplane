@@ -23,8 +23,8 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		ArtifactID:          ids.NewAt(ids.KindConfig, at, 6),
 		Projection: EnvironmentComposeProjection{
-			EnvironmentID:       ids.NewAt(ids.KindEnvironment, at, 5),
-			BlueprintRevisionID: ids.NewAt(ids.KindTask, at, 7), RenderGeneration: 9,
+			EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5),
+			RevisionID:    ids.NewAt(ids.KindTask, at, 7), RenderGeneration: 9,
 			Services: []EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
 		},
 	}
