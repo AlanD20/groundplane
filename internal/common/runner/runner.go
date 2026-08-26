@@ -10,7 +10,6 @@
 package runner
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -36,6 +35,9 @@ type RunCmdOpts struct {
 	ReplaceEnv bool
 	Timeout    time.Duration
 	Stdin      []byte
+	// CaptureLimitBytes bounds the combined stdout and stderr prefixes retained
+	// by Run and Stream. Zero preserves unlimited capture for existing callers.
+	CaptureLimitBytes int64
 	// StderrRedactions are transient values that are replaced before bounded
 	// stderr is returned. They are never included in argv, the environment, or
 	// runner logs.
@@ -139,62 +141,38 @@ func NewBinary(logger *slog.Logger) BinaryRunner {
 }
 
 func (r *OSRunner) Run(ctx context.Context, opts RunCmdOpts) (Result, error) {
-	ctx, cancel := withTimeout(ctx, opts.Timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, opts.Name, opts.Args...)
-	cmd.Dir = opts.Dir
-	cmd.Env = commandEnvironment(cmd, opts)
-	if opts.Stdin != nil {
-		cmd.Stdin = bytes.NewReader(opts.Stdin)
+	operationCtx, cancelOperation := withTimeout(ctx, opts.Timeout)
+	defer cancelOperation()
+	capture, err := newOutputCapture(opts.CaptureLimitBytes)
+	if err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	process, err := r.startCapturedProcess(operationCtx, opts, capture, "exec")
+	if err != nil {
+		return Result{ExitCode: -1}, err
 	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if r.Logger != nil {
-		r.Logger.Debug("runner: exec", "name", opts.Name, "arg_count", len(opts.Args), "dir", opts.Dir)
-	}
-
-	err := cmd.Run()
-	exitCode := -1
-	if cmd.ProcessState != nil {
-		exitCode = cmd.ProcessState.ExitCode()
-	}
-	res := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: exitCode}
-	if err != nil && ctx.Err() != nil {
-		return res, ctx.Err()
-	}
-	return res, err
+	stdoutResult := make(chan error, 1)
+	stderrResult := make(chan error, 1)
+	go readCapturedOutput(process.stdout, false, capture, process.requestInterrupt, stdoutResult)
+	go readCapturedOutput(process.stderr, true, capture, process.requestInterrupt, stderrResult)
+	stdoutErr := <-stdoutResult
+	stderrErr := <-stderrResult
+	readErr := errors.Join(stdoutErr, stderrErr)
+	processErr := process.finish(operationCtx.Err() != nil || capture.exceededLimit() || readErr != nil)
+	result := capture.result(process.exitCode())
+	return result, capture.resolveError(operationCtx.Err(), errors.Join(readErr, processErr))
 }
 
 func (r *OSRunner) Stream(ctx context.Context, opts RunCmdOpts, onLine func(stderr bool, line string)) (Result, error) {
-	ctx, cancel := withTimeout(ctx, opts.Timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, opts.Name, opts.Args...)
-	cmd.Dir = opts.Dir
-	cmd.Env = commandEnvironment(cmd, opts)
-	if opts.Stdin != nil {
-		cmd.Stdin = bytes.NewReader(opts.Stdin)
-	}
-	stdout, err := cmd.StdoutPipe()
+	operationCtx, cancelOperation := withTimeout(ctx, opts.Timeout)
+	defer cancelOperation()
+	capture, err := newOutputCapture(opts.CaptureLimitBytes)
 	if err != nil {
 		return Result{ExitCode: -1}, err
 	}
-	stderr, err := cmd.StderrPipe()
+	process, err := r.startCapturedProcess(operationCtx, opts, capture, "stream")
 	if err != nil {
-		return Result{ExitCode: -1}, err
-	}
-
-	if r.Logger != nil {
-		r.Logger.Debug("runner: stream", "name", opts.Name, "arg_count", len(opts.Args), "dir", opts.Dir)
-	}
-	if err := cmd.Start(); err != nil {
-		if ctx.Err() != nil {
-			return Result{ExitCode: -1}, ctx.Err()
-		}
 		return Result{ExitCode: -1}, err
 	}
 
@@ -202,40 +180,24 @@ func (r *OSRunner) Stream(ctx context.Context, opts RunCmdOpts, onLine func(stde
 	results := make(chan streamResult, 2)
 	var readers sync.WaitGroup
 	readers.Add(2)
-	go readStream(stdout, false, lines, results, &readers)
-	go readStream(stderr, true, lines, results, &readers)
+	go readStream(process.stdout, false, capture, lines, results, process.requestInterrupt, &readers)
+	go readStream(process.stderr, true, capture, lines, results, process.requestInterrupt, &readers)
+	completion := make(chan error, 1)
 	go func() {
 		readers.Wait()
+		first := <-results
+		second := <-results
+		readErr := errors.Join(first.err, second.err)
 		close(lines)
+		processErr := process.finish(operationCtx.Err() != nil || capture.exceededLimit() || readErr != nil)
+		completion <- errors.Join(readErr, processErr)
 	}()
 	for line := range lines {
 		onLine(line.stderr, line.value)
 	}
-
-	first := <-results
-	second := <-results
-	var stdoutBytes, stderrBytes []byte
-	var readErrors []error
-	for _, result := range []streamResult{first, second} {
-		if result.stderr {
-			stderrBytes = result.output
-		} else {
-			stdoutBytes = result.output
-		}
-		if result.err != nil {
-			readErrors = append(readErrors, result.err)
-		}
-	}
-	waitErr := cmd.Wait()
-	exitCode := -1
-	if cmd.ProcessState != nil {
-		exitCode = cmd.ProcessState.ExitCode()
-	}
-	result := Result{Stdout: stdoutBytes, Stderr: stderrBytes, ExitCode: exitCode}
-	if ctx.Err() != nil {
-		return result, ctx.Err()
-	}
-	return result, errors.Join(append(readErrors, waitErr)...)
+	operationErr := <-completion
+	result := capture.result(process.exitCode())
+	return result, capture.resolveError(operationCtx.Err(), operationErr)
 }
 
 const (
@@ -732,42 +694,6 @@ func (r *redactedStderr) Bytes() []byte {
 	keep := min(r.limit-len(mark), len(r.output))
 	result := append([]byte(nil), r.output[:keep]...)
 	return append(result, mark...)
-}
-
-type streamedLine struct {
-	stderr bool
-	value  string
-}
-
-type streamResult struct {
-	stderr bool
-	output []byte
-	err    error
-}
-
-func readStream(
-	reader io.Reader,
-	stderr bool,
-	lines chan<- streamedLine,
-	results chan<- streamResult,
-	readers *sync.WaitGroup,
-) {
-	defer readers.Done()
-	var captured bytes.Buffer
-	scanner := bufio.NewScanner(io.TeeReader(reader, &captured))
-	scanner.Buffer(make([]byte, 4096), 1024*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		line = string(bytes.TrimSuffix([]byte(line), []byte{'\r'}))
-		lines <- streamedLine{stderr: stderr, value: line}
-	}
-	scanErr := scanner.Err()
-	if scanErr != nil {
-		if _, err := io.Copy(&captured, reader); err != nil {
-			scanErr = errors.Join(scanErr, err)
-		}
-	}
-	results <- streamResult{stderr: stderr, output: captured.Bytes(), err: scanErr}
 }
 
 func withTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
