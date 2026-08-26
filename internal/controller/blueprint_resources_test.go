@@ -30,7 +30,7 @@ func TestProjectServiceProjectionPreservesStableTopology(t *testing.T) {
 
 	services, err := ProjectServiceProjection(project, ComposeIdentitySnapshot{
 		Services: []ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("ProjectServiceProjection() error = %v", err)
 	}
@@ -41,6 +41,49 @@ func TestProjectServiceProjectionPreservesStableTopology(t *testing.T) {
 	}}
 	if !reflect.DeepEqual(services, want) {
 		t.Fatalf("ProjectServiceProjection() = %#v, want %#v", services, want)
+	}
+}
+
+// Rationale: release policy and lifecycle-phased dependencies are durable
+// desired decisions even when they cannot be represented as native Compose.
+func TestProjectServiceProjectionCarriesTypedGroundplaneServiceExtensions(t *testing.T) {
+	t.Parallel()
+	serviceID := blueprintResourceID(ids.KindService, 20)
+	project := &composetypes.Project{Services: composetypes.Services{
+		"api": {Image: "example/api:1"},
+	}}
+	services, err := ProjectServiceProjection(
+		project,
+		ComposeIdentitySnapshot{Services: []ComposeResourceIdentity{{ID: serviceID, Name: "api"}}},
+		map[string]core.ServiceExtensionSpec{
+			"api": {
+				Release: &core.ServiceReleaseSpec{
+					DefaultStrategy: core.StrategyBlueGreen,
+					OnFailure:       core.OnFailureLeaveActive,
+				},
+				DependsOn: map[string]core.ServiceDependency{
+					"migrate": {
+						Condition: core.ServiceDependencyCompletedSuccessfully,
+						Phases:    []core.ServiceDependencyPhase{core.ServiceDependencyPhaseDeploy},
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ProjectServiceProjection() error = %v", err)
+	}
+	if len(services) != 1 {
+		t.Fatalf("ProjectServiceProjection() service count = %d, want 1", len(services))
+	}
+	service := services[0]
+	if service.Strategy != core.StrategyBlueGreen || service.OnFailure != core.OnFailureLeaveActive {
+		t.Fatalf("ProjectServiceProjection() release = strategy %q, on_failure %q", service.Strategy, service.OnFailure)
+	}
+	dependency, exists := service.DependsOn["migrate"]
+	if !exists || dependency.Condition != "service_completed_successfully" ||
+		len(dependency.Phases) != 1 || dependency.Phases[0] != "deploy" {
+		t.Fatalf("ProjectServiceProjection() dependency = %#v, exists = %t", dependency, exists)
 	}
 }
 

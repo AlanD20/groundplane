@@ -3,8 +3,6 @@ package etcd
 import (
 	"context"
 	"sort"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -22,9 +20,7 @@ type EnvironmentRouteIdentity struct {
 	Path string `json:"path"`
 }
 
-// EnvironmentComposeProjection is the durable identity and Component input
-// needed to reproduce one Environment render. Named collections are sorted by
-// Name, Routes by host/path, and Components by kind.
+// EnvironmentComposeProjection is the sorted durable input for one Environment render.
 type EnvironmentComposeProjection struct {
 	EnvironmentID       string                       `json:"environment_id"`
 	BlueprintRevisionID string                       `json:"blueprint_revision_id"`
@@ -36,6 +32,7 @@ type EnvironmentComposeProjection struct {
 	SuppressedRoutes    []EnvironmentRouteIdentity   `json:"suppressed_routes,omitempty"`
 	Components          []ComponentRecord            `json:"components,omitempty"`
 	Entries             []EntryRecord                `json:"entries,omitempty"`
+	core.ServiceDependencyPlans
 }
 
 func environmentComposeProjectionKey(environmentID string) string {
@@ -100,6 +97,13 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentComposeIdentities(ids.KindService, projection.Services); err != nil {
 		return err
 	}
+	names := make([]string, len(projection.Services))
+	for index, service := range projection.Services {
+		names[index] = service.Name
+	}
+	if err := projection.ServiceDependencyPlans.Validate(names); err != nil {
+		return err
+	}
 	if err := validateEnvironmentComposeIdentities(ids.KindNetwork, projection.Networks); err != nil {
 		return err
 	}
@@ -121,9 +125,7 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	return validateEnvironmentEntryProjection(projection.EnvironmentID, projection.Entries)
 }
 
-// SuppressEnvironmentRoute prepares the exact next applied projection for an
-// explicit Route removal. The old match remains pinned as reproduction
-// history while the effective Route set and render generation advance once.
+// SuppressEnvironmentRoute removes a Route while pinning its old match and advancing generation.
 func SuppressEnvironmentRoute(
 	current EnvironmentComposeProjection,
 	routeID string,
@@ -161,9 +163,8 @@ func SuppressEnvironmentRoute(
 	return next, true, nil
 }
 
-// RemoveEnvironmentEntry prepares the exact next applied projection for an
-// explicit Entry removal. The removed immutable generation remains available
-// through the deletion intent until terminal acknowledgement promotes next.
+// RemoveEnvironmentEntry prepares the next applied projection for Entry removal.
+// The removed generation remains until terminal acknowledgement promotes next.
 func RemoveEnvironmentEntry(
 	current EnvironmentComposeProjection,
 	entryID string,
@@ -280,6 +281,7 @@ func environmentRouteMatch(value EnvironmentRouteIdentity) string {
 
 func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
 	clone := source
+	clone.ServiceDependencyPlans = source.ServiceDependencyPlans.Clone()
 	clone.Services = append([]EnvironmentComposeIdentity(nil), source.Services...)
 	clone.Networks = append([]EnvironmentComposeIdentity(nil), source.Networks...)
 	clone.Volumes = append([]EnvironmentComposeIdentity(nil), source.Volumes...)
@@ -301,7 +303,7 @@ func validateEnvironmentComposeIdentities(kind ids.Kind, values []EnvironmentCom
 	idsSeen := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if validateStableID(kind, value.ID) != nil || value.Name <= previousName ||
-			!validEnvironmentComposeName(value.Name) {
+			!core.ValidEnvironmentComposeName(value.Name) {
 			return errs.New(errs.KindValidationFailed, "Environment Compose identities are invalid or unsorted")
 		}
 		if _, duplicate := idsSeen[value.ID]; duplicate {
@@ -393,18 +395,6 @@ func preserveEnvironmentComposeIdentities(
 		}
 	}
 	return nil
-}
-
-func validEnvironmentComposeName(value string) bool {
-	if value == "" || len(value) > 255 || !utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
-		return false
-	}
-	for _, character := range value {
-		if character <= ' ' || character == '/' || character == '\\' {
-			return false
-		}
-	}
-	return true
 }
 
 func corruptEnvironmentComposeProjection() error {

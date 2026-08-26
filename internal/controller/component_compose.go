@@ -208,7 +208,7 @@ func projectEnvironmentComponentService(
 				)
 			}
 			projected.DependsOn[name] = composetypes.ServiceDependency{
-				Condition: dependency.Condition, Required: true,
+				Condition: dependency.Condition.String(), Required: true,
 			}
 		}
 	}

@@ -220,14 +220,6 @@ type Service struct {
 	Label       string `yaml:"label,omitempty"        json:"label,omitempty"`        // display only
 }
 
-// ServiceDependency is x-gp-depends_on's per-dependency shape:
-// Compose health/start condition plus which lifecycle phases it applies
-// to. See blueprint.md, "x-gp-depends_on".
-type ServiceDependency struct {
-	Condition string   `yaml:"condition"        json:"condition"`        // Compose condition, e.g. "service_completed_successfully", "service_healthy"
-	Phases    []string `yaml:"phases,omitempty" json:"phases,omitempty"` // "start" | "deploy" | "rollback" | "always"; empty = normal Compose startup only
-}
-
 // EntryKind and EntrySourceKind implement the unified environment-entry
 // model — one CLI noun (`entry`), one API shape, covering variables and
 // files, plain and secret, including fact-derived values. Replaces the

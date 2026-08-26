@@ -34,7 +34,6 @@ type parsePlan struct {
 	projectName string
 	emptyEnv    string
 }
-
 type scanRequest struct {
 	filename string
 	baseDir  string
@@ -43,7 +42,6 @@ type scanRequest struct {
 	root     bool
 	env      types.Mapping
 }
-
 type scanKey struct {
 	filename string
 	baseDir  string
@@ -107,9 +105,11 @@ func (p *parsePlan) scan(ctx context.Context, request scanRequest) error {
 			return err
 		}
 	}
-
 	content, err := p.sanitizedCompose(ctx, request.filename)
 	if err != nil {
+		return err
+	}
+	if err := validateAuthoredGroundplanePresence(request.filename, content); err != nil {
 		return err
 	}
 	model, err := p.loadModel(ctx, request.filename, content, request.env, true)
@@ -122,7 +122,7 @@ func (p *parsePlan) scan(ctx context.Context, request scanRequest) error {
 	if !request.root && hasDocumentGroundplaneField(model) {
 		return validationError("blueprint Groundplane envelope is allowed only in the root")
 	}
-	if err := validateGroundplaneExtensionNames(model); err != nil {
+	if err := validateAuthoredGroundplaneSource(request.filename, model); err != nil {
 		return err
 	}
 

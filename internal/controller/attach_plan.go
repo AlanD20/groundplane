@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"math"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -97,6 +98,9 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	if renderInput.Record.PlanID != task.PlanID || renderInput.Record.AttachID != current.Record.ID ||
 		renderInput.Record.EnvironmentID != current.Record.EnvironmentID ||
 		renderInput.Record.RenderGeneration != uint64(task.RenderGeneration) ||
+		renderInput.Record.BackingProjectID != current.Record.BackingProjectID ||
+		!slices.Equal(renderInput.Record.ConsumerServiceIDs, current.Record.ServiceIDs) ||
+		!slices.Equal(renderInput.Record.GrantAttachIDs, current.Record.GrantAttachIDs) ||
 		task.Params[etcd.TaskMutationEnvironmentParam] != current.Record.EnvironmentID {
 		return nil, errs.New(errs.KindInternal, "durable Attach Task render input does not match its Task")
 	}
@@ -127,12 +131,13 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		return nil, err
 	}
 	projection := etcd.EnvironmentComposeProjection{
-		EnvironmentID:       current.Record.EnvironmentID,
-		BlueprintRevisionID: renderInput.Record.BlueprintRevisionID,
-		RenderGeneration:    renderInput.Record.RenderGeneration,
-		Services:            append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Services...),
-		Networks:            append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Networks...),
-		Volumes:             append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Volumes...),
+		EnvironmentID:          current.Record.EnvironmentID,
+		BlueprintRevisionID:    renderInput.Record.BlueprintRevisionID,
+		RenderGeneration:       renderInput.Record.RenderGeneration,
+		Services:               append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Services...),
+		Networks:               append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Networks...),
+		Volumes:                append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Volumes...),
+		ServiceDependencyPlans: renderInput.Record.ServiceDependencyPlans.Clone(),
 	}
 	artifact, err := resolver.renderPinnedEnvironmentArtifact(
 		ctx,

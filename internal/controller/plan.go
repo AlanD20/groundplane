@@ -12,6 +12,7 @@ package controller
 import (
 	"context"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
@@ -23,6 +24,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"github.com/compose-spec/compose-go/v2/types"
 )
 
 const (
@@ -424,6 +426,28 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
 	projection etcd.EnvironmentComposeProjection,
 	transform environmentComposeTransform,
 ) (*agentpb.ComposeArtifact, error) {
+	return resolver.renderPinnedEnvironmentArtifactForPhase(
+		ctx,
+		task,
+		identity,
+		revisionID,
+		artifactID,
+		projection,
+		"",
+		transform,
+	)
+}
+
+func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhase(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	identity pinnedEnvironmentIdentity,
+	revisionID string,
+	artifactID string,
+	projection etcd.EnvironmentComposeProjection,
+	phase core.ServiceLifecyclePhase,
+	transform environmentComposeTransform,
+) (*agentpb.ComposeArtifact, error) {
 	parsed, err := resolver.parsePinnedEnvironmentBlueprint(ctx, identity, revisionID)
 	if err != nil {
 		return nil, err
@@ -433,6 +457,11 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
 		len(parsed.Extensions.ReleaseGroups) != 0 || len(parsed.Project.Configs) != 0 ||
 		len(parsed.Project.Secrets) != 0 {
 		return nil, errs.New(errs.KindNotImplemented, "Blueprint materialized resources are not yet executable")
+	}
+	if phase != "" {
+		if err := applyServiceDependencyPhase(parsed.Project, parsed.ServiceExtensions, phase); err != nil {
+			return nil, err
+		}
 	}
 	externalNetworks := []ComposeResourceIdentity(nil)
 	if transform != nil {
@@ -445,6 +474,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
 	if len(projection.Components) != 0 {
 		componentProjection, componentErr := projectPinnedEnvironmentComponents(
 			parsed.Project,
+			parsed.ServiceExtensions,
 			identity,
 			projection,
 			parsed.Extensions.Routes,
@@ -465,6 +495,51 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
 		Identities:          composeIdentitySnapshotFromProjection(projection),
 		ExternalNetworks:    externalNetworks,
 	})
+}
+
+func applyServiceDependencyPhase(
+	project *types.Project,
+	extensions map[string]core.ServiceExtensionSpec,
+	phase core.ServiceLifecyclePhase,
+) error {
+	if project == nil {
+		return errs.New(errs.KindInternal, "Service dependency planning requires a parsed Compose project")
+	}
+	names := make([]string, 0, len(project.Services)+len(project.DisabledServices))
+	for name := range project.Services {
+		names = append(names, name)
+	}
+	for name := range project.DisabledServices {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	plan, err := core.BuildServiceDependencyPhasePlan(names, extensions, phase)
+	if err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
+	for _, edge := range plan.Edges {
+		service, enabled := project.Services[edge.Service]
+		if !enabled {
+			service = project.DisabledServices[edge.Service]
+		}
+		if service.DependsOn == nil {
+			service.DependsOn = make(map[string]types.ServiceDependency)
+		}
+		dependency := types.ServiceDependency{Condition: edge.Condition.String(), Required: true}
+		if current, exists := service.DependsOn[edge.Dependency]; exists {
+			if current.Condition != dependency.Condition || current.Required != dependency.Required {
+				return errs.New(errs.KindValidationFailed, "Service dependency phase conflicts with native Compose")
+			}
+		} else {
+			service.DependsOn[edge.Dependency] = dependency
+		}
+		if enabled {
+			project.Services[edge.Service] = service
+		} else {
+			project.DisabledServices[edge.Service] = service
+		}
+	}
+	return nil
 }
 
 func (resolver *TaskPlanResolver) parsePinnedEnvironmentBlueprint(

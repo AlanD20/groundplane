@@ -372,7 +372,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if err := validateBasicEnvironmentBlueprint(parsed); err != nil {
+	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	changes, err := controller.ReconcileOwnedComposeIdentities(parsed.Project, previous, ids.New)
@@ -409,7 +409,11 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	desiredServices, err := controller.ProjectServiceProjection(parsed.Project, changes.Current)
+	desiredServices, err := controller.ProjectServiceProjection(
+		parsed.Project,
+		changes.Current,
+		parsed.ServiceExtensions,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -568,15 +572,17 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	revision := environmentBlueprintRevision(environmentID, taskID, now, bundle)
-	projection := environmentComposeProjection(
-		environmentID,
-		taskID,
-		generation,
-		renderIdentities,
-		reconciledRoutes.Current,
-		pinnedComponents,
-		pinnedEntries,
+	dependencyPlans, err := buildEnvironmentDependencyPlans(renderIdentities.Services, parsed.ServiceExtensions)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	projection, err := controller.BuildEnvironmentComposeProjection(
+		environmentID, taskID, generation, renderIdentities, reconciledRoutes.Current,
+		pinnedComponents, pinnedEntries, dependencyPlans,
 	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -1242,28 +1248,6 @@ func authoredComposeIdentitySnapshot(
 	return snapshot
 }
 
-func validateBasicEnvironmentBlueprint(parsed blueprintparser.Result) error {
-	extensions := parsed.Extensions
-	if parsed.Project == nil || len(extensions.Requires) != 0 || len(extensions.Attachments) != 0 ||
-		len(extensions.Entries) != 0 || extensions.Backup != nil ||
-		len(extensions.ReleaseGroups) != 0 || len(parsed.Project.Configs) != 0 ||
-		len(parsed.Project.Secrets) != 0 {
-		return errs.New(errs.KindValidationFailed, "Blueprint uses a desired-state contract that is not available yet")
-	}
-	for _, network := range parsed.Project.Networks {
-		if network.External || len(network.Extensions) != 0 {
-			return errs.New(errs.KindValidationFailed, "Blueprint external network ownership is not available yet")
-		}
-	}
-	for _, volume := range parsed.Project.Volumes {
-		if volume.External || (volume.Driver != "" && volume.Driver != "local") || len(volume.DriverOpts) != 0 ||
-			len(volume.Extensions) != 0 {
-			return errs.New(errs.KindValidationFailed, "Blueprint volume runtime is not managed by Groundplane")
-		}
-	}
-	return nil
-}
-
 func composeIdentitySnapshot(projection etcd.EnvironmentComposeProjection) controller.ComposeIdentitySnapshot {
 	convert := func(values []etcd.EnvironmentComposeIdentity) []controller.ComposeResourceIdentity {
 		result := make([]controller.ComposeResourceIdentity, len(values))
@@ -1278,38 +1262,6 @@ func composeIdentitySnapshot(projection etcd.EnvironmentComposeProjection) contr
 		),
 		Networks: convert(projection.Networks),
 		Volumes:  convert(projection.Volumes),
-	}
-}
-
-func environmentComposeProjection(
-	environmentID string,
-	revisionID string,
-	generation uint64,
-	snapshot controller.ComposeIdentitySnapshot,
-	routes []core.Route,
-	components []etcd.ComponentRecord,
-	entries []etcd.EntryRecord,
-) etcd.EnvironmentComposeProjection {
-	convert := func(values []controller.ComposeResourceIdentity) []etcd.EnvironmentComposeIdentity {
-		result := make([]etcd.EnvironmentComposeIdentity, len(values))
-		for index, value := range values {
-			result[index] = etcd.EnvironmentComposeIdentity{ID: value.ID, Name: value.Name}
-		}
-		return result
-	}
-	routeIdentities := make([]etcd.EnvironmentRouteIdentity, len(routes))
-	for index, route := range routes {
-		routeIdentities[index] = etcd.EnvironmentRouteIdentity{ID: route.ID, Host: route.Host, Path: route.Path}
-	}
-	sort.Slice(routeIdentities, func(left int, right int) bool {
-		leftMatch := routeIdentities[left].Host + "\x00" + routeIdentities[left].Path
-		rightMatch := routeIdentities[right].Host + "\x00" + routeIdentities[right].Path
-		return leftMatch < rightMatch
-	})
-	return etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: revisionID, RenderGeneration: generation,
-		Services: convert(snapshot.Services), Networks: convert(snapshot.Networks), Volumes: convert(snapshot.Volumes),
-		Routes: routeIdentities, Components: components, Entries: entries,
 	}
 }
 

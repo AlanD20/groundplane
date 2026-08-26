@@ -827,8 +827,8 @@ func serviceAPIResponse(record etcd.ServiceRecord) apiTypes.Service {
 	response.DependsOn = make(map[string]apiTypes.ServiceDependency, len(record.Desired.DependsOn))
 	for name, dependency := range record.Desired.DependsOn {
 		response.DependsOn[name] = apiTypes.ServiceDependency{
-			Condition: dependency.Condition,
-			Phases:    append([]string(nil), dependency.Phases...),
+			Condition: dependency.Condition.String(),
+			Phases:    dependency.PhaseStrings(),
 		}
 	}
 	if len(response.DependsOn) == 0 {

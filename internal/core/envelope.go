@@ -113,6 +113,22 @@ type RequirementTarget struct {
 	Name string `yaml:"name"`
 }
 
+// ServiceExtensionSpec is the typed authored Groundplane input attached to one
+// native Compose Service. The native Service remains the topology authority;
+// these fields carry only Controller behavior that Compose cannot express.
+type ServiceExtensionSpec struct {
+	Release   *ServiceReleaseSpec
+	DependsOn map[string]ServiceDependency
+}
+
+// ServiceReleaseSpec is the authored subset of x-gp-release. Current release
+// state is Controller-generated from the immutable release ledger and is not
+// accepted at the Blueprint boundary.
+type ServiceReleaseSpec struct {
+	DefaultStrategy Strategy  `yaml:"default_strategy"`
+	OnFailure       OnFailure `yaml:"on_failure,omitempty"`
+}
+
 // AttachmentSpec is one x-gp-attachments entry, keyed by attach name.
 // See blueprint.md, "x-gp-attachments".
 type AttachmentSpec struct {

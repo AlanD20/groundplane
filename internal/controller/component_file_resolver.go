@@ -89,6 +89,7 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	}
 	componentProjection, err := projectPinnedEnvironmentComponents(
 		parsed.Project,
+		parsed.ServiceExtensions,
 		identity,
 		projection,
 		parsed.Extensions.Routes,

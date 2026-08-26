@@ -16,6 +16,7 @@ import (
 // projection. It never allocates an identity or consults mutable Components.
 func projectPinnedEnvironmentComponents(
 	project *composetypes.Project,
+	serviceExtensions map[string]core.ServiceExtensionSpec,
 	identity pinnedEnvironmentIdentity,
 	projection etcd.EnvironmentComposeProjection,
 	routeSpecs []core.RouteSpec,
@@ -41,7 +42,7 @@ func projectPinnedEnvironmentComponents(
 	if err != nil {
 		return EnvironmentComponentComposeProjection{}, err
 	}
-	services, err := ProjectServiceProjection(project, identities)
+	services, err := ProjectServiceProjection(project, identities, serviceExtensions)
 	if err != nil {
 		return EnvironmentComponentComposeProjection{}, err
 	}

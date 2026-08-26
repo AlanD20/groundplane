@@ -187,6 +187,14 @@ func (s Service) Validate() error {
 			return fmt.Errorf("service-scoped entry: %w", err)
 		}
 	}
+	for name, dependency := range s.DependsOn {
+		if name == "" {
+			return fmt.Errorf("dependency target is required")
+		}
+		if err := dependency.Validate(); err != nil {
+			return fmt.Errorf("dependency %q: %w", name, err)
+		}
+	}
 	return nil
 }
 

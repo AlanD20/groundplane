@@ -272,8 +272,8 @@ func serviceDependencyResponses(values map[string]core.ServiceDependency) map[st
 	result := make(map[string]apiTypes.ServiceDependency, len(values))
 	for name, dependency := range values {
 		result[name] = apiTypes.ServiceDependency{
-			Condition: dependency.Condition,
-			Phases:    append([]string(nil), dependency.Phases...),
+			Condition: dependency.Condition.String(),
+			Phases:    dependency.PhaseStrings(),
 		}
 	}
 	return result

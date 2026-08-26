@@ -64,7 +64,7 @@ func (a *component) Render(
 		Zones: []string{zone.Name}, Command: []string{"tunnel", "--no-autoupdate", "run"},
 		Aliases: map[string][]string{zone.Name: {cloudflaredServiceName}},
 		DependsOn: map[string]core.ServiceDependency{
-			"caddy": {Condition: "service_started"},
+			"caddy": {Condition: core.ServiceDependencyStarted},
 		},
 		Restart: "unless-stopped", Replicas: 1,
 	}

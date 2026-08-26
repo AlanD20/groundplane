@@ -16,6 +16,7 @@ import (
 func ProjectServiceProjection(
 	project *types.Project,
 	identities ComposeIdentitySnapshot,
+	extensions map[string]core.ServiceExtensionSpec,
 ) ([]core.Service, error) {
 	if project == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Service projection requires a parsed Compose project")
@@ -47,9 +48,15 @@ func ProjectServiceProjection(
 		if len(aliases) == 0 {
 			aliases = nil
 		}
-		dependsOn := make(map[string]core.ServiceDependency, len(config.DependsOn))
+		extension := extensions[name]
+		dependsOn := make(map[string]core.ServiceDependency, len(config.DependsOn)+len(extension.DependsOn))
 		for dependencyName, dependency := range config.DependsOn {
-			dependsOn[dependencyName] = core.ServiceDependency{Condition: dependency.Condition}
+			dependsOn[dependencyName] = core.ServiceDependency{
+				Condition: core.ServiceDependencyCondition(dependency.Condition),
+			}
+		}
+		for dependencyName, dependency := range extension.DependsOn {
+			dependsOn[dependencyName] = dependency
 		}
 		if len(dependsOn) == 0 {
 			dependsOn = nil
@@ -59,6 +66,10 @@ func ProjectServiceProjection(
 			Zones: zones, Command: append([]string(nil), config.Command...), Aliases: aliases,
 			DependsOn: dependsOn, Expose: append([]string(nil), config.Expose...),
 			Restart: config.Restart, Replicas: config.GetScale(),
+		}
+		if extension.Release != nil {
+			service.Strategy = extension.Release.DefaultStrategy
+			service.OnFailure = extension.Release.OnFailure
 		}
 		if err := service.Validate(); err != nil {
 			return nil, errs.Wrap(errs.KindValidationFailed, err)

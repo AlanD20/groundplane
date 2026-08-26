@@ -30,6 +30,13 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 	desiredProjection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
 	zoneChanges := environmentBlueprintTestZoneChanges(t, repository, desiredProjection)
 	serviceChanges := environmentBlueprintTestServiceChanges(t, repository, desiredProjection)
+	serviceChanges[0].Record.Desired.Strategy = core.StrategyBlueGreen
+	serviceChanges[0].Record.Desired.DependsOn = map[string]core.ServiceDependency{
+		"migrate": {
+			Condition: core.ServiceDependencyCompletedSuccessfully,
+			Phases:    []core.ServiceDependencyPhase{core.ServiceDependencyPhaseDeploy},
+		},
+	}
 	routeChanges := environmentBlueprintTestRouteChanges(t, repository, desiredProjection)
 	result, err := repository.ApplyEnvironmentBlueprintWithTask(
 		ctx, project, environment, 0, revision,
@@ -61,8 +68,11 @@ func TestEnvironmentBlueprintApplyPublishesImmutableRevisionAndTaskAtomically(t 
 		t.Fatalf("newServiceRepository() error = %v", err)
 	}
 	service, err := serviceRepository.GetService(ctx, desiredProjection.Services[0].ID)
+	dependency := service.Record.Desired.DependsOn["migrate"]
 	if err != nil || service.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning ||
-		service.Revision != head.Revision {
+		service.Revision != head.Revision || service.Record.Desired.Strategy != core.StrategyBlueGreen ||
+		dependency.Condition != core.ServiceDependencyCompletedSuccessfully || len(dependency.Phases) != 1 ||
+		dependency.Phases[0] != core.ServiceDependencyPhaseDeploy {
 		t.Fatalf("GetService() = %#v, %v", service, err)
 	}
 	routeRepository, err := newRouteRepository(store)

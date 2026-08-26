@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -75,7 +76,11 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 		task.Params[etcd.TaskComposeArtifactParam] != input.ArtifactID {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle Task procedure changed")
 	}
-	artifact, err := resolver.renderPinnedEnvironmentArtifact(
+	phase := core.ServiceLifecyclePhase("")
+	if task.Type == etcd.TaskStart {
+		phase = core.ServiceLifecycleStart
+	}
+	artifact, err := resolver.renderPinnedEnvironmentArtifactForPhase(
 		ctx,
 		task,
 		pinnedEnvironmentIdentity{
@@ -88,6 +93,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 		input.Projection.BlueprintRevisionID,
 		input.ArtifactID,
 		input.Projection,
+		phase,
 		nil,
 	)
 	if err != nil {

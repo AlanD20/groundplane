@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -188,7 +189,7 @@ func validateTaskMaterializationMetadata(reference TaskMaterializationRecord, re
 		return errs.New(errs.KindValidationFailed, "task materialization digest is invalid")
 	}
 	if reference.ServiceID != "" && (validateStableID(ids.KindService, reference.ServiceID) != nil ||
-		!validEnvironmentComposeName(reference.ServiceName)) {
+		!core.ValidEnvironmentComposeName(reference.ServiceName)) {
 		return errs.New(errs.KindValidationFailed, "task materialization Service identity is invalid")
 	}
 	outputKind := entrymaterialization.OutputKind(0)

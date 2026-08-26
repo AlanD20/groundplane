@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -43,6 +44,7 @@ type AttachTaskRenderInput struct {
 	NetworkJoins        []AttachTaskNetworkJoin      `json:"network_joins"`
 	ConsumerServiceIDs  []string                     `json:"consumer_service_ids"`
 	GrantAttachIDs      []string                     `json:"grant_attach_ids,omitempty"`
+	core.ServiceDependencyPlans
 }
 
 func (repository *AttachRepository) GetAttachTaskRenderInput(
@@ -121,6 +123,13 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	}
 	if len(input.Services) == 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input has no consumer Services")
+	}
+	names := make([]string, len(input.Services))
+	for index, service := range input.Services {
+		names[index] = service.Name
+	}
+	if err := input.ServiceDependencyPlans.Validate(names); err != nil {
+		return err
 	}
 	if len(input.ConsumerServiceIDs) == 0 ||
 		validateSortedStableIDs(input.ConsumerServiceIDs, ids.KindService, "Attach consumer service_ids") != nil ||
@@ -202,6 +211,10 @@ func validateAttachTaskRenderInputScope(
 		!slices.Equal(input.Services, scope.ComposeProjection.Record.Services) ||
 		!slices.Equal(input.Networks, scope.ComposeProjection.Record.Networks) ||
 		!slices.Equal(input.Volumes, scope.ComposeProjection.Record.Volumes) ||
+		!equalServiceDependencyPlans(
+			input.ServiceDependencyPlans,
+			scope.ComposeProjection.Record.ServiceDependencyPlans,
+		) ||
 		!slices.Equal(input.ConsumerServiceIDs, record.ServiceIDs) ||
 		!slices.Equal(input.GrantAttachIDs, record.GrantAttachIDs) {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input does not match its pinned desired state")
@@ -226,6 +239,17 @@ func validateAttachTaskRenderInputScope(
 		}
 	}
 	return validateAttachTaskRenderInput(input)
+}
+
+func equalServiceDependencyPlans(left, right core.ServiceDependencyPlans) bool {
+	return equalServiceDependencyPhasePlan(left.DeployDependencyPlan, right.DeployDependencyPlan) &&
+		equalServiceDependencyPhasePlan(left.RollbackDependencyPlan, right.RollbackDependencyPlan)
+}
+
+func equalServiceDependencyPhasePlan(left, right core.ServiceDependencyPhasePlan) bool {
+	return left.Phase == right.Phase &&
+		slices.Equal(left.OrderedServices, right.OrderedServices) &&
+		slices.Equal(left.Edges, right.Edges)
 }
 
 func validAttachTaskRenderLabel(value string) bool {

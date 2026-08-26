@@ -44,9 +44,10 @@ type Extensions struct {
 
 // Result is the closed, typed output of Blueprint bundle parsing.
 type Result struct {
-	Envelope   core.Envelope
-	Extensions Extensions
-	Project    *types.Project
+	Envelope          core.Envelope
+	Extensions        Extensions
+	ServiceExtensions map[string]core.ServiceExtensionSpec
+	Project           *types.Project
 }
 
 type rootDocument struct {
@@ -170,12 +171,19 @@ func Parse(ctx context.Context, scope EnvironmentScope, bundle core.BlueprintBun
 	if resolvedResourceCount(project) > maxResolvedResources {
 		return Result{}, validationError("blueprint resolved Compose resource limit exceeded")
 	}
+	serviceExtensions, err := normalizeServiceExtensions(project)
+	if err != nil {
+		return Result{}, err
+	}
 	if err := validateReleaseGroupReferences(extensions.ReleaseGroups, project); err != nil {
 		return Result{}, err
 	}
 	normalizeProjectPaths(project, workspace)
 
-	return Result{Envelope: envelope, Extensions: extensions, Project: project}, nil
+	return Result{
+		Envelope: envelope, Extensions: extensions,
+		ServiceExtensions: serviceExtensions, Project: project,
+	}, nil
 }
 
 func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
