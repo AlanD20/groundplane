@@ -157,6 +157,10 @@ message ComposeTaskResult {
 
 message EnvironmentDirectoryTaskResult {
   string failed_step_id = 1;
+  bytes next_cursor = 2;
+  uint32 mutation_count = 3;
+  bool complete = 4;
+  bytes response_sha256 = 5;
 }
 
 enum TaskTerminal {
@@ -321,6 +325,8 @@ message ExecutionStep {
     CaddyConfigApply caddy_config_apply = 13;
     BackupSourceCapture backup_source_capture = 14;
     BackupArtifactPrune backup_artifact_prune = 15;
+    ManagedVolumeRemove managed_volume_remove = 16;
+    ManagedVolumeDirectoryRemove managed_volume_directory_remove = 17;
   }
 }
 
@@ -661,6 +667,26 @@ message EnvironmentDirectoryRemove {
 // authenticated Environment Compose artifact. It never carries a host path.
 message ManagedVolumeDirectoriesEnsure {
   string artifact_id = 1;
+  repeated string volume_ids = 2;
+  bytes intent_sha256 = 3;
+}
+
+// ManagedVolumeRemove removes exactly one Controller-owned Docker Volume
+// after the candidate Compose artifact has detached every consumer.
+message ManagedVolumeRemove {
+  string volume_id = 1;
+  string docker_name = 2;
+}
+
+// ManagedVolumeDirectoryRemove selects one immutable key beneath an artifact's
+// authorized Environment volume directory. Traversal state is delivered by
+// the task-owned removal protocol, never accepted as an operator path.
+message ManagedVolumeDirectoryRemove {
+  string artifact_id = 1;
+  string volume_id = 2;
+  string compose_key = 3;
+  bytes intent_sha256 = 4;
+  bytes cursor = 5;
 }
 
 // ManagedNetworkRemove is the closed Zone-removal procedure. The helper may
@@ -698,6 +724,10 @@ message EnvironmentDirectoryHelperResponse {
   uint32 schema = 1; // exactly 1
   int32 exit_code = 2;
   string failed_step_id = 3;
+  bytes next_cursor = 4;
+  uint32 mutation_count = 5;
+  bool complete = 6;
+  bytes response_sha256 = 7;
 }
 
 // ComposeHelperRequest is the single length-framed stdin message accepted by

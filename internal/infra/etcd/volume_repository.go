@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,7 +15,8 @@ type VolumeRepository struct{ store hierarchyStore }
 const (
 	volumeEvidencePrimary = iota
 	volumeEvidenceOwner
-	volumeEvidenceName
+	volumeEvidenceSlug
+	volumeEvidenceComposeKey
 	volumeEvidenceTargetDeletion
 	volumeBaseEvidenceCount
 )
@@ -93,7 +95,8 @@ func (repository *VolumeRepository) prepareVolumeCreation(
 	domainKeys := []string{
 		volumeKey(record.ID),
 		volumeOwnerKey(record.EnvironmentID, record.ID),
-		volumeNameKey(record.EnvironmentID, record.Name),
+		volumeSlugKey(record.EnvironmentID, record.Slug),
+		volumeComposeKey(record.EnvironmentID, record.Key),
 		deletionTombstoneKey("volume", record.ID),
 		environmentKey(environment.Record.ID),
 		projectKey(project.Record.ID),
@@ -159,11 +162,8 @@ func (repository *VolumeRepository) prepareVolumeCreation(
 			Key:   volumeOwnerKey(record.EnvironmentID, record.ID),
 			Value: []byte(record.ID),
 		},
-		{
-			Type:  MutationPut,
-			Key:   volumeNameKey(record.EnvironmentID, record.Name),
-			Value: []byte(record.ID),
-		},
+		{Type: MutationPut, Key: volumeSlugKey(record.EnvironmentID, record.Slug), Value: []byte(record.ID)},
+		{Type: MutationPut, Key: volumeComposeKey(record.EnvironmentID, record.Key), Value: []byte(record.ID)},
 		epochMutation,
 	}
 	classify := func(_ int64, values []*KeyValue) error {
@@ -188,12 +188,12 @@ func (repository *VolumeRepository) GetVolume(
 	)
 }
 
-// GetVolumeByName resolves the current scoped label to a stable Volume at one
+// GetVolumeBySlug resolves the current scoped label to a stable Volume at one
 // MVCC revision. The owner index is verified rather than trusting one pointer.
-func (repository *VolumeRepository) GetVolumeByName(
+func (repository *VolumeRepository) GetVolumeBySlug(
 	ctx context.Context,
 	environmentID string,
-	name string,
+	volumeSlug string,
 ) (Versioned[VolumeRecord], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[VolumeRecord]{}, err
@@ -201,17 +201,17 @@ func (repository *VolumeRepository) GetVolumeByName(
 	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[VolumeRecord]{}, err
 	}
-	if err := validateVolumeName(name); err != nil {
+	if err := slug.Validate("volume slug", volumeSlug); err != nil {
 		return Versioned[VolumeRecord]{}, err
 	}
 	index, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{volumeNameKey(environmentID, name)},
+		Keys: []string{volumeSlugKey(environmentID, volumeSlug)},
 	})
 	if err != nil {
 		return Versioned[VolumeRecord]{}, err
 	}
 	if index == nil || len(index.Values) != 1 {
-		return Versioned[VolumeRecord]{}, errs.New(errs.KindInternal, "volume name lookup returned invalid evidence")
+		return Versioned[VolumeRecord]{}, errs.New(errs.KindInternal, "volume slug lookup returned invalid evidence")
 	}
 	if index.Values[0] == nil {
 		return Versioned[VolumeRecord]{}, errs.New(errs.KindVolumeNotFound, "volume was not found")
@@ -224,7 +224,7 @@ func (repository *VolumeRepository) GetVolumeByName(
 		Keys: []string{
 			volumeKey(id),
 			volumeOwnerKey(environmentID, id),
-			volumeNameKey(environmentID, name),
+			volumeSlugKey(environmentID, volumeSlug),
 		},
 		Revision: index.ReadRevision,
 	})
@@ -240,8 +240,8 @@ func (repository *VolumeRepository) GetVolumeByName(
 	if err != nil {
 		return Versioned[VolumeRecord]{}, err
 	}
-	if record.ID != id || record.EnvironmentID != environmentID || record.Name != name {
-		return Versioned[VolumeRecord]{}, errs.New(errs.KindInternal, "volume name index does not match its record")
+	if record.ID != id || record.EnvironmentID != environmentID || record.Slug != volumeSlug {
+		return Versioned[VolumeRecord]{}, errs.New(errs.KindInternal, "volume slug index does not match its record")
 	}
 	return Versioned[VolumeRecord]{
 		Record: record, Revision: resolved.Values[0].ModRevision, ReadRevision: resolved.ReadRevision,
@@ -281,7 +281,8 @@ func volumeWriteConditions(
 	conditions := []Condition{
 		{Key: volumeKey(record.ID)},
 		{Key: volumeOwnerKey(record.EnvironmentID, record.ID)},
-		{Key: volumeNameKey(record.EnvironmentID, record.Name)},
+		{Key: volumeSlugKey(record.EnvironmentID, record.Slug)},
+		{Key: volumeComposeKey(record.EnvironmentID, record.Key)},
 		{Key: deletionTombstoneKey("volume", record.ID)},
 	}
 	return conditions
@@ -328,8 +329,11 @@ func classifyVolumeWriteConflict(
 	if values[volumeEvidencePrimary] != nil || values[volumeEvidenceOwner] != nil {
 		return errs.New(errs.KindStateConflict, "volume stable identity is already in use")
 	}
-	if values[volumeEvidenceName] != nil {
-		return errs.New(errs.KindNameConflict, "volume name is already in use")
+	if values[volumeEvidenceSlug] != nil {
+		return errs.New(errs.KindNameConflict, "volume slug is already in use")
+	}
+	if values[volumeEvidenceComposeKey] != nil {
+		return errs.New(errs.KindNameConflict, "volume key is already reserved")
 	}
 	if values[volumeEvidenceTargetDeletion] != nil {
 		return errs.New(errs.KindResourceInUse, "volume deletion is in progress")

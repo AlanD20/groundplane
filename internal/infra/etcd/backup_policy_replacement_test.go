@@ -508,7 +508,9 @@ func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) 
 	for index := range candidate.Sources {
 		sourceID := ids.NewAt(ids.KindBackupSource, candidate.Replacement.UpdatedAt, int64(2600+index))
 		volumeID := ids.NewAt(ids.KindVolume, candidate.Replacement.UpdatedAt, int64(2700+index))
-		volume, err := NewVolumeRecord(fixture.environment.Record.ID, volumeID, "volume-"+sourceID)
+		volume, err := NewVolumeRecord(
+			fixture.environment.Record.ID, volumeID, "volume-"+sourceID, "volume-"+sourceID,
+		)
 		if err != nil {
 			t.Fatalf("NewVolumeRecord() error = %v", err)
 		}
@@ -602,6 +604,7 @@ func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backup
 		volume, err := NewVolumeRecord(
 			environment.Record.ID,
 			ids.NewAt(ids.KindVolume, now, 2400),
+			"backup-data",
 			"backup-data",
 		)
 		if err != nil {

@@ -244,7 +244,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	} else if evidence.Values[5] == nil || evidence.Values[6] == nil ||
 		evidence.Values[5].ModRevision != expectedBlueprintRevision ||
 		evidence.Values[6].ModRevision != expectedBlueprintRevision ||
-		len(task.Params) != 4 || task.Params[EnvironmentBlueprintRevisionParam] == "" ||
+		len(task.Params) != 4 || task.Params[EnvironmentDesiredRevisionParam] == "" ||
 		task.Params[TaskMaterializationEnvironmentParam] != environment.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,

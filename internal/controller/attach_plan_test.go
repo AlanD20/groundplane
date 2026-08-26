@@ -90,7 +90,7 @@ type attachPlanFixture struct {
 func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attachPlanFixture {
 	t.Helper()
 	now := time.Date(2026, 8, 22, 18, 0, 0, 0, time.UTC)
-	reader, _ := blueprintPlanTestState()
+	reader, _ := blueprintPlanTestState(t)
 	attachID := ids.NewAt(ids.KindAttach, now, 1)
 	grantID := ids.NewAt(ids.KindAttach, now, 2)
 	taskID := ids.NewAt(ids.KindTask, now, 3)
@@ -151,7 +151,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		RenderGeneration:    reader.projection.RenderGeneration,
 		Services:            append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Services...),
 		Networks:            append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Networks...),
-		Volumes:             append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Volumes...),
+		Volumes:             append([]etcd.EnvironmentVolumeIdentity(nil), reader.projection.Volumes...),
 		NetworkJoins: []etcd.AttachTaskNetworkJoin{
 			{NetworkID: networkID, ServiceIDs: []string{consumerServiceID}},
 		},

@@ -23,6 +23,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
+	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
@@ -31,7 +32,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
+	"github.com/AlanD20/groundplane/internal/volume"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -354,23 +357,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector reads: %w", err)
 	}
-	volumeRecords, err := etcd.NewVolumeRepository(store)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize volume repository", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	volumeReadRepository, err := newDurableVolumeReadRepository(volumeRecords)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize volume read repository", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	volumeReads, err := newVolumeReadService(volumeReadRepository)
+	volumeReads, err := volume.NewReadService(hierarchyRecords)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -806,13 +793,19 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backing Zone cascade: %w", err)
 	}
-	environmentBlueprintIdempotency, err := newDurableEnvironmentBlueprintIdempotency(intentCoordinator, idempotency)
+	environmentBlueprintIdempotency, err := desiredrevision.NewIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint idempotency: %w", err)
 	}
+	desiredRevisionRecords, err := desiredrevisionstore.NewRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize desired revision repository: %w", err)
+	}
 	environmentBlueprintRepository, err := newDurableEnvironmentBlueprintRepository(
 		hierarchyRecords,
+		desiredRevisionRecords,
 		zoneRecords,
 		serviceRecords,
 		routeRecords,
@@ -832,6 +825,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
+	}
+	volumeMutations, err := volume.NewMutationService(
+		cfg.Storage.VolumeRoot,
+		environmentBlueprintRepository,
+		intentCoordinator,
+		idempotency,
+		volumeReads,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Volume mutations: %w", err)
 	}
 	tenantCreationIdempotency, err := newDurableTenantCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -1092,6 +1096,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackupPolicies:        backupPolicies,
 		BackupPolicyMutations: backupPolicies,
 		Volumes:               volumeReads,
+		VolumeMutations:       volumeMutations,
 		EnvironmentMutations:  environmentMutations,
 		EnvironmentChanges:    environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,

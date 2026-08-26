@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -31,13 +32,16 @@ func TestVolumeListResolvesEnvironmentLabel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_ = executeNoun(
+	output := executeNoun(
 		t,
 		newVolumeCmd(),
 		server.URL,
 		Scope{Tenant: "acme", Project: "storefront", Environment: "production"},
 		"list",
 	)
+	if !strings.Contains(output, "uploads") || !strings.Contains(output, "uploads-data") {
+		t.Fatalf("list output = %q", output)
+	}
 }
 
 // Rationale: global --id makes the Environment scope stable already, so the
@@ -68,7 +72,8 @@ func TestVolumeListHonorsGlobalIDMode(t *testing.T) {
 
 func volumePageJSON() string {
 	return fmt.Sprintf(
-		`{"items":[{"id":%q,"name":"uploads"}],"next_cursor":""}`,
+		`{"items":[{"id":%q,"environment_id":%q,"slug":"uploads","key":"uploads-data","state":"active"}],"next_cursor":""}`,
 		backupPolicyVolumeID,
+		backupPolicyTestEnvironmentID,
 	)
 }

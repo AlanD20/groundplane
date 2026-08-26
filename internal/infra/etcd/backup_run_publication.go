@@ -557,7 +557,7 @@ func (repository *BackupRuntimeRepository) prepareManualVolumeSource(
 	composeVolumeKey := ""
 	for _, identity := range projection.Volumes {
 		if identity.ID == volume.ID {
-			composeVolumeKey = identity.Name
+			composeVolumeKey = identity.Key
 			break
 		}
 	}
@@ -568,7 +568,7 @@ func (repository *BackupRuntimeRepository) prepareManualVolumeSource(
 		)
 	}
 	services, err := repository.manualBackupVolumeConsumers(
-		ctx, environmentID, volume.Name, serviceKeys, fixedRevision,
+		ctx, environmentID, volume.Key, serviceKeys, fixedRevision,
 	)
 	if err != nil {
 		return BackupRunSourceAttemptRecord{}, err

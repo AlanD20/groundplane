@@ -712,7 +712,7 @@ func attachDetachRaceEnvelope(
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
 		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
-		Volumes:             append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		ConsumerServiceIDs:  append([]string(nil), current.Record.ServiceIDs...),
 		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),
 	}

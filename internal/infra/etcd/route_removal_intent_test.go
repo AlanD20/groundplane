@@ -17,7 +17,7 @@ func TestRouteRemovalIntentCodecPinsSuppressionCandidate(t *testing.T) {
 	routeID := ids.NewAt(ids.KindRoute, now, 2)
 	projection := Versioned[EnvironmentComposeProjection]{
 		Record: EnvironmentComposeProjection{
-			EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 3),
+			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 3),
 			RenderGeneration: 4,
 			Routes:           []EnvironmentRouteIdentity{{ID: routeID, Host: "app.example.com", Path: "/app/*"}},
 		},
@@ -57,7 +57,7 @@ func TestRouteRemovalIntentWithoutAppliedRouteHasNoProjectionCandidate(t *testin
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	projection := Versioned[EnvironmentComposeProjection]{
 		Record: EnvironmentComposeProjection{
-			EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 2),
+			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 2),
 			RenderGeneration: 3,
 		},
 		Revision: 7, ReadRevision: 7,

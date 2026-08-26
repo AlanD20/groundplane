@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
@@ -163,7 +164,7 @@ x-gp-components:
 			ProvisioningState: etcd.EnvironmentProvisioningReady,
 		},
 		revision: etcd.EnvironmentBlueprintRevision{
-			EnvironmentID: identity.EnvironmentID, RevisionID: projection.BlueprintRevisionID,
+			EnvironmentID: identity.EnvironmentID, RevisionID: projection.RevisionID,
 			RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
 			Files:     []etcd.EnvironmentBlueprintFile{{Path: "blueprint.yaml", Content: content}},
 			CreatedAt: time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC),
@@ -177,7 +178,7 @@ x-gp-components:
 	resolver.componentCatalog = catalog
 	actual, err := resolver.ResolveComponentFile(context.Background(), identity.EnvironmentID,
 		etcd.TaskComponentFileValueReference{
-			RevisionID:  projection.BlueprintRevisionID,
+			RevisionID:  projection.RevisionID,
 			ComponentID: projection.Components[0].Desired.ID,
 			Path:        "components/router/config",
 		})
@@ -229,7 +230,7 @@ func componentPlanProjectionInput(
 			projectID + "/" + environmentID,
 	}
 	projection := etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, at, 8), RenderGeneration: 1,
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, at, 8), RenderGeneration: 1,
 		Services: []etcd.EnvironmentComposeIdentity{{ID: apiID, Name: "api"}, {ID: caddyServiceID, Name: "caddy"}},
 		Networks: []etcd.EnvironmentComposeIdentity{{ID: ids.NewAt(ids.KindNetwork, at, 9), Name: "frontend"}},
 		Routes: []etcd.EnvironmentRouteIdentity{{
@@ -237,6 +238,18 @@ func componentPlanProjectionInput(
 		}},
 		Components: []etcd.ComponentRecord{caddy, tunnel},
 	}
+	projection.ComposeArtifact = normalizedProjectionArtifactFixture(
+		t,
+		ids.NewAt(ids.KindConfig, at, 11),
+		environmentID,
+		identity.AuthorizedVolumeDir,
+		[]byte("services: {}\nnetworks: {}\n"),
+		[]*agentpb.ComposeService{
+			{ServiceId: apiID, ComposeName: "api"},
+			{ServiceId: caddyServiceID, ComposeName: "caddy"},
+		},
+		nil,
+	)
 	routeSpecs := []core.RouteSpec{{
 		Hostname: "app.example.com", Path: "/app/*", Target: "api", TargetPort: 8080, Exposure: "public",
 	}}

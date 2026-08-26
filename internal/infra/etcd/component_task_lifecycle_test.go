@@ -286,7 +286,7 @@ func seedComponentRetryProjection(
 	})
 	projection := EnvironmentComposeProjection{
 		EnvironmentID:       task.Target,
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, task.CreatedAt, 1282),
+		RevisionID: ids.NewAt(ids.KindTask, task.CreatedAt, 1282),
 		RenderGeneration:    uint64(task.RenderGeneration),
 		Components:          components,
 	}

@@ -132,7 +132,7 @@ func TestDeleteEnvironmentBuildsBlueprintAwareRemovalTask(t *testing.T) {
 		},
 		projection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
 			Record: etcd.EnvironmentComposeProjection{
-				EnvironmentID: environmentID, BlueprintRevisionID: revisionID, RenderGeneration: 7,
+				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 7,
 			},
 			Revision: 41, ReadRevision: 41,
 		},
@@ -156,7 +156,7 @@ func TestDeleteEnvironmentBuildsBlueprintAwareRemovalTask(t *testing.T) {
 	if response.Status != http.StatusAccepted || repository.expectedBlueprintRevision != 41 ||
 		task.Type != etcd.TaskRemove || task.Target != environmentID || task.RenderGeneration != 7 ||
 		len(task.Steps) != 2 || len(task.Params) != 4 ||
-		task.Params[etcd.EnvironmentBlueprintRevisionParam] != revisionID ||
+		task.Params[etcd.EnvironmentDesiredRevisionParam] != revisionID ||
 		task.Params[etcd.TaskMaterializationEnvironmentParam] != environmentID ||
 		task.Params[controller.EnvironmentRemoveVolumeDirectoryParam] != repository.environment.Record.VolumeDir ||
 		ids.Validate(ids.KindConfig, task.Params[controller.EnvironmentBlueprintArtifactParam]) != nil {

@@ -56,10 +56,18 @@ func (reader *blueprintPlanReader) GetEnvironmentComposeProjection(
 	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: reader.projection}, true, nil
 }
 
+func (reader *blueprintPlanReader) GetEnvironmentComposeProjectionRevision(
+	context.Context,
+	string,
+	string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: reader.projection}, true, nil
+}
+
 // Rationale: a Controller restart must reproduce the exact canonical artifact
 // and typed pre-apply procedure from immutable Blueprint state, not a stored render.
 func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
-	reader, task := blueprintPlanTestState()
+	reader, task := blueprintPlanTestState(t)
 	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
@@ -82,13 +90,14 @@ func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
 	}
 }
 
-func blueprintPlanTestState() (*blueprintPlanReader, etcd.TaskRecord) {
+func blueprintPlanTestState(t *testing.T) (*blueprintPlanReader, etcd.TaskRecord) {
 	const (
 		tenantID      = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		projectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		taskID        = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		artifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		planID        = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	)
 	at := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
 	content := []byte(`kind: environment
@@ -120,26 +129,56 @@ volumes:
 			Files:          []etcd.EnvironmentBlueprintFile{{Path: "blueprint.yaml", Content: content}}, CreatedAt: at,
 		},
 		projection: etcd.EnvironmentComposeProjection{
-			EnvironmentID: environmentID, BlueprintRevisionID: taskID, RenderGeneration: 1,
+			EnvironmentID: environmentID, RevisionID: taskID, RenderGeneration: 1,
 			Services: []etcd.EnvironmentComposeIdentity{{
 				ID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "api",
 			}},
 			Networks: []etcd.EnvironmentComposeIdentity{{
 				ID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "frontend",
 			}},
-			Volumes: []etcd.EnvironmentComposeIdentity{{
-				ID: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "app-data",
+			Volumes: []etcd.EnvironmentVolumeIdentity{{
+				ID: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", Slug: "app-data", Key: "app-data",
 			}},
 		},
 	}
+	reader.projection.ComposeArtifact = normalizedProjectionArtifactFixture(
+		t,
+		artifactID,
+		environmentID,
+		reader.environment.VolumeDir,
+		[]byte("services: {}\nnetworks: {}\nvolumes:\n  app-data: {}\n"),
+		[]*agentpb.ComposeService{{
+			ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ComposeName: "api", ExpectedReplicas: 1,
+			ExpectedLabels: labelPairs(map[string]string{
+				composeLabelEnvironmentID: environmentID,
+				composeLabelKind:          "service",
+				composeLabelManaged:       "true",
+				composeLabelPlanID:        planID,
+				composeLabelProjectID:     projectID,
+				composeLabelRenderGen:     "1",
+				composeLabelServiceID:     "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				composeLabelTenantID:      tenantID,
+			}),
+		}},
+		[]*agentpb.ComposeVolume{{
+			VolumeId: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", ComposeName: "app-data",
+			DockerName: "gp_vol_vol_01arz3ndektsv4rrffq69g5fav",
+			ExpectedLabels: labelPairs(volumeArtifactOwnershipLabels(environmentID, VolumeArtifactMutation{
+				PlanID: planID, TenantID: tenantID, ProjectID: projectID, RenderGeneration: 1,
+			})),
+		}},
+	)
+	intentDigest := sha256.Sum256([]byte("protected Blueprint intent"))
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Executor: etcd.TaskExecutorAgent, PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Executor: etcd.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: 1, Type: etcd.TaskUpdate, Target: environmentID,
 		Params: map[string]string{
-			etcd.EnvironmentBlueprintRevisionParam:   taskID,
-			etcd.TaskMaterializationEnvironmentParam: environmentID,
-			EnvironmentBlueprintArtifactParam:        artifactID,
+			etcd.EnvironmentDesiredRevisionParam:       taskID,
+			etcd.TaskMaterializationEnvironmentParam:   environmentID,
+			EnvironmentBlueprintArtifactParam:          artifactID,
+			EnvironmentBlueprintIntroducedVolumesParam: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			VolumeTaskIntentSHA256Param:                hex.EncodeToString(intentDigest[:]),
 		},
 		Steps: []etcd.TaskStepRecord{
 			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},

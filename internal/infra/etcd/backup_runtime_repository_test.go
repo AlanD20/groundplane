@@ -4826,7 +4826,7 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 		t.Fatalf("pinned Volume decode corruption error = %v", err)
 	}
 	driftedValue, err := encodeVolumeRecord(VolumeRecord{
-		ID: source.TargetID, EnvironmentID: testBackupBackingEnvironmentID, Name: "data",
+		ID: source.TargetID, EnvironmentID: testBackupBackingEnvironmentID, Slug: "data", Key: "data",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -4853,10 +4853,10 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	projectionRevision := int64(72)
 	projectionValue, err := encodeEnvironmentComposeProjection(EnvironmentComposeProjection{
 		EnvironmentID:       environment.ID,
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, run.CreatedAt, 8101),
+		RevisionID: ids.NewAt(ids.KindTask, run.CreatedAt, 8101),
 		RenderGeneration:    1,
-		Volumes: []EnvironmentComposeIdentity{{
-			ID: source.TargetID, Name: "data",
+		Volumes: []EnvironmentVolumeIdentity{{
+			ID: source.TargetID, Slug: "data", Key: "data",
 		}},
 	})
 	if err != nil {
@@ -4864,7 +4864,7 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	}
 	defer clear(projectionValue)
 	volumeValue, err := encodeVolumeRecord(VolumeRecord{
-		ID: source.TargetID, EnvironmentID: environment.ID, Name: "data",
+		ID: source.TargetID, EnvironmentID: environment.ID, Slug: "data", Key: "data",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -4930,7 +4930,7 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	serviceVolumeValue, err := encodeVolumeRecord(VolumeRecord{
-		ID: source.TargetID, EnvironmentID: service.EnvironmentID, Name: "data",
+		ID: source.TargetID, EnvironmentID: service.EnvironmentID, Slug: "data", Key: "data",
 	})
 	if err != nil {
 		t.Fatal(err)

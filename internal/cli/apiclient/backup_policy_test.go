@@ -94,7 +94,7 @@ func TestListVolumesSendsEnvironmentQuery(t *testing.T) {
 		writer.WriteHeader(http.StatusOK)
 		if _, err := io.WriteString(
 			writer,
-			`{"items":[{"id":"vol_1","name":"uploads"}],"next_cursor":"after"}`,
+			`{"items":[{"id":"vol_1","environment_id":"env_1","slug":"uploads","key":"uploads-data","state":"active"}],"next_cursor":"after"}`,
 		); err != nil {
 			t.Errorf("write response: %v", err)
 		}

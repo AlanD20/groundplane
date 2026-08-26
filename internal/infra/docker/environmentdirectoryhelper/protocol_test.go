@@ -28,20 +28,18 @@ const (
 type fakeCreator struct {
 	root      string
 	directory string
-	volumes   []string
+	volumes   []ManagedVolume
 	removed   bool
 	err       error
 }
 
 func (creator *fakeCreator) EnsureManagedVolumes(
 	_ context.Context,
-	root string,
-	directory string,
-	volumes []string,
+	request ManagedVolumeEnsureRequest,
 ) error {
-	creator.root = root
-	creator.directory = directory
-	creator.volumes = append([]string(nil), volumes...)
+	creator.root = request.VolumeRoot
+	creator.directory = request.VolumeDir
+	creator.volumes = append([]ManagedVolume(nil), request.Volumes...)
 	return creator.err
 }
 
@@ -117,7 +115,7 @@ func TestExecuteEnsuresManagedVolumeDirectoriesFromArtifact(t *testing.T) {
 		t.Fatalf("Execute(managed volumes) = %#v, %v", response, err)
 	}
 	if creator.root != testVolumeRoot || creator.directory != testVolumeDir ||
-		len(creator.volumes) != 1 || creator.volumes[0] != "app-data" {
+		len(creator.volumes) != 1 || creator.volumes[0].ID != testVolumeID || creator.volumes[0].Key != "app-data" {
 		t.Fatalf("managed volume creator = %#v", creator)
 	}
 }
@@ -183,7 +181,9 @@ func validManagedVolumeRequest(t *testing.T) *agentpb.EnvironmentDirectoryHelper
 		Steps: []*agentpb.ExecutionStep{{
 			StepId: testStepID, TimeoutSeconds: 30,
 			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
-				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{ArtifactId: testArtifactID},
+				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
+					ArtifactId: testArtifactID, VolumeIds: []string{testVolumeID}, IntentSha256: make([]byte, 32),
+				},
 			},
 		}},
 	})

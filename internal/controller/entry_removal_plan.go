@@ -60,7 +60,7 @@ func (resolver *TaskPlanResolver) PrepareEntryRemovalTask(
 	task.Params = map[string]string{
 		etcd.TaskEntryEnvironmentParam:           intent.EnvironmentID,
 		etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		etcd.EnvironmentBlueprintRevisionParam:   intent.CandidateProjection.BlueprintRevisionID,
+		etcd.EnvironmentDesiredRevisionParam:   intent.CandidateProjection.RevisionID,
 		etcd.TaskComposeArtifactParam:            procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
@@ -151,11 +151,11 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection
-	revisionID := task.Params[etcd.EnvironmentBlueprintRevisionParam]
+	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[etcd.TaskComposeArtifactParam]
 	if task.Params[etcd.TaskEntryEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[etcd.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
-		revisionID != candidate.BlueprintRevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
+		revisionID != candidate.RevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
 		ids.Validate(ids.KindConfig, artifactID) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task parameters are invalid")
 	}

@@ -409,7 +409,7 @@ func entryDeletionTestRecords(
 		task.Params = map[string]string{
 			TaskEntryEnvironmentParam:           entry.Record.EnvironmentID,
 			TaskMaterializationEnvironmentParam: entry.Record.EnvironmentID,
-			EnvironmentBlueprintRevisionParam:   projection.Record.BlueprintRevisionID,
+			EnvironmentDesiredRevisionParam:   projection.Record.RevisionID,
 			TaskComposeArtifactParam: ids.NewAt(
 				ids.KindConfig, createdAt, 9203,
 			),
@@ -443,7 +443,7 @@ func entryDeletionTestProjection(
 	t.Helper()
 	projection := EnvironmentComposeProjection{
 		EnvironmentID:       entry.Record.EnvironmentID,
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, serviceRecordTestTime().Add(5*time.Hour), 9150),
+		RevisionID: ids.NewAt(ids.KindTask, serviceRecordTestTime().Add(5*time.Hour), 9150),
 		RenderGeneration:    4,
 		Entries:             []EntryRecord{cloneEntryRecord(entry.Record)},
 	}

@@ -26,7 +26,7 @@ func TestEntryRemovalIntentCodecPinsGenerationCandidate(t *testing.T) {
 	}
 	projection := Versioned[EnvironmentComposeProjection]{
 		Record: EnvironmentComposeProjection{
-			EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 4),
+			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 4),
 			RenderGeneration: 4, Entries: []EntryRecord{record},
 		},
 		Revision: 9, ReadRevision: 10,
@@ -66,7 +66,7 @@ func TestEntryRemovalIntentWithoutAppliedEntryHasNoProjectionCandidate(t *testin
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	projection := Versioned[EnvironmentComposeProjection]{
 		Record: EnvironmentComposeProjection{
-			EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 2),
+			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 2),
 			RenderGeneration: 3,
 		},
 		Revision: 7, ReadRevision: 7,

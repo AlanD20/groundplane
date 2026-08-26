@@ -49,6 +49,11 @@ type attachMutationRepository interface {
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjectionRevision(
+		context.Context,
+		string,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
 	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
 	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
@@ -692,7 +697,7 @@ func (service *attachMutationService) resolveAttachScope(
 	if err != nil {
 		return etcd.AttachCreateScope{}, nil, nil, err
 	}
-	if !exists || projection.Record.BlueprintRevisionID != revision.Record.RevisionID {
+	if !exists || projection.Record.RevisionID != revision.Record.RevisionID {
 		return etcd.AttachCreateScope{}, nil, nil, errs.New(
 			errs.KindStateConflict,
 			"Attach requires the current Environment Compose projection",
@@ -971,6 +976,14 @@ func (repository *durableAttachMutationRepository) GetEnvironment(
 	id string,
 ) (etcd.Versioned[etcd.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
+}
+
+func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjectionRevision(
+	ctx context.Context,
+	environmentID string,
+	revisionID string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return repository.hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 }
 
 func (repository *durableAttachMutationRepository) GetService(

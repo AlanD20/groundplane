@@ -10,7 +10,6 @@
     {"path": "console/src/features/platform-component/platform-component-page.tsx", "lines": 684},
     {"path": "console/src/lib/mock-data.ts", "lines": 1316},
     {"path": "console/src/lib/store.tsx", "lines": 3250},
-    {"path": "console/src/lib/types.ts", "lines": 605},
     {"path": "internal/app/attach_mutations.go", "lines": 1178},
     {"path": "internal/app/controller.go", "lines": 1223},
     {"path": "internal/app/environment_blueprint.go", "lines": 1351},

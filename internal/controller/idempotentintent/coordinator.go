@@ -91,6 +91,27 @@ func (evidence ProtectedEvidence) DurableRecord() (infraetcd.ProtectedIntentReco
 	return result, nil
 }
 
+// MatchesDurable compares a candidate with private staged evidence at the
+// encryption boundary. Callers receive only equality and never plaintext.
+func (coordinator *Coordinator) MatchesDurable(
+	ctx context.Context,
+	candidate ProtectedEvidence,
+	existing infraetcd.ProtectedIntentRecord,
+) (bool, error) {
+	if coordinator == nil || coordinator.protector == nil {
+		return false, internalError("coordinator is not initialized")
+	}
+	candidateEnvelope, err := restoreProtectedIntent(candidate.record)
+	if err != nil {
+		return false, err
+	}
+	existingEnvelope, err := restoreProtectedIntent(existing)
+	if err != nil {
+		return false, err
+	}
+	return CompareProtected(ctx, coordinator.protector, existingEnvelope, candidateEnvelope)
+}
+
 // ResolveKnown classifies one same-revision transaction result. It never
 // rereads mutable state after a known compare failure.
 func (coordinator *Coordinator) ResolveKnown(

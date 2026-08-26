@@ -39,7 +39,7 @@ type AttachTaskRenderInput struct {
 	RenderGeneration    uint64                       `json:"render_generation"`
 	Services            []EnvironmentComposeIdentity `json:"services"`
 	Networks            []EnvironmentComposeIdentity `json:"networks,omitempty"`
-	Volumes             []EnvironmentComposeIdentity `json:"volumes,omitempty"`
+	Volumes             []EnvironmentVolumeIdentity  `json:"volumes,omitempty"`
 	NetworkJoins        []AttachTaskNetworkJoin      `json:"network_joins"`
 	ConsumerServiceIDs  []string                     `json:"consumer_service_ids"`
 	GrantAttachIDs      []string                     `json:"grant_attach_ids,omitempty"`
@@ -139,7 +139,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	if err := validateEnvironmentComposeIdentities(ids.KindNetwork, input.Networks); err != nil {
 		return err
 	}
-	if err := validateEnvironmentComposeIdentities(ids.KindVolume, input.Volumes); err != nil {
+	if err := validateEnvironmentVolumeIdentities(input.Volumes); err != nil {
 		return err
 	}
 	ownedNetworkIDs := make(map[string]struct{}, len(input.Networks))
@@ -185,7 +185,7 @@ func validateAttachTaskRenderInputScope(
 	if scope.Tenant.Record.ID != scope.Project.Record.TenantID ||
 		scope.BlueprintRevision.Record.EnvironmentID != record.EnvironmentID ||
 		scope.ComposeProjection.Record.EnvironmentID != record.EnvironmentID ||
-		scope.ComposeProjection.Record.BlueprintRevisionID != scope.BlueprintRevision.Record.RevisionID {
+		scope.ComposeProjection.Record.RevisionID != scope.BlueprintRevision.Record.RevisionID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach render hierarchy is invalid")
 	}
 	if input.PlanID != task.PlanID || input.AttachID != record.ID || input.AttachName != record.Name ||

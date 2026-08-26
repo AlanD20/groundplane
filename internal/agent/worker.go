@@ -190,8 +190,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	reconciliationRequired := false
 	mutationAttempted := false
 	projects := make(map[string]*agentpb.ObservedProject)
-	environmentDirectoryTask := reservation.assignment.Plan.Operation ==
-		agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
+	environmentDirectoryTask := usesEnvironmentDirectory(reservation.assignment.Plan)
+	var environmentDirectoryResult *agentpb.EnvironmentDirectoryTaskResult
 	for _, step := range reservation.assignment.Plan.Steps {
 		if err != nil {
 			break
@@ -226,7 +226,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 				exitCode = stepResult.ExitCode
 			}
 		} else if (step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
-			step.GetManagedVolumeDirectoriesEnsure() != nil) && p.environmentDirectories != nil {
+			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil) &&
+			p.environmentDirectories != nil {
 			var stepResult environmentDirectoryStepResult
 			stepResult, err = p.environmentDirectories.executeStep(stepCtx, reservation.assignment, step)
 			if stepResult.ExitCode != 0 {
@@ -234,6 +235,12 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			}
 			if stepResult.FailedStepID != "" {
 				failedStepID = stepResult.FailedStepID
+			}
+			if step.GetManagedVolumeDirectoryRemove() != nil {
+				environmentDirectoryResult = &agentpb.EnvironmentDirectoryTaskResult{
+					NextCursor: append([]byte(nil), stepResult.NextCursor...), MutationCount: stepResult.MutationCount,
+					Complete: stepResult.Complete, ResponseSha256: append([]byte(nil), stepResult.ResponseSHA256...),
+				}
 			}
 		} else if p.compose == nil {
 			err = p.executeStep(stepCtx, step)
@@ -277,6 +284,12 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	}
 	if environmentDirectoryTask {
 		result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{FailedStepId: failedStepID}
+		if environmentDirectoryResult != nil {
+			result.EnvironmentDirectory.NextCursor = environmentDirectoryResult.NextCursor
+			result.EnvironmentDirectory.MutationCount = environmentDirectoryResult.MutationCount
+			result.EnvironmentDirectory.Complete = environmentDirectoryResult.Complete
+			result.EnvironmentDirectory.ResponseSha256 = environmentDirectoryResult.ResponseSha256
+		}
 	} else {
 		result.Compose = composeTaskResult(projects, failedStepID, diagnostic, reconciliationRequired)
 	}
@@ -383,7 +396,7 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 				TaskID:       reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
 				Terminal: TaskTerminalAborted,
 			}
-			if reservation.assignment.Plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
+			if usesEnvironmentDirectory(reservation.assignment.Plan) {
 				result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{}
 			} else {
 				result.Compose = &agentpb.ComposeTaskResult{
@@ -547,10 +560,12 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 	case *agentpb.ExecutionStep_ComposeApply, *agentpb.ExecutionStep_ComposeStop,
 		*agentpb.ExecutionStep_ComposeRemove, *agentpb.ExecutionStep_WaitHealthy,
 		*agentpb.ExecutionStep_ManagedNetworkRemove,
+		*agentpb.ExecutionStep_ManagedVolumeRemove,
 		*agentpb.ExecutionStep_CaddyConfigApply,
 		*agentpb.ExecutionStep_EnvironmentDirectoryCreate,
 		*agentpb.ExecutionStep_EnvironmentDirectoryRemove,
 		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,
+		*agentpb.ExecutionStep_ManagedVolumeDirectoryRemove,
 		*agentpb.ExecutionStep_MaterializeFile, *agentpb.ExecutionStep_AdapterProcedure,
 		*agentpb.ExecutionStep_BackupSourceCapture:
 		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
@@ -565,4 +580,17 @@ func hashForPlan(plan *agentpb.ExecutionPlan) PlanHash {
 		copy(hash[:], plan.PlanHash)
 	}
 	return hash
+}
+
+func usesEnvironmentDirectory(plan *agentpb.ExecutionPlan) bool {
+	if plan == nil {
+		return false
+	}
+	for _, step := range plan.Steps {
+		if step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
+			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil {
+			return true
+		}
+	}
+	return false
 }

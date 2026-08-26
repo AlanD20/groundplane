@@ -1703,7 +1703,7 @@ func validateBackupVolumePublicationEvidence(
 		serviceKeys = make(map[string]string, len(projection.Services))
 		for _, identity := range projection.Volumes {
 			volumeKeyMatches = volumeKeyMatches ||
-				identity.ID == volume.ID && identity.Name == snapshot.ComposeVolumeKey
+				identity.ID == volume.ID && identity.Key == snapshot.ComposeVolumeKey
 		}
 		for _, identity := range projection.Services {
 			serviceKeys[identity.ID] = identity.Name
@@ -1729,7 +1729,7 @@ func validateBackupVolumePublicationEvidence(
 		}
 		mountPaths := make([]string, 0)
 		for _, mount := range service.Desired.Mounts {
-			if mount.Volume == volume.Name {
+			if mount.Volume == volume.ID {
 				mountPaths = append(mountPaths, mount.Mount)
 			}
 		}

@@ -1,19 +1,36 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type EnvironmentComposeIdentity struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type EnvironmentVolumeIdentity struct {
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	Key  string `json:"key"`
+}
+
+type EnvironmentServiceVolumeMount struct {
+	ServiceID string `json:"service_id"`
+	VolumeID  string `json:"volume_id"`
+	Target    string `json:"target"`
+	ReadOnly  bool   `json:"read_only"`
 }
 
 type EnvironmentRouteIdentity struct {
@@ -26,16 +43,18 @@ type EnvironmentRouteIdentity struct {
 // needed to reproduce one Environment render. Named collections are sorted by
 // Name, Routes by host/path, and Components by kind.
 type EnvironmentComposeProjection struct {
-	EnvironmentID       string                       `json:"environment_id"`
-	BlueprintRevisionID string                       `json:"blueprint_revision_id"`
-	RenderGeneration    uint64                       `json:"render_generation"`
-	Services            []EnvironmentComposeIdentity `json:"services,omitempty"`
-	Networks            []EnvironmentComposeIdentity `json:"networks,omitempty"`
-	Volumes             []EnvironmentComposeIdentity `json:"volumes,omitempty"`
-	Routes              []EnvironmentRouteIdentity   `json:"routes,omitempty"`
-	SuppressedRoutes    []EnvironmentRouteIdentity   `json:"suppressed_routes,omitempty"`
-	Components          []ComponentRecord            `json:"components,omitempty"`
-	Entries             []EntryRecord                `json:"entries,omitempty"`
+	EnvironmentID    string                          `json:"environment_id"`
+	RevisionID       string                          `json:"blueprint_revision_id"`
+	RenderGeneration uint64                          `json:"render_generation"`
+	ComposeArtifact  []byte                          `json:"compose_artifact"`
+	Services         []EnvironmentComposeIdentity    `json:"services,omitempty"`
+	Networks         []EnvironmentComposeIdentity    `json:"networks,omitempty"`
+	Volumes          []EnvironmentVolumeIdentity     `json:"volumes,omitempty"`
+	VolumeMounts     []EnvironmentServiceVolumeMount `json:"volume_mounts,omitempty"`
+	Routes           []EnvironmentRouteIdentity      `json:"routes,omitempty"`
+	SuppressedRoutes []EnvironmentRouteIdentity      `json:"suppressed_routes,omitempty"`
+	Components       []ComponentRecord               `json:"components,omitempty"`
+	Entries          []EntryRecord                   `json:"entries,omitempty"`
 }
 
 func environmentComposeProjectionKey(environmentID string) string {
@@ -52,33 +71,178 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
-	result, err := repository.store.Get(ctx, environmentComposeProjectionKey(environmentID))
+	head, err := repository.store.Get(ctx, environmentBlueprintHeadKey(environmentID))
 	if err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
-	if result == nil {
+	if head == nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, errs.New(
 			errs.KindInternal,
-			"Environment Compose projection read is empty",
+			"Environment desired head read is empty",
 		)
 	}
-	if result.Entry == nil {
-		return Versioned[EnvironmentComposeProjection]{ReadRevision: result.ReadRevision}, false, nil
+	if head.Entry == nil {
+		return Versioned[EnvironmentComposeProjection]{ReadRevision: head.ReadRevision}, false, nil
 	}
-	projection, err := decodeEnvironmentComposeProjection(result.Entry.Value)
-	if err != nil || projection.EnvironmentID != environmentID {
+	revisionID, err := decodeTaskReference(head.Entry.Value)
+	if err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
+	if err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if root == nil || root.Entry == nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
+	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
+		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
+	if err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	defer clear(stream)
+	projection, err := decodeEnvironmentComposeProjection(stream)
+	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
 		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
 	return Versioned[EnvironmentComposeProjection]{
-		Record: projection, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
+		Record: projection, Revision: head.Entry.ModRevision, ReadRevision: readRevision,
 	}, true, nil
+}
+
+// GetEnvironmentComposeProjectionRevision resolves one immutable published
+// revision directly. Task execution uses this method and never substitutes the
+// Environment's newer current head as render input.
+func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
+	ctx context.Context,
+	environmentID string,
+	revisionID string,
+) (Versioned[EnvironmentComposeProjection], bool, error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if err := validateID(ids.KindTask, revisionID); err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
+	if err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if root == nil || root.Entry == nil {
+		readRevision := int64(0)
+		if root != nil {
+			readRevision = root.ReadRevision
+		}
+		return Versioned[EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
+	}
+	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
+	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
+		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
+	if err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	defer clear(stream)
+	projection, err := decodeEnvironmentComposeProjection(stream)
+	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
+		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	return Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: root.Entry.ModRevision, ReadRevision: readRevision,
+	}, true, nil
+}
+
+// FindEnvironmentVolume resolves a stable Volume id from the sole published
+// desired-state authority. The MVP deliberately prefers a bounded sequential
+// head scan over a second synchronously writable identity authority.
+func (repository *HierarchyRepository) FindEnvironmentVolume(
+	ctx context.Context,
+	volumeID string,
+) (Versioned[EnvironmentComposeProjection], EnvironmentVolumeIdentity, error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+	}
+	if err := validateID(ids.KindVolume, volumeID); err != nil {
+		return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+	}
+	const headsPrefix = "/v1/records/environment-blueprints/"
+	start := ""
+	for {
+		page, err := repository.store.Range(ctx, RangeRequest{
+			Prefix: headsPrefix, StartExclusive: start, Limit: 128,
+		})
+		if err != nil {
+			return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+		}
+		if page == nil {
+			return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+				errs.KindInternal, "Environment desired-head scan is empty",
+			)
+		}
+		for _, entry := range page.Values {
+			start = entry.Key
+			if !strings.HasSuffix(entry.Key, "/current") {
+				continue
+			}
+			environmentID := strings.TrimSuffix(strings.TrimPrefix(entry.Key, headsPrefix), "/current")
+			if validateStableID(ids.KindEnvironment, environmentID) != nil {
+				return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
+			}
+			revisionID, err := decodeTaskReference(entry.Value)
+			if err != nil {
+				return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
+			}
+			projection, found, err := repository.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
+			if err != nil {
+				return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+			}
+			if !found {
+				return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
+			}
+			for _, volume := range projection.Record.Volumes {
+				if volume.ID == volumeID {
+					projection.Revision = entry.ModRevision
+					return projection, volume, nil
+				}
+			}
+		}
+		if !page.More {
+			break
+		}
+		if len(page.Values) == 0 {
+			return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+				errs.KindInternal, "Environment desired-head pagination did not advance",
+			)
+		}
+	}
+	return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+		errs.KindVolumeNotFound, "volume was not found",
+	)
 }
 
 func encodeEnvironmentComposeProjection(projection EnvironmentComposeProjection) ([]byte, error) {
 	if err := validateEnvironmentComposeProjection(projection); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("environment-compose-projection", projection)
+	value, err := encodeEnvelope("environment-compose-projection", projection)
+	if err != nil {
+		return nil, err
+	}
+	if len(value) > EnvironmentBlueprintProjectionMaxBytes {
+		clear(value)
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint normalized projection exceeds the 2 MiB ceiling",
+		)
+	}
+	return value, nil
 }
 
 func decodeEnvironmentComposeProjection(value []byte) (EnvironmentComposeProjection, error) {
@@ -94,7 +258,7 @@ func decodeEnvironmentComposeProjection(value []byte) (EnvironmentComposeProject
 
 func validateEnvironmentComposeProjection(projection EnvironmentComposeProjection) error {
 	if validateStableID(ids.KindEnvironment, projection.EnvironmentID) != nil ||
-		validateStableID(ids.KindTask, projection.BlueprintRevisionID) != nil || projection.RenderGeneration == 0 {
+		validateStableID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Environment Compose projection identity is invalid")
 	}
 	if err := validateEnvironmentComposeIdentities(ids.KindService, projection.Services); err != nil {
@@ -103,7 +267,13 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentComposeIdentities(ids.KindNetwork, projection.Networks); err != nil {
 		return err
 	}
-	if err := validateEnvironmentComposeIdentities(ids.KindVolume, projection.Volumes); err != nil {
+	if err := validateEnvironmentVolumeIdentities(projection.Volumes); err != nil {
+		return err
+	}
+	if err := validateEnvironmentServiceVolumeMounts(projection); err != nil {
+		return err
+	}
+	if err := validateEnvironmentProjectionArtifact(projection); err != nil {
 		return err
 	}
 	if err := validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.Routes); err != nil {
@@ -280,9 +450,11 @@ func environmentRouteMatch(value EnvironmentRouteIdentity) string {
 
 func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
 	clone := source
+	clone.ComposeArtifact = append([]byte(nil), source.ComposeArtifact...)
 	clone.Services = append([]EnvironmentComposeIdentity(nil), source.Services...)
 	clone.Networks = append([]EnvironmentComposeIdentity(nil), source.Networks...)
-	clone.Volumes = append([]EnvironmentComposeIdentity(nil), source.Volumes...)
+	clone.Volumes = append([]EnvironmentVolumeIdentity(nil), source.Volumes...)
+	clone.VolumeMounts = append([]EnvironmentServiceVolumeMount(nil), source.VolumeMounts...)
 	clone.Routes = append([]EnvironmentRouteIdentity(nil), source.Routes...)
 	clone.SuppressedRoutes = append([]EnvironmentRouteIdentity(nil), source.SuppressedRoutes...)
 	clone.Components = make([]ComponentRecord, len(source.Components))
@@ -294,6 +466,68 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 		clone.Entries[index] = cloneEntryRecord(entry)
 	}
 	return clone
+}
+
+func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjection) error {
+	if len(projection.ComposeArtifact) == 0 || len(projection.ComposeArtifact) > EnvironmentBlueprintProjectionMaxBytes {
+		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact is missing or oversized")
+	}
+	artifact := &agentpb.ComposeArtifact{}
+	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
+		projection.ComposeArtifact,
+		artifact,
+	); err != nil {
+		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact is invalid")
+	}
+	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil || !bytes.Equal(canonical, projection.ComposeArtifact) {
+		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact is not canonical")
+	}
+	if validateStableID(ids.KindConfig, artifact.GetArtifactId()) != nil ||
+		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		artifact.GetOwnerId() != projection.EnvironmentID || artifact.GetAuthorizedVolumeDir() == "" ||
+		len(artifact.GetCanonicalYaml()) == 0 || len(artifact.GetYamlSha256()) != sha256.Size {
+		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact identity is invalid")
+	}
+	digest := sha256.Sum256(artifact.GetCanonicalYaml())
+	if subtle.ConstantTimeCompare(digest[:], artifact.GetYamlSha256()) != 1 {
+		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact digest is invalid")
+	}
+	if len(artifact.GetServices()) != len(projection.Services) ||
+		len(artifact.GetVolumes()) != len(projection.Volumes) {
+		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
+	}
+	services := make(map[string]string, len(artifact.GetServices()))
+	for _, service := range artifact.GetServices() {
+		if service == nil {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is invalid")
+		}
+		if _, duplicate := services[service.GetServiceId()]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is duplicated")
+		}
+		services[service.GetServiceId()] = service.GetComposeName()
+	}
+	for _, identity := range projection.Services {
+		if services[identity.ID] != identity.Name {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service identity changed")
+		}
+	}
+	volumes := make(map[string]string, len(artifact.GetVolumes()))
+	for _, volume := range artifact.GetVolumes() {
+		if volume == nil {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Volume is invalid")
+		}
+		if _, duplicate := volumes[volume.GetVolumeId()]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Volume is duplicated")
+		}
+		volumes[volume.GetVolumeId()] = volume.GetComposeName()
+	}
+	for _, identity := range projection.Volumes {
+		if volumes[identity.ID] != identity.Key {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Volume identity changed")
+		}
+	}
+	return nil
 }
 
 func validateEnvironmentComposeIdentities(kind ids.Kind, values []EnvironmentComposeIdentity) error {
@@ -318,95 +552,25 @@ func validateEnvironmentComposeProjectionAdvance(
 	hasPrevious bool,
 	next EnvironmentComposeProjection,
 ) error {
-	if err := validateEnvironmentComposeProjection(next); err != nil {
-		return err
-	}
-	if !hasPrevious {
-		if next.RenderGeneration != 1 {
-			return errs.New(errs.KindStateConflict, "first Environment render generation must be one")
-		}
-		return nil
-	}
-	if previous.EnvironmentID != next.EnvironmentID || next.RenderGeneration != previous.RenderGeneration+1 {
-		return errs.New(errs.KindStateConflict, "Environment render generation did not advance exactly once")
-	}
-	if err := preserveEnvironmentComposeIdentities(
-		"service",
-		previous.Services,
-		next.Services,
-		removedComponentGeneratedServiceIDs(previous.Components, next.Components),
-	); err != nil {
-		return err
-	}
-	if err := preserveEnvironmentComposeIdentities("network", previous.Networks, next.Networks, nil); err != nil {
-		return err
-	}
-	return preserveEnvironmentComposeIdentities("volume", previous.Volumes, next.Volumes, nil)
+	return validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
+		previous, hasPrevious, next, "",
+	)
 }
 
-func removedComponentGeneratedServiceIDs(
-	previous []ComponentRecord,
-	next []ComponentRecord,
-) map[string]struct{} {
-	retained := make(map[string]struct{})
-	for _, component := range next {
-		for _, serviceID := range component.Runtime.GeneratedServices {
-			retained[serviceID] = struct{}{}
-		}
-	}
-	removed := make(map[string]struct{})
-	for _, component := range previous {
-		for _, serviceID := range component.Runtime.GeneratedServices {
-			if _, keep := retained[serviceID]; !keep {
-				removed[serviceID] = struct{}{}
-			}
-		}
-	}
-	return removed
-}
-
-func preserveEnvironmentComposeIdentities(
-	kind string,
-	previous []EnvironmentComposeIdentity,
-	next []EnvironmentComposeIdentity,
-	allowedRemovedIDs map[string]struct{},
+func validateEnvironmentComposeProjectionPublicationAdvance(
+	previous EnvironmentComposeProjection,
+	hasPrevious bool,
+	next EnvironmentComposeProjection,
+	task TaskRecord,
 ) error {
-	byName := make(map[string]string, len(next))
-	for _, identity := range next {
-		byName[identity.Name] = identity.ID
-	}
-	for _, identity := range previous {
-		nextID, exists := byName[identity.Name]
-		if !exists {
-			if _, allowed := allowedRemovedIDs[identity.ID]; allowed {
-				continue
-			}
-			return errs.Newf(
-				errs.KindResourceInUse,
-				"Blueprint omits existing %s %s; remove it explicitly before apply",
-				kind,
-				identity.Name,
-			)
-		}
-		if nextID != identity.ID {
-			return errs.New(errs.KindStateConflict, "Environment Compose stable identity changed")
+	removedVolumeID := ""
+	if task.Type == TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
+		removedVolumeID = task.Target
+		if validateStableID(ids.KindVolume, removedVolumeID) != nil {
+			return errs.New(errs.KindValidationFailed, "Volume removal Task target is invalid")
 		}
 	}
-	return nil
-}
-
-func validEnvironmentComposeName(value string) bool {
-	if value == "" || len(value) > 255 || !utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
-		return false
-	}
-	for _, character := range value {
-		if character <= ' ' || character == '/' || character == '\\' {
-			return false
-		}
-	}
-	return true
-}
-
-func corruptEnvironmentComposeProjection() error {
-	return errs.New(errs.KindInternal, "Environment Compose projection is corrupt")
+	return validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
+		previous, hasPrevious, next, removedVolumeID,
+	)
 }

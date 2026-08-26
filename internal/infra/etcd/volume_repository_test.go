@@ -21,16 +21,16 @@ func TestVolumeRepositoryCreatesResolvesAndPagesScopedRecords(t *testing.T) {
 	}
 	for _, record := range records {
 		if _, err := repository.CreateVolume(ctx, environment, project, record); err != nil {
-			t.Fatalf("CreateVolume(%s) error = %v", record.Name, err)
+			t.Fatalf("CreateVolume(%s) error = %v", record.Slug, err)
 		}
 	}
 	stored, err := repository.GetVolume(ctx, records[0].ID)
 	if err != nil || stored.Record != records[0] {
 		t.Fatalf("GetVolume() = %#v, %v", stored, err)
 	}
-	resolved, err := repository.GetVolumeByName(ctx, environment.Record.ID, records[1].Name)
+	resolved, err := repository.GetVolumeBySlug(ctx, environment.Record.ID, records[1].Slug)
 	if err != nil || resolved.Record != records[1] {
-		t.Fatalf("GetVolumeByName() = %#v, %v", resolved, err)
+		t.Fatalf("GetVolumeBySlug() = %#v, %v", resolved, err)
 	}
 	first, err := repository.ListVolumes(ctx, environment.Record.ID, PageRequest{Limit: 1})
 	if err != nil || len(first.Items) != 1 || first.NextCursor == "" {
@@ -99,15 +99,15 @@ func TestVolumeRepositoryEnforcesScopedNameAndAncestorFences(t *testing.T) {
 			if _, err := repository.GetVolume(ctx, fenced.ID); !isKind(err, errs.KindVolumeNotFound) {
 				t.Fatalf("GetVolume(after failed create) error = %v", err)
 			}
-			if _, err := repository.GetVolumeByName(
+			if _, err := repository.GetVolumeBySlug(
 				ctx,
 				environment.Record.ID,
-				fenced.Name,
+				fenced.Slug,
 			); !isKind(
 				err,
 				errs.KindVolumeNotFound,
 			) {
-				t.Fatalf("GetVolumeByName(after failed create) error = %v", err)
+				t.Fatalf("GetVolumeBySlug(after failed create) error = %v", err)
 			}
 		})
 	}
@@ -253,13 +253,14 @@ func volumeRepositoryTestRecord(
 	t *testing.T,
 	environmentID string,
 	offset int64,
-	name string,
+	volumeSlug string,
 ) VolumeRecord {
 	t.Helper()
 	record, err := NewVolumeRecord(
 		environmentID,
 		ids.NewAt(ids.KindVolume, serviceRecordTestTime(), offset),
-		name,
+		volumeSlug,
+		volumeSlug,
 	)
 	if err != nil {
 		t.Fatalf("NewVolumeRecord() error = %v", err)

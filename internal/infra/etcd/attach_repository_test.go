@@ -909,7 +909,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	}
 	projection := EnvironmentComposeProjection{
 		EnvironmentID:       environment.Record.ID,
-		BlueprintRevisionID: blueprintRevision.RevisionID,
+		RevisionID: blueprintRevision.RevisionID,
 		RenderGeneration:    1,
 		Services: []EnvironmentComposeIdentity{
 			{ID: service.Record.Desired.ID, Name: service.Record.Desired.Name},
@@ -1100,7 +1100,7 @@ func createTestAttach(
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
 		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
-		Volumes:             append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		NetworkJoins: []AttachTaskNetworkJoin{{
 			NetworkID: record.BackingNetworkID, ServiceIDs: append([]string(nil), record.ServiceIDs...),
 		}},
@@ -1186,7 +1186,7 @@ func publishTestDetach(
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
 		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
-		Volumes:             append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		NetworkJoins:        nil,
 		ConsumerServiceIDs:  append([]string(nil), current.Record.ServiceIDs...),
 		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),

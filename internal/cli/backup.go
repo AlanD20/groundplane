@@ -478,8 +478,8 @@ func resolveBackupPolicyVolumeNames(
 			return nil, err
 		}
 		for _, volume := range page.Items {
-			if _, wanted := names[volume.Name]; wanted {
-				resolved[volume.Name] = target(app, volume.ID)
+			if _, wanted := names[volume.Slug]; wanted {
+				resolved[volume.Slug] = target(app, volume.ID)
 			}
 		}
 		if len(resolved) == len(names) {

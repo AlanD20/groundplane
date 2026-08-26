@@ -164,7 +164,7 @@ x-gp-components:
 			ProvisioningState: etcd.EnvironmentProvisioningReady,
 		},
 		revision: etcd.EnvironmentBlueprintRevision{
-			EnvironmentID: identity.EnvironmentID, RevisionID: projection.BlueprintRevisionID,
+			EnvironmentID: identity.EnvironmentID, RevisionID: projection.RevisionID,
 			RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
 			Files: []etcd.EnvironmentBlueprintFile{{Path: "blueprint.yaml", Content: content}}, CreatedAt: at,
 		},

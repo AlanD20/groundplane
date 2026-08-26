@@ -18,7 +18,7 @@ func TestEnvironmentComposeProjectionPinsSortedRouteIdentities(t *testing.T) {
 	now := time.Date(2026, 8, 22, 22, 0, 0, 0, time.UTC)
 	projection := EnvironmentComposeProjection{
 		EnvironmentID:       ids.NewAt(ids.KindEnvironment, now, 1),
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 2),
+		RevisionID: ids.NewAt(ids.KindTask, now, 2),
 		RenderGeneration:    1,
 		Routes: []EnvironmentRouteIdentity{
 			{ID: ids.NewAt(ids.KindRoute, now, 3), Host: "api.example.com", Path: "/"},
@@ -50,7 +50,7 @@ func TestSuppressEnvironmentRouteMovesIdentityOutOfEffectiveSet(t *testing.T) {
 	routeID := ids.NewAt(ids.KindRoute, now, 3)
 	projection := EnvironmentComposeProjection{
 		EnvironmentID:       ids.NewAt(ids.KindEnvironment, now, 1),
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 2), RenderGeneration: 7,
+		RevisionID: ids.NewAt(ids.KindTask, now, 2), RenderGeneration: 7,
 		Routes: []EnvironmentRouteIdentity{{ID: routeID, Host: "app.example.com", Path: "/app/*"}},
 	}
 	next, changed, err := SuppressEnvironmentRoute(projection, routeID)
@@ -87,7 +87,7 @@ func TestEnvironmentComposeProjectionPinsSortedComponentSnapshots(t *testing.T) 
 		return record
 	}
 	projection := EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 11),
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 11),
 		RenderGeneration: 1,
 		Components: []ComponentRecord{
 			componentRecord(core.ComponentKindIngressCaddy, 12),
@@ -134,7 +134,7 @@ func TestEnvironmentComposeProjectionPinsSortedEntrySnapshots(t *testing.T) {
 	}
 	sort.Slice(entries, func(left int, right int) bool { return entries[left].Entry.ID < entries[right].Entry.ID })
 	projection := EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 21),
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 21),
 		RenderGeneration: 1, Entries: entries,
 	}
 	encoded, err := encodeEnvironmentComposeProjection(projection)
@@ -171,7 +171,7 @@ func TestRemoveEnvironmentEntryDropsPinnedGeneration(t *testing.T) {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
 	projection := EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 2),
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 2),
 		RenderGeneration: 7, Entries: []EntryRecord{record},
 	}
 	next, changed, err := RemoveEnvironmentEntry(projection, entryID)
@@ -208,7 +208,7 @@ func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemov
 		return record
 	}
 	previous := EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 44),
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 44),
 		RenderGeneration: 1,
 		Services:         []EnvironmentComposeIdentity{{ID: generatedServiceID, Name: "cloudflare-tunnel"}},
 		Components: []ComponentRecord{
@@ -217,7 +217,7 @@ func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemov
 		},
 	}
 	next := EnvironmentComposeProjection{
-		EnvironmentID: environmentID, BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 45),
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 45),
 		RenderGeneration: 2,
 		Components: []ComponentRecord{
 			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),

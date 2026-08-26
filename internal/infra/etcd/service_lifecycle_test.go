@@ -24,7 +24,7 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 		ArtifactID:          ids.NewAt(ids.KindConfig, at, 6),
 		Projection: EnvironmentComposeProjection{
 			EnvironmentID:       ids.NewAt(ids.KindEnvironment, at, 5),
-			BlueprintRevisionID: ids.NewAt(ids.KindTask, at, 7), RenderGeneration: 9,
+			RevisionID: ids.NewAt(ids.KindTask, at, 7), RenderGeneration: 9,
 			Services: []EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
 		},
 	}

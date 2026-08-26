@@ -37,7 +37,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 		intent := stored.Record
 		if !found || intent.TaskID != reference.RouteRemovalTaskID || intent.EnvironmentID != environmentID ||
 			intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
-			intent.CandidateProjection.BlueprintRevisionID != reference.RevisionID {
+			intent.CandidateProjection.RevisionID != reference.RevisionID {
 			return nil, corruptMaterializationSource()
 		}
 		return resolver.resolveComponentFileFromProjection(ctx, environmentID, reference, *intent.CandidateProjection)
@@ -46,7 +46,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 	if err != nil {
 		return nil, err
 	}
-	if !found || projection.Record.BlueprintRevisionID != reference.RevisionID {
+	if !found || projection.Record.RevisionID != reference.RevisionID {
 		return nil, corruptMaterializationSource()
 	}
 	return resolver.resolveComponentFileFromProjection(ctx, environmentID, reference, projection.Record)
@@ -58,7 +58,7 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	reference etcd.TaskComponentFileValueReference,
 	projection etcd.EnvironmentComposeProjection,
 ) ([]byte, error) {
-	if projection.EnvironmentID != environmentID || projection.BlueprintRevisionID != reference.RevisionID {
+	if projection.EnvironmentID != environmentID || projection.RevisionID != reference.RevisionID {
 		return nil, corruptMaterializationSource()
 	}
 	environment, err := resolver.blueprints.GetEnvironment(ctx, environmentID)

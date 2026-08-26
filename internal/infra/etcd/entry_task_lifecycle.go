@@ -447,7 +447,7 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 4 &&
 			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
-			task.Params[EnvironmentBlueprintRevisionParam] == intent.CandidateProjection.BlueprintRevisionID &&
+			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
 			validateStableID(ids.KindConfig, task.Params[TaskComposeArtifactParam]) == nil
 	}
 	if task.ID != intent.TaskID || task.Executor != expectedExecutor || task.Type != TaskRemove ||

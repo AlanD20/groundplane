@@ -215,6 +215,7 @@ func TestBackupPolicyTypedPreparationRejectsForeignTargetBeforeCatalogCreation(t
 		otherEnvironmentID,
 		ids.NewAt(ids.KindVolume, fixture.now, 2901),
 		"foreign-data",
+		"foreign-data",
 	)
 	if err != nil {
 		t.Fatalf("NewVolumeRecord() error = %v", err)
@@ -538,7 +539,9 @@ func backupPolicyBudgetVolumeEvidence(
 	for index := range evidence {
 		sourceID := ids.NewAt(ids.KindBackupSource, now, int64(3300+index))
 		volumeID := ids.NewAt(ids.KindVolume, now, int64(3400+index))
-		volume, err := NewVolumeRecord(environmentID, volumeID, "budget-volume-"+sourceID)
+		volume, err := NewVolumeRecord(
+			environmentID, volumeID, "budget-volume-"+sourceID, "budget-volume-"+sourceID,
+		)
 		if err != nil {
 			t.Fatalf("NewVolumeRecord() error = %v", err)
 		}

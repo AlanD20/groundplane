@@ -574,13 +574,12 @@ type Error struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Error.json
-	Schema  *string                 `json:"$schema,omitempty"`
-	Code    string                  `json:"code"`
-	Detail  string                  `json:"detail"`
-	Details *map[string]interface{} `json:"details,omitempty"`
-	Status  int64                   `json:"status"`
-	Title   string                  `json:"title"`
-	Type    string                  `json:"type"`
+	Schema *string `json:"$schema,omitempty"`
+	Code   string  `json:"code"`
+	Detail string  `json:"detail"`
+	Status int64   `json:"status"`
+	Title  string  `json:"title"`
+	Type   string  `json:"type"`
 }
 
 // Host defines model for Host.
@@ -1144,8 +1143,75 @@ type TenantRename struct {
 
 // Volume defines model for Volume.
 type Volume struct {
-	Id   string `json:"id"`
-	Name string `json:"name"`
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Volume.json
+	Schema        *string `json:"$schema,omitempty"`
+	CreateTaskId  *string `json:"create_task_id,omitempty"`
+	CurrentTaskId *string `json:"current_task_id,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	Id            string  `json:"id"`
+	Key           string  `json:"key"`
+	OriginTaskId  *string `json:"origin_task_id,omitempty"`
+	Path          *string `json:"path,omitempty"`
+	Slug          string  `json:"slug"`
+	State         *string `json:"state,omitempty"`
+}
+
+// VolumeCreate defines model for VolumeCreate.
+type VolumeCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/VolumeCreate.json
+	Schema        *string `json:"$schema,omitempty"`
+	EnvironmentId string  `json:"environment_id"`
+	Key           *string `json:"key,omitempty"`
+	Slug          string  `json:"slug"`
+}
+
+// VolumeDeletionImpactItem defines model for VolumeDeletionImpactItem.
+type VolumeDeletionImpactItem struct {
+	HistoricalDigest     *string `json:"historical_digest,omitempty"`
+	Id                   string  `json:"id"`
+	Kind                 string  `json:"kind"`
+	MountTarget          *string `json:"mount_target,omitempty"`
+	PolicyDisables       *bool   `json:"policy_disables,omitempty"`
+	ReadOnly             *bool   `json:"read_only,omitempty"`
+	RecoveryPointCount   *int64  `json:"recovery_point_count,omitempty"`
+	RetainsConfiguration *bool   `json:"retains_configuration,omitempty"`
+	ServiceId            *string `json:"service_id,omitempty"`
+	ServiceName          *string `json:"service_name,omitempty"`
+	SourceId             *string `json:"source_id,omitempty"`
+}
+
+// VolumeDeletionImpactPage defines model for VolumeDeletionImpactPage.
+type VolumeDeletionImpactPage struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/VolumeDeletionImpactPage.json
+	Schema          *string                     `json:"$schema,omitempty"`
+	Complete        bool                        `json:"complete"`
+	DataHandling    string                      `json:"data_handling"`
+	EnvironmentHead string                      `json:"environment_head"`
+	EnvironmentId   string                      `json:"environment_id"`
+	ImpactToken     *string                     `json:"impact_token,omitempty"`
+	ItemCount       int64                       `json:"item_count"`
+	Items           *[]VolumeDeletionImpactItem `json:"items"`
+	Key             string                      `json:"key"`
+	NextCursor      *string                     `json:"next_cursor,omitempty"`
+	Revision        int64                       `json:"revision"`
+	RollingDigest   string                      `json:"rolling_digest"`
+	Slug            string                      `json:"slug"`
+	VolumeId        string                      `json:"volume_id"`
+}
+
+// VolumeEdit defines model for VolumeEdit.
+type VolumeEdit struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/VolumeEdit.json
+	Schema *string `json:"$schema,omitempty"`
+	Slug   string  `json:"slug"`
 }
 
 // Zone defines model for Zone.
@@ -1524,6 +1590,29 @@ type VolumeListParams struct {
 	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// VolumeCreateParams defines parameters for VolumeCreate.
+type VolumeCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// VolumeRemoveParams defines parameters for VolumeRemove.
+type VolumeRemoveParams struct {
+	ImpactToken    string `form:"impact_token" json:"impact_token"`
+	ConfirmKey     string `form:"confirm_key" json:"confirm_key"`
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// VolumeEditParams defines parameters for VolumeEdit.
+type VolumeEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// VolumeRemovalImpactParams defines parameters for VolumeRemovalImpact.
+type VolumeRemovalImpactParams struct {
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ZoneListParams defines parameters for ZoneList.
 type ZoneListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -1613,6 +1702,12 @@ type TenantEditJSONRequestBody = TenantEdit
 
 // TenantRenameJSONRequestBody defines body for TenantRename for application/json ContentType.
 type TenantRenameJSONRequestBody = TenantRename
+
+// VolumeCreateJSONRequestBody defines body for VolumeCreate for application/json ContentType.
+type VolumeCreateJSONRequestBody = VolumeCreate
+
+// VolumeEditJSONRequestBody defines body for VolumeEdit for application/json ContentType.
+type VolumeEditJSONRequestBody = VolumeEdit
 
 // ZoneCreateJSONRequestBody defines body for ZoneCreate for application/json ContentType.
 type ZoneCreateJSONRequestBody = ZoneCreate
@@ -2371,6 +2466,49 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /volumes (the `VolumeList` operationId).
 	VolumeList(ctx context.Context, params *VolumeListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeCreateWithBody Add an Environment volume
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+	VolumeCreateWithBody(ctx context.Context, params *VolumeCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeCreate Add an Environment volume
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+	VolumeCreate(ctx context.Context, params *VolumeCreateParams, body VolumeCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeRemove Remove an Environment volume
+	//
+	// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+	VolumeRemove(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeShow Show an Environment volume
+	//
+	// Corresponds with GET /volumes/{id} (the `VolumeShow` operationId).
+	VolumeShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeEditWithBody Edit a volume slug
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+	VolumeEditWithBody(ctx context.Context, id string, params *VolumeEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeEdit Edit a volume slug
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+	VolumeEdit(ctx context.Context, id string, params *VolumeEditParams, body VolumeEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// VolumeRemovalImpact Preview the fixed-revision impact of removing a volume
+	//
+	// Corresponds with GET /volumes/{id}/deletion-impact (the `VolumeRemovalImpact` operationId).
+	VolumeRemovalImpact(ctx context.Context, id string, params *VolumeRemovalImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ZoneList List network zones
 	//
@@ -3918,6 +4056,119 @@ func (c *Client) TenantRename(ctx context.Context, id string, params *TenantRena
 // Corresponds with GET /volumes (the `VolumeList` operationId).
 func (c *Client) VolumeList(ctx context.Context, params *VolumeListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewVolumeListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeCreateWithBody Add an Environment volume
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+func (c *Client) VolumeCreateWithBody(ctx context.Context, params *VolumeCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeCreate Add an Environment volume
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+func (c *Client) VolumeCreate(ctx context.Context, params *VolumeCreateParams, body VolumeCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeRemove Remove an Environment volume
+//
+// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+func (c *Client) VolumeRemove(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeRemoveRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeShow Show an Environment volume
+//
+// Corresponds with GET /volumes/{id} (the `VolumeShow` operationId).
+func (c *Client) VolumeShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeEditWithBody Edit a volume slug
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+func (c *Client) VolumeEditWithBody(ctx context.Context, id string, params *VolumeEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeEdit Edit a volume slug
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+func (c *Client) VolumeEdit(ctx context.Context, id string, params *VolumeEditParams, body VolumeEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// VolumeRemovalImpact Preview the fixed-revision impact of removing a volume
+//
+// Corresponds with GET /volumes/{id}/deletion-impact (the `VolumeRemovalImpact` operationId).
+func (c *Client) VolumeRemovalImpact(ctx context.Context, id string, params *VolumeRemovalImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewVolumeRemovalImpactRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7893,6 +8144,304 @@ func NewVolumeListRequest(server string, params *VolumeListParams) (*http.Reques
 	return req, nil
 }
 
+// NewVolumeCreateRequest calls the generic VolumeCreate builder with application/json body
+func NewVolumeCreateRequest(server string, params *VolumeCreateParams, body VolumeCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewVolumeCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewVolumeCreateRequestWithBody constructs an http.Request for the VolumeCreate method, with any body, and a specified content type
+func NewVolumeCreateRequestWithBody(server string, params *VolumeCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/volumes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewVolumeRemoveRequest constructs an http.Request for the VolumeRemove method
+func NewVolumeRemoveRequest(server string, id string, params *VolumeRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/volumes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "impact_token", params.ImpactToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", false, "confirm_key", params.ConfirmKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewVolumeShowRequest constructs an http.Request for the VolumeShow method
+func NewVolumeShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/volumes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewVolumeEditRequest calls the generic VolumeEdit builder with application/json body
+func NewVolumeEditRequest(server string, id string, params *VolumeEditParams, body VolumeEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewVolumeEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewVolumeEditRequestWithBody constructs an http.Request for the VolumeEdit method, with any body, and a specified content type
+func NewVolumeEditRequestWithBody(server string, id string, params *VolumeEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/volumes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewVolumeRemovalImpactRequest constructs an http.Request for the VolumeRemovalImpact method
+func NewVolumeRemovalImpactRequest(server string, id string, params *VolumeRemovalImpactParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/volumes/%s/deletion-impact", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewZoneListRequest constructs an http.Request for the ZoneList method
 func NewZoneListRequest(server string, params *ZoneListParams) (*http.Request, error) {
 	var err error
@@ -8872,6 +9421,55 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /volumes (the `VolumeList` operationId).
 	VolumeListWithResponse(ctx context.Context, params *VolumeListParams, reqEditors ...RequestEditorFn) (*VolumeListResponse, error)
+
+	// VolumeCreateWithBodyWithResponse Add an Environment volume
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+	VolumeCreateWithBodyWithResponse(ctx context.Context, params *VolumeCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VolumeCreateResponse, error)
+
+	// VolumeCreateWithResponse Add an Environment volume
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+	VolumeCreateWithResponse(ctx context.Context, params *VolumeCreateParams, body VolumeCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*VolumeCreateResponse, error)
+
+	// VolumeRemoveWithResponse Remove an Environment volume
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+	VolumeRemoveWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error)
+
+	// VolumeShowWithResponse Show an Environment volume
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /volumes/{id} (the `VolumeShow` operationId).
+	VolumeShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*VolumeShowResponse, error)
+
+	// VolumeEditWithBodyWithResponse Edit a volume slug
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+	VolumeEditWithBodyWithResponse(ctx context.Context, id string, params *VolumeEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VolumeEditResponse, error)
+
+	// VolumeEditWithResponse Edit a volume slug
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+	VolumeEditWithResponse(ctx context.Context, id string, params *VolumeEditParams, body VolumeEditJSONRequestBody, reqEditors ...RequestEditorFn) (*VolumeEditResponse, error)
+
+	// VolumeRemovalImpactWithResponse Preview the fixed-revision impact of removing a volume
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /volumes/{id}/deletion-impact (the `VolumeRemovalImpact` operationId).
+	VolumeRemovalImpactWithResponse(ctx context.Context, id string, params *VolumeRemovalImpactParams, reqEditors ...RequestEditorFn) (*VolumeRemovalImpactResponse, error)
 
 	// ZoneListWithResponse List network zones
 	//
@@ -12631,6 +13229,283 @@ func (r VolumeListResponse) ContentType() string {
 	return ""
 }
 
+// VolumeCreateResponse201Headers the declared response headers of an HTTP 201 response for VolumeCreate
+type VolumeCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type VolumeCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *struct {
+		TaskId string `json:"task_id"`
+		Volume Volume `json:"volume"`
+	}
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *VolumeCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r VolumeCreateResponse) GetJSON201() *struct {
+	TaskId string `json:"task_id"`
+	Volume Volume `json:"volume"`
+} {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r VolumeCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r VolumeCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VolumeCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VolumeCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VolumeCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// VolumeRemoveResponse202Headers the declared response headers of an HTTP 202 response for VolumeRemove
+type VolumeRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type VolumeRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *struct {
+		TaskId string `json:"task_id"`
+	}
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *VolumeRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r VolumeRemoveResponse) GetJSON202() *struct {
+	TaskId string `json:"task_id"`
+} {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r VolumeRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r VolumeRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VolumeRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VolumeRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VolumeRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type VolumeShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Volume
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r VolumeShowResponse) GetJSON200() *Volume {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r VolumeShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r VolumeShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VolumeShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VolumeShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VolumeShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// VolumeEditResponse200Headers the declared response headers of an HTTP 200 response for VolumeEdit
+type VolumeEditResponse200Headers struct {
+	ContentType *string
+}
+
+type VolumeEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		TaskId string `json:"task_id"`
+		Volume Volume `json:"volume"`
+	}
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *VolumeEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r VolumeEditResponse) GetJSON200() *struct {
+	TaskId string `json:"task_id"`
+	Volume Volume `json:"volume"`
+} {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r VolumeEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r VolumeEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VolumeEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VolumeEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VolumeEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type VolumeRemovalImpactResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *VolumeDeletionImpactPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r VolumeRemovalImpactResponse) GetJSON200() *VolumeDeletionImpactPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r VolumeRemovalImpactResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r VolumeRemovalImpactResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r VolumeRemovalImpactResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r VolumeRemovalImpactResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r VolumeRemovalImpactResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ZoneListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -14120,6 +14995,97 @@ func (c *ClientWithResponses) VolumeListWithResponse(ctx context.Context, params
 		return nil, err
 	}
 	return ParseVolumeListResponse(rsp)
+}
+
+// VolumeCreateWithBodyWithResponse Add an Environment volume
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+func (c *ClientWithResponses) VolumeCreateWithBodyWithResponse(ctx context.Context, params *VolumeCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VolumeCreateResponse, error) {
+	rsp, err := c.VolumeCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeCreateResponse(rsp)
+}
+
+// VolumeCreateWithResponse Add an Environment volume
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /volumes (the `VolumeCreate` operationId).
+func (c *ClientWithResponses) VolumeCreateWithResponse(ctx context.Context, params *VolumeCreateParams, body VolumeCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*VolumeCreateResponse, error) {
+	rsp, err := c.VolumeCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeCreateResponse(rsp)
+}
+
+// VolumeRemoveWithResponse Remove an Environment volume
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /volumes/{id} (the `VolumeRemove` operationId).
+func (c *ClientWithResponses) VolumeRemoveWithResponse(ctx context.Context, id string, params *VolumeRemoveParams, reqEditors ...RequestEditorFn) (*VolumeRemoveResponse, error) {
+	rsp, err := c.VolumeRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeRemoveResponse(rsp)
+}
+
+// VolumeShowWithResponse Show an Environment volume
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /volumes/{id} (the `VolumeShow` operationId).
+func (c *ClientWithResponses) VolumeShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*VolumeShowResponse, error) {
+	rsp, err := c.VolumeShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeShowResponse(rsp)
+}
+
+// VolumeEditWithBodyWithResponse Edit a volume slug
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+func (c *ClientWithResponses) VolumeEditWithBodyWithResponse(ctx context.Context, id string, params *VolumeEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VolumeEditResponse, error) {
+	rsp, err := c.VolumeEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeEditResponse(rsp)
+}
+
+// VolumeEditWithResponse Edit a volume slug
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /volumes/{id} (the `VolumeEdit` operationId).
+func (c *ClientWithResponses) VolumeEditWithResponse(ctx context.Context, id string, params *VolumeEditParams, body VolumeEditJSONRequestBody, reqEditors ...RequestEditorFn) (*VolumeEditResponse, error) {
+	rsp, err := c.VolumeEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeEditResponse(rsp)
+}
+
+// VolumeRemovalImpactWithResponse Preview the fixed-revision impact of removing a volume
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /volumes/{id}/deletion-impact (the `VolumeRemovalImpact` operationId).
+func (c *ClientWithResponses) VolumeRemovalImpactWithResponse(ctx context.Context, id string, params *VolumeRemovalImpactParams, reqEditors ...RequestEditorFn) (*VolumeRemovalImpactResponse, error) {
+	rsp, err := c.VolumeRemovalImpact(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseVolumeRemovalImpactResponse(rsp)
 }
 
 // ZoneListWithResponse List network zones
@@ -17046,6 +18012,218 @@ func ParseVolumeListResponse(rsp *http.Response) (*VolumeListResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest PageVolume
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseVolumeCreateResponse parses an HTTP response from a VolumeCreateWithResponse call
+func ParseVolumeCreateResponse(rsp *http.Response) (*VolumeCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VolumeCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			TaskId string `json:"task_id"`
+			Volume Volume `json:"volume"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers VolumeCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseVolumeRemoveResponse parses an HTTP response from a VolumeRemoveWithResponse call
+func ParseVolumeRemoveResponse(rsp *http.Response) (*VolumeRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VolumeRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			TaskId string `json:"task_id"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers VolumeRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseVolumeShowResponse parses an HTTP response from a VolumeShowWithResponse call
+func ParseVolumeShowResponse(rsp *http.Response) (*VolumeShowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VolumeShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Volume
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseVolumeEditResponse parses an HTTP response from a VolumeEditWithResponse call
+func ParseVolumeEditResponse(rsp *http.Response) (*VolumeEditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VolumeEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			TaskId string `json:"task_id"`
+			Volume Volume `json:"volume"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers VolumeEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseVolumeRemovalImpactResponse parses an HTTP response from a VolumeRemovalImpactWithResponse call
+func ParseVolumeRemovalImpactResponse(rsp *http.Response) (*VolumeRemovalImpactResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &VolumeRemovalImpactResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest VolumeDeletionImpactPage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

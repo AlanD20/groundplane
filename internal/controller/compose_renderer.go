@@ -14,16 +14,17 @@ import (
 )
 
 const (
-	composeLabelEnvironmentID = "com.groundplane.environment-id"
-	composeLabelKind          = "com.groundplane.kind"
-	composeLabelManaged       = "com.groundplane.managed"
-	composeLabelPlanID        = "com.groundplane.plan-id"
-	composeLabelProjectID     = "com.groundplane.project-id"
-	composeLabelRenderGen     = "com.groundplane.render-generation"
-	composeLabelServiceID     = "com.groundplane.service-id"
-	composeLabelTenantID      = "com.groundplane.tenant-id"
-	composeResourceExtension  = "x-gp-resource"
-	composeNetworkExtension   = "x-gp-network"
+	composeLabelEnvironmentID  = "com.groundplane.environment-id"
+	composeLabelKind           = "com.groundplane.kind"
+	composeLabelManaged        = "com.groundplane.managed"
+	composeLabelPlanID         = "com.groundplane.plan-id"
+	composeLabelProjectID      = "com.groundplane.project-id"
+	composeLabelRenderGen      = "com.groundplane.render-generation"
+	composeLabelServiceID      = "com.groundplane.service-id"
+	composeLabelTenantID       = "com.groundplane.tenant-id"
+	composeResourceExtension   = "x-gp-resource"
+	composeNetworkExtension    = "x-gp-network"
+	composeVolumeSlugExtension = "x-gp-slug"
 )
 
 // ComposeRenderInput is the complete Controller-owned input to one environment artifact render.
@@ -159,11 +160,17 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		if err != nil {
 			return nil, err
 		}
-		extensions, err := composeResourceExtensions(volume.Extensions, "volume", volumeID, input.EnvironmentID)
+		authoredExtensions := make(composetypes.Extensions, len(volume.Extensions))
+		for key, value := range volume.Extensions {
+			if key != composeVolumeSlugExtension {
+				authoredExtensions[key] = value
+			}
+		}
+		extensions, err := composeResourceExtensions(authoredExtensions, "volume", volumeID, input.EnvironmentID)
 		if err != nil {
 			return nil, err
 		}
-		dockerName := "gp_vol_" + volumeID
+		dockerName := "gp_vol_" + strings.ToLower(volumeID)
 		volume.Name = dockerName
 		volume.Driver = "local"
 		volume.DriverOpts = composetypes.Options{
@@ -248,7 +255,7 @@ func renderableManagedVolumeNames(project *composetypes.Project) ([]string, erro
 			return nil, errs.New(errs.KindNotImplemented, "compose volume runtime requires an unresolved contract")
 		}
 		for extension := range volume.Extensions {
-			if strings.HasPrefix(extension, "x-gp-") {
+			if strings.HasPrefix(extension, "x-gp-") && extension != composeVolumeSlugExtension {
 				return nil, errs.New(errs.KindNotImplemented, "compose volume extension is not implemented")
 			}
 		}

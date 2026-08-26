@@ -54,7 +54,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		return etcd.TaskRecord{}, err
 	}
 	reference := etcd.TaskComponentFileValueReference{
-		RevisionID:         intent.CandidateProjection.BlueprintRevisionID,
+		RevisionID:         intent.CandidateProjection.RevisionID,
 		ComponentID:        componentID,
 		Path:               RouteRemovalCaddyfilePath,
 		RouteRemovalTaskID: task.ID,
@@ -74,7 +74,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	task.Params = map[string]string{
 		etcd.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		etcd.EnvironmentBlueprintRevisionParam:   intent.CandidateProjection.BlueprintRevisionID,
+		etcd.EnvironmentDesiredRevisionParam:   intent.CandidateProjection.RevisionID,
 		EnvironmentBlueprintArtifactParam:        procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
@@ -129,11 +129,11 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		return nil, errs.New(errs.KindInternal, "durable Route removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection
-	revisionID := task.Params[etcd.EnvironmentBlueprintRevisionParam]
+	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[EnvironmentBlueprintArtifactParam]
 	if task.Params[etcd.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[etcd.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
-		revisionID != candidate.BlueprintRevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
+		revisionID != candidate.RevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
 		ids.Validate(
 			ids.KindConfig,
 			artifactID,

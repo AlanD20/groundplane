@@ -1,23 +1,25 @@
 package etcd
 
 import (
-	"github.com/AlanD20/groundplane/internal/common/composekey"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/internal/common/slug"
+	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
 )
 
 const volumePrefix = "/v1/records/volumes/"
 
-// VolumeRecord is the durable boundary for one Environment-owned managed
-// Volume. Name is both its scoped label and exact Compose volume key.
+// VolumeRecord is the desired identity of one Environment-owned managed
+// Volume. Slug is the renamable operator label. Key is the immutable authored
+// Compose key and direct child below the Environment volume directory.
 type VolumeRecord struct {
 	ID            string `json:"id"`
 	EnvironmentID string `json:"environment_id"`
-	Name          string `json:"name"`
+	Slug          string `json:"slug"`
+	Key           string `json:"key"`
 }
 
-func NewVolumeRecord(environmentID string, id string, name string) (VolumeRecord, error) {
-	record := VolumeRecord{ID: id, EnvironmentID: environmentID, Name: name}
+func NewVolumeRecord(environmentID string, id string, volumeSlug string, key string) (VolumeRecord, error) {
+	record := VolumeRecord{ID: id, EnvironmentID: environmentID, Slug: volumeSlug, Key: key}
 	if err := validateVolumeRecord(record); err != nil {
 		return VolumeRecord{}, err
 	}
@@ -34,8 +36,12 @@ func volumeOwnerKey(environmentID string, volumeID string) string {
 	return volumeOwnerPrefix(environmentID) + volumeID
 }
 
-func volumeNameKey(environmentID string, name string) string {
-	return "/v1/indexes/volumes/by-name/environment/" + environmentID + "/" + encodeDynamicSegment(name)
+func volumeSlugKey(environmentID string, volumeSlug string) string {
+	return "/v1/indexes/volumes/by-slug/environment/" + environmentID + "/" + encodeDynamicSegment(volumeSlug)
+}
+
+func volumeComposeKey(environmentID string, key string) string {
+	return "/v1/indexes/volumes/by-compose-key/environment/" + environmentID + "/" + encodeDynamicSegment(key)
 }
 
 func validateVolumeRecord(record VolumeRecord) error {
@@ -45,23 +51,14 @@ func validateVolumeRecord(record VolumeRecord) error {
 	if err := validateID(ids.KindVolume, record.ID); err != nil {
 		return err
 	}
-	if err := validateVolumeName(record.Name); err != nil {
+	if err := slug.Validate("volume slug", record.Slug); err != nil {
 		return err
 	}
-	return nil
+	return validateVolumeComposeKey(record.Key)
 }
 
-func validateVolumeName(name string) error {
-	if err := composekey.Validate(name); err != nil {
-		return err
-	}
-	if name == "." || name == ".." {
-		return errs.New(
-			errs.KindValidationFailed,
-			"volume name must identify one direct Environment directory child",
-		)
-	}
-	return nil
+func validateVolumeComposeKey(key string) error {
+	return volumeidentity.ValidateKey(key)
 }
 
 func encodeVolumeRecord(record VolumeRecord) ([]byte, error) {

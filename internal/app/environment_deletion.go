@@ -241,7 +241,7 @@ func (service *environmentDeletionService) deleteEnvironmentOnce(
 		}
 		renderGeneration = int32(projection.Record.RenderGeneration)
 		expectedBlueprintRevision = projection.Revision
-		params[etcd.EnvironmentBlueprintRevisionParam] = projection.Record.BlueprintRevisionID
+		params[etcd.EnvironmentDesiredRevisionParam] = projection.Record.RevisionID
 		params[etcd.TaskMaterializationEnvironmentParam] = environment.Record.ID
 		params[controller.EnvironmentBlueprintArtifactParam] = ids.New(ids.KindConfig)
 		steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}, {ID: ids.New(ids.KindStep)}}
