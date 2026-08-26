@@ -63,15 +63,16 @@ func TestCommitParsesExactSignedEvidence(t *testing.T) {
 	// Rationale: delivery and snapshot acceptance depend on each NUL-delimited
 	// field retaining its exact position, including the observed parent.
 	const (
-		commit = "1111111111111111111111111111111111111111"
-		parent = "2222222222222222222222222222222222222222"
-		tree   = "3333333333333333333333333333333333333333"
-		signer = "4444444444444444444444444444444444444444"
+		commit          = "1111111111111111111111111111111111111111"
+		parent          = "2222222222222222222222222222222222222222"
+		tree            = "3333333333333333333333333333333333333333"
+		gitSigner       = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		canonicalSigner = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	)
 	fake := runner.NewFake()
 	fake.RunFunc = func(_ context.Context, _ runner.RunCmdOpts) (runner.Result, error) {
 		return runner.Result{Stdout: bytes.Join(
-			[][]byte{[]byte(commit), []byte(parent), []byte(tree), []byte("G"), []byte(signer)},
+			[][]byte{[]byte(commit), []byte(parent), []byte(tree), []byte("G"), []byte(gitSigner)},
 			[]byte{0},
 		)}, nil
 	}
@@ -83,7 +84,7 @@ func TestCommitParsesExactSignedEvidence(t *testing.T) {
 		!sameValues(evidence.Parents, []swarmcheck.CommitID{swarmcheck.CommitID(parent)}) ||
 		evidence.Tree != tree ||
 		evidence.Signature != "G" ||
-		evidence.SignerFingerprint != signer {
+		evidence.SignerFingerprint != canonicalSigner {
 		t.Fatalf("unexpected evidence: %#v", evidence)
 	}
 }

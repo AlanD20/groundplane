@@ -155,7 +155,7 @@ func (inspector *Inspector) commit(ctx context.Context, ref string) (CommitEvide
 	if err != nil {
 		return CommitEvidence{}, err
 	}
-	fingerprint, err := swarmcheck.ParseFingerprint(fields[4])
+	fingerprint, err := swarmcheck.ParseFingerprint(strings.ToLower(fields[4]))
 	if err != nil {
 		return CommitEvidence{}, err
 	}
