@@ -49,6 +49,12 @@ type Coordinator struct {
 	protector *secretvalue.Protector
 }
 
+// EvidenceRepository is the consumer-owned read seam used to classify a
+// durable idempotency marker without depending on a concrete repository.
+type EvidenceRepository interface {
+	Read(context.Context, infraetcd.IdempotencyLocator) (*infraetcd.IdempotencyEvidence, error)
+}
+
 func NewCoordinator(protector *secretvalue.Protector) (*Coordinator, error) {
 	if protector == nil {
 		return nil, internalError("protector is required")
@@ -121,7 +127,7 @@ func (coordinator *Coordinator) ResolveKnown(
 // claiming a marker and creating its Task.
 func (coordinator *Coordinator) ResolveExisting(
 	ctx context.Context,
-	repository *infraetcd.IdempotencyRepository,
+	repository EvidenceRepository,
 	locator infraetcd.IdempotencyLocator,
 	candidate ProtectedEvidence,
 ) (Resolution, bool, error) {
@@ -149,7 +155,7 @@ func (coordinator *Coordinator) ResolveExisting(
 // evidence preserves the original retryable/cancellation error.
 func (coordinator *Coordinator) ResolveUnknown(
 	ctx context.Context,
-	repository *infraetcd.IdempotencyRepository,
+	repository EvidenceRepository,
 	locator infraetcd.IdempotencyLocator,
 	candidate ProtectedEvidence,
 	original error,

@@ -30,12 +30,16 @@ type controllerTaskLocalAgents interface {
 
 type controllerTaskHandler struct {
 	agents       controllerTaskLocalAgents
-	backingZones *backingZoneCascadeService
+	backingZones backingZoneCascadeExecutor
+}
+
+type backingZoneCascadeExecutor interface {
+	Execute(context.Context, etcd.TaskRecord) error
 }
 
 func newControllerTaskHandler(
 	agents controllerTaskLocalAgents,
-	backingZones *backingZoneCascadeService,
+	backingZones backingZoneCascadeExecutor,
 ) (*controllerTaskHandler, error) {
 	if agents == nil || backingZones == nil {
 		return nil, errs.New(errs.KindInternal, "Controller Task handlers are not configured")
@@ -97,13 +101,6 @@ func (handler *controllerTaskHandler) Execute(
 		}
 		return nil
 	case etcd.TaskResourceBackingZone:
-		valid, err := isBackingZoneCascadeTask(task)
-		if err != nil || !valid {
-			if err != nil {
-				return err
-			}
-			return errs.New(errs.KindValidationFailed, "Controller Task backing Zone removal is invalid")
-		}
 		return handler.backingZones.Execute(ctx, task)
 	default:
 		return errs.New(errs.KindValidationFailed, "Controller Task resource kind is invalid")

@@ -160,7 +160,7 @@ func (marker IdempotencyMarker) String() string {
 
 func (marker IdempotencyMarker) GoString() string { return marker.String() }
 
-type idempotencyEvidence struct {
+type IdempotencyEvidence struct {
 	marker      IdempotencyMarker
 	modRevision int64
 }
@@ -987,7 +987,7 @@ type idempotencyRepositoryStore interface {
 type IdempotencyRepository struct{ store idempotencyRepositoryStore }
 
 type idempotencyPruneCandidate struct {
-	Marker                  idempotencyEvidence
+	Marker                  IdempotencyEvidence
 	RetentionKey            string
 	RetentionValue          []byte
 	RetentionModRevision    int64
@@ -1137,7 +1137,7 @@ func clearKeyValues(values []*KeyValue) {
 func (repository *IdempotencyRepository) Read(
 	ctx context.Context,
 	locator IdempotencyLocator,
-) (*idempotencyEvidence, error) {
+) (*IdempotencyEvidence, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency context is required")
 	}
@@ -1163,7 +1163,7 @@ func (repository *IdempotencyRepository) Read(
 	if result.Entry.ModRevision <= 0 {
 		return nil, corruptIdempotencyMarker()
 	}
-	return &idempotencyEvidence{marker: marker, modRevision: result.Entry.ModRevision}, nil
+	return &IdempotencyEvidence{marker: marker, modRevision: result.Entry.ModRevision}, nil
 }
 
 func (repository *IdempotencyRepository) ResolveReplayLocator(
@@ -1229,7 +1229,7 @@ func (repository *IdempotencyRepository) ResolveReplayLocator(
 	return locator, true, nil
 }
 
-func (evidence *idempotencyEvidence) Marker() (IdempotencyMarker, error) {
+func (evidence *IdempotencyEvidence) Marker() (IdempotencyMarker, error) {
 	if evidence == nil || evidence.modRevision <= 0 || validateIdempotencyMarker(evidence.marker) != nil {
 		return IdempotencyMarker{}, corruptIdempotencyMarker()
 	}
@@ -1352,7 +1352,7 @@ func (repository *IdempotencyRepository) collectExpired(
 			return nil, err
 		}
 		candidates = append(candidates, idempotencyPruneCandidate{
-			Marker:               idempotencyEvidence{marker: marker, modRevision: markerEntry.ModRevision},
+			Marker:               IdempotencyEvidence{marker: marker, modRevision: markerEntry.ModRevision},
 			RetentionKey:         retentionEntries[index].Key,
 			RetentionValue:       append([]byte(nil), retentionEntries[index].Value...),
 			RetentionModRevision: retentionEntries[index].ModRevision,

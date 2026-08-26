@@ -9,22 +9,21 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 type fakeZoneMutator struct {
-	input          apiTypes.ZoneCreate
+	input          corenetwork.CreateZoneRequest
 	idempotencyKey string
-	response       etcd.IdempotencyResponse
+	response       corenetwork.MutationResponse
 }
 
 func (fake *fakeZoneMutator) RemoveZone(
 	_ context.Context,
 	id string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (corenetwork.MutationResponse, error) {
 	fake.input.EnvironmentID = id
 	fake.idempotencyKey = idempotencyKey
 	return fake.response, nil
@@ -32,18 +31,18 @@ func (fake *fakeZoneMutator) RemoveZone(
 
 func (fake *fakeZoneMutator) CreateZone(
 	_ context.Context,
-	input apiTypes.ZoneCreate,
+	input corenetwork.CreateZoneRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (corenetwork.MutationResponse, error) {
 	fake.input = input
 	fake.idempotencyKey = idempotencyKey
 	return fake.response, nil
 }
 
 type fakeZoneReader struct {
-	zone        etcd.Versioned[etcd.ZoneRecord]
-	page        etcd.Page[etcd.ZoneRecord]
-	wantRequest etcd.PageRequest
+	zone        corenetwork.Zone
+	page        corenetwork.Page[corenetwork.Zone]
+	wantRequest corenetwork.PageRequest
 	wantEnv     string
 	listed      bool
 }
@@ -51,15 +50,15 @@ type fakeZoneReader struct {
 func (fake *fakeZoneReader) GetZone(
 	context.Context,
 	string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
+) (corenetwork.Zone, error) {
 	return fake.zone, nil
 }
 
 func (fake *fakeZoneReader) ListZones(
 	_ context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
+	request corenetwork.PageRequest,
+) (corenetwork.Page[corenetwork.Zone], error) {
 	fake.listed = environmentID == fake.wantEnv && request == fake.wantRequest
 	return fake.page, nil
 }
@@ -69,11 +68,11 @@ func (fake *fakeZoneReader) ListZones(
 func TestZoneRoutesProjectExactPublicRecord(t *testing.T) {
 	t.Parallel()
 	record := zoneRouteTestRecord()
-	request := etcd.PageRequest{Limit: 3, Cursor: "opaque"}
+	request := corenetwork.PageRequest{Limit: 3, Cursor: "opaque"}
 	reader := &fakeZoneReader{
-		zone: etcd.Versioned[etcd.ZoneRecord]{Record: record},
-		page: etcd.Page[etcd.ZoneRecord]{
-			Items: []etcd.Versioned[etcd.ZoneRecord]{{Record: record}}, NextCursor: "next", Revision: 71,
+		zone: record,
+		page: corenetwork.Page[corenetwork.Zone]{
+			Items: []corenetwork.Zone{record}, NextCursor: "next",
 		},
 		wantRequest: request, wantEnv: record.EnvironmentID,
 	}
@@ -88,7 +87,7 @@ func TestZoneRoutesProjectExactPublicRecord(t *testing.T) {
 	if !reflect.DeepEqual(page.Body.Items[0], want) || page.Body.NextCursor != "next" {
 		t.Fatalf("Zone page = %#v, want %#v", page.Body, want)
 	}
-	shown, err := server.showZone(context.Background(), &zoneShowInput{ID: record.Desired.ID})
+	shown, err := server.showZone(context.Background(), &zoneShowInput{ID: record.ID})
 	if err != nil || !reflect.DeepEqual(shown.Body, want) {
 		t.Fatalf("showZone() = %#v, %v, want %#v", shown, err, want)
 	}
@@ -104,13 +103,13 @@ func TestZoneCreateRouteForwardsStrictInputAndExactResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal Zone: %v", err)
 	}
-	mutator := &fakeZoneMutator{response: etcd.IdempotencyResponse{
+	mutator := &fakeZoneMutator{response: corenetwork.MutationResponse{
 		Status: http.StatusCreated, ContentKind: "application/json", Body: body,
 	}}
 	server := &Server{zoneMutations: mutator}
 	input := apiTypes.ZoneCreate{
-		EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
-		Subnet: record.Desired.Subnet, Internal: record.Desired.Internal,
+		EnvironmentID: record.EnvironmentID, Name: record.Name,
+		Subnet: record.Subnet, Internal: record.Internal,
 	}
 	raw, err := json.Marshal(input)
 	if err != nil {
@@ -120,7 +119,9 @@ func TestZoneCreateRouteForwardsStrictInputAndExactResponse(t *testing.T) {
 		IdempotencyKey: "zone-create-key-0001", RawBody: raw,
 	})
 	if err != nil || output.Status != http.StatusCreated || output.ContentType != "application/json" ||
-		!reflect.DeepEqual(mutator.input, input) || mutator.idempotencyKey != "zone-create-key-0001" {
+		!reflect.DeepEqual(mutator.input, corenetwork.CreateZoneRequest{
+			EnvironmentID: input.EnvironmentID, Name: input.Name, Subnet: input.Subnet, Internal: input.Internal,
+		}) || mutator.idempotencyKey != "zone-create-key-0001" {
 		t.Fatalf("createZone() = %#v, %v; forwarded %#v/%q", output, err, mutator.input, mutator.idempotencyKey)
 	}
 }
@@ -134,15 +135,15 @@ func TestZoneRemoveRouteForwardsStableTargetAndExactResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal Task accepted: %v", err)
 	}
-	mutator := &fakeZoneMutator{response: etcd.IdempotencyResponse{
+	mutator := &fakeZoneMutator{response: corenetwork.MutationResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
 	}}
 	server := &Server{zoneMutations: mutator}
 	output, err := server.removeZone(context.Background(), &zoneRemoveInput{
-		ID: record.Desired.ID, IdempotencyKey: "zone-remove-key-0001",
+		ID: record.ID, IdempotencyKey: "zone-remove-key-0001",
 	})
 	if err != nil || output.Status != http.StatusAccepted || output.ContentType != "application/json" ||
-		mutator.input.EnvironmentID != record.Desired.ID || mutator.idempotencyKey != "zone-remove-key-0001" {
+		mutator.input.EnvironmentID != record.ID || mutator.idempotencyKey != "zone-remove-key-0001" {
 		t.Fatalf(
 			"removeZone() = %#v, %v; forwarded %q/%q",
 			output,
@@ -199,14 +200,12 @@ func TestZoneOpenAPIContainsReadOperations(t *testing.T) {
 	}
 }
 
-func zoneRouteTestRecord() etcd.ZoneRecord {
+func zoneRouteTestRecord() corenetwork.Zone {
 	at := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
-	return etcd.ZoneRecord{
-		EnvironmentID: environmentID,
-		Desired: core.Zone{
-			ID: ids.NewAt(ids.KindNetwork, at, 2), Name: "frontend", Subnet: "10.40.10.0/24",
-			Internal: true, OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
-		},
+	return corenetwork.Zone{
+		ID: ids.NewAt(ids.KindNetwork, at, 2), EnvironmentID: environmentID,
+		Name: "frontend", Subnet: "10.40.10.0/24", Internal: true,
+		OwnerKind: corenetwork.ZoneOwnerEnvironment, OwnerID: environmentID,
 	}
 }

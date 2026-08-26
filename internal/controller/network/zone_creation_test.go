@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func TestZoneCreationServiceDerivesOwnershipAndPersistsExactResponse(t *testing.
 		},
 	}
 	idempotency := &fakeZoneCreationIdempotency{
-		evidence:   zoneCreationEvidence{durable: projectCreationTestEvidence().durable},
+		evidence:   zoneCreationEvidence{durable: networkTestProtectedIntent()},
 		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	}
 	service, err := newZoneCreationService(repository, idempotency)
@@ -87,7 +87,7 @@ func TestZoneCreationServiceReplaysBeforeHierarchyReads(t *testing.T) {
 	}
 	repository := &fakeZoneCreationRepository{}
 	service, err := newZoneCreationService(repository, &fakeZoneCreationIdempotency{
-		evidence:   zoneCreationEvidence{durable: projectCreationTestEvidence().durable},
+		evidence:   zoneCreationEvidence{durable: networkTestProtectedIntent()},
 		existing:   true,
 		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionReplay, Response: want},
 	})

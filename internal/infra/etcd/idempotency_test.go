@@ -493,7 +493,7 @@ func TestIdempotencyRepositoryPrunesAtMost16ValidatedTriples(t *testing.T) {
 			t.Fatalf("encodeReplayTargetReference(%d) error = %v", index, marshalErr)
 		}
 		candidates[index] = idempotencyPruneCandidate{
-			Marker:       idempotencyEvidence{marker: marker, modRevision: int64(index + 1)},
+			Marker:       IdempotencyEvidence{marker: marker, modRevision: int64(index + 1)},
 			RetentionKey: retentionKey, RetentionValue: retentionValue,
 			RetentionModRevision: int64(index + 101),
 			ReplayTargetKey:      targetKey, ReplayTargetValue: targetValue,
@@ -581,7 +581,7 @@ func TestIdempotencyPrunePropagatesUnknownOutcome(t *testing.T) {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
 	_, err = repository.pruneExpired(context.Background(), marker.RetainUntil, []idempotencyPruneCandidate{{
-		Marker:       idempotencyEvidence{marker: marker, modRevision: 7},
+		Marker:       IdempotencyEvidence{marker: marker, modRevision: 7},
 		RetentionKey: retentionKey, RetentionValue: retentionValue, RetentionModRevision: 8,
 	}})
 	if !isKind(err, errs.KindStorageUnavailable) || !errors.Is(err, backendError) || backend.getKey != "" {

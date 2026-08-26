@@ -155,6 +155,41 @@ func TestRenderRejectsUnreachableTargetsAndInvalidTemplates(t *testing.T) {
 	}
 }
 
+func TestRenderRejectsRouteSyntaxInjectionAndMixedHostExposure(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		mutate func(*core.Environment)
+	}{
+		{
+			name: "path directive injection",
+			mutate: func(environment *core.Environment) {
+				environment.Routes[0].Path = "/ok\n}\nrespond 200\n"
+			},
+		},
+		{
+			name: "mixed public and internal host",
+			mutate: func(environment *core.Environment) {
+				environment.Routes[1].Exposure = "internal"
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			environment, adapter := renderFixture()
+			test.mutate(&environment)
+			_, files, err := (&component{}).Render(environment, adapter)
+			if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("Render() error = %v, want %q", err, errs.CodeValidationFailed)
+			}
+			if caddyfile := string(files[caddyfileName]); strings.Contains(caddyfile, "respond 200") {
+				t.Fatalf("Render() emitted injected directive: %q", caddyfile)
+			}
+		})
+	}
+}
+
 func TestRenderDisabledComponentProducesNoArtifacts(t *testing.T) {
 	// Rationale: disabling Caddy removes its generated service and files rather
 	// than retaining a compatibility listener.

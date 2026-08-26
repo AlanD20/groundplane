@@ -12,6 +12,8 @@ package core
 
 import (
 	"fmt"
+	"net/netip"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -283,10 +285,8 @@ func (r Route) Validate() error {
 	if r.TargetPort == 0 {
 		return fmt.Errorf("route: target_port is required")
 	}
-	if r.Path == "" || r.Path[0] != '/' || strings.ContainsAny(r.Path, "?#") ||
-		(strings.Contains(r.Path, "*") &&
-			(!strings.HasSuffix(r.Path, "*") || strings.Count(r.Path, "*") != 1)) {
-		return fmt.Errorf("route: path must be absolute, queryless, fragmentless, and use only an optional terminal *")
+	if !validRoutePath(r.Path) {
+		return fmt.Errorf("route: path must be a safe absolute ASCII path with only an optional terminal *")
 	}
 	switch r.Exposure {
 	case "public":
@@ -312,6 +312,9 @@ func validRouteHost(host string) bool {
 	if host == "" || len(host) > 253 || strings.HasSuffix(host, ".") || strings.ToLower(host) != host {
 		return false
 	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return false
+	}
 	for _, label := range strings.Split(host, ".") {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
@@ -323,6 +326,69 @@ func validRouteHost(host string) bool {
 		}
 	}
 	return true
+}
+
+func validRoutePath(path string) bool {
+	if path == "" || len(path) > 2048 || path[0] != '/' {
+		return false
+	}
+	for index := 0; index < len(path); index++ {
+		character := path[index]
+		if character == '*' {
+			return index == len(path)-1
+		}
+		if character == '%' {
+			if index+2 >= len(path) || !isHex(path[index+1]) || !isHex(path[index+2]) {
+				return false
+			}
+			index += 2
+			continue
+		}
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') || strings.ContainsRune("/-._~:@!$&()+,;=", rune(character)) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isHex(character byte) bool {
+	return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f') ||
+		(character >= 'A' && character <= 'F')
+}
+
+// ServiceExposesTCPPort reports whether a Compose-style expose declaration
+// makes target reachable over TCP. Route persistence and Caddy rendering use
+// the same parser so an accepted Route cannot become unreachable by semantic
+// drift between the two boundaries.
+func ServiceExposesTCPPort(exposures []string, target uint16) bool {
+	for _, exposure := range exposures {
+		value := strings.TrimSpace(exposure)
+		if _, udp := strings.CutSuffix(value, "/udp"); udp {
+			continue
+		}
+		value, _ = strings.CutSuffix(value, "/tcp")
+		if colon := strings.LastIndexByte(value, ':'); colon >= 0 {
+			value = value[colon+1:]
+		}
+		startText, endText, ranged := strings.Cut(value, "-")
+		start, err := strconv.ParseUint(startText, 10, 16)
+		if err != nil {
+			continue
+		}
+		end := start
+		if ranged {
+			end, err = strconv.ParseUint(endText, 10, 16)
+			if err != nil || end < start {
+				continue
+			}
+		}
+		if uint64(target) >= start && uint64(target) <= end {
+			return true
+		}
+	}
+	return false
 }
 
 func (a Attach) Validate() error {

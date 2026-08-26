@@ -27,11 +27,13 @@ import (
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
+	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -236,16 +238,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script repository: %w", err)
 	}
-	routeReadRepository, err := newDurableRouteReadRepository(hierarchyRecords, routeRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Route read repositories: %w", err)
-	}
-	routeReads, err := newRouteReadService(routeReadRepository)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Route reads: %w", err)
-	}
 	scriptReadRepository, err := newDurableScriptReadRepository(hierarchyRecords, serviceRecords, scriptRecords)
 	if err != nil {
 		_ = store.Close()
@@ -261,37 +253,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone repository: %w", err)
 	}
-	zoneReadRepository, err := newDurableZoneReadRepository(hierarchyRecords, zoneRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone read repositories: %w", err)
-	}
-	zoneReads, err := newZoneReadService(zoneReadRepository)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone reads: %w", err)
-	}
 	serviceMutationRepository, err := newDurableServiceMutationRepository(hierarchyRecords, serviceRecords, zoneRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service mutation repositories: %w", err)
-	}
-	zoneCreationRepository, err := newDurableZoneCreationRepository(hierarchyRecords, zoneRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone creation repositories: %w", err)
-	}
-	zoneDeletionRepository, err := newDurableZoneDeletionRepository(hierarchyRecords, zoneRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone deletion repositories: %w", err)
-	}
-	routeMutationRepository, err := newDurableRouteMutationRepository(
-		hierarchyRecords, serviceRecords, routeRecords,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Route mutation repositories: %w", err)
 	}
 	scriptMutationRepository, err := newDurableScriptMutationRepository(
 		hierarchyRecords, serviceRecords, scriptRecords,
@@ -482,43 +447,29 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	zoneCreationIdempotency, err := newDurableZoneCreationIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone creation idempotency: %w", err)
-	}
-	zoneMutations, err := newZoneCreationService(zoneCreationRepository, zoneCreationIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone creation service: %w", err)
-	}
-	zoneDeletionIdempotency, err := newDurableZoneDeletionIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone deletion idempotency: %w", err)
-	}
-	zoneDeletions, err := newZoneDeletionService(
-		zoneDeletionRepository,
-		planResolver,
-		zoneDeletionIdempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone deletion service: %w", err)
-	}
-	zoneImpacts, err := newZoneRemovalImpactService(
-		zoneDeletionRepository,
-		attachRecords,
+	networkRecords, err := networketcd.NewRepository(
+		hierarchyRecords,
 		serviceRecords,
+		zoneRecords,
+		routeRecords,
+		attachRecords,
+		tasks,
+		idempotency,
 		attachFactValues,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Zone removal impact service: %w", err)
+		return nil, fmt.Errorf("controller: initialize Network persistence adapter: %w", err)
 	}
-	zoneMutations.deletions = zoneDeletions
-	zoneMutations.impacts = zoneImpacts
-	zoneDeletions.impacts = zoneImpacts
+	networkCapability, err := networkcontroller.NewEtcdService(
+		networkRecords,
+		planResolver,
+		intentCoordinator,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Network capability: %w", err)
+	}
 	serviceMutationIdempotency, err := newDurableServiceMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
@@ -543,16 +494,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service lifecycle service: %w", err)
 	}
-	routeMutationIdempotency, err := newDurableRouteMutationIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Route mutation idempotency: %w", err)
-	}
-	routeMutations, err := newRouteMutationService(routeMutationRepository, routeMutationIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Route mutation service: %w", err)
-	}
 	scriptMutationIdempotency, err := newDurableScriptMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
@@ -574,21 +515,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Script deletion service: %w", err)
 	}
 	scriptMutations.deletions = scriptDeletions
-	routeDeletionIdempotency, err := newDurableRouteDeletionIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Route deletion idempotency: %w", err)
-	}
-	routeDeletions, err := newRouteDeletionService(
-		routeMutationRepository,
-		planResolver,
-		routeDeletionIdempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Route deletion service: %w", err)
-	}
-	routeMutations.deletions = routeDeletions
 	agentConfigIdempotency, err := newDurableLocalAgentConfigIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
@@ -788,17 +714,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)
 	}
-	backingZoneCascades, err := newBackingZoneCascadeService(
-		&durableBackingZoneCascadeRepository{
-			hierarchy: hierarchyRecords,
-			zones:     zoneRecords,
-			attaches:  attachRecords,
-			tasks:     tasks,
-		},
+	backingZoneCascades, err := networkCapability.NewBackingZoneCascadeExecutor(
 		attachMutations,
 		taskMutations,
 		planResolver,
-		zoneDeletionIdempotency,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -1073,10 +992,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Environments:          hierarchyRecords,
 		Services:              serviceReads,
 		ServiceMutations:      serviceMutations,
-		Zones:                 zoneReads,
-		ZoneMutations:         zoneMutations,
-		Routes:                routeReads,
-		RouteMutations:        routeMutations,
+		Zones:                 networkCapability,
+		ZoneMutations:         networkCapability,
+		Routes:                networkCapability,
+		RouteMutations:        networkCapability,
 		Scripts:               scriptReads,
 		ScriptMutations:       scriptMutations,
 		Entries:               entryReads,

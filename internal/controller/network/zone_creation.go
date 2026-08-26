@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -34,45 +34,6 @@ type zoneCreationRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-type durableZoneCreationRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	zones     *etcd.ZoneRepository
-}
-
-func newDurableZoneCreationRepository(
-	hierarchy *etcd.HierarchyRepository,
-	zones *etcd.ZoneRepository,
-) (*durableZoneCreationRepository, error) {
-	if hierarchy == nil || zones == nil {
-		return nil, errs.New(errs.KindInternal, "Zone creation repositories are not configured")
-	}
-	return &durableZoneCreationRepository{hierarchy: hierarchy, zones: zones}, nil
-}
-
-func (repository *durableZoneCreationRepository) GetEnvironment(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return repository.hierarchy.GetEnvironment(ctx, id)
-}
-
-func (repository *durableZoneCreationRepository) GetProject(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
-	return repository.hierarchy.GetProject(ctx, id)
-}
-
-func (repository *durableZoneCreationRepository) CreateZoneIdempotent(
-	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	record etcd.ZoneRecord,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.CreateZoneIdempotent(ctx, environment, project, record, marker)
-}
-
 type zoneCreationEvidence struct {
 	candidate idempotentintent.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
@@ -100,12 +61,12 @@ type zoneCreationIdempotency interface {
 
 type durableZoneCreationIdempotency struct {
 	coordinator *idempotentintent.Coordinator
-	repository  *etcd.IdempotencyRepository
+	repository  idempotentintent.EvidenceRepository
 }
 
 func newDurableZoneCreationIdempotency(
 	coordinator *idempotentintent.Coordinator,
-	repository *etcd.IdempotencyRepository,
+	repository idempotentintent.EvidenceRepository,
 ) (*durableZoneCreationIdempotency, error) {
 	if coordinator == nil || repository == nil {
 		return nil, errs.New(errs.KindInternal, "Zone creation idempotency is not configured")

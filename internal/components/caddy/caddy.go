@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/netip"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ipam"
@@ -146,6 +145,7 @@ func resolveRoutes(env core.Environment, zone core.Zone) ([]resolvedRoute, error
 		services[service.ID] = service
 	}
 	seen := make(map[string]struct{}, len(env.Routes))
+	hostExposure := make(map[string]string, len(env.Routes))
 	resolved := make([]resolvedRoute, 0, len(env.Routes))
 	for _, route := range env.Routes {
 		if err := route.Validate(); err != nil {
@@ -156,6 +156,13 @@ func resolveRoutes(env core.Environment, zone core.Zone) ([]resolvedRoute, error
 			return nil, errs.New(errs.KindValidationFailed, "caddy: duplicate Route host and path")
 		}
 		seen[match] = struct{}{}
+		if exposure, found := hostExposure[route.Host]; found && exposure != route.Exposure {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"caddy: one host cannot mix public and internal Route exposure",
+			)
+		}
+		hostExposure[route.Host] = route.Exposure
 		service, ok := services[route.TargetServiceID]
 		if !ok || !safeServiceName(service.Name) {
 			return nil, errs.New(errs.KindValidationFailed, "caddy: Route target Service is missing or invalid")
@@ -168,7 +175,7 @@ func resolveRoutes(env core.Environment, zone core.Zone) ([]resolvedRoute, error
 				zone.ID,
 			)
 		}
-		if !exposesTCPPort(service.Expose, route.TargetPort) {
+		if !core.ServiceExposesTCPPort(service.Expose, route.TargetPort) {
 			return nil, errs.Newf(
 				errs.KindValidationFailed,
 				"caddy: Route %s target Service does not expose TCP port %d",
@@ -203,36 +210,6 @@ func safeServiceName(name string) bool {
 		return false
 	}
 	return true
-}
-
-func exposesTCPPort(exposures []string, target uint16) bool {
-	for _, exposure := range exposures {
-		value := strings.TrimSpace(exposure)
-		if protocol, found := strings.CutSuffix(value, "/udp"); found {
-			_ = protocol
-			continue
-		}
-		value, _ = strings.CutSuffix(value, "/tcp")
-		if colon := strings.LastIndexByte(value, ':'); colon >= 0 {
-			value = value[colon+1:]
-		}
-		startText, endText, ranged := strings.Cut(value, "-")
-		start, err := strconv.ParseUint(startText, 10, 16)
-		if err != nil {
-			continue
-		}
-		end := start
-		if ranged {
-			end, err = strconv.ParseUint(endText, 10, 16)
-			if err != nil || end < start {
-				continue
-			}
-		}
-		if uint64(target) >= start && uint64(target) <= end {
-			return true
-		}
-	}
-	return false
 }
 
 func contains(values []string, target string) bool {

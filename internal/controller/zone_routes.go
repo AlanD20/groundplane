@@ -13,21 +13,20 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type ZoneReader interface {
-	GetZone(context.Context, string) (etcd.Versioned[etcd.ZoneRecord], error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
+	GetZone(context.Context, string) (corenetwork.Zone, error)
+	ListZones(context.Context, string, corenetwork.PageRequest) (corenetwork.Page[corenetwork.Zone], error)
 }
 
 type ZoneMutator interface {
-	CreateZone(context.Context, apiTypes.ZoneCreate, string) (etcd.IdempotencyResponse, error)
-	RemoveZone(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	CreateZone(context.Context, corenetwork.CreateZoneRequest, string) (corenetwork.MutationResponse, error)
+	RemoveZone(context.Context, string, string) (corenetwork.MutationResponse, error)
 }
 
 type zoneListInput struct {
@@ -52,7 +51,7 @@ type zoneRemoveInput struct {
 }
 
 type zoneRemovalImpactMutator interface {
-	RemoveZoneWithImpact(context.Context, string, string, string) (etcd.IdempotencyResponse, error)
+	RemoveZoneWithImpact(context.Context, string, string, string) (corenetwork.MutationResponse, error)
 }
 
 type zoneOutput struct {
@@ -163,7 +162,12 @@ func (s *Server) createZone(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	response, err := s.zoneMutations.CreateZone(ctx, input, request.IdempotencyKey)
+	response, err := s.zoneMutations.CreateZone(ctx, corenetwork.CreateZoneRequest{
+		EnvironmentID: input.EnvironmentID,
+		Name:          input.Name,
+		Subnet:        input.Subnet,
+		Internal:      input.Internal,
+	}, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -267,7 +271,7 @@ func zoneCreateJSONError(err error) error {
 	return errs.Wrap(errs.KindMalformedRequest, err)
 }
 
-func (s *Server) zoneMutationResponse(response etcd.IdempotencyResponse) *zoneMutationOutput {
+func (s *Server) zoneMutationResponse(response corenetwork.MutationResponse) *zoneMutationOutput {
 	return &zoneMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {
@@ -298,7 +302,7 @@ func (s *Server) listZones(
 		Items: make([]apiTypes.Zone, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
-		response.Items[index] = zoneResponse(item.Record)
+		response.Items[index] = zoneResponse(item)
 	}
 	return &zonePageOutput{Body: response}, nil
 }
@@ -314,32 +318,31 @@ func (s *Server) showZone(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &zoneOutput{Body: zoneResponse(zone.Record)}, nil
+	return &zoneOutput{Body: zoneResponse(zone)}, nil
 }
 
-func zoneListRequest(environmentID string, limit int, cursor string) (etcd.PageRequest, error) {
+func zoneListRequest(environmentID string, limit int, cursor string) (corenetwork.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.PageRequest{}, errs.New(
+		return corenetwork.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone list requires a stable Environment id",
 		)
 	}
 	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Zone list limit must be a positive integer")
+		return corenetwork.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Zone list limit must be a positive integer",
+		)
 	}
-	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return corenetwork.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
-func zoneResponse(record etcd.ZoneRecord) apiTypes.Zone {
+func zoneResponse(record corenetwork.Zone) apiTypes.Zone {
 	return apiTypes.Zone{
-		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
-		Subnet: record.Desired.Subnet, Internal: record.Desired.Internal,
-		OwnerKind: zoneOwnerKindResponse(record.Desired.OwnerKind), OwnerID: record.Desired.OwnerID,
+		ID: record.ID, EnvironmentID: record.EnvironmentID, Name: record.Name,
+		Subnet: record.Subnet, Internal: record.Internal,
+		OwnerKind: apiTypes.ZoneOwnerKind(record.OwnerKind), OwnerID: record.OwnerID,
 	}
-}
-
-func zoneOwnerKindResponse(kind core.ZoneOwnerKind) apiTypes.ZoneOwnerKind {
-	return apiTypes.ZoneOwnerKind(kind)
 }
 
 func (s *Server) validateZoneListQuery(ctx huma.Context, next func(huma.Context)) {

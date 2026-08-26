@@ -9,21 +9,21 @@ import (
 	"reflect"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type RouteReader interface {
-	GetRoute(context.Context, string) (etcd.Versioned[etcd.RouteRecord], error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
+	GetRoute(context.Context, string) (corenetwork.Route, error)
+	ListRoutes(context.Context, string, corenetwork.PageRequest) (corenetwork.Page[corenetwork.Route], error)
 }
 
 type RouteMutator interface {
-	CreateRoute(context.Context, apiTypes.RouteCreate, string) (etcd.IdempotencyResponse, error)
-	EditRoute(context.Context, string, apiTypes.RouteEdit, string) (etcd.IdempotencyResponse, error)
-	RemoveRoute(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	CreateRoute(context.Context, corenetwork.CreateRouteRequest, string) (corenetwork.MutationResponse, error)
+	EditRoute(context.Context, string, corenetwork.EditRouteRequest, string) (corenetwork.MutationResponse, error)
+	RemoveRoute(context.Context, string, string) (corenetwork.MutationResponse, error)
 }
 
 type routeListInput struct {
@@ -132,7 +132,7 @@ func (s *Server) listRoutes(
 		Items: make([]apiTypes.Route, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
-		response.Items[index] = routeResponse(item.Record)
+		response.Items[index] = routeResponse(item)
 	}
 	return &routePageOutput{Body: response}, nil
 }
@@ -148,7 +148,7 @@ func (s *Server) showRoute(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &routeOutput{Body: routeResponse(route.Record)}, nil
+	return &routeOutput{Body: routeResponse(route)}, nil
 }
 
 func (s *Server) createRoute(
@@ -158,7 +158,14 @@ func (s *Server) createRoute(
 	if s.routeMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutator is not configured")
 	}
-	response, err := s.routeMutations.CreateRoute(ctx, request.Body, request.IdempotencyKey)
+	response, err := s.routeMutations.CreateRoute(ctx, corenetwork.CreateRouteRequest{
+		EnvironmentID:   request.Body.EnvironmentID,
+		Host:            request.Body.Host,
+		Path:            request.Body.Path,
+		Exposure:        corenetwork.RouteExposure(request.Body.Exposure),
+		TargetServiceID: request.Body.TargetServiceID,
+		TargetPort:      request.Body.TargetPort,
+	}, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -172,7 +179,10 @@ func (s *Server) editRoute(
 	if s.routeMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutator is not configured")
 	}
-	response, err := s.routeMutations.EditRoute(ctx, request.ID, request.Body, request.IdempotencyKey)
+	response, err := s.routeMutations.EditRoute(
+		ctx, request.ID, corenetwork.EditRouteRequest{Exposure: corenetwork.RouteExposure(request.Body.Exposure)},
+		request.IdempotencyKey,
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -218,7 +228,7 @@ func (s *Server) writeRouteProblem(ctx huma.Context, detail string) {
 	}
 }
 
-func (s *Server) routeMutationResponse(response etcd.IdempotencyResponse) *routeMutationOutput {
+func (s *Server) routeMutationResponse(response corenetwork.MutationResponse) *routeMutationOutput {
 	return &routeMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {
@@ -230,23 +240,26 @@ func (s *Server) routeMutationResponse(response etcd.IdempotencyResponse) *route
 	}
 }
 
-func routeListRequest(environmentID string, limit int, cursor string) (etcd.PageRequest, error) {
+func routeListRequest(environmentID string, limit int, cursor string) (corenetwork.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.PageRequest{}, errs.New(
+		return corenetwork.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Route list requires a stable Environment id",
 		)
 	}
 	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Route list limit must be a positive integer")
+		return corenetwork.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Route list limit must be a positive integer",
+		)
 	}
-	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return corenetwork.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
-func routeResponse(record etcd.RouteRecord) apiTypes.Route {
+func routeResponse(record corenetwork.Route) apiTypes.Route {
 	return apiTypes.Route{
-		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Host: record.Desired.Host,
-		Path: record.Desired.Path, Exposure: string(record.Desired.Exposure),
-		TargetServiceID: record.Desired.TargetServiceID, TargetPort: record.Desired.TargetPort,
+		ID: record.ID, EnvironmentID: record.EnvironmentID, Host: record.Host,
+		Path: record.Path, Exposure: string(record.Exposure),
+		TargetServiceID: record.TargetServiceID, TargetPort: record.TargetPort,
 	}
 }

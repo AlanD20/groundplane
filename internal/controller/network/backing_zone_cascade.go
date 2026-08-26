@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -44,62 +44,6 @@ type backingZoneCascadeRepository interface {
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type durableBackingZoneCascadeRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	zones     *etcd.ZoneRepository
-	attaches  *etcd.AttachRepository
-	tasks     *etcd.TaskRepository
-}
-
-func (repository *durableBackingZoneCascadeRepository) GetZone(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
-	return repository.zones.GetZone(ctx, id)
-}
-
-func (repository *durableBackingZoneCascadeRepository) GetDeletionTombstone(
-	ctx context.Context,
-	kind etcd.DeletionTargetKind,
-	id string,
-) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error) {
-	return repository.hierarchy.GetDeletionTombstone(ctx, kind, id)
-}
-
-func (repository *durableBackingZoneCascadeRepository) ListAttachesByBackingNetworkAtRevision(
-	ctx context.Context,
-	projectID string,
-	networkID string,
-	revision int64,
-) ([]etcd.Versioned[etcd.AttachRecord], error) {
-	return repository.attaches.ListAttachesByBackingNetworkAtRevision(ctx, projectID, networkID, revision)
-}
-
-func (repository *durableBackingZoneCascadeRepository) GetTask(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.TaskRecord], error) {
-	return repository.tasks.GetTask(ctx, id)
-}
-
-func (repository *durableBackingZoneCascadeRepository) GetSystemTaskInitiation(
-	ctx context.Context,
-	id string,
-) (etcd.TaskInitiation, error) {
-	return repository.tasks.GetSystemTaskInitiation(ctx, id)
-}
-
-func (repository *durableBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
-	ctx context.Context,
-	zone etcd.Versioned[etcd.ZoneRecord],
-	parentTaskID string,
-	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
-	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.HandoffBackingZoneDeletion(ctx, zone, parentTaskID, tombstone, task, marker)
 }
 
 type backingZoneCascadeDetaches interface {
@@ -491,6 +435,7 @@ func requireCascadeChildSuccess(task etcd.TaskRecord) error {
 	return errs.Newf(errs.KindStateConflict, "cascade child Task %s ended with status %s", task.ID, task.Status)
 }
 
+// isBackingZoneCascadeTask validates the closed Controller executor contract.
 func isBackingZoneCascadeTask(task etcd.TaskRecord) (bool, error) {
 	if task.Executor != etcd.TaskExecutorController ||
 		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceBackingZone {

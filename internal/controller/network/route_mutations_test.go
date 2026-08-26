@@ -1,8 +1,9 @@
-package app
+package network
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"reflect"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type fakeRouteMutationRepository struct {
@@ -21,6 +23,7 @@ type fakeRouteMutationRepository struct {
 	target      etcd.Versioned[etcd.ServiceRecord]
 	record      etcd.RouteRecord
 	marker      etcd.IdempotencyMarker
+	createCalls int
 }
 
 func (fake *fakeRouteMutationRepository) GetEnvironment(
@@ -52,6 +55,7 @@ func (fake *fakeRouteMutationRepository) CreateRouteIdempotent(
 	record etcd.RouteRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
+	fake.createCalls++
 	fake.record = record
 	fake.marker = marker
 	fake.marker.Intent.Ciphertext = append([]byte(nil), marker.Intent.Ciphertext...)
@@ -115,8 +119,9 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 		},
 	}
 	repository.target.Record.Desired.ID = targetID
+	repository.target.Record.Desired.Expose = []string{"8080"}
 	idempotency := &fakeRouteMutationIdempotency{
-		evidence: routeMutationEvidence{durable: projectCreationTestEvidence().durable},
+		evidence: routeMutationEvidence{durable: networkTestProtectedIntent()},
 	}
 	service, err := newRouteMutationService(repository, idempotency)
 	if err != nil {
@@ -148,6 +153,63 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 		repository.marker.RetainUntil != now.Add(90*24*time.Hour) ||
 		!reflect.DeepEqual(repository.marker.Response, response) {
 		t.Fatalf("persisted Route/marker = %#v/%#v", repository.record, repository.marker)
+	}
+}
+
+func TestRouteCreationRejectsUnsafePathBeforePersistence(t *testing.T) {
+	t.Parallel()
+	repository := &fakeRouteMutationRepository{}
+	service, err := newRouteMutationService(repository, &fakeRouteMutationIdempotency{})
+	if err != nil {
+		t.Fatalf("newRouteMutationService() error = %v", err)
+	}
+	input := apiTypes.RouteCreate{
+		EnvironmentID: ids.New(ids.KindEnvironment), Host: "app.example.com",
+		Path: "/ok\n}\nrespond 200\n", Exposure: "public",
+		TargetServiceID: ids.New(ids.KindService), TargetPort: 8080,
+	}
+	_, err = service.CreateRoute(context.Background(), input, "route-create-key-unsafe")
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("CreateRoute() error = %v, want validation_failed", err)
+	}
+	if repository.createCalls != 0 {
+		t.Fatalf("CreateRoute() persistence calls = %d, want 0", repository.createCalls)
+	}
+}
+
+func TestRouteCreationRejectsUnexposedTargetPort(t *testing.T) {
+	t.Parallel()
+	environmentID := ids.New(ids.KindEnvironment)
+	projectID := ids.New(ids.KindProject)
+	targetID := ids.New(ids.KindService)
+	repository := &fakeRouteMutationRepository{
+		environment: etcd.Versioned[etcd.EnvironmentRecord]{
+			Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}, Revision: 7, ReadRevision: 7,
+		},
+		project: etcd.Versioned[etcd.ProjectRecord]{
+			Record: etcd.ProjectRecord{ID: projectID, Kind: etcd.ProjectKindTenant}, Revision: 8, ReadRevision: 8,
+		},
+		target: etcd.Versioned[etcd.ServiceRecord]{
+			Record: etcd.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,
+		},
+	}
+	repository.target.Record.Desired.ID = targetID
+	repository.target.Record.Desired.Expose = []string{"9000", "8080/udp"}
+	service, err := newRouteMutationService(repository, &fakeRouteMutationIdempotency{
+		evidence: routeMutationEvidence{durable: networkTestProtectedIntent()},
+	})
+	if err != nil {
+		t.Fatalf("newRouteMutationService() error = %v", err)
+	}
+	_, err = service.CreateRoute(context.Background(), apiTypes.RouteCreate{
+		EnvironmentID: environmentID, Host: "app.example.com", Path: "/api/*", Exposure: "public",
+		TargetServiceID: targetID, TargetPort: 8080,
+	}, "route-create-unexposed")
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("CreateRoute() error = %v, want validation_failed", err)
+	}
+	if repository.createCalls != 0 {
+		t.Fatalf("CreateRoute() persistence calls = %d, want 0", repository.createCalls)
 	}
 }
 

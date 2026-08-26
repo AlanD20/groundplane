@@ -1768,26 +1768,36 @@
             "type": "string"
           },
           "environment_id": {
+            "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
           },
           "exposure": {
+            "enum": [
+              "public",
+              "internal"
+            ],
             "type": "string"
           },
           "host": {
+            "maxLength": 253,
             "type": "string"
           },
           "id": {
+            "pattern": "^rte_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
           },
           "path": {
+            "maxLength": 2048,
+            "minLength": 1,
             "type": "string"
           },
           "target_port": {
             "format": "int32",
-            "minimum": 0,
+            "minimum": 1,
             "type": "integer"
           },
           "target_service_id": {
+            "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
           }
         },
@@ -1814,23 +1824,31 @@
             "type": "string"
           },
           "environment_id": {
+            "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
           },
           "exposure": {
+            "enum": [
+              "public",
+              "internal"
+            ],
             "type": "string"
           },
           "host": {
+            "maxLength": 253,
             "type": "string"
           },
           "path": {
+            "maxLength": 2048,
             "type": "string"
           },
           "target_port": {
             "format": "int32",
-            "minimum": 0,
+            "minimum": 1,
             "type": "integer"
           },
           "target_service_id": {
+            "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
           }
         },
@@ -1855,6 +1873,10 @@
             "type": "string"
           },
           "exposure": {
+            "enum": [
+              "public",
+              "internal"
+            ],
             "type": "string"
           }
         },
@@ -2801,6 +2823,10 @@
             "type": "string"
           },
           "owner_kind": {
+            "enum": [
+              "environment",
+              "backing_project"
+            ],
             "type": "string"
           },
           "subnet": {
@@ -2887,6 +2913,10 @@
             "type": "string"
           },
           "mode": {
+            "enum": [
+              "ordinary",
+              "backing_cascade"
+            ],
             "type": "string"
           },
           "services": {

@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -65,41 +65,4 @@ func (service *zoneReadService) GetZone(
 		)
 	}
 	return service.repository.GetZone(ctx, zoneID)
-}
-
-type durableZoneReadRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	zones     *etcd.ZoneRepository
-}
-
-func newDurableZoneReadRepository(
-	hierarchy *etcd.HierarchyRepository,
-	zones *etcd.ZoneRepository,
-) (*durableZoneReadRepository, error) {
-	if hierarchy == nil || zones == nil {
-		return nil, errs.New(errs.KindInternal, "Zone read repositories are not configured")
-	}
-	return &durableZoneReadRepository{hierarchy: hierarchy, zones: zones}, nil
-}
-
-func (repository *durableZoneReadRepository) GetEnvironment(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return repository.hierarchy.GetEnvironment(ctx, id)
-}
-
-func (repository *durableZoneReadRepository) GetZone(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
-	return repository.zones.GetZone(ctx, id)
-}
-
-func (repository *durableZoneReadRepository) ListZones(
-	ctx context.Context,
-	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
-	return repository.zones.ListZones(ctx, environmentID, request)
 }

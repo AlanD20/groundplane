@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -40,54 +40,6 @@ type zoneDeletionRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-type durableZoneDeletionRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	zones     *etcd.ZoneRepository
-}
-
-func newDurableZoneDeletionRepository(
-	hierarchy *etcd.HierarchyRepository,
-	zones *etcd.ZoneRepository,
-) (*durableZoneDeletionRepository, error) {
-	if hierarchy == nil || zones == nil {
-		return nil, errs.New(errs.KindInternal, "Zone deletion repositories are not configured")
-	}
-	return &durableZoneDeletionRepository{hierarchy: hierarchy, zones: zones}, nil
-}
-
-func (repository *durableZoneDeletionRepository) GetZone(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
-	return repository.zones.GetZone(ctx, id)
-}
-
-func (repository *durableZoneDeletionRepository) GetEnvironment(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return repository.hierarchy.GetEnvironment(ctx, id)
-}
-
-func (repository *durableZoneDeletionRepository) GetProject(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
-	return repository.hierarchy.GetProject(ctx, id)
-}
-
-func (repository *durableZoneDeletionRepository) BeginZoneDeletionWithTask(
-	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	zone etcd.Versioned[etcd.ZoneRecord],
-	tombstone etcd.DeletionTombstoneRecord,
-	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.BeginZoneDeletionWithTask(ctx, environment, project, zone, tombstone, task, marker)
-}
-
 type zoneDeletionEvidence struct {
 	candidate idempotentintent.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
@@ -122,12 +74,12 @@ type zoneDeletionIdempotency interface {
 
 type durableZoneDeletionIdempotency struct {
 	coordinator *idempotentintent.Coordinator
-	repository  *etcd.IdempotencyRepository
+	repository  idempotencyEvidenceRepository
 }
 
 func newDurableZoneDeletionIdempotency(
 	coordinator *idempotentintent.Coordinator,
-	repository *etcd.IdempotencyRepository,
+	repository idempotencyEvidenceRepository,
 ) (*durableZoneDeletionIdempotency, error) {
 	if coordinator == nil || repository == nil {
 		return nil, errs.New(errs.KindInternal, "Zone deletion idempotency is not configured")

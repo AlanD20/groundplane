@@ -1,10 +1,11 @@
-package app
+package network
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"time"
@@ -24,15 +25,14 @@ const (
 	maximumRouteDeletionAttempts         = 3
 )
 
-type routeDeletionRepository interface {
+type routeRemovalRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	GetRoute(context.Context, string) (etcd.Versioned[etcd.RouteRecord], error)
-	GetEnvironmentComposeProjection(
-		context.Context,
-		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjection(context.Context, string) (
+		etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error,
+	)
 	BeginRouteDeletionWithTask(
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
@@ -47,78 +47,33 @@ type routeDeletionRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-func (repository *durableRouteMutationRepository) GetEnvironmentComposeProjection(
-	ctx context.Context,
-	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
-	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
-}
-
-func (repository *durableRouteMutationRepository) BeginRouteDeletionWithTask(
-	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	target etcd.Versioned[etcd.ServiceRecord],
-	route etcd.Versioned[etcd.RouteRecord],
-	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],
-	tombstone etcd.DeletionTombstoneRecord,
-	intent etcd.RouteRemovalIntent,
-	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.routes.BeginRouteDeletionWithTask(
-		ctx, environment, project, target, route, projection, tombstone, intent, task, marker,
-	)
-}
-
-type routeDeletionEvidence struct {
+type routeRemovalEvidence struct {
 	candidate idempotentintent.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
-type routeDeletionIdempotency interface {
-	ResolveReplayLocator(
-		context.Context,
-		etcd.IdempotencyReplayTarget,
-		string,
-		string,
-		string,
-	) (etcd.IdempotencyLocator, bool, error)
-	Prepare(context.Context, etcd.IdempotencyLocator, string) (routeDeletionEvidence, error)
-	ResolveExisting(
-		context.Context,
-		etcd.IdempotencyLocator,
-		routeDeletionEvidence,
-	) (idempotentintent.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		routeDeletionEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		etcd.IdempotencyLocator,
-		routeDeletionEvidence,
-		error,
-	) (idempotentintent.Resolution, error)
+type routeRemovalIdempotency interface {
+	ResolveReplayLocator(context.Context, etcd.IdempotencyReplayTarget, string, string, string) (
+		etcd.IdempotencyLocator, bool, error,
+	)
+	Prepare(context.Context, etcd.IdempotencyLocator, string) (routeRemovalEvidence, error)
+	ResolveExisting(context.Context, etcd.IdempotencyLocator, routeRemovalEvidence) (
+		idempotentintent.Resolution, bool, error,
+	)
+	ResolveKnown(context.Context, routeRemovalEvidence, etcd.IdempotencyTransactionResult) (
+		idempotentintent.Resolution, error,
+	)
+	ResolveUnknown(context.Context, etcd.IdempotencyLocator, routeRemovalEvidence, error) (
+		idempotentintent.Resolution, error,
+	)
 }
 
-type durableRouteDeletionIdempotency struct {
+type durableRouteRemovalIdempotency struct {
 	coordinator *idempotentintent.Coordinator
-	repository  *etcd.IdempotencyRepository
+	repository  idempotencyEvidenceRepository
 }
 
-func newDurableRouteDeletionIdempotency(
-	coordinator *idempotentintent.Coordinator,
-	repository *etcd.IdempotencyRepository,
-) (*durableRouteDeletionIdempotency, error) {
-	if coordinator == nil || repository == nil {
-		return nil, errs.New(errs.KindInternal, "Route deletion idempotency is not configured")
-	}
-	return &durableRouteDeletionIdempotency{coordinator: coordinator, repository: repository}, nil
-}
-
-func (service *durableRouteDeletionIdempotency) ResolveReplayLocator(
+func (service *durableRouteRemovalIdempotency) ResolveReplayLocator(
 	ctx context.Context,
 	target etcd.IdempotencyReplayTarget,
 	method string,
@@ -128,67 +83,64 @@ func (service *durableRouteDeletionIdempotency) ResolveReplayLocator(
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
-func (service *durableRouteDeletionIdempotency) Prepare(
+func (service *durableRouteRemovalIdempotency) Prepare(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	routeID string,
-) (routeDeletionEvidence, error) {
+) (routeRemovalEvidence, error) {
 	if locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
-		return routeDeletionEvidence{}, errs.New(errs.KindInternal, "Route deletion replay scope is invalid")
+		return routeRemovalEvidence{}, errs.New(errs.KindInternal, "route removal replay scope is invalid")
 	}
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: http.MethodDelete,
 		Route:  routeDeletionRoute,
-		Scope: idempotentintent.Scope{
-			Kind: idempotentintent.ScopeEnvironment,
-			ID:   locator.ScopeID,
-		},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: routeID}},
-		Query: idempotentintent.Object(),
-		Body:  idempotentintent.NoBody(),
+		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: locator.ScopeID},
+		Path:   []idempotentintent.PathBinding{{Name: "id", Value: routeID}},
+		Query:  idempotentintent.Object(),
+		Body:   idempotentintent.NoBody(),
 	})
 	if err != nil {
-		return routeDeletionEvidence{}, err
+		return routeRemovalEvidence{}, err
 	}
 	defer digest.Destroy()
 	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
 	if err != nil {
-		return routeDeletionEvidence{}, err
+		return routeRemovalEvidence{}, err
 	}
 	durable, err := candidate.DurableRecord()
 	if err != nil {
-		return routeDeletionEvidence{}, err
+		return routeRemovalEvidence{}, err
 	}
-	return routeDeletionEvidence{candidate: candidate, durable: durable}, nil
+	return routeRemovalEvidence{candidate: candidate, durable: durable}, nil
 }
 
-func (service *durableRouteDeletionIdempotency) ResolveExisting(
+func (service *durableRouteRemovalIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
-	evidence routeDeletionEvidence,
+	evidence routeRemovalEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
-func (service *durableRouteDeletionIdempotency) ResolveKnown(
+func (service *durableRouteRemovalIdempotency) ResolveKnown(
 	ctx context.Context,
-	evidence routeDeletionEvidence,
+	evidence routeRemovalEvidence,
 	result etcd.IdempotencyTransactionResult,
 ) (idempotentintent.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
-func (service *durableRouteDeletionIdempotency) ResolveUnknown(
+func (service *durableRouteRemovalIdempotency) ResolveUnknown(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
-	evidence routeDeletionEvidence,
+	evidence routeRemovalEvidence,
 	original error,
 ) (idempotentintent.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
-type routeDeletionPlanResolver interface {
+type routeRemovalPlanResolver interface {
 	PrepareRouteRemovalTask(
 		context.Context,
 		etcd.TaskRecord,
@@ -197,38 +149,39 @@ type routeDeletionPlanResolver interface {
 	) (etcd.TaskRecord, error)
 }
 
-type routeDeletionService struct {
-	repository  routeDeletionRepository
-	plans       routeDeletionPlanResolver
-	idempotency routeDeletionIdempotency
+// routeRemovalService owns the complete operator intent for removing a Route,
+// from protected replay resolution through durable Task publication.
+type routeRemovalService struct {
+	repository  routeRemovalRepository
+	plans       routeRemovalPlanResolver
+	idempotency routeRemovalIdempotency
 	now         func() time.Time
 }
 
-func newRouteDeletionService(
-	repository routeDeletionRepository,
-	plans routeDeletionPlanResolver,
-	idempotency routeDeletionIdempotency,
-) (*routeDeletionService, error) {
+func newRouteRemovalService(
+	repository routeRemovalRepository,
+	plans routeRemovalPlanResolver,
+	idempotency routeRemovalIdempotency,
+) (*routeRemovalService, error) {
 	if repository == nil || plans == nil || idempotency == nil {
-		return nil, errs.New(errs.KindInternal, "Route deletion service is not configured")
+		return nil, errs.New(errs.KindInternal, "route removal service is not configured")
 	}
-	return &routeDeletionService{
-		repository: repository, plans: plans, idempotency: idempotency, now: time.Now,
-	}, nil
+	return &routeRemovalService{repository: repository, plans: plans, idempotency: idempotency, now: time.Now}, nil
 }
 
-func (service *routeDeletionService) RemoveRoute(
+// RemoveRoute publishes one replay-safe Route removal Task.
+func (service *routeRemovalService) RemoveRoute(
 	ctx context.Context,
 	routeID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route deletion context is required")
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal context is required")
 	}
 	if ids.Validate(ids.KindRoute, routeID) != nil {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
-			"Route deletion requires a stable Route id",
+			"route removal requires a stable Route id",
 		)
 	}
 	for attempt := 0; attempt < maximumRouteDeletionAttempts; attempt++ {
@@ -241,10 +194,10 @@ func (service *routeDeletionService) RemoveRoute(
 			return etcd.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route deletion retry bound was not enforced")
+	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal retry bound was not enforced")
 }
 
-func (service *routeDeletionService) removeRouteOnce(
+func (service *routeRemovalService) removeRouteOnce(
 	ctx context.Context,
 	routeID string,
 	idempotencyKey string,
@@ -257,22 +210,7 @@ func (service *routeDeletionService) removeRouteOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if indexed {
-		evidence, prepareErr := service.idempotency.Prepare(ctx, locator, routeID)
-		if prepareErr != nil {
-			return etcd.IdempotencyResponse{}, prepareErr
-		}
-		defer clear(evidence.durable.Ciphertext)
-		resolution, existing, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence)
-		if resolveErr != nil {
-			return etcd.IdempotencyResponse{}, resolveErr
-		}
-		if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Route deletion replay target is inconsistent",
-			)
-		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return service.replayIndexedRemoval(ctx, routeID, locator)
 	}
 
 	current, err := service.repository.GetRoute(ctx, routeID)
@@ -296,13 +234,7 @@ func (service *routeDeletionService) removeRouteOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
-				errs.KindInternal,
-				"Route deletion replay resolution is invalid",
-			)
-		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return replayResponse(resolution)
 	}
 
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
@@ -333,9 +265,9 @@ func (service *routeDeletionService) removeRouteOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
-		PlanID: ids.New(ids.KindPlan), Type: etcd.TaskRemove, Target: routeID,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
+		Type: etcd.TaskRemove, Target: routeID, Status: etcd.TaskStatusPending,
+		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	intent, err := etcd.NewRouteRemovalIntent(
 		task.ID, environment.Record.ID, routeID, current.Revision, projectionInput, now,
@@ -385,7 +317,7 @@ func (service *routeDeletionService) removeRouteOnce(
 		ctx, environment, project, targetService, current, projectionInput, tombstone, intent, task, marker,
 	)
 	if mutationErr != nil {
-		if !isUnknownRouteMutationOutcome(mutationErr) {
+		if !isUnknownRemovalOutcome(mutationErr) {
 			return etcd.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
@@ -397,12 +329,32 @@ func (service *routeDeletionService) removeRouteOnce(
 	}
 	switch resolution.Kind {
 	case idempotentintent.ResolutionApplied:
-		return cloneIdempotencyResponse(response), nil
+		return cloneResponse(response), nil
 	case idempotentintent.ResolutionReplay:
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return cloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route deletion resolution is invalid")
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal resolution is invalid")
 	}
+}
+
+func (service *routeRemovalService) replayIndexedRemoval(
+	ctx context.Context,
+	routeID string,
+	locator etcd.IdempotencyLocator,
+) (etcd.IdempotencyResponse, error) {
+	evidence, err := service.idempotency.Prepare(ctx, locator, routeID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(evidence.durable.Ciphertext)
+	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if !existing {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay target is inconsistent")
+	}
+	return replayResponse(resolution)
 }
 
 func prepareControllerRouteRemovalTask(
@@ -416,7 +368,7 @@ func prepareControllerRouteRemovalTask(
 	if renderGeneration == 0 || renderGeneration > math.MaxInt32 {
 		return etcd.TaskRecord{}, errs.New(
 			errs.KindStateConflict,
-			"Route render generation exceeds Controller Task limits",
+			"route render generation exceeds Controller Task limits",
 		)
 	}
 	task.Executor = etcd.TaskExecutorController
@@ -454,4 +406,24 @@ func controllerRouteRemovalPlanHash(intent etcd.RouteRemovalIntent) (string, err
 	digest := sha256.Sum256(value)
 	clear(value)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+func replayResponse(resolution idempotentintent.Resolution) (etcd.IdempotencyResponse, error) {
+	if resolution.Kind != idempotentintent.ResolutionReplay {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay resolution is invalid")
+	}
+	return cloneResponse(resolution.Response), nil
+}
+
+func cloneResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+	response.Body = append([]byte(nil), response.Body...)
+	return response
+}
+
+func isUnknownRemovalOutcome(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
 }

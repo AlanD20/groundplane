@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -65,41 +65,4 @@ func (service *routeReadService) GetRoute(
 		)
 	}
 	return service.repository.GetRoute(ctx, routeID)
-}
-
-type durableRouteReadRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	routes    *etcd.RouteRepository
-}
-
-func newDurableRouteReadRepository(
-	hierarchy *etcd.HierarchyRepository,
-	routes *etcd.RouteRepository,
-) (*durableRouteReadRepository, error) {
-	if hierarchy == nil || routes == nil {
-		return nil, errs.New(errs.KindInternal, "Route read repositories are not configured")
-	}
-	return &durableRouteReadRepository{hierarchy: hierarchy, routes: routes}, nil
-}
-
-func (repository *durableRouteReadRepository) GetEnvironment(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return repository.hierarchy.GetEnvironment(ctx, id)
-}
-
-func (repository *durableRouteReadRepository) GetRoute(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.RouteRecord], error) {
-	return repository.routes.GetRoute(ctx, id)
-}
-
-func (repository *durableRouteReadRepository) ListRoutes(
-	ctx context.Context,
-	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.RouteRecord], error) {
-	return repository.routes.ListRoutes(ctx, environmentID, request)
 }

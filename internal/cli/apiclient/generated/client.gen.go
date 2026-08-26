@@ -97,6 +97,60 @@ func (e BackupSourceInputKind) Valid() bool {
 	}
 }
 
+// Defines values for RouteExposure.
+const (
+	RouteExposureInternal RouteExposure = "internal"
+	RouteExposurePublic   RouteExposure = "public"
+)
+
+// Valid indicates whether the value is a known member of the RouteExposure enum.
+func (e RouteExposure) Valid() bool {
+	switch e {
+	case RouteExposureInternal:
+		return true
+	case RouteExposurePublic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RouteCreateExposure.
+const (
+	RouteCreateExposureInternal RouteCreateExposure = "internal"
+	RouteCreateExposurePublic   RouteCreateExposure = "public"
+)
+
+// Valid indicates whether the value is a known member of the RouteCreateExposure enum.
+func (e RouteCreateExposure) Valid() bool {
+	switch e {
+	case RouteCreateExposureInternal:
+		return true
+	case RouteCreateExposurePublic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RouteEditExposure.
+const (
+	RouteEditExposureInternal RouteEditExposure = "internal"
+	RouteEditExposurePublic   RouteEditExposure = "public"
+)
+
+// Valid indicates whether the value is a known member of the RouteEditExposure enum.
+func (e RouteEditExposure) Valid() bool {
+	switch e {
+	case RouteEditExposureInternal:
+		return true
+	case RouteEditExposurePublic:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskActor.
 const (
 	Operator TaskActor = "operator"
@@ -220,6 +274,42 @@ func (e TaskEventState) Valid() bool {
 	case Running:
 		return true
 	case TimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ZoneOwnerKind.
+const (
+	ZoneOwnerKindBackingProject ZoneOwnerKind = "backing_project"
+	ZoneOwnerKindEnvironment    ZoneOwnerKind = "environment"
+)
+
+// Valid indicates whether the value is a known member of the ZoneOwnerKind enum.
+func (e ZoneOwnerKind) Valid() bool {
+	switch e {
+	case ZoneOwnerKindBackingProject:
+		return true
+	case ZoneOwnerKindEnvironment:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ZoneRemovalImpactMode.
+const (
+	BackingCascade ZoneRemovalImpactMode = "backing_cascade"
+	Ordinary       ZoneRemovalImpactMode = "ordinary"
+)
+
+// Valid indicates whether the value is a known member of the ZoneRemovalImpactMode enum.
+func (e ZoneRemovalImpactMode) Valid() bool {
+	switch e {
+	case BackingCascade:
+		return true
+	case Ordinary:
 		return true
 	default:
 		return false
@@ -814,38 +904,47 @@ type Route struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Route.json
-	Schema          *string `json:"$schema,omitempty"`
-	EnvironmentId   string  `json:"environment_id"`
-	Exposure        string  `json:"exposure"`
-	Host            *string `json:"host,omitempty"`
-	Id              string  `json:"id"`
-	Path            string  `json:"path"`
-	TargetPort      int32   `json:"target_port"`
-	TargetServiceId string  `json:"target_service_id"`
+	Schema          *string       `json:"$schema,omitempty"`
+	EnvironmentId   string        `json:"environment_id"`
+	Exposure        RouteExposure `json:"exposure"`
+	Host            *string       `json:"host,omitempty"`
+	Id              string        `json:"id"`
+	Path            string        `json:"path"`
+	TargetPort      int32         `json:"target_port"`
+	TargetServiceId string        `json:"target_service_id"`
 }
+
+// RouteExposure defines model for Route.Exposure.
+type RouteExposure string
 
 // RouteCreate defines model for RouteCreate.
 type RouteCreate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/RouteCreate.json
-	Schema          *string `json:"$schema,omitempty"`
-	EnvironmentId   string  `json:"environment_id"`
-	Exposure        string  `json:"exposure"`
-	Host            *string `json:"host,omitempty"`
-	Path            *string `json:"path,omitempty"`
-	TargetPort      int32   `json:"target_port"`
-	TargetServiceId string  `json:"target_service_id"`
+	Schema          *string             `json:"$schema,omitempty"`
+	EnvironmentId   string              `json:"environment_id"`
+	Exposure        RouteCreateExposure `json:"exposure"`
+	Host            *string             `json:"host,omitempty"`
+	Path            *string             `json:"path,omitempty"`
+	TargetPort      int32               `json:"target_port"`
+	TargetServiceId string              `json:"target_service_id"`
 }
+
+// RouteCreateExposure defines model for RouteCreate.Exposure.
+type RouteCreateExposure string
 
 // RouteEdit defines model for RouteEdit.
 type RouteEdit struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/RouteEdit.json
-	Schema   *string `json:"$schema,omitempty"`
-	Exposure string  `json:"exposure"`
+	Schema   *string           `json:"$schema,omitempty"`
+	Exposure RouteEditExposure `json:"exposure"`
 }
+
+// RouteEditExposure defines model for RouteEdit.Exposure.
+type RouteEditExposure string
 
 // Script defines model for Script.
 type Script struct {
@@ -1149,15 +1248,18 @@ type Zone struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Zone.json
-	Schema        *string `json:"$schema,omitempty"`
-	EnvironmentId string  `json:"environment_id"`
-	Id            string  `json:"id"`
-	Internal      bool    `json:"internal"`
-	Name          string  `json:"name"`
-	OwnerId       string  `json:"owner_id"`
-	OwnerKind     string  `json:"owner_kind"`
-	Subnet        string  `json:"subnet"`
+	Schema        *string       `json:"$schema,omitempty"`
+	EnvironmentId string        `json:"environment_id"`
+	Id            string        `json:"id"`
+	Internal      bool          `json:"internal"`
+	Name          string        `json:"name"`
+	OwnerId       string        `json:"owner_id"`
+	OwnerKind     ZoneOwnerKind `json:"owner_kind"`
+	Subnet        string        `json:"subnet"`
 }
+
+// ZoneOwnerKind defines model for Zone.OwnerKind.
+type ZoneOwnerKind string
 
 // ZoneCreate defines model for ZoneCreate.
 type ZoneCreate struct {
@@ -1180,11 +1282,14 @@ type ZoneRemovalImpact struct {
 	Attaches    *[]ZoneRemovalImpactAttach   `json:"attaches"`
 	Databases   *[]ZoneRemovalImpactDatabase `json:"databases"`
 	ImpactToken string                       `json:"impact_token"`
-	Mode        string                       `json:"mode"`
+	Mode        ZoneRemovalImpactMode        `json:"mode"`
 	Services    *[]ZoneRemovalImpactService  `json:"services"`
 	ZoneId      string                       `json:"zone_id"`
 	ZoneName    string                       `json:"zone_name"`
 }
+
+// ZoneRemovalImpactMode defines model for ZoneRemovalImpact.Mode.
+type ZoneRemovalImpactMode string
 
 // ZoneRemovalImpactAttach defines model for ZoneRemovalImpactAttach.
 type ZoneRemovalImpactAttach struct {

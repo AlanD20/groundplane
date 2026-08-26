@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -446,7 +447,7 @@ func (service *serviceLifecycleService) runOnce(
 		ctx, tenant, project, environment, current, replacement, projectionInput, renderInput, task, marker,
 	)
 	if mutationErr != nil {
-		if !isUnknownRouteMutationOutcome(mutationErr) {
+		if !isUnknownServiceLifecycleMutationOutcome(mutationErr) {
 			return etcd.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
@@ -464,6 +465,14 @@ func (service *serviceLifecycleService) runOnce(
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle resolution is invalid")
 	}
+}
+
+func isUnknownServiceLifecycleMutationOutcome(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
 }
 
 func serviceLifecycleContract(taskType etcd.TaskType) (string, core.ServiceRuntimeIntent, error) {

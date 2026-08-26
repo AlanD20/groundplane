@@ -1,0 +1,249 @@
+// Package network adapts the shared etcd store to the Controller's Network
+// capability. It is the only place that assembles Zone and Route persistence
+// repositories; Controller use cases receive this capability-specific adapter
+// instead of individual concrete stores.
+package network
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// RemovalDatabaseResolver resolves the one dynamic fact needed to preview a
+// backing Zone cascade. It is colocated with the adapter because Attach
+// persistence records must not cross the Network capability's public service
+// boundary.
+type RemovalDatabaseResolver interface {
+	ResolveRemovalDatabase(context.Context, etcd.Versioned[etcd.AttachRecord], func(string) error) error
+}
+
+// Repository owns all durable records used by the Network capability.
+type Repository struct {
+	hierarchy   *etcd.HierarchyRepository
+	services    *etcd.ServiceRepository
+	zones       *etcd.ZoneRepository
+	routes      *etcd.RouteRepository
+	attaches    *etcd.AttachRepository
+	tasks       *etcd.TaskRepository
+	idempotency *etcd.IdempotencyRepository
+	facts       RemovalDatabaseResolver
+}
+
+// NewRepository constructs the complete Network persistence adapter.
+func NewRepository(
+	hierarchy *etcd.HierarchyRepository,
+	services *etcd.ServiceRepository,
+	zones *etcd.ZoneRepository,
+	routes *etcd.RouteRepository,
+	attaches *etcd.AttachRepository,
+	tasks *etcd.TaskRepository,
+	idempotency *etcd.IdempotencyRepository,
+	facts RemovalDatabaseResolver,
+) (*Repository, error) {
+	if hierarchy == nil || services == nil || zones == nil || routes == nil || attaches == nil || tasks == nil ||
+		idempotency == nil || facts == nil {
+		return nil, errs.New(errs.KindInternal, "Network persistence dependencies are not configured")
+	}
+	return &Repository{
+		hierarchy: hierarchy, services: services, zones: zones, routes: routes,
+		attaches: attaches, tasks: tasks, idempotency: idempotency, facts: facts,
+	}, nil
+}
+
+func (repository *Repository) Read(
+	ctx context.Context,
+	locator etcd.IdempotencyLocator,
+) (*etcd.IdempotencyEvidence, error) {
+	return repository.idempotency.Read(ctx, locator)
+}
+
+func (repository *Repository) ResolveReplayLocator(
+	ctx context.Context,
+	target etcd.IdempotencyReplayTarget,
+	method string,
+	route string,
+	key string,
+) (etcd.IdempotencyLocator, bool, error) {
+	return repository.idempotency.ResolveReplayLocator(ctx, target, method, route, key)
+}
+
+func (repository *Repository) GetEnvironment(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	return repository.hierarchy.GetEnvironment(ctx, id)
+}
+
+func (repository *Repository) GetProject(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ProjectRecord], error) {
+	return repository.hierarchy.GetProject(ctx, id)
+}
+
+func (repository *Repository) GetService(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ServiceRecord], error) {
+	return repository.services.GetService(ctx, id)
+}
+
+func (repository *Repository) ListServices(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.ServiceRecord], error) {
+	return repository.services.ListServices(ctx, environmentID, request)
+}
+
+func (repository *Repository) GetZone(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ZoneRecord], error) {
+	return repository.zones.GetZone(ctx, id)
+}
+
+func (repository *Repository) ListZones(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.ZoneRecord], error) {
+	return repository.zones.ListZones(ctx, environmentID, request)
+}
+
+func (repository *Repository) CreateZoneIdempotent(
+	ctx context.Context,
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	record etcd.ZoneRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.zones.CreateZoneIdempotent(ctx, environment, project, record, marker)
+}
+
+func (repository *Repository) BeginZoneDeletionWithTask(
+	ctx context.Context,
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	zone etcd.Versioned[etcd.ZoneRecord],
+	tombstone etcd.DeletionTombstoneRecord,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.zones.BeginZoneDeletionWithTask(ctx, environment, project, zone, tombstone, task, marker)
+}
+
+func (repository *Repository) GetRoute(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.RouteRecord], error) {
+	return repository.routes.GetRoute(ctx, id)
+}
+
+func (repository *Repository) ListRoutes(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.RouteRecord], error) {
+	return repository.routes.ListRoutes(ctx, environmentID, request)
+}
+
+func (repository *Repository) CreateRouteIdempotent(
+	ctx context.Context,
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	target etcd.Versioned[etcd.ServiceRecord],
+	record etcd.RouteRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.routes.CreateRouteIdempotent(ctx, environment, project, target, record, marker)
+}
+
+func (repository *Repository) ReplaceDesiredIdempotent(
+	ctx context.Context,
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	target etcd.Versioned[etcd.ServiceRecord],
+	current etcd.Versioned[etcd.RouteRecord],
+	desired core.Route,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.routes.ReplaceDesiredIdempotent(ctx, environment, project, target, current, desired, marker)
+}
+
+func (repository *Repository) GetEnvironmentComposeProjection(
+	ctx context.Context,
+	environmentID string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+}
+
+func (repository *Repository) BeginRouteDeletionWithTask(
+	ctx context.Context,
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	target etcd.Versioned[etcd.ServiceRecord],
+	route etcd.Versioned[etcd.RouteRecord],
+	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],
+	tombstone etcd.DeletionTombstoneRecord,
+	intent etcd.RouteRemovalIntent,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.routes.BeginRouteDeletionWithTask(
+		ctx, environment, project, target, route, projection, tombstone, intent, task, marker,
+	)
+}
+
+func (repository *Repository) GetDeletionTombstone(
+	ctx context.Context,
+	kind etcd.DeletionTargetKind,
+	id string,
+) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error) {
+	return repository.hierarchy.GetDeletionTombstone(ctx, kind, id)
+}
+
+func (repository *Repository) ListAttachesByBackingNetworkAtRevision(
+	ctx context.Context,
+	projectID string,
+	networkID string,
+	revision int64,
+) ([]etcd.Versioned[etcd.AttachRecord], error) {
+	return repository.attaches.ListAttachesByBackingNetworkAtRevision(ctx, projectID, networkID, revision)
+}
+
+func (repository *Repository) ResolveRemovalDatabase(
+	ctx context.Context,
+	attach etcd.Versioned[etcd.AttachRecord],
+	yield func(string) error,
+) error {
+	return repository.facts.ResolveRemovalDatabase(ctx, attach, yield)
+}
+
+func (repository *Repository) GetTask(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.TaskRecord], error) {
+	return repository.tasks.GetTask(ctx, id)
+}
+
+func (repository *Repository) GetSystemTaskInitiation(
+	ctx context.Context,
+	id string,
+) (etcd.TaskInitiation, error) {
+	return repository.tasks.GetSystemTaskInitiation(ctx, id)
+}
+
+func (repository *Repository) HandoffBackingZoneDeletion(
+	ctx context.Context,
+	zone etcd.Versioned[etcd.ZoneRecord],
+	parentTaskID string,
+	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.zones.HandoffBackingZoneDeletion(ctx, zone, parentTaskID, tombstone, task, marker)
+}

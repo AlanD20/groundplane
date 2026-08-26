@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -45,74 +45,6 @@ type routeMutationRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-type durableRouteMutationRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	services  *etcd.ServiceRepository
-	routes    *etcd.RouteRepository
-}
-
-func newDurableRouteMutationRepository(
-	hierarchy *etcd.HierarchyRepository,
-	services *etcd.ServiceRepository,
-	routes *etcd.RouteRepository,
-) (*durableRouteMutationRepository, error) {
-	if hierarchy == nil || services == nil || routes == nil {
-		return nil, errs.New(errs.KindInternal, "Route mutation repositories are not configured")
-	}
-	return &durableRouteMutationRepository{hierarchy: hierarchy, services: services, routes: routes}, nil
-}
-
-func (repository *durableRouteMutationRepository) GetEnvironment(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return repository.hierarchy.GetEnvironment(ctx, id)
-}
-
-func (repository *durableRouteMutationRepository) GetProject(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
-	return repository.hierarchy.GetProject(ctx, id)
-}
-
-func (repository *durableRouteMutationRepository) GetService(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
-	return repository.services.GetService(ctx, id)
-}
-
-func (repository *durableRouteMutationRepository) GetRoute(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.RouteRecord], error) {
-	return repository.routes.GetRoute(ctx, id)
-}
-
-func (repository *durableRouteMutationRepository) CreateRouteIdempotent(
-	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	target etcd.Versioned[etcd.ServiceRecord],
-	record etcd.RouteRecord,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.routes.CreateRouteIdempotent(ctx, environment, project, target, record, marker)
-}
-
-func (repository *durableRouteMutationRepository) ReplaceDesiredIdempotent(
-	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	target etcd.Versioned[etcd.ServiceRecord],
-	current etcd.Versioned[etcd.RouteRecord],
-	desired core.Route,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.routes.ReplaceDesiredIdempotent(ctx, environment, project, target, current, desired, marker)
-}
-
 type routeMutationEvidence struct {
 	candidate idempotentintent.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
@@ -148,12 +80,12 @@ type routeMutationIdempotency interface {
 
 type durableRouteMutationIdempotency struct {
 	coordinator *idempotentintent.Coordinator
-	repository  *etcd.IdempotencyRepository
+	repository  idempotentintent.EvidenceRepository
 }
 
 func newDurableRouteMutationIdempotency(
 	coordinator *idempotentintent.Coordinator,
-	repository *etcd.IdempotencyRepository,
+	repository idempotentintent.EvidenceRepository,
 ) (*durableRouteMutationIdempotency, error) {
 	if coordinator == nil || repository == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutation idempotency is not configured")
@@ -219,7 +151,7 @@ func (service *durableRouteMutationIdempotency) ResolveUnknown(
 type routeMutationService struct {
 	repository  routeMutationRepository
 	idempotency routeMutationIdempotency
-	deletions   *routeDeletionService
+	deletions   *routeRemovalService
 	now         func() time.Time
 }
 
@@ -307,6 +239,12 @@ func (service *routeMutationService) createRouteOnce(
 	environment, project, target, err := service.routeHierarchy(ctx, input.EnvironmentID, input.TargetServiceID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	if !core.ServiceExposesTCPPort(target.Record.Desired.Expose, input.TargetPort) {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Route target Service does not expose the requested TCP port",
+		)
 	}
 	record, err := etcd.NewRouteRecord(input.EnvironmentID, core.Route{
 		ID: ids.New(ids.KindRoute), Host: input.Host, Path: input.Path,
