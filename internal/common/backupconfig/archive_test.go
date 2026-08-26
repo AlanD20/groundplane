@@ -89,13 +89,32 @@ func TestOneEntryArtifactMatchesGoldenVectorAndStreamsPassTwo(t *testing.T) {
 		t.Fatalf("layout = %#v", layout)
 	}
 	destination := newMemoryWriter(authority.SourceSizeBytes)
-	if err := WriteArtifact(ctx, destination, manifest, layout, metadata, []io.Reader{bytes.NewReader(value)}); err != nil {
+	if err := WriteArtifact(
+		ctx,
+		destination,
+		manifest,
+		layout,
+		metadata,
+		[]io.Reader{bytes.NewReader(value)},
+	); err != nil {
 		t.Fatalf("WriteArtifact(): %v", err)
 	}
 	if got, want := destination.bytes[148:156], []byte{'0', '1', '1', '7', '0', '2', 0, ' '}; !bytes.Equal(got, want) {
 		t.Fatalf("manifest checksum = %q, want %q", got, want)
 	}
-	if got, want := destination.bytes[1024+148:1024+156], []byte{'0', '1', '3', '5', '2', '6', 0, ' '}; !bytes.Equal(got, want) {
+	if got, want := destination.bytes[1024+148:1024+156], []byte{
+		'0',
+		'1',
+		'3',
+		'5',
+		'2',
+		'6',
+		0,
+		' ',
+	}; !bytes.Equal(
+		got,
+		want,
+	) {
 		t.Fatalf("value checksum = %q, want %q", got, want)
 	}
 	sourceDigest := sha256.Sum256(destination.bytes)
@@ -152,7 +171,14 @@ func TestValidateArtifactRejectsTamperedCanonicalRegions(t *testing.T) {
 		t.Fatalf("ComputeLayout(): %v", err)
 	}
 	destination := newMemoryWriter(authority.SourceSizeBytes)
-	if err := WriteArtifact(ctx, destination, manifest, layout, metadata, []io.Reader{bytes.NewReader(value)}); err != nil {
+	if err := WriteArtifact(
+		ctx,
+		destination,
+		manifest,
+		layout,
+		metadata,
+		[]io.Reader{bytes.NewReader(value)},
+	); err != nil {
 		t.Fatalf("WriteArtifact(): %v", err)
 	}
 
@@ -197,7 +223,9 @@ func TestSelectedValueSemanticPolicy(t *testing.T) {
 		}},
 		Secret: true,
 		Value: ValueEvidence{
-			Path: "values/ev_00000000000000000000000000", SizeBytes: uint64(len(binaryValue)), SHA256: sha256.Sum256(binaryValue),
+			Path:      "values/ev_00000000000000000000000000",
+			SizeBytes: uint64(len(binaryValue)),
+			SHA256:    sha256.Sum256(binaryValue),
 		},
 	}
 	ctx := context.Background()
@@ -209,13 +237,25 @@ func TestSelectedValueSemanticPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeLayout(file fact): %v", err)
 	}
-	if err := WriteArtifact(ctx, newMemoryWriter(authority.SourceSizeBytes), manifest, layout, metadata, []io.Reader{bytes.NewReader(binaryValue)}); err != nil {
+	if err := WriteArtifact(
+		ctx,
+		newMemoryWriter(authority.SourceSizeBytes),
+		manifest,
+		layout,
+		metadata,
+		[]io.Reader{bytes.NewReader(binaryValue)},
+	); err != nil {
 		t.Fatalf("WriteArtifact(file fact arbitrary bytes): %v", err)
 	}
 
 	environmentEntry := fileEntry
 	environmentEntry.Metadata = Metadata{Kind: MetadataEnvironment, Environment: EnvironmentMetadata{Key: "BLOB"}}
-	manifest, authority, metadata, err = BuildManifest(ctx, TransferCapture, []Entry{environmentEntry}, testMetadataEncoder)
+	manifest, authority, metadata, err = BuildManifest(
+		ctx,
+		TransferCapture,
+		[]Entry{environmentEntry},
+		testMetadataEncoder,
+	)
 	if err != nil {
 		t.Fatalf("BuildManifest(env fact): %v", err)
 	}
@@ -223,14 +263,29 @@ func TestSelectedValueSemanticPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeLayout(env fact): %v", err)
 	}
-	if err := WriteArtifact(ctx, newMemoryWriter(authority.SourceSizeBytes), manifest, layout, metadata, []io.Reader{bytes.NewReader(binaryValue)}); err == nil {
+	if err := WriteArtifact(
+		ctx,
+		newMemoryWriter(authority.SourceSizeBytes),
+		manifest,
+		layout,
+		metadata,
+		[]io.Reader{bytes.NewReader(binaryValue)},
+	); err == nil {
 		t.Fatal("WriteArtifact() accepted non-UTF-8/NUL environment bytes")
 	}
 
 	badSecretReference := environmentEntry
 	badSecretReference.Secret = false
-	badSecretReference.Source = Source{Kind: SourceSecretReference, SecretReference: SecretReference{AuthoredKey: "DATABASE_URL"}}
-	if _, _, _, err := BuildManifest(ctx, TransferCapture, []Entry{badSecretReference}, testMetadataEncoder); err == nil {
+	badSecretReference.Source = Source{
+		Kind:            SourceSecretReference,
+		SecretReference: SecretReference{AuthoredKey: "DATABASE_URL"},
+	}
+	if _, _, _, err := BuildManifest(
+		ctx,
+		TransferCapture,
+		[]Entry{badSecretReference},
+		testMetadataEncoder,
+	); err == nil {
 		t.Fatal("BuildManifest() accepted reusable secret source for a plain Entry")
 	}
 }
@@ -277,10 +332,19 @@ func TestSecretLiteralIsAcceptedAndUsesSecretMemberMode(t *testing.T) {
 		t.Fatalf("ComputeLayout(): %v", err)
 	}
 	destination := newMemoryWriter(authority.SourceSizeBytes)
-	if err := WriteArtifact(ctx, destination, manifest, layout, metadata, []io.Reader{bytes.NewReader(value)}); err != nil {
+	if err := WriteArtifact(
+		ctx,
+		destination,
+		manifest,
+		layout,
+		metadata,
+		[]io.Reader{bytes.NewReader(value)},
+	); err != nil {
 		t.Fatalf("WriteArtifact(): %v", err)
 	}
-	if got := string(destination.bytes[layout.ValueHeaderOffsets[0]+100 : layout.ValueHeaderOffsets[0]+108]); got != "0000600\x00" {
+	if got := string(
+		destination.bytes[layout.ValueHeaderOffsets[0]+100 : layout.ValueHeaderOffsets[0]+108],
+	); got != "0000600\x00" {
 		t.Fatalf("secret literal member mode = %q", got)
 	}
 }
@@ -332,7 +396,14 @@ func TestPassTwoOwnsSourceRehashesAndZeroizesReader(t *testing.T) {
 		t.Fatalf("ComputeLayout(): %v", err)
 	}
 	destination := newMemoryWriter(authority.SourceSizeBytes)
-	if err := WriteArtifact(ctx, destination, manifest, layout, metadata, []io.Reader{bytes.NewReader(value)}); err != nil {
+	if err := WriteArtifact(
+		ctx,
+		destination,
+		manifest,
+		layout,
+		metadata,
+		[]io.Reader{bytes.NewReader(value)},
+	); err != nil {
 		t.Fatalf("WriteArtifact(): %v", err)
 	}
 	digest := sha256.Sum256(destination.bytes)
@@ -414,7 +485,12 @@ func TestPassTwoEnforcesOrderedSingleInFlightValue(t *testing.T) {
 	second.Metadata.Environment.Key = "B"
 	second.Value.Path = "values/" + second.ID
 	second.Value.SHA256 = sha256.Sum256(secondValue)
-	manifest, authority, metadata, err := BuildManifest(ctx, TransferCapture, []Entry{first, second}, testMetadataEncoder)
+	manifest, authority, metadata, err := BuildManifest(
+		ctx,
+		TransferCapture,
+		[]Entry{first, second},
+		testMetadataEncoder,
+	)
 	if err != nil {
 		t.Fatalf("BuildManifest(): %v", err)
 	}
@@ -595,7 +671,12 @@ func TestCleanupOwnedSpoolJoinsPrimaryTruncateAndCloseFailures(t *testing.T) {
 		t.Fatalf("cleanup error is not typed internal: %v", err)
 	}
 	if spool.truncateCalls != 1 || spool.syncCalls != 1 || spool.closeCalls != 1 {
-		t.Fatalf("cleanup calls = truncate %d, sync %d, close %d", spool.truncateCalls, spool.syncCalls, spool.closeCalls)
+		t.Fatalf(
+			"cleanup calls = truncate %d, sync %d, close %d",
+			spool.truncateCalls,
+			spool.syncCalls,
+			spool.closeCalls,
+		)
 	}
 }
 
@@ -620,7 +701,12 @@ func TestValidatedArtifactCloseRecordsFailureWithoutRetryOrReuse(t *testing.T) {
 		t.Fatalf("second Close() = %v, want memoized first result %v", second, first)
 	}
 	if spool.truncateCalls != 1 || spool.syncCalls != 1 || spool.closeCalls != 1 {
-		t.Fatalf("terminal cleanup retried: truncate %d, sync %d, close %d", spool.truncateCalls, spool.syncCalls, spool.closeCalls)
+		t.Fatalf(
+			"terminal cleanup retried: truncate %d, sync %d, close %d",
+			spool.truncateCalls,
+			spool.syncCalls,
+			spool.closeCalls,
+		)
 	}
 	if _, err := artifact.BeginPassTwo(context.Background()); err == nil {
 		t.Fatal("closed artifact exposed its former spool")
@@ -653,16 +739,16 @@ type memoryWriter struct {
 }
 
 type faultOwnedSpool struct {
-	truncateErr  error
-	syncErr      error
-	closeErr     error
+	truncateErr   error
+	syncErr       error
+	closeErr      error
 	truncateCalls int
 	syncCalls     int
 	closeCalls    int
 }
 
-func (spool *faultOwnedSpool) ReadAt([]byte, int64) (int, error) { return 0, io.EOF }
-func (spool *faultOwnedSpool) Write([]byte) (int, error)         { return 0, io.ErrShortWrite }
+func (spool *faultOwnedSpool) ReadAt([]byte, int64) (int, error)  { return 0, io.EOF }
+func (spool *faultOwnedSpool) Write([]byte) (int, error)          { return 0, io.ErrShortWrite }
 func (spool *faultOwnedSpool) WriteAt([]byte, int64) (int, error) { return 0, io.ErrShortWrite }
 func (spool *faultOwnedSpool) Stat() (os.FileInfo, error)         { return nil, errors.New("unused Stat") }
 func (spool *faultOwnedSpool) Truncate(int64) error {
@@ -692,7 +778,6 @@ func (writer *memoryWriter) WriteAt(value []byte, offset int64) (int, error) {
 	}
 	return count, nil
 }
-
 
 func testMetadataEncoder(_ context.Context, direction TransferDirection, ordinal uint32, entry Entry) ([]byte, error) {
 	return []byte{byte(direction), byte(ordinal), byte(len(entry.ID))}, nil

@@ -29,10 +29,14 @@ func TestEmptyTransferTranscriptGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore transcript: %v", err)
 	}
-	if got := hex.EncodeToString(capture[:]); got != "c5595baebe3953162a534d981e7ed5f241d2a6358accbd7e3f9a1ad6449c1ee5" {
+	if got := hex.EncodeToString(
+		capture[:],
+	); got != "c5595baebe3953162a534d981e7ed5f241d2a6358accbd7e3f9a1ad6449c1ee5" {
 		t.Fatalf("capture digest = %s", got)
 	}
-	if got := hex.EncodeToString(restore[:]); got != "a1652dfd0833e8ed6bd8d18657b4d014e1cac11edad358a2f58c320d2bdf33b0" {
+	if got := hex.EncodeToString(
+		restore[:],
+	); got != "a1652dfd0833e8ed6bd8d18657b4d014e1cac11edad358a2f58c320d2bdf33b0" {
 		t.Fatalf("restore digest = %s", got)
 	}
 }
@@ -58,7 +62,14 @@ func TestTransferTranscriptFramesAllMetadataBeforeValues(t *testing.T) {
 		{Ordinal: 2, EntryID: metadata[1].EntryID, SizeBytes: 1, Reader: bytes.NewReader([]byte{'y'})},
 	}
 	var got bytes.Buffer
-	if err := WriteTransferTranscript(context.Background(), &got, TransferCapture, authority, metadata, values); err != nil {
+	if err := WriteTransferTranscript(
+		context.Background(),
+		&got,
+		TransferCapture,
+		authority,
+		metadata,
+		values,
+	); err != nil {
 		t.Fatalf("WriteTransferTranscript(): %v", err)
 	}
 
@@ -99,7 +110,14 @@ func TestTransferTranscriptRejectsOversizedCanonicalEntry(t *testing.T) {
 	entryID := "ev_00000000000000000000000000"
 	metadata := []MetadataFrame{{Ordinal: 1, EntryID: entryID, CanonicalEntry: make([]byte, MaxCanonicalEntryBytes+1)}}
 	values := []ValueFrame{{Ordinal: 1, EntryID: entryID, Reader: bytes.NewReader(nil)}}
-	if err := WriteTransferTranscript(context.Background(), &bytes.Buffer{}, TransferCapture, authority, metadata, values); err == nil {
+	if err := WriteTransferTranscript(
+		context.Background(),
+		&bytes.Buffer{},
+		TransferCapture,
+		authority,
+		metadata,
+		values,
+	); err == nil {
 		t.Fatal("WriteTransferTranscript() accepted oversized deterministic metadata")
 	}
 }
@@ -115,7 +133,14 @@ func TestTransferTranscriptRejectsImpossibleSourceGeometryAndCancellation(t *tes
 		EntryCount: 1, TotalSelectedValueBytes: 1, ManifestSizeBytes: 47, SourceSizeBytes: 2048,
 	}
 	var destination bytes.Buffer
-	if err := WriteTransferTranscript(context.Background(), &destination, TransferCapture, authority, metadata, values); err == nil {
+	if err := WriteTransferTranscript(
+		context.Background(),
+		&destination,
+		TransferCapture,
+		authority,
+		metadata,
+		values,
+	); err == nil {
 		t.Fatal("WriteTransferTranscript() accepted impossible S")
 	}
 	if destination.Len() != 0 {
@@ -123,7 +148,14 @@ func TestTransferTranscriptRejectsImpossibleSourceGeometryAndCancellation(t *tes
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := WriteTransferTranscript(canceled, &destination, TransferCapture, authority, metadata, values); err == nil {
+	if err := WriteTransferTranscript(
+		canceled,
+		&destination,
+		TransferCapture,
+		authority,
+		metadata,
+		values,
+	); err == nil {
 		t.Fatal("WriteTransferTranscript() ignored cancellation")
 	}
 }

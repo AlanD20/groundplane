@@ -99,7 +99,7 @@ func buildAttachTaskRenderInput(
 	return etcd.AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: record.ID,
 		AttachName: record.Name,
-		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
+		TenantID:   scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
 		EnvironmentID: record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
 		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir,

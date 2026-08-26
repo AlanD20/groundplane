@@ -21,14 +21,45 @@ func checkTypeScriptRules(files []*sourceFile) []Finding {
 		}
 		tokens := lexTypeScript(file.data)
 		for index, token := range tokens {
-			if token.text == "as" && index+2 < len(tokens) && tokens[index+1].text == "unknown" && tokens[index+2].text == "as" && !likelyJSXText(tokens, index) {
-				findings = append(findings, Finding{Path: file.rel, Line: token.line, Column: token.column, Rule: "ts-unsafe-assertion", Message: "double assertion through unknown is forbidden"})
+			if token.text == "as" && index+2 < len(tokens) && tokens[index+1].text == "unknown" &&
+				tokens[index+2].text == "as" &&
+				!likelyJSXText(tokens, index) {
+				findings = append(
+					findings,
+					Finding{
+						Path:    file.rel,
+						Line:    token.line,
+						Column:  token.column,
+						Rule:    "ts-unsafe-assertion",
+						Message: "double assertion through unknown is forbidden",
+					},
+				)
 			}
-			if token.text == "as" && index+1 < len(tokens) && tokens[index+1].text == "any" && !likelyJSXText(tokens, index) {
-				findings = append(findings, Finding{Path: file.rel, Line: token.line, Column: token.column, Rule: "ts-unsafe-assertion", Message: "assertion to any is forbidden"})
+			if token.text == "as" && index+1 < len(tokens) && tokens[index+1].text == "any" &&
+				!likelyJSXText(tokens, index) {
+				findings = append(
+					findings,
+					Finding{
+						Path:    file.rel,
+						Line:    token.line,
+						Column:  token.column,
+						Rule:    "ts-unsafe-assertion",
+						Message: "assertion to any is forbidden",
+					},
+				)
 			}
-			if file.ext != ".tsx" && token.text == "<" && index+2 < len(tokens) && tokens[index+1].text == "any" && tokens[index+2].text == ">" {
-				findings = append(findings, Finding{Path: file.rel, Line: token.line, Column: token.column, Rule: "ts-unsafe-assertion", Message: "angle-bracket assertion to any is forbidden"})
+			if file.ext != ".tsx" && token.text == "<" && index+2 < len(tokens) && tokens[index+1].text == "any" &&
+				tokens[index+2].text == ">" {
+				findings = append(
+					findings,
+					Finding{
+						Path:    file.rel,
+						Line:    token.line,
+						Column:  token.column,
+						Rule:    "ts-unsafe-assertion",
+						Message: "angle-bracket assertion to any is forbidden",
+					},
+				)
 			}
 		}
 	}

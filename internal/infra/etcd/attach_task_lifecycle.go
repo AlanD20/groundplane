@@ -366,7 +366,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	}
 	dependentGrants, err := repository.store.Range(ctx, RangeRequest{
 		Prefix: attachDependentGrantPrefix(task.Target),
-		Limit: 2, Revision: revision,
+		Limit:  2, Revision: revision,
 	})
 	if err != nil {
 		return err

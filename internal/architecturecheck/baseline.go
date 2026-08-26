@@ -183,7 +183,12 @@ func validateBaseline(baseline Baseline) error {
 
 func legacyRule(rule string) bool {
 	switch rule {
-	case "interface-constructor", "reflect-import", "layer-import", "local-concrete-recovery", "open-model-field", "json-roundtrip-conversion":
+	case "interface-constructor",
+		"reflect-import",
+		"layer-import",
+		"local-concrete-recovery",
+		"open-model-field",
+		"json-roundtrip-conversion":
 		return true
 	default:
 		return false

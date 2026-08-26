@@ -259,7 +259,11 @@ func TestRunnerRuntimeOwnershipCleanupFencesRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, found, err := tasks.ClaimNextControllerTask(ctx, removeTask.CreatedAt.Add(time.Second)); err != nil || !found {
+	if _, found, err := tasks.ClaimNextControllerTask(
+		ctx,
+		removeTask.CreatedAt.Add(time.Second),
+	); err != nil ||
+		!found {
 		t.Fatalf("claim removal found/error = %t/%v", found, err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(

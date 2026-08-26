@@ -36,7 +36,10 @@ func checkGoRules(ctx context.Context, root string, files []*sourceFile) []Findi
 			continue
 		}
 		if contextErr(ctx) != nil {
-			return append(findings, Finding{Path: file.rel, Line: 1, Column: 1, Rule: "context-canceled", Message: contextErr(ctx).Error()})
+			return append(
+				findings,
+				Finding{Path: file.rel, Line: 1, Column: 1, Rule: "context-canceled", Message: contextErr(ctx).Error()},
+			)
 		}
 		fset := token.NewFileSet()
 		parsedFile, parseErr := parser.ParseFile(fset, file.abs, file.data, parser.ParseComments|parser.AllErrors)
@@ -49,7 +52,10 @@ func checkGoRules(ctx context.Context, root string, files []*sourceFile) []Findi
 				line, column = list[0].Pos.Line, list[0].Pos.Column
 				message = list[0].Msg
 			}
-			findings = append(findings, Finding{Path: file.rel, Line: line, Column: column, Rule: "go-parse-error", Message: message})
+			findings = append(
+				findings,
+				Finding{Path: file.rel, Line: line, Column: column, Rule: "go-parse-error", Message: message},
+			)
 		}
 		if parsedFile == nil {
 			continue
@@ -57,7 +63,11 @@ func checkGoRules(ctx context.Context, root string, files []*sourceFile) []Findi
 		key := file.dir + "\x00" + parsedFile.Name.Name
 		packageInfo := packages[key]
 		if packageInfo == nil {
-			packageInfo = &goPackage{interfaces: make(map[string]struct{}), concrete: make(map[string]struct{}), types: make(map[string]ast.Expr)}
+			packageInfo = &goPackage{
+				interfaces: make(map[string]struct{}),
+				concrete:   make(map[string]struct{}),
+				types:      make(map[string]ast.Expr),
+			}
 			packages[key] = packageInfo
 		}
 		for _, declaration := range parsedFile.Decls {
@@ -93,13 +103,42 @@ func checkGoRules(ctx context.Context, root string, files []*sourceFile) []Findi
 			}
 			position := unit.fset.Position(importSpec.Pos())
 			if importPath == "unsafe" {
-				findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "unsafe-import", Message: "unsafe imports are forbidden"})
+				findings = append(
+					findings,
+					Finding{
+						Path:    unit.file.rel,
+						Line:    position.Line,
+						Column:  position.Column,
+						Rule:    "unsafe-import",
+						Message: "unsafe imports are forbidden",
+					},
+				)
 			}
 			if importPath == "reflect" && !unit.file.isTest {
-				findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "reflect-import", Subject: "reflect", Message: "reflection is a forbidden conversion dependency"})
+				findings = append(
+					findings,
+					Finding{
+						Path:    unit.file.rel,
+						Line:    position.Line,
+						Column:  position.Column,
+						Rule:    "reflect-import",
+						Subject: "reflect",
+						Message: "reflection is a forbidden conversion dependency",
+					},
+				)
 			}
 			if subject, reason := forbiddenLayerImport(unit.file.rel, importPath, module); reason != "" {
-				findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "layer-import", Subject: subject, Message: reason})
+				findings = append(
+					findings,
+					Finding{
+						Path:    unit.file.rel,
+						Line:    position.Line,
+						Column:  position.Column,
+						Rule:    "layer-import",
+						Subject: subject,
+						Message: reason,
+					},
+				)
 			}
 		}
 		if unit.file.isTest || unit.ast.Name == nil {
@@ -112,14 +151,29 @@ func checkGoRules(ctx context.Context, root string, files []*sourceFile) []Findi
 		findings = append(findings, checkUnsafeMappings(unit, packageInfo)...)
 		for _, declaration := range unit.ast.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
-			if !ok || function.Recv != nil || function.Name == nil || !function.Name.IsExported() || !strings.HasPrefix(function.Name.Name, "New") || function.Type.Results == nil {
+			if !ok || function.Recv != nil || function.Name == nil || !function.Name.IsExported() ||
+				!strings.HasPrefix(function.Name.Name, "New") ||
+				function.Type.Results == nil {
 				continue
 			}
 			if !returnsLocalInterface(function.Type.Results, packageInfo.interfaces) {
 				continue
 			}
 			position := unit.fset.Position(function.Pos())
-			findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "interface-constructor", Subject: function.Name.Name, Message: fmt.Sprintf("exported constructor %s returns a locally declared interface", function.Name.Name)})
+			findings = append(
+				findings,
+				Finding{
+					Path:    unit.file.rel,
+					Line:    position.Line,
+					Column:  position.Column,
+					Rule:    "interface-constructor",
+					Subject: function.Name.Name,
+					Message: fmt.Sprintf(
+						"exported constructor %s returns a locally declared interface",
+						function.Name.Name,
+					),
+				},
+			)
 		}
 	}
 	return findings
@@ -148,7 +202,17 @@ func checkUnsafeMappings(unit *parsedGoFile, packageInfo *goPackage) []Finding {
 		case *ast.TypeAssertExpr:
 			if subject := localConcreteSubject(value.Type, packageInfo.concrete); subject != "" {
 				position := unit.fset.Position(value.Pos())
-				findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "local-concrete-recovery", Subject: subject, Message: "type assertion recovers a locally declared concrete type"})
+				findings = append(
+					findings,
+					Finding{
+						Path:    unit.file.rel,
+						Line:    position.Line,
+						Column:  position.Column,
+						Rule:    "local-concrete-recovery",
+						Subject: subject,
+						Message: "type assertion recovers a locally declared concrete type",
+					},
+				)
 			}
 		case *ast.TypeSwitchStmt:
 			for _, statement := range value.Body.List {
@@ -162,7 +226,17 @@ func checkUnsafeMappings(unit *parsedGoFile, packageInfo *goPackage) []Finding {
 						continue
 					}
 					position := unit.fset.Position(expression.Pos())
-					findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "local-concrete-recovery", Subject: subject, Message: "type switch recovers a locally declared concrete type"})
+					findings = append(
+						findings,
+						Finding{
+							Path:    unit.file.rel,
+							Line:    position.Line,
+							Column:  position.Column,
+							Rule:    "local-concrete-recovery",
+							Subject: subject,
+							Message: "type switch recovers a locally declared concrete type",
+						},
+					)
 				}
 			}
 		case *ast.StructType:
@@ -172,7 +246,17 @@ func checkUnsafeMappings(unit *parsedGoFile, packageInfo *goPackage) []Finding {
 				}
 				position := unit.fset.Position(field.Type.Pos())
 				subject := structNames[value] + "." + fieldName(field)
-				findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "open-model-field", Subject: subject, Message: "model fields must not use any or interface{}"})
+				findings = append(
+					findings,
+					Finding{
+						Path:    unit.file.rel,
+						Line:    position.Line,
+						Column:  position.Column,
+						Rule:    "open-model-field",
+						Subject: subject,
+						Message: "model fields must not use any or interface{}",
+					},
+				)
 			}
 		}
 		return true
@@ -262,7 +346,17 @@ func checkJSONRoundTrips(unit *parsedGoFile) []Finding {
 				}
 				if _, roundTrip := marshaled[identifier.Name]; roundTrip {
 					position := unit.fset.Position(value.Pos())
-					findings = append(findings, Finding{Path: unit.file.rel, Line: position.Line, Column: position.Column, Rule: "json-roundtrip-conversion", Subject: function.Name.Name, Message: "JSON marshal/unmarshal round trips are forbidden conversion strategies"})
+					findings = append(
+						findings,
+						Finding{
+							Path:    unit.file.rel,
+							Line:    position.Line,
+							Column:  position.Column,
+							Rule:    "json-roundtrip-conversion",
+							Subject: function.Name.Name,
+							Message: "JSON marshal/unmarshal round trips are forbidden conversion strategies",
+						},
+					)
 				}
 			}
 			return true
@@ -362,21 +456,62 @@ func forbiddenLayerImport(source, importPath, module string) (string, string) {
 	case sourceDirectory == "console":
 		denied = true
 	case sourceDirectory == "internal/cli" || strings.HasPrefix(sourceDirectory, "internal/cli/"):
-		denied = forbidden("internal/controller", "internal/agent", "internal/infra", "internal/adapters", "internal/components")
+		denied = forbidden(
+			"internal/controller",
+			"internal/agent",
+			"internal/infra",
+			"internal/adapters",
+			"internal/components",
+		)
 	case sourceDirectory == "internal/controller" || strings.HasPrefix(sourceDirectory, "internal/controller/"):
 		denied = forbidden("internal/cli")
 	case sourceDirectory == "internal/agent" || strings.HasPrefix(sourceDirectory, "internal/agent/"):
 		denied = forbidden("internal/controller", "internal/cli", "internal/adapters", "internal/components")
 	case sourceDirectory == "internal/core" || strings.HasPrefix(sourceDirectory, "internal/core/"):
-		denied = forbidden("internal/infra", "internal/controller", "internal/agent", "internal/adapters", "internal/components", "internal/cli")
+		denied = forbidden(
+			"internal/infra",
+			"internal/controller",
+			"internal/agent",
+			"internal/adapters",
+			"internal/components",
+			"internal/cli",
+		)
 	case sourceDirectory == "internal/adapters" || strings.HasPrefix(sourceDirectory, "internal/adapters/"):
-		denied = forbidden("internal/infra", "internal/cli", "internal/controller", "internal/agent", "internal/components")
+		denied = forbidden(
+			"internal/infra",
+			"internal/cli",
+			"internal/controller",
+			"internal/agent",
+			"internal/components",
+		)
 	case sourceDirectory == "internal/components" || strings.HasPrefix(sourceDirectory, "internal/components/"):
-		denied = forbidden("internal/infra", "internal/cli", "internal/controller", "internal/agent", "internal/adapters")
+		denied = forbidden(
+			"internal/infra",
+			"internal/cli",
+			"internal/controller",
+			"internal/agent",
+			"internal/adapters",
+		)
 	case sourceDirectory == "internal/infra" || strings.HasPrefix(sourceDirectory, "internal/infra/"):
-		denied = forbidden("internal/cli", "internal/controller", "internal/agent", "internal/adapters", "internal/components", "pkg/api")
+		denied = forbidden(
+			"internal/cli",
+			"internal/controller",
+			"internal/agent",
+			"internal/adapters",
+			"internal/components",
+			"pkg/api",
+		)
 	case sourceDirectory == "internal/common" || strings.HasPrefix(sourceDirectory, "internal/common/"):
-		denied = forbidden("internal/app", "internal/cli", "internal/controller", "internal/agent", "internal/infra", "internal/adapters", "internal/components", "pkg/api")
+		denied = forbidden(
+			"internal/app",
+			"internal/cli",
+			"internal/controller",
+			"internal/agent",
+			"internal/infra",
+			"internal/adapters",
+			"internal/components",
+			"pkg/api",
+		)
 	case sourceDirectory == "pkg/api" || strings.HasPrefix(sourceDirectory, "pkg/api/"):
 		denied = forbidden("internal/infra")
 	case sourceDirectory == "pkg/errs" || strings.HasPrefix(sourceDirectory, "pkg/errs/"):

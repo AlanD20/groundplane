@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
 func bootstrapRunnerNetworkPool(
-	ctx context.Context,
-	store etcd.Store,
+	ctx context.Context, store etcd.Store,
 	controllerConfig config.ControllerConfig,
 ) error {
 	pools, err := controllerConfig.AllocationPools()
@@ -20,5 +20,5 @@ func bootstrapRunnerNetworkPool(
 	if err != nil {
 		return err
 	}
-	return repository.EnsureRunnerNetworkPool(ctx, etcd.RunnerAllocationConfigFromPools(pools))
+	return repository.EnsureRunnerNetworkPool(ctx, runnerallocation.RunnerAllocationConfigFromPools(pools))
 }

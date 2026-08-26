@@ -219,7 +219,9 @@ func (c ControllerConfig) AllocationPools() (AllocationPools, error) {
 	runnerPool, err := ipam.ParseIPv4Prefix(c.Runner.NetworkPool)
 	if err != nil || runnerPool.String() != c.Runner.NetworkPool || runnerPool.Bits() <= systemPool.Bits() ||
 		runnerPool.Bits() > 29 || !systemPool.Contains(runnerPool.Addr()) {
-		return AllocationPools{}, fmt.Errorf("config: controller runner.network_pool must be a canonical IPv4 child of system_pool with /29 children")
+		return AllocationPools{}, fmt.Errorf(
+			"config: controller runner.network_pool must be a canonical IPv4 child of system_pool with /29 children",
+		)
 	}
 	hostUID, err := parseInclusiveRange("runner.host_uid_range", c.Runner.HostUIDRange)
 	if err != nil {
@@ -239,7 +241,9 @@ func (c ControllerConfig) AllocationPools() (AllocationPools, error) {
 	networkCount := uint64(1) << uint(29-runnerPool.Bits())
 	if hostCount < 5 || hostCount > math.MaxUint32 || subUIDCount != hostCount*65536 ||
 		subGIDCount != hostCount*65536 || networkCount < hostCount {
-		return AllocationPools{}, fmt.Errorf("config: controller runner allocation ranges must define at least five matching fixed-size slots")
+		return AllocationPools{}, fmt.Errorf(
+			"config: controller runner allocation ranges must define at least five matching fixed-size slots",
+		)
 	}
 	return AllocationPools{
 		Environment: environmentPool,

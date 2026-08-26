@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -50,19 +51,6 @@ type RunnerDesiredRecord struct {
 	ImageRef  string          `json:"image_ref"`
 }
 
-// RunnerHostAllocationRecord is the exact scarce allocation retained across
-// create retry and removal finalization. Registration credentials never enter
-// this record.
-type RunnerHostAllocationRecord struct {
-	Slot        uint32 `json:"slot"`
-	HostUID     uint32 `json:"host_uid"`
-	SubUIDStart uint32 `json:"subuid_start"`
-	SubUIDCount uint32 `json:"subuid_count"`
-	SubGIDStart uint32 `json:"subgid_start"`
-	SubGIDCount uint32 `json:"subgid_count"`
-	NetworkCIDR string `json:"network_cidr"`
-}
-
 type RunnerRecord struct {
 	Desired RunnerDesiredRecord
 	RunnerLifecycleRecord
@@ -70,13 +58,13 @@ type RunnerRecord struct {
 }
 
 type RunnerLifecycleRecord struct {
-	RunnerID          string                     `json:"runner_id"`
-	ProvisioningState RunnerProvisioningState    `json:"provisioning_state"`
-	CreateTaskID      string                     `json:"create_task_id"`
-	Allocation        RunnerHostAllocationRecord `json:"allocation"`
-	CreatedAt         time.Time                  `json:"created_at"`
-	ContainerID       string                     `json:"container_id,omitempty"`
-	RuntimeEpoch      uint64                     `json:"runtime_epoch"`
+	RunnerID          string                                      `json:"runner_id"`
+	ProvisioningState RunnerProvisioningState                     `json:"provisioning_state"`
+	CreateTaskID      string                                      `json:"create_task_id"`
+	Allocation        runnerallocation.RunnerHostAllocationRecord `json:"allocation"`
+	CreatedAt         time.Time                                   `json:"created_at"`
+	ContainerID       string                                      `json:"container_id,omitempty"`
+	RuntimeEpoch      uint64                                      `json:"runtime_epoch"`
 }
 
 type RunnerRuntimeOwnershipRecord struct {
@@ -99,7 +87,7 @@ type RunnerObservationRecord struct {
 
 func NewProvisioningRunner(
 	desired RunnerDesiredRecord,
-	allocation RunnerHostAllocationRecord,
+	allocation runnerallocation.RunnerHostAllocationRecord,
 	taskID string,
 	createdAt time.Time,
 ) (RunnerRecord, error) {
@@ -216,7 +204,7 @@ func validateRunnerLifecycle(record RunnerLifecycleRecord) error {
 	if record.ContainerID != "" && !validLowerHex(record.ContainerID, runnerContainerIDEncodedLength) {
 		return errs.New(errs.KindValidationFailed, "runner container id is invalid")
 	}
-	if err := validateRunnerAllocation(record.Allocation); err != nil {
+	if err := record.Allocation.Validate(); err != nil {
 		return err
 	}
 	return nil
@@ -326,7 +314,8 @@ func CanonicalRunnerGitHubURL(ownerKind RunnerOwnerKind, value string) (string, 
 }
 
 func validGitHubOrganization(value string) bool {
-	if len(value) < 1 || len(value) > 39 || value[0] == '-' || value[len(value)-1] == '-' || strings.Contains(value, "--") {
+	if len(value) < 1 || len(value) > 39 || value[0] == '-' || value[len(value)-1] == '-' ||
+		strings.Contains(value, "--") {
 		return false
 	}
 	for index := range value {
@@ -396,16 +385,6 @@ func validRunnerImageRef(value string) bool {
 		}
 	}
 	return true
-}
-
-func validateRunnerAllocation(allocation RunnerHostAllocationRecord) error {
-	prefix, err := ipam.ParseIPv4Prefix(allocation.NetworkCIDR)
-	if err != nil || prefix.String() != allocation.NetworkCIDR || prefix.Bits() != runnerSubnetBits ||
-		allocation.SubUIDCount != runnerSubordinateBlockSize ||
-		allocation.SubGIDCount != runnerSubordinateBlockSize {
-		return errs.New(errs.KindValidationFailed, "runner allocation is invalid")
-	}
-	return nil
 }
 
 func validateRunnerObservation(record RunnerObservationRecord) error {
@@ -534,7 +513,7 @@ func cloneRunnerRecord(record RunnerRecord) RunnerRecord {
 
 func runnerAllocationPrefix(value string) (netip.Prefix, error) {
 	prefix, err := ipam.ParseIPv4Prefix(value)
-	if err != nil || prefix.String() != value || prefix.Bits() != runnerSubnetBits {
+	if err != nil || prefix.String() != value || prefix.Bits() != runnerallocation.RunnerSubnetBits {
 		return netip.Prefix{}, errs.New(errs.KindInternal, "runner network allocation is corrupt")
 	}
 	return prefix, nil

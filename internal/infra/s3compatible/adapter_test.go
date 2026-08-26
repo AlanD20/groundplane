@@ -148,8 +148,16 @@ func TestPutExactMultipartIsSequentialAndConditional(t *testing.T) {
 			if aws.ToInt32(input.PartNumber) != int32(uploadedParts) || written != wantLength ||
 				aws.ToInt64(input.ContentLength) != wantLength ||
 				aws.ToString(input.ContentMD5) != base64.StdEncoding.EncodeToString(hasher.Sum(nil)) {
-				t.Fatalf("UploadPart %d = number %d length %d/%d md5 %q", uploadedParts,
-					aws.ToInt32(input.PartNumber), written, aws.ToInt64(input.ContentLength), aws.ToString(input.ContentMD5))
+				t.Fatalf(
+					"UploadPart %d = number %d length %d/%d md5 %q",
+					uploadedParts,
+					aws.ToInt32(
+						input.PartNumber,
+					),
+					written,
+					aws.ToInt64(input.ContentLength),
+					aws.ToString(input.ContentMD5),
+				)
 			}
 			return &s3.UploadPartOutput{ETag: aws.String("part-etag")}, nil
 		},
@@ -248,10 +256,16 @@ func TestCleanupExactUploadsFullyPaginatesAndMatchesCompleteKey(t *testing.T) {
 				}, nil
 			case 2:
 				if aws.ToString(input.KeyMarker) != artifact.Key || aws.ToString(input.UploadIdMarker) != "marker-1" {
-					t.Fatalf("pagination markers = %q/%q", aws.ToString(input.KeyMarker), aws.ToString(input.UploadIdMarker))
+					t.Fatalf(
+						"pagination markers = %q/%q",
+						aws.ToString(input.KeyMarker),
+						aws.ToString(input.UploadIdMarker),
+					)
 				}
 				return &s3.ListMultipartUploadsOutput{
-					Uploads:     []types.MultipartUpload{{Key: aws.String(artifact.Key), UploadId: aws.String("upload-2")}},
+					Uploads: []types.MultipartUpload{
+						{Key: aws.String(artifact.Key), UploadId: aws.String("upload-2")},
+					},
 					IsTruncated: aws.Bool(false),
 				}, nil
 			case 3:
@@ -407,7 +421,8 @@ func TestProviderErrorsAreClassifiedAndRedacted(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			err := providerError(test.err)
 			kind, ok := errs.KindOf(err)
-			if !ok || kind != test.kind || !strings.Contains(err.Error(), test.detail) || strings.Contains(err.Error(), "LEAK") {
+			if !ok || kind != test.kind || !strings.Contains(err.Error(), test.detail) ||
+				strings.Contains(err.Error(), "LEAK") {
 				t.Fatalf("providerError() = %v, kind %v, %t", err, kind, ok)
 			}
 		})

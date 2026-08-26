@@ -103,7 +103,17 @@ func applyLegacyFindings(findings []Finding, baseline Baseline) []Finding {
 		if _, found := used[key]; found {
 			continue
 		}
-		filtered = append(filtered, Finding{Path: exception.Path, Line: 1, Column: 1, Rule: "stale-legacy-finding", Subject: exception.Subject, Message: fmt.Sprintf("legacy finding %s is no longer present", exception.Rule)})
+		filtered = append(
+			filtered,
+			Finding{
+				Path:    exception.Path,
+				Line:    1,
+				Column:  1,
+				Rule:    "stale-legacy-finding",
+				Subject: exception.Subject,
+				Message: fmt.Sprintf("legacy finding %s is no longer present", exception.Rule),
+			},
+		)
 	}
 	return filtered
 }
@@ -136,7 +146,10 @@ func discoverSources(ctx context.Context, root string) (discoveredSources, error
 			}
 			rel = filepath.ToSlash(rel)
 			if walkErr != nil {
-				result.findings = append(result.findings, Finding{Path: rel, Line: 1, Column: 1, Rule: "read-error", Message: walkErr.Error()})
+				result.findings = append(
+					result.findings,
+					Finding{Path: rel, Line: 1, Column: 1, Rule: "read-error", Message: walkErr.Error()},
+				)
 				return nil
 			}
 			if entry.IsDir() {
@@ -157,7 +170,10 @@ func discoverSources(ctx context.Context, root string) (discoveredSources, error
 			}
 			data, readErr := os.ReadFile(path)
 			if readErr != nil {
-				result.findings = append(result.findings, Finding{Path: rel, Line: 1, Column: 1, Rule: "read-error", Message: readErr.Error()})
+				result.findings = append(
+					result.findings,
+					Finding{Path: rel, Line: 1, Column: 1, Rule: "read-error", Message: readErr.Error()},
+				)
 				return nil
 			}
 			seenFiles[rel] = struct{}{}
@@ -184,7 +200,8 @@ func isSourcePath(rel string) bool {
 }
 
 func isExplicitGeneratedPath(rel string) bool {
-	return rel == "console/src/lib/api.generated.ts" || strings.HasPrefix(rel, "internal/cli/apiclient/generated/") || rel == "internal/cli/apiclient/generated"
+	return rel == "console/src/lib/api.generated.ts" || strings.HasPrefix(rel, "internal/cli/apiclient/generated/") ||
+		rel == "internal/cli/apiclient/generated"
 }
 
 func isTestPath(rel string) bool {
@@ -192,7 +209,9 @@ func isTestPath(rel string) bool {
 	if strings.HasSuffix(base, "_test.go") {
 		return true
 	}
-	return strings.HasSuffix(base, ".test.ts") || strings.HasSuffix(base, ".test.tsx") || strings.HasSuffix(base, ".spec.ts") || strings.HasSuffix(base, ".spec.tsx")
+	return strings.HasSuffix(base, ".test.ts") || strings.HasSuffix(base, ".test.tsx") ||
+		strings.HasSuffix(base, ".spec.ts") ||
+		strings.HasSuffix(base, ".spec.tsx")
 }
 
 func physicalLines(data []byte) int {
@@ -222,16 +241,60 @@ func checkLineRatchets(files []*sourceFile, baseline Baseline) []Finding {
 		entry, recorded := entries[file.rel]
 		switch {
 		case file.lines > limit && !recorded:
-			findings = append(findings, Finding{Path: file.rel, Line: 1, Column: 1, Rule: "missing-oversized-baseline", Message: fmt.Sprintf("file has %d lines, over the %d-line limit, but is not in oversized_files", file.lines, limit)})
+			findings = append(
+				findings,
+				Finding{
+					Path:   file.rel,
+					Line:   1,
+					Column: 1,
+					Rule:   "missing-oversized-baseline",
+					Message: fmt.Sprintf(
+						"file has %d lines, over the %d-line limit, but is not in oversized_files",
+						file.lines,
+						limit,
+					),
+				},
+			)
 		case file.lines > limit && entry.Lines < file.lines:
-			findings = append(findings, Finding{Path: file.rel, Line: 1, Column: 1, Rule: "oversized-file-growth", Message: fmt.Sprintf("baseline allows %d lines but file has %d", entry.Lines, file.lines)})
+			findings = append(
+				findings,
+				Finding{
+					Path:    file.rel,
+					Line:    1,
+					Column:  1,
+					Rule:    "oversized-file-growth",
+					Message: fmt.Sprintf("baseline allows %d lines but file has %d", entry.Lines, file.lines),
+				},
+			)
 		case file.lines <= limit && recorded:
-			findings = append(findings, Finding{Path: file.rel, Line: 1, Column: 1, Rule: "stale-oversized-baseline", Message: fmt.Sprintf("file has %d lines and no longer exceeds the %d-line limit", file.lines, limit)})
+			findings = append(
+				findings,
+				Finding{
+					Path:   file.rel,
+					Line:   1,
+					Column: 1,
+					Rule:   "stale-oversized-baseline",
+					Message: fmt.Sprintf(
+						"file has %d lines and no longer exceeds the %d-line limit",
+						file.lines,
+						limit,
+					),
+				},
+			)
 		}
 	}
 	for _, entry := range baseline.OversizedFiles {
 		if _, exists := current[entry.Path]; !exists {
-			findings = append(findings, Finding{Path: entry.Path, Line: 1, Column: 1, Rule: "stale-oversized-baseline", Message: "oversized_files entry does not name a current source file"})
+			findings = append(
+				findings,
+				Finding{
+					Path:    entry.Path,
+					Line:    1,
+					Column:  1,
+					Rule:    "stale-oversized-baseline",
+					Message: "oversized_files entry does not name a current source file",
+				},
+			)
 		}
 	}
 	return findings
@@ -241,7 +304,16 @@ func checkFrozenTotals(discovered discoveredSources, baseline Baseline) []Findin
 	findings := make([]Finding, 0)
 	for _, entry := range baseline.FrozenTotals {
 		if _, exists := discovered.directories[entry.Path]; !exists {
-			findings = append(findings, Finding{Path: entry.Path, Line: 1, Column: 1, Rule: "stale-frozen-total", Message: "frozen_totals entry does not name a current source directory"})
+			findings = append(
+				findings,
+				Finding{
+					Path:    entry.Path,
+					Line:    1,
+					Column:  1,
+					Rule:    "stale-frozen-total",
+					Message: "frozen_totals entry does not name a current source directory",
+				},
+			)
 			continue
 		}
 		total := 0
@@ -253,11 +325,33 @@ func checkFrozenTotals(discovered discoveredSources, baseline Baseline) []Findin
 			}
 		}
 		if fileCount == 0 {
-			findings = append(findings, Finding{Path: entry.Path, Line: 1, Column: 1, Rule: "stale-frozen-total", Message: "frozen_totals entry does not name a direct production Go package"})
+			findings = append(
+				findings,
+				Finding{
+					Path:    entry.Path,
+					Line:    1,
+					Column:  1,
+					Rule:    "stale-frozen-total",
+					Message: "frozen_totals entry does not name a direct production Go package",
+				},
+			)
 			continue
 		}
 		if total != entry.Lines {
-			findings = append(findings, Finding{Path: entry.Path, Line: 1, Column: 1, Rule: "frozen-total-drift", Message: fmt.Sprintf("frozen total is %d lines but current direct production Go total is %d", entry.Lines, total)})
+			findings = append(
+				findings,
+				Finding{
+					Path:   entry.Path,
+					Line:   1,
+					Column: 1,
+					Rule:   "frozen-total-drift",
+					Message: fmt.Sprintf(
+						"frozen total is %d lines but current direct production Go total is %d",
+						entry.Lines,
+						total,
+					),
+				},
+			)
 		}
 	}
 	return findings
@@ -270,13 +364,23 @@ func checkCatchAllDirectories(directories map[string]struct{}) []Finding {
 		if _, forbidden := catchAllDirectories[name]; !forbidden || allowedCatchAllDirectory(directory) {
 			continue
 		}
-		findings = append(findings, Finding{Path: directory, Line: 1, Column: 1, Rule: "catch-all-directory", Message: fmt.Sprintf("directory name %q is reserved for narrowly named packages", name)})
+		findings = append(
+			findings,
+			Finding{
+				Path:    directory,
+				Line:    1,
+				Column:  1,
+				Rule:    "catch-all-directory",
+				Message: fmt.Sprintf("directory name %q is reserved for narrowly named packages", name),
+			},
+		)
 	}
 	return findings
 }
 
 func allowedCatchAllDirectory(directory string) bool {
-	return directory == "internal/common" || directory == "internal/cli/common" || directory == "console/src/components/common"
+	return directory == "internal/common" || directory == "internal/cli/common" ||
+		directory == "console/src/components/common"
 }
 
 func sortFindings(findings []Finding) {

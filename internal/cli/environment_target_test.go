@@ -108,7 +108,10 @@ func TestEnvironmentEditResolvesTenantProjectAndEnvironmentLabels(t *testing.T) 
 				r.Header.Get("Idempotency-Key") == "" {
 				t.Errorf("Environment edit request = %s %s %s", r.Method, r.URL.String(), body)
 			}
-			_, _ = io.WriteString(w, `{"id":"`+environmentID+`","project_id":"`+projectID+`","name":"production","network_pool":"10.40.0.0/15","volume_dir":"/var/lib/groundplane/vol/x","provisioning_state":"ready","create_task_id":null}`)
+			_, _ = io.WriteString(
+				w,
+				`{"id":"`+environmentID+`","project_id":"`+projectID+`","name":"production","network_pool":"10.40.0.0/15","volume_dir":"/var/lib/groundplane/vol/x","provisioning_state":"ready","create_task_id":null}`,
+			)
 		default:
 			t.Errorf("unexpected request %d: %s %s", calls, r.Method, r.URL.String())
 		}

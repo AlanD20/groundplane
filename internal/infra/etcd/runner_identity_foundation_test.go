@@ -59,9 +59,16 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	first := runnerTestDesired(210, RunnerOwnerTenant, tenantID, tenantID)
 	first.Slug = "shared"
 	firstTask := runnerTestTask(first, TaskCreate, 211, "runner-slug-create-0001")
-	if result, err := repository.CreateRunnerWithTask(ctx, config, first, firstTask, runnerTestMarker(firstTask, first)); err != nil {
+	if result, err := repository.CreateRunnerWithTask(
+		ctx,
+		config,
+		first,
+		firstTask,
+		runnerTestMarker(firstTask, first),
+	); err != nil {
 		t.Fatal(err)
-	} else if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	} else if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("first create = %v, %v, %v", outcome, conflict, classifyErr)
 	}
 	resolved, err := repository.ResolveRunner(ctx, tenantID, "shared")
@@ -72,11 +79,19 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	second := runnerTestDesired(212, RunnerOwnerProject, projectID, tenantID)
 	second.Slug = "shared"
 	secondTask := runnerTestTask(second, TaskCreate, 213, "runner-slug-create-0002")
-	result, err := repository.CreateRunnerWithTask(ctx, config, second, secondTask, runnerTestMarker(secondTask, second))
+	result, err := repository.CreateRunnerWithTask(
+		ctx,
+		config,
+		second,
+		secondTask,
+		runnerTestMarker(secondTask, second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindSlugConflict) {
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil ||
+		outcome != IdempotencyKnownConflict ||
+		!isKind(conflict, errs.KindSlugConflict) {
 		t.Fatalf("slug collision = %v, %v, %v", outcome, conflict, classifyErr)
 	}
 
@@ -105,7 +120,8 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("replace slug = %v, %v, %v", outcome, conflict, classifyErr)
 	}
 	if _, err := repository.ResolveRunner(ctx, tenantID, "shared"); !isKind(err, errs.KindRunnerNotFound) {

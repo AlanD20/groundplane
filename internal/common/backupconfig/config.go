@@ -133,11 +133,11 @@ type Entry struct {
 // Layout contains exact member offsets. ValueHeaderOffsets and
 // ValuePayloadOffsets use the same ordinal as Entries.
 type Layout struct {
-	Authority          ContentAuthority
-	Entries            []Entry
-	ValueHeaderOffsets []uint64
+	Authority           ContentAuthority
+	Entries             []Entry
+	ValueHeaderOffsets  []uint64
 	ValuePayloadOffsets []uint64
-	FooterOffset       uint64
+	FooterOffset        uint64
 }
 
 // BuildManifest returns the exact RFC 8785 payload and its complete content
@@ -181,13 +181,17 @@ func buildManifestPayload(ctx context.Context, entries []Entry) ([]byte, Content
 		payload = appendManifestEntry(payload, entry)
 		if len(payload) > MaxManifestBytes {
 			clearBytes(payload)
-			return nil, ContentAuthority{}, archiveError("canonical Config manifest exceeds its byte limit")
+			return nil, ContentAuthority{}, archiveError(
+				"canonical Config manifest exceeds its byte limit",
+			)
 		}
 	}
 	payload = append(payload, `],"format":"environment-config-v1"}`...)
 	if len(payload) > MaxManifestBytes {
 		clearBytes(payload)
-		return nil, ContentAuthority{}, archiveError("canonical Config manifest exceeds its byte limit")
+		return nil, ContentAuthority{}, archiveError(
+			"canonical Config manifest exceeds its byte limit",
+		)
 	}
 
 	authority := ContentAuthority{
@@ -209,7 +213,11 @@ func buildManifestPayload(ctx context.Context, entries []Entry) ([]byte, Content
 
 // ComputeLayout verifies authority against regenerated canonical manifest
 // bytes and returns checked USTAR offsets.
-func ComputeLayout(ctx context.Context, authority ContentAuthority, entries []Entry) (Layout, error) {
+func ComputeLayout(
+	ctx context.Context,
+	authority ContentAuthority,
+	entries []Entry,
+) (Layout, error) {
 	payload, expected, err := buildManifestPayload(ctx, entries)
 	if err != nil {
 		return Layout{}, err
@@ -329,7 +337,8 @@ func validateEntry(entry Entry) error {
 
 	switch entry.Metadata.Kind {
 	case MetadataEnvironment:
-		if !validEnvironmentKey(entry.Metadata.Environment.Key) || entry.Metadata.File != (FileMetadata{}) {
+		if !validEnvironmentKey(entry.Metadata.Environment.Key) ||
+			entry.Metadata.File != (FileMetadata{}) {
 			return archiveError("Config Entry environment metadata is invalid")
 		}
 	case MetadataFile:
@@ -512,7 +521,11 @@ func appendJSONString(destination []byte, value string) []byte {
 			if character < 0x20 {
 				destination = append(destination, `\u00`...)
 				const hexadecimal = "0123456789abcdef"
-				destination = append(destination, hexadecimal[byte(character)>>4], hexadecimal[byte(character)&15])
+				destination = append(
+					destination,
+					hexadecimal[byte(character)>>4],
+					hexadecimal[byte(character)&15],
+				)
 			} else {
 				destination = utf8.AppendRune(destination, character)
 			}
@@ -539,11 +552,6 @@ type manifestValue struct {
 	Path      string `json:"path"`
 	SHA256    string `json:"sha256"`
 	SizeBytes uint64 `json:"size_bytes"`
-}
-
-type kindProbe struct {
-	Kind string `json:"kind"`
-	Type string `json:"type"`
 }
 
 func parseManifest(ctx context.Context, payload []byte) ([]Entry, error) {
@@ -583,8 +591,11 @@ func parseManifest(ctx context.Context, payload []byte) ([]Entry, error) {
 
 func parseManifestEntry(encoded manifestEntry) (Entry, error) {
 	digestBytes, err := hex.DecodeString(encoded.Value.SHA256)
-	if err != nil || len(digestBytes) != sha256.Size || hex.EncodeToString(digestBytes) != encoded.Value.SHA256 {
-		return Entry{}, archiveError("Config manifest value digest is not canonical lowercase SHA-256")
+	if err != nil || len(digestBytes) != sha256.Size ||
+		hex.EncodeToString(digestBytes) != encoded.Value.SHA256 {
+		return Entry{}, archiveError(
+			"Config manifest value digest is not canonical lowercase SHA-256",
+		)
 	}
 	entry := Entry{
 		ID:     encoded.ID,
@@ -607,119 +618,13 @@ func parseManifestEntry(encoded manifestEntry) (Entry, error) {
 	return entry, nil
 }
 
-func parseMetadata(payload []byte, entry *Entry) error {
-	var probe kindProbe
-	if json.Unmarshal(payload, &probe) != nil {
-		return archiveError("Config manifest metadata is invalid JSON")
-	}
-	switch probe.Type {
-	case "env":
-		var value struct {
-			Key  string `json:"key"`
-			Type string `json:"type"`
-		}
-		if json.Unmarshal(payload, &value) != nil {
-			return archiveError("Config manifest environment metadata is invalid")
-		}
-		entry.Metadata = Metadata{Kind: MetadataEnvironment, Environment: EnvironmentMetadata{Key: value.Key}}
-	case "file":
-		var value struct {
-			GID  uint32 `json:"gid"`
-			Mode uint32 `json:"mode"`
-			Path string `json:"path"`
-			Type string `json:"type"`
-			UID  uint32 `json:"uid"`
-		}
-		if json.Unmarshal(payload, &value) != nil {
-			return archiveError("Config manifest file metadata is invalid")
-		}
-		entry.Metadata = Metadata{Kind: MetadataFile, File: FileMetadata{
-			Path: value.Path, Mode: value.Mode, UID: value.UID, GID: value.GID,
-		}}
-	default:
-		return archiveError("Config manifest metadata type is invalid")
-	}
-	return nil
-}
-
-func parseExposure(payload []byte, entry *Entry) error {
-	var probe kindProbe
-	if json.Unmarshal(payload, &probe) != nil {
-		return archiveError("Config manifest exposure is invalid JSON")
-	}
-	switch probe.Kind {
-	case "all":
-		var value struct {
-			Kind string `json:"kind"`
-		}
-		if json.Unmarshal(payload, &value) != nil {
-			return archiveError("Config manifest all-services exposure is invalid")
-		}
-		entry.Exposure = Exposure{Kind: ExposureAll}
-	case "services":
-		var value struct {
-			Kind       string   `json:"kind"`
-			ServiceIDs []string `json:"service_ids"`
-		}
-		if json.Unmarshal(payload, &value) != nil {
-			return archiveError("Config manifest services exposure is invalid")
-		}
-		entry.Exposure = Exposure{Kind: ExposureServices, ServiceIDs: value.ServiceIDs}
-	default:
-		return archiveError("Config manifest exposure kind is invalid")
-	}
-	return nil
-}
-
-func parseSource(payload []byte, entry *Entry) error {
-	var probe kindProbe
-	if json.Unmarshal(payload, &probe) != nil {
-		return archiveError("Config manifest source is invalid JSON")
-	}
-	switch probe.Kind {
-	case "literal":
-		var value struct {
-			Kind string `json:"kind"`
-		}
-		if json.Unmarshal(payload, &value) != nil {
-			return archiveError("Config manifest literal source is invalid")
-		}
-		entry.Source = Source{Kind: SourceLiteral}
-	case "secret_ref":
-		var value struct {
-			Kind      string `json:"kind"`
-			SecretRef string `json:"secret_ref"`
-		}
-		if json.Unmarshal(payload, &value) != nil {
-			return archiveError("Config manifest secret-reference source is invalid")
-		}
-		entry.Source = Source{Kind: SourceSecretReference, SecretReference: SecretReference{AuthoredKey: value.SecretRef}}
-	case "fact":
-		var value struct {
-			AttachID     string  `json:"attach_id"`
-			Fact         string  `json:"fact"`
-			GrantAttachID *string `json:"grant_attach_id"`
-			Kind         string  `json:"kind"`
-		}
-		if json.Unmarshal(payload, &value) != nil {
-			return archiveError("Config manifest fact source is invalid")
-		}
-		fact := FactReference{AttachID: value.AttachID, Fact: value.Fact}
-		if value.GrantAttachID != nil {
-			fact.GrantAttachID = *value.GrantAttachID
-		}
-		entry.Source = Source{Kind: SourceFact, Fact: fact}
-	default:
-		return archiveError("Config manifest source kind is invalid")
-	}
-	return nil
-}
-
 func cloneEntries(entries []Entry) []Entry {
 	result := make([]Entry, len(entries))
 	copy(result, entries)
 	for index := range result {
-		result[index].Exposure.ServiceIDs = append([]string(nil), entries[index].Exposure.ServiceIDs...)
+		result[index].Exposure.ServiceIDs = append(
+			[]string(nil),
+			entries[index].Exposure.ServiceIDs...)
 	}
 	return result
 }

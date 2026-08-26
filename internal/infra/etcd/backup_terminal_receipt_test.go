@@ -336,7 +336,7 @@ func TestBackupTerminalReceiptReplaySurvivesCompactionAndLaterPointLifecycle(t *
 				dispatchValue, err := encodeBackupRecoveryPointPruneDispatchRecord(
 					BackupRecoveryPointPruneDispatchRecord{
 						TaskID: successorTaskID, OperationID: task.Record.OperationID,
-						EnvironmentID: point.Point.EnvironmentID,
+						EnvironmentID:    point.Point.EnvironmentID,
 						RecoveryPointIDs: []string{point.Point.ID}, CreatedAt: successorAt,
 					},
 				)

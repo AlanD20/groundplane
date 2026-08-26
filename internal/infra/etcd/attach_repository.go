@@ -927,7 +927,7 @@ func prepareAttachRemoval(
 	}
 	dependentGrants, err := store.Range(ctx, RangeRequest{
 		Prefix: attachDependentGrantPrefix(current.Record.ID),
-		Limit: 2, Revision: revision,
+		Limit:  2, Revision: revision,
 	})
 	if err != nil {
 		return nil, nil, nil, err

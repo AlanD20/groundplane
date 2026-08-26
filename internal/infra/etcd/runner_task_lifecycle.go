@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -86,13 +87,13 @@ func (evidence runnerRemovalTaskEvidence) matchesIntent(intent RunnerRemovalInte
 }
 
 type RunnerRemovalIntent struct {
-	RunnerID   string                     `json:"runner_id"`
-	TaskID     string                     `json:"task_id"`
-	OwnerKind  RunnerOwnerKind            `json:"owner_kind"`
-	OwnerID    string                     `json:"owner_id"`
-	TenantID   string                     `json:"tenant_id"`
-	Allocation RunnerHostAllocationRecord `json:"allocation"`
-	CreatedAt  time.Time                  `json:"created_at"`
+	RunnerID   string                                      `json:"runner_id"`
+	TaskID     string                                      `json:"task_id"`
+	OwnerKind  RunnerOwnerKind                             `json:"owner_kind"`
+	OwnerID    string                                      `json:"owner_id"`
+	TenantID   string                                      `json:"tenant_id"`
+	Allocation runnerallocation.RunnerHostAllocationRecord `json:"allocation"`
+	CreatedAt  time.Time                                   `json:"created_at"`
 }
 
 func runnerRemovalIntentKey(runnerID string) string {
@@ -104,7 +105,7 @@ func validateRunnerRemovalIntent(intent RunnerRemovalIntent) error {
 		ID: intent.RunnerID, OwnerKind: intent.OwnerKind, OwnerID: intent.OwnerID, TenantID: intent.TenantID,
 	}
 	if validateRunnerOwnership(desired) != nil || ids.Validate(ids.KindTask, intent.TaskID) != nil ||
-		validateRunnerAllocation(intent.Allocation) != nil || !validMarkerTime(intent.CreatedAt) {
+		intent.Allocation.Validate() != nil || !validMarkerTime(intent.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "runner removal intent is invalid")
 	}
 	return nil
@@ -157,262 +158,6 @@ func decodeRunnerDeletionTombstone(value []byte) (DeletionTombstoneRecord, error
 	return record, nil
 }
 
-// RetryRunnerCreationWithTask is deliberately separate from generic Task
-// retry because every attempt must fetch a fresh single-use registration token.
-// Only the fact that a fresh token was present crosses this persistence seam.
-func (repository *RunnerRepository) RetryRunnerCreationWithTask(
-	ctx context.Context,
-	sourceTaskID string,
-	retry TaskRecord,
-	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if ids.Validate(ids.KindTask, sourceTaskID) != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "source task id is invalid")
-	}
-	if retry.RetryOf != sourceTaskID || retry.Executor != TaskExecutorController || retry.Type != TaskCreate ||
-		retry.Status != TaskStatusPending || retry.IdempotencyKey == "" || len(retry.Params) != 2 ||
-		retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
-		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"runner creation retry has invalid durable input",
-		)
-	}
-	if err := validateRunnerRetryMarkerEnvelope(retry, marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	retry = bindRunnerTaskMarker(retry, marker)
-	if err := validateTaskRecord(retry); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	existing, err := idempotency.Read(ctx, marker.Locator)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing != nil {
-		return IdempotencyTransactionResult{
-			kind: idempotencyTransactionExisting, revision: existing.modRevision,
-			marker: cloneIdempotencyMarker(existing.marker),
-		}, nil
-	}
-	sourceResult, err := repository.store.Get(ctx, taskKey(sourceTaskID))
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if sourceResult == nil || sourceResult.Entry == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindTaskNotFound, "source task was not found")
-	}
-	source, err := decodeTaskRecord(sourceResult.Entry.Value)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	applies, err := taskOwnsRunnerCreation(source)
-	if err != nil || !applies {
-		if err != nil {
-			return IdempotencyTransactionResult{}, err
-		}
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"source task is not a runner creation",
-		)
-	}
-	if !runnerRetryableTerminal(source.Status) {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindStateConflict,
-			"source runner creation task is not retryable",
-		)
-	}
-	current, err := repository.GetRunner(ctx, source.Target)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if retry.RetryOf != source.ID || retry.OperationID != source.OperationID ||
-		retry.Owner != source.Owner ||
-		retry.Executor != TaskExecutorController || retry.Type != TaskCreate ||
-		retry.Target != source.Target || retry.Status != TaskStatusPending ||
-		retry.IdempotencyKey != source.IdempotencyKey || retry.PlanID != source.PlanID ||
-		retry.PlanHash != source.PlanHash || retry.RenderGeneration != source.RenderGeneration ||
-		retry.TimeoutSeconds != source.TimeoutSeconds || !runnerTaskStepsEqual(retry.Steps, source.Steps) ||
-		!runnerTaskMaterializationsEqual(retry.Materializations, source.Materializations) ||
-		len(retry.Params) != 2 || retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
-		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"runner creation retry has invalid durable input",
-		)
-	}
-	if err := validateRunnerRetryMarker(current.Record.Desired, retry, marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	replacement, err := RetryRunnerProvisioning(current.Record, source.ID, retry.ID)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	parents, err := repository.resolveRunnerParents(ctx, current.Record.Desired)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	allocation, err := repository.readRunnerAllocationEvidence(ctx, current.Record, current.ReadRevision)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	recordValue, err := encodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(recordValue)
-	taskValue, err := encodeTaskRecord(retry)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(taskValue)
-	reference, err := encodeTaskReference(retry.ID)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(reference)
-	conditions := []Condition{
-		{Key: taskKey(retry.ID)},
-		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
-		{Key: taskActiveOperationKey(retry.OperationID)},
-		{Key: taskQueueKey(retry.Executor, retry.ID)},
-		{Key: taskKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
-		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
-		{Key: runnerRuntimeOwnershipKey(current.Record.Desired.ID)},
-		{
-			Key: runnerOwnerKey(
-				current.Record.Desired.OwnerKind,
-				current.Record.Desired.OwnerID,
-				current.Record.Desired.ID,
-			),
-			ModRevision: allocation.owner.ModRevision,
-		},
-		{Key: runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug), ModRevision: allocation.slug.ModRevision},
-		{Key: runnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
-		{Key: runnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
-		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
-		{Key: tenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
-	}
-	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
-		conditions = append(conditions,
-			Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
-		)
-	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
-		{Type: MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: recordValue},
-	}
-	classifier := func(_ int64, values []*KeyValue) error {
-		if len(values) != len(conditions) {
-			return errs.New(errs.KindInternal, "runner creation retry compare evidence is incomplete")
-		}
-		if values[2] != nil {
-			activeTaskID, decodeErr := decodeTaskReference(values[2].Value)
-			if decodeErr != nil {
-				return decodeErr
-			}
-			return errs.Newf(
-				errs.KindStateConflict,
-				"operation %s already has active task %s",
-				retry.OperationID,
-				activeTaskID,
-			)
-		}
-		return stateConflict("runner creation retry", current.Record.Desired.ID)
-	}
-	initiation, err := newInheritedTaskInitiation(Versioned[TaskRecord]{
-		Record: source, Revision: sourceResult.Entry.ModRevision, ReadRevision: sourceResult.ReadRevision,
-	}, retry.Actor)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	plan, err := newTaskIdempotencyMutationPlan(retry, initiation, conditions, mutations, classifier)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
-}
-
-func runnerTaskStepsEqual(left []TaskStepRecord, right []TaskStepRecord) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
-}
-
-func runnerTaskMaterializationsEqual(left []TaskMaterializationRecord, right []TaskMaterializationRecord) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if !runnerTaskMaterializationEqual(left[index], right[index]) {
-			return false
-		}
-	}
-	return true
-}
-
-func runnerTaskMaterializationEqual(left TaskMaterializationRecord, right TaskMaterializationRecord) bool {
-	if left.StepID != right.StepID || left.MaterializationID != right.MaterializationID ||
-		left.EnvironmentID != right.EnvironmentID || left.Destination != right.Destination ||
-		left.ServiceID != right.ServiceID || left.ServiceName != right.ServiceName ||
-		left.OutputKind != right.OutputKind || left.UID != right.UID || left.GID != right.GID ||
-		left.Mode != right.Mode || left.Length != right.Length || left.SHA256 != right.SHA256 ||
-		left.Source.Kind != right.Source.Kind ||
-		!runnerComparablePointersEqual(left.Source.BlueprintFile, right.Source.BlueprintFile) ||
-		!runnerComparablePointersEqual(left.Source.ComponentFile, right.Source.ComponentFile) ||
-		!runnerComparablePointersEqual(left.Source.EntryValue, right.Source.EntryValue) {
-		return false
-	}
-	return runnerGeneratedEnvironmentPointersEqual(
-		left.Source.GeneratedEnvironment, right.Source.GeneratedEnvironment,
-	)
-}
-
-func runnerComparablePointersEqual[T comparable](left *T, right *T) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
-}
-
-func runnerGeneratedEnvironmentPointersEqual(
-	left *TaskGeneratedEnvironmentValueReference,
-	right *TaskGeneratedEnvironmentValueReference,
-) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	if left.FormatVersion != right.FormatVersion || len(left.Values) != len(right.Values) {
-		return false
-	}
-	for index := range left.Values {
-		if left.Values[index] != right.Values[index] {
-			return false
-		}
-	}
-	return true
-}
-
 type runnerAllocationEvidence struct {
 	owner  *KeyValue
 	slug   *KeyValue
@@ -443,7 +188,11 @@ func (repository *RunnerRepository) readRunnerAllocationEvidence(
 		return runnerAllocationEvidence{}, errs.New(errs.KindInternal, "runner allocation evidence is incomplete")
 	}
 	evidence := runnerAllocationEvidence{
-		owner: result.Values[0], slug: result.Values[1], quota: result.Values[2], host: result.Values[3], system: result.Values[4],
+		owner:  result.Values[0],
+		slug:   result.Values[1],
+		quota:  result.Values[2],
+		host:   result.Values[3],
+		system: result.Values[4],
 	}
 	if err := runnerAllocationEvidenceOwns(record, evidence); err != nil {
 		return runnerAllocationEvidence{}, err
@@ -458,7 +207,7 @@ func runnerAllocationEvidenceOwns(record RunnerRecord, evidence runnerAllocation
 		return errs.New(errs.KindInternal, "runner allocation evidence is incomplete")
 	}
 	quota, err := decodeRunnerTenantQuota(evidence.quota.Value)
-	if err != nil || validateRunnerTenantQuota(quota) != nil {
+	if err != nil || quota.Validate() != nil {
 		return corruptRunnerTenantQuota()
 	}
 	index := sortSearchRunnerID(quota.RunnerIDs, record.Desired.ID)
@@ -470,7 +219,8 @@ func runnerAllocationEvidenceOwns(record RunnerRecord, evidence runnerAllocation
 		return corruptRunnerHostSlotRecord()
 	}
 	system, err := decodeSystemPoolRegistry(evidence.system.Value)
-	if err != nil || system.Reservations[runnerPoolOwner(record.Desired.ID)] != record.Allocation.NetworkCIDR {
+	if err != nil ||
+		system.Reservations[runnerallocation.RunnerReservationOwner(record.Desired.ID)] != record.Allocation.NetworkCIDR {
 		return corruptSystemPoolRegistry()
 	}
 	return nil
@@ -545,13 +295,19 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if runtimeEvidence == nil || len(runtimeEvidence.Values) != 1 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner runtime ownership evidence is incomplete")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"runner runtime ownership evidence is incomplete",
+		)
 	}
 	if runtimeEvidence.Values[0] != nil {
 		ownership, decodeErr := decodeRunnerRuntimeOwnership(runtimeEvidence.Values[0].Value)
 		if decodeErr != nil || ownership.RunnerID != current.Record.Desired.ID ||
 			ownership.RuntimeEpoch != current.Record.RuntimeEpoch || current.Record.ContainerID == "" {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner runtime ownership does not match lifecycle")
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindInternal,
+				"runner runtime ownership does not match lifecycle",
+			)
 		}
 	} else if current.Record.ContainerID != "" {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner lifecycle lost runtime ownership")
@@ -605,7 +361,10 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
-		{Key: runnerRuntimeOwnershipKey(current.Record.Desired.ID), ModRevision: keyValueRevision(runtimeEvidence.Values[0])},
+		{
+			Key:         runnerRuntimeOwnershipKey(current.Record.Desired.ID),
+			ModRevision: keyValueRevision(runtimeEvidence.Values[0]),
+		},
 		{
 			Key: runnerOwnerKey(
 				current.Record.Desired.OwnerKind,
@@ -614,7 +373,10 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 			),
 			ModRevision: allocation.owner.ModRevision,
 		},
-		{Key: runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug), ModRevision: allocation.slug.ModRevision},
+		{
+			Key:         runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+			ModRevision: allocation.slug.ModRevision,
+		},
 		{Key: runnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
 		{Key: runnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
@@ -736,7 +498,8 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	if result == nil || len(result.Values) != 5 || result.Values[0] == nil || result.Values[1] == nil || result.Values[2] != nil {
+	if result == nil || len(result.Values) != 5 || result.Values[0] == nil || result.Values[1] == nil ||
+		result.Values[2] != nil {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner provisioning state does not match its task")
 	}
 	record, err := decodeRunnerAggregate(result.Values[0], result.Values[1])
@@ -755,7 +518,10 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		}
 		if ownership.RunnerID != record.Desired.ID || ownership.RuntimeEpoch != record.RuntimeEpoch ||
 			!runnerReadinessProofMatches(proof, task, record, result.Values[3]) {
-			return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner readiness proof does not match its lifecycle")
+			return runnerTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"runner readiness proof does not match its lifecycle",
+			)
 		}
 	}
 	replacement, err := CompleteRunnerProvisioning(record, task.ID, terminalStatus == TaskStatusCompleted)
@@ -782,7 +548,10 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 			Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 			ModRevision: allocation.owner.ModRevision,
 		},
-		{Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug), ModRevision: allocation.slug.ModRevision},
+		{
+			Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+			ModRevision: allocation.slug.ModRevision,
+		},
 		{Key: runnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
 		{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
@@ -861,7 +630,10 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 				Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target),
 				ModRevision: allocation.owner.ModRevision,
 			},
-			{Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug), ModRevision: allocation.slug.ModRevision},
+			{
+				Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+				ModRevision: allocation.slug.ModRevision,
+			},
 			{Key: runnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
 			{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 			{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
@@ -1061,7 +833,10 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 				Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 				ModRevision: allocation.owner.ModRevision,
 			},
-			{Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug), ModRevision: allocation.slug.ModRevision},
+			{
+				Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+				ModRevision: allocation.slug.ModRevision,
+			},
 			{Key: runnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
 			{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 			{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
@@ -1150,7 +925,8 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 	if err != nil {
 		return err
 	}
-	if stored == nil || len(stored.Values) != 3 || stored.Values[0] == nil || stored.Values[1] == nil || stored.Values[2] != nil {
+	if stored == nil || len(stored.Values) != 3 || stored.Values[0] == nil || stored.Values[1] == nil ||
+		stored.Values[2] != nil {
 		return errs.New(errs.KindStateConflict, "runner creation replay evidence is incomplete")
 	}
 	record, err := decodeRunnerAggregate(stored.Values[0], stored.Values[1])
@@ -1206,7 +982,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 		return errs.New(errs.KindStateConflict, "runner removal replay lost allocation registries")
 	}
 	quota, err := decodeRunnerTenantQuota(stored.Values[6].Value)
-	if err != nil || validateRunnerTenantQuota(quota) != nil {
+	if err != nil || quota.Validate() != nil {
 		return corruptRunnerTenantQuota()
 	}
 	system, err := decodeSystemPoolRegistry(stored.Values[8].Value)
@@ -1220,7 +996,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 		}
 		index := sortSearchRunnerID(quota.RunnerIDs, task.Target)
 		if (index < len(quota.RunnerIDs) && quota.RunnerIDs[index] == task.Target) ||
-			system.Reservations[runnerPoolOwner(task.Target)] != "" {
+			system.Reservations[runnerallocation.RunnerReservationOwner(task.Target)] != "" {
 			return errs.New(errs.KindStateConflict, "completed runner removal retained allocation ownership")
 		}
 		return nil
@@ -1243,7 +1019,11 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 		return errs.New(errs.KindInternal, "runner removal replay slug evidence is incomplete")
 	}
 	return runnerAllocationEvidenceOwns(record, runnerAllocationEvidence{
-		owner: stored.Values[5], slug: slug.Values[0], quota: stored.Values[6], host: stored.Values[7], system: stored.Values[8],
+		owner:  stored.Values[5],
+		slug:   slug.Values[0],
+		quota:  stored.Values[6],
+		host:   stored.Values[7],
+		system: stored.Values[8],
 	})
 }
 

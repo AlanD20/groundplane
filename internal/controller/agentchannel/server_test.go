@@ -84,7 +84,12 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 				continue
 			}
 			if operationMatchesTask(pair.operation, other.taskType) {
-				t.Errorf("operationMatchesTask(%s, %q) = true for cross-pair with %q", pair.operation, other.taskType, pair.taskType)
+				t.Errorf(
+					"operationMatchesTask(%s, %q) = true for cross-pair with %q",
+					pair.operation,
+					other.taskType,
+					pair.taskType,
+				)
 			}
 		}
 	}

@@ -41,8 +41,13 @@ func TestWirePutObjectContractAndAddressing(t *testing.T) {
 				}
 				if request.Method != http.MethodPut || request.Header.Get("If-None-Match") != "*" ||
 					request.Header.Get("Content-MD5") != md5Base64(body) || !bytes.Equal(wireBody, body) {
-					t.Errorf("PUT method/conditional/md5/body = %s/%q/%q/%q",
-						request.Method, request.Header.Get("If-None-Match"), request.Header.Get("Content-MD5"), wireBody)
+					t.Errorf(
+						"PUT method/conditional/md5/body = %s/%q/%q/%q",
+						request.Method,
+						request.Header.Get("If-None-Match"),
+						request.Header.Get("Content-MD5"),
+						wireBody,
+					)
 				}
 				if request.Header.Get("X-Amz-Sdk-Checksum-Algorithm") != "" ||
 					request.Header.Get("X-Amz-Checksum-Crc32") != "" {
@@ -52,7 +57,8 @@ func TestWirePutObjectContractAndAddressing(t *testing.T) {
 					t.Errorf("format metadata = %q", request.Header.Get("X-Amz-Meta-Groundplane-Format-Version"))
 				}
 				if pathStyle {
-					if request.Host != wireEndpointHost(server) || request.URL.Path != "/groundplane-backups/"+artifact.Key {
+					if request.Host != wireEndpointHost(server) ||
+						request.URL.Path != "/groundplane-backups/"+artifact.Key {
 						t.Errorf("path-style host/path = %q/%q", request.Host, request.URL.Path)
 					}
 				} else if request.Host != "groundplane-backups."+wireEndpointHost(server) ||
@@ -62,7 +68,10 @@ func TestWirePutObjectContractAndAddressing(t *testing.T) {
 				if attempt < 3 {
 					response.Header().Set("Content-Type", "application/xml")
 					response.WriteHeader(http.StatusInternalServerError)
-					_, _ = io.WriteString(response, `<Error><Code>InternalError</Code><Message>private</Message></Error>`)
+					_, _ = io.WriteString(
+						response,
+						`<Error><Code>InternalError</Code><Message>private</Message></Error>`,
+					)
 					return
 				}
 				response.Header().Set("ETag", `"wire-etag"`)
@@ -182,14 +191,23 @@ func TestWireCompleteMultipartConditional(t *testing.T) {
 		}
 		response.Header().Set("Content-Type", "application/xml")
 		response.Header().Set("X-Amz-Version-Id", "null")
-		_, _ = io.WriteString(response, `<CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Bucket>groundplane-backups</Bucket><Key>`+
-			artifact.Key+`</Key><ETag>"wire-etag"</ETag></CompleteMultipartUploadResult>`)
+		_, _ = io.WriteString(
+			response,
+			`<CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Bucket>groundplane-backups</Bucket><Key>`+
+				artifact.Key+`</Key><ETag>"wire-etag"</ETag></CompleteMultipartUploadResult>`,
+		)
 	}))
 	defer server.Close()
 	adapter := newWireAdapter(t, server, true)
-	object, restart, err := adapter.completeMultipart(context.Background(), artifact, bytes.NewReader(body), "upload-1", []types.CompletedPart{{
-		ETag: aws.String(`"part-etag"`), PartNumber: aws.Int32(1),
-	}})
+	object, restart, err := adapter.completeMultipart(
+		context.Background(),
+		artifact,
+		bytes.NewReader(body),
+		"upload-1",
+		[]types.CompletedPart{{
+			ETag: aws.String(`"part-etag"`), PartNumber: aws.Int32(1),
+		}},
+	)
 	if err != nil || restart || object.Discriminator != (backupobject.Discriminator{
 		Kind: backupobject.DiscriminatorVersionID, Value: "null",
 	}) {
@@ -569,9 +587,13 @@ func writeMultipartList(
 	uploads ...[2]string,
 ) {
 	response.Header().Set("Content-Type", "application/xml")
-	_, _ = fmt.Fprintf(response,
+	_, _ = fmt.Fprintf(
+		response,
 		`<ListMultipartUploadsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Bucket>groundplane-backups</Bucket><Prefix>%s</Prefix><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker>%s</NextKeyMarker><NextUploadIdMarker>%s</NextUploadIdMarker><MaxUploads>1000</MaxUploads><IsTruncated>%t</IsTruncated>`,
-		prefix, nextKeyMarker, nextUploadIDMarker, truncated,
+		prefix,
+		nextKeyMarker,
+		nextUploadIDMarker,
+		truncated,
 	)
 	for _, upload := range uploads {
 		_, _ = fmt.Fprintf(response, "<Upload><Key>%s</Key><UploadId>%s</UploadId></Upload>", upload[0], upload[1])

@@ -85,7 +85,12 @@ func TestEncryptStreamRejectsMismatchedIdentity(t *testing.T) {
 		t.Fatalf("GenerateKeypair(other) error = %v", err)
 	}
 	var encrypted bytes.Buffer
-	if err := encryptStreamNonClosing(context.Background(), owner.Recipient, strings.NewReader("artifact"), &encrypted); err != nil {
+	if err := encryptStreamNonClosing(
+		context.Background(),
+		owner.Recipient,
+		strings.NewReader("artifact"),
+		&encrypted,
+	); err != nil {
 		t.Fatalf("EncryptStream() error = %v", err)
 	}
 	_, err = Decrypt(other.Identity, encrypted.Bytes())

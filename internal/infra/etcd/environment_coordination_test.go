@@ -260,7 +260,11 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 				t.Fatalf("ScheduleClockFloor = %s, want %s", next.ScheduleClockFloor, wantFloor)
 			}
 			if (next.CurrentBackupScheduleState != nil) != test.wantSchedule {
-				t.Fatalf("CurrentBackupScheduleState = %#v, want present %t", next.CurrentBackupScheduleState, test.wantSchedule)
+				t.Fatalf(
+					"CurrentBackupScheduleState = %#v, want present %t",
+					next.CurrentBackupScheduleState,
+					test.wantSchedule,
+				)
 			}
 			if !test.wantSchedule {
 				if !nextRunAt.IsZero() {

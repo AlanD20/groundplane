@@ -22,7 +22,16 @@ func TestReadBaselineStrictness(t *testing.T) {
 		{"unknown", baselineJSON(`, "extra": 1`), "unknown field"},
 		{"duplicate", strings.Replace(baselineJSON(""), `"version":1`, `"version":1,"version":1`, 1), "duplicate"},
 		{"trailing", baselineJSON("") + "{}", "trailing"},
-		{"unsorted", strings.Replace(baselineJSON(""), `"oversized_files":[]`, `"oversized_files":[{"path":"internal/z.go","lines":601},{"path":"internal/a.go","lines":601}]`, 1), "sorted"},
+		{
+			"unsorted",
+			strings.Replace(
+				baselineJSON(""),
+				`"oversized_files":[]`,
+				`"oversized_files":[{"path":"internal/z.go","lines":601},{"path":"internal/a.go","lines":601}]`,
+				1,
+			),
+			"sorted",
+		},
 		{"bad limit", strings.Replace(baselineJSON(""), `"production":600`, `"production":1`, 1), "limits"},
 	}
 	for _, test := range tests {
@@ -59,7 +68,12 @@ func TestCheckRatchetsAndFrozenTotals(t *testing.T) {
 
 func TestCheckGoRulesAndExceptions(t *testing.T) {
 	root := checkRoot(t)
-	writeFixtureAt(t, root, "internal/adapters/demo/demo.go", "package demo\n\nimport \"example.com/project/internal/infra/etcd\"\nimport \"unsafe\"\ntype Contract interface { Run() }\ntype Alias = Contract\nfunc New() Contract { return nil }\nfunc NewAlias() Alias { return nil }\n")
+	writeFixtureAt(
+		t,
+		root,
+		"internal/adapters/demo/demo.go",
+		"package demo\n\nimport \"example.com/project/internal/infra/etcd\"\nimport \"unsafe\"\ntype Contract interface { Run() }\ntype Alias = Contract\nfunc New() Contract { return nil }\nfunc NewAlias() Alias { return nil }\n",
+	)
 	findings, err := Check(context.Background(), root, validBaseline())
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +84,9 @@ func TestCheckGoRulesAndExceptions(t *testing.T) {
 		}
 	}
 	baseline := validBaseline()
-	baseline.LegacyFindings = []LegacyFinding{{Path: "internal/adapters/demo/demo.go", Rule: "interface-constructor", Subject: "New", Reason: "legacy seam"}}
+	baseline.LegacyFindings = []LegacyFinding{
+		{Path: "internal/adapters/demo/demo.go", Rule: "interface-constructor", Subject: "New", Reason: "legacy seam"},
+	}
 	findings, err = Check(context.Background(), root, baseline)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +98,12 @@ func TestCheckGoRulesAndExceptions(t *testing.T) {
 
 func TestCheckTypeScriptLexicalRulesAndDirectories(t *testing.T) {
 	root := checkRoot(t)
-	writeFixtureAt(t, root, "console/src/features/types/code.ts", "// as any\nconst a = 'as unknown as X';\nconst b = `text ${value as any}`;\nconst c = value as any;\nconst d = value as unknown as Thing;\nconst e = <any>value;\nconst r = /as any/;\nfunction regex() { return /as any/ }\n")
+	writeFixtureAt(
+		t,
+		root,
+		"console/src/features/types/code.ts",
+		"// as any\nconst a = 'as unknown as X';\nconst b = `text ${value as any}`;\nconst c = value as any;\nconst d = value as unknown as Thing;\nconst e = <any>value;\nconst r = /as any/;\nfunction regex() { return /as any/ }\n",
+	)
 	writeFixtureAt(t, root, "console/src/features/view.tsx", "export const View = () => <p>as unknown as</p>\n")
 	findings, err := Check(context.Background(), root, validBaseline())
 	if err != nil {
@@ -129,9 +150,19 @@ func convert(value contract, input any) {
 
 func TestCheckImportMatrixAndReflectExceptions(t *testing.T) {
 	root := checkRoot(t)
-	writeFixtureAt(t, root, "internal/agent/bad.go", "package agent\nimport _ \"example.com/project/internal/controller\"\n")
+	writeFixtureAt(
+		t,
+		root,
+		"internal/agent/bad.go",
+		"package agent\nimport _ \"example.com/project/internal/controller\"\n",
+	)
 	writeFixtureAt(t, root, "pkg/errs/bad.go", "package errs\nimport _ \"example.com/project/internal/common/ids\"\n")
-	writeFixtureAt(t, root, "internal/controller/schema.go", "package controller\nimport \"reflect\"\nvar _ = reflect.TypeOf(0)\n")
+	writeFixtureAt(
+		t,
+		root,
+		"internal/controller/schema.go",
+		"package controller\nimport \"reflect\"\nvar _ = reflect.TypeOf(0)\n",
+	)
 	findings, err := Check(context.Background(), root, validBaseline())
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +171,14 @@ func TestCheckImportMatrixAndReflectExceptions(t *testing.T) {
 		t.Fatalf("findings = %+v", findings)
 	}
 	baseline := validBaseline()
-	baseline.LegacyFindings = []LegacyFinding{{Path: "internal/controller/schema.go", Rule: "reflect-import", Subject: "reflect", Reason: "legacy schema boundary"}}
+	baseline.LegacyFindings = []LegacyFinding{
+		{
+			Path:    "internal/controller/schema.go",
+			Rule:    "reflect-import",
+			Subject: "reflect",
+			Reason:  "legacy schema boundary",
+		},
+	}
 	findings, err = Check(context.Background(), root, baseline)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +189,10 @@ func TestCheckImportMatrixAndReflectExceptions(t *testing.T) {
 }
 
 func TestWriteFindingsIsDeterministic(t *testing.T) {
-	findings := []Finding{{Path: "b", Line: 2, Column: 1, Rule: "z", Message: "last"}, {Path: "a", Line: 1, Column: 1, Rule: "a", Message: "first"}}
+	findings := []Finding{
+		{Path: "b", Line: 2, Column: 1, Rule: "z", Message: "last"},
+		{Path: "a", Line: 1, Column: 1, Rule: "a", Message: "first"},
+	}
 	var output bytes.Buffer
 	if err := WriteFindings(&output, findings); err != nil {
 		t.Fatal(err)
@@ -166,7 +207,13 @@ func TestWriteFindingsIsDeterministic(t *testing.T) {
 }
 
 func validBaseline() Baseline {
-	return Baseline{Version: 1, Limits: Limits{Production: 600, Test: 1000}, OversizedFiles: []OversizedFile{}, FrozenTotals: []FrozenTotal{{Path: "internal/app", Lines: 1}, {Path: "internal/infra/etcd", Lines: 1}}, LegacyFindings: []LegacyFinding{}}
+	return Baseline{
+		Version:        1,
+		Limits:         Limits{Production: 600, Test: 1000},
+		OversizedFiles: []OversizedFile{},
+		FrozenTotals:   []FrozenTotal{{Path: "internal/app", Lines: 1}, {Path: "internal/infra/etcd", Lines: 1}},
+		LegacyFindings: []LegacyFinding{},
+	}
 }
 
 func baselineJSON(suffix string) string {
@@ -219,10 +266,15 @@ func countRule(findings []Finding, rule string) int {
 }
 
 func TestFindingSortOrder(t *testing.T) {
-	findings := []Finding{{Path: "a", Line: 2, Column: 1}, {Path: "a", Line: 1, Column: 2}, {Path: "a", Line: 1, Column: 1}}
+	findings := []Finding{
+		{Path: "a", Line: 2, Column: 1},
+		{Path: "a", Line: 1, Column: 2},
+		{Path: "a", Line: 1, Column: 1},
+	}
 	sortFindings(findings)
 	if !sort.SliceIsSorted(findings, func(i, j int) bool {
-		return findings[i].Line < findings[j].Line || findings[i].Line == findings[j].Line && findings[i].Column <= findings[j].Column
+		return findings[i].Line < findings[j].Line ||
+			findings[i].Line == findings[j].Line && findings[i].Column <= findings[j].Column
 	}) {
 		t.Fatalf("findings not sorted: %+v", findings)
 	}

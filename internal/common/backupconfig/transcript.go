@@ -308,7 +308,8 @@ func validateTranscriptFrames(authority ContentAuthority, metadata []MetadataFra
 			return archiveError("transfer transcript source geometry overflows")
 		}
 	}
-	if total != authority.TotalSelectedValueBytes || sourceSize != authority.SourceSizeBytes || sourceSize > MaxSourceBytes {
+	if total != authority.TotalSelectedValueBytes || sourceSize != authority.SourceSizeBytes ||
+		sourceSize > MaxSourceBytes {
 		return archiveError("transfer transcript source geometry does not match authority")
 	}
 	return nil

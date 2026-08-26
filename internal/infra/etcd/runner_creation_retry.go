@@ -1,0 +1,267 @@
+package etcd
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// RetryRunnerCreationWithTask is deliberately separate from generic Task
+// retry because every attempt must fetch a fresh single-use registration token.
+// Only the fact that a fresh token was present crosses this persistence seam.
+func (repository *RunnerRepository) RetryRunnerCreationWithTask(
+	ctx context.Context,
+	sourceTaskID string,
+	retry TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateContext(ctx); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if ids.Validate(ids.KindTask, sourceTaskID) != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "source task id is invalid")
+	}
+	if retry.RetryOf != sourceTaskID || retry.Executor != TaskExecutorController || retry.Type != TaskCreate ||
+		retry.Status != TaskStatusPending || retry.IdempotencyKey == "" || len(retry.Params) != 2 ||
+		retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
+		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"runner creation retry has invalid durable input",
+		)
+	}
+	if err := validateRunnerRetryMarkerEnvelope(retry, marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	retry = bindRunnerTaskMarker(retry, marker)
+	if err := validateTaskRecord(retry); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	existing, err := idempotency.Read(ctx, marker.Locator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if existing != nil {
+		return IdempotencyTransactionResult{
+			kind: idempotencyTransactionExisting, revision: existing.modRevision,
+			marker: cloneIdempotencyMarker(existing.marker),
+		}, nil
+	}
+	sourceResult, err := repository.store.Get(ctx, taskKey(sourceTaskID))
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if sourceResult == nil || sourceResult.Entry == nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindTaskNotFound, "source task was not found")
+	}
+	source, err := decodeTaskRecord(sourceResult.Entry.Value)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	applies, err := taskOwnsRunnerCreation(source)
+	if err != nil || !applies {
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"source task is not a runner creation",
+		)
+	}
+	if !runnerRetryableTerminal(source.Status) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"source runner creation task is not retryable",
+		)
+	}
+	current, err := repository.GetRunner(ctx, source.Target)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if retry.RetryOf != source.ID || retry.OperationID != source.OperationID ||
+		retry.Owner != source.Owner ||
+		retry.Executor != TaskExecutorController || retry.Type != TaskCreate ||
+		retry.Target != source.Target || retry.Status != TaskStatusPending ||
+		retry.IdempotencyKey != source.IdempotencyKey || retry.PlanID != source.PlanID ||
+		retry.PlanHash != source.PlanHash || retry.RenderGeneration != source.RenderGeneration ||
+		retry.TimeoutSeconds != source.TimeoutSeconds || !runnerTaskStepsEqual(retry.Steps, source.Steps) ||
+		!runnerTaskMaterializationsEqual(retry.Materializations, source.Materializations) ||
+		len(retry.Params) != 2 || retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
+		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"runner creation retry has invalid durable input",
+		)
+	}
+	if err := validateRunnerRetryMarker(current.Record.Desired, retry, marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	replacement, err := RetryRunnerProvisioning(current.Record, source.ID, retry.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	parents, err := repository.resolveRunnerParents(ctx, current.Record.Desired)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	allocation, err := repository.readRunnerAllocationEvidence(ctx, current.Record, current.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	recordValue, err := encodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(recordValue)
+	taskValue, err := encodeTaskRecord(retry)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskValue)
+	reference, err := encodeTaskReference(retry.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(reference)
+	conditions := []Condition{
+		{Key: taskKey(retry.ID)},
+		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
+		{Key: taskActiveOperationKey(retry.OperationID)},
+		{Key: taskQueueKey(retry.Executor, retry.ID)},
+		{Key: taskKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
+		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
+		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerRuntimeOwnershipKey(current.Record.Desired.ID)},
+		{
+			Key: runnerOwnerKey(
+				current.Record.Desired.OwnerKind,
+				current.Record.Desired.OwnerID,
+				current.Record.Desired.ID,
+			),
+			ModRevision: allocation.owner.ModRevision,
+		},
+		{
+			Key:         runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+			ModRevision: allocation.slug.ModRevision,
+		},
+		{Key: runnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
+		{Key: runnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
+		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
+		{Key: tenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
+		{Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID)},
+		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
+	}
+	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
+		conditions = append(conditions,
+			Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
+			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
+		)
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
+		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+		{Type: MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: recordValue},
+	}
+	classifier := func(_ int64, values []*KeyValue) error {
+		if len(values) != len(conditions) {
+			return errs.New(errs.KindInternal, "runner creation retry compare evidence is incomplete")
+		}
+		if values[2] != nil {
+			activeTaskID, decodeErr := decodeTaskReference(values[2].Value)
+			if decodeErr != nil {
+				return decodeErr
+			}
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				retry.OperationID,
+				activeTaskID,
+			)
+		}
+		return stateConflict("runner creation retry", current.Record.Desired.ID)
+	}
+	initiation, err := newInheritedTaskInitiation(Versioned[TaskRecord]{
+		Record: source, Revision: sourceResult.Entry.ModRevision, ReadRevision: sourceResult.ReadRevision,
+	}, retry.Actor)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(retry, initiation, conditions, mutations, classifier)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}
+
+func runnerTaskStepsEqual(left []TaskStepRecord, right []TaskStepRecord) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func runnerTaskMaterializationsEqual(left []TaskMaterializationRecord, right []TaskMaterializationRecord) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !runnerTaskMaterializationEqual(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func runnerTaskMaterializationEqual(left TaskMaterializationRecord, right TaskMaterializationRecord) bool {
+	if left.StepID != right.StepID || left.MaterializationID != right.MaterializationID ||
+		left.EnvironmentID != right.EnvironmentID || left.Destination != right.Destination ||
+		left.ServiceID != right.ServiceID || left.ServiceName != right.ServiceName ||
+		left.OutputKind != right.OutputKind || left.UID != right.UID || left.GID != right.GID ||
+		left.Mode != right.Mode || left.Length != right.Length || left.SHA256 != right.SHA256 ||
+		left.Source.Kind != right.Source.Kind ||
+		!runnerComparablePointersEqual(left.Source.BlueprintFile, right.Source.BlueprintFile) ||
+		!runnerComparablePointersEqual(left.Source.ComponentFile, right.Source.ComponentFile) ||
+		!runnerComparablePointersEqual(left.Source.EntryValue, right.Source.EntryValue) {
+		return false
+	}
+	return runnerGeneratedEnvironmentPointersEqual(
+		left.Source.GeneratedEnvironment, right.Source.GeneratedEnvironment,
+	)
+}
+
+func runnerComparablePointersEqual[T comparable](left *T, right *T) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func runnerGeneratedEnvironmentPointersEqual(
+	left *TaskGeneratedEnvironmentValueReference,
+	right *TaskGeneratedEnvironmentValueReference,
+) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	if left.FormatVersion != right.FormatVersion || len(left.Values) != len(right.Values) {
+		return false
+	}
+	for index := range left.Values {
+		if left.Values[index] != right.Values[index] {
+			return false
+		}
+	}
+	return true
+}
