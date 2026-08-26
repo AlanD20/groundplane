@@ -182,8 +182,8 @@ func (r {{genResponseTypeName $opid | ucFirst}}) ContentType() string {
 
 // Parse{{genResponseTypeName $opid | ucFirst}} parses an HTTP response from a {{$opid}}WithResponse call
 func Parse{{genResponseTypeName $opid | ucFirst}}(rsp *http.Response) (*{{genResponseTypeName $opid}}, error) {
-    bodyBytes, err := problemresponse.Read(rsp)
     defer func() { _ = rsp.Body.Close() }()
+    bodyBytes, err := problemresponse.Read(rsp)
     if err != nil {
         return nil, err
     }

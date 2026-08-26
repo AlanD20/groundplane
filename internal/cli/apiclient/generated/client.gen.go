@@ -14198,8 +14198,8 @@ func (c *ClientWithResponses) ZoneRemovalImpactWithResponse(ctx context.Context,
 
 // ParseActivityListResponse parses an HTTP response from a ActivityListWithResponse call
 func ParseActivityListResponse(rsp *http.Response) (*ActivityListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14231,8 +14231,8 @@ func ParseActivityListResponse(rsp *http.Response) (*ActivityListResponse, error
 
 // ParseAgentListResponse parses an HTTP response from a AgentListWithResponse call
 func ParseAgentListResponse(rsp *http.Response) (*AgentListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14264,8 +14264,8 @@ func ParseAgentListResponse(rsp *http.Response) (*AgentListResponse, error) {
 
 // ParseAgentJoinResponse parses an HTTP response from a AgentJoinWithResponse call
 func ParseAgentJoinResponse(rsp *http.Response) (*AgentJoinResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14310,8 +14310,8 @@ func ParseAgentJoinResponse(rsp *http.Response) (*AgentJoinResponse, error) {
 
 // ParseAgentRemoveResponse parses an HTTP response from a AgentRemoveWithResponse call
 func ParseAgentRemoveResponse(rsp *http.Response) (*AgentRemoveResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14356,8 +14356,8 @@ func ParseAgentRemoveResponse(rsp *http.Response) (*AgentRemoveResponse, error) 
 
 // ParseAgentShowResponse parses an HTTP response from a AgentShowWithResponse call
 func ParseAgentShowResponse(rsp *http.Response) (*AgentShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14389,8 +14389,8 @@ func ParseAgentShowResponse(rsp *http.Response) (*AgentShowResponse, error) {
 
 // ParseAgentConfigShowResponse parses an HTTP response from a AgentConfigShowWithResponse call
 func ParseAgentConfigShowResponse(rsp *http.Response) (*AgentConfigShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14422,8 +14422,8 @@ func ParseAgentConfigShowResponse(rsp *http.Response) (*AgentConfigShowResponse,
 
 // ParseAgentConfigSetResponse parses an HTTP response from a AgentConfigSetWithResponse call
 func ParseAgentConfigSetResponse(rsp *http.Response) (*AgentConfigSetResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14468,8 +14468,8 @@ func ParseAgentConfigSetResponse(rsp *http.Response) (*AgentConfigSetResponse, e
 
 // ParseAgentUpdateResponse parses an HTTP response from a AgentUpdateWithResponse call
 func ParseAgentUpdateResponse(rsp *http.Response) (*AgentUpdateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14514,8 +14514,8 @@ func ParseAgentUpdateResponse(rsp *http.Response) (*AgentUpdateResponse, error) 
 
 // ParseAttachListResponse parses an HTTP response from a AttachListWithResponse call
 func ParseAttachListResponse(rsp *http.Response) (*AttachListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14547,8 +14547,8 @@ func ParseAttachListResponse(rsp *http.Response) (*AttachListResponse, error) {
 
 // ParseAttachCreateResponse parses an HTTP response from a AttachCreateWithResponse call
 func ParseAttachCreateResponse(rsp *http.Response) (*AttachCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14593,8 +14593,8 @@ func ParseAttachCreateResponse(rsp *http.Response) (*AttachCreateResponse, error
 
 // ParseAttachDetachResponse parses an HTTP response from a AttachDetachWithResponse call
 func ParseAttachDetachResponse(rsp *http.Response) (*AttachDetachResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14639,8 +14639,8 @@ func ParseAttachDetachResponse(rsp *http.Response) (*AttachDetachResponse, error
 
 // ParseAttachFactRevealResponse parses an HTTP response from a AttachFactRevealWithResponse call
 func ParseAttachFactRevealResponse(rsp *http.Response) (*AttachFactRevealResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14672,8 +14672,8 @@ func ParseAttachFactRevealResponse(rsp *http.Response) (*AttachFactRevealRespons
 
 // ParseAttachRenameResponse parses an HTTP response from a AttachRenameWithResponse call
 func ParseAttachRenameResponse(rsp *http.Response) (*AttachRenameResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14718,8 +14718,8 @@ func ParseAttachRenameResponse(rsp *http.Response) (*AttachRenameResponse, error
 
 // ParseBackingServiceListResponse parses an HTTP response from a BackingServiceListWithResponse call
 func ParseBackingServiceListResponse(rsp *http.Response) (*BackingServiceListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14751,8 +14751,8 @@ func ParseBackingServiceListResponse(rsp *http.Response) (*BackingServiceListRes
 
 // ParseBackingServiceShowResponse parses an HTTP response from a BackingServiceShowWithResponse call
 func ParseBackingServiceShowResponse(rsp *http.Response) (*BackingServiceShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14784,8 +14784,8 @@ func ParseBackingServiceShowResponse(rsp *http.Response) (*BackingServiceShowRes
 
 // ParseConnectorListResponse parses an HTTP response from a ConnectorListWithResponse call
 func ParseConnectorListResponse(rsp *http.Response) (*ConnectorListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14817,8 +14817,8 @@ func ParseConnectorListResponse(rsp *http.Response) (*ConnectorListResponse, err
 
 // ParseConnectorCreateResponse parses an HTTP response from a ConnectorCreateWithResponse call
 func ParseConnectorCreateResponse(rsp *http.Response) (*ConnectorCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14863,8 +14863,8 @@ func ParseConnectorCreateResponse(rsp *http.Response) (*ConnectorCreateResponse,
 
 // ParseConnectorRemoveResponse parses an HTTP response from a ConnectorRemoveWithResponse call
 func ParseConnectorRemoveResponse(rsp *http.Response) (*ConnectorRemoveResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14909,8 +14909,8 @@ func ParseConnectorRemoveResponse(rsp *http.Response) (*ConnectorRemoveResponse,
 
 // ParseConnectorShowResponse parses an HTTP response from a ConnectorShowWithResponse call
 func ParseConnectorShowResponse(rsp *http.Response) (*ConnectorShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14942,8 +14942,8 @@ func ParseConnectorShowResponse(rsp *http.Response) (*ConnectorShowResponse, err
 
 // ParseEntryListResponse parses an HTTP response from a EntryListWithResponse call
 func ParseEntryListResponse(rsp *http.Response) (*EntryListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -14975,8 +14975,8 @@ func ParseEntryListResponse(rsp *http.Response) (*EntryListResponse, error) {
 
 // ParseEntryCreateResponse parses an HTTP response from a EntryCreateWithResponse call
 func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15021,8 +15021,8 @@ func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) 
 
 // ParseEntryRemoveResponse parses an HTTP response from a EntryRemoveWithResponse call
 func ParseEntryRemoveResponse(rsp *http.Response) (*EntryRemoveResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15067,8 +15067,8 @@ func ParseEntryRemoveResponse(rsp *http.Response) (*EntryRemoveResponse, error) 
 
 // ParseEntryShowResponse parses an HTTP response from a EntryShowWithResponse call
 func ParseEntryShowResponse(rsp *http.Response) (*EntryShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15100,8 +15100,8 @@ func ParseEntryShowResponse(rsp *http.Response) (*EntryShowResponse, error) {
 
 // ParseEntryEditResponse parses an HTTP response from a EntryEditWithResponse call
 func ParseEntryEditResponse(rsp *http.Response) (*EntryEditResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15146,8 +15146,8 @@ func ParseEntryEditResponse(rsp *http.Response) (*EntryEditResponse, error) {
 
 // ParseEntryRevealResponse parses an HTTP response from a EntryRevealWithResponse call
 func ParseEntryRevealResponse(rsp *http.Response) (*EntryRevealResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15179,8 +15179,8 @@ func ParseEntryRevealResponse(rsp *http.Response) (*EntryRevealResponse, error) 
 
 // ParseEnvironmentListResponse parses an HTTP response from a EnvironmentListWithResponse call
 func ParseEnvironmentListResponse(rsp *http.Response) (*EnvironmentListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15212,8 +15212,8 @@ func ParseEnvironmentListResponse(rsp *http.Response) (*EnvironmentListResponse,
 
 // ParseEnvironmentCreateResponse parses an HTTP response from a EnvironmentCreateWithResponse call
 func ParseEnvironmentCreateResponse(rsp *http.Response) (*EnvironmentCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15258,8 +15258,8 @@ func ParseEnvironmentCreateResponse(rsp *http.Response) (*EnvironmentCreateRespo
 
 // ParseEnvironmentShowResponse parses an HTTP response from a EnvironmentShowWithResponse call
 func ParseEnvironmentShowResponse(rsp *http.Response) (*EnvironmentShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15291,8 +15291,8 @@ func ParseEnvironmentShowResponse(rsp *http.Response) (*EnvironmentShowResponse,
 
 // ParseEnvironmentEditResponse parses an HTTP response from a EnvironmentEditWithResponse call
 func ParseEnvironmentEditResponse(rsp *http.Response) (*EnvironmentEditResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15337,8 +15337,8 @@ func ParseEnvironmentEditResponse(rsp *http.Response) (*EnvironmentEditResponse,
 
 // ParseBackupPolicyShowResponse parses an HTTP response from a BackupPolicyShowWithResponse call
 func ParseBackupPolicyShowResponse(rsp *http.Response) (*BackupPolicyShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15370,8 +15370,8 @@ func ParseBackupPolicyShowResponse(rsp *http.Response) (*BackupPolicyShowRespons
 
 // ParseBackupPolicySetResponse parses an HTTP response from a BackupPolicySetWithResponse call
 func ParseBackupPolicySetResponse(rsp *http.Response) (*BackupPolicySetResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15416,8 +15416,8 @@ func ParseBackupPolicySetResponse(rsp *http.Response) (*BackupPolicySetResponse,
 
 // ParseEnvironmentApplyResponse parses an HTTP response from a EnvironmentApplyWithResponse call
 func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15462,8 +15462,8 @@ func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyRespons
 
 // ParseEnvironmentRenameResponse parses an HTTP response from a EnvironmentRenameWithResponse call
 func ParseEnvironmentRenameResponse(rsp *http.Response) (*EnvironmentRenameResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15508,8 +15508,8 @@ func ParseEnvironmentRenameResponse(rsp *http.Response) (*EnvironmentRenameRespo
 
 // ParseHostShowResponse parses an HTTP response from a HostShowWithResponse call
 func ParseHostShowResponse(rsp *http.Response) (*HostShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15541,8 +15541,8 @@ func ParseHostShowResponse(rsp *http.Response) (*HostShowResponse, error) {
 
 // ParseProjectListResponse parses an HTTP response from a ProjectListWithResponse call
 func ParseProjectListResponse(rsp *http.Response) (*ProjectListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15574,8 +15574,8 @@ func ParseProjectListResponse(rsp *http.Response) (*ProjectListResponse, error) 
 
 // ParseProjectCreateResponse parses an HTTP response from a ProjectCreateWithResponse call
 func ParseProjectCreateResponse(rsp *http.Response) (*ProjectCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15620,8 +15620,8 @@ func ParseProjectCreateResponse(rsp *http.Response) (*ProjectCreateResponse, err
 
 // ParseProjectShowResponse parses an HTTP response from a ProjectShowWithResponse call
 func ParseProjectShowResponse(rsp *http.Response) (*ProjectShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15653,8 +15653,8 @@ func ParseProjectShowResponse(rsp *http.Response) (*ProjectShowResponse, error) 
 
 // ParseProjectEditResponse parses an HTTP response from a ProjectEditWithResponse call
 func ParseProjectEditResponse(rsp *http.Response) (*ProjectEditResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15699,8 +15699,8 @@ func ParseProjectEditResponse(rsp *http.Response) (*ProjectEditResponse, error) 
 
 // ParseProjectRenameResponse parses an HTTP response from a ProjectRenameWithResponse call
 func ParseProjectRenameResponse(rsp *http.Response) (*ProjectRenameResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15745,8 +15745,8 @@ func ParseProjectRenameResponse(rsp *http.Response) (*ProjectRenameResponse, err
 
 // ParseRouteListResponse parses an HTTP response from a RouteListWithResponse call
 func ParseRouteListResponse(rsp *http.Response) (*RouteListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15778,8 +15778,8 @@ func ParseRouteListResponse(rsp *http.Response) (*RouteListResponse, error) {
 
 // ParseRouteCreateResponse parses an HTTP response from a RouteCreateWithResponse call
 func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15824,8 +15824,8 @@ func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) 
 
 // ParseRouteRemoveResponse parses an HTTP response from a RouteRemoveWithResponse call
 func ParseRouteRemoveResponse(rsp *http.Response) (*RouteRemoveResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15870,8 +15870,8 @@ func ParseRouteRemoveResponse(rsp *http.Response) (*RouteRemoveResponse, error) 
 
 // ParseRouteShowResponse parses an HTTP response from a RouteShowWithResponse call
 func ParseRouteShowResponse(rsp *http.Response) (*RouteShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15903,8 +15903,8 @@ func ParseRouteShowResponse(rsp *http.Response) (*RouteShowResponse, error) {
 
 // ParseRouteEditResponse parses an HTTP response from a RouteEditWithResponse call
 func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15949,8 +15949,8 @@ func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
 
 // ParseScriptListResponse parses an HTTP response from a ScriptListWithResponse call
 func ParseScriptListResponse(rsp *http.Response) (*ScriptListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -15982,8 +15982,8 @@ func ParseScriptListResponse(rsp *http.Response) (*ScriptListResponse, error) {
 
 // ParseScriptCreateResponse parses an HTTP response from a ScriptCreateWithResponse call
 func ParseScriptCreateResponse(rsp *http.Response) (*ScriptCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16028,8 +16028,8 @@ func ParseScriptCreateResponse(rsp *http.Response) (*ScriptCreateResponse, error
 
 // ParseScriptRemoveResponse parses an HTTP response from a ScriptRemoveWithResponse call
 func ParseScriptRemoveResponse(rsp *http.Response) (*ScriptRemoveResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16074,8 +16074,8 @@ func ParseScriptRemoveResponse(rsp *http.Response) (*ScriptRemoveResponse, error
 
 // ParseScriptShowResponse parses an HTTP response from a ScriptShowWithResponse call
 func ParseScriptShowResponse(rsp *http.Response) (*ScriptShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16107,8 +16107,8 @@ func ParseScriptShowResponse(rsp *http.Response) (*ScriptShowResponse, error) {
 
 // ParseScriptEditResponse parses an HTTP response from a ScriptEditWithResponse call
 func ParseScriptEditResponse(rsp *http.Response) (*ScriptEditResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16153,8 +16153,8 @@ func ParseScriptEditResponse(rsp *http.Response) (*ScriptEditResponse, error) {
 
 // ParseSecretListResponse parses an HTTP response from a SecretListWithResponse call
 func ParseSecretListResponse(rsp *http.Response) (*SecretListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16186,8 +16186,8 @@ func ParseSecretListResponse(rsp *http.Response) (*SecretListResponse, error) {
 
 // ParseSecretCreateResponse parses an HTTP response from a SecretCreateWithResponse call
 func ParseSecretCreateResponse(rsp *http.Response) (*SecretCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16232,8 +16232,8 @@ func ParseSecretCreateResponse(rsp *http.Response) (*SecretCreateResponse, error
 
 // ParseSecretRemoveResponse parses an HTTP response from a SecretRemoveWithResponse call
 func ParseSecretRemoveResponse(rsp *http.Response) (*SecretRemoveResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16278,8 +16278,8 @@ func ParseSecretRemoveResponse(rsp *http.Response) (*SecretRemoveResponse, error
 
 // ParseSecretShowResponse parses an HTTP response from a SecretShowWithResponse call
 func ParseSecretShowResponse(rsp *http.Response) (*SecretShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16311,8 +16311,8 @@ func ParseSecretShowResponse(rsp *http.Response) (*SecretShowResponse, error) {
 
 // ParseSecretRevealResponse parses an HTTP response from a SecretRevealWithResponse call
 func ParseSecretRevealResponse(rsp *http.Response) (*SecretRevealResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16344,8 +16344,8 @@ func ParseSecretRevealResponse(rsp *http.Response) (*SecretRevealResponse, error
 
 // ParseServiceListResponse parses an HTTP response from a ServiceListWithResponse call
 func ParseServiceListResponse(rsp *http.Response) (*ServiceListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16377,8 +16377,8 @@ func ParseServiceListResponse(rsp *http.Response) (*ServiceListResponse, error) 
 
 // ParseServiceCreateResponse parses an HTTP response from a ServiceCreateWithResponse call
 func ParseServiceCreateResponse(rsp *http.Response) (*ServiceCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16423,8 +16423,8 @@ func ParseServiceCreateResponse(rsp *http.Response) (*ServiceCreateResponse, err
 
 // ParseServiceShowResponse parses an HTTP response from a ServiceShowWithResponse call
 func ParseServiceShowResponse(rsp *http.Response) (*ServiceShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16456,8 +16456,8 @@ func ParseServiceShowResponse(rsp *http.Response) (*ServiceShowResponse, error) 
 
 // ParseServiceEditResponse parses an HTTP response from a ServiceEditWithResponse call
 func ParseServiceEditResponse(rsp *http.Response) (*ServiceEditResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16502,8 +16502,8 @@ func ParseServiceEditResponse(rsp *http.Response) (*ServiceEditResponse, error) 
 
 // ParseServiceDestroyResponse parses an HTTP response from a ServiceDestroyWithResponse call
 func ParseServiceDestroyResponse(rsp *http.Response) (*ServiceDestroyResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16548,8 +16548,8 @@ func ParseServiceDestroyResponse(rsp *http.Response) (*ServiceDestroyResponse, e
 
 // ParseServiceStartResponse parses an HTTP response from a ServiceStartWithResponse call
 func ParseServiceStartResponse(rsp *http.Response) (*ServiceStartResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16594,8 +16594,8 @@ func ParseServiceStartResponse(rsp *http.Response) (*ServiceStartResponse, error
 
 // ParseServiceStopResponse parses an HTTP response from a ServiceStopWithResponse call
 func ParseServiceStopResponse(rsp *http.Response) (*ServiceStopResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16640,8 +16640,8 @@ func ParseServiceStopResponse(rsp *http.Response) (*ServiceStopResponse, error) 
 
 // ParseTaskListResponse parses an HTTP response from a TaskListWithResponse call
 func ParseTaskListResponse(rsp *http.Response) (*TaskListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16673,8 +16673,8 @@ func ParseTaskListResponse(rsp *http.Response) (*TaskListResponse, error) {
 
 // ParseTaskShowResponse parses an HTTP response from a TaskShowWithResponse call
 func ParseTaskShowResponse(rsp *http.Response) (*TaskShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16706,8 +16706,8 @@ func ParseTaskShowResponse(rsp *http.Response) (*TaskShowResponse, error) {
 
 // ParseTaskAbortResponse parses an HTTP response from a TaskAbortWithResponse call
 func ParseTaskAbortResponse(rsp *http.Response) (*TaskAbortResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16752,8 +16752,8 @@ func ParseTaskAbortResponse(rsp *http.Response) (*TaskAbortResponse, error) {
 
 // ParseTaskEventsResponse parses an HTTP response from a TaskEventsWithResponse call
 func ParseTaskEventsResponse(rsp *http.Response) (*TaskEventsResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16778,8 +16778,8 @@ func ParseTaskEventsResponse(rsp *http.Response) (*TaskEventsResponse, error) {
 
 // ParseTaskRetryResponse parses an HTTP response from a TaskRetryWithResponse call
 func ParseTaskRetryResponse(rsp *http.Response) (*TaskRetryResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16824,8 +16824,8 @@ func ParseTaskRetryResponse(rsp *http.Response) (*TaskRetryResponse, error) {
 
 // ParseTenantListResponse parses an HTTP response from a TenantListWithResponse call
 func ParseTenantListResponse(rsp *http.Response) (*TenantListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16857,8 +16857,8 @@ func ParseTenantListResponse(rsp *http.Response) (*TenantListResponse, error) {
 
 // ParseTenantCreateResponse parses an HTTP response from a TenantCreateWithResponse call
 func ParseTenantCreateResponse(rsp *http.Response) (*TenantCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16903,8 +16903,8 @@ func ParseTenantCreateResponse(rsp *http.Response) (*TenantCreateResponse, error
 
 // ParseTenantShowResponse parses an HTTP response from a TenantShowWithResponse call
 func ParseTenantShowResponse(rsp *http.Response) (*TenantShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16936,8 +16936,8 @@ func ParseTenantShowResponse(rsp *http.Response) (*TenantShowResponse, error) {
 
 // ParseTenantEditResponse parses an HTTP response from a TenantEditWithResponse call
 func ParseTenantEditResponse(rsp *http.Response) (*TenantEditResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -16982,8 +16982,8 @@ func ParseTenantEditResponse(rsp *http.Response) (*TenantEditResponse, error) {
 
 // ParseTenantRenameResponse parses an HTTP response from a TenantRenameWithResponse call
 func ParseTenantRenameResponse(rsp *http.Response) (*TenantRenameResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -17028,8 +17028,8 @@ func ParseTenantRenameResponse(rsp *http.Response) (*TenantRenameResponse, error
 
 // ParseVolumeListResponse parses an HTTP response from a VolumeListWithResponse call
 func ParseVolumeListResponse(rsp *http.Response) (*VolumeListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -17061,8 +17061,8 @@ func ParseVolumeListResponse(rsp *http.Response) (*VolumeListResponse, error) {
 
 // ParseZoneListResponse parses an HTTP response from a ZoneListWithResponse call
 func ParseZoneListResponse(rsp *http.Response) (*ZoneListResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -17094,8 +17094,8 @@ func ParseZoneListResponse(rsp *http.Response) (*ZoneListResponse, error) {
 
 // ParseZoneCreateResponse parses an HTTP response from a ZoneCreateWithResponse call
 func ParseZoneCreateResponse(rsp *http.Response) (*ZoneCreateResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -17140,8 +17140,8 @@ func ParseZoneCreateResponse(rsp *http.Response) (*ZoneCreateResponse, error) {
 
 // ParseZoneRemoveResponse parses an HTTP response from a ZoneRemoveWithResponse call
 func ParseZoneRemoveResponse(rsp *http.Response) (*ZoneRemoveResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -17186,8 +17186,8 @@ func ParseZoneRemoveResponse(rsp *http.Response) (*ZoneRemoveResponse, error) {
 
 // ParseZoneShowResponse parses an HTTP response from a ZoneShowWithResponse call
 func ParseZoneShowResponse(rsp *http.Response) (*ZoneShowResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
@@ -17219,8 +17219,8 @@ func ParseZoneShowResponse(rsp *http.Response) (*ZoneShowResponse, error) {
 
 // ParseZoneRemovalImpactResponse parses an HTTP response from a ZoneRemovalImpactWithResponse call
 func ParseZoneRemovalImpactResponse(rsp *http.Response) (*ZoneRemovalImpactResponse, error) {
-	bodyBytes, err := problemresponse.Read(rsp)
 	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
