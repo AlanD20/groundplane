@@ -27,12 +27,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/problemresponse"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const idempotencyKeyHeader = "Idempotency-Key"
-
-const maximumProblemResponseBytes = 1 << 20
 
 var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
 
@@ -373,16 +372,12 @@ func splitEventStreamLines(data []byte, atEOF bool) (advance int, token []byte, 
 }
 
 func responseProblem(method, path string, resp *http.Response) error {
-	mediaType, _, mediaTypeErr := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if mediaTypeErr != nil || mediaType != "application/problem+json" {
-		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
-	}
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maximumProblemResponseBytes+1))
-	if readErr != nil || len(body) > maximumProblemResponseBytes {
-		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
+	body, err := problemresponse.Read(resp)
+	if err != nil {
+		return err
 	}
 
-	problem, ok := decodeProblem(body)
+	problem, ok := problemresponse.Decode(body)
 	if !ok || problem.Status != resp.StatusCode {
 		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
 	}
@@ -391,86 +386,4 @@ func responseProblem(method, path string, resp *http.Response) error {
 		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
 	}
 	return domainError
-}
-
-func decodeProblem(body []byte) (errs.Problem, bool) {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	opening, err := decoder.Token()
-	if err != nil || opening != json.Delim('{') {
-		return errs.Problem{}, false
-	}
-
-	const (
-		typeMember uint8 = 1 << iota
-		titleMember
-		statusMember
-		detailMember
-		codeMember
-		allProblemMembers = typeMember | titleMember | statusMember | detailMember | codeMember
-	)
-	var problem errs.Problem
-	var seen uint8
-	decodeString := func(destination *string) bool {
-		var value *string
-		if err := decoder.Decode(&value); err != nil || value == nil {
-			return false
-		}
-		*destination = *value
-		return true
-	}
-
-	for decoder.More() {
-		memberToken, err := decoder.Token()
-		member, ok := memberToken.(string)
-		if err != nil || !ok {
-			return errs.Problem{}, false
-		}
-		var bit uint8
-		switch member {
-		case "type":
-			bit = typeMember
-			if !decodeString(&problem.Type) {
-				return errs.Problem{}, false
-			}
-		case "title":
-			bit = titleMember
-			if !decodeString(&problem.Title) {
-				return errs.Problem{}, false
-			}
-		case "status":
-			bit = statusMember
-			var value *int
-			if err := decoder.Decode(&value); err != nil || value == nil {
-				return errs.Problem{}, false
-			}
-			problem.Status = *value
-		case "detail":
-			bit = detailMember
-			if !decodeString(&problem.Detail) {
-				return errs.Problem{}, false
-			}
-		case "code":
-			bit = codeMember
-			var value string
-			if !decodeString(&value) {
-				return errs.Problem{}, false
-			}
-			problem.Code = errs.Code(value)
-		default:
-			return errs.Problem{}, false
-		}
-		if seen&bit != 0 {
-			return errs.Problem{}, false
-		}
-		seen |= bit
-	}
-
-	closing, err := decoder.Token()
-	if err != nil || closing != json.Delim('}') || seen != allProblemMembers {
-		return errs.Problem{}, false
-	}
-	if _, err := decoder.Token(); err != io.EOF {
-		return errs.Problem{}, false
-	}
-	return problem, true
 }

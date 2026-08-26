@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/problemresponse"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -38,7 +39,7 @@ func TestResponseProblemRejectsInvalidEnvelope(t *testing.T) {
 		},
 		"oversized body": {
 			mediaType: "application/problem+json",
-			body:      bytes.Repeat([]byte("x"), maximumProblemResponseBytes+1),
+			body:      bytes.Repeat([]byte("x"), int(problemresponse.MaximumBytes)+1),
 		},
 		"missing member": {
 			mediaType: "application/problem+json",
