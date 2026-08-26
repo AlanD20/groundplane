@@ -382,13 +382,8 @@ func responseProblem(method, path string, resp *http.Response) error {
 		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	var problem errs.Problem
-	if err := decoder.Decode(&problem); err != nil || problem.Status != resp.StatusCode {
-		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
+	problem, ok := decodeProblem(body)
+	if !ok || problem.Status != resp.StatusCode {
 		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
 	}
 	domainError, ok := errs.FromProblem(problem)
@@ -396,4 +391,86 @@ func responseProblem(method, path string, resp *http.Response) error {
 		return errs.Newf(errs.KindInternal, "%s %s: unexpected status %d", method, path, resp.StatusCode)
 	}
 	return domainError
+}
+
+func decodeProblem(body []byte) (errs.Problem, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return errs.Problem{}, false
+	}
+
+	const (
+		typeMember uint8 = 1 << iota
+		titleMember
+		statusMember
+		detailMember
+		codeMember
+		allProblemMembers = typeMember | titleMember | statusMember | detailMember | codeMember
+	)
+	var problem errs.Problem
+	var seen uint8
+	decodeString := func(destination *string) bool {
+		var value *string
+		if err := decoder.Decode(&value); err != nil || value == nil {
+			return false
+		}
+		*destination = *value
+		return true
+	}
+
+	for decoder.More() {
+		memberToken, err := decoder.Token()
+		member, ok := memberToken.(string)
+		if err != nil || !ok {
+			return errs.Problem{}, false
+		}
+		var bit uint8
+		switch member {
+		case "type":
+			bit = typeMember
+			if !decodeString(&problem.Type) {
+				return errs.Problem{}, false
+			}
+		case "title":
+			bit = titleMember
+			if !decodeString(&problem.Title) {
+				return errs.Problem{}, false
+			}
+		case "status":
+			bit = statusMember
+			var value *int
+			if err := decoder.Decode(&value); err != nil || value == nil {
+				return errs.Problem{}, false
+			}
+			problem.Status = *value
+		case "detail":
+			bit = detailMember
+			if !decodeString(&problem.Detail) {
+				return errs.Problem{}, false
+			}
+		case "code":
+			bit = codeMember
+			var value string
+			if !decodeString(&value) {
+				return errs.Problem{}, false
+			}
+			problem.Code = errs.Code(value)
+		default:
+			return errs.Problem{}, false
+		}
+		if seen&bit != 0 {
+			return errs.Problem{}, false
+		}
+		seen |= bit
+	}
+
+	closing, err := decoder.Token()
+	if err != nil || closing != json.Delim('}') || seen != allProblemMembers {
+		return errs.Problem{}, false
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return errs.Problem{}, false
+	}
+	return problem, true
 }

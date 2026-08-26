@@ -40,6 +40,26 @@ func TestResponseProblemRejectsInvalidEnvelope(t *testing.T) {
 			mediaType: "application/problem+json",
 			body:      bytes.Repeat([]byte("x"), maximumProblemResponseBytes+1),
 		},
+		"missing member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`,"code":"storage.unavailable"`), nil, 1),
+		},
+		"null member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`"detail":"storage offline"`), []byte(`"detail":null`), 1),
+		},
+		"invalid member type": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`"status":503`), []byte(`"status":"503"`), 1),
+		},
+		"unknown member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`}`), []byte(`,"details":{}}`), 1),
+		},
+		"duplicate member": {
+			mediaType: "application/problem+json",
+			body:      bytes.Replace(valid, []byte(`"code":`), []byte(`"code":"future.error","code":`), 1),
+		},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

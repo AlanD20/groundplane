@@ -571,16 +571,11 @@ type EnvironmentRename struct {
 
 // Error defines model for Error.
 type Error struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/Error.json
-	Schema  *string                 `json:"$schema,omitempty"`
-	Code    string                  `json:"code"`
-	Detail  string                  `json:"detail"`
-	Details *map[string]interface{} `json:"details,omitempty"`
-	Status  int64                   `json:"status"`
-	Title   string                  `json:"title"`
-	Type    string                  `json:"type"`
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+	Status int64  `json:"status"`
+	Title  string `json:"title"`
+	Type   string `json:"type"`
 }
 
 // Host defines model for Host.

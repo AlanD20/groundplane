@@ -329,18 +329,6 @@
     "rule": "open-model-field",
     "subject": "ComponentEnableRequest.Config",
     "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
-  },
-  {
-    "path": "pkg/errs/errs.go",
-    "rule": "open-model-field",
-    "subject": "Error.details",
-    "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
-  },
-  {
-    "path": "pkg/errs/errs.go",
-    "rule": "open-model-field",
-    "subject": "Problem.Details",
-    "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
   }
 ]
 
