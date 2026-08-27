@@ -202,6 +202,85 @@ func TestRegistryReadyIgnoresDifferentGeneration(t *testing.T) {
 	}
 }
 
+// Rationale: a recovery fence must revoke every live session at or below its
+// bound and must not report completion until the canceled stream closes.
+func TestRegistryFenceThroughCancelsAndWaitsForPriorGeneration(t *testing.T) {
+	registry := NewRegistry()
+	session, err := registry.Open(context.Background(), testAgentID, 7)
+	if err != nil {
+		t.Fatalf("open session: %v", err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		result <- fenceRegistryThrough(context.Background(), registry, testAgentID, 7)
+	}()
+	select {
+	case <-session.Done():
+	case <-time.After(time.Second):
+		t.Fatal("prior-generation fence did not cancel the session")
+	}
+	select {
+	case err := <-result:
+		t.Fatalf("prior-generation fence returned before Close: %v", err)
+	default:
+	}
+	session.Close()
+	if err := <-result; err != nil {
+		t.Fatalf("FenceThrough() error = %v", err)
+	}
+	_, err = registry.Open(context.Background(), testAgentID, 7)
+	assertStateConflict(t, err)
+}
+
+// Rationale: recovery may repeat after the normal path already revoked and
+// disconnected the prior generation, so the bounded fence must remain a no-op.
+func TestRegistryFenceThroughIsIdempotentAfterNormalRevocation(t *testing.T) {
+	registry := NewRegistry()
+	session, err := registry.Open(context.Background(), testAgentID, 7)
+	if err != nil {
+		t.Fatalf("open session: %v", err)
+	}
+	if err := registry.Revoke(context.Background(), testAgentID, 7); err != nil {
+		t.Fatalf("Revoke() error = %v", err)
+	}
+	session.Close()
+	if err := registry.WaitOffline(context.Background(), testAgentID, 7); err != nil {
+		t.Fatalf("WaitOffline() error = %v", err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := fenceRegistryThrough(context.Background(), registry, testAgentID, 7); err != nil {
+			t.Fatalf("FenceThrough() attempt %d error = %v", attempt+1, err)
+		}
+	}
+}
+
+// Rationale: a current-generation session proves every lower generation has
+// already lost registry authority; recovery must not revoke or cancel it.
+func TestRegistryFenceThroughLeavesNewerRegisteredGenerationCurrent(t *testing.T) {
+	registry := NewRegistry()
+	prior, err := registry.Open(context.Background(), testAgentID, 7)
+	if err != nil {
+		t.Fatalf("open prior session: %v", err)
+	}
+	current, err := registry.Open(context.Background(), testAgentID, 8)
+	if err != nil {
+		t.Fatalf("open current session: %v", err)
+	}
+	defer current.Close()
+	if err := fenceRegistryThrough(context.Background(), registry, testAgentID, 7); err != nil {
+		t.Fatalf("FenceThrough() error = %v", err)
+	}
+	if !current.AssignmentsAllowed() {
+		t.Fatal("prior-generation fence stopped the current session")
+	}
+	select {
+	case <-current.Done():
+		t.Fatal("prior-generation fence canceled the current session")
+	default:
+	}
+	prior.Close()
+}
+
 // Rationale: stale lifecycle work must never stop, revoke, or wait on a newer
 // replacement generation that reused the same Agent id.
 func TestRegistryLifecycleOperationsFenceGenerationMismatch(t *testing.T) {
@@ -457,6 +536,21 @@ func TestRegistryRevokeFencesOnlyMatchingGeneration(t *testing.T) {
 		t.Fatalf("open replacement: %v", err)
 	}
 	replacement.Close()
+}
+
+func fenceRegistryThrough(
+	ctx context.Context,
+	registry *Registry,
+	agentID string,
+	generation uint64,
+) error {
+	fencer, ok := any(registry).(interface {
+		FenceThrough(context.Context, string, uint64) error
+	})
+	if !ok {
+		return errors.New("registry does not expose a prior-generation fence")
+	}
+	return fencer.FenceThrough(ctx, agentID, generation)
 }
 
 func assertStateConflict(t *testing.T, err error) {

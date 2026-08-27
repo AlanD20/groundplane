@@ -54,6 +54,14 @@ func (adapter *localAgentSessionsAdapter) StopAssignments(
 	return adapter.registry.StopAssignments(ctx, agentID, generation)
 }
 
+func (adapter *localAgentSessionsAdapter) FenceThrough(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+) error {
+	return adapter.registry.FenceThrough(ctx, agentID, generation)
+}
+
 func (adapter *localAgentSessionsAdapter) Revoke(
 	ctx context.Context,
 	agentID string,

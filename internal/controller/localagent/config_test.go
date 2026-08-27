@@ -159,6 +159,7 @@ func (configTestSessions) Ready(context.Context, string, uint64) (<-chan struct{
 }
 func (configTestSessions) Snapshot(string) (SessionSnapshot, bool)               { return SessionSnapshot{}, false }
 func (configTestSessions) StopAssignments(context.Context, string, uint64) error { return nil }
+func (configTestSessions) FenceThrough(context.Context, string, uint64) error    { return nil }
 func (configTestSessions) Revoke(context.Context, string, uint64) error          { return nil }
 func (configTestSessions) WaitOffline(context.Context, string, uint64) error     { return nil }
 

@@ -151,12 +151,15 @@ type SessionSnapshot struct {
 
 // Sessions owns authenticated readiness and generation fencing. Ready must be a
 // race-free subscription: it returns an already-closed channel when a matching
-// generation has already reported Ready. Removal operations are idempotent when
-// the matching session is already absent or offline.
+// generation has already reported Ready. FenceThrough revokes and waits out
+// every session at or below its bound; a newer registered generation satisfies
+// that prior-generation fence without being stopped or revoked. Removal
+// operations are idempotent when the matching session is already absent or offline.
 type Sessions interface {
 	Ready(ctx context.Context, agentID string, generation uint64) (<-chan struct{}, error)
 	Snapshot(agentID string) (SessionSnapshot, bool)
 	StopAssignments(ctx context.Context, agentID string, generation uint64) error
+	FenceThrough(ctx context.Context, agentID string, generation uint64) error
 	Revoke(ctx context.Context, agentID string, generation uint64) error
 	WaitOffline(ctx context.Context, agentID string, generation uint64) error
 }

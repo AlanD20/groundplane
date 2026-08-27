@@ -185,7 +185,7 @@ func (manager *Manager) Reconcile(ctx context.Context) error {
 	case PhaseReady:
 		return manager.convergeRuntime(ctx, stored.Record)
 	case PhaseUpdating:
-		return manager.convergeRuntime(ctx, stored.Record)
+		return manager.resumeReplacement(ctx, stored)
 	case PhaseDeleting:
 		return manager.resumeDelete(ctx, stored)
 	default:
@@ -386,6 +386,16 @@ func agentUpdateRolledBack() error {
 func (manager *Manager) resumeReplacement(ctx context.Context, stored StoredRecord) error {
 	if stored.Record.Phase != PhaseUpdating {
 		return errs.New(errs.KindStateConflict, "local agent is not updating")
+	}
+	if stored.Record.Generation <= initialGeneration {
+		return errs.New(errs.KindInternal, "local agent replacement generation has no predecessor")
+	}
+	if err := manager.sessions.FenceThrough(
+		ctx,
+		stored.Record.ID,
+		stored.Record.Generation-1,
+	); err != nil {
+		return safePortError(ctx, err, "local agent prior session fence failed")
 	}
 	if err := manager.convergeRuntime(ctx, stored.Record); err != nil {
 		return err

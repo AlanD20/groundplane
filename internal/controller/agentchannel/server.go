@@ -439,8 +439,14 @@ func (s *Server) dispatchReady(
 	if err != nil {
 		return err
 	}
+	if !session.AssignmentsAllowed() {
+		return nil
+	}
 	remaining := capacity
 	for _, assignment := range recovered {
+		if !session.AssignmentsAllowed() {
+			return nil
+		}
 		if err := validateAgentDispatchClaim(
 			assignment,
 			agentID,
@@ -461,6 +467,9 @@ func (s *Server) dispatchReady(
 		remaining--
 	}
 	for remaining > 0 {
+		if !session.AssignmentsAllowed() {
+			return nil
+		}
 		assignment, found, err := s.tasks.ClaimNextTask(
 			stream.Context(),
 			agentID,
@@ -470,7 +479,7 @@ func (s *Server) dispatchReady(
 		if err != nil {
 			return err
 		}
-		if !found {
+		if !found || !session.AssignmentsAllowed() {
 			return nil
 		}
 		if err := validateAgentDispatchClaim(
@@ -479,6 +488,9 @@ func (s *Server) dispatchReady(
 			authorization.Generation,
 		); err != nil {
 			return err
+		}
+		if !session.AssignmentsAllowed() {
+			return nil
 		}
 		if err := s.sendTaskAssignment(stream, assignment); err != nil {
 			return err

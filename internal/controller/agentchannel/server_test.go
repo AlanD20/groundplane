@@ -552,6 +552,105 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	}
 }
 
+// Rationale: rotation can cancel a stream after its Ready pull commits a real
+// durable claim; once the prior-generation fence is active, that old stream
+// must not receive the assignment returned by the racing repository call.
+func TestConnectDoesNotDeliverAssignmentClaimedDuringPriorGenerationFence(t *testing.T) {
+	now := testTime()
+	taskID := ids.NewAt(ids.KindTask, now, 120)
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 121),
+		IdempotencyKey: "channel-fence-0001",
+		Owner:          etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
+		Executor: etcd.TaskExecutorAgent,
+		PlanID:   ids.NewAt(ids.KindPlan, now, 122), RenderGeneration: 7,
+		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 123),
+		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 124)}},
+		TimeoutSeconds: 120, Status: etcd.TaskStatusPending,
+		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	plan := testExecutionPlan(t, task)
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	repository := newChannelTaskRepository(t, task)
+	claimEntered := make(chan struct{}, 1)
+	claimRelease := make(chan struct{})
+	tasks := &blockingClaimTaskStore{
+		repository: repository,
+		entered:    claimEntered,
+		release:    claimRelease,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	registry := NewRegistry()
+	stream := newLiveStream(ctx)
+	stream.received <- authenticateMessage(testAgentID, testToken(8))
+	connectResult := make(chan error, 1)
+	go func() {
+		connectResult <- New(
+			authorizedAuthenticator(),
+			registry,
+			tasks,
+			&fakePlanResolver{plan: plan},
+		).Connect(stream)
+	}()
+	select {
+	case message := <-stream.sent:
+		if message.GetConfigUpdate() == nil {
+			t.Fatalf("first Controller message = %#v, want ConfigUpdate", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Controller did not send initial config")
+	}
+	stream.received <- readyMessage(1)
+	select {
+	case <-claimEntered:
+	case <-time.After(time.Second):
+		t.Fatal("old stream did not commit a durable claim")
+	}
+
+	fenceResult := make(chan error, 1)
+	go func() {
+		fenceResult <- fenceRegistryThrough(context.Background(), registry, testAgentID, 1)
+	}()
+	deadline := time.After(time.Second)
+	for {
+		snapshot, ok := registry.Snapshot(testAgentID)
+		if ok && snapshot.Revoked {
+			break
+		}
+		select {
+		case err := <-fenceResult:
+			close(claimRelease)
+			t.Fatalf("FenceThrough() returned before revoking the old session: %v", err)
+		case <-deadline:
+			close(claimRelease)
+			t.Fatal("FenceThrough() did not revoke the old session")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	close(claimRelease)
+	if err := <-fenceResult; err != nil {
+		t.Fatalf("FenceThrough() error = %v", err)
+	}
+	if err := <-connectResult; err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	select {
+	case message := <-stream.sent:
+		t.Fatalf("old stream received post-fence Controller message %#v", message)
+	default:
+	}
+	assignments, err := repository.ListAgentAssignments(context.Background(), testAgentID, 1, 1)
+	if err != nil {
+		t.Fatalf("ListAgentAssignments() error = %v", err)
+	}
+	if len(assignments) != 1 || assignments[0].Task.Record.ID != taskID ||
+		assignments[0].Assignment.Record.AgentGeneration != 1 {
+		t.Fatalf("persisted racing assignment = %#v", assignments)
+	}
+}
+
 // Rationale: Ready is both the pull and the capacity fence. The Controller
 // must claim durable work, preserve every execution-identity field in the
 // protobuf assignment, and terminalize only an acknowledgement with the same

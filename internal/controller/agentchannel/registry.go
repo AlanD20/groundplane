@@ -426,6 +426,47 @@ func (r *Registry) StopAssignments(ctx context.Context, agentID string, generati
 	return nil
 }
 
+// FenceThrough removes all assignment and channel authority at or below one
+// durable generation bound. A newer registered generation proves the prior
+// capability is already fenced and is never stopped, revoked, or canceled.
+func (r *Registry) FenceThrough(ctx context.Context, agentID string, generation uint64) error {
+	if err := validateLifecycleTarget(ctx, agentID, generation); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	lifecycle := r.lifecycleFenceLocked(agentID)
+	if generation > lifecycle.quiescedThrough {
+		lifecycle.quiescedThrough = generation
+	}
+	if generation > lifecycle.revokedThrough {
+		lifecycle.revokedThrough = generation
+	}
+	state := r.agents[agentID]
+	if state == nil || state.generation > generation {
+		r.mu.Unlock()
+		return nil
+	}
+	state.assignmentsStopped = true
+	if !state.revoked {
+		state.revoked = true
+		state.cancel()
+	}
+	if !state.online {
+		r.mu.Unlock()
+		return nil
+	}
+	offline := state.offline
+	r.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-offline:
+		return nil
+	}
+}
+
 // Revoke fences one exact in-memory generation after its credential has been
 // durably revoked by the lifecycle repository.
 func (r *Registry) Revoke(ctx context.Context, agentID string, generation uint64) error {
