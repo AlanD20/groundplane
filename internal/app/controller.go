@@ -477,14 +477,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	backupRuntimeRecords, err := etcd.NewBackupRuntimeRepository(store)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize backup runtime repository", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
 	backupPointReads, err := controller.NewRecoveryPointReadService(
 		hierarchyRecords,
 		backupRuntimeRecords,
