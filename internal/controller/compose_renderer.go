@@ -26,9 +26,10 @@ const (
 	composeLabelReleaseID      = "com.groundplane.release-id"
 	composeLabelSlot           = "com.groundplane.slot"
 	composeLabelRuntimeRole    = "com.groundplane.runtime-role"
-	composeResourceExtension   = "x-gp-resource"
-	composeNetworkExtension    = "x-gp-network"
-	composeVolumeSlugExtension = "x-gp-slug"
+	composeResourceExtension     = "x-gp-resource"
+	composeNetworkExtension      = "x-gp-network"
+	composeVolumeBackupExtension = "x-gp-backup"
+	composeVolumeSlugExtension   = "x-gp-slug"
 )
 
 // ComposeRenderInput is the complete Controller-owned input to one environment artifact render.
@@ -147,7 +148,7 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		}
 		authoredExtensions := make(composetypes.Extensions, len(volume.Extensions))
 		for key, value := range volume.Extensions {
-			if key != composeVolumeSlugExtension {
+			if key != composeVolumeBackupExtension && key != composeVolumeSlugExtension {
 				authoredExtensions[key] = value
 			}
 		}
@@ -252,7 +253,8 @@ func renderableManagedVolumeNames(project *composetypes.Project) ([]string, erro
 			return nil, errs.New(errs.KindNotImplemented, "compose volume runtime requires an unresolved contract")
 		}
 		for extension := range volume.Extensions {
-			if strings.HasPrefix(extension, "x-gp-") && extension != composeVolumeSlugExtension {
+			if strings.HasPrefix(extension, "x-gp-") &&
+				extension != composeVolumeBackupExtension && extension != composeVolumeSlugExtension {
 				return nil, errs.New(errs.KindNotImplemented, "compose volume extension is not implemented")
 			}
 		}
