@@ -78,7 +78,7 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Start a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBackingServiceAction(cmd, args[0], "start")
+			return runBackingServiceAction(cmd, args[0], backingServiceActionStart)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -86,7 +86,7 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Stop a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBackingServiceAction(cmd, args[0], "stop")
+			return runBackingServiceAction(cmd, args[0], backingServiceActionStop)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -94,7 +94,7 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Remove backing-service runtime while retaining durable data",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBackingServiceAction(cmd, args[0], "destroy")
+			return runBackingServiceAction(cmd, args[0], backingServiceActionDestroy)
 		},
 	})
 
@@ -140,12 +140,35 @@ func resolveBackingAdapterServiceTarget(cmd *cobra.Command, argument string) (st
 	return target(app, backing.ServiceID), nil
 }
 
-func runBackingServiceAction(cmd *cobra.Command, argument string, action string) error {
+type backingServiceAction uint8
+
+const (
+	backingServiceActionStart backingServiceAction = iota + 1
+	backingServiceActionStop
+	backingServiceActionDestroy
+)
+
+func runBackingServiceAction(cmd *cobra.Command, argument string, action backingServiceAction) error {
 	projectID, err := resolveBackingProjectTarget(cmd, argument)
 	if err != nil {
 		return err
 	}
-	return runAction(cmd, "/api/v1/backing-services/"+projectID+"/"+action, nil)
+	app := fromContext(cmd)
+	var accepted apiTypes.TaskAccepted
+	switch action {
+	case backingServiceActionStart:
+		accepted, err = app.Client.StartBackingService(cmd.Context(), projectID)
+	case backingServiceActionStop:
+		accepted, err = app.Client.StopBackingService(cmd.Context(), projectID)
+	case backingServiceActionDestroy:
+		accepted, err = app.Client.DestroyBackingService(cmd.Context(), projectID)
+	default:
+		return errs.New(errs.KindInternal, "Backing-service action is invalid")
+	}
+	if err != nil {
+		return err
+	}
+	return renderDispatchedTask(cmd, accepted)
 }
 
 func renderBackingService(cmd *cobra.Command, backing apiTypes.BackingService) error {
