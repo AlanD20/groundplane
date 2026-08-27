@@ -852,17 +852,6 @@ type PageEntry struct {
 	Revision   *int64   `json:"revision,omitempty"`
 }
 
-// PageRecoveryPoint defines model for PageRecoveryPoint.
-type PageRecoveryPoint struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/PageRecoveryPoint.json
-	Schema     *string          `json:"$schema,omitempty"`
-	Items      *[]RecoveryPoint `json:"items"`
-	NextCursor *string          `json:"next_cursor,omitempty"`
-	Revision   *int64           `json:"revision,omitempty"`
-}
-
 // PageReleaseGroup defines model for PageReleaseGroup.
 type PageReleaseGroup struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1035,6 +1024,12 @@ type RecoveryPointSourceKind string
 
 // RecoveryPointStatus defines model for RecoveryPoint.Status.
 type RecoveryPointStatus string
+
+// RecoveryPointPage defines model for RecoveryPointPage.
+type RecoveryPointPage struct {
+	Items      *[]RecoveryPoint `json:"items"`
+	NextCursor *string          `json:"next_cursor,omitempty"`
+}
 
 // ReleaseAttempt defines model for ReleaseAttempt.
 type ReleaseAttempt struct {
@@ -13099,13 +13094,13 @@ type BackupPointsListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *PageRecoveryPoint
+	JSON200 *RecoveryPointPage
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r BackupPointsListResponse) GetJSON200() *PageRecoveryPoint {
+func (r BackupPointsListResponse) GetJSON200() *RecoveryPointPage {
 	return r.JSON200
 }
 
@@ -19379,7 +19374,7 @@ func ParseBackupPointsListResponse(rsp *http.Response) (*BackupPointsListRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PageRecoveryPoint
+		var dest RecoveryPointPage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

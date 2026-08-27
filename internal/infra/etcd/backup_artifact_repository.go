@@ -1081,10 +1081,30 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByEnvironment
 
 // ListVerifiedRecoveryPointsByEnvironment keeps every storage-layout detail
 // inside the repository while preserving the verified-only fixed revision.
+type backupRecoveryPointPageReader func(
+	context.Context,
+	string,
+	BackupRuntimeListRequest,
+) (BackupRuntimePage[BackupRecoveryPointRecord], error)
+
 func (repository *BackupRuntimeRepository) ListVerifiedRecoveryPointsByEnvironment(
 	ctx context.Context,
 	environmentID string,
 	request BackupRecoveryPointPageRequest,
+) (BackupRecoveryPointPage, error) {
+	return collectVerifiedRecoveryPointPage(
+		ctx,
+		environmentID,
+		request,
+		repository.ListBackupRecoveryPointsByEnvironment,
+	)
+}
+
+func collectVerifiedRecoveryPointPage(
+	ctx context.Context,
+	environmentID string,
+	request BackupRecoveryPointPageRequest,
+	read backupRecoveryPointPageReader,
 ) (BackupRecoveryPointPage, error) {
 	storageRequest := BackupRuntimeListRequest{Limit: request.Limit, Revision: request.Revision}
 	if request.AfterID != "" {
@@ -1094,18 +1114,53 @@ func (repository *BackupRuntimeRepository) ListVerifiedRecoveryPointsByEnvironme
 		}
 		storageRequest.StartExclusive = boundary
 	}
-	page, err := repository.ListBackupRecoveryPointsByEnvironment(ctx, environmentID, storageRequest)
-	if err != nil {
-		return BackupRecoveryPointPage{}, err
-	}
-	result := BackupRecoveryPointPage{Items: page.Items, Revision: page.Revision}
-	if page.Next != "" {
-		result.NextID, err = backupRecoveryPointIDFromEnvironmentIndexKey(environmentID, page.Next)
+
+	result := BackupRecoveryPointPage{}
+	for {
+		storageRequest.Limit = request.Limit - len(result.Items)
+		page, err := read(ctx, environmentID, storageRequest)
 		if err != nil {
 			return BackupRecoveryPointPage{}, err
 		}
+		if page.Revision <= 0 {
+			return BackupRecoveryPointPage{}, errs.New(
+				errs.KindInternal,
+				"recovery point list returned no fixed revision",
+			)
+		}
+		if result.Revision == 0 {
+			result.Revision = page.Revision
+		} else if page.Revision != result.Revision {
+			return BackupRecoveryPointPage{}, errs.New(
+				errs.KindInternal,
+				"recovery point list changed fixed revision",
+			)
+		}
+		if len(page.Items) > storageRequest.Limit {
+			return BackupRecoveryPointPage{}, errs.New(
+				errs.KindInternal,
+				"recovery point list exceeded the visible page limit",
+			)
+		}
+		result.Items = append(result.Items, page.Items...)
+		if len(result.Items) == request.Limit || page.Next == "" {
+			if page.Next != "" {
+				result.NextID, err = backupRecoveryPointIDFromEnvironmentIndexKey(environmentID, page.Next)
+				if err != nil {
+					return BackupRecoveryPointPage{}, err
+				}
+			}
+			return result, nil
+		}
+		if page.Next == storageRequest.StartExclusive {
+			return BackupRecoveryPointPage{}, errs.New(
+				errs.KindInternal,
+				"recovery point list boundary did not advance",
+			)
+		}
+		storageRequest.StartExclusive = page.Next
+		storageRequest.Revision = result.Revision
 	}
-	return result, nil
 }
 
 func (repository *BackupRuntimeRepository) ListBackupRunsByEnvironment(

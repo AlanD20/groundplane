@@ -14,10 +14,10 @@ func (c *Client) ListRecoveryPoints(
 	ctx context.Context,
 	environmentID string,
 	cursor string,
-) (apiTypes.Page[apiTypes.RecoveryPoint], error) {
+) (apiTypes.RecoveryPointPage, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.Page[apiTypes.RecoveryPoint]{}, err
+		return apiTypes.RecoveryPointPage{}, err
 	}
 	params := &generated.BackupPointsListParams{}
 	if cursor != "" {
@@ -26,7 +26,7 @@ func (c *Client) ListRecoveryPoints(
 	path := "/api/v1/environments/" + environmentID + "/recovery-points"
 	response, err := client.BackupPointsListWithResponse(ctx, environmentID, params)
 	if err != nil {
-		return apiTypes.Page[apiTypes.RecoveryPoint]{}, generatedCallError(ctx, http.MethodGet, path, err)
+		return apiTypes.RecoveryPointPage{}, generatedCallError(ctx, http.MethodGet, path, err)
 	}
 	if err := generatedResponseError(
 		http.MethodGet,
@@ -35,20 +35,20 @@ func (c *Client) ListRecoveryPoints(
 		response.Body,
 		http.StatusOK,
 	); err != nil {
-		return apiTypes.Page[apiTypes.RecoveryPoint]{}, err
+		return apiTypes.RecoveryPointPage{}, err
 	}
 	parsed := response.JSON200
 	if parsed == nil {
-		parsed = &generated.PageRecoveryPoint{}
+		parsed = &generated.RecoveryPointPage{}
 		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.Page[apiTypes.RecoveryPoint]{}, err
+			return apiTypes.RecoveryPointPage{}, err
 		}
 	}
 	items := []generated.RecoveryPoint(nil)
 	if parsed.Items != nil {
 		items = *parsed.Items
 	}
-	page := apiTypes.Page[apiTypes.RecoveryPoint]{Items: make([]apiTypes.RecoveryPoint, len(items))}
+	page := apiTypes.RecoveryPointPage{Items: make([]apiTypes.RecoveryPoint, len(items))}
 	if parsed.NextCursor != nil {
 		page.NextCursor = *parsed.NextCursor
 	}

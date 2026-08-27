@@ -82,6 +82,16 @@ func TestRecoveryPointRouteProjectsVerifiedRedactedItems(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &raw); err != nil {
 		t.Fatal(err)
 	}
+	var pageFields map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &pageFields); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := pageFields["$schema"]; present {
+		t.Fatalf("page exposes schema link: %s", response.Body.String())
+	}
+	if _, present := pageFields["revision"]; present {
+		t.Fatalf("page exposes fixed revision: %s", response.Body.String())
+	}
 	for _, field := range []string{
 		"environment_id", "connector_id", "object_key", "source_format", "sha256",
 		"recipient", "verified_at", "locator", "size",
@@ -111,5 +121,44 @@ func TestRecoveryPointOpenAPIContainsOnlyListSurface(t *testing.T) {
 	}
 	if _, ok := path["post"]; ok {
 		t.Fatalf("recovery point mutation operation unexpectedly present: %#v", path)
+	}
+}
+
+// Rationale: fixed-revision storage evidence belongs inside the authenticated
+// cursor; the public page exposes exactly items and optional next_cursor.
+func TestRecoveryPointOpenAPISchemaHasExactPageFields(t *testing.T) {
+	document, err := New(nil, nil, Options{}).OpenAPIDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(document, &root); err != nil {
+		t.Fatal(err)
+	}
+	var components map[string]json.RawMessage
+	if err := json.Unmarshal(root["components"], &components); err != nil {
+		t.Fatal(err)
+	}
+	var schemas map[string]json.RawMessage
+	if err := json.Unmarshal(components["schemas"], &schemas); err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties map[string]json.RawMessage
+	}
+	if err := json.Unmarshal(schemas["RecoveryPointPage"], &schema); err != nil {
+		t.Fatal(err)
+	}
+	properties := schema.Properties
+	if len(properties) != 2 {
+		t.Fatalf("RecoveryPointPage properties = %#v, want exactly items and next_cursor", properties)
+	}
+	for _, field := range []string{"items", "next_cursor"} {
+		if _, present := properties[field]; !present {
+			t.Errorf("RecoveryPointPage is missing %q: %#v", field, properties)
+		}
+	}
+	if _, present := properties["revision"]; present {
+		t.Fatalf("RecoveryPointPage exposes fixed revision: %#v", properties)
 	}
 }

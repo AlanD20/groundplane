@@ -521,6 +521,11 @@ type RecoveryPoint struct {
 	Status     RecoveryPointStatus `json:"status" enum:"verified"`
 }
 
+type RecoveryPointPage struct {
+	Items      []RecoveryPoint `json:"items"`
+	NextCursor string          `json:"next_cursor,omitempty"`
+}
+
 type Runner struct {
 	ID        string   `json:"id"`
 	TenantID  string   `json:"tenant_id"`

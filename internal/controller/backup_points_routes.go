@@ -22,7 +22,7 @@ type recoveryPointListInput struct {
 }
 
 type recoveryPointPageOutput struct {
-	Body apiTypes.Page[apiTypes.RecoveryPoint]
+	Body apiTypes.RecoveryPointPage
 }
 
 func (s *Server) registerRecoveryPoints() {
@@ -32,13 +32,20 @@ func (s *Server) registerRecoveryPoints() {
 		"RecoveryPoint",
 	)
 	pageSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.Page[apiTypes.RecoveryPoint]](),
+		reflect.TypeFor[apiTypes.RecoveryPointPage](),
 		true,
 		"RecoveryPointPage",
 	)
 	if pageSchema == nil || pointSchema == nil {
 		return
 	}
+	pageDefinition := s.API.OpenAPI().Components.Schemas.Map()["RecoveryPointPage"]
+	if pageDefinition == nil {
+		return
+	}
+	// This exact public page carries fixed-revision evidence only inside its
+	// authenticated cursor, so suppress Huma's optional schema-link field.
+	pageDefinition.Properties["$schema"] = &huma.Schema{Type: huma.TypeString}
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backup.points.list",
 		Method:      http.MethodGet,
@@ -54,6 +61,7 @@ func (s *Server) registerRecoveryPoints() {
 			},
 		},
 	}, s.listRecoveryPoints)
+	delete(pageDefinition.Properties, "$schema")
 }
 
 func (s *Server) listRecoveryPoints(
@@ -67,7 +75,7 @@ func (s *Server) listRecoveryPoints(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	response := apiTypes.Page[apiTypes.RecoveryPoint]{
+	response := apiTypes.RecoveryPointPage{
 		Items: make([]apiTypes.RecoveryPoint, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
