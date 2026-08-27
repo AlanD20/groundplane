@@ -126,6 +126,13 @@ func TestRenderCorefileRejectsInvalidInputBeforeProducingBytes(t *testing.T) {
 			},
 		},
 		{
+			name: "IP literal hostname",
+			input: CoreDNSRenderInput{
+				Hosts:    []CoreDNSHost{{Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"192.0.2.10"}}},
+				CatchAll: []ResolverEndpoint{resolver("1.1.1.1", 0)},
+			},
+		},
+		{
 			name: "catch-all forwarder domain",
 			input: CoreDNSRenderInput{
 				Forwarders: []CoreDNSForwarder{{Domain: ".", Resolvers: []ResolverEndpoint{resolver("10.0.0.53", 0)}}},
@@ -188,6 +195,15 @@ func TestRenderCorefileOmitsEmptyHostsBlock(t *testing.T) {
 		"}\n"
 	if string(rendered) != want {
 		t.Fatalf("RenderCorefile() = %q, want %q", rendered, want)
+	}
+}
+
+func TestRenderCorefileAllowsHostResolverStub(t *testing.T) {
+	t.Parallel()
+	if _, err := RenderCorefile(CoreDNSRenderInput{
+		CatchAll: []ResolverEndpoint{resolver("127.0.0.53", 53)},
+	}); err != nil {
+		t.Fatalf("RenderCorefile() rejected host resolver stub: %v", err)
 	}
 }
 

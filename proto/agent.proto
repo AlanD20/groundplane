@@ -349,6 +349,7 @@ message ExecutionStep {
     ServiceRecreateCompensate service_recreate_compensate = 23;
     ManagedVolumeRemove managed_volume_remove = 24;
     ManagedVolumeDirectoryRemove managed_volume_directory_remove = 25;
+    ComponentApply component_apply = 26;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;
@@ -835,6 +836,57 @@ message CaddyConfigApply {
   string artifact_id = 1;
   string service_id = 2;
   bytes caddyfile_sha256 = 3;
+}
+
+// ComponentApply is the closed platform-component procedure union. Concrete
+// payloads carry only Controller-authorized identity and proof inputs.
+message ComponentApply {
+  oneof component_payload {
+    CoreDNSConfigApply coredns_config_apply = 1;
+  }
+}
+
+message CoreDNSConfigApply {
+  string component_id = 1;
+  string service_id = 2;
+  uint64 desired_generation = 3;
+  uint64 render_generation = 4;
+  string agent_id = 5;
+  uint64 agent_generation = 6;
+  string image_index_ref = 7;
+  string image_child_digest = 8;
+  string platform = 9;
+  string candidate_artifact_id = 10;
+  bytes candidate_compose_sha256 = 11;
+  string previous_artifact_id = 12;
+  bytes previous_compose_sha256 = 13;
+  bytes corefile_sha256 = 14;
+  uint32 corefile_length = 15;
+  bytes normalized_input_sha256 = 16;
+  uint64 baseline_generation = 17;
+  uint64 ownership_generation = 18;
+  CoreDNSApplyMode mode = 19;
+  CoreDNSStaticProof static_proof = 20;
+  repeated CoreDNSForwardProof forward_proofs = 21;
+}
+
+message CoreDNSStaticProof {
+  bool present = 1;
+  string hostname = 2;
+  bytes canonical_ipv4 = 3;
+}
+
+message CoreDNSForwardProof {
+  string domain = 1;
+  repeated string resolver_endpoints = 2;
+}
+
+enum CoreDNSApplyMode {
+  COREDNS_APPLY_MODE_UNSPECIFIED = 0;
+  COREDNS_INITIAL_ENABLE = 1;
+  COREDNS_RECREATE = 2;
+  COREDNS_DISABLE = 3;
+  COREDNS_REPAIR = 4;
 }
 
 // EnvironmentDirectoryHelperRequest is the single length-framed stdin message

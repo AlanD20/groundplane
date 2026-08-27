@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"path"
 	"strconv"
@@ -159,6 +160,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH) {
 		return validateArtifactFreeAdapterPlan(plan)
 	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY && len(plan.Artifacts) == 0 {
+		return validateComponentApplyPlan(plan, nil)
+	}
 	if len(plan.Artifacts) == 0 && validateID(ids.KindNetwork, plan.TargetId) == nil {
 		return validateArtifactFreeManagedNetworkRemovePlan(plan)
 	}
@@ -181,6 +185,11 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			return errs.New(errs.KindValidationFailed, "execution plan artifact ids must be unique")
 		}
 		artifacts[artifact.ArtifactId] = artifact
+	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
+		if err := validateComponentApplyPlan(plan, artifacts); err != nil {
+			return err
+		}
 	}
 	if len(plan.Steps) == 0 {
 		return errs.New(errs.KindValidationFailed, "execution plan must contain at least one step")
@@ -729,6 +738,11 @@ func validateStep(
 			}
 		}
 		return errs.New(errs.KindValidationFailed, "Caddy config apply Service is invalid")
+	case *agentpb.ExecutionStep_ComponentApply:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY || payload.ComponentApply == nil {
+			return errs.New(errs.KindValidationFailed, "component apply payload is invalid")
+		}
+		return validateCoreDNSComponentApply(payload.ComponentApply.GetCorednsConfigApply(), artifacts)
 	case *agentpb.ExecutionStep_BackupArtifactPrune:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
 			return errs.New(errs.KindValidationFailed, "backup artifact prune requires a backup prune operation")
@@ -737,6 +751,155 @@ func validateStep(
 	default:
 		return errs.New(errs.KindValidationFailed, "execution step payload is unsupported")
 	}
+}
+
+// validateComponentApplyPlan keeps the platform component procedure closed:
+// one CoreDNS payload is the only step, and an enabled apply must name the
+// exact platform artifact and generated service it was rendered from.
+func validateComponentApplyPlan(plan *agentpb.ExecutionPlan, artifacts map[string]*agentpb.ComposeArtifact) error {
+	if len(plan.Steps) != 1 {
+		return errs.New(errs.KindValidationFailed, "component apply plan must contain exactly one step")
+	}
+	step := plan.Steps[0]
+	if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts); err != nil {
+		return err
+	}
+	component := step.GetComponentApply()
+	if component == nil {
+		if step.GetCaddyConfigApply() != nil {
+			return nil
+		}
+		return errs.New(errs.KindValidationFailed, "component apply plan must contain a ComponentApply step")
+	}
+	apply := component.GetCorednsConfigApply()
+	if err := validateCoreDNSComponentApply(apply, artifacts); err != nil {
+		return err
+	}
+	if apply.GetComponentId() != plan.TargetId || apply.GetRenderGeneration() != plan.RenderGeneration {
+		return errs.New(errs.KindValidationFailed, "CoreDNS apply identity does not match the execution plan")
+	}
+	return nil
+}
+
+func validateCoreDNSComponentApply(apply *agentpb.CoreDNSConfigApply, artifacts map[string]*agentpb.ComposeArtifact) error {
+	if apply == nil || validateID(ids.KindComponent, apply.ComponentId) != nil ||
+		validateID(ids.KindService, apply.ServiceId) != nil || apply.DesiredGeneration == 0 ||
+		apply.RenderGeneration == 0 || apply.AgentGeneration == 0 || apply.OwnershipGeneration == 0 ||
+		apply.AgentId == "" || validateID(ids.KindAgent, apply.AgentId) != nil ||
+		apply.ImageIndexRef == "" || apply.ImageChildDigest == "" || apply.Platform == "" ||
+		strings.IndexFunc(apply.ImageIndexRef, func(r rune) bool { return r < 0x21 || r > 0x7e }) >= 0 ||
+		strings.IndexFunc(apply.ImageChildDigest, func(r rune) bool { return r < 0x21 || r > 0x7e }) >= 0 ||
+		strings.IndexFunc(apply.Platform, func(r rune) bool { return r < 0x21 || r > 0x7e }) >= 0 {
+		return errs.New(errs.KindValidationFailed, "CoreDNS apply identity or generation is invalid")
+	}
+	if artifacts == nil && (apply.Mode != agentpb.CoreDNSApplyMode_COREDNS_DISABLE || apply.CandidateArtifactId != "" || len(apply.CandidateComposeSha256) != 0) {
+		return errs.New(errs.KindValidationFailed, "CoreDNS disable plan must not carry an artifact")
+	}
+	if len(apply.CandidateComposeSha256) != sha256.Size || validateID(ids.KindConfig, apply.CandidateArtifactId) != nil {
+		if apply.Mode != agentpb.CoreDNSApplyMode_COREDNS_DISABLE || apply.CandidateArtifactId != "" || len(apply.CandidateComposeSha256) != 0 {
+			return errs.New(errs.KindValidationFailed, "CoreDNS candidate artifact identity is invalid")
+		}
+	} else if artifacts != nil {
+		artifact := artifacts[apply.CandidateArtifactId]
+		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM ||
+			subtle.ConstantTimeCompare(artifact.YamlSha256, apply.CandidateComposeSha256) != 1 {
+			return errs.New(errs.KindValidationFailed, "CoreDNS candidate artifact does not match its proof")
+		}
+		foundService := false
+		for _, service := range artifact.Services {
+			if service != nil && service.ServiceId == apply.ServiceId {
+				foundService = true
+				break
+			}
+		}
+		if !foundService {
+			return errs.New(errs.KindValidationFailed, "CoreDNS candidate artifact does not contain its generated service")
+		}
+	}
+	if apply.PreviousArtifactId == "" {
+		if len(apply.PreviousComposeSha256) != 0 {
+			return errs.New(errs.KindValidationFailed, "CoreDNS previous artifact digest is missing its identity")
+		}
+	} else if validateID(ids.KindConfig, apply.PreviousArtifactId) != nil || len(apply.PreviousComposeSha256) != sha256.Size {
+		return errs.New(errs.KindValidationFailed, "CoreDNS previous artifact identity is invalid")
+	} else if artifacts != nil {
+		artifact := artifacts[apply.PreviousArtifactId]
+		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM ||
+			subtle.ConstantTimeCompare(artifact.YamlSha256, apply.PreviousComposeSha256) != 1 {
+			return errs.New(errs.KindValidationFailed, "CoreDNS previous artifact does not match its proof")
+		}
+	}
+	if apply.Mode < agentpb.CoreDNSApplyMode_COREDNS_INITIAL_ENABLE || apply.Mode > agentpb.CoreDNSApplyMode_COREDNS_REPAIR {
+		return errs.New(errs.KindValidationFailed, "CoreDNS apply mode is unsupported")
+	}
+	if apply.Mode == agentpb.CoreDNSApplyMode_COREDNS_DISABLE {
+		if apply.CorefileLength != 0 || len(apply.CorefileSha256) != 0 || len(apply.NormalizedInputSha256) != 0 {
+			return errs.New(errs.KindValidationFailed, "disabled CoreDNS apply carries rendered state")
+		}
+	} else {
+		if apply.CorefileLength == 0 || apply.CorefileLength > 96*1024 ||
+			len(apply.CorefileSha256) != sha256.Size || len(apply.NormalizedInputSha256) != sha256.Size {
+			return errs.New(errs.KindValidationFailed, "CoreDNS rendered state is invalid")
+		}
+	}
+	if apply.StaticProof == nil {
+		return errs.New(errs.KindValidationFailed, "CoreDNS static proof is required")
+	}
+	if apply.StaticProof.Present {
+		if !validDNSProofName(apply.StaticProof.Hostname) || len(apply.StaticProof.CanonicalIpv4) != net.IPv4len {
+			return errs.New(errs.KindValidationFailed, "CoreDNS static proof is invalid")
+		}
+	} else if apply.StaticProof.Hostname != "" || len(apply.StaticProof.CanonicalIpv4) != 0 {
+		return errs.New(errs.KindValidationFailed, "empty CoreDNS static proof carries values")
+	}
+	previousDomain := ""
+	for _, proof := range apply.ForwardProofs {
+		if proof == nil || !validDNSProofName(proof.Domain) || proof.Domain <= previousDomain || len(proof.ResolverEndpoints) == 0 {
+			return errs.New(errs.KindValidationFailed, "CoreDNS forward proofs are invalid or unsorted")
+		}
+		previousDomain = proof.Domain
+		previousEndpoint := ""
+		for _, endpoint := range proof.ResolverEndpoints {
+			if !validResolverProofEndpoint(endpoint) || endpoint <= previousEndpoint {
+				return errs.New(errs.KindValidationFailed, "CoreDNS forward proof resolvers are invalid or unsorted")
+			}
+			previousEndpoint = endpoint
+		}
+	}
+	return nil
+}
+
+func validDNSProofName(value string) bool {
+	if value == "" || value == "." || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") ||
+		net.ParseIP(strings.TrimSuffix(value, ".")) != nil || strings.IndexFunc(value, func(r rune) bool {
+		return r < 0x21 || r > 0x7e
+	}) >= 0 {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !(r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+				return false
+			}
+		}
+	}
+	return len(value) <= 253
+}
+
+func validResolverProofEndpoint(value string) bool {
+	host, port, err := net.SplitHostPort(value)
+	if err != nil || host == "" || port == "" {
+		return false
+	}
+	address, err := netip.ParseAddr(host)
+	if err != nil || address.IsUnspecified() || address.IsMulticast() || address.IsLoopback() && address.String() != "127.0.0.53" {
+		return false
+	}
+	parsedPort, err := strconv.Atoi(port)
+	return err == nil && parsedPort >= 1 && parsedPort <= 65535
 }
 
 func validateBackupArtifactPrune(

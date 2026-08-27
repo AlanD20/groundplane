@@ -127,7 +127,7 @@ func normalizeHosts(input []CoreDNSHost) ([]CoreDNSHost, error) {
 			byAddress[host.Address] = names
 		}
 		for _, hostname := range host.Hostnames {
-			if !dnsname.Valid(hostname) {
+			if !validDNSName(hostname) {
 				return nil, invalid("coredns: static hostname is not a canonical Route DNS name")
 			}
 			if address, exists := addressByHostname[hostname]; exists && address != host.Address {
@@ -163,7 +163,7 @@ func normalizeForwarders(input []CoreDNSForwarder) ([]CoreDNSForwarder, error) {
 	seen := make(map[string]struct{}, len(input))
 	forwarders := make([]CoreDNSForwarder, 0, len(input))
 	for _, forwarder := range input {
-		if !dnsname.ValidWithin(forwarder.Domain, 218) {
+		if !validDNSNameWithin(forwarder.Domain, 253) {
 			return nil, invalid("coredns: forwarder domain is not canonical")
 		}
 		if _, duplicate := seen[forwarder.Domain]; duplicate {
@@ -196,7 +196,7 @@ func normalizeResolvers(input []ResolverEndpoint) ([]ResolverEndpoint, error) {
 	for _, endpoint := range input {
 		address := endpoint.Address
 		if !address.IsValid() || address.Is4In6() || address.Zone() != "" || address.IsUnspecified() ||
-			address.IsLoopback() || address.IsMulticast() {
+			(address.IsLoopback() && address != netip.MustParseAddr("127.0.0.53")) || address.IsMulticast() {
 			return nil, invalid("coredns: resolver endpoint is not usable")
 		}
 		port := endpoint.Port
@@ -217,6 +217,20 @@ func normalizeResolvers(input []ResolverEndpoint) ([]ResolverEndpoint, error) {
 		return resolvers[left].Port < resolvers[right].Port
 	})
 	return resolvers, nil
+}
+
+func validDNSName(value string) bool {
+	if _, err := netip.ParseAddr(value); err == nil {
+		return false
+	}
+	return dnsname.Valid(value)
+}
+
+func validDNSNameWithin(value string, maxLength int) bool {
+	if _, err := netip.ParseAddr(value); err == nil {
+		return false
+	}
+	return dnsname.ValidWithin(value, maxLength)
 }
 
 func writeForward(output *strings.Builder, domain string, resolvers []ResolverEndpoint) {

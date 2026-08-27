@@ -94,6 +94,7 @@ type WorkerPool struct {
 	environmentDirectories *EnvironmentDirectoryRuntime
 	materializer           *MaterializationRuntime
 	adapter                *AdapterRuntime
+	coreDNS                CoreDNSStepRuntime
 	materializations       *materializationInbox
 	backupSecrets          *backupSecretSlotInbox
 
@@ -134,6 +135,14 @@ func NewWorkerPoolWithRuntimes(
 	pool.environmentDirectories = environmentDirectories
 	pool.materializer = materializer
 	return pool
+}
+
+// SetCoreDNSRuntime installs the typed platform component runtime without
+// changing the existing WorkerPool constructor contract.
+func (p *WorkerPool) SetCoreDNSRuntime(runtime CoreDNSStepRuntime) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.coreDNS = runtime
 }
 
 func (p *WorkerPool) Capacity() int {
@@ -246,6 +255,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 					Complete: stepResult.Complete, ResponseSha256: append([]byte(nil), stepResult.ResponseSHA256...),
 				}
 			}
+		} else if step.GetComponentApply() != nil && p.coreDNS != nil {
+			err = p.coreDNS.ExecuteCoreDNS(stepCtx, reservation.assignment, step)
 		} else if p.compose == nil {
 			err = p.executeStep(stepCtx, step)
 		} else {
@@ -592,6 +603,7 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 		*agentpb.ExecutionStep_ManagedNetworkRemove,
 		*agentpb.ExecutionStep_ManagedVolumeRemove,
 		*agentpb.ExecutionStep_CaddyConfigApply,
+		*agentpb.ExecutionStep_ComponentApply,
 		*agentpb.ExecutionStep_EnvironmentDirectoryCreate,
 		*agentpb.ExecutionStep_EnvironmentDirectoryRemove,
 		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,
