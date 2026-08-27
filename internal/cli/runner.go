@@ -1,6 +1,9 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/spf13/cobra"
+)
 
 // runner: list | add | show | remove. Scope = tenant (org-scoped) OR
 // project (repo-scoped) — see api-cli.md: "`?tenant=` or `?project=`".
@@ -15,11 +18,27 @@ func newRunnerCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			query := scopeQuery(app, "tenant")
+			tenantID := ""
+			projectID := ""
+			var err error
 			if app.Scope.Project != "" {
-				query = scopeQuery(app, "project")
+				projectID, err = resolveProjectTarget(cmd, app.Scope.Project)
+			} else {
+				tenantID, err = resolveTenantTarget(cmd, app.Scope.Tenant)
 			}
-			return runList(cmd, "/api/v1/runners", query)
+			if err != nil {
+				return err
+			}
+			page, err := app.Client.ListRunners(cmd.Context(), tenantID, projectID, 0, "")
+			if err != nil {
+				return err
+			}
+			items := make([]map[string]any, len(page.Items))
+			for index, runner := range page.Items {
+				items[index] = runnerFields(runner)
+			}
+			headers, rows := tabulateVia(app, items)
+			return app.Out.Render(headers, rows, page)
 		},
 	}
 	cmd.AddCommand(list)
@@ -51,7 +70,13 @@ func newRunnerCmd() *cobra.Command {
 		Short: "Show a runner (online/offline status)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runShow(cmd, "/api/v1/runners/"+target(fromContext(cmd), args[0]))
+			app := fromContext(cmd)
+			runner, err := app.Client.ShowRunner(cmd.Context(), target(app, args[0]))
+			if err != nil {
+				return err
+			}
+			headers, rows := tabulateVia(app, []map[string]any{runnerFields(runner)})
+			return app.Out.Render(headers, rows, runner)
 		},
 	})
 
@@ -66,4 +91,14 @@ func newRunnerCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func runnerFields(runner apiTypes.Runner) map[string]any {
+	return map[string]any{
+		"id":         runner.ID,
+		"tenant_id":  runner.TenantID,
+		"project_id": runner.ProjectID,
+		"labels":     runner.Labels,
+		"online":     runner.Online,
+	}
 }
