@@ -86,7 +86,12 @@ func newVolumeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runShow(cmd, "/api/v1/volumes/"+id)
+			volume, err := fromContext(cmd).Client.GetVolume(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(volumeFields(volume))
+			return fromContext(cmd).Out.RenderOne(fields, values, volume)
 		},
 	})
 
@@ -101,11 +106,19 @@ func newVolumeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := map[string]string{"environment_id": environmentID, "slug": volumeSlug}
-			if cmd.Flags().Changed("key") {
-				body["key"] = volumeComposeKey
+			if cmd.Flags().Changed("key") && volumeComposeKey == "" {
+				return errs.New(errs.KindValidationFailed, "volume --key cannot be empty")
 			}
-			return runCreate(cmd, "/api/v1/volumes", body)
+			created, err := fromContext(cmd).Client.CreateVolume(cmd.Context(), apiTypes.VolumeCreate{
+				EnvironmentID: environmentID, Slug: volumeSlug, Key: volumeComposeKey,
+			})
+			if err != nil {
+				return err
+			}
+			fields := volumeFields(created.Volume)
+			fields["task_id"] = created.TaskID
+			headers, values := fieldsOfVia(fields)
+			return fromContext(cmd).Out.RenderOne(headers, values, created)
 		},
 	}
 	add.Flags().StringVar(&volumeSlug, "slug", "", "environment-scoped mutable slug")
@@ -173,6 +186,15 @@ func newVolumeCmd() *cobra.Command {
 	cmd.AddCommand(remove)
 
 	return cmd
+}
+
+func volumeFields(volume apiTypes.Volume) map[string]any {
+	return map[string]any{
+		"id": volume.ID, "environment_id": volume.EnvironmentID, "slug": volume.Slug,
+		"key": volume.Key, "path": volume.Path, "state": volume.State,
+		"create_task_id": volume.CreateTaskID, "origin_task_id": volume.OriginTaskID,
+		"current_task_id": volume.CurrentTaskID,
+	}
 }
 
 func collectVolumeImpact(cmd *cobra.Command, id string) ([]apiTypes.VolumeDeletionImpactPage, error) {

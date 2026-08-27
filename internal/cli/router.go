@@ -15,7 +15,17 @@ func newRouterCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			app := fromContext(cmd)
-			return runShow(cmd, "/api/v1/environments/"+target(app, app.Scope.Environment)+"/router")
+			environmentID, err := resolveEnvironmentTarget(cmd, app.Scope.Environment)
+			if err != nil {
+				return err
+			}
+			router, err := app.Client.ShowRouter(cmd.Context(), environmentID)
+			if err != nil {
+				return err
+			}
+			fields := map[string]any{"caddy": router.Caddy, "tunnel": router.Tunnel}
+			headers, values := fieldsOfVia(fields)
+			return app.Out.RenderOne(headers, values, router)
 		},
 	})
 
