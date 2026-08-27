@@ -87,6 +87,25 @@ func (config RunnerAllocationConfig) Validate() (uint32, error) {
 	return slots, nil
 }
 
+func (config RunnerAllocationConfig) ValidateAllocation(allocation RunnerHostAllocationRecord) error {
+	slots, err := config.Validate()
+	if err != nil {
+		return err
+	}
+	if allocation.Slot >= slots || allocation.HostUID == 0 || allocation.SubUIDStart == 0 || allocation.SubGIDStart == 0 {
+		return errs.New(errs.KindValidationFailed, "runner allocation is outside its configured slot pool")
+	}
+	prefix, err := ipam.ParseIPv4Prefix(allocation.NetworkCIDR)
+	if err != nil || prefix.Bits() != RunnerSubnetBits || !config.RunnerPool.Contains(prefix.Addr()) {
+		return errs.New(errs.KindValidationFailed, "runner allocation subnet is outside the runner pool")
+	}
+	expected, err := config.HostPool.Allocation(allocation.Slot, prefix)
+	if err != nil || expected != allocation {
+		return errs.New(errs.KindValidationFailed, "runner allocation does not match its configured slot")
+	}
+	return nil
+}
+
 func (config RunnerHostPoolConfig) Allocation(
 	slot uint32,
 	network netip.Prefix,
