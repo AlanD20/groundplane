@@ -147,6 +147,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: reserve Runner network pool: %w", err)
 	}
+	runnerRecords, err := etcd.NewRunnerRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Runner repository: %w", err)
+	}
 	tasks, err := etcd.NewTaskRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -1149,6 +1154,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Connectors:            connectorReads,
 		ConnectorMutations:    connectorMutations,
 		ConnectorDeletions:    connectorDeletions,
+		Runners:               runnerRecords,
 		BackupPolicies:        backupPolicies,
 		BackupPolicyMutations: backupPolicies,
 		RecoveryPoints:        backupPointReads,

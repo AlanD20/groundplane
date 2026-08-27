@@ -993,6 +993,17 @@ type PageRoute struct {
 	Revision   *int64   `json:"revision,omitempty"`
 }
 
+// PageRunner defines model for PageRunner.
+type PageRunner struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageRunner.json
+	Schema     *string   `json:"$schema,omitempty"`
+	Items      *[]Runner `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
+	Revision   *int64    `json:"revision,omitempty"`
+}
+
 // PageScript defines model for PageScript.
 type PageScript struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1362,6 +1373,19 @@ type Router struct {
 	Schema *string              `json:"$schema,omitempty"`
 	Caddy  *ComponentProjection `json:"caddy,omitempty"`
 	Tunnel *ComponentProjection `json:"tunnel,omitempty"`
+}
+
+// Runner defines model for Runner.
+type Runner struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Runner.json
+	Schema    *string   `json:"$schema,omitempty"`
+	Id        string    `json:"id"`
+	Labels    *[]string `json:"labels,omitempty"`
+	Online    bool      `json:"online"`
+	ProjectId *string   `json:"project_id,omitempty"`
+	TenantId  string    `json:"tenant_id"`
 }
 
 // Script defines model for Script.
@@ -2096,6 +2120,14 @@ type RouteRemoveParams struct {
 // RouteEditParams defines parameters for RouteEdit.
 type RouteEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RunnerListParams defines parameters for RunnerList.
+type RunnerListParams struct {
+	Tenant  *string `form:"tenant,omitempty" json:"tenant,omitempty"`
+	Project *string `form:"project,omitempty" json:"project,omitempty"`
+	Limit   *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // ScriptListParams defines parameters for ScriptList.
@@ -3083,6 +3115,16 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
 	RouteEdit(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerList List managed runners
+	//
+	// Corresponds with GET /runners (the `RunnerList` operationId).
+	RunnerList(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerShow Show a managed runner
+	//
+	// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
+	RunnerShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ScriptList List scripts
 	//
@@ -4812,6 +4854,36 @@ func (c *Client) RouteEditWithBody(ctx context.Context, id string, params *Route
 // Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
 func (c *Client) RouteEdit(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRouteEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerList List managed runners
+//
+// Corresponds with GET /runners (the `RunnerList` operationId).
+func (c *Client) RunnerList(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerShow Show a managed runner
+//
+// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
+func (c *Client) RunnerShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerShowRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -9379,6 +9451,130 @@ func NewRouteEditRequestWithBody(server string, id string, params *RouteEditPara
 	return req, nil
 }
 
+// NewRunnerListRequest constructs an http.Request for the RunnerList method
+func NewRunnerListRequest(server string, params *RunnerListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Tenant != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "tenant", *params.Tenant, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Project != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", *params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRunnerShowRequest constructs an http.Request for the RunnerShow method
+func NewRunnerShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewScriptListRequest constructs an http.Request for the ScriptList method
 func NewScriptListRequest(server string, params *ScriptListParams) (*http.Request, error) {
 	var err error
@@ -12281,6 +12477,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /routes/{id} (the `RouteEdit` operationId).
 	RouteEditWithResponse(ctx context.Context, id string, params *RouteEditParams, body RouteEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RouteEditResponse, error)
+
+	// RunnerListWithResponse List managed runners
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /runners (the `RunnerList` operationId).
+	RunnerListWithResponse(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*RunnerListResponse, error)
+
+	// RunnerShowWithResponse Show a managed runner
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
+	RunnerShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerShowResponse, error)
 
 	// ScriptListWithResponse List scripts
 	//
@@ -16277,6 +16487,102 @@ func (r RouteEditResponse) ContentType() string {
 	return ""
 }
 
+type RunnerListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageRunner
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerListResponse) GetJSON200() *PageRunner {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RunnerShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Runner
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerShowResponse) GetJSON200() *Runner {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ScriptListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19563,6 +19869,32 @@ func (c *ClientWithResponses) RouteEditWithResponse(ctx context.Context, id stri
 		return nil, err
 	}
 	return ParseRouteEditResponse(rsp)
+}
+
+// RunnerListWithResponse List managed runners
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /runners (the `RunnerList` operationId).
+func (c *ClientWithResponses) RunnerListWithResponse(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*RunnerListResponse, error) {
+	rsp, err := c.RunnerList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerListResponse(rsp)
+}
+
+// RunnerShowWithResponse Show a managed runner
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
+func (c *ClientWithResponses) RunnerShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerShowResponse, error) {
+	rsp, err := c.RunnerShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerShowResponse(rsp)
 }
 
 // ScriptListWithResponse List scripts
@@ -23062,6 +23394,72 @@ func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRunnerListResponse parses an HTTP response from a RunnerListWithResponse call
+func ParseRunnerListResponse(rsp *http.Response) (*RunnerListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageRunner
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRunnerShowResponse parses an HTTP response from a RunnerShowWithResponse call
+func ParseRunnerShowResponse(rsp *http.Response) (*RunnerShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Runner
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

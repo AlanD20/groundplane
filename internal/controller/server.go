@@ -65,6 +65,7 @@ type Server struct {
 	connectors              ConnectorReader
 	connectorMutations      ConnectorMutator
 	connectorDeletions      ConnectorDeleter
+	runners                 RunnerReader
 	backupPolicies          BackupPolicyReader
 	backupPolicyMutations   BackupPolicyMutator
 	recoveryPoints          RecoveryPointReader
@@ -122,6 +123,7 @@ type Options struct {
 	Connectors              ConnectorReader
 	ConnectorMutations      ConnectorMutator
 	ConnectorDeletions      ConnectorDeleter
+	Runners                 RunnerReader
 	BackupPolicies          BackupPolicyReader
 	BackupPolicyMutations   BackupPolicyMutator
 	RecoveryPoints          RecoveryPointReader
@@ -192,6 +194,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		connectors:              options.Connectors,
 		connectorMutations:      options.ConnectorMutations,
 		connectorDeletions:      options.ConnectorDeletions,
+		runners:                 options.Runners,
 		backupPolicies:          options.BackupPolicies,
 		backupPolicyMutations:   options.BackupPolicyMutations,
 		recoveryPoints:          options.RecoveryPoints,
@@ -232,6 +235,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerEntries()
 	s.registerSecrets()
 	s.registerConnectors()
+	s.registerRunners()
 	s.registerBackupPolicies()
 	s.registerRecoveryPoints()
 	s.registerBackupRuns()
@@ -294,13 +298,11 @@ func (s *Server) routes() {
 	// Secret reads, protected create/delete, and explicit reveal are typed
 	// Huma operations.
 
-	// runner (?tenant= or ?project=) — org-scoped or repo-scoped
-	mux.HandleFunc("GET /api/v1/runners", s.notImplemented)
+	// runner (?tenant= or ?project=) — typed list/show; mutations remain task-backed placeholders
 	s.jsonRoute(
 		"POST /api/v1/runners",
 		s.notImplemented,
 	) // {tenant_id|project_id, registration_token} — token discarded after registration
-	mux.HandleFunc("GET /api/v1/runners/{id}", s.notImplemented)
 	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.acceptTask)
 
 	// host / agents
