@@ -3,8 +3,13 @@ package controller
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type fakeTaskExpiration struct {
@@ -156,5 +161,87 @@ func TestSchedulerRetriesFailedTaskPruningOnNextTick(t *testing.T) {
 	if pruning.calls != 2 || tasks.pruneCalls != 2 ||
 		!scheduler.nextPrune.Equal(now.Add(dailyMaintenanceInterval)) {
 		t.Fatalf("retry marker/Task prune calls/next = %d/%d/%s", pruning.calls, tasks.pruneCalls, scheduler.nextPrune)
+	}
+}
+
+type backupScheduleIsolationRepository struct {
+	candidates []etcd.BackupScheduleCandidate
+	evaluation etcd.BackupScheduleEvaluation
+	evaluated  []string
+}
+
+func (repository *backupScheduleIsolationRepository) ListBackupScheduleCandidates(
+	context.Context,
+) ([]etcd.BackupScheduleCandidate, error) {
+	return repository.candidates, nil
+}
+
+func (repository *backupScheduleIsolationRepository) EvaluateBackupSchedule(
+	_ context.Context,
+	environmentID string,
+	_ time.Time,
+) (etcd.BackupScheduleEvaluation, error) {
+	repository.evaluated = append(repository.evaluated, environmentID)
+	return repository.evaluation, nil
+}
+
+func (*backupScheduleIsolationRepository) SkipScheduledBackup(
+	context.Context,
+	etcd.BackupScheduleEvaluation,
+	time.Time,
+) error {
+	return nil
+}
+
+type backupScheduleIsolationRunner struct {
+	calls int
+}
+
+func (runner *backupScheduleIsolationRunner) RunScheduledBackup(
+	context.Context,
+	string,
+	int64,
+	time.Time,
+	time.Time,
+	...int64,
+) (etcd.IdempotencyResponse, error) {
+	runner.calls++
+	return etcd.IdempotencyResponse{Status: 202}, nil
+}
+
+// Rationale: one corrupt policy is observed but cannot abort the ordered pass
+// before a later valid due candidate is dispatched.
+func TestBackupScheduleServiceIsolatesBadPolicyAndContinues(t *testing.T) {
+	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	badID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	goodID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	repository := &backupScheduleIsolationRepository{
+		candidates: []etcd.BackupScheduleCandidate{
+			{EnvironmentID: badID, Err: errs.New(errs.KindInternal, "corrupt policy")},
+			{EnvironmentID: goodID},
+		},
+		evaluation: etcd.BackupScheduleEvaluation{
+			EnvironmentID:  goodID,
+			PolicyRevision: 7,
+			ReadRevision:   11,
+			ScheduledAt:    now.Add(-time.Hour),
+			EvaluatedAt:    now,
+			Due:            true,
+		},
+	}
+	runner := &backupScheduleIsolationRunner{}
+	service, err := NewBackupScheduleService(
+		repository,
+		runner,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RunBackupSchedules(context.Background(), now); err != nil {
+		t.Fatal(err)
+	}
+	if len(repository.evaluated) != 1 || repository.evaluated[0] != goodID || runner.calls != 1 {
+		t.Fatalf("evaluated=%v run calls=%d", repository.evaluated, runner.calls)
 	}
 }

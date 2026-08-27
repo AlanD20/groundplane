@@ -1,22 +1,25 @@
-package app
+package controller
 
 import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-const backupRunRoute = "/environments/{id}/backup-run"
+const (
+	backupRunRoute          = "/environments/{id}/backup-run"
+	scheduledBackupRunRoute = "/system/backup-schedules/{id}/backup-run"
+)
 
 // BackupRunPrepareInput contains only identities and the selected fixed
 // revision. The repository fills it with immutable policy, hierarchy, source,
@@ -30,6 +33,8 @@ type BackupRunPrepareInput struct {
 	StepIDs       []string
 	FixedRevision int64
 	CreatedAt     time.Time
+	Initiator     etcd.BackupRunInitiator
+	ScheduledAt   *time.Time
 }
 
 // BackupRunPrepared is returned by the repository only after all fixed-
@@ -59,18 +64,18 @@ type BackupRunRepository interface {
 }
 
 type durableBackupRunRepository struct {
-	runtime *etcd.BackupRuntimeRepository
-	facts   *AttachFactService
+	runtime         *etcd.BackupRuntimeRepository
+	resolvePostgres etcd.BackupPostgresIdentityResolver
 }
 
-func newDurableBackupRunRepository(
+func NewDurableBackupRunRepository(
 	runtime *etcd.BackupRuntimeRepository,
-	facts *AttachFactService,
+	facts etcd.BackupPostgresIdentityResolver,
 ) (*durableBackupRunRepository, error) {
 	if runtime == nil || facts == nil {
 		return nil, errs.New(errs.KindInternal, "backup run repository dependencies are required")
 	}
-	return &durableBackupRunRepository{runtime: runtime, facts: facts}, nil
+	return &durableBackupRunRepository{runtime: runtime, resolvePostgres: facts}, nil
 }
 
 func (repository *durableBackupRunRepository) PrepareBackupRun(
@@ -81,7 +86,8 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 		EnvironmentID: input.EnvironmentID,
 		TaskID:        input.TaskID, OperationID: input.OperationID, PlanID: input.PlanID,
 		FixedRevision: input.FixedRevision, CreatedAt: input.CreatedAt,
-	}, repository.facts.ResolveBackupIdentity)
+		Initiator: input.Initiator, ScheduledAt: input.ScheduledAt,
+	}, repository.resolvePostgres)
 	if err != nil {
 		return BackupRunPrepared{}, err
 	}
@@ -93,15 +99,15 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 // BackupRunPlanBuilder seals a task/run pair without adding caller-controlled
 // source selection or any plaintext materialization.
 type BackupRunPlanBuilder interface {
-	BuildBackupRunPlan(controller.BackupRunPlanInput) (*agentpb.ExecutionPlan, error)
+	BuildBackupRunPlan(BackupRunPlanInput) (*agentpb.ExecutionPlan, error)
 }
 
 // BackupRunPlanBuilderFunc adapts the package-level Controller builder to the
 // application service.
-type BackupRunPlanBuilderFunc func(controller.BackupRunPlanInput) (*agentpb.ExecutionPlan, error)
+type BackupRunPlanBuilderFunc func(BackupRunPlanInput) (*agentpb.ExecutionPlan, error)
 
 func (builder BackupRunPlanBuilderFunc) BuildBackupRunPlan(
-	input controller.BackupRunPlanInput,
+	input BackupRunPlanInput,
 ) (*agentpb.ExecutionPlan, error) {
 	return builder(input)
 }
@@ -110,7 +116,7 @@ func (builder BackupRunPlanBuilderFunc) BuildBackupRunPlan(
 // manual backup service. It is deliberately shaped like the other app
 // mutation services so marker replay occurs before any durable state reads.
 type backupRunIdempotency interface {
-	Prepare(context.Context, string) (backupRunEvidence, error)
+	Prepare(context.Context, string, string) (backupRunEvidence, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
@@ -148,7 +154,7 @@ type durableBackupRunIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableBackupRunIdempotency(
+func NewDurableBackupRunIdempotency(
 	coordinator *idempotentintent.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableBackupRunIdempotency, error) {
@@ -161,10 +167,11 @@ func newDurableBackupRunIdempotency(
 func (service *durableBackupRunIdempotency) Prepare(
 	ctx context.Context,
 	environmentID string,
+	route string,
 ) (backupRunEvidence, error) {
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: http.MethodPost,
-		Route:  backupRunRoute,
+		Route:  route,
 		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
 		Path:   []idempotentintent.PathBinding{{Name: "id", Value: environmentID}},
 		Query:  idempotentintent.Object(),
@@ -265,6 +272,41 @@ func (service *BackupRunService) RunBackup(
 	environmentID, idempotencyKey string,
 	fixedRevision ...int64,
 ) (etcd.IdempotencyResponse, error) {
+	return service.runBackup(
+		ctx, environmentID, idempotencyKey, backupRunRoute,
+		etcd.BackupRunInitiatorOperator, nil, time.Time{}, fixedRevision...,
+	)
+}
+
+// RunScheduledBackup publishes one deterministic occurrence in a Controller-
+// only route namespace. evaluatedAt is the tick boundary that selected the
+// latest occurrence and becomes the atomic schedule progress boundary.
+func (service *BackupRunService) RunScheduledBackup(
+	ctx context.Context, environmentID string, policyRevision int64,
+	scheduledAt, evaluatedAt time.Time, fixedRevision ...int64,
+) (etcd.IdempotencyResponse, error) {
+	if policyRevision <= 0 || scheduledAt.IsZero() || evaluatedAt.IsZero() ||
+		scheduledAt.After(evaluatedAt) {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed, "scheduled backup identity is invalid",
+		)
+	}
+	key := fmt.Sprintf(
+		"scheduled:%d:%s", policyRevision,
+		scheduledAt.UTC().Format("20060102T150405Z"),
+	)
+	return service.runBackup(
+		ctx, environmentID, key, scheduledBackupRunRoute,
+		etcd.BackupRunInitiatorSchedule, &scheduledAt, evaluatedAt, fixedRevision...,
+	)
+}
+
+func (service *BackupRunService) runBackup(
+	ctx context.Context,
+	environmentID, idempotencyKey, route string,
+	initiator etcd.BackupRunInitiator, scheduledAt *time.Time,
+	createdAtOverride time.Time, fixedRevision ...int64,
+) (etcd.IdempotencyResponse, error) {
 	if service == nil || service.repository == nil || service.plans == nil ||
 		service.idempotency == nil {
 		return etcd.IdempotencyResponse{}, errs.New(
@@ -290,10 +332,10 @@ func (service *BackupRunService) RunBackup(
 	}
 
 	locator := etcd.IdempotencyLocator{
-		Method: http.MethodPost, Route: backupRunRoute, Key: idempotencyKey,
+		Method: http.MethodPost, Route: route, Key: idempotencyKey,
 		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
 	}
-	evidence, err := service.idempotency.Prepare(ctx, environmentID)
+	evidence, err := service.idempotency.Prepare(ctx, environmentID, route)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -307,6 +349,9 @@ func (service *BackupRunService) RunBackup(
 	}
 
 	createdAt := service.now().UTC().Truncate(time.Millisecond)
+	if !createdAtOverride.IsZero() {
+		createdAt = createdAtOverride.UTC().Truncate(time.Second)
+	}
 	taskID, operationID, planID := ids.New(
 		ids.KindTask,
 	), ids.New(
@@ -317,6 +362,7 @@ func (service *BackupRunService) RunBackup(
 	prepared, err := service.repository.PrepareBackupRun(ctx, BackupRunPrepareInput{
 		EnvironmentID: environmentID, TaskID: taskID, OperationID: operationID,
 		PlanID: planID, FixedRevision: revision, CreatedAt: createdAt,
+		Initiator: initiator, ScheduledAt: scheduledAt,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -343,8 +389,11 @@ func (service *BackupRunService) RunBackup(
 		CreatedAt:         createdAt,
 		UpdatedAt:         createdAt,
 	}
-	sealed, err := service.plans.BuildBackupRunPlan(controller.BackupRunPlanInput{
-		Task: task, Run: prepared.Run, Upload: controller.BackupRunUploadAuthorities(prepared.Run),
+	if initiator == etcd.BackupRunInitiatorSchedule {
+		task.Actor = etcd.TaskActorSystem
+	}
+	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{
+		Task: task, Run: prepared.Run, Upload: BackupRunUploadAuthorities(prepared.Run),
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

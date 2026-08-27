@@ -356,7 +356,7 @@ func TestBackupRuntimeRepositoryPublishesPinnedConfigSnapshotAtomically(t *testi
 		ConfigSnapshotID: run.TaskID,
 	}}
 	policyValue, err := encodeBackupPolicyRecord(BackupPolicyRecord{
-		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "daily", Keep: 3,
+		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
 	})
@@ -4142,9 +4142,20 @@ func seedBackupRuntimePublicationEvidence(
 	}
 	defer clear(facts.Ciphertext)
 	policy := BackupPolicyRecord{
-		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "daily", Keep: 3,
+		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
+	}
+	digest, err := backupPolicyScheduleDigest(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordination := EnvironmentCoordinationRecord{
+		EnvironmentID: run.EnvironmentID, ScheduleClockFloor: run.CreatedAt,
+		CurrentBackupScheduleState: &CurrentBackupScheduleState{
+			PolicyDigest: digest, Frequency: policy.Frequency, EnabledAt: run.CreatedAt,
+			LastEvaluatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
+		},
 	}
 	storedSource := backupRuntimeSourceRecord(
 		t, source.SourceID, run.EnvironmentID, "attach", source.TargetID, run.CreatedAt,
@@ -4162,6 +4173,9 @@ func seedBackupRuntimePublicationEvidence(
 		encode func() ([]byte, error)
 	}{
 		{backupPolicyKey(run.EnvironmentID), func() ([]byte, error) { return encodeBackupPolicyRecord(policy) }},
+		{environmentCoordinationKey(run.EnvironmentID), func() ([]byte, error) {
+			return encodeEnvironmentCoordinationRecord(coordination)
+		}},
 		{backupSourceKey(source.SourceID), func() ([]byte, error) { return encodeBackupSourceRecord(storedSource) }},
 		{attachKey(attach.ID), func() ([]byte, error) { return encodeAttachRecord(attach) }},
 		{attachFactsKey(attach.ID), func() ([]byte, error) { return encodeAttachEncryptedFacts(facts) }},
@@ -4267,7 +4281,7 @@ func extendBackupRuntimePublicationSources(
 		}
 	}
 	policyValue, err := encodeBackupPolicyRecord(BackupPolicyRecord{
-		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "daily", Keep: 3,
+		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: sourceIDs, UpdatedAt: run.CreatedAt,
 	})
@@ -4420,7 +4434,7 @@ func configureBackupRuntimeConfigRun(
 		ConfigSnapshotID: run.TaskID,
 	}}
 	policyValue, err := encodeBackupPolicyRecord(BackupPolicyRecord{
-		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "daily", Keep: 3,
+		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
 	})

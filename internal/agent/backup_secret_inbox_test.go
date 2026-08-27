@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -449,7 +450,7 @@ func agentBackupSecretAssignment(t *testing.T) Assignment {
 	}
 	return Assignment{
 		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
-		OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV", Plan: plan, Timeout: 120 * 1e9,
+		OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV", Plan: plan, Deadline: time.Now().Add(120 * time.Second),
 	}
 }
 

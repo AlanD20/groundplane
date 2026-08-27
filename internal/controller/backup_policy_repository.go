@@ -1,7 +1,8 @@
-package app
+package controller
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,7 +12,7 @@ type durableBackupPolicyRepository struct {
 	repository *etcd.BackupPolicyRepository
 }
 
-func newDurableBackupPolicyRepository(
+func NewDurableBackupPolicyRepository(
 	repository *etcd.BackupPolicyRepository,
 ) (*durableBackupPolicyRepository, error) {
 	if repository == nil {
@@ -41,6 +42,17 @@ func (repository *durableBackupPolicyRepository) SupplyBackupPolicyInitialKey(
 	material etcd.BackupPolicyInitialKeyMaterial,
 ) (etcd.PreparedBackupPolicyReplacement, error) {
 	return repository.repository.SupplyBackupPolicyInitialKey(ctx, prepared, material)
+}
+
+func (repository *durableBackupPolicyRepository) FinalizeBackupPolicySchedule(
+	prepared etcd.PreparedBackupPolicyReplacement,
+	now time.Time,
+) (etcd.PreparedBackupPolicyReplacement, etcd.BackupPolicyProjection, error) {
+	finalized, err := prepared.FinalizeSchedule(now)
+	if err != nil {
+		return etcd.PreparedBackupPolicyReplacement{}, etcd.BackupPolicyProjection{}, err
+	}
+	return finalized, finalized.Projection(), nil
 }
 
 func (repository *durableBackupPolicyRepository) ReplaceBackupPolicyProtected(

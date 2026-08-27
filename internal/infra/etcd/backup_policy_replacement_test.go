@@ -112,6 +112,10 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 		}
 		move.ExistingKey = &existingKey
 		move.InitialKey = nil
+		move.Coordination = mustBackupPolicyCoordination(t, fixture.store, fixture.environment.Record.ID)
+		if err := sealBackupPolicyCandidateSchedule(&move, move.Replacement.UpdatedAt); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), move,
 			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-move-0002"),
@@ -145,6 +149,10 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 				ConnectorID: secondConnector.Record.Connector.ID, Entry: newReference,
 			}},
 			ExistingKey: &retained,
+		}
+		disabled.Coordination = mustBackupPolicyCoordination(t, fixture.store, fixture.environment.Record.ID)
+		if err := sealBackupPolicyCandidateSchedule(&disabled, disabled.Replacement.UpdatedAt); err != nil {
+			t.Fatal(err)
 		}
 		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), disabled,
@@ -284,6 +292,10 @@ func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *test
 			ConnectorReferences: []backupPolicyConnectorReferenceEvidence{{
 				ConnectorID: fixture.connector.Record.Connector.ID, Entry: reference,
 			}},
+		}
+		disabled.Coordination = mustBackupPolicyCoordination(t, fixture.store, fixture.environment.Record.ID)
+		if err := sealBackupPolicyCandidateSchedule(&disabled, disabled.Replacement.UpdatedAt); err != nil {
+			t.Fatal(err)
 		}
 		if _, err := fixture.repository.replaceBackupPolicyProtected(
 			context.Background(), disabled,
@@ -468,37 +480,36 @@ func TestBackupPolicyProtectedReplacementRejectsHeldEnvironmentOperationLockWith
 	}
 }
 
-// Rationale: preparation is valid only for its exact Environment mutation
-// epoch; advancing that epoch must reject the stale candidate without writes.
-func TestBackupPolicyProtectedReplacementRejectsAdvancedMutationEpochWithoutWrites(t *testing.T) {
+// Rationale: preparation is valid only for its exact Environment coordination
+// revision; advancing that fence must reject the stale candidate without writes.
+func TestBackupPolicyProtectedReplacementRejectsAdvancedCoordinationWithoutWrites(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	fixture := newBackupPolicyReplacementFixture(t, false)
 	candidate := fixture.candidate(t, true, "age")
-	epoch, err := fixture.store.Get(ctx, environmentMutationEpochKey(fixture.environment.Record.ID))
-	if err != nil || epoch == nil || epoch.Entry == nil {
-		t.Fatalf("get Environment mutation epoch = %#v, %v", epoch, err)
+	coordinationValue, err := encodeEnvironmentCoordinationRecord(candidate.Coordination.Record)
+	if err != nil {
+		t.Fatal(err)
 	}
 	transaction, err := fixture.store.Transact(ctx, nil, []Mutation{{
-		Type:  MutationPut,
-		Key:   environmentMutationEpochKey(fixture.environment.Record.ID),
-		Value: epoch.Entry.Value,
+		Type: MutationPut, Key: environmentCoordinationKey(fixture.environment.Record.ID),
+		Value: coordinationValue,
 	}})
 	if err != nil || !transaction.Succeeded {
-		t.Fatalf("advance Environment mutation epoch = %#v, %v", transaction, err)
+		t.Fatalf("advance Environment coordination = %#v, %v", transaction, err)
 	}
 	revisionBefore := fixture.store.revision
 	result, err := fixture.repository.replaceBackupPolicyProtected(
 		ctx,
 		candidate,
-		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-stale-epoch-0001"),
+		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-stale-coordination-0001"),
 	)
 	if err != nil || result.kind != idempotencyTransactionConflict ||
 		!isKind(result.conflict, errs.KindStateConflict) {
 		t.Fatalf("replaceBackupPolicyProtected(stale epoch) = %#v, %v", result, err)
 	}
 	if fixture.store.revision != revisionBefore {
-		t.Fatalf("stale-epoch replacement revision = %d, want unchanged %d", fixture.store.revision, revisionBefore)
+		t.Fatalf("stale-coordination replacement revision = %d, want unchanged %d", fixture.store.revision, revisionBefore)
 	}
 }
 
@@ -658,13 +669,35 @@ func (fixture *backupPolicyReplacementFixture) candidate(
 		Enabled:       enabled,
 		UpdatedAt:     fixture.now,
 	}
+	coordinationValue, err := fixture.store.Get(
+		context.Background(), environmentCoordinationKey(fixture.environment.Record.ID),
+	)
+	if err != nil || coordinationValue == nil {
+		t.Fatalf("get Environment coordination = %#v, %v", coordinationValue, err)
+	}
+	coordination := EnvironmentCoordinationRecord{
+		EnvironmentID: fixture.environment.Record.ID, ScheduleClockFloor: fixture.now,
+	}
+	coordinationRevision := int64(0)
+	if coordinationValue.Entry != nil {
+		coordination, err = decodeEnvironmentCoordinationRecord(coordinationValue.Entry.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		coordinationRevision = coordinationValue.Entry.ModRevision
+	}
 	candidate := backupPolicyReplacementCandidate{
-		Environment:   fixture.environment,
-		Project:       fixture.project,
-		MutationEpoch: fixture.mutationEpoch,
-		Replacement:   policy,
+		Environment: fixture.environment, Project: fixture.project,
+		MutationEpoch: fixture.mutationEpoch, Replacement: policy,
+		Coordination: Versioned[EnvironmentCoordinationRecord]{
+			Record: coordination, Revision: coordinationRevision,
+			ReadRevision: coordinationValue.ReadRevision,
+		},
 	}
 	if !enabled {
+		if err := sealBackupPolicyCandidateSchedule(&candidate, fixture.now); err != nil {
+			t.Fatal(err)
+		}
 		return candidate
 	}
 	policy.Frequency = "*-*-* 03:00:00"
@@ -715,6 +748,9 @@ func (fixture *backupPolicyReplacementFixture) candidate(
 				KeyEra:        1, Ciphertext: []byte("controller-sealed-age-identity"),
 			},
 		}
+	}
+	if err := sealBackupPolicyCandidateSchedule(&candidate, fixture.now); err != nil {
+		t.Fatal(err)
 	}
 	return candidate
 }
@@ -922,4 +958,203 @@ func (store *backupPolicyReplacementUnknownStore) Transact(
 		return TransactionResult{}, failure
 	}
 	return result, err
+}
+
+func replaceBackupSchedulePolicy(
+	t *testing.T,
+	fixture *backupPolicyReplacementFixture,
+	input BackupPolicyReplacementInput,
+	at time.Time,
+	key string,
+) BackupPolicyProjection {
+	t.Helper()
+	prepared, err := fixture.repository.PrepareBackupPolicyReplacement(
+		context.Background(), input,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Destroy()
+	prepared, err = prepared.FinalizeSchedule(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection := prepared.Projection()
+	result, err := fixture.repository.ReplaceBackupPolicyProtected(
+		context.Background(),
+		prepared,
+		backupPolicyReplacementMarker(fixture.environment.Record.ID, key),
+	)
+	if err != nil || result.kind != idempotencyTransactionApplied {
+		t.Fatalf("ReplaceBackupPolicyProtected() = %#v, %v", result, err)
+	}
+	return projection
+}
+
+func backupSchedulePolicyInput(
+	fixture *backupPolicyReplacementFixture,
+	enabled bool,
+) BackupPolicyReplacementInput {
+	volume := fixture.sources[0].Source.Record
+	return BackupPolicyReplacementInput{
+		EnvironmentID: fixture.environment.Record.ID,
+		Enabled:       enabled, Frequency: "*-*-* 03:00:00", Keep: 7,
+		Encryption: "none", ConnectorID: fixture.connector.Record.Connector.ID,
+		Sources: []BackupPolicySourceSelection{{
+			Kind: core.BackupSourceVolume, TargetID: volume.TargetID,
+		}},
+	}
+}
+
+// Rationale: the policy, nullable next_run_at source state, and coordination
+// transition are one protected commit; a delayed first tick still selects only
+// the latest occurrence since that exact transition boundary.
+func TestBackupPolicyReplacementPublishesScheduleAtomicallyAndLatestCatchUp(t *testing.T) {
+	fixture := newBackupPolicyReplacementFixture(t, true)
+	transition := fixture.now.Add(time.Minute)
+	projection := replaceBackupSchedulePolicy(
+		t, fixture, backupSchedulePolicyInput(fixture, true), transition,
+		"backup-schedule-atomic-0001",
+	)
+	wantNext := time.Date(2026, 8, 24, 3, 0, 0, 0, time.UTC)
+	if projection.NextRunAt == nil || !projection.NextRunAt.Equal(wantNext) {
+		t.Fatalf("next_run_at = %v, want %s", projection.NextRunAt, wantNext)
+	}
+	read, err := fixture.store.GetMany(context.Background(), GetManyRequest{Keys: []string{
+		backupPolicyKey(fixture.environment.Record.ID),
+		environmentCoordinationKey(fixture.environment.Record.ID),
+	}})
+	if err != nil || read == nil || len(read.Values) != 2 ||
+		read.Values[0] == nil || read.Values[1] == nil ||
+		read.Values[0].ModRevision != read.Values[1].ModRevision {
+		t.Fatalf("atomic policy/coordination read = %#v, %v", read, err)
+	}
+	runtime, err := newBackupRuntimeRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delayed := time.Date(2026, 8, 27, 10, 0, 0, 0, time.UTC)
+	evaluation, err := runtime.EvaluateBackupSchedule(
+		context.Background(), fixture.environment.Record.ID, delayed,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLatest := time.Date(2026, 8, 27, 3, 0, 0, 0, time.UTC)
+	if !evaluation.Due || !evaluation.ScheduledAt.Equal(wantLatest) ||
+		!evaluation.EvaluatedAt.Equal(delayed) {
+		t.Fatalf("delayed evaluation = %#v, want latest %s", evaluation, wantLatest)
+	}
+}
+
+// Rationale: disable clears only schedule state while advancing the monotonic
+// floor, and re-enable seeds strictly from its own later transition boundary.
+func TestBackupPolicyDisableReenableCannotReplayDisabledOccurrences(t *testing.T) {
+	fixture := newBackupPolicyReplacementFixture(t, true)
+	input := backupSchedulePolicyInput(fixture, true)
+	replaceBackupSchedulePolicy(
+		t, fixture, input, fixture.now.Add(time.Minute),
+		"backup-schedule-enable-0001",
+	)
+	disabledAt := fixture.now.Add(48 * time.Hour)
+	input.Enabled = false
+	disabled := replaceBackupSchedulePolicy(
+		t, fixture, input, disabledAt,
+		"backup-schedule-disable-0001",
+	)
+	if disabled.NextRunAt != nil {
+		t.Fatalf("disabled next_run_at = %v", disabled.NextRunAt)
+	}
+	reenabledAt := disabledAt.Add(2 * time.Hour)
+	input.Enabled = true
+	reenabled := replaceBackupSchedulePolicy(
+		t, fixture, input, reenabledAt,
+		"backup-schedule-reenable-0001",
+	)
+	wantNext := time.Date(2026, 8, 26, 3, 0, 0, 0, time.UTC)
+	if reenabled.NextRunAt == nil || !reenabled.NextRunAt.Equal(wantNext) {
+		t.Fatalf("re-enabled next_run_at = %v, want %s", reenabled.NextRunAt, wantNext)
+	}
+	runtime, err := newBackupRuntimeRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeNext, err := runtime.EvaluateBackupSchedule(
+		context.Background(), fixture.environment.Record.ID, reenabledAt.Add(30*time.Minute),
+	)
+	if err != nil || beforeNext.Due {
+		t.Fatalf("re-enabled pre-occurrence evaluation = %#v, %v", beforeNext, err)
+	}
+}
+
+// Rationale: a held Environment operation lock publishes one immutable overlap
+// outcome with coordination progress and never creates a competing Task.
+func TestBackupScheduleOverlapPublishesOutcomeAtomically(t *testing.T) {
+	fixture := newBackupPolicyReplacementFixture(t, true)
+	replaceBackupSchedulePolicy(
+		t, fixture, backupSchedulePolicyInput(fixture, true), fixture.now,
+		"backup-schedule-overlap-0001",
+	)
+	lock, err := fixture.store.Transact(context.Background(), nil, []Mutation{{
+		Type:  MutationPut,
+		Key:   environmentOperationLockKey(fixture.environment.Record.ID),
+		Value: []byte("held"),
+	}})
+	if err != nil || !lock.Succeeded {
+		t.Fatalf("seed operation lock = %#v, %v", lock, err)
+	}
+	runtime, err := newBackupRuntimeRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 24, 4, 0, 0, 0, time.UTC)
+	evaluation, err := runtime.EvaluateBackupSchedule(
+		context.Background(), fixture.environment.Record.ID, now,
+	)
+	if err != nil || !evaluation.Due || !evaluation.Overlap {
+		t.Fatalf("overlap evaluation = %#v, %v", evaluation, err)
+	}
+	if err := runtime.SkipScheduledBackup(context.Background(), evaluation, now); err != nil {
+		t.Fatal(err)
+	}
+	dueKey, err := backupDueOutcomeKey(
+		evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dueValue, err := fixture.store.Get(context.Background(), dueKey)
+	if err != nil || dueValue == nil || dueValue.Entry == nil {
+		t.Fatalf("due outcome read = %#v, %v", dueValue, err)
+	}
+	due, err := decodeBackupDueOutcomeRecord(dueValue.Entry.Value)
+	if err != nil || due.Outcome != BackupDueSkippedOverlap || due.TaskID != "" {
+		t.Fatalf("overlap due outcome = %#v, %v", due, err)
+	}
+	coordinationValue, err := fixture.store.Get(
+		context.Background(), environmentCoordinationKey(evaluation.EnvironmentID),
+	)
+	if err != nil || coordinationValue == nil || coordinationValue.Entry == nil ||
+		coordinationValue.Entry.ModRevision != dueValue.Entry.ModRevision {
+		t.Fatalf("atomic overlap coordination = %#v, %v", coordinationValue, err)
+	}
+}
+
+func mustBackupPolicyCoordination(
+	t *testing.T,
+	store *memoryHierarchyStore,
+	environmentID string,
+) Versioned[EnvironmentCoordinationRecord] {
+	t.Helper()
+	value, err := store.Get(context.Background(), environmentCoordinationKey(environmentID))
+	if err != nil || value == nil || value.Entry == nil {
+		t.Fatalf("get Environment coordination = %#v, %v", value, err)
+	}
+	record, err := decodeEnvironmentCoordinationRecord(value.Entry.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Versioned[EnvironmentCoordinationRecord]{
+		Record: record, Revision: value.Entry.ModRevision, ReadRevision: value.ReadRevision,
+	}
 }

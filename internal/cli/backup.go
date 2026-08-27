@@ -135,9 +135,15 @@ func newBackupCmd() *cobra.Command {
 		Short: "Run all configured backup sources now",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			app := fromContext(cmd)
-			path := "/api/v1/environments/" + target(app, app.Scope.Environment) + "/backup-run"
-			return runAction(cmd, path, nil)
+			environmentID, err := backupPolicyEnvironmentID(cmd)
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.RunBackup(cmd.Context(), environmentID)
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, accepted)
 		},
 	}
 	cmd.AddCommand(run)
@@ -510,7 +516,7 @@ func renderBackupPolicy(cmd *cobra.Command, policy apiTypes.BackupPolicy) error 
 		"encryption": policy.Encryption, "connector_id": policy.ConnectorID,
 		"sources": policy.Sources, "age_recipient": policy.AgeRecipient,
 		"key_era": policy.KeyEra, "key_created_at": policy.KeyCreatedAt,
-		"key_rotated_at": policy.KeyRotatedAt,
+		"key_rotated_at": policy.KeyRotatedAt, "next_run_at": policy.NextRunAt,
 	})
 	return fromContext(cmd).Out.RenderOne(fields, values, policy)
 }

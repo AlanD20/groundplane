@@ -242,7 +242,7 @@ func materializationAssignment(t *testing.T, content []byte) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       materializationTaskID, OperationID: materializationOperationID,
-		Plan: plan, Timeout: time.Minute,
+		Plan: plan, Deadline: time.Now().Add(time.Minute),
 	}
 }
 

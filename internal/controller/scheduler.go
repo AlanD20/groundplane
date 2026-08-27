@@ -22,6 +22,13 @@ type staleAgentExpiration interface {
 	ExpireStaleAgentTasks(context.Context, time.Time) (int, error)
 }
 
+// BackupScheduleRunner evaluates all due policy occurrences in one bounded
+// scheduler pass. It owns durable coordination, due outcomes, and publication;
+// policies never create independent timers or goroutines.
+type BackupScheduleRunner interface {
+	RunBackupSchedules(context.Context, time.Time) error
+}
+
 const dailyMaintenanceInterval = 24 * time.Hour
 
 // Scheduler runs ONE tick that evaluates every backup schedule from
@@ -29,13 +36,14 @@ const dailyMaintenanceInterval = 24 * time.Hour
 // cost nothing extra, no per-policy timer/unit churn. See mvp.md,
 // "systemd timers (backup, cleanup) -> the Controller scheduler".
 type Scheduler struct {
-	Server      *Server
-	Interval    time.Duration
-	tasks       taskExpiration
-	idempotency idempotencyPruning
-	agents      staleAgentExpiration
-	now         func() time.Time
-	nextPrune   time.Time
+	Server          *Server
+	Interval        time.Duration
+	tasks           taskExpiration
+	idempotency     idempotencyPruning
+	agents          staleAgentExpiration
+	backupSchedules BackupScheduleRunner
+	now             func() time.Time
+	nextPrune       time.Time
 }
 
 func NewScheduler(
@@ -44,9 +52,15 @@ func NewScheduler(
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
 	agents staleAgentExpiration,
+	backupSchedules ...BackupScheduleRunner,
 ) *Scheduler {
+	var schedules BackupScheduleRunner
+	if len(backupSchedules) > 0 {
+		schedules = backupSchedules[0]
+	}
 	return &Scheduler{
-		Server: s, Interval: interval, tasks: tasks, idempotency: idempotency, agents: agents, now: time.Now,
+		Server: s, Interval: interval, tasks: tasks, idempotency: idempotency, agents: agents,
+		backupSchedules: schedules, now: time.Now,
 	}
 }
 
@@ -82,6 +96,11 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	}
 	if _, err := sch.agents.ExpireStaleAgentTasks(ctx, now); err != nil {
 		return err
+	}
+	if sch.backupSchedules != nil {
+		if err := sch.backupSchedules.RunBackupSchedules(ctx, now); err != nil {
+			return err
+		}
 	}
 	if !sch.nextPrune.IsZero() && now.Before(sch.nextPrune) {
 		return nil

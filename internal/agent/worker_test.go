@@ -237,7 +237,7 @@ func workerAssignment(taskID, plan string) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan: sealed, Timeout: time.Minute,
+		Plan: sealed, Deadline: time.Now().Add(time.Minute),
 	}
 }
 

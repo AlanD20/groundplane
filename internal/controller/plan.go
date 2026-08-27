@@ -83,6 +83,7 @@ type TaskPlanResolver struct {
 	attachIdentities attachPlanIdentityResolver
 	componentCatalog []components.Registration
 	releases         *etcd.ReleaseLedger
+	backupRuns       backupRunPlanReader
 }
 
 type blueprintPlanStateReader interface {
@@ -145,6 +146,9 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 	}
 	if resolver == nil || resolver.volumeRoot == "" {
 		return nil, errs.New(errs.KindInternal, "execution plan resolver is not configured")
+	}
+	if task.Type == etcd.TaskBackup {
+		return resolver.resolveBackupRunPlan(ctx, task)
 	}
 	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceVolume {
 		return resolver.resolveVolumePlan(ctx, task)

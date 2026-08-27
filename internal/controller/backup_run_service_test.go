@@ -1,17 +1,28 @@
-package app
+package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
+
+type backupRunTestCipher struct{}
+
+func (backupRunTestCipher) Seal(_ context.Context, plaintext []byte) ([]byte, error) {
+	return append([]byte("sealed:"), plaintext...), nil
+}
+
+func (backupRunTestCipher) Open(_ context.Context, ciphertext []byte) ([]byte, error) {
+	return append([]byte(nil), ciphertext...), nil
+}
 
 type backupRunReplayRepository struct{ prepares int }
 
@@ -26,14 +37,14 @@ func (repository *backupRunReplayRepository) PrepareBackupRun(
 type backupRunReplayPlans struct{}
 
 func (backupRunReplayPlans) BuildBackupRunPlan(
-	controller.BackupRunPlanInput,
+	BackupRunPlanInput,
 ) (*agentpb.ExecutionPlan, error) {
 	return nil, nil
 }
 
 type backupRunReplayIdempotency struct{}
 
-func (backupRunReplayIdempotency) Prepare(context.Context, string) (backupRunEvidence, error) {
+func (backupRunReplayIdempotency) Prepare(context.Context, string, string) (backupRunEvidence, error) {
 	return backupRunEvidence{}, nil
 }
 
@@ -118,7 +129,7 @@ func (repository *backupRunServiceRepository) PrepareBackupRun(
 type backupRunServicePlans struct{}
 
 func (backupRunServicePlans) BuildBackupRunPlan(
-	controller.BackupRunPlanInput,
+	BackupRunPlanInput,
 ) (*agentpb.ExecutionPlan, error) {
 	return &agentpb.ExecutionPlan{PlanHash: make([]byte, 32)}, nil
 }
@@ -131,7 +142,7 @@ type backupRunServiceIdempotency struct {
 	unknown     idempotentintent.Resolution
 }
 
-func (backupRunServiceIdempotency) Prepare(context.Context, string) (backupRunEvidence, error) {
+func (backupRunServiceIdempotency) Prepare(context.Context, string, string) (backupRunEvidence, error) {
 	return backupRunEvidence{}, nil
 }
 
@@ -197,15 +208,17 @@ func TestBackupRunServiceReplaysBeforePreparation(t *testing.T) {
 // Rationale: a newly published Task marker is pending and receives retention
 // only when Task terminalization commits its applied lifecycle state.
 func TestDurableBackupRunNewMarkerHasNoPendingRetention(t *testing.T) {
-	coordinator, err := idempotentintent.NewCoordinator(
-		mustSecretValueProtector(t, reversibleSecretValueKey{}),
-	)
+	protector, err := secretvalue.NewProtector(backupRunTestCipher{}, backupRunTestCipher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator, err := idempotentintent.NewCoordinator(protector)
 	if err != nil {
 		t.Fatal(err)
 	}
 	service := &durableBackupRunIdempotency{coordinator: coordinator}
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	evidence, err := service.Prepare(context.Background(), environmentID)
+	evidence, err := service.Prepare(context.Background(), environmentID, backupRunRoute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,5 +338,51 @@ func TestBackupRunServiceRejectsExistingMarkerConflictBeforePreparation(t *testi
 				)
 			}
 		})
+	}
+}
+
+type backupRunLocatorCapture struct {
+	backupRunServiceIdempotency
+	locators []etcd.IdempotencyLocator
+}
+
+func (capture *backupRunLocatorCapture) ResolveExisting(
+	_ context.Context,
+	locator etcd.IdempotencyLocator,
+	_ backupRunEvidence,
+) (idempotentintent.Resolution, bool, error) {
+	capture.locators = append(capture.locators, locator)
+	return idempotentintent.Resolution{}, false, nil
+}
+
+// Rationale: an operator may deliberately submit the system key bytes, but
+// public and scheduled attempts still resolve and replay under disjoint routes.
+func TestBackupRunScheduledIdempotencyNamespaceCannotCollideWithOperatorHeader(t *testing.T) {
+	scheduledAt := time.Date(2026, 8, 27, 11, 0, 0, 0, time.UTC)
+	evaluatedAt := scheduledAt.Add(time.Hour)
+	key := fmt.Sprintf("scheduled:%d:%s", 42, scheduledAt.Format("20060102T150405Z"))
+	publication := &backupRunServicePublication{}
+	repository := &backupRunServiceRepository{publication: publication}
+	capture := &backupRunLocatorCapture{}
+	service := NewBackupRunService(repository, backupRunServicePlans{}, capture)
+	service.now = func() time.Time { return evaluatedAt }
+
+	if _, err := service.RunBackup(
+		context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", key,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RunScheduledBackup(
+		context.Background(), "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		42, scheduledAt, evaluatedAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if len(capture.locators) != 2 ||
+		capture.locators[0].Key != capture.locators[1].Key ||
+		capture.locators[0].Route != backupRunRoute ||
+		capture.locators[1].Route != scheduledBackupRunRoute ||
+		capture.locators[0].Route == capture.locators[1].Route {
+		t.Fatalf("idempotency locators = %#v", capture.locators)
 	}
 }

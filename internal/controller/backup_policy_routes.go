@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -22,6 +23,10 @@ type BackupPolicyMutator interface {
 		apiTypes.BackupPolicyReplacementRequest,
 		string,
 	) (apiTypes.BackupPolicyMutationResult, error)
+}
+
+type BackupRunMutator interface {
+	RunBackup(context.Context, string, string, ...int64) (etcd.IdempotencyResponse, error)
 }
 
 type backupPolicyShowInput struct {

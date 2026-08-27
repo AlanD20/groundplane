@@ -380,11 +380,14 @@ func (c *Client) sendReady(stream agentStream) error {
 
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
 	if assignment := message.GetTaskAssignment(); assignment != nil {
+		if assignment.Deadline == nil || assignment.Deadline.CheckValid() != nil {
+			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid task deadline")
+		}
 		return false, c.pool.Submit(ctx, Assignment{
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan,
-			Timeout: time.Duration(assignment.TimeoutSeconds) * time.Second,
+			Deadline: assignment.Deadline.AsTime(),
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {

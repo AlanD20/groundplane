@@ -232,7 +232,8 @@ message TaskAssignment {
   string operation_id = 2; // stable across retries
   string retry_of = 3;     // set iff this is a retry of a prior task_id
   ExecutionPlan plan = 4;  // complete authoritative procedure
-  int32 timeout_seconds = 5;
+  reserved 5;
+  google.protobuf.Timestamp deadline = 7; // durable absolute assignment deadline; reconnect never restarts the budget
   string assignment_id = 6;
 }
 

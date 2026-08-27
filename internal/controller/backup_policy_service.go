@@ -1,4 +1,4 @@
-package app
+package controller
 
 import (
 	"context"
@@ -29,6 +29,10 @@ type backupPolicyRepository interface {
 		etcd.PreparedBackupPolicyReplacement,
 		etcd.BackupPolicyInitialKeyMaterial,
 	) (etcd.PreparedBackupPolicyReplacement, error)
+	FinalizeBackupPolicySchedule(
+		etcd.PreparedBackupPolicyReplacement,
+		time.Time,
+	) (etcd.PreparedBackupPolicyReplacement, etcd.BackupPolicyProjection, error)
 	ReplaceBackupPolicyProtected(
 		context.Context,
 		etcd.PreparedBackupPolicyReplacement,
@@ -61,7 +65,7 @@ type durableBackupPolicyIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableBackupPolicyIdempotency(
+func NewDurableBackupPolicyIdempotency(
 	coordinator *idempotentintent.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableBackupPolicyIdempotency, error) {
@@ -135,7 +139,7 @@ type ageBackupPolicyKeyFactory struct {
 	protector *secretvalue.Protector
 }
 
-func newAgeBackupPolicyKeyFactory(protector *secretvalue.Protector) (*ageBackupPolicyKeyFactory, error) {
+func NewAgeBackupPolicyKeyFactory(protector *secretvalue.Protector) (*ageBackupPolicyKeyFactory, error) {
 	if protector == nil {
 		return nil, errs.New(errs.KindInternal, "backup policy key protector is required")
 	}
@@ -167,7 +171,7 @@ type backupPolicyService struct {
 	now         func() time.Time
 }
 
-func newBackupPolicyService(
+func NewBackupPolicyService(
 	repository backupPolicyRepository,
 	keys backupPolicyKeyFactory,
 	idempotency backupPolicyIdempotency,
@@ -246,7 +250,13 @@ func (service *backupPolicyService) SetBackupPolicy(
 			return apiTypes.BackupPolicyMutationResult{}, err
 		}
 	}
-	policy := backupPolicyAPI(prepared.Projection())
+	transitionAt := service.now().UTC().Truncate(time.Second)
+	var projection etcd.BackupPolicyProjection
+	prepared, projection, err = service.repository.FinalizeBackupPolicySchedule(prepared, transitionAt)
+	if err != nil {
+		return apiTypes.BackupPolicyMutationResult{}, err
+	}
+	policy := backupPolicyAPI(projection)
 	responseBody, err := json.Marshal(policy)
 	if err != nil {
 		return apiTypes.BackupPolicyMutationResult{}, errs.Wrap(errs.KindInternal, err)
@@ -256,7 +266,7 @@ func (service *backupPolicyService) SetBackupPolicy(
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
 	defer clear(response.Body)
-	marker, err := service.idempotency.NewMarker(evidence, locator, response, service.now())
+	marker, err := service.idempotency.NewMarker(evidence, locator, response, transitionAt)
 	if err != nil {
 		return apiTypes.BackupPolicyMutationResult{}, err
 	}
@@ -323,7 +333,16 @@ func backupPolicyAPI(projection etcd.BackupPolicyProjection) apiTypes.BackupPoli
 		KeyEra:       projection.KeyEra,
 		KeyCreatedAt: backupPolicyTimestamp(projection.KeyCreatedAt),
 		KeyRotatedAt: backupPolicyTimestamp(projection.KeyRotatedAt),
+		NextRunAt:    backupPolicyTimestampPointer(projection.NextRunAt),
 	}
+}
+
+func backupPolicyTimestampPointer(value *time.Time) *string {
+	if value == nil {
+		return nil
+	}
+	formatted := value.UTC().Format(time.RFC3339)
+	return &formatted
 }
 
 func backupPolicyTimestamp(value time.Time) string {

@@ -2738,15 +2738,15 @@ func (x *MaterializationTransferEnd) GetChunkCount() uint32 {
 }
 
 type TaskAssignment struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	TaskId         string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	OperationId    string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"` // stable across retries
-	RetryOf        string                 `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
-	Plan           *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`                                  // complete authoritative procedure
-	TimeoutSeconds int32                  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	AssignmentId   string                 `protobuf:"bytes,6,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"` // stable across retries
+	RetryOf       string                 `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
+	Plan          *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`                                  // complete authoritative procedure
+	Deadline      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=deadline,proto3" json:"deadline,omitempty"`                          // durable absolute assignment deadline; reconnect never restarts the budget
+	AssignmentId  string                 `protobuf:"bytes,6,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TaskAssignment) Reset() {
@@ -2807,11 +2807,11 @@ func (x *TaskAssignment) GetPlan() *ExecutionPlan {
 	return nil
 }
 
-func (x *TaskAssignment) GetTimeoutSeconds() int32 {
+func (x *TaskAssignment) GetDeadline() *timestamppb.Timestamp {
 	if x != nil {
-		return x.TimeoutSeconds
+		return x.Deadline
 	}
-	return 0
+	return nil
 }
 
 func (x *TaskAssignment) GetAssignmentId() string {
@@ -8107,14 +8107,14 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\acontent\x18\x02 \x01(\fR\acontent\"=\n" +
 	"\x1aMaterializationTransferEnd\x12\x1f\n" +
 	"\vchunk_count\x18\x01 \x01(\rR\n" +
-	"chunkCount\"\xee\x01\n" +
+	"chunkCount\"\x83\x02\n" +
 	"\x0eTaskAssignment\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
 	"\bretry_of\x18\x03 \x01(\tR\aretryOf\x127\n" +
-	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12'\n" +
-	"\x0ftimeout_seconds\x18\x05 \x01(\x05R\x0etimeoutSeconds\x12#\n" +
-	"\rassignment_id\x18\x06 \x01(\tR\fassignmentId\"\xea\x02\n" +
+	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x126\n" +
+	"\bdeadline\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\x12#\n" +
+	"\rassignment_id\x18\x06 \x01(\tR\fassignmentIdJ\x04\b\x05\x10\x06\"\xea\x02\n" +
 	"\rExecutionPlan\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12\x1b\n" +
@@ -8852,82 +8852,83 @@ var file_proto_agent_proto_depIdxs = []int32{
 	37,  // 36: groundplane.agent.v1.MaterializationTransfer.end:type_name -> groundplane.agent.v1.MaterializationTransferEnd
 	16,  // 37: groundplane.agent.v1.MaterializationTransferHeader.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
 	39,  // 38: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	5,   // 39: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
-	40,  // 40: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
-	45,  // 41: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
-	6,   // 42: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
-	41,  // 43: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
-	42,  // 44: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
-	43,  // 45: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
-	44,  // 46: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	7,   // 47: groundplane.agent.v1.ComposeService.role:type_name -> groundplane.agent.v1.ComposeServiceRole
-	44,  // 48: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	44,  // 49: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
-	72,  // 50: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
-	73,  // 51: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
-	74,  // 52: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
-	75,  // 53: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
-	86,  // 54: groundplane.agent.v1.ExecutionStep.environment_directory_create:type_name -> groundplane.agent.v1.EnvironmentDirectoryCreate
-	71,  // 55: groundplane.agent.v1.ExecutionStep.materialize_file:type_name -> groundplane.agent.v1.MaterializeFile
-	88,  // 56: groundplane.agent.v1.ExecutionStep.managed_volume_directories_ensure:type_name -> groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
-	87,  // 57: groundplane.agent.v1.ExecutionStep.environment_directory_remove:type_name -> groundplane.agent.v1.EnvironmentDirectoryRemove
-	70,  // 58: groundplane.agent.v1.ExecutionStep.adapter_procedure:type_name -> groundplane.agent.v1.AdapterProcedure
-	91,  // 59: groundplane.agent.v1.ExecutionStep.managed_network_remove:type_name -> groundplane.agent.v1.ManagedNetworkRemove
-	92,  // 60: groundplane.agent.v1.ExecutionStep.caddy_config_apply:type_name -> groundplane.agent.v1.CaddyConfigApply
-	46,  // 61: groundplane.agent.v1.ExecutionStep.backup_source_capture:type_name -> groundplane.agent.v1.BackupSourceCapture
-	47,  // 62: groundplane.agent.v1.ExecutionStep.backup_artifact_prune:type_name -> groundplane.agent.v1.BackupArtifactPrune
-	76,  // 63: groundplane.agent.v1.ExecutionStep.compose_workload_apply:type_name -> groundplane.agent.v1.ComposeWorkloadApply
-	77,  // 64: groundplane.agent.v1.ExecutionStep.wait_workload_healthy:type_name -> groundplane.agent.v1.WaitWorkloadHealthy
-	78,  // 65: groundplane.agent.v1.ExecutionStep.service_proxy_switch:type_name -> groundplane.agent.v1.ServiceProxySwitch
-	79,  // 66: groundplane.agent.v1.ExecutionStep.service_proxy_probe:type_name -> groundplane.agent.v1.ServiceProxyProbe
-	80,  // 67: groundplane.agent.v1.ExecutionStep.service_proxy_compensate:type_name -> groundplane.agent.v1.ServiceProxyCompensate
-	82,  // 68: groundplane.agent.v1.ExecutionStep.service_recreate_acknowledge:type_name -> groundplane.agent.v1.ServiceRecreateAcknowledge
-	83,  // 69: groundplane.agent.v1.ExecutionStep.service_recreate_probe:type_name -> groundplane.agent.v1.ServiceRecreateProbe
-	84,  // 70: groundplane.agent.v1.ExecutionStep.service_recreate_compensate:type_name -> groundplane.agent.v1.ServiceRecreateCompensate
-	89,  // 71: groundplane.agent.v1.ExecutionStep.managed_volume_remove:type_name -> groundplane.agent.v1.ManagedVolumeRemove
-	90,  // 72: groundplane.agent.v1.ExecutionStep.managed_volume_directory_remove:type_name -> groundplane.agent.v1.ManagedVolumeDirectoryRemove
-	8,   // 73: groundplane.agent.v1.ExecutionStep.policy:type_name -> groundplane.agent.v1.ExecutionStepPolicy
-	10,  // 74: groundplane.agent.v1.BackupSourceCapture.source_format:type_name -> groundplane.agent.v1.BackupSourceFormat
-	11,  // 75: groundplane.agent.v1.BackupSourceCapture.encryption:type_name -> groundplane.agent.v1.BackupEncryption
-	48,  // 76: groundplane.agent.v1.BackupSourceCapture.attach:type_name -> groundplane.agent.v1.BackupAttachSource
-	49,  // 77: groundplane.agent.v1.BackupSourceCapture.config:type_name -> groundplane.agent.v1.BackupConfigSource
-	50,  // 78: groundplane.agent.v1.BackupSourceCapture.volume:type_name -> groundplane.agent.v1.BackupVolumeSource
-	9,   // 79: groundplane.agent.v1.BackupArtifactPrune.connector_addressing:type_name -> groundplane.agent.v1.BackupS3Addressing
-	51,  // 80: groundplane.agent.v1.BackupVolumeSource.services:type_name -> groundplane.agent.v1.BackupVolumeService
-	12,  // 81: groundplane.agent.v1.BackupVolumeService.prior_intent:type_name -> groundplane.agent.v1.BackupServiceRuntimeIntent
-	14,  // 82: groundplane.agent.v1.BackupCheckpointRequest.kind:type_name -> groundplane.agent.v1.BackupCheckpointKind
-	58,  // 83: groundplane.agent.v1.BackupCheckpointRequest.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPreparedCheckpoint
-	60,  // 84: groundplane.agent.v1.BackupCheckpointRequest.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerifiedCheckpoint
-	61,  // 85: groundplane.agent.v1.BackupCheckpointRequest.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompletedCheckpoint
-	62,  // 86: groundplane.agent.v1.BackupCheckpointRequest.restore_artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidatedCheckpoint
-	63,  // 87: groundplane.agent.v1.BackupCheckpointRequest.volume_tree_staged:type_name -> groundplane.agent.v1.BackupVolumeTreeStagedCheckpoint
-	64,  // 88: groundplane.agent.v1.BackupCheckpointRequest.volume_tree_exchanged:type_name -> groundplane.agent.v1.BackupVolumeTreeExchangedCheckpoint
-	65,  // 89: groundplane.agent.v1.BackupCheckpointRequest.volume_replaced_tree_cleaned:type_name -> groundplane.agent.v1.BackupVolumeReplacedTreeCleanedCheckpoint
-	66,  // 90: groundplane.agent.v1.BackupCheckpointRequest.config_generation_staged:type_name -> groundplane.agent.v1.BackupConfigGenerationStagedCheckpoint
-	67,  // 91: groundplane.agent.v1.BackupCheckpointRequest.config_generation_activated:type_name -> groundplane.agent.v1.BackupConfigGenerationActivatedCheckpoint
-	68,  // 92: groundplane.agent.v1.BackupCheckpointRequest.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerifiedCheckpoint
-	69,  // 93: groundplane.agent.v1.BackupCheckpointRequest.remote_object_absent:type_name -> groundplane.agent.v1.BackupRemoteObjectAbsentCheckpoint
-	59,  // 94: groundplane.agent.v1.BackupCheckpointRequest.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompletedCheckpoint
-	13,  // 95: groundplane.agent.v1.BackupSecretSlotTransfer.purpose:type_name -> groundplane.agent.v1.BackupSecretSlotPurpose
-	55,  // 96: groundplane.agent.v1.BackupSecretSlotTransfer.header:type_name -> groundplane.agent.v1.BackupSecretSlotHeader
-	56,  // 97: groundplane.agent.v1.BackupSecretSlotTransfer.chunk:type_name -> groundplane.agent.v1.BackupSecretSlotChunk
-	57,  // 98: groundplane.agent.v1.BackupSecretSlotTransfer.end:type_name -> groundplane.agent.v1.BackupSecretSlotEnd
-	15,  // 99: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
-	16,  // 100: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
-	39,  // 101: groundplane.agent.v1.EnvironmentDirectoryHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	39,  // 102: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	17,  // 103: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
-	18,  // 104: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	81,  // 105: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
-	85,  // 106: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
-	20,  // 107: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	21,  // 108: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	33,  // 109: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	109, // [109:110] is the sub-list for method output_type
-	108, // [108:109] is the sub-list for method input_type
-	108, // [108:108] is the sub-list for extension type_name
-	108, // [108:108] is the sub-list for extension extendee
-	0,   // [0:108] is the sub-list for field type_name
+	101, // 39: groundplane.agent.v1.TaskAssignment.deadline:type_name -> google.protobuf.Timestamp
+	5,   // 40: groundplane.agent.v1.ExecutionPlan.operation:type_name -> groundplane.agent.v1.PlanOperation
+	40,  // 41: groundplane.agent.v1.ExecutionPlan.artifacts:type_name -> groundplane.agent.v1.ComposeArtifact
+	45,  // 42: groundplane.agent.v1.ExecutionPlan.steps:type_name -> groundplane.agent.v1.ExecutionStep
+	6,   // 43: groundplane.agent.v1.ComposeArtifact.owner_kind:type_name -> groundplane.agent.v1.ComposeOwnerKind
+	41,  // 44: groundplane.agent.v1.ComposeArtifact.services:type_name -> groundplane.agent.v1.ComposeService
+	42,  // 45: groundplane.agent.v1.ComposeArtifact.networks:type_name -> groundplane.agent.v1.ComposeNetwork
+	43,  // 46: groundplane.agent.v1.ComposeArtifact.volumes:type_name -> groundplane.agent.v1.ComposeVolume
+	44,  // 47: groundplane.agent.v1.ComposeService.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	7,   // 48: groundplane.agent.v1.ComposeService.role:type_name -> groundplane.agent.v1.ComposeServiceRole
+	44,  // 49: groundplane.agent.v1.ComposeNetwork.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	44,  // 50: groundplane.agent.v1.ComposeVolume.expected_labels:type_name -> groundplane.agent.v1.LabelPair
+	72,  // 51: groundplane.agent.v1.ExecutionStep.compose_apply:type_name -> groundplane.agent.v1.ComposeApply
+	73,  // 52: groundplane.agent.v1.ExecutionStep.compose_stop:type_name -> groundplane.agent.v1.ComposeStop
+	74,  // 53: groundplane.agent.v1.ExecutionStep.compose_remove:type_name -> groundplane.agent.v1.ComposeRemove
+	75,  // 54: groundplane.agent.v1.ExecutionStep.wait_healthy:type_name -> groundplane.agent.v1.WaitHealthy
+	86,  // 55: groundplane.agent.v1.ExecutionStep.environment_directory_create:type_name -> groundplane.agent.v1.EnvironmentDirectoryCreate
+	71,  // 56: groundplane.agent.v1.ExecutionStep.materialize_file:type_name -> groundplane.agent.v1.MaterializeFile
+	88,  // 57: groundplane.agent.v1.ExecutionStep.managed_volume_directories_ensure:type_name -> groundplane.agent.v1.ManagedVolumeDirectoriesEnsure
+	87,  // 58: groundplane.agent.v1.ExecutionStep.environment_directory_remove:type_name -> groundplane.agent.v1.EnvironmentDirectoryRemove
+	70,  // 59: groundplane.agent.v1.ExecutionStep.adapter_procedure:type_name -> groundplane.agent.v1.AdapterProcedure
+	91,  // 60: groundplane.agent.v1.ExecutionStep.managed_network_remove:type_name -> groundplane.agent.v1.ManagedNetworkRemove
+	92,  // 61: groundplane.agent.v1.ExecutionStep.caddy_config_apply:type_name -> groundplane.agent.v1.CaddyConfigApply
+	46,  // 62: groundplane.agent.v1.ExecutionStep.backup_source_capture:type_name -> groundplane.agent.v1.BackupSourceCapture
+	47,  // 63: groundplane.agent.v1.ExecutionStep.backup_artifact_prune:type_name -> groundplane.agent.v1.BackupArtifactPrune
+	76,  // 64: groundplane.agent.v1.ExecutionStep.compose_workload_apply:type_name -> groundplane.agent.v1.ComposeWorkloadApply
+	77,  // 65: groundplane.agent.v1.ExecutionStep.wait_workload_healthy:type_name -> groundplane.agent.v1.WaitWorkloadHealthy
+	78,  // 66: groundplane.agent.v1.ExecutionStep.service_proxy_switch:type_name -> groundplane.agent.v1.ServiceProxySwitch
+	79,  // 67: groundplane.agent.v1.ExecutionStep.service_proxy_probe:type_name -> groundplane.agent.v1.ServiceProxyProbe
+	80,  // 68: groundplane.agent.v1.ExecutionStep.service_proxy_compensate:type_name -> groundplane.agent.v1.ServiceProxyCompensate
+	82,  // 69: groundplane.agent.v1.ExecutionStep.service_recreate_acknowledge:type_name -> groundplane.agent.v1.ServiceRecreateAcknowledge
+	83,  // 70: groundplane.agent.v1.ExecutionStep.service_recreate_probe:type_name -> groundplane.agent.v1.ServiceRecreateProbe
+	84,  // 71: groundplane.agent.v1.ExecutionStep.service_recreate_compensate:type_name -> groundplane.agent.v1.ServiceRecreateCompensate
+	89,  // 72: groundplane.agent.v1.ExecutionStep.managed_volume_remove:type_name -> groundplane.agent.v1.ManagedVolumeRemove
+	90,  // 73: groundplane.agent.v1.ExecutionStep.managed_volume_directory_remove:type_name -> groundplane.agent.v1.ManagedVolumeDirectoryRemove
+	8,   // 74: groundplane.agent.v1.ExecutionStep.policy:type_name -> groundplane.agent.v1.ExecutionStepPolicy
+	10,  // 75: groundplane.agent.v1.BackupSourceCapture.source_format:type_name -> groundplane.agent.v1.BackupSourceFormat
+	11,  // 76: groundplane.agent.v1.BackupSourceCapture.encryption:type_name -> groundplane.agent.v1.BackupEncryption
+	48,  // 77: groundplane.agent.v1.BackupSourceCapture.attach:type_name -> groundplane.agent.v1.BackupAttachSource
+	49,  // 78: groundplane.agent.v1.BackupSourceCapture.config:type_name -> groundplane.agent.v1.BackupConfigSource
+	50,  // 79: groundplane.agent.v1.BackupSourceCapture.volume:type_name -> groundplane.agent.v1.BackupVolumeSource
+	9,   // 80: groundplane.agent.v1.BackupArtifactPrune.connector_addressing:type_name -> groundplane.agent.v1.BackupS3Addressing
+	51,  // 81: groundplane.agent.v1.BackupVolumeSource.services:type_name -> groundplane.agent.v1.BackupVolumeService
+	12,  // 82: groundplane.agent.v1.BackupVolumeService.prior_intent:type_name -> groundplane.agent.v1.BackupServiceRuntimeIntent
+	14,  // 83: groundplane.agent.v1.BackupCheckpointRequest.kind:type_name -> groundplane.agent.v1.BackupCheckpointKind
+	58,  // 84: groundplane.agent.v1.BackupCheckpointRequest.artifact_prepared:type_name -> groundplane.agent.v1.BackupArtifactPreparedCheckpoint
+	60,  // 85: groundplane.agent.v1.BackupCheckpointRequest.upload_verified:type_name -> groundplane.agent.v1.BackupUploadVerifiedCheckpoint
+	61,  // 86: groundplane.agent.v1.BackupCheckpointRequest.source_cleanup_completed:type_name -> groundplane.agent.v1.BackupSourceCleanupCompletedCheckpoint
+	62,  // 87: groundplane.agent.v1.BackupCheckpointRequest.restore_artifact_validated:type_name -> groundplane.agent.v1.BackupRestoreArtifactValidatedCheckpoint
+	63,  // 88: groundplane.agent.v1.BackupCheckpointRequest.volume_tree_staged:type_name -> groundplane.agent.v1.BackupVolumeTreeStagedCheckpoint
+	64,  // 89: groundplane.agent.v1.BackupCheckpointRequest.volume_tree_exchanged:type_name -> groundplane.agent.v1.BackupVolumeTreeExchangedCheckpoint
+	65,  // 90: groundplane.agent.v1.BackupCheckpointRequest.volume_replaced_tree_cleaned:type_name -> groundplane.agent.v1.BackupVolumeReplacedTreeCleanedCheckpoint
+	66,  // 91: groundplane.agent.v1.BackupCheckpointRequest.config_generation_staged:type_name -> groundplane.agent.v1.BackupConfigGenerationStagedCheckpoint
+	67,  // 92: groundplane.agent.v1.BackupCheckpointRequest.config_generation_activated:type_name -> groundplane.agent.v1.BackupConfigGenerationActivatedCheckpoint
+	68,  // 93: groundplane.agent.v1.BackupCheckpointRequest.postgres_restore_verified:type_name -> groundplane.agent.v1.BackupPostgresRestoreVerifiedCheckpoint
+	69,  // 94: groundplane.agent.v1.BackupCheckpointRequest.remote_object_absent:type_name -> groundplane.agent.v1.BackupRemoteObjectAbsentCheckpoint
+	59,  // 95: groundplane.agent.v1.BackupCheckpointRequest.upload_completed:type_name -> groundplane.agent.v1.BackupUploadCompletedCheckpoint
+	13,  // 96: groundplane.agent.v1.BackupSecretSlotTransfer.purpose:type_name -> groundplane.agent.v1.BackupSecretSlotPurpose
+	55,  // 97: groundplane.agent.v1.BackupSecretSlotTransfer.header:type_name -> groundplane.agent.v1.BackupSecretSlotHeader
+	56,  // 98: groundplane.agent.v1.BackupSecretSlotTransfer.chunk:type_name -> groundplane.agent.v1.BackupSecretSlotChunk
+	57,  // 99: groundplane.agent.v1.BackupSecretSlotTransfer.end:type_name -> groundplane.agent.v1.BackupSecretSlotEnd
+	15,  // 100: groundplane.agent.v1.AdapterProcedure.phase:type_name -> groundplane.agent.v1.AdapterProcedurePhase
+	16,  // 101: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
+	39,  // 102: groundplane.agent.v1.EnvironmentDirectoryHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	39,  // 103: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
+	17,  // 104: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	18,  // 105: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	81,  // 106: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	85,  // 107: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
+	20,  // 108: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	21,  // 109: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	33,  // 110: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	110, // [110:111] is the sub-list for method output_type
+	109, // [109:110] is the sub-list for method input_type
+	109, // [109:109] is the sub-list for extension type_name
+	109, // [109:109] is the sub-list for extension extendee
+	0,   // [0:109] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }

@@ -477,6 +477,7 @@ type BackupPolicy struct {
 	KeyEra       int              `json:"key_era,omitempty"`
 	KeyCreatedAt string           `json:"key_created_at,omitempty" format:"date-time"`
 	KeyRotatedAt string           `json:"key_rotated_at,omitempty" format:"date-time"`
+	NextRunAt    *string          `json:"next_run_at" format:"date-time"`
 }
 
 // BackupPolicyMutationResult carries the typed public value and the exact

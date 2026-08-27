@@ -133,5 +133,9 @@ func backupPolicyFromGenerated(policy generated.BackupPolicy) apiTypes.BackupPol
 	if policy.KeyRotatedAt != nil {
 		converted.KeyRotatedAt = policy.KeyRotatedAt.Format(time.RFC3339)
 	}
+	if policy.NextRunAt != nil {
+		formatted := policy.NextRunAt.UTC().Format(time.RFC3339)
+		converted.NextRunAt = &formatted
+	}
 	return converted
 }

@@ -60,6 +60,29 @@ func (prepared PreparedBackupPolicyReplacement) RequiresInitialKey() bool {
 	return prepared.requiresInitialKey
 }
 
+// FinalizeSchedule chooses the replacement logical boundary after any initial
+// key preparation and immediately before the protected response is sealed.
+func (prepared PreparedBackupPolicyReplacement) FinalizeSchedule(
+	now time.Time,
+) (PreparedBackupPolicyReplacement, error) {
+	if prepared.requiresInitialKey || (prepared.candidate.InitialKey == nil &&
+		prepared.candidate.Replacement.Enabled &&
+		prepared.candidate.Replacement.Encryption == "age" &&
+		prepared.candidate.ExistingKey == nil) {
+		return PreparedBackupPolicyReplacement{}, errs.New(
+			errs.KindValidationFailed, "backup policy initial key is not prepared",
+		)
+	}
+	if err := sealBackupPolicyCandidateSchedule(&prepared.candidate, now); err != nil {
+		return PreparedBackupPolicyReplacement{}, err
+	}
+	if err := validatebackupPolicyReplacementCandidate(context.Background(), prepared.candidate); err != nil {
+		return PreparedBackupPolicyReplacement{}, err
+	}
+	prepared.projection = backupPolicyProjectionFromCandidate(prepared.candidate)
+	return prepared, nil
+}
+
 // Destroy clears private key ciphertext retained by an abandoned or completed
 // prepared replacement. The prepared value must not be reused afterward.
 func (prepared *PreparedBackupPolicyReplacement) Destroy() {
@@ -174,6 +197,9 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	if err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
+	if err := sealBackupPolicyCandidateSchedule(&candidate, now); err != nil {
+		return PreparedBackupPolicyReplacement{}, err
+	}
 	requiresInitialKey := input.Enabled && input.Encryption == "age" && !keyFound
 	projection := BackupPolicyProjection{}
 	if !requiresInitialKey {
@@ -206,11 +232,12 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		deletionTombstoneKey(string(DeletionTargetEnvironment), input.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetProject), projectID),
 		deletionTombstoneKey(string(DeletionTargetTenant), tenantID),
+		environmentCoordinationKey(input.EnvironmentID),
 	}})
 	if err != nil {
 		return backupPolicyReplacementCandidate{}, false, err
 	}
-	if result == nil || result.ReadRevision <= 0 || len(result.Values) != 10 {
+	if result == nil || result.ReadRevision <= 0 || len(result.Values) != 11 {
 		return backupPolicyReplacementCandidate{}, false, errs.New(
 			errs.KindInternal,
 			"backup policy replacement base read is incomplete",
@@ -298,6 +325,37 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 			Record: current, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
+	coordination := EnvironmentCoordinationRecord{
+		EnvironmentID: input.EnvironmentID, ScheduleClockFloor: now,
+	}
+	coordinationRevision := int64(0)
+	if result.Values[10] != nil {
+		decoded, coordinationErr := decodeEnvironmentCoordinationRecord(result.Values[10].Value)
+		if coordinationErr != nil || decoded.EnvironmentID != input.EnvironmentID {
+			return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+		}
+		coordination = decoded
+		coordinationRevision = result.Values[10].ModRevision
+	} else if candidate.Current != nil {
+		return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+	}
+	candidate.Coordination = Versioned[EnvironmentCoordinationRecord]{
+		Record: coordination, Revision: coordinationRevision, ReadRevision: result.ReadRevision,
+	}
+	if candidate.Current == nil {
+		if coordination.CurrentBackupScheduleState != nil {
+			return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+		}
+	} else if candidate.Current.Record.Enabled {
+		digest, digestErr := backupPolicyScheduleDigest(candidate.Current.Record)
+		state := coordination.CurrentBackupScheduleState
+		if digestErr != nil || state == nil || state.PolicyDigest != digest ||
+			state.Frequency != candidate.Current.Record.Frequency {
+			return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+		}
+	} else if coordination.CurrentBackupScheduleState != nil {
+		return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+	}
 	if (result.Values[5] == nil) != (result.Values[6] == nil) {
 		return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
 	}
@@ -361,6 +419,26 @@ func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.replaceBackupPolicyProtected(ctx, prepared.candidate, marker)
+}
+
+func sealBackupPolicyCandidateSchedule(
+	candidate *backupPolicyReplacementCandidate,
+	now time.Time,
+) error {
+	if candidate == nil || !validEnvironmentCoordinationInstant(now.UTC()) {
+		return errs.New(errs.KindValidationFailed, "backup policy schedule boundary is invalid")
+	}
+	candidate.Replacement.UpdatedAt = now.UTC()
+	next, nextRunAt, err := replaceEnvironmentCoordinationSchedule(
+		candidate.Coordination.Record, candidate.Replacement, now.UTC(),
+	)
+	if err != nil {
+		return err
+	}
+	candidate.NextCoordination = next
+	candidate.NextRunAt = nextRunAt
+	candidate.ScheduleSealed = true
+	return nil
 }
 
 func validateBackupPolicyReplacementInput(
@@ -666,6 +744,7 @@ func backupPolicyProjectionFromCandidate(candidate backupPolicyReplacementCandid
 		Encryption:    candidate.Replacement.Encryption,
 		ConnectorID:   candidate.Replacement.ConnectorID,
 		Sources:       make([]BackupPolicySourceProjection, len(candidate.Sources)),
+		NextRunAt:     backupPolicyNextRunAt(candidate.NextRunAt),
 	}
 	for index, source := range candidate.Sources {
 		projection.Sources[index] = BackupPolicySourceProjection{
@@ -685,6 +764,14 @@ func backupPolicyProjectionFromCandidate(candidate backupPolicyReplacementCandid
 		projection.KeyRotatedAt = candidate.InitialKey.Record.RotatedAt
 	}
 	return projection
+}
+
+func backupPolicyNextRunAt(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	value = value.UTC()
+	return &value
 }
 
 func cloneBackupPolicyEvidenceKeyValue(value *KeyValue) *KeyValue {

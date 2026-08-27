@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const clientTestAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -69,7 +70,7 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 				OperationId: assignment.OperationID,
-				Plan:        assignment.Plan, TimeoutSeconds: 60,
+				Plan:        assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)),
 			}},
 		},
 	)
@@ -220,7 +221,7 @@ func TestClientReconnectsSameInstanceAndExecutesRedispatchOnReplacementPool(t *t
 			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 				OperationId: assignment.OperationID,
-				Plan:        assignment.Plan, TimeoutSeconds: 60,
+				Plan:        assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)),
 			}},
 		},
 	)

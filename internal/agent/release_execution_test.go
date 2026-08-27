@@ -190,7 +190,7 @@ func runReleaseExecution(
 	taskCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	reservation := &taskReservation{assignment: Assignment{
 		AssignmentID: "assignment-" + taskID, TaskID: taskID, OperationID: "operation-" + taskID,
-		RetryOf: retryOf, Plan: plan, Timeout: 5 * time.Second,
+		RetryOf: retryOf, Plan: plan, Deadline: time.Now().Add(5 * time.Second),
 	}, ctx: taskCtx, cancel: cancel}
 	pool.executeRelease(context.Background(), reservation)
 	for len(pool.outputs) > 0 {

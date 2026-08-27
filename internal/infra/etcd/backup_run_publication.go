@@ -28,6 +28,8 @@ type ManualBackupRunInput struct {
 	PlanID        string
 	FixedRevision int64
 	CreatedAt     time.Time
+	Initiator     BackupRunInitiator
+	ScheduledAt   *time.Time
 }
 
 type BackupPostgresIdentity struct {
@@ -138,13 +140,27 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	if err != nil {
 		return PreparedManualBackupRun{}, err
 	}
+	initiator := input.Initiator
+	if initiator == "" {
+		initiator = BackupRunInitiatorOperator
+	}
+	if initiator != BackupRunInitiatorOperator && initiator != BackupRunInitiatorSchedule {
+		return PreparedManualBackupRun{}, errs.New(errs.KindValidationFailed, "backup run initiator is invalid")
+	}
+	if initiator == BackupRunInitiatorOperator && input.ScheduledAt != nil {
+		return PreparedManualBackupRun{}, errs.New(errs.KindValidationFailed, "operator backup run cannot have a schedule")
+	}
+	if initiator == BackupRunInitiatorSchedule &&
+		(input.ScheduledAt == nil || !validBackupRuntimeInstant(input.ScheduledAt.UTC()) || input.ScheduledAt.After(input.CreatedAt)) {
+		return PreparedManualBackupRun{}, errs.New(errs.KindValidationFailed, "scheduled backup run time is invalid")
+	}
 	run := BackupRunRecord{
 		TaskID:                        input.TaskID,
 		OperationID:                   input.OperationID,
 		EnvironmentID:                 input.EnvironmentID,
 		PolicyRevision:                anchor.Values[1].ModRevision,
 		RetentionKeep:                 int64(policy.Keep),
-		Initiator:                     BackupRunInitiatorOperator,
+		Initiator:                     initiator,
 		ConnectorID:                   policy.ConnectorID,
 		ConnectorRevision:             connectorRevision,
 		ConnectorEndpoint:             connector.Connector.Endpoint,
@@ -158,6 +174,10 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		State:                         BackupRunQueued,
 		CreatedAt:                     input.CreatedAt.UTC(),
 		UpdatedAt:                     input.CreatedAt.UTC(),
+	}
+	if input.ScheduledAt != nil {
+		scheduledAt := input.ScheduledAt.UTC()
+		run.ScheduledAt = &scheduledAt
 	}
 	if err := repository.manualBackupKey(ctx, &run, fixedRevision); err != nil {
 		return PreparedManualBackupRun{}, err
@@ -664,9 +684,9 @@ func (publication *PreparedBackupRunPublication) Publish(
 	publication.state.plan = backupRunPublicationPlan{}
 	publication.state.mu.Unlock()
 	defer plan.clear()
-	if task.Actor != TaskActorOperator {
+	if task.Actor != TaskActorOperator && task.Actor != TaskActorSystem {
 		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed, "backup run task actor must be operator",
+			errs.KindValidationFailed, "backup run task actor must be operator or system",
 		)
 	}
 	initiation, err := newTaskInitiation(task.Owner, task.Actor)
@@ -727,7 +747,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	}
 	task, taskErr := decodeTaskRecord(read.Values[1].Value)
 	if taskErr != nil || task.ID != marker.TaskID || task.Type != TaskBackup ||
-		task.Actor != TaskActorOperator || task.Executor != TaskExecutorAgent ||
+		(task.Actor != TaskActorOperator && task.Actor != TaskActorSystem) || task.Executor != TaskExecutorAgent ||
 		task.IdempotencyKey != marker.Locator.Key || task.idempotencyMarker == nil ||
 		*task.idempotencyMarker != marker.Locator || task.Owner.EnvironmentID != marker.Locator.ScopeID {
 		return corruptBackupRuntimeRecord()
@@ -749,6 +769,8 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	run, runErr := decodeBackupRunRecord(read.Values[0].Value)
 	lock, lockErr := decodeBackupOperationLockRecord(read.Values[2].Value)
 	if runErr != nil || lockErr != nil || validateBackupRunTaskBinding(task, run) != nil ||
+		(run.Initiator == BackupRunInitiatorOperator && task.Actor != TaskActorOperator) ||
+		(run.Initiator == BackupRunInitiatorSchedule && task.Actor != TaskActorSystem) ||
 		lock.TaskID != marker.TaskID || lock.OperationID != run.OperationID ||
 		lock.EnvironmentID != run.EnvironmentID || lock.Kind != BackupOperationBackup ||
 		!lock.CreatedAt.Equal(run.CreatedAt) || !lock.UpdatedAt.Equal(lock.CreatedAt) {
@@ -782,6 +804,10 @@ func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 		if value == nil || value.ModRevision != commitRevision {
 			return corruptBackupRuntimeRecord()
 		}
+	}
+	if run.Initiator == BackupRunInitiatorSchedule &&
+		!repository.exactScheduledBackupRunSubordinates(ctx, run, readRevision, commitRevision) {
+		return corruptBackupRuntimeRecord()
 	}
 	if run.State != BackupRunQueued || !run.UpdatedAt.Equal(run.CreatedAt) ||
 		task.NextEventSequence != 1 || !task.UpdatedAt.Equal(task.CreatedAt) ||

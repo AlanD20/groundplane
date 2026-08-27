@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"math"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
@@ -22,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const tokenSize = 32
@@ -708,7 +708,7 @@ func (s *Server) taskAssignmentMessage(
 	if err != nil || len(planHash) != 32 {
 		return nil, errs.New(errs.KindInternal, "durable Task has an invalid plan hash")
 	}
-	if task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxInt32 {
+	if task.TimeoutSeconds <= 0 {
 		return nil, errs.New(errs.KindInternal, "durable Task has an invalid Agent timeout")
 	}
 	resolved, err := s.plans.ResolveExecutionPlan(ctx, task)
@@ -733,11 +733,8 @@ func (s *Server) taskAssignmentMessage(
 	return &agentpb.TaskAssignment{
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
-		Plan: plan,
-		// Rationale: schema1's relative integer timeout cannot preserve the durable
-		// absolute deadline on redispatch. The final Agent Backup protocol replaces this wire shape;
-		// end-to-end Agent enforcement intentionally remains blocked on that replacement.
-		TimeoutSeconds: int32(task.TimeoutSeconds),
+		Plan:     plan,
+		Deadline: timestamppb.New(record.Deadline.UTC()),
 	}, nil
 }
 

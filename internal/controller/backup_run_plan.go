@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"bytes"
+	"context"
+	"encoding/hex"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -12,8 +15,40 @@ import (
 
 const (
 	backupRunTaskTimeoutSeconds int64 = 6 * 60 * 60
-	backupAgentSchema2Available       = false
 )
+
+type backupRunPlanReader interface {
+	GetBackupRun(context.Context, string) (etcd.Versioned[etcd.BackupRunRecord], error)
+}
+
+// EnableBackupPlans connects the task-plan resolver to the durable Backup run
+// records needed when the Agent claims or reconnects a task. The resolver
+// reconstructs the plan from the closed run snapshot, never from request input.
+func (resolver *TaskPlanResolver) EnableBackupPlans(reader backupRunPlanReader) error {
+	if resolver == nil || reader == nil {
+		return errs.New(errs.KindInternal, "backup plan resolver requires a run reader")
+	}
+	resolver.backupRuns = reader
+	return nil
+}
+
+func (resolver *TaskPlanResolver) resolveBackupRunPlan(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
+	if resolver == nil || resolver.backupRuns == nil {
+		return nil, errs.New(errs.KindInternal, "backup plan resolver is not configured")
+	}
+	run, err := resolver.backupRuns.GetBackupRun(ctx, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	return BuildBackupRunPlan(BackupRunPlanInput{
+		Task:   task,
+		Run:    run.Record,
+		Upload: BackupRunUploadAuthorities(run.Record),
+	})
+}
 
 // BackupRunPlanInput contains the already-persisted task and fixed plan
 // evidence. Source order and all source identities come from the run record;
@@ -127,25 +162,35 @@ func backupConnectorAddressing(pathStyle bool) string {
 	return "virtual-hosted"
 }
 
-// BuildBackupRunPlan builds and seals the immutable agent plan for a manual
-// backup task. It intentionally has no credential, database, or other
+// BuildBackupRunPlan builds and seals the immutable agent plan for a backup
+// task. It intentionally has no credential, database, or other
 // plaintext-bearing fields.
 func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error) {
-	// The accepted Backup authority requires Agent schema2 fields that are not
-	// generated yet. Emitting the older payload would create an unexecutable Task.
 	task := input.Task
 	run := input.Run
 	if task.Type != etcd.TaskBackup {
 		return nil, errs.New(errs.KindValidationFailed, "backup run task type must be backup")
 	}
-	if task.Executor != etcd.TaskExecutorAgent || task.Actor != etcd.TaskActorOperator {
+	if task.Executor != etcd.TaskExecutorAgent {
 		return nil, errs.New(
 			errs.KindValidationFailed,
-			"backup run task must be operator-initiated and agent-executed",
+			"backup run task must be agent-executed",
 		)
 	}
-	if task.Status != etcd.TaskStatusPending {
-		return nil, errs.New(errs.KindValidationFailed, "backup run task status must be pending")
+	switch run.Initiator {
+	case etcd.BackupRunInitiatorOperator:
+		if task.Actor != etcd.TaskActorOperator {
+			return nil, errs.New(errs.KindValidationFailed, "operator backup run task must be operator-acted")
+		}
+	case etcd.BackupRunInitiatorSchedule:
+		if task.Actor != etcd.TaskActorSystem {
+			return nil, errs.New(errs.KindValidationFailed, "scheduled backup run task must be system-acted")
+		}
+	default:
+		return nil, errs.New(errs.KindValidationFailed, "backup run initiator is invalid")
+	}
+	if task.Status != etcd.TaskStatusPending && task.Status != etcd.TaskStatusRunning {
+		return nil, errs.New(errs.KindValidationFailed, "backup run task status must be pending or running")
 	}
 	if task.Target == "" || task.Target != run.EnvironmentID {
 		return nil, errs.New(
@@ -160,7 +205,7 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 			"backup run task and run identities do not match",
 		)
 	}
-	if task.PlanHash != "" || task.RenderGeneration != 0 {
+	if task.RenderGeneration != 0 {
 		return nil, errs.New(
 			errs.KindValidationFailed,
 			"backup run task plan metadata is not unrendered",
@@ -175,10 +220,12 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 			"backup run task params and materializations must be empty",
 		)
 	}
-	if run.State != etcd.BackupRunQueued || run.Initiator != etcd.BackupRunInitiatorOperator {
+	if !((task.Status == etcd.TaskStatusPending && run.State == etcd.BackupRunQueued) ||
+		(task.Status == etcd.TaskStatusRunning && run.State == etcd.BackupRunRunning)) ||
+		(run.Initiator != etcd.BackupRunInitiatorOperator && run.Initiator != etcd.BackupRunInitiatorSchedule) {
 		return nil, errs.New(
 			errs.KindValidationFailed,
-			"backup run must be queued and manually initiated",
+			"backup run state must match its pending or running task and have a valid initiator",
 		)
 	}
 	if len(run.Sources) == 0 || len(run.Sources) > executionplan.MaximumBackupSources {
@@ -194,9 +241,6 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 		)
 	}
 	if err := validateBackupRunUploadAuthorities(run, input.Upload); err != nil {
-		return nil, err
-	}
-	if err := requireBackupAgentSchema2(); err != nil {
 		return nil, err
 	}
 	if ids.Validate(ids.KindTask, task.ID) != nil ||
@@ -229,14 +273,19 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 			},
 		})
 	}
-	return executionplan.Seal(plan)
-}
-
-func requireBackupAgentSchema2() error {
-	if !backupAgentSchema2Available {
-		return errs.New(errs.KindStateConflict, "backup Agent schema2 executor is unavailable")
+	sealed, err := executionplan.Seal(plan)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if task.PlanHash != "" {
+		durableHash, decodeErr := hex.DecodeString(task.PlanHash)
+		if decodeErr != nil || !bytes.Equal(durableHash, sealed.PlanHash) {
+			return nil, errs.New(
+				errs.KindStateConflict, "backup run sealed plan changed during reconnect",
+			)
+		}
+	}
+	return sealed, nil
 }
 
 func validateBackupRunUploadAuthorities(
@@ -280,7 +329,7 @@ func validateBackupRunUploadAuthorities(
 				len(authority.Volume.Consumers) != len(volume.Services) {
 				return errs.New(
 					errs.KindStateConflict,
-					"backup Volume schema2 authority is unavailable",
+					"backup Volume authority is invalid",
 				)
 			}
 			for _, service := range source.Snapshot.Volume.Services {

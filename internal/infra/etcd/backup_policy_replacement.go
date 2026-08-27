@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -39,6 +40,10 @@ type backupPolicyReplacementCandidate struct {
 	Environment         Versioned[EnvironmentRecord]
 	Project             Versioned[ProjectRecord]
 	MutationEpoch       Versioned[EnvironmentMutationEpochRecord]
+	Coordination        Versioned[EnvironmentCoordinationRecord]
+	NextCoordination    EnvironmentCoordinationRecord
+	NextRunAt           time.Time
+	ScheduleSealed      bool
 	Current             *Versioned[BackupPolicyRecord]
 	Replacement         BackupPolicyRecord
 	Sources             []backupPolicySourceEvidence
@@ -55,7 +60,7 @@ const (
 	backupPolicyComparePolicy backupPolicyReplacementCompareKind = iota + 1
 	backupPolicyCompareEnvironment
 	backupPolicyCompareProject
-	backupPolicyCompareMutationEpoch
+	backupPolicyCompareCoordination
 	backupPolicyCompareOperationLock
 	backupPolicyCompareHierarchyTombstone
 	backupPolicyCompareSource
@@ -189,16 +194,25 @@ func validatebackupPolicyReplacementCandidate(
 		return err
 	}
 	if !validReplacementRevision(candidate.Environment.Revision, candidate.Environment.ReadRevision) ||
+		!(validReplacementRevision(candidate.Coordination.Revision, candidate.Coordination.ReadRevision) ||
+			(candidate.Coordination.Revision == 0 && candidate.Current == nil &&
+				candidate.Coordination.ReadRevision > 0)) ||
+		!candidate.ScheduleSealed ||
 		!validReplacementRevision(candidate.Project.Revision, candidate.Project.ReadRevision) ||
 		!validReplacementRevision(candidate.MutationEpoch.Revision, candidate.MutationEpoch.ReadRevision) ||
 		candidate.Replacement.EnvironmentID != candidate.Environment.Record.ID ||
 		candidate.MutationEpoch.Record.EnvironmentID != candidate.Environment.Record.ID ||
+		candidate.Coordination.Record.EnvironmentID != candidate.Environment.Record.ID ||
+		candidate.NextCoordination.EnvironmentID != candidate.Environment.Record.ID ||
 		candidate.Environment.Record.ProjectID != candidate.Project.Record.ID ||
 		candidate.Project.Record.Kind != ProjectKindTenant || candidate.Project.Record.TenantID == "" {
 		return errs.New(errs.KindValidationFailed, "backup policy hierarchy is invalid")
 	}
 	if candidate.Environment.Record.ProvisioningState != EnvironmentProvisioningReady {
 		return errs.New(errs.KindStateConflict, "environment is not ready for backup policy replacement")
+	}
+	if !equalEnvironmentCoordinationRecord(candidate.NextCoordination, mustBackupPolicyScheduleTransition(candidate)) {
+		return errs.New(errs.KindValidationFailed, "backup policy schedule transition is invalid")
 	}
 	if candidate.Replacement.Enabled {
 		if err := validateBackupPolicyFrequency(candidate.Replacement.Frequency); err != nil {
@@ -283,6 +297,18 @@ func validatebackupPolicyReplacementCandidate(
 		return err
 	}
 	return validateBackupPolicyConnectorReferences(candidate)
+}
+
+func mustBackupPolicyScheduleTransition(
+	candidate backupPolicyReplacementCandidate,
+) EnvironmentCoordinationRecord {
+	next, _, err := replaceEnvironmentCoordinationSchedule(
+		candidate.Coordination.Record, candidate.Replacement, candidate.Replacement.UpdatedAt,
+	)
+	if err != nil {
+		return EnvironmentCoordinationRecord{}
+	}
+	return next
 }
 
 func validateBackupPolicyFrequency(frequency string) error {
@@ -476,7 +502,7 @@ func prepareBackupPolicyReplacement(
 	if err != nil {
 		return backupPolicyReplacementPlan{}, err
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(candidate.MutationEpoch.Record)
+	coordinationValue, err := encodeEnvironmentCoordinationRecord(candidate.NextCoordination)
 	if err != nil {
 		clear(policyValue)
 		return backupPolicyReplacementPlan{}, err
@@ -488,8 +514,8 @@ func prepareBackupPolicyReplacement(
 				Type: MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
 			},
 			{
-				Type: MutationPut, Key: environmentMutationEpochKey(candidate.Replacement.EnvironmentID),
-				Value: epochValue,
+				Type: MutationPut, Key: environmentCoordinationKey(candidate.Replacement.EnvironmentID),
+				Value: coordinationValue,
 			},
 		},
 		evidence: make([]backupPolicyReplacementCompare, 0, 18+len(candidate.Sources)*3),
@@ -517,10 +543,10 @@ func prepareBackupPolicyReplacement(
 		candidate.Project.Revision,
 	)
 	plan.compare(
-		backupPolicyCompareMutationEpoch,
+		backupPolicyCompareCoordination,
 		candidate.Replacement.EnvironmentID,
-		environmentMutationEpochKey(candidate.Replacement.EnvironmentID),
-		candidate.MutationEpoch.Revision,
+		environmentCoordinationKey(candidate.Replacement.EnvironmentID),
+		candidate.Coordination.Revision,
 	)
 	plan.compare(
 		backupPolicyCompareOperationLock,
@@ -741,15 +767,15 @@ func classifyBackupPolicyReplacementConflict(
 				return errs.New(errs.KindProjectNotFound, "project was not found")
 			}
 			return stateConflict("project", comparison.ID)
-		case backupPolicyCompareMutationEpoch:
+		case backupPolicyCompareCoordination:
 			if value == nil {
-				return errs.New(errs.KindInternal, "environment mutation epoch is missing")
+				return errs.New(errs.KindInternal, "environment coordination is missing")
 			}
-			epoch, err := decodeEnvironmentMutationEpochRecord(value.Value)
-			if err != nil || epoch.EnvironmentID != comparison.ID {
-				return errs.New(errs.KindInternal, "environment mutation epoch is corrupt")
+			coordination, err := decodeEnvironmentCoordinationRecord(value.Value)
+			if err != nil || coordination.EnvironmentID != comparison.ID {
+				return errs.New(errs.KindInternal, "environment coordination is corrupt")
 			}
-			return stateConflict("environment mutation epoch", comparison.ID)
+			return stateConflict("environment coordination", comparison.ID)
 		case backupPolicyCompareOperationLock:
 			return errs.New(errs.KindResourceInUse, "environment persistence operation is in progress")
 		case backupPolicyCompareSource:

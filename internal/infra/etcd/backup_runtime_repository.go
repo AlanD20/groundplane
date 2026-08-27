@@ -408,7 +408,13 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublication(
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
-	conditions := make([]Condition, 0, len(keys)+len(fence.conditions))
+	policyFence, err := repository.loadManualBackupPolicyFence(ctx, record, fixedRevision)
+	if err != nil {
+		clearBackupRuntimeMutations(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	conditions := make([]Condition, 0, len(keys)+len(fence.conditions)+len(policyFence))
 	for index, key := range keys {
 		if index == 1 {
 			continue
@@ -417,6 +423,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublication(
 	}
 	conditions = append(conditions, backupRunExternalConditions(record, snapshotConditions)...)
 	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, policyFence...)
 	mutations = append(mutations, Mutation{
 		Type: MutationPut, Key: environmentOperationLockKey(record.EnvironmentID), Value: lockValue,
 	})
@@ -427,6 +434,17 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublication(
 		return backupRunPublicationPlan{}, err
 	}
 	mutations = append(mutations, epoch)
+	if record.Initiator == BackupRunInitiatorSchedule {
+		scheduleConditions, scheduleMutations, scheduleErr := repository.prepareScheduledBackupPublication(
+			ctx, record, fixedRevision,
+		)
+		if scheduleErr != nil {
+			clearBackupRuntimeMutations(mutations)
+			return backupRunPublicationPlan{}, scheduleErr
+		}
+		conditions = append(conditions, scheduleConditions...)
+		mutations = append(mutations, scheduleMutations...)
+	}
 	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
 		clearBackupRuntimeMutations(mutations)
 		return backupRunPublicationPlan{}, err
@@ -2016,4 +2034,32 @@ func clearBackupRuntimeMutations(mutations []Mutation) {
 		clear(mutations[index].Value)
 		mutations[index].Value = nil
 	}
+}
+
+func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
+	ctx context.Context,
+	record BackupRunRecord,
+	fixedRevision int64,
+) ([]Condition, error) {
+	if record.Initiator != BackupRunInitiatorOperator {
+		return nil, nil
+	}
+	key := environmentCoordinationKey(record.EnvironmentID)
+	read, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{key}, Revision: fixedRevision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if read == nil || read.ReadRevision != fixedRevision || len(read.Values) != 1 || read.Values[0] == nil ||
+		read.Values[0].ModRevision <= 0 {
+		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination changed")
+	}
+	defer clearKeyValues(read.Values)
+	coordination, err := decodeEnvironmentCoordinationRecord(read.Values[0].Value)
+	if err != nil || coordination.EnvironmentID != record.EnvironmentID ||
+		coordination.CurrentBackupScheduleState == nil {
+		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination is invalid")
+	}
+	return []Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
 }

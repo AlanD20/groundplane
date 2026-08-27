@@ -673,12 +673,14 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	planHash := append([]byte(nil), plan.PlanHash...)
 	assignmentID := ids.NewAt(ids.KindAssignment, now, 26)
+	deadline := now.Add(37 * time.Second)
 	versioned := etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5}
 	tasks := &fakeTaskStore{
 		claims: []etcd.TaskAssignment{{
 			Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
 				AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
 				AgentID: testAgentID, AgentGeneration: 1,
+				AssignedAt: now, Deadline: deadline,
 			}},
 			Task: versioned,
 		}},
@@ -714,7 +716,8 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		assignment.Plan.PlanId != task.PlanID ||
 		assignment.Plan.RenderGeneration != uint64(task.RenderGeneration) ||
 		!bytes.Equal(assignment.Plan.PlanHash, planHash) ||
-		len(assignment.Plan.Steps) != 1 || assignment.Plan.Steps[0].StepId != task.Steps[0].ID {
+		len(assignment.Plan.Steps) != 1 || assignment.Plan.Steps[0].StepId != task.Steps[0].ID ||
+		assignment.Deadline == nil || !assignment.Deadline.AsTime().Equal(deadline) {
 		t.Fatalf("TaskAssignment = %#v", assignment)
 	}
 	if tasks.ackAgentID != testAgentID || tasks.ackGeneration != 1 ||
@@ -865,4 +868,46 @@ func testExecutionPlan(t *testing.T, task etcd.TaskRecord) *agentpb.ExecutionPla
 		t.Fatalf("seal test execution plan: %v", err)
 	}
 	return sealed
+}
+
+// Rationale: reconnect redispatches an existing durable assignment; it must
+// carry the original absolute deadline rather than restart Task timeout from
+// the new stream's delivery time.
+func TestTaskAssignmentMessagePreservesAbsoluteDeadlineOnRedispatch(t *testing.T) {
+	now := testTime()
+	startedAt := now
+	task := etcd.TaskRecord{
+		ID:               ids.NewAt(ids.KindTask, now, 8201),
+		OperationID:      ids.NewAt(ids.KindOperation, now, 8202),
+		PlanID:           ids.NewAt(ids.KindPlan, now, 8203),
+		RenderGeneration: 7, Type: etcd.TaskDeploy,
+		Target:         ids.NewAt(ids.KindService, now, 8204),
+		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 8205)}},
+		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
+	}
+	plan := testExecutionPlan(t, task)
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	deadline := now.Add(37 * time.Second)
+	claim := etcd.TaskAssignment{
+		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8206),
+			TaskID:       task.ID, Executor: etcd.TaskExecutorAgent,
+			AgentID: testAgentID, AgentGeneration: 1,
+			AssignedAt: now, Deadline: deadline,
+		}},
+	}
+	server := New(
+		authorizedAuthenticator(), NewRegistry(), &fakeTaskStore{},
+		&fakePlanResolver{plan: plan},
+	)
+	server.now = func() time.Time { return now.Add(29 * time.Second) }
+	message, err := server.taskAssignmentMessage(context.Background(), claim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message.Deadline == nil || !message.Deadline.AsTime().Equal(deadline) {
+		t.Fatalf("redispatched deadline = %#v, want %s", message.Deadline, deadline)
+	}
 }

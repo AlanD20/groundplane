@@ -1,4 +1,4 @@
-package app
+package controller
 
 import (
 	"context"
@@ -26,7 +26,7 @@ func backupPolicyTestService(
 	idempotency backupPolicyIdempotency,
 ) *backupPolicyService {
 	t.Helper()
-	service, err := newBackupPolicyService(repository, keys, idempotency)
+	service, err := NewBackupPolicyService(repository, keys, idempotency)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +62,13 @@ func (repository *backupPolicyTestRepository) SupplyBackupPolicyInitialKey(
 ) (etcd.PreparedBackupPolicyReplacement, error) {
 	repository.supplyCalls++
 	return prepared, nil
+}
+
+func (*backupPolicyTestRepository) FinalizeBackupPolicySchedule(
+	prepared etcd.PreparedBackupPolicyReplacement,
+	_ time.Time,
+) (etcd.PreparedBackupPolicyReplacement, etcd.BackupPolicyProjection, error) {
+	return prepared, etcd.BackupPolicyProjection{Sources: []etcd.BackupPolicySourceProjection{}}, nil
 }
 
 func (repository *backupPolicyTestRepository) ReplaceBackupPolicyProtected(

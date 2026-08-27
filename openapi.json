@@ -421,6 +421,13 @@
             "format": "date-time",
             "type": "string"
           },
+          "next_run_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/BackupSource"
@@ -430,7 +437,8 @@
         },
         "required": [
           "enabled",
-          "sources"
+          "sources",
+          "next_run_at"
         ],
         "type": "object"
       },
@@ -5870,6 +5878,66 @@
           }
         },
         "summary": "Replace the Backup Policy",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/environments/{id}/backup-run": {
+      "post": {
+        "operationId": "backup.run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Run all configured backup sources now",
         "tags": [
           "Backup"
         ]

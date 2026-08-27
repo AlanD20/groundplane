@@ -12,7 +12,7 @@ func TestBackupPolicyEffectiveDisabledJSONContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(value) != `{"enabled":false,"sources":[]}` {
+	if string(value) != `{"enabled":false,"sources":[],"next_run_at":null}` {
 		t.Fatalf("BackupPolicy JSON = %s", value)
 	}
 	if MaximumBackupPolicySources != 12 {
@@ -62,7 +62,7 @@ func TestBackupPolicyKeepJSONPreservesMaximumPublicValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal(maximum Keep) error = %v", err)
 	}
-	if string(encoded) != body {
+	if string(encoded) != `{"enabled":false,"keep":9007199254740991,"sources":[],"next_run_at":null}` {
 		t.Fatalf("BackupPolicy JSON = %s", encoded)
 	}
 }

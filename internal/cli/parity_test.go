@@ -462,14 +462,17 @@ func TestBackupRunPostsWithoutBodyOrSourceSelection(t *testing.T) {
 	server := exactRequestServer(
 		t,
 		http.MethodPost,
-		"/api/v1/environments/production/backup-run",
+		"/api/v1/environments/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/backup-run",
 		"",
 		http.StatusAccepted,
 		`{"task_id":"task_backup"}`,
 	)
 	defer server.Close()
 
-	output := executeNoun(t, command, server.URL, Scope{Environment: "production"}, "run")
+	output := executeNoun(t, command, server.URL, Scope{
+		Environment: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		AsID:        true,
+	}, "run")
 	want := "{\n  \"task_id\": \"task_backup\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)

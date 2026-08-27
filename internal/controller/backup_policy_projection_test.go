@@ -1,4 +1,4 @@
-package app
+package controller
 
 import (
 	"encoding/json"
@@ -50,7 +50,7 @@ func TestBackupPolicyAPIProjectsEffectiveDisabledAbsence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(encoded) != `{"enabled":false,"sources":[]}` {
+	if string(encoded) != `{"enabled":false,"sources":[],"next_run_at":null}` {
 		t.Fatalf("response = %s", encoded)
 	}
 }

@@ -477,6 +477,7 @@ type BackupPolicy struct {
 	KeyCreatedAt *time.Time              `json:"key_created_at,omitempty"`
 	KeyEra       *int64                  `json:"key_era,omitempty"`
 	KeyRotatedAt *time.Time              `json:"key_rotated_at,omitempty"`
+	NextRunAt    *time.Time              `json:"next_run_at"`
 	Sources      []BackupSource          `json:"sources"`
 }
 
@@ -1818,6 +1819,11 @@ type BackupPolicySetParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// BackupRunParams defines parameters for BackupRun.
+type BackupRunParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EnvironmentApplyMultipartBody defines parameters for EnvironmentApply.
 type EnvironmentApplyMultipartBody = openapi_types.File
 
@@ -2626,6 +2632,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
 	BackupPolicySet(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupRun Run all configured backup sources now
+	//
+	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+	BackupRun(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentApplyWithBody Apply an environment Blueprint
 	//
@@ -3796,6 +3807,21 @@ func (c *Client) BackupPolicySetWithBody(ctx context.Context, id string, params 
 // Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
 func (c *Client) BackupPolicySet(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackupPolicySetRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupRun Run all configured backup sources now
+//
+// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+func (c *Client) BackupRun(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupRunRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6901,6 +6927,53 @@ func NewBackupPolicySetRequestWithBody(server string, id string, params *BackupP
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewBackupRunRequest constructs an http.Request for the BackupRun method
+func NewBackupRunRequest(server string, id string, params *BackupRunParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/backup-run", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -10789,6 +10862,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /environments/{id}/backup-policy (the `BackupPolicySet` operationId).
 	BackupPolicySetWithResponse(ctx context.Context, id string, params *BackupPolicySetParams, body BackupPolicySetJSONRequestBody, reqEditors ...RequestEditorFn) (*BackupPolicySetResponse, error)
 
+	// BackupRunWithResponse Run all configured backup sources now
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+	BackupRunWithResponse(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*BackupRunResponse, error)
+
 	// EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -13029,6 +13109,61 @@ func (r BackupPolicySetResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackupPolicySetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackupRunResponse202Headers the declared response headers of an HTTP 202 response for BackupRun
+type BackupRunResponse202Headers struct {
+	ContentType *string
+}
+
+type BackupRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackupRunResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackupRunResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupRunResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupRunResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupRunResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16942,6 +17077,19 @@ func (c *ClientWithResponses) BackupPolicySetWithResponse(ctx context.Context, i
 	return ParseBackupPolicySetResponse(rsp)
 }
 
+// BackupRunWithResponse Run all configured backup sources now
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
+func (c *ClientWithResponses) BackupRunWithResponse(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*BackupRunResponse, error) {
+	rsp, err := c.BackupRun(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupRunResponse(rsp)
+}
+
 // EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -19308,6 +19456,52 @@ func ParseBackupPolicySetResponse(rsp *http.Response) (*BackupPolicySetResponse,
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackupRunResponse parses an HTTP response from a BackupRunWithResponse call
+func ParseBackupRunResponse(rsp *http.Response) (*BackupRunResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers BackupRunResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

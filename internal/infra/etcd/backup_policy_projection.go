@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backupschedule"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -32,6 +33,7 @@ type BackupPolicyProjection struct {
 	KeyEra        int
 	KeyCreatedAt  time.Time
 	KeyRotatedAt  time.Time
+	NextRunAt     *time.Time
 }
 
 func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
@@ -49,11 +51,12 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		backupPolicyKey(environmentID),
 		backupKeyKey(environmentID),
 		backupKeyValueKey(environmentID),
+		environmentCoordinationKey(environmentID),
 	}})
 	if err != nil {
 		return BackupPolicyProjection{}, err
 	}
-	if base == nil || len(base.Values) != 4 {
+	if base == nil || len(base.Values) != 5 {
 		return BackupPolicyProjection{}, errs.New(errs.KindInternal, "backup policy projection read is incomplete")
 	}
 	if base.Values[0] == nil {
@@ -71,6 +74,16 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 			return BackupPolicyProjection{}, corruptRecord()
 		}
 		policy = &decoded
+	}
+	coordination := EnvironmentCoordinationRecord{EnvironmentID: environmentID}
+	if base.Values[4] != nil {
+		decoded, decodeErr := decodeEnvironmentCoordinationRecord(base.Values[4].Value)
+		if decodeErr != nil || decoded.EnvironmentID != environmentID {
+			return BackupPolicyProjection{}, corruptEnvironmentCoordination()
+		}
+		coordination = decoded
+	} else if policy != nil {
+		return BackupPolicyProjection{}, corruptEnvironmentCoordination()
 	}
 	key, err := decodeBackupPolicyProjectionKey(environmentID, base.Values[2], base.Values[3])
 	if err != nil {
@@ -118,6 +131,9 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		)
 	}
 	if policy == nil {
+		if coordination.CurrentBackupScheduleState != nil {
+			return BackupPolicyProjection{}, corruptEnvironmentCoordination()
+		}
 		return BackupPolicyProjection{EnvironmentID: environmentID, Sources: []BackupPolicySourceProjection{}}, nil
 	}
 	if policy.Frequency != "" {
@@ -134,6 +150,29 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		Encryption:    policy.Encryption,
 		ConnectorID:   policy.ConnectorID,
 		Sources:       make([]BackupPolicySourceProjection, 0, len(policy.SourceIDs)),
+	}
+	if policy.Enabled {
+		state := coordination.CurrentBackupScheduleState
+		digest, digestErr := backupPolicyScheduleDigest(*policy)
+		if digestErr != nil || state == nil || state.PolicyDigest != digest ||
+			state.Frequency != policy.Frequency {
+			return BackupPolicyProjection{}, corruptEnvironmentCoordination()
+		}
+		boundary := state.LastEvaluatedAt
+		if coordination.ScheduleClockFloor.After(boundary) {
+			boundary = coordination.ScheduleClockFloor
+		}
+		schedule, parseErr := backupschedule.Parse(policy.Frequency)
+		if parseErr != nil {
+			return BackupPolicyProjection{}, corruptEnvironmentCoordination()
+		}
+		next, nextErr := schedule.NextOccurrence(boundary)
+		if nextErr != nil {
+			return BackupPolicyProjection{}, corruptEnvironmentCoordination()
+		}
+		projection.NextRunAt = &next
+	} else if coordination.CurrentBackupScheduleState != nil {
+		return BackupPolicyProjection{}, corruptEnvironmentCoordination()
 	}
 	seen := make(map[struct {
 		kind     core.BackupSourceKind
@@ -256,6 +295,10 @@ func decodeBackupPolicyProjectionKey(
 
 func cloneBackupPolicyProjection(projection BackupPolicyProjection) BackupPolicyProjection {
 	projection.Sources = append([]BackupPolicySourceProjection(nil), projection.Sources...)
+	if projection.NextRunAt != nil {
+		next := *projection.NextRunAt
+		projection.NextRunAt = &next
+	}
 	if projection.Sources == nil {
 		projection.Sources = []BackupPolicySourceProjection{}
 	}

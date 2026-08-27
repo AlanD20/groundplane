@@ -25,7 +25,7 @@ type Assignment struct {
 	OperationID  string
 	RetryOf      string
 	Plan         *agentpb.ExecutionPlan
-	Timeout      time.Duration
+	Deadline     time.Time
 }
 
 type TaskTerminal uint8
@@ -533,7 +533,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 		p.materializations.Release(owned.TaskID)
 		return err
 	}
-	taskCtx, cancel := context.WithTimeout(ctx, owned.Timeout)
+	taskCtx, cancel := context.WithDeadline(ctx, owned.Deadline)
 	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel}
 	p.reservations[owned.TaskID] = reservation
 	select {
@@ -555,8 +555,8 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if err := ids.Validate(ids.KindTask, assignment.TaskID); err != nil {
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
-	if assignment.Timeout <= 0 {
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task timeout")
+	if assignment.Deadline.IsZero() {
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task deadline")
 	}
 	if err := ids.Validate(ids.KindOperation, assignment.OperationID); err != nil {
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid operation id")
@@ -577,15 +577,10 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
 		return Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
-	for _, step := range plan.Steps {
-		if time.Duration(step.TimeoutSeconds)*time.Second > assignment.Timeout {
-			return Assignment{}, errs.New(errs.KindInternal, "agent: step timeout exceeds its task timeout")
-		}
-	}
 	return Assignment{
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
-		RetryOf: assignment.RetryOf, Plan: plan, Timeout: assignment.Timeout,
+		RetryOf: assignment.RetryOf, Plan: plan, Deadline: assignment.Deadline,
 	}, nil
 }
 
