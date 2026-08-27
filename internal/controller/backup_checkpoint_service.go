@@ -43,9 +43,11 @@ func (service *BackupCheckpointService) CheckpointBackup(
 	if ctx == nil || service == nil || service.repository == nil || service.now == nil {
 		return nil, errs.New(errs.KindInternal, "Backup checkpoint service is not configured")
 	}
-	if err := executionplan.ValidateBackupCheckpointRequest(request, request.GetSequence()); err != nil {
+	validated, err := executionplan.ValidateBackupCheckpointRequest(request, request.GetSequence())
+	if err != nil {
 		return nil, err
 	}
+	request = validated
 	payload, err := backupCheckpointPayload(request)
 	if err != nil {
 		return nil, err
@@ -79,7 +81,7 @@ func (service *BackupCheckpointService) CheckpointBackup(
 		AgentID:         agentID,
 		AgentGeneration: agentGeneration,
 		StepID:          request.GetStepId(),
-		Sequence:        request.GetSequence(),
+		Sequence:        uint64(request.GetSequence()),
 		Payload:         payload,
 	}, current, next)
 	if err != nil {
@@ -94,21 +96,26 @@ func (service *BackupCheckpointService) CheckpointBackup(
 }
 
 func backupCheckpointPayload(request *agentpb.BackupCheckpointRequest) (etcd.BackupCheckpointPayload, error) {
-	payload := request.GetPayload()
-	result := etcd.BackupCheckpointPayload{
-		PointID:         payload.GetPointId(),
-		StoredSizeBytes: payload.GetStoredSizeBytes(),
-		StoredSHA256:    hex.EncodeToString(payload.GetStoredSha256()),
-	}
-	switch request.GetKind() {
-	case agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED:
+	result := etcd.BackupCheckpointPayload{}
+	switch payload := request.GetPayload().(type) {
+	case *agentpb.BackupCheckpointRequest_ArtifactPrepared:
 		result.Kind = etcd.BackupCheckpointArtifactPrepared
-	case agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED:
+		result.PointID = payload.ArtifactPrepared.GetPointId()
+		result.StoredSizeBytes = payload.ArtifactPrepared.GetStoredSizeBytes()
+		result.StoredSHA256 = hex.EncodeToString(payload.ArtifactPrepared.GetStoredSha256())
+	case *agentpb.BackupCheckpointRequest_UploadCompleted:
 		result.Kind = etcd.BackupCheckpointUploadCompleted
-	case agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_VERIFIED:
+		result.PointID = payload.UploadCompleted.GetPointId()
+		result.StoredSizeBytes = payload.UploadCompleted.GetStoredSizeBytes()
+		result.StoredSHA256 = hex.EncodeToString(payload.UploadCompleted.GetStoredSha256())
+	case *agentpb.BackupCheckpointRequest_UploadVerified:
 		result.Kind = etcd.BackupCheckpointUploadVerified
-	case agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_SOURCE_CLEANUP_COMPLETED:
+		result.PointID = payload.UploadVerified.GetPointId()
+		result.StoredSizeBytes = payload.UploadVerified.GetStoredSizeBytes()
+		result.StoredSHA256 = hex.EncodeToString(payload.UploadVerified.GetStoredSha256())
+	case *agentpb.BackupCheckpointRequest_SourceCleanupCompleted:
 		result.Kind = etcd.BackupCheckpointSourceCleanupCompleted
+		result.PointID = payload.SourceCleanupCompleted.GetPointId()
 	default:
 		return etcd.BackupCheckpointPayload{}, errs.New(
 			errs.KindNotImplemented,

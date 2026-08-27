@@ -14,7 +14,7 @@ type backupCheckpointKey struct {
 	taskID       string
 	assignmentID string
 	stepID       string
-	sequence     uint64
+	sequence     uint32
 }
 
 type backupCheckpointWaiter struct {
@@ -69,7 +69,7 @@ func (inbox *backupCheckpointInbox) Accept(ack *agentpb.BackupCheckpointAck) err
 		inbox.mu.Unlock()
 		return errs.New(errs.KindStateConflict, "agent: Backup checkpoint acknowledgement is unexpected")
 	}
-	if err := executionplan.ValidateBackupCheckpointAck(ack, waiter.request); err != nil {
+	if _, err := executionplan.ValidateBackupCheckpointAck(ack, waiter.request); err != nil {
 		inbox.mu.Unlock()
 		return err
 	}
@@ -109,16 +109,17 @@ func (p *WorkerPool) CheckpointBackup(
 	if ctx == nil || p == nil || p.backupCheckpoints == nil {
 		return errs.New(errs.KindInternal, "agent: Backup checkpoint transport is not configured")
 	}
-	if err := executionplan.ValidateBackupCheckpointRequest(request, request.GetSequence()); err != nil {
+	validated, err := executionplan.ValidateBackupCheckpointRequest(request, request.GetSequence())
+	if err != nil {
 		return err
 	}
-	acknowledged, abandon, err := p.backupCheckpoints.Register(request)
+	acknowledged, abandon, err := p.backupCheckpoints.Register(validated)
 	if err != nil {
 		return err
 	}
 	select {
 	case p.outputs <- WorkerOutput{
-		BackupCheckpoint: proto.Clone(request).(*agentpb.BackupCheckpointRequest),
+		BackupCheckpoint: proto.Clone(validated).(*agentpb.BackupCheckpointRequest),
 	}:
 	case <-ctx.Done():
 		abandon()

@@ -1048,7 +1048,7 @@ func validateBackupSourceCapture(environmentID string, capture *agentpb.BackupSo
 		if source.Volume == nil || capture.SourceFormat !=
 			agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1 ||
 			validateID(ids.KindVolume, capture.TargetId) != nil ||
-			validateID(ids.KindArtifact, source.Volume.ArtifactId) != nil ||
+			validateID(ids.KindConfig, source.Volume.ArtifactId) != nil ||
 			len(source.Volume.ArtifactSha256) != sha256.Size || source.Volume.ArtifactRevision == 0 ||
 			source.Volume.ProjectionRoot == 0 || source.Volume.RenderGeneration == 0 ||
 			!validManagedVolumeComposeKey(source.Volume.ComposeVolumeKey) ||
