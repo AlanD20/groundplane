@@ -136,7 +136,16 @@ func newVolumeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runPatch(cmd, "/api/v1/volumes/"+id, changedStringFields(cmd, map[string]string{"slug": newSlug}))
+			edited, err := fromContext(cmd).Client.EditVolume(
+				cmd.Context(), id, apiTypes.VolumeEdit{Slug: newSlug},
+			)
+			if err != nil {
+				return err
+			}
+			fields := volumeFields(edited.Volume)
+			fields["task_id"] = edited.TaskID
+			headers, values := fieldsOfVia(fields)
+			return fromContext(cmd).Out.RenderOne(headers, values, edited)
 		},
 	}
 	edit.Flags().StringVar(&newSlug, "slug", "", "new environment-scoped slug")

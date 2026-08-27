@@ -1,11 +1,15 @@
 package apiclient
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
-	"strconv"
 
+	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) ListVolumes(
@@ -14,38 +18,79 @@ func (c *Client) ListVolumes(
 	limit int,
 	cursor string,
 ) (apiTypes.Page[apiTypes.Volume], error) {
-	query := map[string]string{"environment": environmentID}
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Page[apiTypes.Volume]{}, err
+	}
+	params := &generated.VolumeListParams{Environment: environmentID}
 	if limit != 0 {
-		query["limit"] = strconv.Itoa(limit)
+		value := int64(limit)
+		params.Limit = &value
 	}
 	if cursor != "" {
-		query["cursor"] = cursor
+		params.Cursor = &cursor
+	}
+	response, err := client.VolumeListWithResponse(ctx, params)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Volume]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/volumes", err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet, "/api/v1/volumes", response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.Page[apiTypes.Volume]{}, err
 	}
 	var page apiTypes.Page[apiTypes.Volume]
-	request := c.NewRequest(http.MethodGet, "/api/v1/volumes", query, nil, http.StatusOK)
-	if err := c.Do(ctx, request, &page); err != nil {
+	if err := decodeSingleJSON(http.MethodGet, "/api/v1/volumes", bytes.NewReader(response.Body), &page); err != nil {
 		return apiTypes.Page[apiTypes.Volume]{}, err
 	}
 	return page, nil
 }
 
 func (c *Client) GetVolume(ctx context.Context, id string) (apiTypes.Volume, error) {
-	var volume apiTypes.Volume
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Volume{}, err
+	}
 	path := "/api/v1/volumes/" + id
-	request := c.NewRequest(http.MethodGet, path, nil, nil, http.StatusOK)
-	if err := c.Do(ctx, request, &volume); err != nil {
+	response, err := client.VolumeShowWithResponse(ctx, id)
+	if err != nil {
+		return apiTypes.Volume{}, generatedCallError(ctx, http.MethodGet, path, err)
+	}
+	if err := generatedResponseError(http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK); err != nil {
+		return apiTypes.Volume{}, err
+	}
+	var volume apiTypes.Volume
+	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &volume); err != nil {
 		return apiTypes.Volume{}, err
 	}
 	return volume, nil
 }
 
 func (c *Client) CreateVolume(ctx context.Context, input apiTypes.VolumeCreate) (apiTypes.VolumeMutationResponse, error) {
-	var response apiTypes.VolumeMutationResponse
-	request := c.NewRequest(http.MethodPost, "/api/v1/volumes", nil, input, http.StatusCreated)
-	if err := c.Do(ctx, request, &response); err != nil {
+	client, err := c.generatedHumanClient()
+	if err != nil {
 		return apiTypes.VolumeMutationResponse{}, err
 	}
-	return response, nil
+	body, err := generatedVolumeBody[generated.VolumeCreateJSONRequestBody](input)
+	if err != nil {
+		return apiTypes.VolumeMutationResponse{}, err
+	}
+	response, err := client.VolumeCreateWithResponse(
+		ctx, &generated.VolumeCreateParams{IdempotencyKey: ids.NewULID()}, body,
+	)
+	if err != nil {
+		return apiTypes.VolumeMutationResponse{}, generatedCallError(ctx, http.MethodPost, "/api/v1/volumes", err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, "/api/v1/volumes", response.HTTPResponse, response.Body, http.StatusCreated,
+	); err != nil {
+		return apiTypes.VolumeMutationResponse{}, err
+	}
+	var result apiTypes.VolumeMutationResponse
+	if err := decodeSingleJSON(http.MethodPost, "/api/v1/volumes", bytes.NewReader(response.Body), &result); err != nil {
+		return apiTypes.VolumeMutationResponse{}, err
+	}
+	return result, nil
 }
 
 func (c *Client) EditVolume(
@@ -53,13 +98,29 @@ func (c *Client) EditVolume(
 	id string,
 	input apiTypes.VolumeEdit,
 ) (apiTypes.VolumeMutationResponse, error) {
-	var response apiTypes.VolumeMutationResponse
-	path := "/api/v1/volumes/" + id
-	request := c.NewRequest(http.MethodPatch, path, nil, input, http.StatusOK)
-	if err := c.Do(ctx, request, &response); err != nil {
+	client, err := c.generatedHumanClient()
+	if err != nil {
 		return apiTypes.VolumeMutationResponse{}, err
 	}
-	return response, nil
+	body, err := generatedVolumeBody[generated.VolumeEditJSONRequestBody](input)
+	if err != nil {
+		return apiTypes.VolumeMutationResponse{}, err
+	}
+	path := "/api/v1/volumes/" + id
+	response, err := client.VolumeEditWithResponse(
+		ctx, id, &generated.VolumeEditParams{IdempotencyKey: ids.NewULID()}, body,
+	)
+	if err != nil {
+		return apiTypes.VolumeMutationResponse{}, generatedCallError(ctx, http.MethodPatch, path, err)
+	}
+	if err := generatedResponseError(http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusOK); err != nil {
+		return apiTypes.VolumeMutationResponse{}, err
+	}
+	var result apiTypes.VolumeMutationResponse
+	if err := decodeSingleJSON(http.MethodPatch, path, bytes.NewReader(response.Body), &result); err != nil {
+		return apiTypes.VolumeMutationResponse{}, err
+	}
+	return result, nil
 }
 
 func (c *Client) GetVolumeDeletionImpact(
@@ -68,14 +129,28 @@ func (c *Client) GetVolumeDeletionImpact(
 	cursor string,
 	limit int,
 ) (apiTypes.VolumeDeletionImpactPage, error) {
-	query := map[string]string{"limit": strconv.Itoa(limit)}
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.VolumeDeletionImpactPage{}, err
+	}
+	params := &generated.VolumeRemovalImpactParams{}
 	if cursor != "" {
-		query["cursor"] = cursor
+		params.Cursor = &cursor
+	}
+	if limit != 0 {
+		value := int64(limit)
+		params.Limit = &value
+	}
+	path := "/api/v1/volumes/" + id + "/deletion-impact"
+	response, err := client.VolumeRemovalImpactWithResponse(ctx, id, params)
+	if err != nil {
+		return apiTypes.VolumeDeletionImpactPage{}, generatedCallError(ctx, http.MethodGet, path, err)
+	}
+	if err := generatedResponseError(http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK); err != nil {
+		return apiTypes.VolumeDeletionImpactPage{}, err
 	}
 	var page apiTypes.VolumeDeletionImpactPage
-	path := "/api/v1/volumes/" + id + "/deletion-impact"
-	request := c.NewRequest(http.MethodGet, path, query, nil, http.StatusOK)
-	if err := c.Do(ctx, request, &page); err != nil {
+	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &page); err != nil {
 		return apiTypes.VolumeDeletionImpactPage{}, err
 	}
 	return page, nil
@@ -87,12 +162,36 @@ func (c *Client) RemoveVolume(
 	impactToken string,
 	confirmKey string,
 ) (apiTypes.TaskAccepted, error) {
-	query := map[string]string{"impact_token": impactToken, "confirm_key": confirmKey}
-	var response apiTypes.TaskAccepted
-	path := "/api/v1/volumes/" + id
-	request := c.NewRequest(http.MethodDelete, path, query, nil, http.StatusAccepted)
-	if err := c.Do(ctx, request, &response); err != nil {
+	client, err := c.generatedHumanClient()
+	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return response, nil
+	path := "/api/v1/volumes/" + id
+	response, err := client.VolumeRemoveWithResponse(ctx, id, &generated.VolumeRemoveParams{
+		ImpactToken: impactToken, ConfirmKey: confirmKey, IdempotencyKey: ids.NewULID(),
+	})
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	var result apiTypes.TaskAccepted
+	if err := decodeSingleJSON(http.MethodDelete, path, bytes.NewReader(response.Body), &result); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return result, nil
+}
+
+func generatedVolumeBody[Body any](input any) (Body, error) {
+	var body Body
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return body, errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(encoded)
+	if err := json.Unmarshal(encoded, &body); err != nil {
+		return body, errs.Wrap(errs.KindInternal, err)
+	}
+	return body, nil
 }
