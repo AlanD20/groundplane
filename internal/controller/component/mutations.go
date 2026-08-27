@@ -118,13 +118,13 @@ func (service *MutationService) mutateComponent(
 	}
 	if component.Record.Desired.Owner != core.ComponentOwnerEnvironment {
 		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindComponentActionUnsupported,
+			errs.KindStateConflict,
 			"Platform Component actions require their dedicated lifecycle API",
 		)
 	}
 	if component.Record.Desired.Kind != core.ComponentKindIngressCaddy &&
 		component.Record.Desired.Kind != core.ComponentKindEdgeCloudflare {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindComponentActionUnsupported, "Component action is unsupported for this kind")
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Component action is unsupported for this kind")
 	}
 	environmentID := component.Record.Desired.OwnerID
 	head, found, err := service.blueprints.GetEnvironmentBlueprintHead(ctx, environmentID)

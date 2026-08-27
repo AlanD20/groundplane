@@ -13,6 +13,7 @@ const (
 	TaskResourceService                  = "service"
 	TaskResourceReleaseGroup             = "release_group"
 	TaskResourceVolume                   = "volume"
+	TaskResourceComponent                = "component"
 	TaskResourceHierarchyDeletion        = "hierarchy_deletion"
 	TaskHierarchyDeletionOperationParam  = "hierarchy_deletion_operation_id"
 	TaskHierarchyDeletionTargetKindParam = "hierarchy_deletion_target_kind"
