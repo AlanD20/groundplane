@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"strconv"
-
 	"github.com/spf13/cobra"
+
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 func newReleaseCmd() *cobra.Command {
@@ -18,20 +18,25 @@ func newReleaseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			query := map[string]string{
-				"environment_id": environmentID, "limit": strconv.Itoa(limit),
-			}
+			serviceID := ""
 			if serviceName != "" {
-				serviceID, err := resolveServiceTarget(cmd, serviceName)
+				serviceID, err = resolveServiceTarget(cmd, serviceName)
 				if err != nil {
 					return err
 				}
-				query["service_id"] = serviceID
 			}
-			if cursor != "" {
-				query["cursor"] = cursor
+			page, err := fromContext(cmd).Client.ListReleases(
+				cmd.Context(), environmentID, serviceID, limit, cursor,
+			)
+			if err != nil {
+				return err
 			}
-			return runList(cmd, "/api/v1/releases", query)
+			items := make([]map[string]any, len(page.Items))
+			for index, release := range page.Items {
+				items[index] = releaseFields(release)
+			}
+			headers, rows := tabulateVia(fromContext(cmd), items)
+			return fromContext(cmd).Out.Render(headers, rows, page)
 		},
 	}
 	list.Flags().StringVar(&serviceName, "service", "", "filter by Service name; --id accepts a stable id")
@@ -41,8 +46,28 @@ func newReleaseCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use: "show <release-id>", Short: "Show one immutable release and its attempts", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runShow(cmd, "/api/v1/releases/"+target(fromContext(cmd), args[0]))
+			release, err := fromContext(cmd).Client.GetRelease(
+				cmd.Context(), target(fromContext(cmd), args[0]),
+			)
+			if err != nil {
+				return err
+			}
+			fields, values := fieldsOfVia(releaseFields(release.ReleaseSummary))
+			return fromContext(cmd).Out.RenderOne(fields, values, release)
 		},
 	})
 	return cmd
+}
+
+func releaseFields(release apiTypes.ReleaseSummary) map[string]any {
+	return map[string]any{
+		"id":          release.ID,
+		"service_id":  release.ServiceID,
+		"image":       release.Image,
+		"tag":         release.Tag,
+		"state":       release.State,
+		"serving":     release.Serving,
+		"created_at":  release.CreatedAt,
+		"completed_at": release.CompletedAt,
+	}
 }
