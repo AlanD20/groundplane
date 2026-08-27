@@ -444,6 +444,11 @@ type ComponentConfig struct {
 	Config map[string]any `json:"config,omitempty"`
 }
 
+type ComponentConfigMutationResult struct {
+	Resource        ComponentConfig `json:"resource"`
+	ReconcileTaskID *string         `json:"reconcile_task_id"`
+}
+
 // MaximumBackupPolicySources is the public replacement bound. It mirrors the
 // persistence transaction budget and is intentionally available to clients.
 const (

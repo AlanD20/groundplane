@@ -42,6 +42,7 @@ type Server struct {
 	projectChanges        ProjectChanger
 	backingServices       BackingServiceReader
 	components            ComponentReader
+	componentMutations    ComponentMutator
 	environments          *environmentcapability.Reader
 	services              ServiceReader
 	serviceMutations      ServiceMutator
@@ -97,6 +98,7 @@ type Options struct {
 	ProjectChanges        ProjectChanger
 	BackingServices       BackingServiceReader
 	Components            ComponentReader
+	ComponentMutations    ComponentMutator
 	Environments          *environmentcapability.Reader
 	Services              ServiceReader
 	ServiceMutations      ServiceMutator
@@ -165,6 +167,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		projectChanges:        options.ProjectChanges,
 		backingServices:       options.BackingServices,
 		components:            options.Components,
+		componentMutations:    options.ComponentMutations,
 		environments:          options.Environments,
 		services:              options.Services,
 		serviceMutations:      options.ServiceMutations,
@@ -281,10 +284,6 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
 	// component (?environment= or ?platform=true) — one resource across both owners
-	s.jsonRoute("POST /api/v1/components/{id}/enable", s.acceptTask)
-	s.jsonRoute("POST /api/v1/components/{id}/disable", s.acceptTask)
-	s.jsonRoute("POST /api/v1/components/{id}/update", s.acceptTask)
-	s.jsonRoute("PUT /api/v1/components/{id}/config", s.notImplemented)
 
 	// backing-service
 	s.jsonRoute("POST /api/v1/backing-services", s.notImplemented)

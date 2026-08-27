@@ -2,8 +2,13 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
+	"reflect"
+	"strconv"
 
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -16,6 +21,13 @@ type ComponentReader interface {
 	GetComponent(context.Context, string) (apiTypes.Component, error)
 	GetComponentConfig(context.Context, string) (apiTypes.ComponentConfig, error)
 	GetRouter(context.Context, string) (apiTypes.Router, error)
+}
+
+type ComponentMutator interface {
+	EnableComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DisableComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	UpdateComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	SetComponentConfig(context.Context, string, apiTypes.ComponentConfig, string) (etcd.IdempotencyResponse, error)
 }
 
 type componentListInput struct {
@@ -36,6 +48,17 @@ type componentIDInput struct {
 	ID string `path:"id" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
 }
 
+type componentActionInput struct {
+	ID             string `path:"id" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+}
+
+type componentConfigInput struct {
+	ID             string `path:"id" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           apiTypes.ComponentConfig
+}
+
 type componentRouterInput struct {
 	ID string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
 }
@@ -43,6 +66,12 @@ type componentRouterInput struct {
 type componentRouterOutput struct{ Body apiTypes.Router }
 
 func (s *Server) registerComponents() {
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
+	)
+	configResultSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.ComponentConfigMutationResult](), true, "ComponentConfigMutationResult",
+	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "component.list", Method: http.MethodGet, Path: "/components",
 		Summary: "List Components", Tags: []string{"Component"},
@@ -57,9 +86,34 @@ func (s *Server) registerComponents() {
 		Summary: "Show Component config", Tags: []string{"Component"},
 	}, s.showComponentConfig)
 	huma.Register(s.API, huma.Operation{
+		OperationID: "component-config.set", Method: http.MethodPut, Path: "/components/{id}/config",
+		Summary: "Replace Component config", Tags: []string{"Component"}, DefaultStatus: http.StatusOK,
+		Responses: map[string]*huma.Response{strconv.Itoa(http.StatusOK): {
+			Description: http.StatusText(http.StatusOK),
+			Content:     map[string]*huma.MediaType{"application/json": {Schema: configResultSchema}},
+		}},
+	}, s.setComponentConfig)
+	for _, action := range []struct {
+		id      string
+		path    string
+		handler func(context.Context, *componentActionInput) (*componentMutationOutput, error)
+	}{
+		{id: "component.enable", path: "/components/{id}/enable", handler: s.enableComponent},
+		{id: "component.disable", path: "/components/{id}/disable", handler: s.disableComponent},
+		{id: "component.update", path: "/components/{id}/update", handler: s.updateComponent},
+	} {
+		huma.Register(s.API, huma.Operation{
+			OperationID: action.id, Method: http.MethodPost, Path: action.path,
+			Summary: action.id, Tags: []string{"Component"}, DefaultStatus: http.StatusAccepted,
+			Middlewares: huma.Middlewares{s.rejectComponentMutationBody, s.rejectComponentQuery},
+			Responses:   attachMutationResponses(taskAcceptedSchema),
+		}, action.handler)
+	}
+	huma.Register(s.API, huma.Operation{
 		OperationID: "router.show", Method: http.MethodGet, Path: "/environments/{id}/router",
 		Summary: "Show Environment router", Tags: []string{"Component"},
 	}, s.showComponentRouter)
+	s.setRoutePolicy("PUT /api/v1/components/{id}/config", routePolicy{body: jsonBody})
 }
 
 func (s *Server) listComponents(ctx context.Context, request *componentListInput) (*componentListOutput, error) {
@@ -108,6 +162,63 @@ func (s *Server) showComponentConfig(ctx context.Context, request *componentIDIn
 	return &componentConfigOutput{Body: config}, nil
 }
 
+func (s *Server) setComponentConfig(ctx context.Context, request *componentConfigInput) (*componentMutationOutput, error) {
+	if s.componentMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Component mutation service is not configured")
+	}
+	response, err := s.componentMutations.SetComponentConfig(ctx, request.ID, request.Body, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return componentMutationResponse(response), nil
+}
+
+func (s *Server) enableComponent(ctx context.Context, request *componentActionInput) (*componentMutationOutput, error) {
+	if s.componentMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Component mutation service is not configured")
+	}
+	response, err := s.componentMutations.EnableComponent(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return componentMutationResponse(response), nil
+}
+
+func (s *Server) disableComponent(ctx context.Context, request *componentActionInput) (*componentMutationOutput, error) {
+	if s.componentMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Component mutation service is not configured")
+	}
+	response, err := s.componentMutations.DisableComponent(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return componentMutationResponse(response), nil
+}
+
+func (s *Server) updateComponent(ctx context.Context, request *componentActionInput) (*componentMutationOutput, error) {
+	if s.componentMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Component mutation service is not configured")
+	}
+	response, err := s.componentMutations.UpdateComponent(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return componentMutationResponse(response), nil
+}
+
+type componentMutationOutput struct {
+	Status      int
+	ContentType string `header:"Content-Type"`
+	Body        func(huma.Context)
+}
+
+func componentMutationResponse(response etcd.IdempotencyResponse) *componentMutationOutput {
+	return &componentMutationOutput{Status: response.Status, ContentType: response.ContentKind, Body: func(ctx huma.Context) {
+		ctx.SetStatus(response.Status)
+		_, _ = ctx.BodyWriter().Write(response.Body)
+	}}
+}
+
 func (s *Server) showComponentRouter(ctx context.Context, request *componentRouterInput) (*componentRouterOutput, error) {
 	if s.components == nil {
 		return nil, errs.New(errs.KindInternal, "Component reader is not configured")
@@ -130,6 +241,25 @@ func (s *Server) validateComponentListQuery(ctx huma.Context, next func(huma.Con
 			s.writeComponentRequestProblem(ctx, "Component list query contains duplicate values")
 			return
 		}
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectComponentQuery(ctx huma.Context, next func(huma.Context)) {
+	requestURL := ctx.URL()
+	if len(requestURL.Query()) != 0 {
+		s.writeComponentRequestProblem(ctx, "Component request query is invalid")
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) rejectComponentMutationBody(ctx huma.Context, next func(huma.Context)) {
+	var probe [1]byte
+	count, err := ctx.BodyReader().Read(probe[:])
+	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		s.writeComponentRequestProblem(ctx, "Component mutation body is not allowed")
+		return
 	}
 	next(ctx)
 }

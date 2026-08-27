@@ -39,6 +39,7 @@ type environmentBlueprintRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentBlueprintRevision(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
@@ -216,6 +217,29 @@ func (service *environmentBlueprintService) ApplyBlueprint(
 	bundle core.BlueprintBundle,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey)
+}
+
+func (service *environmentBlueprintService) ApplyComponentBlueprint(
+	ctx context.Context,
+	environmentID string,
+	componentID string,
+	bundle core.BlueprintBundle,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	if ids.Validate(ids.KindComponent, componentID) != nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Component id is invalid")
+	}
+	return service.applyBlueprint(ctx, environmentID, componentID, bundle, idempotencyKey)
+}
+
+func (service *environmentBlueprintService) applyBlueprint(
+	ctx context.Context,
+	environmentID string,
+	taskTarget string,
+	bundle core.BlueprintBundle,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint context is required")
 	}
@@ -226,7 +250,7 @@ func (service *environmentBlueprintService) ApplyBlueprint(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
 	}
 	for attempt := 0; attempt < maximumEnvironmentBlueprintAttempts; attempt++ {
-		response, err := service.applyBlueprintOnce(ctx, environmentID, bundle, idempotencyKey)
+		response, err := service.applyBlueprintOnce(ctx, environmentID, taskTarget, bundle, idempotencyKey)
 		if err == nil {
 			return response, nil
 		}
@@ -241,6 +265,7 @@ func (service *environmentBlueprintService) ApplyBlueprint(
 func (service *environmentBlueprintService) applyBlueprintOnce(
 	ctx context.Context,
 	environmentID string,
+	taskTarget string,
 	bundle core.BlueprintBundle,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
@@ -546,9 +571,13 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		}},
 	})
 	stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: applyStepID})
+	planOperation := agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	if taskTarget != environmentID {
+		planOperation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
+	}
 	plan, err := controller.BuildPlan(controller.PlanBuildInput{
 		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: generation,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: environmentID,
+		Operation: planOperation, TargetID: taskTarget,
 		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
 	})
 	if err != nil {
@@ -559,6 +588,9 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		etcd.TaskMaterializationEnvironmentParam:     environmentID,
 		controller.EnvironmentBlueprintArtifactParam: artifactID,
 	}
+	if taskTarget != environmentID {
+		params[etcd.TaskResourceKindParam] = etcd.TaskResourceComponent
+	}
 	if len(introducedVolumeIDs) != 0 {
 		params[controller.EnvironmentBlueprintIntroducedVolumesParam] = strings.Join(introducedVolumeIDs, ",")
 		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
@@ -567,7 +599,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
-		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: environmentID,
+		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: taskTarget,
 		Params: params,
 		Steps:  stepRecords, TimeoutSeconds: environmentBlueprintTimeoutSeconds,
 		Materializations: materializations,

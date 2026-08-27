@@ -599,6 +599,16 @@ type ComponentConfig struct {
 	Config *map[string]interface{} `json:"config,omitempty"`
 }
 
+// ComponentConfigMutationResult defines model for ComponentConfigMutationResult.
+type ComponentConfigMutationResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ComponentConfigMutationResult.json
+	Schema          *string         `json:"$schema,omitempty"`
+	ReconcileTaskId *string         `json:"reconcile_task_id"`
+	Resource        ComponentConfig `json:"resource"`
+}
+
 // ComponentProjection defines model for ComponentProjection.
 type ComponentProjection struct {
 	ComponentId string  `json:"component_id"`
@@ -1868,6 +1878,26 @@ type ComponentListParams struct {
 	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ComponentConfigSetParams defines parameters for ComponentConfigSet.
+type ComponentConfigSetParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ComponentDisableParams defines parameters for ComponentDisable.
+type ComponentDisableParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ComponentEnableParams defines parameters for ComponentEnable.
+type ComponentEnableParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ComponentUpdateParams defines parameters for ComponentUpdate.
+type ComponentUpdateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ConnectorListParams defines parameters for ConnectorList.
 type ConnectorListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -2241,6 +2271,9 @@ type AttachCreateJSONRequestBody = AttachRequest
 
 // AttachRenameJSONRequestBody defines body for AttachRename for application/json ContentType.
 type AttachRenameJSONRequestBody = AttachRenameRequest
+
+// ComponentConfigSetJSONRequestBody defines body for ComponentConfigSet for application/json ContentType.
+type ComponentConfigSetJSONRequestBody = ComponentConfig
 
 // ConnectorCreateJSONRequestBody defines body for ConnectorCreate for application/json ContentType.
 type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
@@ -2629,6 +2662,35 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /components/{id}/config (the `ComponentConfigShow` operationId).
 	ComponentConfigShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentConfigSetWithBody Replace Component config
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+	ComponentConfigSetWithBody(ctx context.Context, id string, params *ComponentConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentConfigSet Replace Component config
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+	ComponentConfigSet(ctx context.Context, id string, params *ComponentConfigSetParams, body ComponentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentDisable component.disable
+	//
+	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+	ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentEnable component.enable
+	//
+	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+	ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentUpdate component.update
+	//
+	// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+	ComponentUpdate(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ConnectorList List Environment connectors
 	//
@@ -3634,6 +3696,85 @@ func (c *Client) ComponentShow(ctx context.Context, id string, reqEditors ...Req
 // Corresponds with GET /components/{id}/config (the `ComponentConfigShow` operationId).
 func (c *Client) ComponentConfigShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewComponentConfigShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentConfigSetWithBody Replace Component config
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+func (c *Client) ComponentConfigSetWithBody(ctx context.Context, id string, params *ComponentConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentConfigSetRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentConfigSet Replace Component config
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+func (c *Client) ComponentConfigSet(ctx context.Context, id string, params *ComponentConfigSetParams, body ComponentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentConfigSetRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentDisable component.disable
+//
+// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+func (c *Client) ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentDisableRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentEnable component.enable
+//
+// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+func (c *Client) ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentEnableRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentUpdate component.update
+//
+// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+func (c *Client) ComponentUpdate(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentUpdateRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6455,6 +6596,207 @@ func NewComponentConfigShowRequest(server string, id string) (*http.Request, err
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewComponentConfigSetRequest calls the generic ComponentConfigSet builder with application/json body
+func NewComponentConfigSetRequest(server string, id string, params *ComponentConfigSetParams, body ComponentConfigSetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewComponentConfigSetRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewComponentConfigSetRequestWithBody constructs an http.Request for the ComponentConfigSet method, with any body, and a specified content type
+func NewComponentConfigSetRequestWithBody(server string, id string, params *ComponentConfigSetParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/config", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewComponentDisableRequest constructs an http.Request for the ComponentDisable method
+func NewComponentDisableRequest(server string, id string, params *ComponentDisableParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/disable", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewComponentEnableRequest constructs an http.Request for the ComponentEnable method
+func NewComponentEnableRequest(server string, id string, params *ComponentEnableParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/enable", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewComponentUpdateRequest constructs an http.Request for the ComponentUpdate method
+func NewComponentUpdateRequest(server string, id string, params *ComponentUpdateParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/update", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -11248,6 +11590,41 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /components/{id}/config (the `ComponentConfigShow` operationId).
 	ComponentConfigShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ComponentConfigShowResponse, error)
 
+	// ComponentConfigSetWithBodyWithResponse Replace Component config
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+	ComponentConfigSetWithBodyWithResponse(ctx context.Context, id string, params *ComponentConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentConfigSetResponse, error)
+
+	// ComponentConfigSetWithResponse Replace Component config
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+	ComponentConfigSetWithResponse(ctx context.Context, id string, params *ComponentConfigSetParams, body ComponentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentConfigSetResponse, error)
+
+	// ComponentDisableWithResponse component.disable
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+	ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error)
+
+	// ComponentEnableWithResponse component.enable
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+	ComponentEnableWithResponse(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error)
+
+	// ComponentUpdateWithResponse component.update
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+	ComponentUpdateWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error)
+
 	// ConnectorListWithResponse List Environment connectors
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -12956,6 +13333,226 @@ func (r ComponentConfigShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ComponentConfigShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ComponentConfigSetResponse200Headers the declared response headers of an HTTP 200 response for ComponentConfigSet
+type ComponentConfigSetResponse200Headers struct {
+	ContentType *string
+}
+
+type ComponentConfigSetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ComponentConfigMutationResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ComponentConfigSetResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ComponentConfigSetResponse) GetJSON200() *ComponentConfigMutationResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentConfigSetResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentConfigSetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentConfigSetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentConfigSetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentConfigSetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ComponentDisableResponse202Headers the declared response headers of an HTTP 202 response for ComponentDisable
+type ComponentDisableResponse202Headers struct {
+	ContentType *string
+}
+
+type ComponentDisableResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ComponentDisableResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ComponentDisableResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentDisableResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentDisableResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentDisableResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentDisableResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentDisableResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ComponentEnableResponse202Headers the declared response headers of an HTTP 202 response for ComponentEnable
+type ComponentEnableResponse202Headers struct {
+	ContentType *string
+}
+
+type ComponentEnableResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ComponentEnableResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ComponentEnableResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentEnableResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentEnableResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentEnableResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentEnableResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentEnableResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ComponentUpdateResponse202Headers the declared response headers of an HTTP 202 response for ComponentUpdate
+type ComponentUpdateResponse202Headers struct {
+	ContentType *string
+}
+
+type ComponentUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ComponentUpdateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ComponentUpdateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentUpdateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentUpdateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentUpdateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17682,6 +18279,71 @@ func (c *ClientWithResponses) ComponentConfigShowWithResponse(ctx context.Contex
 	return ParseComponentConfigShowResponse(rsp)
 }
 
+// ComponentConfigSetWithBodyWithResponse Replace Component config
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+func (c *ClientWithResponses) ComponentConfigSetWithBodyWithResponse(ctx context.Context, id string, params *ComponentConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentConfigSetResponse, error) {
+	rsp, err := c.ComponentConfigSetWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentConfigSetResponse(rsp)
+}
+
+// ComponentConfigSetWithResponse Replace Component config
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /components/{id}/config (the `ComponentConfigSet` operationId).
+func (c *ClientWithResponses) ComponentConfigSetWithResponse(ctx context.Context, id string, params *ComponentConfigSetParams, body ComponentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentConfigSetResponse, error) {
+	rsp, err := c.ComponentConfigSet(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentConfigSetResponse(rsp)
+}
+
+// ComponentDisableWithResponse component.disable
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
+func (c *ClientWithResponses) ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error) {
+	rsp, err := c.ComponentDisable(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentDisableResponse(rsp)
+}
+
+// ComponentEnableWithResponse component.enable
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+func (c *ClientWithResponses) ComponentEnableWithResponse(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error) {
+	rsp, err := c.ComponentEnable(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentEnableResponse(rsp)
+}
+
+// ComponentUpdateWithResponse component.update
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/update (the `ComponentUpdate` operationId).
+func (c *ClientWithResponses) ComponentUpdateWithResponse(ctx context.Context, id string, params *ComponentUpdateParams, reqEditors ...RequestEditorFn) (*ComponentUpdateResponse, error) {
+	rsp, err := c.ComponentUpdate(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentUpdateResponse(rsp)
+}
+
 // ConnectorListWithResponse List Environment connectors
 //
 // Returns a wrapper object for the known response body format(s).
@@ -19846,6 +20508,190 @@ func ParseComponentConfigShowResponse(rsp *http.Response) (*ComponentConfigShowR
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseComponentConfigSetResponse parses an HTTP response from a ComponentConfigSetWithResponse call
+func ParseComponentConfigSetResponse(rsp *http.Response) (*ComponentConfigSetResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentConfigSetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ComponentConfigMutationResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ComponentConfigSetResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseComponentDisableResponse parses an HTTP response from a ComponentDisableWithResponse call
+func ParseComponentDisableResponse(rsp *http.Response) (*ComponentDisableResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentDisableResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ComponentDisableResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseComponentEnableResponse parses an HTTP response from a ComponentEnableWithResponse call
+func ParseComponentEnableResponse(rsp *http.Response) (*ComponentEnableResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentEnableResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ComponentEnableResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseComponentUpdateResponse parses an HTTP response from a ComponentUpdateWithResponse call
+func ParseComponentUpdateResponse(rsp *http.Response) (*ComponentUpdateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ComponentUpdateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

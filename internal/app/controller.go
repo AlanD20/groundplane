@@ -857,6 +857,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
 	}
+	componentMutations, err := componentcapability.NewMutationService(
+		componentRecords, environmentBlueprintRepository, environmentBlueprints,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Component mutations: %w", err)
+	}
 	volumeMutations, err := volume.NewMutationService(
 		cfg.Storage.VolumeRoot,
 		environmentBlueprintRepository,
@@ -1102,11 +1109,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 
 	srv := controller.New(store, logger, controller.Options{
 		Host: hostReads, Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
-		Projects:         hierarchyService,
-		ProjectMutations: projectMutations,
-		ProjectChanges:   projectChanges,
-		BackingServices:  backingServiceReads,
-		Components:       componentReads,
+		Projects:           hierarchyService,
+		ProjectMutations:   projectMutations,
+		ProjectChanges:     projectChanges,
+		BackingServices:    backingServiceReads,
+		Components:         componentReads,
+		ComponentMutations: componentMutations,
 		Environments: environmentcapability.NewEtcdReader(
 			environmentetcd.NewRepository(hierarchyRecords, zoneRecords),
 		),
