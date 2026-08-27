@@ -258,6 +258,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 					Complete: stepResult.Complete, ResponseSha256: append([]byte(nil), stepResult.ResponseSHA256...),
 				}
 			}
+		} else if step.GetBackupArtifactPrune() != nil {
+			err = p.executeBackupArtifactPrune(stepCtx, reservation.assignment, step)
 		} else if step.GetComponentApply() != nil && p.coreDNS != nil {
 			err = p.coreDNS.ExecuteCoreDNS(stepCtx, reservation.assignment, step)
 		} else if p.compose == nil {
