@@ -2,6 +2,8 @@
 // CoreDNS validation.
 package dnsname
 
+import "net/netip"
+
 const maxNameLength = 253
 
 // Valid reports whether value is a canonical lowercase ASCII DNS name within
@@ -15,6 +17,9 @@ func Valid(value string) bool {
 // that reserve bytes for other record data.
 func ValidWithin(value string, maxLength int) bool {
 	if maxLength <= 0 || value == "" || len(value) > maxLength || value[len(value)-1] == '.' {
+		return false
+	}
+	if _, err := netip.ParseAddr(value); err == nil {
 		return false
 	}
 	for _, label := range splitLabels(value) {

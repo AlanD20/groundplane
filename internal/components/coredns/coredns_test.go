@@ -103,6 +103,23 @@ func TestRenderCorefilePreservesEnvironmentAddressesAndRejectsConflicts(t *testi
 	}
 }
 
+// Rationale: hosts commonly expose a local stub resolver at 127.0.0.53, but
+// forwarding to CoreDNS's own 127.0.0.1 listener would recurse forever.
+func TestRenderCorefileAllowsLocalStubAndRejectsSelfForwarding(t *testing.T) {
+	t.Parallel()
+	input := CoreDNSRenderInput{
+		CatchAll: []ResolverEndpoint{resolver("127.0.0.53", 53)},
+	}
+	if _, err := RenderCorefile(input); err != nil {
+		t.Fatalf("RenderCorefile(local stub) error = %v", err)
+	}
+
+	input.CatchAll = []ResolverEndpoint{resolver("127.0.0.1", 53)}
+	if rendered, err := RenderCorefile(input); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) || rendered != nil {
+		t.Fatalf("RenderCorefile(self-forward) = %q, %v, want nil validation failure", rendered, err)
+	}
+}
+
 // Rationale: invalid resolver inputs must fail before bytes exist, preserving
 // the last-known-good CoreDNS configuration during a candidate reload.
 func TestRenderCorefileRejectsInvalidInputBeforeProducingBytes(t *testing.T) {

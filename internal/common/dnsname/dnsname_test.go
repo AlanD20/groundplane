@@ -15,6 +15,8 @@ func TestValidCanonicalDNSName(t *testing.T) {
 	}{
 		{name: "single label", value: "example", valid: true},
 		{name: "dotted name", value: "api.example.com", valid: true},
+		{name: "IPv4 literal", value: "127.0.0.1"},
+		{name: "IPv6 literal", value: "2001:db8::1"},
 		{name: "uppercase", value: "API.example.com"},
 		{name: "wildcard", value: "*.example.com"},
 		{name: "trailing dot", value: "example.com."},
@@ -29,11 +31,11 @@ func TestValidCanonicalDNSName(t *testing.T) {
 	}
 }
 
-// Rationale: the forwarder domain bound is narrower than a Route hostname,
-// but must use the same canonical label grammar.
+// Rationale: callers may impose a narrower bound while retaining the shared
+// canonical DNS grammar.
 func TestValidWithinHonorsBound(t *testing.T) {
-	value := strings.Repeat("a.", 108) + "aaa"
-	if len(value) <= 218 || !Valid(value) || ValidWithin(value, 218) {
-		t.Fatalf("bounded validation for %q (length %d) did not distinguish 218-byte limit", value, len(value))
+	value := strings.Repeat("a.", 110) + "a"
+	if len(value) <= 220 || !Valid(value) || ValidWithin(value, 220) {
+		t.Fatalf("bounded validation for %q (length %d) did not distinguish 220-byte limit", value, len(value))
 	}
 }
