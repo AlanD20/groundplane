@@ -1010,6 +1010,9 @@ func validateBackupSourceCapture(environmentID string, capture *agentpb.BackupSo
 		validateID(ids.KindConnector, capture.ConnectorId) != nil || capture.ConnectorRevision == 0 {
 		return errs.New(errs.KindValidationFailed, "backup source identity or revision is invalid")
 	}
+	if err := validateBackupUploadAuthority(environmentID, capture); err != nil {
+		return err
+	}
 	switch capture.Encryption {
 	case agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE:
 		if capture.KeyEra != 0 || capture.AgeRecipient != "" {
@@ -1044,20 +1047,56 @@ func validateBackupSourceCapture(environmentID string, capture *agentpb.BackupSo
 	case *agentpb.BackupSourceCapture_Volume:
 		if source.Volume == nil || capture.SourceFormat !=
 			agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1 ||
-			validateID(ids.KindVolume, capture.TargetId) != nil {
+			validateID(ids.KindVolume, capture.TargetId) != nil ||
+			validateID(ids.KindArtifact, source.Volume.ArtifactId) != nil ||
+			len(source.Volume.ArtifactSha256) != sha256.Size || source.Volume.ArtifactRevision == 0 ||
+			source.Volume.ProjectionRoot == 0 || source.Volume.RenderGeneration == 0 ||
+			!validManagedVolumeComposeKey(source.Volume.ComposeVolumeKey) ||
+			source.Volume.DockerVolumeName != "gp_vol_"+capture.TargetId ||
+			validateVolumeDirectory(source.Volume.AuthorizedVolumeDir, environmentID) != nil {
 			return errs.New(errs.KindValidationFailed, "volume backup source control data is invalid")
 		}
 		previousServiceID := ""
 		for _, service := range source.Volume.Services {
 			if service == nil || validateID(ids.KindService, service.ServiceId) != nil ||
 				service.ServiceId <= previousServiceID || service.ServiceRevision == 0 ||
-				!validBackupServiceRuntimeIntent(service.PriorIntent) {
+				!validBackupServiceRuntimeIntent(service.PriorIntent) ||
+				!validManagedVolumeComposeKey(service.ComposeKey) || len(service.MountPaths) == 0 {
 				return errs.New(errs.KindValidationFailed, "volume backup service control data is invalid")
+			}
+			previousMountPath := ""
+			for _, mountPath := range service.MountPaths {
+				if !path.IsAbs(mountPath) || path.Clean(mountPath) != mountPath ||
+					mountPath <= previousMountPath || strings.ContainsRune(mountPath, '\x00') {
+					return errs.New(errs.KindValidationFailed, "volume backup mount path is invalid or unsorted")
+				}
+				previousMountPath = mountPath
 			}
 			previousServiceID = service.ServiceId
 		}
 	default:
 		return errs.New(errs.KindValidationFailed, "backup source kind is unsupported")
+	}
+	return nil
+}
+
+func validateBackupUploadAuthority(environmentID string, capture *agentpb.BackupSourceCapture) error {
+	upload := capture.Upload
+	if upload == nil || !validBackupConnectorEndpoint(upload.ConnectorEndpoint) ||
+		!validBackupConnectorBucket(upload.ConnectorBucket) ||
+		!validBackupConnectorPrefix(upload.ConnectorPrefix) ||
+		!validBackupConnectorRegion(upload.ConnectorRegion) ||
+		!validBackupS3Addressing(upload.ConnectorAddressing) ||
+		!upload.ImmutableCreate || !upload.PutAfterArtifactPreparedAck ||
+		!upload.HeadAfterUploadCompletedAck || upload.ProtectedObjectKey == "" ||
+		len(upload.ProtectedObjectKey) > maximumBackupObjectKeyBytes ||
+		!utf8.ValidString(upload.ProtectedObjectKey) || strings.ContainsRune(upload.ProtectedObjectKey, '\x00') ||
+		strings.Contains(upload.ProtectedObjectKey, `\`) || strings.HasPrefix(upload.ProtectedObjectKey, "/") {
+		return errs.New(errs.KindValidationFailed, "backup upload authority is invalid")
+	}
+	expected := upload.ConnectorPrefix + environmentID + "/" + capture.SourceId + "/" + capture.PointId + "/artifact.bin"
+	if upload.ProtectedObjectKey != expected {
+		return errs.New(errs.KindValidationFailed, "backup upload object identity is invalid")
 	}
 	return nil
 }

@@ -60,8 +60,7 @@ type BackupRunPlanInput struct {
 }
 
 // BackupSourceUploadAuthority is the typed internal seam for the accepted
-// immutable-upload protocol. It is deliberately not guessed into the Agent
-// protobuf while that separate wire contract is under review.
+// immutable-upload protocol.
 type BackupSourceUploadAuthority struct {
 	SourceID                    string
 	PointID                     string
@@ -80,8 +79,8 @@ type BackupSourceUploadAuthority struct {
 	Volume                      *BackupVolumeExecutionAuthority
 }
 
-// BackupVolumeExecutionAuthority is the schema2-ready immutable Volume input.
-// It remains internal until the Agent wire schema can carry every field.
+// BackupVolumeExecutionAuthority is the immutable Volume input carried by the
+// active execution-plan schema.
 type BackupVolumeExecutionAuthority struct {
 	ArtifactID          string
 	ArtifactDigest      string
@@ -261,7 +260,7 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 		if ids.Validate(ids.KindStep, step.ID) != nil {
 			return nil, errs.New(errs.KindValidationFailed, "backup run step identity is invalid")
 		}
-		capture, err := backupRunCapture(source, run)
+		capture, err := backupRunCapture(source, run, input.Upload[index])
 		if err != nil {
 			return nil, err
 		}
@@ -364,6 +363,7 @@ func validateBackupRunUploadAuthorities(
 func backupRunCapture(
 	source etcd.BackupRunSourceAttemptRecord,
 	run etcd.BackupRunRecord,
+	upload BackupSourceUploadAuthority,
 ) (*agentpb.BackupSourceCapture, error) {
 	if source.SourceID == "" || source.TargetID == "" || source.RecoveryPointID == "" ||
 		source.ObjectKey == "" {
@@ -384,6 +384,17 @@ func backupRunCapture(
 		Encryption:        backupRunPlanEncryption(run.Encryption),
 		KeyEra:            uint64(run.KeyEra),
 		AgeRecipient:      run.Recipient,
+		Upload: &agentpb.BackupUploadAuthority{
+			ConnectorEndpoint:            upload.ConnectorEndpoint,
+			ConnectorBucket:              upload.ConnectorBucket,
+			ConnectorPrefix:              upload.ConnectorPrefix,
+			ConnectorRegion:              upload.ConnectorRegion,
+			ConnectorAddressing:          backupRunPlanAddressing(upload.ConnectorAddressing),
+			ProtectedObjectKey:           upload.ObjectKey,
+			ImmutableCreate:              upload.ImmutableCreate,
+			PutAfterArtifactPreparedAck: upload.PutAfterArtifactPreparedAck,
+			HeadAfterUploadCompletedAck: upload.HeadAfterUploadCompletedAck,
+		},
 	}
 	switch source.Kind {
 	case etcd.BackupRuntimeSourceAttach:
@@ -408,16 +419,28 @@ func backupRunCapture(
 		if source.Snapshot.Volume == nil {
 			return nil, errs.New(errs.KindValidationFailed, "volume snapshot is required")
 		}
+		artifactSHA256, err := hex.DecodeString(source.Snapshot.Volume.ArtifactDigest)
+		if err != nil {
+			return nil, errs.New(errs.KindValidationFailed, "volume artifact digest is invalid")
+		}
 		services := make([]*agentpb.BackupVolumeService, 0, len(source.Snapshot.Volume.Services))
 		for _, service := range source.Snapshot.Volume.Services {
 			services = append(services, &agentpb.BackupVolumeService{
 				ServiceId:       service.ServiceID,
 				ServiceRevision: uint64(service.ServiceRevision),
 				PriorIntent:     backupRunPlanServiceIntent(service.PriorIntent),
+				ComposeKey:      service.ComposeKey,
+				MountPaths:      append([]string(nil), service.MountPaths...),
 			})
 		}
+		volume := source.Snapshot.Volume
 		capture.Source = &agentpb.BackupSourceCapture_Volume{
-			Volume: &agentpb.BackupVolumeSource{Services: services},
+			Volume: &agentpb.BackupVolumeSource{
+				Services: services, ArtifactId: volume.ArtifactID, ArtifactSha256: artifactSHA256,
+				ArtifactRevision: uint64(volume.ArtifactRevision), ProjectionRoot: uint64(volume.ProjectionRoot),
+				RenderGeneration: volume.RenderGeneration, ComposeVolumeKey: volume.ComposeVolumeKey,
+				DockerVolumeName: volume.DockerVolumeName, AuthorizedVolumeDir: volume.AuthorizedVolumeDir,
+			},
 		}
 	default:
 		return nil, errs.New(
@@ -426,6 +449,16 @@ func backupRunCapture(
 		)
 	}
 	return capture, nil
+}
+
+func backupRunPlanAddressing(value string) agentpb.BackupS3Addressing {
+	if value == "path" {
+		return agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE
+	}
+	if value == "virtual-hosted" {
+		return agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_VIRTUAL_HOSTED_STYLE
+	}
+	return agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_UNSPECIFIED
 }
 
 func backupRunPlanFormat(format etcd.BackupRuntimeFormat) agentpb.BackupSourceFormat {

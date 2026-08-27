@@ -364,9 +364,9 @@ enum ExecutionStepPolicy {
 }
 
 // BackupSourceCapture is one immutable source attempt in policy order. It
-// carries only Controller-authorized control evidence. Object locators,
-// credentials, private identities, Entry values, artifact bytes, and provider
-// responses travel through neither this plan nor ordinary Task messages.
+// carries only Controller-authorized control evidence. Credentials, Entry
+// values, artifact bytes, and provider responses never enter the plan or
+// ordinary Task messages.
 message BackupSourceCapture {
   string source_id = 1;
   uint64 source_revision = 2;
@@ -384,12 +384,25 @@ message BackupSourceCapture {
     BackupConfigSource config = 13;
     BackupVolumeSource volume = 14;
   }
+  BackupUploadAuthority upload = 15;
 }
 
 enum BackupS3Addressing {
   BACKUP_S3_ADDRESSING_UNSPECIFIED = 0;
   BACKUP_S3_ADDRESSING_PATH_STYLE = 1;
   BACKUP_S3_ADDRESSING_VIRTUAL_HOSTED_STYLE = 2;
+}
+
+message BackupUploadAuthority {
+  string connector_endpoint = 1;
+  string connector_bucket = 2;
+  string connector_prefix = 3;
+  string connector_region = 4;
+  BackupS3Addressing connector_addressing = 5;
+  string protected_object_key = 6;
+  bool immutable_create = 7;
+  bool put_after_artifact_prepared_ack = 8;
+  bool head_after_upload_completed_ack = 9;
 }
 
 // BackupArtifactPrune is one ordered Recovery Point authority. Credentials
@@ -445,12 +458,22 @@ message BackupConfigSource {
 
 message BackupVolumeSource {
   repeated BackupVolumeService services = 1; // uniquely sorted by service_id
+  string artifact_id = 2;
+  bytes artifact_sha256 = 3;
+  uint64 artifact_revision = 4;
+  uint64 projection_root = 5;
+  uint64 render_generation = 6;
+  string compose_volume_key = 7;
+  string docker_volume_name = 8;
+  string authorized_volume_dir = 9;
 }
 
 message BackupVolumeService {
   string service_id = 1;
   uint64 service_revision = 2;
   BackupServiceRuntimeIntent prior_intent = 3;
+  string compose_key = 4;
+  repeated string mount_paths = 5;
 }
 
 enum BackupServiceRuntimeIntent {
