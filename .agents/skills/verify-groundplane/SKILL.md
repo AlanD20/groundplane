@@ -42,12 +42,17 @@ state. Repository tests and `make ci` remain separate required gates.
 - Fail closed when prerequisites or assertions are missing.
 - Do not delete failed-run evidence.
 
-## Current journey
+## Current journeys
 
-The first path is C01-lite Host health. Read `features/host-health.md` and run:
+For C01-lite Host health, read `features/host-health.md` and run:
 
 ```sh
 .agents/skills/verify-groundplane/scripts/host-health-ssh.sh
+```
+For hermetic C11 Attach L2 acceptance, read `features/c11-attach-l2.md` and run:
+
+```sh
+.agents/skills/verify-groundplane/scripts/c11-attach-l2.sh
 ```
 
 For the managed Volume vertical, read `features/volume-lifecycle.md` and run

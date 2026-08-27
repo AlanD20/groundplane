@@ -1,7 +1,9 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -169,6 +171,158 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 	if err != nil || provisioning.Record.Status != core.AttachProvisioning ||
 		provisioning.Revision != claim.Task.Revision {
 		t.Fatalf("retry provisioning Attach = %#v, %v", provisioning, err)
+	}
+}
+
+// Rationale: an injected terminal failure may be followed by Controller
+// restart; reconstruction must retain one Attach identity, one encrypted fact
+// bundle, and one reverse grant edge while retrying the same durable operation.
+func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *testing.T) {
+	ctx := context.Background()
+	store := newAttachTestStore()
+	scope := seedAttachScope(t, ctx, store)
+	attaches, err := NewAttachRepository(store)
+	if err != nil {
+		t.Fatalf("NewAttachRepository() error = %v", err)
+	}
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	agentID := ids.NewAt(ids.KindAgent, testAttachTime, 820)
+
+	grantRecord, grantFacts := testPendingAttach(t, scope, 84, "grant-target", nil)
+	createTestAttach(t, ctx, attaches, scope, grantRecord, &grantFacts)
+	if _, found, claimErr := tasks.ClaimNextTask(
+		ctx, agentID, 20, grantRecord.CreatedAt.Add(time.Second),
+	); claimErr != nil || !found {
+		t.Fatalf("ClaimNextTask(grant) found/error = %v/%v", found, claimErr)
+	}
+	if _, err = tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		20,
+		grantRecord.TaskID,
+		taskAssignmentIDForTest(t, tasks, grantRecord.TaskID),
+		TaskStatusCompleted,
+		completedComposeTaskResult(),
+		grantRecord.CreatedAt.Add(2*time.Second),
+	); err != nil {
+		t.Fatalf("AcknowledgeTask(grant) error = %v", err)
+	}
+	grant, err := attaches.GetAttach(ctx, grantRecord.ID)
+	if err != nil {
+		t.Fatalf("GetAttach(grant) error = %v", err)
+	}
+
+	sourceScope := scope
+	sourceScope.Grants = []Versioned[AttachRecord]{grant}
+	record, facts := testPendingAttach(t, sourceScope, 85, "granted-source", sourceScope.Grants)
+	expectedCiphertext := append([]byte(nil), facts.Ciphertext...)
+	defer clear(expectedCiphertext)
+	createTestAttach(t, ctx, attaches, sourceScope, record, &facts)
+	if _, found, claimErr := tasks.ClaimNextTask(
+		ctx, agentID, 20, record.CreatedAt.Add(3*time.Second),
+	); claimErr != nil || !found {
+		t.Fatalf("ClaimNextTask(source) found/error = %v/%v", found, claimErr)
+	}
+	failureAt := record.CreatedAt.Add(4 * time.Second)
+	failedTask, err := tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		20,
+		record.TaskID,
+		taskAssignmentIDForTest(t, tasks, record.TaskID),
+		TaskStatusTimedOut,
+		TaskResultRecord{
+			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+			ReconciliationRequired: true,
+		},
+		failureAt,
+	)
+	if err != nil {
+		t.Fatalf("AcknowledgeTask(injected timeout) error = %v", err)
+	}
+
+	attaches, err = NewAttachRepository(store)
+	if err != nil {
+		t.Fatalf("NewAttachRepository(restart) error = %v", err)
+	}
+	tasks, err = newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository(restart) error = %v", err)
+	}
+	failed, err := attaches.GetAttach(ctx, record.ID)
+	if err != nil || failed.Record.Status != core.AttachFailed ||
+		failed.Record.ID != record.ID || failed.Record.Name != record.Name ||
+		failed.Record.BackingServiceID != record.BackingServiceID ||
+		!reflect.DeepEqual(failed.Record.GrantAttachIDs, record.GrantAttachIDs) ||
+		!reflect.DeepEqual(failed.Record.FactSets, record.FactSets) {
+		t.Fatalf("restarted failed Attach = %#v, %v", failed, err)
+	}
+	storedFacts, foundFacts, err := attaches.GetAttachFacts(ctx, failed)
+	if err != nil || !foundFacts || string(storedFacts.Ciphertext) != "encrypted-facts" {
+		t.Fatalf("restarted encrypted facts = %#v, %v, %v", storedFacts, foundFacts, err)
+	}
+	clear(storedFacts.Ciphertext)
+
+	retryAt := failureAt.Add(time.Second)
+	retryID := ids.NewAt(ids.KindTask, retryAt, 821)
+	retryResult, err := tasks.RetryTask(
+		ctx,
+		record.TaskID,
+		retryID,
+		TaskActorOperator,
+		pendingRetryMarker(failedTask.Record, retryID, retryAt, "grant-restart-retry-0001"),
+	)
+	if err != nil {
+		t.Fatalf("RetryTask(restart) error = %v", err)
+	}
+	outcome, _, conflict, classifyErr := retryResult.Classify()
+	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+		t.Fatalf("RetryTask(restart) outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+	}
+	claim, found, err := tasks.ClaimNextTask(ctx, agentID, 20, retryAt.Add(time.Second))
+	if err != nil || !found || claim.Task.Record.ID != retryID {
+		t.Fatalf("ClaimNextTask(retry) = %#v, %v, %v", claim, found, err)
+	}
+	if _, err = tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		20,
+		retryID,
+		taskAssignmentIDForTest(t, tasks, retryID),
+		TaskStatusCompleted,
+		completedComposeTaskResult(),
+		retryAt.Add(2*time.Second),
+	); err != nil {
+		t.Fatalf("AcknowledgeTask(retry) error = %v", err)
+	}
+	ready, err := attaches.GetAttach(ctx, record.ID)
+	if err != nil || ready.Record.Status != core.AttachReady || ready.Record.ID != record.ID ||
+		ready.Record.Name != record.Name ||
+		ready.Record.BackingServiceID != record.BackingServiceID ||
+		!reflect.DeepEqual(ready.Record.ServiceIDs, record.ServiceIDs) ||
+		!reflect.DeepEqual(ready.Record.GrantAttachIDs, record.GrantAttachIDs) ||
+		!reflect.DeepEqual(ready.Record.FactSets, record.FactSets) {
+		t.Fatalf("ready Attach after restart = %#v, %v", ready, err)
+	}
+	retriedFacts, foundFacts, err := attaches.GetAttachFacts(ctx, ready)
+	if err != nil || !foundFacts || retriedFacts.AttachID != facts.AttachID ||
+		retriedFacts.EnvelopeVersion != facts.EnvelopeVersion || retriedFacts.Cipher != facts.Cipher ||
+		retriedFacts.DigestAlgorithm != facts.DigestAlgorithm ||
+		retriedFacts.CiphertextSHA256 != facts.CiphertextSHA256 ||
+		!bytes.Equal(retriedFacts.Ciphertext, expectedCiphertext) {
+		t.Fatalf("ready encrypted facts after restart = %#v, %v, %v", retriedFacts, foundFacts, err)
+	}
+	clear(retriedFacts.Ciphertext)
+	reverse, err := store.Get(ctx, attachGrantedByKey(grant.Record.ID, record.ID))
+	if err != nil || reverse.Entry == nil || string(reverse.Entry.Value) != record.ID {
+		t.Fatalf("reverse grant edge after restart = %#v, %v", reverse, err)
+	}
+	page, err := attaches.ListAttaches(ctx, record.EnvironmentID, PageRequest{Limit: 10})
+	if err != nil || len(page.Items) != 2 {
+		t.Fatalf("Attach page after restart = %#v, %v", page, err)
 	}
 }
 
