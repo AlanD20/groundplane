@@ -22,6 +22,7 @@ import (
 	controllercomponent "github.com/AlanD20/groundplane/internal/components/controller"
 	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/backupkey"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
@@ -508,6 +509,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup scheduler: %w", err)
+	}
+	backupKeys, err := backupkey.NewService(
+		backupPolicyRecords,
+		backupPolicyKeys,
+		intentCoordinator,
+		idempotency,
+		intentProtector,
+	)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize backup key service", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
 	}
 	networkRecords, err := networketcd.NewRepository(
 		hierarchyRecords,
@@ -1011,7 +1026,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
 	}
-	hierarchyTaskDispatcher, err := newHierarchyDeletionTaskDispatcher(controllerTaskHandler, hierarchyDeletions)
+	backupKeyTaskDispatcher, err := controllertask.NewDispatcher(controllerTaskHandler, backupKeys)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize backup key Task dispatcher: %w", err)
+	}
+	hierarchyTaskDispatcher, err := newHierarchyDeletionTaskDispatcher(backupKeyTaskDispatcher, hierarchyDeletions)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()
@@ -1097,6 +1118,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackupPolicyMutations: backupPolicies,
 		RecoveryPoints:        backupPointReads,
 		BackupRuns:            backupRuns,
+		BackupKeyMutations:    backupKeys,
+		BackupKeyExports:      backupKeys,
 		Volumes:               volumeReads,
 		VolumeMutations:       volumeMutations,
 		EnvironmentMutations:  environmentMutations,

@@ -66,6 +66,8 @@ type Server struct {
 	backupPolicyMutations BackupPolicyMutator
 	recoveryPoints        RecoveryPointReader
 	backupRuns            BackupRunMutator
+	backupKeyMutations    BackupKeyMutator
+	backupKeyExports      BackupKeyExporter
 	volumes               VolumeReader
 	volumeMutations       VolumeMutator
 	environmentMutations  EnvironmentMutator
@@ -118,6 +120,8 @@ type Options struct {
 	BackupPolicyMutations BackupPolicyMutator
 	RecoveryPoints        RecoveryPointReader
 	BackupRuns            BackupRunMutator
+	BackupKeyMutations    BackupKeyMutator
+	BackupKeyExports      BackupKeyExporter
 	Volumes               VolumeReader
 	VolumeMutations       VolumeMutator
 	EnvironmentMutations  EnvironmentMutator
@@ -183,6 +187,8 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		backupPolicyMutations: options.BackupPolicyMutations,
 		recoveryPoints:        options.RecoveryPoints,
 		backupRuns:            options.BackupRuns,
+		backupKeyMutations:    options.BackupKeyMutations,
+		backupKeyExports:      options.BackupKeyExports,
 		volumes:               options.Volumes,
 		volumeMutations:       options.VolumeMutations,
 		environmentMutations:  options.EnvironmentMutations,
@@ -219,6 +225,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerBackupPolicies()
 	s.registerRecoveryPoints()
 	s.registerBackupRuns()
+	s.registerBackupKeyRoutes()
 	s.registerVolumes()
 	s.registerAttaches()
 	s.registerTasks()
@@ -250,8 +257,6 @@ func (s *Server) routes() {
 
 	// environment singleton sub-resources
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
-	s.jsonRoute("POST /api/v1/environments/{id}/rotate-key", s.acceptTask)
-	mux.HandleFunc("POST /api/v1/environments/{id}/export-key", s.notImplemented)
 	// router: READ-ONLY projection grouping ingress components — GET only,
 	// never PUT (api-cli.md, section 4). Managed entirely through /components.
 	mux.HandleFunc("GET /api/v1/environments/{id}/router", s.notImplemented)

@@ -36,10 +36,23 @@ func requiresIdempotencyKey(r *http.Request) bool {
 	}
 	switch r.Method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		if r.Method == http.MethodPost && isBackupKeyExportPath(r.URL.Path) {
+			return false
+		}
 		return true
 	default:
 		return false
 	}
+}
+
+func isBackupKeyExportPath(path string) bool {
+	const prefix = "/api/v1/environments/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	remainder := strings.TrimPrefix(path, prefix)
+	environmentID, action, found := strings.Cut(remainder, "/")
+	return found && environmentID != "" && action == "export-key"
 }
 
 func hasValidIdempotencyKey(values []string) bool {

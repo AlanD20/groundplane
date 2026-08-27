@@ -1,0 +1,274 @@
+package backupkey
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	corebackup "github.com/AlanD20/groundplane/internal/core/backup"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const backupKeyRotationRoute = "/environments/{id}/rotate-key"
+
+type Export struct {
+	Identity []byte
+	Era      int
+}
+
+type Repository interface {
+	PrepareBackupKeyRotation(context.Context, etcd.BackupKeyRotationInput, etcd.BackupPolicyInitialKeyMaterial) (etcd.PreparedBackupKeyRotation, error)
+	PublishBackupKeyRotation(context.Context, etcd.PreparedBackupKeyRotation, etcd.TaskRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	GetBackupKey(context.Context, string) (etcd.VersionedBackupKey, bool, error)
+	ApplyBackupKeyRotation(context.Context, string) error
+}
+
+type backupKeyRotationIdempotency interface {
+	Prepare(context.Context, string) (idempotentintent.ProtectedEvidence, error)
+	ResolveExisting(context.Context, etcd.IdempotencyLocator, idempotentintent.ProtectedEvidence) (idempotentintent.Resolution, bool, error)
+	NewMarker(idempotentintent.ProtectedEvidence, etcd.IdempotencyLocator, etcd.IdempotencyResponse, string, time.Time) (etcd.IdempotencyMarker, error)
+	ResolveKnown(context.Context, idempotentintent.ProtectedEvidence, etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
+	ResolveUnknown(context.Context, etcd.IdempotencyLocator, idempotentintent.ProtectedEvidence, error) (idempotentintent.Resolution, error)
+}
+
+type durableBackupKeyRotationIdempotency struct {
+	coordinator *idempotentintent.Coordinator
+	repository  *etcd.IdempotencyRepository
+}
+
+func newDurableBackupKeyRotationIdempotency(coordinator *idempotentintent.Coordinator, repository *etcd.IdempotencyRepository) (*durableBackupKeyRotationIdempotency, error) {
+	if coordinator == nil || repository == nil {
+		return nil, errs.New(errs.KindInternal, "backup key rotation idempotency dependencies are required")
+	}
+	return &durableBackupKeyRotationIdempotency{coordinator: coordinator, repository: repository}, nil
+}
+
+func (service *durableBackupKeyRotationIdempotency) Prepare(ctx context.Context, environmentID string) (idempotentintent.ProtectedEvidence, error) {
+	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+		Method: http.MethodPost, Route: backupKeyRotationRoute,
+		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
+		Path:  []idempotentintent.PathBinding{{Name: "id", Value: environmentID}}, Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+	})
+	if err != nil {
+		return idempotentintent.ProtectedEvidence{}, err
+	}
+	defer digest.Destroy()
+	return service.coordinator.ProtectIntent(ctx, version, digest)
+}
+
+func (service *durableBackupKeyRotationIdempotency) ResolveExisting(ctx context.Context, locator etcd.IdempotencyLocator, evidence idempotentintent.ProtectedEvidence) (idempotentintent.Resolution, bool, error) {
+	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence)
+}
+
+func (*durableBackupKeyRotationIdempotency) NewMarker(
+	evidence idempotentintent.ProtectedEvidence,
+	locator etcd.IdempotencyLocator,
+	response etcd.IdempotencyResponse,
+	taskID string,
+	now time.Time,
+) (etcd.IdempotencyMarker, error) {
+	intent, err := evidence.DurableRecord()
+	if err != nil {
+		return etcd.IdempotencyMarker{}, err
+	}
+	defer clear(intent.Ciphertext)
+	return newPendingRotationMarker(intent, locator, response, taskID, now), nil
+}
+
+func (service *durableBackupKeyRotationIdempotency) ResolveKnown(ctx context.Context, evidence idempotentintent.ProtectedEvidence, result etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error) {
+	return service.coordinator.ResolveKnown(ctx, evidence, result)
+}
+
+func (service *durableBackupKeyRotationIdempotency) ResolveUnknown(ctx context.Context, locator etcd.IdempotencyLocator, evidence idempotentintent.ProtectedEvidence, original error) (idempotentintent.Resolution, error) {
+	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence, original)
+}
+
+type KeyFactory interface {
+	Create(context.Context) (etcd.BackupPolicyInitialKeyMaterial, error)
+}
+
+type Service struct {
+	repository  Repository
+	keys        KeyFactory
+	idempotency backupKeyRotationIdempotency
+	protector   *secretvalue.Protector
+	now         func() time.Time
+}
+
+func NewService(
+	repository Repository,
+	keys KeyFactory,
+	coordinator *idempotentintent.Coordinator,
+	markers *etcd.IdempotencyRepository,
+	protector *secretvalue.Protector,
+) (*Service, error) {
+	idempotency, err := newDurableBackupKeyRotationIdempotency(coordinator, markers)
+	if err != nil {
+		return nil, err
+	}
+	return newService(repository, keys, idempotency, protector)
+}
+
+func newService(
+	repository Repository,
+	keys KeyFactory,
+	idempotency backupKeyRotationIdempotency,
+	protector *secretvalue.Protector,
+) (*Service, error) {
+	if repository == nil || keys == nil || idempotency == nil || protector == nil {
+		return nil, errs.New(errs.KindInternal, "backup key service dependencies are required")
+	}
+	return &Service{
+		repository: repository, keys: keys, idempotency: idempotency,
+		protector: protector, now: func() time.Time { return time.Now().UTC() },
+	}, nil
+}
+
+func (service *Service) RotateBackupKey(ctx context.Context, environmentID, idempotencyKey string) (etcd.IdempotencyResponse, error) {
+	evidence, err := service.idempotency.Prepare(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	locator := etcd.IdempotencyLocator{ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID, Method: http.MethodPost, Route: backupKeyRotationRoute, Key: idempotencyKey}
+	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if existing {
+		defer clear(resolution.Response.Body)
+		return cloneIdempotencyResponse(resolution.Response), nil
+	}
+	now := service.now().UTC()
+	material, err := service.keys.Create(ctx)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(material.Ciphertext)
+	taskID, operationID, planID := ids.New(ids.KindTask), ids.New(ids.KindOperation), ids.New(ids.KindPlan)
+	prepared, err := service.repository.PrepareBackupKeyRotation(ctx, etcd.BackupKeyRotationInput{
+		EnvironmentID: environmentID, TaskID: taskID, OperationID: operationID, PlanID: planID, CreatedAt: now,
+	}, material)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer prepared.Clear()
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: operationID, IdempotencyKey: idempotencyKey,
+		Owner: prepared.Owner, Actor: etcd.TaskActorOperator,
+		Executor: etcd.TaskExecutorController, PlanID: planID, PlanHash: corebackup.KeyRotationPlanHash(), RenderGeneration: 1,
+		Type: etcd.TaskRotate, Target: environmentID, TimeoutSeconds: corebackup.KeyRotationTimeoutSeconds, Status: etcd.TaskStatusPending,
+		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
+	if err != nil {
+		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+	}
+	response := etcd.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...)}
+	defer clear(response.Body)
+	marker, err := service.idempotency.NewMarker(evidence, locator, response, taskID, now)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(marker.Intent.Ciphertext)
+	defer clear(marker.Response.Body)
+	transaction, publishErr := service.repository.PublishBackupKeyRotation(ctx, prepared, task, marker)
+	if publishErr != nil {
+		if !isUnknownBackupKeyPublicationOutcome(publishErr) {
+			return etcd.IdempotencyResponse{}, publishErr
+		}
+		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, publishErr)
+	} else {
+		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, transaction)
+	}
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(resolution.Response.Body)
+	if resolution.Kind == idempotentintent.ResolutionApplied {
+		return cloneIdempotencyResponse(response), nil
+	}
+	if resolution.Kind == idempotentintent.ResolutionReplay {
+		return cloneIdempotencyResponse(resolution.Response), nil
+	}
+	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "backup key rotation resolution is invalid")
+}
+
+func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error {
+	if task.Type != etcd.TaskRotate || task.Executor != etcd.TaskExecutorController {
+		return errs.New(errs.KindValidationFailed, "backup key rotation Task is invalid")
+	}
+	return service.repository.ApplyBackupKeyRotation(ctx, task.ID)
+}
+
+func (service *Service) ExportBackupKey(ctx context.Context, environmentID string) (Export, error) {
+	key, found, err := service.repository.GetBackupKey(ctx, environmentID)
+	if err != nil {
+		return Export{}, err
+	}
+	if !found {
+		return Export{}, errs.New(errs.KindStateConflict, "backup encryption key is not configured")
+	}
+	defer clear(key.Encrypted.Ciphertext)
+	digest := sha256.Sum256(key.Encrypted.Ciphertext)
+	envelope, err := secretvalue.Restore(secretvalue.Metadata{
+		Version: secretvalue.EnvelopeVersion1, Cipher: secretvalue.CipherSuiteAgeX25519,
+		Digest: secretvalue.Digest{Algorithm: secretvalue.DigestAlgorithmSHA256, Value: hex.EncodeToString(digest[:])},
+	}, key.Encrypted.Ciphertext)
+	if err != nil {
+		return Export{}, err
+	}
+	var identity []byte
+	err = service.protector.OpenOwned(ctx, &envelope, func(plaintext []byte) error {
+		identity = append(identity, plaintext...)
+		return nil
+	})
+	if err != nil {
+		clear(identity)
+		return Export{}, err
+	}
+	if len(identity) == 0 {
+		return Export{}, errs.New(errs.KindInternal, "backup key identity is empty")
+	}
+	identity = append(identity, '\n')
+	return Export{Identity: identity, Era: key.Record.KeyEra}, nil
+}
+
+func newPendingRotationMarker(
+	intent etcd.ProtectedIntentRecord,
+	locator etcd.IdempotencyLocator,
+	response etcd.IdempotencyResponse,
+	taskID string,
+	now time.Time,
+) etcd.IdempotencyMarker {
+	marker := etcd.IdempotencyMarker{
+		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+		Locator: locator, Intent: intent, Response: cloneIdempotencyResponse(response),
+		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
+	}
+	marker.Intent.Ciphertext = append([]byte(nil), intent.Ciphertext...)
+	return marker
+}
+
+func isUnknownBackupKeyPublicationOutcome(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
+}
+
+var _ backupKeyRotationIdempotency = (*durableBackupKeyRotationIdempotency)(nil)
+
+func cloneIdempotencyResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+	response.Body = append([]byte(nil), response.Body...)
+	return response
+}

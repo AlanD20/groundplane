@@ -204,28 +204,38 @@ func newBackupCmd() *cobra.Command {
 		Use:   "rotate-key",
 		Short: "Rotate the environment's backup encryption age key (bumps key_era; affects new recovery points only)",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			app := fromContext(cmd)
-			return runAction(
-				cmd,
-				"/api/v1/environments/"+target(app, app.Scope.Environment)+"/rotate-key",
-				nil,
+			accepted, err := app.Client.RotateBackupKey(
+				cmd.Context(),
+				target(app, app.Scope.Environment),
 			)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 
-	cmd.AddCommand(&cobra.Command{
+	var exportPath string
+	export := &cobra.Command{
 		Use:   "export-key",
 		Short: "Export the current age identity for off-host disaster recovery",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("output") {
+				return errs.New(errs.KindValidationFailed, "backup export-key does not support global --output; use --file")
+			}
 			app := fromContext(cmd)
 			return runExportKey(
 				cmd,
 				"/api/v1/environments/"+target(app, app.Scope.Environment)+"/export-key",
+				exportPath,
 			)
 		},
-	})
+	}
+	export.Flags().StringVar(&exportPath, "file", "-", "write the private identity to PATH, or - for stdout")
+	cmd.AddCommand(export)
 
 	return cmd
 }

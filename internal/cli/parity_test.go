@@ -488,7 +488,7 @@ func TestBackupExportKeyPostsAndPrintsIdentity(t *testing.T) {
 		"/api/v1/environments/production/export-key",
 		"",
 		http.StatusOK,
-		`{"value":"AGE-SECRET-KEY-1TEST"}`,
+		"AGE-SECRET-KEY-1TEST\n",
 	)
 	defer server.Close()
 
@@ -548,6 +548,12 @@ func exactRequestServer(
 			keys := request.Header.Values("Idempotency-Key")
 			switch method {
 			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				if path == "/api/v1/environments/production/export-key" {
+					if len(keys) != 0 {
+						t.Errorf("backup export Idempotency-Key values = %q, want none", keys)
+					}
+					break
+				}
 				if len(keys) != 1 {
 					t.Errorf("mutation Idempotency-Key values = %q, want exactly one", keys)
 				} else if _, err := ulid.ParseStrict(keys[0]); err != nil {

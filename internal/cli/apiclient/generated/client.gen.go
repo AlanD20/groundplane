@@ -1842,6 +1842,11 @@ type EnvironmentRenameParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// BackupKeyRotateParams defines parameters for BackupKeyRotate.
+type BackupKeyRotateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ProjectListParams defines parameters for ProjectList.
 type ProjectListParams struct {
 	Kind   *string `form:"kind,omitempty" json:"kind,omitempty"`
@@ -2645,6 +2650,11 @@ type ClientInterface interface {
 	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
 	EnvironmentApplyWithBody(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// BackupKeyExport Export the current backup age identity without storing it
+	//
+	// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
+	BackupKeyExport(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// BackupPointsList List verified Recovery Points
 	//
 	// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
@@ -2663,6 +2673,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
 	EnvironmentRename(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupKeyRotate Rotate the Environment backup age key
+	//
+	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+	BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// HostShow Show host health
 	//
@@ -3849,6 +3864,21 @@ func (c *Client) EnvironmentApplyWithBody(ctx context.Context, id string, params
 	return c.Client.Do(req)
 }
 
+// BackupKeyExport Export the current backup age identity without storing it
+//
+// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
+func (c *Client) BackupKeyExport(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupKeyExportRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // BackupPointsList List verified Recovery Points
 //
 // Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
@@ -3888,6 +3918,21 @@ func (c *Client) EnvironmentRenameWithBody(ctx context.Context, id string, param
 // Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
 func (c *Client) EnvironmentRename(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnvironmentRenameRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupKeyRotate Rotate the Environment backup age key
+//
+// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+func (c *Client) BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupKeyRotateRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7040,6 +7085,40 @@ func NewEnvironmentApplyRequestWithBody(server string, id string, params *Enviro
 	return req, nil
 }
 
+// NewBackupKeyExportRequest constructs an http.Request for the BackupKeyExport method
+func NewBackupKeyExportRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/export-key", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewBackupPointsListRequest constructs an http.Request for the BackupPointsList method
 func NewBackupPointsListRequest(server string, id string, params *BackupPointsListParams) (*http.Request, error) {
 	var err error
@@ -7144,6 +7223,53 @@ func NewEnvironmentRenameRequestWithBody(server string, id string, params *Envir
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewBackupKeyRotateRequest constructs an http.Request for the BackupKeyRotate method
+func NewBackupKeyRotateRequest(server string, id string, params *BackupKeyRotateParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/rotate-key", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -10876,6 +11002,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
 	EnvironmentApplyWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentApplyResponse, error)
 
+	// BackupKeyExportWithResponse Export the current backup age identity without storing it
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
+	BackupKeyExportWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BackupKeyExportResponse, error)
+
 	// BackupPointsListWithResponse List verified Recovery Points
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -10896,6 +11029,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/rename (the `EnvironmentRename` operationId).
 	EnvironmentRenameWithResponse(ctx context.Context, id string, params *EnvironmentRenameParams, body EnvironmentRenameJSONRequestBody, reqEditors ...RequestEditorFn) (*EnvironmentRenameResponse, error)
+
+	// BackupKeyRotateWithResponse Rotate the Environment backup age key
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+	BackupKeyRotateWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error)
 
 	// HostShowWithResponse Show host health
 	//
@@ -13225,6 +13365,56 @@ func (r EnvironmentApplyResponse) ContentType() string {
 	return ""
 }
 
+// BackupKeyExportResponse200Headers the declared response headers of an HTTP 200 response for BackupKeyExport
+type BackupKeyExportResponse200Headers struct {
+	CacheControl       *string
+	ContentDisposition *string
+	ContentType        *string
+}
+
+type BackupKeyExportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *BackupKeyExportResponse200Headers
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupKeyExportResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupKeyExportResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupKeyExportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupKeyExportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupKeyExportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type BackupPointsListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -13322,6 +13512,61 @@ func (r EnvironmentRenameResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EnvironmentRenameResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackupKeyRotateResponse202Headers the declared response headers of an HTTP 202 response for BackupKeyRotate
+type BackupKeyRotateResponse202Headers struct {
+	ContentType *string
+}
+
+type BackupKeyRotateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackupKeyRotateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackupKeyRotateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupKeyRotateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupKeyRotateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupKeyRotateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupKeyRotateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupKeyRotateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17103,6 +17348,19 @@ func (c *ClientWithResponses) EnvironmentApplyWithBodyWithResponse(ctx context.C
 	return ParseEnvironmentApplyResponse(rsp)
 }
 
+// BackupKeyExportWithResponse Export the current backup age identity without storing it
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
+func (c *ClientWithResponses) BackupKeyExportWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BackupKeyExportResponse, error) {
+	rsp, err := c.BackupKeyExport(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupKeyExportResponse(rsp)
+}
+
 // BackupPointsListWithResponse List verified Recovery Points
 //
 // Returns a wrapper object for the known response body format(s).
@@ -17140,6 +17398,19 @@ func (c *ClientWithResponses) EnvironmentRenameWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseEnvironmentRenameResponse(rsp)
+}
+
+// BackupKeyRotateWithResponse Rotate the Environment backup age key
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
+func (c *ClientWithResponses) BackupKeyRotateWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error) {
+	rsp, err := c.BackupKeyRotate(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupKeyRotateResponse(rsp)
 }
 
 // HostShowWithResponse Show host health
@@ -19553,6 +19824,59 @@ func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyRespons
 	return response, nil
 }
 
+// ParseBackupKeyExportResponse parses an HTTP response from a BackupKeyExportWithResponse call
+func ParseBackupKeyExportResponse(rsp *http.Response) (*BackupKeyExportResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupKeyExportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers BackupKeyExportResponse200Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentDisposition = &value
+		}
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseBackupPointsListResponse parses an HTTP response from a BackupPointsListWithResponse call
 func ParseBackupPointsListResponse(rsp *http.Response) (*BackupPointsListResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -19627,6 +19951,52 @@ func ParseEnvironmentRenameResponse(rsp *http.Response) (*EnvironmentRenameRespo
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackupKeyRotateResponse parses an HTTP response from a BackupKeyRotateWithResponse call
+func ParseBackupKeyRotateResponse(rsp *http.Response) (*BackupKeyRotateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupKeyRotateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers BackupKeyRotateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

@@ -31,7 +31,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const idempotencyKeyHeader = "Idempotency-Key"
+const (
+	idempotencyKeyHeader       = "Idempotency-Key"
+	maximumRawResponseByteSize = 4 << 10
+)
 
 var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
 
@@ -70,7 +73,7 @@ func (c *Client) NewRequest(method, path string, query map[string]string, body a
 		Body:           body,
 		ExpectedStatus: expectedStatus,
 	}
-	if requiresIdempotencyKey(request.Method) {
+	if requiresIdempotencyKey(request.Method, request.Path) {
 		request.IdempotencyKey = ids.NewULID()
 	}
 	return request
@@ -129,7 +132,11 @@ func (c *Client) Do(ctx context.Context, request Request, out any) error {
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, fmt.Errorf("apiclient: build request: %w", err))
 	}
-	req.Header.Set("Accept", "application/json")
+	if _, raw := out.(*[]byte); raw {
+		req.Header.Set("Accept", "text/plain")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -179,16 +186,74 @@ func (c *Client) Do(ctx context.Context, request Request, out any) error {
 			request.Path,
 		)
 	}
+	if raw, ok := out.(*[]byte); ok {
+		value, err := readBoundedRawResponseInto(
+			resp.Body,
+			make([]byte, maximumRawResponseByteSize+1),
+			request.Method,
+			request.Path,
+		)
+		if err != nil {
+			return err
+		}
+		*raw = value
+		return nil
+	}
 	return decodeSingleJSON(request.Method, request.Path, resp.Body, out)
 }
 
-func requiresIdempotencyKey(method string) bool {
+func readBoundedRawResponseInto(
+	reader io.Reader,
+	scratch []byte,
+	method string,
+	path string,
+) ([]byte, error) {
+	if len(scratch) != maximumRawResponseByteSize+1 {
+		clear(scratch)
+		return nil, errs.New(errs.KindInternal, "apiclient: raw response scratch has an invalid size")
+	}
+	count, err := io.ReadFull(reader, scratch)
+	switch err {
+	case nil:
+		clear(scratch)
+		return nil, errs.Newf(
+			errs.KindInternal,
+			"apiclient: %s %s raw response exceeds %d bytes",
+			method,
+			path,
+			maximumRawResponseByteSize,
+		)
+	case io.EOF, io.ErrUnexpectedEOF:
+		return scratch[:count], nil
+	default:
+		clear(scratch)
+		return nil, errs.Wrap(
+			errs.KindInternal,
+			fmt.Errorf("apiclient: %s %s read response: %w", method, path, err),
+		)
+	}
+}
+
+func requiresIdempotencyKey(method, path string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		if method == http.MethodPost && isBackupKeyExportPath(path) {
+			return false
+		}
 		return true
 	default:
 		return false
 	}
+}
+
+func isBackupKeyExportPath(path string) bool {
+	const prefix = "/api/v1/environments/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	remainder := strings.TrimPrefix(path, prefix)
+	environmentID, action, found := strings.Cut(remainder, "/")
+	return found && environmentID != "" && action == "export-key"
 }
 
 func validExpectedStatus(method string, status int) bool {
@@ -209,7 +274,7 @@ func validExpectedStatus(method string, status int) bool {
 }
 
 func validateIdempotencyKey(request Request) error {
-	required := requiresIdempotencyKey(request.Method)
+	required := requiresIdempotencyKey(request.Method, request.Path)
 	if required && !idempotencyKeyPattern.MatchString(request.IdempotencyKey) {
 		return errs.Newf(
 			errs.KindInternal,

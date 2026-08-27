@@ -268,6 +268,9 @@ func (repository *TaskRepository) retryTask(
 			"backup retry requires its atomic domain retry protocol",
 		)
 	}
+	if source.Record.Type == TaskRotate {
+		return repository.retryBackupKeyRotationTask(ctx, source, retryTaskID, actor, marker)
+	}
 	if source.Record.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
 		return repository.retryHierarchyDeletionTask(
 			ctx, source, retryTaskID, actor, provided, marker,
@@ -1371,6 +1374,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateBackupKeyRotationTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				if err := repository.validateTaskRetentionReplay(
 					ctx, task, primaryAndAssignment.ReadRevision,
 				); err != nil {
@@ -1779,6 +1787,15 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, runnerChange.conditions...)
 			mutations = append(mutations, runnerChange.mutations...)
 		}
+		rotationChange, err := repository.prepareBackupKeyRotationTaskAcknowledgement(
+			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			return Versioned[TaskRecord]{}, err
+		}
+		defer rotationChange.clear()
+		conditions = append(conditions, rotationChange.conditions...)
+		mutations = append(mutations, rotationChange.mutations...)
 		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 			ctx,
 			task,
@@ -2452,6 +2469,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
+			if err := repository.validateBackupKeyRotationTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			if err := repository.validateTaskRetentionReplay(
 				ctx, current.Record, current.ReadRevision,
 			); err != nil {
@@ -2800,6 +2822,15 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, runnerChange.conditions...)
 			mutations = append(mutations, runnerChange.mutations...)
 		}
+		rotationChange, err := repository.prepareBackupKeyRotationTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+		)
+		if err != nil {
+			return Versioned[TaskRecord]{}, err
+		}
+		defer rotationChange.clear()
+		conditions = append(conditions, rotationChange.conditions...)
+		mutations = append(mutations, rotationChange.mutations...)
 		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 			ctx,
 			current.Record,

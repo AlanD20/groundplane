@@ -6,11 +6,16 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/url"
+	"os"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 
 	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 )
@@ -164,17 +169,75 @@ func renderDispatchedTask(cmd *cobra.Command, accepted apiTypes.TaskAccepted) er
 	return err
 }
 
-func runExportKey(cmd *cobra.Command, path string) error {
+func runExportKey(cmd *cobra.Command, path, destination string) error {
 	app := fromContext(cmd)
-	var res struct {
-		Value string `json:"value"`
-	}
+	var body []byte
 	request := app.Client.NewRequest("POST", path, nil, nil, 200)
-	if err := app.Client.Do(cmd.Context(), request, &res); err != nil {
+	if err := app.Client.Do(cmd.Context(), request, &body); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintln(cmd.OutOrStdout(), res.Value)
-	return err
+	defer clear(body)
+	if destination == "" || destination == "-" {
+		written, err := io.Copy(cmd.OutOrStdout(), bytes.NewReader(body))
+		if err != nil {
+			return errs.Wrap(errs.KindInternal, err)
+		}
+		if written != int64(len(body)) {
+			return errs.Wrap(errs.KindInternal, io.ErrShortWrite)
+		}
+		return nil
+	}
+	return writePrivateExportFile(destination, body)
+}
+
+func writePrivateExportFile(path string, body []byte) (result error) {
+	fd, err := unix.Open(
+		path,
+		unix.O_WRONLY|unix.O_CREAT|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK,
+		0o600,
+	)
+	if err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		if closeErr := unix.Close(fd); closeErr != nil {
+			return errs.Wrap(errs.KindInternal, closeErr)
+		}
+		return errs.New(errs.KindInternal, "backup export-key file descriptor is invalid")
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && result == nil {
+			result = errs.Wrap(errs.KindInternal, closeErr)
+		}
+	}()
+	info, err := file.Stat()
+	if err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
+	if !info.Mode().IsRegular() {
+		return errs.New(errs.KindValidationFailed, "backup export-key destination must be a regular file")
+	}
+	if err := file.Chmod(0o600); err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
+	if err := file.Truncate(0); err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
+	written, err := io.Copy(file, bytes.NewReader(body))
+	if err != nil {
+		return errs.Wrap(errs.KindInternal, err)
+	}
+	if written != int64(len(body)) {
+		return errs.Wrap(errs.KindInternal, io.ErrShortWrite)
+	}
+	if err := file.Sync(); err != nil {
+		return errs.Wrap(errs.KindInternal, err)
+	}
+	return nil
 }
 
 // scopeQuery builds the ?tenant=&project=&environment= filter set from
