@@ -130,7 +130,11 @@ func newTenantCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/tenants/"+id)
+			accepted, err := fromContext(cmd).Client.DeleteTenant(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 

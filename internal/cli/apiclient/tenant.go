@@ -164,6 +164,26 @@ func (c *Client) RenameTenant(ctx context.Context, id, slug string) (apiTypes.Te
 	return generatedTenantBody(http.MethodPost, path, response.Body, response.JSON200)
 }
 
+func (c *Client) DeleteTenant(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/tenants/" + id
+	response, err := client.TenantDeleteWithResponse(
+		ctx, id, &generated.TenantDeleteParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+}
+
 func (c *Client) generatedHumanClient() (*generated.ClientWithResponses, error) {
 	client, err := generated.NewClientWithResponses(
 		c.BaseURL+"/api/v1",

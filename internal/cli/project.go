@@ -143,7 +143,11 @@ func newProjectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/projects/"+id)
+			accepted, err := fromContext(cmd).Client.DeleteProject(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 
