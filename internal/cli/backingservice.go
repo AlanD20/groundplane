@@ -91,7 +91,7 @@ func newBackingServiceCmd() *cobra.Command {
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:   "destroy <slug>",
-		Short: "Destroy a backing service (typed confirmation in the Console; removes data)",
+		Short: "Remove backing-service runtime while retaining durable data",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runBackingServiceAction(cmd, args[0], "destroy")

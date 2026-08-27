@@ -1869,6 +1869,21 @@ type BackingServiceListParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// BackingServiceDestroyParams defines parameters for BackingServiceDestroy.
+type BackingServiceDestroyParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// BackingServiceStartParams defines parameters for BackingServiceStart.
+type BackingServiceStartParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// BackingServiceStopParams defines parameters for BackingServiceStop.
+type BackingServiceStopParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ComponentListParams defines parameters for ComponentList.
 type ComponentListParams struct {
 	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
@@ -2647,6 +2662,21 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceDestroy backing-service.destroy
+	//
+	// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+	BackingServiceDestroy(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceStart backing-service.start
+	//
+	// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+	BackingServiceStart(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceStop backing-service.stop
+	//
+	// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+	BackingServiceStop(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ComponentList List Components
 	//
@@ -3651,6 +3681,51 @@ func (c *Client) BackingServiceList(ctx context.Context, params *BackingServiceL
 // Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 func (c *Client) BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackingServiceShowRequest(c.Server, projectId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceDestroy backing-service.destroy
+//
+// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+func (c *Client) BackingServiceDestroy(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceDestroyRequest(c.Server, projectId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceStart backing-service.start
+//
+// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+func (c *Client) BackingServiceStart(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceStartRequest(c.Server, projectId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceStop backing-service.stop
+//
+// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+func (c *Client) BackingServiceStop(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceStopRequest(c.Server, projectId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6426,6 +6501,147 @@ func NewBackingServiceShowRequest(server string, projectId string) (*http.Reques
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceDestroyRequest constructs an http.Request for the BackingServiceDestroy method
+func NewBackingServiceDestroyRequest(server string, projectId string, params *BackingServiceDestroyParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "project_id", projectId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-services/%s/destroy", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceStartRequest constructs an http.Request for the BackingServiceStart method
+func NewBackingServiceStartRequest(server string, projectId string, params *BackingServiceStartParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "project_id", projectId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-services/%s/start", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceStopRequest constructs an http.Request for the BackingServiceStop method
+func NewBackingServiceStopRequest(server string, projectId string, params *BackingServiceStopParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "project_id", projectId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-services/%s/stop", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -11569,6 +11785,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShowWithResponse(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*BackingServiceShowResponse, error)
 
+	// BackingServiceDestroyWithResponse backing-service.destroy
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+	BackingServiceDestroyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error)
+
+	// BackingServiceStartWithResponse backing-service.start
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+	BackingServiceStartWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error)
+
+	// BackingServiceStopWithResponse backing-service.stop
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+	BackingServiceStopWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error)
+
 	// ComponentListWithResponse List Components
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -13189,6 +13426,171 @@ func (r BackingServiceShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackingServiceShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackingServiceDestroyResponse202Headers the declared response headers of an HTTP 202 response for BackingServiceDestroy
+type BackingServiceDestroyResponse202Headers struct {
+	ContentType *string
+}
+
+type BackingServiceDestroyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackingServiceDestroyResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackingServiceDestroyResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceDestroyResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceDestroyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceDestroyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceDestroyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceDestroyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackingServiceStartResponse202Headers the declared response headers of an HTTP 202 response for BackingServiceStart
+type BackingServiceStartResponse202Headers struct {
+	ContentType *string
+}
+
+type BackingServiceStartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackingServiceStartResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackingServiceStartResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceStartResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceStartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceStartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceStartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceStartResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackingServiceStopResponse202Headers the declared response headers of an HTTP 202 response for BackingServiceStop
+type BackingServiceStopResponse202Headers struct {
+	ContentType *string
+}
+
+type BackingServiceStopResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BackingServiceStopResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BackingServiceStopResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceStopResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceStopResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceStopResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceStopResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceStopResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -18240,6 +18642,45 @@ func (c *ClientWithResponses) BackingServiceShowWithResponse(ctx context.Context
 	return ParseBackingServiceShowResponse(rsp)
 }
 
+// BackingServiceDestroyWithResponse backing-service.destroy
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services/{project_id}/destroy (the `BackingServiceDestroy` operationId).
+func (c *ClientWithResponses) BackingServiceDestroyWithResponse(ctx context.Context, projectId string, params *BackingServiceDestroyParams, reqEditors ...RequestEditorFn) (*BackingServiceDestroyResponse, error) {
+	rsp, err := c.BackingServiceDestroy(ctx, projectId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceDestroyResponse(rsp)
+}
+
+// BackingServiceStartWithResponse backing-service.start
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services/{project_id}/start (the `BackingServiceStart` operationId).
+func (c *ClientWithResponses) BackingServiceStartWithResponse(ctx context.Context, projectId string, params *BackingServiceStartParams, reqEditors ...RequestEditorFn) (*BackingServiceStartResponse, error) {
+	rsp, err := c.BackingServiceStart(ctx, projectId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceStartResponse(rsp)
+}
+
+// BackingServiceStopWithResponse backing-service.stop
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services/{project_id}/stop (the `BackingServiceStop` operationId).
+func (c *ClientWithResponses) BackingServiceStopWithResponse(ctx context.Context, projectId string, params *BackingServiceStopParams, reqEditors ...RequestEditorFn) (*BackingServiceStopResponse, error) {
+	rsp, err := c.BackingServiceStop(ctx, projectId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceStopResponse(rsp)
+}
+
 // ComponentListWithResponse List Components
 //
 // Returns a wrapper object for the known response body format(s).
@@ -20409,6 +20850,144 @@ func ParseBackingServiceShowResponse(rsp *http.Response) (*BackingServiceShowRes
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceDestroyResponse parses an HTTP response from a BackingServiceDestroyWithResponse call
+func ParseBackingServiceDestroyResponse(rsp *http.Response) (*BackingServiceDestroyResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceDestroyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers BackingServiceDestroyResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceStartResponse parses an HTTP response from a BackingServiceStartWithResponse call
+func ParseBackingServiceStartResponse(rsp *http.Response) (*BackingServiceStartResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceStartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers BackingServiceStartResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceStopResponse parses an HTTP response from a BackingServiceStopWithResponse call
+func ParseBackingServiceStopResponse(rsp *http.Response) (*BackingServiceStopResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceStopResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers BackingServiceStopResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

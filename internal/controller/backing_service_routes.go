@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"reflect"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -16,6 +17,12 @@ type BackingServiceReader interface {
 	ListBackingServices(context.Context, etcd.PageRequest) (etcd.Page[etcd.BackingServiceRecord], error)
 }
 
+type BackingServiceMutator interface {
+	StartBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	StopBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DestroyBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+}
+
 type backingServiceListInput struct {
 	Limit  int    `query:"limit" required:"false"`
 	Cursor string `query:"cursor" required:"false"`
@@ -23,6 +30,11 @@ type backingServiceListInput struct {
 
 type backingServiceShowInput struct {
 	ProjectID string `path:"project_id" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
+}
+
+type backingServiceActionInput struct {
+	ProjectID      string `path:"project_id" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type backingServicePageOutput struct {
@@ -34,6 +46,9 @@ type backingServiceOutput struct {
 }
 
 func (s *Server) registerBackingServices() {
+	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
+	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.list", Method: http.MethodGet, Path: "/backing-services",
 		Summary: "List backing services", Tags: []string{"Backing service"},
@@ -43,6 +58,79 @@ func (s *Server) registerBackingServices() {
 		OperationID: "backing-service.show", Method: http.MethodGet, Path: "/backing-services/{project_id}",
 		Summary: "Show a backing service", Tags: []string{"Backing service"},
 	}, s.showBackingService)
+	for _, action := range []struct {
+		id      string
+		path    string
+		handler func(context.Context, *backingServiceActionInput) (*backingServiceMutationOutput, error)
+	}{
+		{id: "backing-service.start", path: "/backing-services/{project_id}/start", handler: s.startBackingService},
+		{id: "backing-service.stop", path: "/backing-services/{project_id}/stop", handler: s.stopBackingService},
+		{id: "backing-service.destroy", path: "/backing-services/{project_id}/destroy", handler: s.destroyBackingService},
+	} {
+		huma.Register(s.API, huma.Operation{
+			OperationID: action.id, Method: http.MethodPost, Path: action.path,
+			Summary: action.id, Tags: []string{"Backing service"}, DefaultStatus: http.StatusAccepted,
+			Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery},
+			Responses:   attachMutationResponses(taskAcceptedSchema),
+		}, action.handler)
+	}
+}
+
+type backingServiceMutationOutput struct {
+	Status      int
+	ContentType string `header:"Content-Type"`
+	Body        func(huma.Context)
+}
+
+func (s *Server) startBackingService(
+	ctx context.Context,
+	request *backingServiceActionInput,
+) (*backingServiceMutationOutput, error) {
+	if s.backingServiceMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Backing-service mutator is not configured")
+	}
+	return s.mutateBackingService(ctx, request, s.backingServiceMutations.StartBackingService)
+}
+
+func (s *Server) stopBackingService(
+	ctx context.Context,
+	request *backingServiceActionInput,
+) (*backingServiceMutationOutput, error) {
+	if s.backingServiceMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Backing-service mutator is not configured")
+	}
+	return s.mutateBackingService(ctx, request, s.backingServiceMutations.StopBackingService)
+}
+
+func (s *Server) destroyBackingService(
+	ctx context.Context,
+	request *backingServiceActionInput,
+) (*backingServiceMutationOutput, error) {
+	if s.backingServiceMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Backing-service mutator is not configured")
+	}
+	return s.mutateBackingService(ctx, request, s.backingServiceMutations.DestroyBackingService)
+}
+
+func (s *Server) mutateBackingService(
+	ctx context.Context,
+	request *backingServiceActionInput,
+	mutate func(context.Context, string, string) (etcd.IdempotencyResponse, error),
+) (*backingServiceMutationOutput, error) {
+	if s.backingServiceMutations == nil || mutate == nil {
+		return nil, errs.New(errs.KindInternal, "Backing-service mutator is not configured")
+	}
+	response, err := mutate(ctx, request.ProjectID, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &backingServiceMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			_, _ = ctx.BodyWriter().Write(response.Body)
+		},
+	}, nil
 }
 
 func (s *Server) listBackingServices(
