@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -64,7 +65,9 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 		}},
 	}
 	references, steps, err := service.environmentComponentMaterializations(
-		context.Background(), environmentID, revisionID, artifactID, projection, []etcd.EntryRecord{entry},
+		context.Background(), environmentID, revisionID, artifactID,
+		func(kind ids.Kind, _ string) string { return ids.New(kind) },
+		projection, []etcd.EntryRecord{entry},
 	)
 	if err != nil {
 		t.Fatalf("environmentComponentMaterializations() error = %v", err)

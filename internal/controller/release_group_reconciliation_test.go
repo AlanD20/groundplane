@@ -80,6 +80,6 @@ func TestReconcileBlueprintReleaseGroupsClassifiesInvalidSpec(t *testing.T) {
 	)
 	kind, ok := errs.KindOf(err)
 	if !ok || kind != errs.KindValidationFailed {
-		t.Fatalf("error kind = %q/%t for %v, want validation.failed", kind, ok, err)
+		t.Fatalf("error kind = %v/%t for %v, want validation.failed", kind, ok, err)
 	}
 }
