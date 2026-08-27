@@ -182,6 +182,7 @@ func publishEnvironmentBlueprintTestRevision(
 		zoneChanges,
 		serviceChanges,
 		routeChanges,
+		ReleaseGroupBlueprintPreparedMutation{},
 		componentPreparation,
 		task,
 		marker,

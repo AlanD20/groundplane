@@ -183,14 +183,29 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx con
 		mutations: []Mutation{{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID)}},
 	}
 	if terminal == TaskStatusCompleted {
-		change.conditions = append(change.conditions, Condition{Key: environmentMutationEpochKey(group.EnvironmentID), ModRevision: indexes.Values[2].ModRevision})
+		collectionCondition, collectionMutation, collectionErr := loadReleaseGroupCollectionEpoch(
+			ctx,
+			repository.store,
+			group.EnvironmentID,
+			revision,
+		)
+		if collectionErr != nil {
+			clear(epochValue)
+			return releaseGroupTaskChange{}, collectionErr
+		}
+		change.conditions = append(
+			change.conditions,
+			Condition{Key: environmentMutationEpochKey(group.EnvironmentID), ModRevision: indexes.Values[2].ModRevision},
+			collectionCondition,
+		)
 		change.mutations = append(change.mutations,
 			Mutation{Type: MutationDelete, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID)},
 			Mutation{Type: MutationDelete, Key: releaseGroupNameKey(group.EnvironmentID, group.Name)},
 			Mutation{Type: MutationDelete, Key: releaseGroupRecordKey(group.ID)},
 			Mutation{Type: MutationPut, Key: environmentMutationEpochKey(group.EnvironmentID), Value: epochValue},
+			collectionMutation,
 		)
-		change.values = append(change.values, epochValue)
+		change.values = append(change.values, epochValue, collectionMutation.Value)
 	} else {
 		clear(epochValue)
 	}

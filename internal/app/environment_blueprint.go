@@ -79,6 +79,7 @@ type environmentBlueprintRepository interface {
 		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
+		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -86,11 +87,12 @@ type environmentBlueprintRepository interface {
 }
 
 type environmentBlueprintService struct {
-	volumeRoot  string
-	repository  environmentBlueprintRepository
-	idempotency *desiredrevision.Idempotency
-	materials   environmentBlueprintMaterializationResolver
-	now         func() time.Time
+	volumeRoot    string
+	repository    environmentBlueprintRepository
+	idempotency   *desiredrevision.Idempotency
+	materials     environmentBlueprintMaterializationResolver
+	releaseGroups *controller.ReleaseGroupBlueprintPlanner
+	now           func() time.Time
 }
 
 type environmentBlueprintMaterializationResolver interface {
@@ -193,8 +195,9 @@ func newEnvironmentBlueprintService(
 	repository environmentBlueprintRepository,
 	idempotency *desiredrevision.Idempotency,
 	materials environmentBlueprintMaterializationResolver,
+	releaseGroups *controller.ReleaseGroupBlueprintPlanner,
 ) (*environmentBlueprintService, error) {
-	if repository == nil || idempotency == nil || materials == nil {
+	if repository == nil || idempotency == nil || materials == nil || releaseGroups == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
 	if _, err := controller.NewTaskPlanResolver(volumeRoot); err != nil {
@@ -202,7 +205,8 @@ func newEnvironmentBlueprintService(
 	}
 	return &environmentBlueprintService{
 		volumeRoot: volumeRoot, repository: repository, idempotency: idempotency,
-		materials: materials, now: time.Now,
+		materials: materials, releaseGroups: releaseGroups,
+		now: time.Now,
 	}, nil
 }
 
@@ -301,8 +305,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if generation > math.MaxInt32 {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment render generation is exhausted")
 	}
-	taskID := ids.New(ids.KindTask)
-	now := service.now().UTC()
+	candidateTaskID := ids.New(ids.KindTask)
+	candidateCreatedAt := service.now().UTC()
 
 	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
 		EnvironmentID: environmentID,
@@ -314,6 +318,25 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	claim, err := desiredrevision.Claim(
+		ctx, service.repository, desiredrevision.ClaimInput{
+			EnvironmentID: environmentID, CandidateTaskID: candidateTaskID,
+			Locator: locator, Intent: evidence.Durable, BaselineHeadRevision: expectedHeadRevision,
+			SourceKind: etcd.EnvironmentBlueprintSourceApply,
+			MatchExistingIntent: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+				return service.idempotency.MatchesStaged(ctx, evidence, existing)
+			},
+			RenderGeneration: generation, CreatedAt: candidateCreatedAt,
+		})
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	allocator, err := desiredrevision.NewBlueprintIdentityAllocator(claim)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	taskID := claim.TaskID
+	now := claim.CreatedAt
 	if err := preserveEnvironmentBlueprintVolumes(parsed.Project, previousProjection.Record, hasProjection); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -325,7 +348,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	changes, err := controller.ReconcileOwnedComposeIdentities(parsed.Project, previous, ids.New)
+	changes, err := controller.ReconcileOwnedComposeIdentities(parsed.Project, previous, allocator.New)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -377,6 +400,16 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	releaseGroupPreparation, err := service.releaseGroups.Prepare(
+		ctx,
+		environmentID,
+		parsed.Extensions.ReleaseGroups,
+		desiredServices,
+		func() string { return allocator.New(ids.KindReleaseGroup) },
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	currentRoutes, err := service.listBlueprintRoutes(ctx, environmentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -391,7 +424,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		parsed.Extensions.Routes,
 		desiredServices,
 		previousRoutes,
-		ids.New,
+		allocator.New,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -421,6 +454,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		environmentID,
 		taskID,
 		now,
+		allocator.New,
 		parsed.Extensions.Components,
 		currentComponents,
 		zoneChanges,
@@ -452,8 +486,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	planID := ids.New(ids.KindPlan)
-	artifactID := ids.New(ids.KindConfig)
+	planID := allocator.Named(ids.KindPlan, "execution-plan")
+	artifactID := allocator.Named(ids.KindConfig, "compose-artifact")
 	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: artifactID,
 		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID,
@@ -472,6 +506,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		environmentID,
 		taskID,
 		artifactID,
+		allocator.Named,
 		componentProjection,
 		pinnedEntries,
 	)
@@ -491,7 +526,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Blueprint protected intent digest is invalid")
 		}
 		volumeIntentDigest = intentDigest
-		stepID := ids.New(ids.KindStep)
+		stepID := allocator.Named(ids.KindStep, "managed-volume-directories")
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId: stepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
@@ -503,7 +538,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		})
 		stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: stepID})
 	}
-	applyStepID := ids.New(ids.KindStep)
+	applyStepID := allocator.Named(ids.KindStep, "compose-apply")
 	steps = append(steps, &agentpb.ExecutionStep{
 		StepId: applyStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
 		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
@@ -529,7 +564,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
 	}
 	task := etcd.TaskRecord{
-		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
 		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: environmentID,
@@ -556,16 +591,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		pinnedEntries,
 	)
 	projection.ServiceDependencyPlans = dependencyPlans.Clone()
-	claim, projectionEvidence, err := desiredrevision.PreflightAndClaim(
-		ctx, service.repository, projection, desiredrevision.ClaimInput{
-			EnvironmentID: environmentID, CandidateTaskID: taskID,
-			Locator: locator, Intent: evidence.Durable, BaselineHeadRevision: expectedHeadRevision,
-			SourceKind: etcd.EnvironmentBlueprintSourceApply,
-			MatchExistingIntent: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
-				return service.idempotency.MatchesStaged(ctx, evidence, existing)
-			},
-			RenderGeneration: generation, CreatedAt: now,
-		})
+	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -574,7 +600,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		Claim: claim, Evidence: evidence, Locator: locator, Blueprint: revision,
 		Projection: projection, DependencyDigest: projectionEvidence.DependencyDigest,
 		ZoneChanges: zoneChanges, ServiceChanges: serviceChanges, RouteChanges: routeChanges,
-		ComponentPreparation: componentPreparation, Task: task,
+		ReleaseGroupPreparation: releaseGroupPreparation,
+		ComponentPreparation:    componentPreparation, Task: task,
 	})
 }
 
@@ -745,6 +772,7 @@ func (service *environmentBlueprintService) prepareBlueprintComponents(
 	environmentID string,
 	taskID string,
 	createdAt time.Time,
+	allocate func(ids.Kind) string,
 	specs map[string]core.ComponentSpec,
 	current []etcd.Versioned[etcd.ComponentRecord],
 	zoneChanges []etcd.EnvironmentBlueprintZoneChange,
@@ -765,7 +793,7 @@ func (service *environmentBlueprintService) prepareBlueprintComponents(
 		currentComponents[index] = component
 		currentByID[component.ID] = versioned
 	}
-	changes, err := controller.ReconcileBlueprintComponents(specs, currentComponents, ids.New)
+	changes, err := controller.ReconcileBlueprintComponents(specs, currentComponents, allocate)
 	if err != nil {
 		return etcd.ComponentTaskPreparation{}, nil, nil, err
 	}
@@ -921,6 +949,7 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 	environmentID string,
 	revisionID string,
 	artifactID string,
+	allocate func(ids.Kind, string) string,
 	projection controller.EnvironmentComponentComposeProjection,
 	entries []etcd.EntryRecord,
 ) ([]etcd.TaskMaterializationRecord, []*agentpb.ExecutionStep, error) {
@@ -993,8 +1022,9 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 		}
 		digest := sha256.Sum256(content)
 		reference := etcd.TaskMaterializationRecord{
-			StepID: ids.New(ids.KindStep), MaterializationID: ids.New(ids.KindConfig),
-			EnvironmentID: environmentID, Destination: input.destination,
+			StepID:            allocate(ids.KindStep, "materialization-step/"+input.destination),
+			MaterializationID: allocate(ids.KindConfig, "materialization/"+input.destination),
+			EnvironmentID:     environmentID, Destination: input.destination,
 			ServiceID: input.serviceID, ServiceName: input.serviceName,
 			OutputKind: input.outputKind, Mode: uint32(input.mode),
 			Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]), Source: input.source,

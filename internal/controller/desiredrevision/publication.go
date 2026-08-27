@@ -28,6 +28,7 @@ type Repository interface {
 		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
+		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -105,20 +106,21 @@ func Claim(
 }
 
 type PublishInput struct {
-	Project              etcd.Versioned[etcd.ProjectRecord]
-	Environment          etcd.Versioned[etcd.EnvironmentRecord]
-	ExpectedHeadRevision int64
-	Claim                etcd.EnvironmentBlueprintStageClaim
-	Evidence             Evidence
-	Locator              etcd.IdempotencyLocator
-	Blueprint            etcd.EnvironmentBlueprintRevision
-	Projection           etcd.EnvironmentComposeProjection
-	DependencyDigest     [sha256.Size]byte
-	ZoneChanges          []etcd.EnvironmentBlueprintZoneChange
-	ServiceChanges       []etcd.EnvironmentBlueprintServiceChange
-	RouteChanges         []etcd.EnvironmentBlueprintRouteChange
-	ComponentPreparation etcd.ComponentTaskPreparation
-	Task                 etcd.TaskRecord
+	Project                 etcd.Versioned[etcd.ProjectRecord]
+	Environment             etcd.Versioned[etcd.EnvironmentRecord]
+	ExpectedHeadRevision    int64
+	Claim                   etcd.EnvironmentBlueprintStageClaim
+	Evidence                Evidence
+	Locator                 etcd.IdempotencyLocator
+	Blueprint               etcd.EnvironmentBlueprintRevision
+	Projection              etcd.EnvironmentComposeProjection
+	DependencyDigest        [sha256.Size]byte
+	ZoneChanges             []etcd.EnvironmentBlueprintZoneChange
+	ServiceChanges          []etcd.EnvironmentBlueprintServiceChange
+	RouteChanges            []etcd.EnvironmentBlueprintRouteChange
+	ReleaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation
+	ComponentPreparation    etcd.ComponentTaskPreparation
+	Task                    etcd.TaskRecord
 }
 
 type ProjectionEvidence struct {
@@ -182,7 +184,7 @@ func Publish(
 		input.Claim,
 		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.Environment.Record.ID, RevisionID: input.Task.ID},
 		input.Projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
-		input.ComponentPreparation, input.Task, marker,
+		input.ReleaseGroupPreparation, input.ComponentPreparation, input.Task, marker,
 	)
 	var resolution idempotentintent.Resolution
 	if publicationErr != nil {

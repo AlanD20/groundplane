@@ -8,7 +8,9 @@
 package ids
 
 import (
+	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"sync"
@@ -105,6 +107,14 @@ func Timestamp(kind Kind, value string) (time.Time, error) {
 func NewAt(kind Kind, t time.Time, entropySeed int64) string {
 	entropy := ulid.Monotonic(newSeededReader(entropySeed), 0)
 	return string(kind) + "_" + ulid.MustNew(ulid.Timestamp(t), entropy).String()
+}
+
+// DeriveAt returns a stable ID whose full ULID entropy is derived from durable
+// authority and a capability-owned purpose. It is for restart reconstruction;
+// ordinary allocation must continue to use New.
+func DeriveAt(kind Kind, t time.Time, authority, purpose string) string {
+	digest := sha256.Sum256([]byte(string(kind) + "\x00" + authority + "\x00" + purpose))
+	return string(kind) + "_" + ulid.MustNew(ulid.Timestamp(t), bytes.NewReader(digest[:])).String()
 }
 
 // newSeededReader gives fixtures reproducible ULIDs across test runs.

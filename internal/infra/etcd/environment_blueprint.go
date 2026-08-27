@@ -202,6 +202,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	zoneChanges []EnvironmentBlueprintZoneChange,
 	serviceChanges []EnvironmentBlueprintServiceChange,
 	routeChanges []EnvironmentBlueprintRouteChange,
+	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -245,6 +246,9 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Environment desired revision marker does not match its Task",
 		)
+	}
+	if err := validateReleaseGroupBlueprintPreparedMutation(releaseGroupPreparation, environment.Record.ID); err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
@@ -315,6 +319,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		}
 		defer clearPreparedComponentTaskPublication(componentPublication)
 	} else if len(zoneChanges) != 0 || len(serviceChanges) != 0 || len(routeChanges) != 0 ||
+		!releaseGroupPreparation.isZero() ||
 		!componentTaskPreparationIsZero(componentPreparation) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -468,6 +473,16 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 			),
 			componentPublication,
 		)
+		baseConditionCount := len(conditions)
+		conditions = append(conditions, releaseGroupPreparation.conditions...)
+		mutations = append(mutations, releaseGroupPreparation.mutations...)
+		previousClassifier := classified
+		classified = func(revision int64, values []*KeyValue) error {
+			if len(values) != baseConditionCount+len(releaseGroupPreparation.conditions) {
+				return errs.New(errs.KindInternal, "Blueprint Release Group compare evidence is incomplete")
+			}
+			return previousClassifier(revision, values[:baseConditionCount])
+		}
 	}
 	classifier := func(revision int64, values []*KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {

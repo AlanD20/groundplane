@@ -380,7 +380,7 @@ func (service *MutationService) mutateOnce(
 	result, mutationErr := service.repository.PublishEnvironmentDesiredRevisionWithTask(
 		ctx, project, environment, expectedHeadRevision, claim,
 		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
-		candidate, nil, nil, nil, etcd.ComponentTaskPreparation{}, task, marker,
+		candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{}, etcd.ComponentTaskPreparation{}, task, marker,
 	)
 	if mutationErr != nil {
 		if !isUnknownPublicationOutcome(mutationErr) {

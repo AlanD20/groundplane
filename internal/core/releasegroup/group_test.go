@@ -56,8 +56,6 @@ func TestNewRejectsInvalidIdentityMembershipOrderAndPolicy(t *testing.T) {
 		overflow[index] = ids.NewAt(ids.KindService, now, int64(100+index))
 	}
 	tests["too many members"] = Input{ID: groupID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: overflow}
-	tests["surrounding name whitespace"] = Input{ID: groupID, EnvironmentID: environmentID, Name: " realtime ", ServiceIDs: []string{serviceA, serviceB}}
-
 	for name, input := range tests {
 		input := input
 		t.Run(name, func(t *testing.T) {
@@ -110,9 +108,27 @@ func TestValidateRejectsNonNormalizedDurableValue(t *testing.T) {
 			ids.NewAt(ids.KindService, now, 3), ids.NewAt(ids.KindService, now, 4),
 		}, Order: []string{
 			ids.NewAt(ids.KindService, now, 3), ids.NewAt(ids.KindService, now, 4),
-		}, OnFailure: OnFailureSwitchBack,
+		}, OnFailure: "",
 	}
 	if err := Validate(group); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("Validate() error = %v, want validation.failed", err)
+	}
+}
+
+func TestNewPreservesBlueprintNameWhitespace(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 26, 10, 0, 0, 0, time.UTC)
+	group, err := New(Input{
+		ID: ids.NewAt(ids.KindReleaseGroup, now, 1), EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
+		Name: " realtime ", ServiceIDs: []string{
+			ids.NewAt(ids.KindService, now, 3), ids.NewAt(ids.KindService, now, 4),
+		},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if group.Name != " realtime " {
+		t.Fatalf("Name = %q, want exact Blueprint key", group.Name)
 	}
 }

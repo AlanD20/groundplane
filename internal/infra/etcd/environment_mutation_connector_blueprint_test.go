@@ -258,7 +258,7 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 			EnvironmentID: revision.EnvironmentID,
 			RevisionID:    revision.RevisionID,
 		},
-		projection, zoneChanges, serviceChanges, routeChanges, ComponentTaskPreparation{}, task, marker,
+		projection, zoneChanges, serviceChanges, routeChanges, ReleaseGroupBlueprintPreparedMutation{}, ComponentTaskPreparation{}, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
@@ -300,7 +300,7 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 			EnvironmentID: revision.EnvironmentID,
 			RevisionID:    revision.RevisionID,
 		},
-		projection, zoneChanges, serviceChanges, routeChanges, ComponentTaskPreparation{}, task, marker,
+		projection, zoneChanges, serviceChanges, routeChanges, ReleaseGroupBlueprintPreparedMutation{}, ComponentTaskPreparation{}, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(replay) error = %v", err)
@@ -361,6 +361,7 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 		zoneChanges,
 		serviceChanges,
 		routeChanges,
+		ReleaseGroupBlueprintPreparedMutation{},
 		ComponentTaskPreparation{},
 		task,
 		marker,
@@ -457,6 +458,7 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 			nil,
 			nil,
 			nil,
+			ReleaseGroupBlueprintPreparedMutation{},
 			ComponentTaskPreparation{},
 			task,
 			marker,

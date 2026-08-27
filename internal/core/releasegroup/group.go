@@ -110,9 +110,9 @@ func Equal(left Group, right Group) bool {
 
 func build(id string, environmentID string, desired Desired) (Group, error) {
 	name := desired.Name
-	if name == "" || name != strings.TrimSpace(name) || !utf8.ValidString(name) ||
+	if strings.TrimSpace(name) == "" || !utf8.ValidString(name) ||
 		strings.IndexFunc(name, unicode.IsControl) >= 0 {
-		return Group{}, validation("release group name must be canonical valid UTF-8 without surrounding whitespace or control characters")
+		return Group{}, validation("release group name must be valid UTF-8, nonblank, and without control characters")
 	}
 	if desired.DefaultTag != "" && strings.TrimSpace(desired.DefaultTag) == "" {
 		return Group{}, validation("release group default tag cannot be blank")

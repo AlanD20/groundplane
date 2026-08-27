@@ -190,11 +190,11 @@ func (service *releaseGroupMutationService) apply(
 	}
 	var prepared etcd.ReleaseGroupPreparedMutation
 	if current == nil {
-		prepared, err = service.groups.PrepareCreate(ctx, desired)
+		prepared, err = service.tasks.PrepareReleaseGroupCreate(ctx, desired)
 	} else if method == http.MethodPatch {
-		prepared, err = service.groups.PrepareUpdate(ctx, *current, desired)
+		prepared, err = service.tasks.PrepareReleaseGroupUpdate(ctx, current.Group, current.Revision, desired)
 	} else {
-		prepared, err = service.groups.PrepareRemove(ctx, *current)
+		prepared, err = service.tasks.PrepareReleaseGroupRemove(ctx, current.Group, current.Revision)
 	}
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

@@ -14,9 +14,14 @@ import (
 )
 
 type boundaryRepository struct {
-	claims       int
-	stages       int
-	publications int
+	claims               int
+	stages               int
+	publications         int
+	retainClaim          bool
+	winner               *etcd.EnvironmentBlueprintStageClaim
+	stagedTaskID         string
+	publishedClaimTaskID string
+	publishedTaskID      string
 }
 
 func (repository *boundaryRepository) ClaimEnvironmentBlueprintStage(
@@ -24,40 +29,56 @@ func (repository *boundaryRepository) ClaimEnvironmentBlueprintStage(
 	request etcd.EnvironmentBlueprintStageClaimRequest,
 ) (etcd.EnvironmentBlueprintStageClaim, error) {
 	repository.claims++
-	return etcd.EnvironmentBlueprintStageClaim{
+	if repository.retainClaim && repository.winner != nil {
+		winner := *repository.winner
+		winner.Intent.Ciphertext = append([]byte(nil), winner.Intent.Ciphertext...)
+		winner.Existing = true
+		return winner, nil
+	}
+	claim := etcd.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(request.CandidateTaskID, "task_"),
 		EnvironmentID: request.EnvironmentID, RevisionID: request.CandidateRevisionID,
 		TaskID: request.CandidateTaskID, Locator: request.Locator, Intent: request.Intent,
 		BaselineHeadRevision: request.BaselineHeadRevision, SourceKind: request.SourceKind,
 		RenderGeneration: request.RenderGeneration, ProjectionSchema: request.ProjectionSchema,
 		CreatedAt: request.CreatedAt,
-	}, nil
+	}
+	if repository.retainClaim {
+		winner := claim
+		winner.Intent.Ciphertext = append([]byte(nil), claim.Intent.Ciphertext...)
+		repository.winner = &winner
+	}
+	return claim, nil
 }
 
 func (repository *boundaryRepository) StageEnvironmentBlueprintRevision(
-	context.Context,
-	etcd.EnvironmentBlueprintStageRequest,
+	_ context.Context,
+	request etcd.EnvironmentBlueprintStageRequest,
 ) (etcd.EnvironmentBlueprintSeal, error) {
 	repository.stages++
+	repository.stagedTaskID = request.Claim.TaskID
 	return etcd.EnvironmentBlueprintSeal{}, nil
 }
 
 func (repository *boundaryRepository) PublishEnvironmentDesiredRevisionWithTask(
-	context.Context,
-	etcd.Versioned[etcd.ProjectRecord],
-	etcd.Versioned[etcd.EnvironmentRecord],
-	int64,
-	etcd.EnvironmentBlueprintStageClaim,
-	etcd.EnvironmentDesiredRevisionIdentity,
-	etcd.EnvironmentComposeProjection,
-	[]etcd.EnvironmentBlueprintZoneChange,
-	[]etcd.EnvironmentBlueprintServiceChange,
-	[]etcd.EnvironmentBlueprintRouteChange,
-	etcd.ComponentTaskPreparation,
-	etcd.TaskRecord,
-	etcd.IdempotencyMarker,
+	_ context.Context,
+	_ etcd.Versioned[etcd.ProjectRecord],
+	_ etcd.Versioned[etcd.EnvironmentRecord],
+	_ int64,
+	claim etcd.EnvironmentBlueprintStageClaim,
+	_ etcd.EnvironmentDesiredRevisionIdentity,
+	_ etcd.EnvironmentComposeProjection,
+	_ []etcd.EnvironmentBlueprintZoneChange,
+	_ []etcd.EnvironmentBlueprintServiceChange,
+	_ []etcd.EnvironmentBlueprintRouteChange,
+	_ etcd.ReleaseGroupBlueprintPreparedMutation,
+	_ etcd.ComponentTaskPreparation,
+	task etcd.TaskRecord,
+	_ etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.publications++
+	repository.publishedClaimTaskID = claim.TaskID
+	repository.publishedTaskID = task.ID
 	return etcd.IdempotencyTransactionResult{}, nil
 }
 
@@ -113,6 +134,97 @@ func TestPreflightAndClaimEnforcesExactNormalizedProjectionBoundary(t *testing.T
 		rejected.stages != 0 || rejected.publications != 0 {
 		t.Fatalf("oversized normalized projection authority = %#v/%d/%d/%d/%v",
 			evidence, rejected.claims, rejected.stages, rejected.publications, err)
+	}
+}
+
+// Rationale: a crash after the durable claim but before publication must resume with the winner's Task authority and byte-identical Release Group identity allocation.
+func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	now := time.Date(2026, 8, 26, 21, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 20)
+	firstCandidate := ids.NewAt(ids.KindTask, now, 21)
+	repository := &boundaryRepository{retainClaim: true}
+
+	firstInput := boundaryClaimInput(now, environmentID, firstCandidate)
+	first, err := Claim(ctx, repository, firstInput)
+	if err != nil {
+		t.Fatalf("Claim(first) error = %v", err)
+	}
+	firstAllocator, err := NewBlueprintIdentityAllocator(first)
+	if err != nil {
+		t.Fatalf("NewBlueprintIdentityAllocator(first) error = %v", err)
+	}
+	firstGroupID := firstAllocator.New(ids.KindReleaseGroup)
+	firstProjection := boundaryProjection(t, first.CreatedAt, environmentID, first.TaskID, 64, 0)
+	firstProjectionEvidence, err := PreflightProjection(firstProjection)
+	if err != nil {
+		t.Fatalf("PreflightProjection(first) error = %v", err)
+	}
+
+	secondInput := firstInput
+	secondInput.CandidateTaskID = ids.NewAt(ids.KindTask, now.Add(time.Second), 22)
+	secondInput.CreatedAt = now.Add(time.Second)
+	recovered, err := Claim(ctx, repository, secondInput)
+	if err != nil {
+		t.Fatalf("Claim(recovered) error = %v", err)
+	}
+	recoveredAllocator, err := NewBlueprintIdentityAllocator(recovered)
+	if err != nil {
+		t.Fatalf("NewBlueprintIdentityAllocator(recovered) error = %v", err)
+	}
+	recoveredGroupID := recoveredAllocator.New(ids.KindReleaseGroup)
+	recoveredProjection := boundaryProjection(
+		t, recovered.CreatedAt, environmentID, recovered.TaskID, 64, 0,
+	)
+	recoveredProjectionEvidence, err := PreflightProjection(recoveredProjection)
+	if err != nil {
+		t.Fatalf("PreflightProjection(recovered) error = %v", err)
+	}
+	if !recovered.Existing || first.TaskID == secondInput.CandidateTaskID ||
+		recovered.TaskID != first.TaskID || recoveredGroupID != firstGroupID ||
+		recoveredProjectionEvidence != firstProjectionEvidence {
+		t.Fatalf(
+			"recovered authority = existing:%t task:%q/%q group:%q/%q projection:%#v/%#v",
+			recovered.Existing, recovered.TaskID, first.TaskID,
+			recoveredGroupID, firstGroupID, recoveredProjectionEvidence, firstProjectionEvidence,
+		)
+	}
+
+	if _, err := repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+		Claim: recovered, Projection: recoveredProjection,
+		DependencyDigest: recoveredProjectionEvidence.DependencyDigest,
+	}); err != nil {
+		t.Fatalf("StageEnvironmentBlueprintRevision(recovered) error = %v", err)
+	}
+	if _, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+		ctx,
+		etcd.Versioned[etcd.ProjectRecord]{},
+		etcd.Versioned[etcd.EnvironmentRecord]{},
+		0,
+		recovered,
+		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: recovered.TaskID},
+		recoveredProjection,
+		nil,
+		nil,
+		nil,
+		etcd.ReleaseGroupBlueprintPreparedMutation{},
+		etcd.ComponentTaskPreparation{},
+		etcd.TaskRecord{ID: recovered.TaskID},
+		etcd.IdempotencyMarker{},
+	); err != nil {
+		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(recovered) error = %v", err)
+	}
+	if repository.claims != 2 || repository.stages != 1 || repository.publications != 1 ||
+		repository.stagedTaskID != first.TaskID ||
+		repository.publishedClaimTaskID != first.TaskID ||
+		repository.publishedTaskID != first.TaskID {
+		t.Fatalf(
+			"resume calls = %d/%d/%d, Task authority = %q/%q/%q, want %q",
+			repository.claims, repository.stages, repository.publications,
+			repository.stagedTaskID, repository.publishedClaimTaskID,
+			repository.publishedTaskID, first.TaskID,
+		)
 	}
 }
 

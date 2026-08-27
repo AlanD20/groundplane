@@ -808,11 +808,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint repositories: %w", err)
 	}
+	releaseGroupBlueprints, err := controller.NewReleaseGroupBlueprintPlanner(
+		releaseGroups,
+		hierarchyRecords,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Release Group Blueprint planner: %w", err)
+	}
 	environmentBlueprints, err := newEnvironmentBlueprintService(
 		cfg.Storage.VolumeRoot,
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
 		materializationResolver,
+		releaseGroupBlueprints,
 	)
 	if err != nil {
 		_ = store.Close()
