@@ -153,7 +153,7 @@ func (c *Client) DeployService(
 	); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+	return generatedReleaseTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
 func (c *Client) RollbackService(
@@ -181,7 +181,7 @@ func (c *Client) RollbackService(
 	); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+	return generatedReleaseTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
 }
 
 func (c *Client) StartService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {

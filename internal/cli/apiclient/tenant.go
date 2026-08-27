@@ -181,7 +181,7 @@ func (c *Client) DeleteTenant(ctx context.Context, id string) (apiTypes.TaskAcce
 	); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+	return generatedHierarchyTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
 func (c *Client) generatedHumanClient() (*generated.ClientWithResponses, error) {

@@ -175,7 +175,7 @@ func (c *Client) DeleteProject(ctx context.Context, id string) (apiTypes.TaskAcc
 	); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+	return generatedHierarchyTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
 func projectFromGenerated(project generated.Project) apiTypes.Project {

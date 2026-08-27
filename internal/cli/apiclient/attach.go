@@ -234,3 +234,33 @@ func generatedTaskAccepted(
 	}
 	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
 }
+
+func generatedHierarchyTaskAccepted(
+	method string,
+	path string,
+	body []byte,
+	parsed *generated.HierarchyDeleteOutputBody,
+) (apiTypes.TaskAccepted, error) {
+	if parsed == nil {
+		parsed = &generated.HierarchyDeleteOutputBody{}
+		if err := decodeSingleJSON(method, path, bytes.NewReader(body), parsed); err != nil {
+			return apiTypes.TaskAccepted{}, err
+		}
+	}
+	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
+}
+
+func generatedReleaseTaskAccepted(
+	method string,
+	path string,
+	body []byte,
+	parsed *generated.ReleaseTaskAccepted,
+) (apiTypes.TaskAccepted, error) {
+	if parsed == nil {
+		parsed = &generated.ReleaseTaskAccepted{}
+		if err := decodeSingleJSON(method, path, bytes.NewReader(body), parsed); err != nil {
+			return apiTypes.TaskAccepted{}, err
+		}
+	}
+	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
+}
