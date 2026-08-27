@@ -128,6 +128,122 @@ func (c *Client) EditService(ctx context.Context, id string, input apiTypes.Serv
 	return decodeServiceResponse(http.MethodPatch, path, response.Body)
 }
 
+func (c *Client) DeployService(
+	ctx context.Context,
+	id string,
+	input apiTypes.DeployRequest,
+) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	body, err := generatedServiceBody[generated.ServiceDeployJSONRequestBody](input)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/services/" + id + "/deploy"
+	response, err := client.ServiceDeployWithResponse(
+		ctx, id, &generated.ServiceDeployParams{IdempotencyKey: ids.NewULID()}, body,
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
+func (c *Client) RollbackService(
+	ctx context.Context,
+	id string,
+	input apiTypes.RollbackRequest,
+) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	body, err := generatedServiceBody[generated.ServiceRollbackJSONRequestBody](input)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/services/" + id + "/rollback"
+	response, err := client.ServiceRollbackWithResponse(
+		ctx, id, &generated.ServiceRollbackParams{IdempotencyKey: ids.NewULID()}, body,
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
+func (c *Client) StartService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/services/" + id + "/start"
+	response, err := client.ServiceStartWithResponse(
+		ctx, id, &generated.ServiceStartParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
+func (c *Client) StopService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/services/" + id + "/stop"
+	response, err := client.ServiceStopWithResponse(
+		ctx, id, &generated.ServiceStopParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
+func (c *Client) DestroyService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/services/" + id + "/destroy"
+	response, err := client.ServiceDestroyWithResponse(
+		ctx, id, &generated.ServiceDestroyParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
 func generatedServiceBody[Body any](input any) (Body, error) {
 	var body Body
 	encoded, err := json.Marshal(input)

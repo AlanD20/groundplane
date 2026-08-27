@@ -191,22 +191,13 @@ func newServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			path := "/api/v1/services/" + serviceID + "/deploy"
-			body := map[string]string{}
-			if deployTag != "" {
-				body["tag"] = deployTag
+			accepted, err := fromContext(cmd).Client.DeployService(cmd.Context(), serviceID, apiTypes.DeployRequest{
+				Tag: deployTag, Strategy: deployStrategy, OnFailure: apiTypes.OnFailure(deployOnFailure),
+			})
+			if err != nil {
+				return err
 			}
-			if deployStrategy != "" {
-				body["strategy"] = deployStrategy
-			}
-			if deployOnFailure != "" {
-				body["on_failure"] = deployOnFailure
-			}
-			return runAction(
-				cmd,
-				path,
-				body,
-			)
+			return renderDispatchedTask(cmd, accepted)
 		},
 	}
 	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag (defaults to the current tag)")
@@ -225,12 +216,13 @@ func newServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			path := "/api/v1/services/" + serviceID + "/rollback"
-			body := map[string]string{}
-			if rollbackTag != "" {
-				body["tag"] = rollbackTag
+			accepted, err := fromContext(cmd).Client.RollbackService(
+				cmd.Context(), serviceID, apiTypes.RollbackRequest{Tag: rollbackTag},
+			)
+			if err != nil {
+				return err
 			}
-			return runAction(cmd, path, body)
+			return renderDispatchedTask(cmd, accepted)
 		},
 	}
 	rollback.Flags().StringVar(&rollbackTag, "tag", "", "explicit tag (overrides the auto-selected previous tag)")
@@ -241,7 +233,15 @@ func newServiceCmd() *cobra.Command {
 		Short: "Start a service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/services/"+target(fromContext(cmd), args[0])+"/start", nil)
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.StartService(cmd.Context(), serviceID)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -249,7 +249,15 @@ func newServiceCmd() *cobra.Command {
 		Short: "Stop a service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/services/"+target(fromContext(cmd), args[0])+"/stop", nil)
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.StopService(cmd.Context(), serviceID)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -257,7 +265,15 @@ func newServiceCmd() *cobra.Command {
 		Short: "Destroy a service (typed confirmation in the Console)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAction(cmd, "/api/v1/services/"+target(fromContext(cmd), args[0])+"/destroy", nil)
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.DestroyService(cmd.Context(), serviceID)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 
