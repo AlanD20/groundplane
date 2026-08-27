@@ -4,13 +4,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"net"
-	"net/url"
-	"path"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/s3connector"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -202,70 +199,25 @@ func validateConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) 
 }
 
 func validateConnectorEndpoint(value string) error {
-	parsed, err := url.ParseRequestURI(value)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
-		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
-		(parsed.Path != "" && parsed.Path != "/") || strings.HasSuffix(value, "/") {
+	if !s3connector.ValidEndpoint(value) {
 		return errs.New(errs.KindValidationFailed, "Connector endpoint is invalid")
 	}
 	return nil
 }
 
 func validConnectorBucket(value string) bool {
-	if len(value) < 3 || len(value) > 63 || net.ParseIP(value) != nil ||
-		!connectorBucketAlphaNumeric(
-			value[0],
-		) || !connectorBucketAlphaNumeric(value[len(value)-1]) ||
-		strings.Contains(
-			value,
-			"..",
-		) || strings.Contains(value, ".-") || strings.Contains(value, "-.") {
-		return false
-	}
-	for index := range len(value) {
-		character := value[index]
-		if !connectorBucketAlphaNumeric(character) && character != '-' && character != '.' {
-			return false
-		}
-	}
-	return true
-}
-
-func connectorBucketAlphaNumeric(character byte) bool {
-	return character >= 'a' && character <= 'z' || character >= '0' && character <= '9'
+	return s3connector.ValidBucket(value)
 }
 
 func validateConnectorPrefix(value string) error {
-	if value == "" {
-		return nil
-	}
-	if !utf8.ValidString(value) || strings.ContainsRune(value, '\x00') || strings.Contains(value, `\`) ||
-		strings.HasPrefix(value, "/") ||
-		!strings.HasSuffix(value, "/") {
+	if !s3connector.ValidPrefix(value) {
 		return errs.New(errs.KindValidationFailed, "Connector prefix is invalid")
-	}
-	withoutSlash := strings.TrimSuffix(value, "/")
-	if withoutSlash == "" || path.Clean(withoutSlash) != withoutSlash {
-		return errs.New(errs.KindValidationFailed, "Connector prefix is invalid")
-	}
-	for _, component := range strings.Split(withoutSlash, "/") {
-		if component == "." || component == ".." {
-			return errs.New(errs.KindValidationFailed, "Connector prefix is invalid")
-		}
 	}
 	return nil
 }
 
 func validConnectorRegion(value string) bool {
-	if value == "" {
-		return false
-	}
-	for index := range len(value) {
-		if value[index] < 0x21 || value[index] > 0x7e {
-			return false
-		}
-	}
-	return true
+	return s3connector.ValidRegion(value)
 }
 
 func cloneConnectorCredentials(

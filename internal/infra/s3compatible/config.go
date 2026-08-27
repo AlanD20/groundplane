@@ -6,11 +6,9 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
-	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/s3connector"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
@@ -19,8 +17,8 @@ import (
 
 const (
 	credentialMaxBytes = 256 * 1024
-	endpointMaxBytes   = 2048
-	regionMaxBytes     = 64
+	endpointMaxBytes   = s3connector.EndpointMaxBytes
+	regionMaxBytes     = s3connector.RegionMaxBytes
 	maxBackoff         = 20 * time.Second
 )
 
@@ -50,17 +48,13 @@ func (provider staticCredentials) Retrieve(context.Context) (aws.Credentials, er
 }
 
 func validateConfig(config Config) error {
-	parsed, err := url.Parse(config.Endpoint)
-	if !utf8.ValidString(config.Endpoint) || len(config.Endpoint) > endpointMaxBytes || err != nil || parsed == nil ||
-		(parsed.Scheme != "http" && parsed.Scheme != "https") ||
-		parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
-		parsed.Opaque != "" || parsed.Path != "" || parsed.RawPath != "" {
+	if !s3connector.ValidEndpoint(config.Endpoint) {
 		return errs.New(errs.KindValidationFailed, "s3 connector endpoint is invalid")
 	}
 	if !validBucket(config.Bucket) {
 		return errs.New(errs.KindValidationFailed, "s3 connector bucket is invalid")
 	}
-	if config.Region == "" || len(config.Region) > regionMaxBytes || !ascii(config.Region) {
+	if !s3connector.ValidRegion(config.Region) {
 		return errs.New(errs.KindValidationFailed, "s3 connector region is invalid")
 	}
 	if !validPrefix(config.Prefix) {
@@ -74,88 +68,11 @@ func validateConfig(config Config) error {
 }
 
 func validBucket(bucket string) bool {
-	if len(bucket) < 3 || len(bucket) > 63 || ipv4Shape(bucket) ||
-		hasAnyPrefix(bucket, "xn--", "sthree-", "amzn-s3-demo-") ||
-		hasAnySuffix(bucket, "-s3alias", "--ol-s3", ".mrap", "--x-s3", "--table-s3") {
-		return false
-	}
-	for _, label := range strings.Split(bucket, ".") {
-		if label == "" || !lowerAlphaNumeric(label[0]) || !lowerAlphaNumeric(label[len(label)-1]) {
-			return false
-		}
-		for index := range len(label) {
-			character := label[index]
-			if !lowerAlphaNumeric(character) && character != '-' {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func hasAnyPrefix(value string, prefixes ...string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(value, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasAnySuffix(value string, suffixes ...string) bool {
-	for _, suffix := range suffixes {
-		if strings.HasSuffix(value, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
-func ipv4Shape(value string) bool {
-	parts := strings.Split(value, ".")
-	if len(parts) != 4 {
-		return false
-	}
-	for _, part := range parts {
-		if len(part) == 0 || len(part) > 3 {
-			return false
-		}
-		for index := range len(part) {
-			if part[index] < '0' || part[index] > '9' {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func lowerAlphaNumeric(character byte) bool {
-	return character >= 'a' && character <= 'z' || character >= '0' && character <= '9'
-}
-
-func ascii(value string) bool {
-	for index := range len(value) {
-		if value[index] > 0x7f {
-			return false
-		}
-	}
-	return true
+	return s3connector.ValidBucket(bucket)
 }
 
 func validPrefix(prefix string) bool {
-	if prefix == "" {
-		return true
-	}
-	if !utf8.ValidString(prefix) || len(prefix) > 1024 || strings.ContainsRune(prefix, '\x00') ||
-		strings.ContainsRune(prefix, '\\') || strings.HasPrefix(prefix, "/") || !strings.HasSuffix(prefix, "/") {
-		return false
-	}
-	for _, component := range strings.Split(strings.TrimSuffix(prefix, "/"), "/") {
-		if component == "" || component == "." || component == ".." {
-			return false
-		}
-	}
-	return true
+	return s3connector.ValidPrefix(prefix)
 }
 
 func newAWSConfig(config Config) aws.Config {

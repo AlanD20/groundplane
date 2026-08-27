@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check swarm-check clean test tidy ci
+.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check swarm-check clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
@@ -99,6 +99,14 @@ console-release-smoke: | $(BIN_DIR)
 
 test:
 	go test ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
+
+c15-connector-acceptance: console-toolchain
+	go test -race -count=1 -run '^(TestC15|TestConnector|TestPrepareConnector|TestParseConnectorDocumentRequiresExplicitPathStyle)' \
+		./pkg/api ./internal/common/s3connector ./internal/core ./internal/app ./internal/infra/etcd \
+		./internal/controller ./internal/cli ./internal/cli/apiclient
+	go test -race -count=1 ./internal/controller/secretvalue ./internal/infra/age ./internal/infra/s3compatible
+	cd console && npm test
+	cd console && npm run build
 
 tidy:
 	go mod tidy

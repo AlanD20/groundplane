@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -193,7 +194,8 @@ func TestConnectorCreateRoutePassesCompleteTypedDecision(t *testing.T) {
 			Status: http.StatusCreated, ContentKind: "application/json", Body: created,
 		},
 	}
-	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{
+	var logs bytes.Buffer
+	server := New(nil, slog.New(slog.NewTextHandler(&logs, nil)), Options{
 		ConnectorMutations: mutator,
 	})
 	body := `{"name":"backups","kind":"s3-compatible","endpoint":"https://objects.example.test",` +
@@ -212,7 +214,8 @@ func TestConnectorCreateRoutePassesCompleteTypedDecision(t *testing.T) {
 	if response.Code != http.StatusCreated || mutator.calls != 1 ||
 		mutator.input.PathStyle == nil || *mutator.input.PathStyle ||
 		mutator.input.Credentials[string(core.ConnectorCredentialSecretKey)].Value != "direct-secret" ||
-		mutator.key != "connector-create-key-0002" {
+		mutator.key != "connector-create-key-0002" || strings.Contains(response.Body.String(), "direct-secret") ||
+		strings.Contains(logs.String(), "direct-secret") {
 		t.Fatalf(
 			"create response/input/key = %d/%s/%#v/%q",
 			response.Code,

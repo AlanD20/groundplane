@@ -10,7 +10,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-// Rationale: mutable Connector names are the default CLI operand while --id
+// Rationale: immutable Connector names are the default CLI operand while --id
 // bypasses lookup; both modes must dispatch the same stable-id DELETE Task.
 func TestConnectorRemoveResolvesNameUnlessIDModeIsSelected(t *testing.T) {
 	t.Parallel()

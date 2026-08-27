@@ -60,7 +60,7 @@ type EnvelopeMetadata struct {
 	Tenant      string `yaml:"tenant,omitempty"`
 	Project     string `yaml:"project,omitempty"`
 	Environment string `yaml:"environment,omitempty"`
-	Name        string `yaml:"name,omitempty"` // connector documents: the connector's slug
+	Name        string `yaml:"name,omitempty"` // connector documents: the immutable Connector name
 }
 
 // ConnectorDocument is a `kind: connector` Blueprint document — see
