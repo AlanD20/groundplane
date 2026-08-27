@@ -512,13 +512,13 @@ const RecoveryPointVerified RecoveryPointStatus = "verified"
 type RecoveryPoint struct {
 	ID         string              `json:"id"`
 	SourceID   string              `json:"source_id"`
-	SourceKind BackupSourceKind    `json:"source_kind"`
-	CreatedAt  string              `json:"created_at"` // RFC3339
-	Locator    string              `json:"locator"`
-	Size       int64               `json:"size,omitempty"`
+	SourceKind BackupSourceKind    `json:"source_kind" enum:"attach,volume,config"`
+	TargetID   string              `json:"target_id"`
+	CreatedAt  string              `json:"created_at" format:"date-time"`
+	SizeBytes  int64               `json:"size_bytes"`
 	Encrypted  bool                `json:"encrypted"`
 	KeyEra     int                 `json:"key_era,omitempty"`
-	Status     RecoveryPointStatus `json:"status"` // verified points only; failures remain task state
+	Status     RecoveryPointStatus `json:"status" enum:"verified"`
 }
 
 type Runner struct {

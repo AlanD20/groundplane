@@ -1528,6 +1528,40 @@
         ],
         "type": "object"
       },
+      "PageRecoveryPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/PageRecoveryPoint.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecoveryPoint"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "PageReleaseGroup": {
         "additionalProperties": false,
         "properties": {
@@ -1978,6 +2012,60 @@
         },
         "required": [
           "slug"
+        ],
+        "type": "object"
+      },
+      "RecoveryPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "key_era": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "source_kind": {
+            "enum": [
+              "attach",
+              "volume",
+              "config"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "verified"
+            ],
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "source_kind",
+          "target_id",
+          "created_at",
+          "size_bytes",
+          "encrypted",
+          "status"
         ],
         "type": "object"
       },
@@ -5869,6 +5957,57 @@
         "summary": "Apply an environment Blueprint",
         "tags": [
           "Environment"
+        ]
+      }
+    },
+    "/environments/{id}/recovery-points": {
+      "get": {
+        "operationId": "backup.points.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageRecoveryPoint"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List verified Recovery Points",
+        "tags": [
+          "Backup"
         ]
       }
     },

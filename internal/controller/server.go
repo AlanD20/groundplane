@@ -64,6 +64,7 @@ type Server struct {
 	connectorDeletions    ConnectorDeleter
 	backupPolicies        BackupPolicyReader
 	backupPolicyMutations BackupPolicyMutator
+	recoveryPoints        RecoveryPointReader
 	volumes               VolumeReader
 	volumeMutations       VolumeMutator
 	environmentMutations  EnvironmentMutator
@@ -114,6 +115,7 @@ type Options struct {
 	ConnectorDeletions    ConnectorDeleter
 	BackupPolicies        BackupPolicyReader
 	BackupPolicyMutations BackupPolicyMutator
+	RecoveryPoints        RecoveryPointReader
 	Volumes               VolumeReader
 	VolumeMutations       VolumeMutator
 	EnvironmentMutations  EnvironmentMutator
@@ -177,6 +179,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		connectorDeletions:    options.ConnectorDeletions,
 		backupPolicies:        options.BackupPolicies,
 		backupPolicyMutations: options.BackupPolicyMutations,
+		recoveryPoints:        options.RecoveryPoints,
 		volumes:               options.Volumes,
 		volumeMutations:       options.VolumeMutations,
 		environmentMutations:  options.EnvironmentMutations,
@@ -211,6 +214,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerSecrets()
 	s.registerConnectors()
 	s.registerBackupPolicies()
+	s.registerRecoveryPoints()
 	s.registerVolumes()
 	s.registerAttaches()
 	s.registerTasks()
@@ -242,7 +246,6 @@ func (s *Server) routes() {
 
 	// environment singleton sub-resources
 	mux.HandleFunc("POST /api/v1/environments/{id}/backup-run", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/environments/{id}/recovery-points", s.notImplemented)
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
 	s.jsonRoute("POST /api/v1/environments/{id}/rotate-key", s.acceptTask)
 	mux.HandleFunc("POST /api/v1/environments/{id}/export-key", s.notImplemented)

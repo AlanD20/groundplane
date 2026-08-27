@@ -97,6 +97,42 @@ func (e BackupSourceInputKind) Valid() bool {
 	}
 }
 
+// Defines values for RecoveryPointSourceKind.
+const (
+	RecoveryPointSourceKindAttach RecoveryPointSourceKind = "attach"
+	RecoveryPointSourceKindConfig RecoveryPointSourceKind = "config"
+	RecoveryPointSourceKindVolume RecoveryPointSourceKind = "volume"
+)
+
+// Valid indicates whether the value is a known member of the RecoveryPointSourceKind enum.
+func (e RecoveryPointSourceKind) Valid() bool {
+	switch e {
+	case RecoveryPointSourceKindAttach:
+		return true
+	case RecoveryPointSourceKindConfig:
+		return true
+	case RecoveryPointSourceKindVolume:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RecoveryPointStatus.
+const (
+	Verified RecoveryPointStatus = "verified"
+)
+
+// Valid indicates whether the value is a known member of the RecoveryPointStatus enum.
+func (e RecoveryPointStatus) Valid() bool {
+	switch e {
+	case Verified:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RouteExposure.
 const (
 	RouteExposureInternal RouteExposure = "internal"
@@ -816,6 +852,17 @@ type PageEntry struct {
 	Revision   *int64   `json:"revision,omitempty"`
 }
 
+// PageRecoveryPoint defines model for PageRecoveryPoint.
+type PageRecoveryPoint struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageRecoveryPoint.json
+	Schema     *string          `json:"$schema,omitempty"`
+	Items      *[]RecoveryPoint `json:"items"`
+	NextCursor *string          `json:"next_cursor,omitempty"`
+	Revision   *int64           `json:"revision,omitempty"`
+}
+
 // PageReleaseGroup defines model for PageReleaseGroup.
 type PageReleaseGroup struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -969,6 +1016,25 @@ type ProjectRename struct {
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
 }
+
+// RecoveryPoint defines model for RecoveryPoint.
+type RecoveryPoint struct {
+	CreatedAt  time.Time               `json:"created_at"`
+	Encrypted  bool                    `json:"encrypted"`
+	Id         string                  `json:"id"`
+	KeyEra     *int64                  `json:"key_era,omitempty"`
+	SizeBytes  int64                   `json:"size_bytes"`
+	SourceId   string                  `json:"source_id"`
+	SourceKind RecoveryPointSourceKind `json:"source_kind"`
+	Status     RecoveryPointStatus     `json:"status"`
+	TargetId   string                  `json:"target_id"`
+}
+
+// RecoveryPointSourceKind defines model for RecoveryPoint.SourceKind.
+type RecoveryPointSourceKind string
+
+// RecoveryPointStatus defines model for RecoveryPoint.Status.
+type RecoveryPointStatus string
 
 // ReleaseAttempt defines model for ReleaseAttempt.
 type ReleaseAttempt struct {
@@ -1763,6 +1829,11 @@ type EnvironmentApplyMultipartBody = openapi_types.File
 // EnvironmentApplyParams defines parameters for EnvironmentApply.
 type EnvironmentApplyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// BackupPointsListParams defines parameters for BackupPointsList.
+type BackupPointsListParams struct {
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // EnvironmentRenameParams defines parameters for EnvironmentRename.
@@ -2567,6 +2638,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
 	EnvironmentApplyWithBody(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackupPointsList List verified Recovery Points
+	//
+	// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
+	BackupPointsList(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EnvironmentRenameWithBody Rename an environment
 	//
@@ -3742,6 +3818,21 @@ func (c *Client) BackupPolicySet(ctx context.Context, id string, params *BackupP
 // Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
 func (c *Client) EnvironmentApplyWithBody(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnvironmentApplyRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackupPointsList List verified Recovery Points
+//
+// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
+func (c *Client) BackupPointsList(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackupPointsListRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6876,6 +6967,67 @@ func NewEnvironmentApplyRequestWithBody(server string, id string, params *Enviro
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewBackupPointsListRequest constructs an http.Request for the BackupPointsList method
+func NewBackupPointsListRequest(server string, id string, params *BackupPointsListParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/recovery-points", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -10649,6 +10801,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
 	EnvironmentApplyWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentApplyResponse, error)
 
+	// BackupPointsListWithResponse List verified Recovery Points
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
+	BackupPointsListWithResponse(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*BackupPointsListResponse, error)
+
 	// EnvironmentRenameWithBodyWithResponse Rename an environment
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -12930,6 +13089,54 @@ func (r EnvironmentApplyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EnvironmentApplyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BackupPointsListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageRecoveryPoint
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BackupPointsListResponse) GetJSON200() *PageRecoveryPoint {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackupPointsListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackupPointsListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackupPointsListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackupPointsListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackupPointsListResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16753,6 +16960,19 @@ func (c *ClientWithResponses) EnvironmentApplyWithBodyWithResponse(ctx context.C
 	return ParseEnvironmentApplyResponse(rsp)
 }
 
+// BackupPointsListWithResponse List verified Recovery Points
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /environments/{id}/recovery-points (the `BackupPointsList` operationId).
+func (c *ClientWithResponses) BackupPointsListWithResponse(ctx context.Context, id string, params *BackupPointsListParams, reqEditors ...RequestEditorFn) (*BackupPointsListResponse, error) {
+	rsp, err := c.BackupPointsList(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackupPointsListResponse(rsp)
+}
+
 // EnvironmentRenameWithBodyWithResponse Rename an environment
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -19139,6 +19359,39 @@ func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyRespons
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBackupPointsListResponse parses an HTTP response from a BackupPointsListWithResponse call
+func ParseBackupPointsListResponse(rsp *http.Response) (*BackupPointsListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackupPointsListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageRecoveryPoint
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

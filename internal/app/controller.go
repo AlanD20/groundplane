@@ -468,6 +468,26 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
+	backupRuntimeRecords, err := etcd.NewBackupRuntimeRepository(store)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize backup runtime repository", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
+	backupPointReads, err := controller.NewRecoveryPointReadService(
+		hierarchyRecords,
+		backupRuntimeRecords,
+		&secretValueCipher{key: controllerKey},
+	)
+	if err != nil {
+		closeErr := store.Close()
+		return nil, errs.Wrap(errs.KindInternal, errors.Join(
+			wrapControllerRunError("initialize recovery point reads", err),
+			wrapControllerRunError("close etcd", closeErr),
+		))
+	}
 	networkRecords, err := networketcd.NewRepository(
 		hierarchyRecords,
 		serviceRecords,
@@ -1045,6 +1065,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ConnectorDeletions:    connectorDeletions,
 		BackupPolicies:        backupPolicies,
 		BackupPolicyMutations: backupPolicies,
+		RecoveryPoints:        backupPointReads,
 		Volumes:               volumeReads,
 		VolumeMutations:       volumeMutations,
 		EnvironmentMutations:  environmentMutations,

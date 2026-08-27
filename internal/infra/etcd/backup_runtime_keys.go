@@ -127,6 +127,22 @@ func backupRecoveryPointEnvironmentIndexKey(
 	return backupRecoveryPointEnvironmentPrefix + environmentID + "/" + inverted, nil
 }
 
+func backupRecoveryPointIDFromEnvironmentIndexKey(environmentID string, key string) (string, error) {
+	prefix := backupRecoveryPointEnvironmentPrefix + environmentID + "/"
+	if validateStableID(ids.KindEnvironment, environmentID) != nil || !strings.HasPrefix(key, prefix) {
+		return "", errs.New(errs.KindInternal, "backup recovery point continuation key is invalid")
+	}
+	body, ok := invertBackupRecoveryPointULIDBody(strings.TrimPrefix(key, prefix))
+	if !ok {
+		return "", errs.New(errs.KindInternal, "backup recovery point continuation key is invalid")
+	}
+	pointID := string(ids.KindRecoveryPoint) + "_" + body
+	if validateStableID(ids.KindRecoveryPoint, pointID) != nil {
+		return "", errs.New(errs.KindInternal, "backup recovery point continuation key is invalid")
+	}
+	return pointID, nil
+}
+
 func backupRecoveryPointSourceIndexKey(sourceID string, recoveryPointID string) (string, error) {
 	if validateStableID(ids.KindBackupSource, sourceID) != nil {
 		return "", errs.New(

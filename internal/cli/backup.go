@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
@@ -141,19 +142,26 @@ func newBackupCmd() *cobra.Command {
 	}
 	cmd.AddCommand(run)
 
+	var pointCursor string
 	points := &cobra.Command{
 		Use:   "points",
 		Short: "List recovery points (visible only after dump/encrypt/upload/verify all succeed)",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			environmentID, err := backupPolicyEnvironmentID(cmd)
+			if err != nil {
+				return err
+			}
 			app := fromContext(cmd)
-			return runList(
-				cmd,
-				"/api/v1/environments/"+target(app, app.Scope.Environment)+"/recovery-points",
-				nil,
-			)
+			page, err := app.Client.ListRecoveryPoints(cmd.Context(), environmentID, pointCursor)
+			if err != nil {
+				return err
+			}
+			headers, rows := clicommon.RecoveryPointTable(page.Items)
+			return app.Out.Render(headers, rows, page)
 		},
 	}
+	points.Flags().StringVar(&pointCursor, "cursor", "", "opaque continuation cursor from a previous page")
 	cmd.AddCommand(points)
 
 	var point, ageIdentityPath string

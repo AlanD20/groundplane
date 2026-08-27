@@ -26,6 +26,21 @@ type BackupRuntimePage[T any] struct {
 	Revision int64
 }
 
+// BackupRecoveryPointPageRequest is the stable-id public paging seam. The
+// repository alone translates AfterID to its private inverted index key.
+type BackupRecoveryPointPageRequest struct {
+	Limit    int
+	AfterID  string
+	Revision int64
+}
+
+// BackupRecoveryPointPage never exposes an etcd key or inverted-id layout.
+type BackupRecoveryPointPage struct {
+	Items    []Versioned[BackupRecoveryPointRecord]
+	NextID   string
+	Revision int64
+}
+
 type backupPruneTransactionPlan struct {
 	conditions   []Condition
 	mutations    []Mutation
@@ -1062,6 +1077,35 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByEnvironment
 			return backupRecoveryPointEnvironmentIndexKey(environmentID, point.ID)
 		},
 	)
+}
+
+// ListVerifiedRecoveryPointsByEnvironment keeps every storage-layout detail
+// inside the repository while preserving the verified-only fixed revision.
+func (repository *BackupRuntimeRepository) ListVerifiedRecoveryPointsByEnvironment(
+	ctx context.Context,
+	environmentID string,
+	request BackupRecoveryPointPageRequest,
+) (BackupRecoveryPointPage, error) {
+	storageRequest := BackupRuntimeListRequest{Limit: request.Limit, Revision: request.Revision}
+	if request.AfterID != "" {
+		boundary, err := backupRecoveryPointEnvironmentIndexKey(environmentID, request.AfterID)
+		if err != nil {
+			return BackupRecoveryPointPage{}, err
+		}
+		storageRequest.StartExclusive = boundary
+	}
+	page, err := repository.ListBackupRecoveryPointsByEnvironment(ctx, environmentID, storageRequest)
+	if err != nil {
+		return BackupRecoveryPointPage{}, err
+	}
+	result := BackupRecoveryPointPage{Items: page.Items, Revision: page.Revision}
+	if page.Next != "" {
+		result.NextID, err = backupRecoveryPointIDFromEnvironmentIndexKey(environmentID, page.Next)
+		if err != nil {
+			return BackupRecoveryPointPage{}, err
+		}
+	}
+	return result, nil
 }
 
 func (repository *BackupRuntimeRepository) ListBackupRunsByEnvironment(
