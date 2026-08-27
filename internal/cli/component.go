@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
 )
 
@@ -15,25 +16,59 @@ func newComponentCmd() *cobra.Command {
 	var platform bool
 	cmd.PersistentFlags().BoolVar(&platform, "platform", false, "target platform-owned components")
 	cmd.AddCommand(&cobra.Command{Use: "list", Short: "List components", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		query := scopeQuery(fromContext(cmd), "environment")
-		if platform {
-			delete(query, "environment")
-			query["platform"] = "true"
+		app := fromContext(cmd)
+		environmentID := ""
+		if !platform {
+			var err error
+			environmentID, err = resolveEnvironmentTarget(cmd, app.Scope.Environment)
+			if err != nil {
+				return err
+			}
 		}
-		return runList(cmd, "/api/v1/components", query)
+		page, err := app.Client.ListComponents(cmd.Context(), environmentID, platform, "", 0, "")
+		if err != nil {
+			return err
+		}
+		items := make([]map[string]any, len(page.Items))
+		for index, component := range page.Items {
+			items[index] = componentFields(component)
+		}
+		headers, rows := tabulateVia(app, items)
+		return app.Out.Render(headers, rows, page)
 	}})
 	cmd.AddCommand(&cobra.Command{Use: "show <id>", Short: "Show a component (status, generated services, health)", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return runShow(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0]))
+		app := fromContext(cmd)
+		component, err := app.Client.ShowComponent(cmd.Context(), target(app, args[0]))
+		if err != nil {
+			return err
+		}
+		return renderComponent(cmd, component)
 	}})
 	cmd.AddCommand(&cobra.Command{Use: "enable <id>", Short: "Enable a component", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return runAction(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/enable", nil)
+		app := fromContext(cmd)
+		accepted, err := app.Client.EnableComponent(cmd.Context(), target(app, args[0]))
+		if err != nil {
+			return err
+		}
+		return renderDispatchedTask(cmd, accepted)
 	}})
 	cmd.AddCommand(&cobra.Command{Use: "disable <id>", Short: "Disable a component", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return runAction(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/disable", nil)
+		app := fromContext(cmd)
+		accepted, err := app.Client.DisableComponent(cmd.Context(), target(app, args[0]))
+		if err != nil {
+			return err
+		}
+		return renderDispatchedTask(cmd, accepted)
 	}})
 	config := &cobra.Command{Use: "config", Short: "A component's kind-specific config"}
 	config.AddCommand(&cobra.Command{Use: "show <id>", Short: "Show a component's config", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return runShow(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/config")
+		app := fromContext(cmd)
+		config, err := app.Client.ShowComponentConfig(cmd.Context(), target(app, args[0]))
+		if err != nil {
+			return err
+		}
+		headers, rows := tabulateVia(app, []map[string]any{{"config": config.Config}})
+		return app.Out.Render(headers, rows, config)
 	}})
 	var upstreamAuto bool
 	var upstreamResolvers []string
@@ -57,11 +92,16 @@ func newComponentCmd() *cobra.Command {
 		if cmd.Flags().Changed("tailnet-delegation") {
 			body["tailnet_delegation"] = tailnetDelegation
 		}
-		path := "/api/v1/components/" + target(fromContext(cmd), args[0]) + "/config"
-		if len(body) == 0 {
-			return runReplaceSingleton(cmd, path, nil)
+		app := fromContext(cmd)
+		result, err := app.Client.SetComponentConfig(
+			cmd.Context(), target(app, args[0]), apiTypes.ComponentConfig{Config: body},
+		)
+		if err != nil {
+			return err
 		}
-		return runReplaceSingleton(cmd, path, body)
+		fields := map[string]any{"config": result.Resource.Config, "reconcile_task_id": result.ReconcileTaskID}
+		headers, rows := tabulateVia(app, []map[string]any{fields})
+		return app.Out.Render(headers, rows, result)
 	}}
 	set.Flags().BoolVar(&upstreamAuto, "upstream-auto", false, "derive upstream resolvers from the authoritative host baseline")
 	set.Flags().StringArrayVar(&upstreamResolvers, "upstream", nil, "repeatable upstream resolver endpoint")
@@ -70,9 +110,29 @@ func newComponentCmd() *cobra.Command {
 	config.AddCommand(set)
 	cmd.AddCommand(config)
 	cmd.AddCommand(&cobra.Command{Use: "update <id>", Short: "Update a component", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return runAction(cmd, "/api/v1/components/"+target(fromContext(cmd), args[0])+"/update", nil)
+		app := fromContext(cmd)
+		accepted, err := app.Client.UpdateComponent(cmd.Context(), target(app, args[0]))
+		if err != nil {
+			return err
+		}
+		return renderDispatchedTask(cmd, accepted)
 	}})
 	return cmd
+}
+
+func renderComponent(cmd *cobra.Command, component apiTypes.Component) error {
+	fields := componentFields(component)
+	headers, values := fieldsOfVia(fields)
+	return fromContext(cmd).Out.RenderOne(headers, values, component)
+}
+
+func componentFields(component apiTypes.Component) map[string]any {
+	return map[string]any{
+		"id": component.ID, "owner": component.Owner, "owner_id": component.OwnerID,
+		"environment_id": component.EnvironmentID, "kind": component.Kind, "enabled": component.Enabled,
+		"config": component.Config, "generated_services": component.GeneratedServices,
+		"pinned_ipv4": component.PinnedIPv4, "healthy": component.Healthy, "status": component.Status,
+	}
 }
 
 func parseCoreDNSForwardFlags(values []string) ([]map[string]any, error) {
