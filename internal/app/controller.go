@@ -365,6 +365,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup runtime repository: %w", err)
 	}
+	backupCheckpoints, err := controller.NewBackupCheckpointService(backupRuntimeRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Backup checkpoint service: %w", err)
+	}
 	backupPolicyRepository, err := controller.NewDurableBackupPolicyRepository(backupPolicyRecords)
 	if err != nil {
 		closeErr := store.Close()
@@ -432,7 +437,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	agentRuntime := newAgentChannelRuntime(
-		authenticator, tasks, planResolver, materializationResolver, backupSecrets,
+		authenticator, tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
 	)
 	staleTasks, err := newStaleAgentTaskMaintenance(agents, agentRuntime.registry, tasks)
 	if err != nil {

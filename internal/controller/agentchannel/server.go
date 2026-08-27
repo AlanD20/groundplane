@@ -101,16 +101,28 @@ type BackupSecretSlotResolver interface {
 	) (map[agentpb.BackupSecretSlotPurpose][]byte, error)
 }
 
+// BackupCheckpointer durably accepts one Agent operation boundary before the
+// stream acknowledges that the next side effect is authorized.
+type BackupCheckpointer interface {
+	CheckpointBackup(
+		context.Context,
+		string,
+		uint64,
+		*agentpb.BackupCheckpointRequest,
+	) (*agentpb.BackupCheckpointAck, error)
+}
+
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
-	auth      Authenticator
-	sessions  *Registry
-	tasks     TaskStore
-	plans     PlanResolver
-	materials MaterializationResolver
-	secrets   BackupSecretSlotResolver
-	now       func() time.Time
+	auth        Authenticator
+	sessions    *Registry
+	tasks       TaskStore
+	plans       PlanResolver
+	materials   MaterializationResolver
+	secrets     BackupSecretSlotResolver
+	checkpoints BackupCheckpointer
+	now         func() time.Time
 }
 
 // New returns an AgentChannel server backed by the supplied authenticator and
@@ -141,17 +153,32 @@ func NewWithPrivateTransfers(
 	materials MaterializationResolver,
 	secrets BackupSecretSlotResolver,
 ) *Server {
+	return NewWithRuntimeServices(auth, sessions, tasks, plans, materials, secrets, nil)
+}
+
+// NewWithRuntimeServices returns a server with all private transfer and
+// durable operation-boundary services used by the authenticated stream loop.
+func NewWithRuntimeServices(
+	auth Authenticator,
+	sessions *Registry,
+	tasks TaskStore,
+	plans PlanResolver,
+	materials MaterializationResolver,
+	secrets BackupSecretSlotResolver,
+	checkpoints BackupCheckpointer,
+) *Server {
 	if sessions == nil {
 		sessions = NewRegistry()
 	}
 	return &Server{
-		auth:      auth,
-		sessions:  sessions,
-		tasks:     tasks,
-		plans:     plans,
-		materials: materials,
-		secrets:   secrets,
-		now:       time.Now,
+		auth:        auth,
+		sessions:    sessions,
+		tasks:       tasks,
+		plans:       plans,
+		materials:   materials,
+		secrets:     secrets,
+		checkpoints: checkpoints,
+		now:         time.Now,
 	}
 }
 
@@ -346,6 +373,25 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					stream.Context(), authenticate.AgentId, authorization.Generation, event,
 				); err != nil {
 					return taskStoreStatus(err)
+				}
+				continue
+			}
+			if request := result.message.GetBackupCheckpointRequest(); request != nil {
+				if s.checkpoints == nil {
+					return status.Error(codes.Internal, "Backup checkpoint service is not configured")
+				}
+				acknowledgement, err := s.checkpoints.CheckpointBackup(
+					stream.Context(), authenticate.AgentId, authorization.Generation, request,
+				)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{
+					Payload: &agentpb.ControllerMessage_BackupCheckpointAck{
+						BackupCheckpointAck: acknowledgement,
+					},
+				}); err != nil {
+					return err
 				}
 				continue
 			}

@@ -264,6 +264,13 @@ func (c *Client) runSession(
 				}
 				continue
 			}
+			if acknowledgement := result.message.GetBackupCheckpointAck(); acknowledgement != nil {
+				if err := c.pool.AcceptBackupCheckpointAck(acknowledgement); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
 				return false, err
@@ -273,6 +280,15 @@ func (c *Client) runSession(
 			}
 			receiveNext(streamCtx, stream, received)
 		case output := <-c.pool.Outputs():
+			if output.BackupCheckpoint != nil {
+				if output.Progress != nil || output.Result != nil {
+					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+				}
+				if err := c.sendBackupCheckpoint(stream, output.BackupCheckpoint); err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: send Backup checkpoint")
+				}
+				continue
+			}
 			if output.Progress != nil {
 				if output.Result != nil {
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
@@ -293,6 +309,15 @@ func (c *Client) runSession(
 			}
 		}
 	}
+}
+
+func (c *Client) sendBackupCheckpoint(
+	stream agentStream,
+	request *agentpb.BackupCheckpointRequest,
+) error {
+	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupCheckpointRequest{
+		BackupCheckpointRequest: proto.Clone(request).(*agentpb.BackupCheckpointRequest),
+	}})
 }
 
 func (c *Client) startWorkerPool(ctx context.Context, size int) (context.CancelFunc, <-chan struct{}) {

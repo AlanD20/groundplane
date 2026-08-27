@@ -71,8 +71,9 @@ type TaskProgress struct {
 // WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
 // each Task's terminal step progress is emitted before its final result.
 type WorkerOutput struct {
-	Progress *TaskProgress
-	Result   *TaskResult
+	Progress         *TaskProgress
+	Result           *TaskResult
+	BackupCheckpoint *agentpb.BackupCheckpointRequest
 }
 
 type taskReservation struct {
@@ -97,6 +98,7 @@ type WorkerPool struct {
 	coreDNS                CoreDNSStepRuntime
 	materializations       *materializationInbox
 	backupSecrets          *backupSecretSlotInbox
+	backupCheckpoints      *backupCheckpointInbox
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -106,16 +108,17 @@ type WorkerPool struct {
 
 func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
 	pool := &WorkerPool{
-		size:             size,
-		volumeRoot:       volumeRoot,
-		runner:           taskRunner,
-		logger:           logger,
-		work:             make(chan *taskReservation, size),
-		outputs:          make(chan WorkerOutput, size),
-		reservations:     make(map[string]*taskReservation, size),
-		materializations: newMaterializationInbox(),
-		backupSecrets:    newBackupSecretSlotInbox(),
-		adapter:          NewAdapterRuntime(taskRunner),
+		size:              size,
+		volumeRoot:        volumeRoot,
+		runner:            taskRunner,
+		logger:            logger,
+		work:              make(chan *taskReservation, size),
+		outputs:           make(chan WorkerOutput, size),
+		reservations:      make(map[string]*taskReservation, size),
+		materializations:  newMaterializationInbox(),
+		backupSecrets:     newBackupSecretSlotInbox(),
+		backupCheckpoints: newBackupCheckpointInbox(),
+		adapter:           NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
 	return pool

@@ -36,6 +36,7 @@ func newAgentChannelRuntime(
 	plans agentchannel.PlanResolver,
 	materials agentchannel.MaterializationResolver,
 	secrets agentchannel.BackupSecretSlotResolver,
+	checkpoints agentchannel.BackupCheckpointer,
 ) *agentChannelRuntime {
 	return &agentChannelRuntime{
 		registry: agentchannel.NewRegistry(),
@@ -47,8 +48,8 @@ func newAgentChannelRuntime(
 			)
 			agentpb.RegisterAgentChannelServer(
 				server,
-				agentchannel.NewWithPrivateTransfers(
-					authenticator, registry, tasks, plans, materials, secrets,
+				agentchannel.NewWithRuntimeServices(
+					authenticator, registry, tasks, plans, materials, secrets, checkpoints,
 				),
 			)
 			return server
