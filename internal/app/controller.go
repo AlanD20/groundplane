@@ -23,6 +23,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
+	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
@@ -278,6 +279,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component repository: %w", err)
+	}
+	componentReads, err := componentcapability.NewReadService(componentRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)
+	}
+	platformComponents, err := etcd.DefaultPlatformComponents()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize platform Components: %w", err)
+	}
+	if _, err := componentRecords.EnsurePlatformComponents(ctx, platformComponents); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: bootstrap platform Components: %w", err)
 	}
 	serviceReadRepository, err := newDurableServiceReadRepository(hierarchyRecords, serviceRecords)
 	if err != nil {
@@ -1091,6 +1106,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ProjectMutations: projectMutations,
 		ProjectChanges:   projectChanges,
 		BackingServices:  backingServiceReads,
+		Components:       componentReads,
 		Environments: environmentcapability.NewEtcdReader(
 			environmentetcd.NewRepository(hierarchyRecords, zoneRecords),
 		),

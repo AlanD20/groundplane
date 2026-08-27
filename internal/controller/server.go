@@ -41,6 +41,7 @@ type Server struct {
 	projectMutations      ProjectMutator
 	projectChanges        ProjectChanger
 	backingServices       BackingServiceReader
+	components            ComponentReader
 	environments          *environmentcapability.Reader
 	services              ServiceReader
 	serviceMutations      ServiceMutator
@@ -95,6 +96,7 @@ type Options struct {
 	ProjectMutations      ProjectMutator
 	ProjectChanges        ProjectChanger
 	BackingServices       BackingServiceReader
+	Components            ComponentReader
 	Environments          *environmentcapability.Reader
 	Services              ServiceReader
 	ServiceMutations      ServiceMutator
@@ -162,6 +164,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		projectMutations:      options.ProjectMutations,
 		projectChanges:        options.ProjectChanges,
 		backingServices:       options.BackingServices,
+		components:            options.Components,
 		environments:          options.Environments,
 		services:              options.Services,
 		serviceMutations:      options.ServiceMutations,
@@ -210,6 +213,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerTenants()
 	s.registerProjects()
 	s.registerBackingServices()
+	s.registerComponents()
 	s.registerEnvironments()
 	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions)
 	s.registerEnvironmentBlueprints()
@@ -259,7 +263,6 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
 	// router: READ-ONLY projection grouping ingress components — GET only,
 	// never PUT (api-cli.md, section 4). Managed entirely through /components.
-	mux.HandleFunc("GET /api/v1/environments/{id}/router", s.notImplemented)
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
 	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
@@ -278,12 +281,9 @@ func (s *Server) routes() {
 	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
 	// component (?environment= or ?platform=true) — one resource across both owners
-	mux.HandleFunc("GET /api/v1/components", s.notImplemented)
-	mux.HandleFunc("GET /api/v1/components/{id}", s.notImplemented)
 	s.jsonRoute("POST /api/v1/components/{id}/enable", s.acceptTask)
 	s.jsonRoute("POST /api/v1/components/{id}/disable", s.acceptTask)
 	s.jsonRoute("POST /api/v1/components/{id}/update", s.acceptTask)
-	mux.HandleFunc("GET /api/v1/components/{id}/config", s.notImplemented)
 	s.jsonRoute("PUT /api/v1/components/{id}/config", s.notImplemented)
 
 	// backing-service

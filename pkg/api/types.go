@@ -412,6 +412,8 @@ type ScriptEdit struct {
 // not bespoke resources — see blueprint.md, "x-gp-components".
 type Component struct {
 	ID                string         `json:"id"`
+	Owner             string         `json:"owner" enum:"environment,platform"`
+	OwnerID           string         `json:"owner_id,omitempty"`
 	EnvironmentID     string         `json:"environment_id"`
 	Kind              string         `json:"kind"`
 	Enabled           bool           `json:"enabled"`
@@ -419,6 +421,7 @@ type Component struct {
 	GeneratedServices []string       `json:"generated_services,omitempty"`
 	PinnedIPv4        string         `json:"pinned_ipv4,omitempty"`
 	Healthy           bool           `json:"healthy"`
+	Status            string         `json:"status" enum:"disabled,pending,healthy,degraded,unknown"`
 }
 
 // Router is the READ-ONLY projection grouping ingress components — GET
@@ -433,6 +436,12 @@ type ComponentProjection struct {
 	ComponentID string `json:"component_id"`
 	Enabled     bool   `json:"enabled"`
 	PinnedIPv4  string `json:"pinned_ipv4,omitempty"`
+}
+
+// ComponentConfig is the complete desired configuration singleton for one
+// Component. Runtime and secret material are deliberately absent.
+type ComponentConfig struct {
+	Config map[string]any `json:"config,omitempty"`
 }
 
 // MaximumBackupPolicySources is the public replacement bound. It mirrors the

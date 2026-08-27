@@ -97,6 +97,51 @@ func (e BackupSourceInputKind) Valid() bool {
 	}
 }
 
+// Defines values for ComponentOwner.
+const (
+	ComponentOwnerEnvironment ComponentOwner = "environment"
+	ComponentOwnerPlatform    ComponentOwner = "platform"
+)
+
+// Valid indicates whether the value is a known member of the ComponentOwner enum.
+func (e ComponentOwner) Valid() bool {
+	switch e {
+	case ComponentOwnerEnvironment:
+		return true
+	case ComponentOwnerPlatform:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentStatus.
+const (
+	ComponentStatusDegraded ComponentStatus = "degraded"
+	ComponentStatusDisabled ComponentStatus = "disabled"
+	ComponentStatusHealthy  ComponentStatus = "healthy"
+	ComponentStatusPending  ComponentStatus = "pending"
+	ComponentStatusUnknown  ComponentStatus = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the ComponentStatus enum.
+func (e ComponentStatus) Valid() bool {
+	switch e {
+	case ComponentStatusDegraded:
+		return true
+	case ComponentStatusDisabled:
+		return true
+	case ComponentStatusHealthy:
+		return true
+	case ComponentStatusPending:
+		return true
+	case ComponentStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RecoveryPointSourceKind.
 const (
 	RecoveryPointSourceKindAttach RecoveryPointSourceKind = "attach"
@@ -288,28 +333,28 @@ func (e TaskWorkspaceType) Valid() bool {
 
 // Defines values for TaskEventState.
 const (
-	Aborted   TaskEventState = "aborted"
-	Completed TaskEventState = "completed"
-	Failed    TaskEventState = "failed"
-	Pending   TaskEventState = "pending"
-	Running   TaskEventState = "running"
-	TimedOut  TaskEventState = "timed_out"
+	TaskEventStateAborted   TaskEventState = "aborted"
+	TaskEventStateCompleted TaskEventState = "completed"
+	TaskEventStateFailed    TaskEventState = "failed"
+	TaskEventStatePending   TaskEventState = "pending"
+	TaskEventStateRunning   TaskEventState = "running"
+	TaskEventStateTimedOut  TaskEventState = "timed_out"
 )
 
 // Valid indicates whether the value is a known member of the TaskEventState enum.
 func (e TaskEventState) Valid() bool {
 	switch e {
-	case Aborted:
+	case TaskEventStateAborted:
 		return true
-	case Completed:
+	case TaskEventStateCompleted:
 		return true
-	case Failed:
+	case TaskEventStateFailed:
 		return true
-	case Pending:
+	case TaskEventStatePending:
 		return true
-	case Running:
+	case TaskEventStateRunning:
 		return true
-	case TimedOut:
+	case TaskEventStateTimedOut:
 		return true
 	default:
 		return false
@@ -519,6 +564,47 @@ type BackupSourceInput struct {
 
 // BackupSourceInputKind defines model for BackupSourceInput.Kind.
 type BackupSourceInputKind string
+
+// Component defines model for Component.
+type Component struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Component.json
+	Schema            *string                 `json:"$schema,omitempty"`
+	Config            *map[string]interface{} `json:"config,omitempty"`
+	Enabled           bool                    `json:"enabled"`
+	EnvironmentId     string                  `json:"environment_id"`
+	GeneratedServices *[]string               `json:"generated_services,omitempty"`
+	Healthy           bool                    `json:"healthy"`
+	Id                string                  `json:"id"`
+	Kind              string                  `json:"kind"`
+	Owner             ComponentOwner          `json:"owner"`
+	OwnerId           *string                 `json:"owner_id,omitempty"`
+	PinnedIpv4        *string                 `json:"pinned_ipv4,omitempty"`
+	Status            ComponentStatus         `json:"status"`
+}
+
+// ComponentOwner defines model for Component.Owner.
+type ComponentOwner string
+
+// ComponentStatus defines model for Component.Status.
+type ComponentStatus string
+
+// ComponentConfig defines model for ComponentConfig.
+type ComponentConfig struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ComponentConfig.json
+	Schema *string                 `json:"$schema,omitempty"`
+	Config *map[string]interface{} `json:"config,omitempty"`
+}
+
+// ComponentProjection defines model for ComponentProjection.
+type ComponentProjection struct {
+	ComponentId string  `json:"component_id"`
+	Enabled     bool    `json:"enabled"`
+	PinnedIpv4  *string `json:"pinned_ipv4,omitempty"`
+}
 
 // Connector defines model for Connector.
 type Connector struct {
@@ -829,6 +915,17 @@ type PageBackingService struct {
 	Items      *[]BackingService `json:"items"`
 	NextCursor *string           `json:"next_cursor,omitempty"`
 	Revision   *int64            `json:"revision,omitempty"`
+}
+
+// PageComponent defines model for PageComponent.
+type PageComponent struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/PageComponent.json
+	Schema     *string      `json:"$schema,omitempty"`
+	Items      *[]Component `json:"items"`
+	NextCursor *string      `json:"next_cursor,omitempty"`
+	Revision   *int64       `json:"revision,omitempty"`
 }
 
 // PageConnector defines model for PageConnector.
@@ -1246,6 +1343,16 @@ type RouteEdit struct {
 
 // RouteEditExposure defines model for RouteEdit.Exposure.
 type RouteEditExposure string
+
+// Router defines model for Router.
+type Router struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/Router.json
+	Schema *string              `json:"$schema,omitempty"`
+	Caddy  *ComponentProjection `json:"caddy,omitempty"`
+	Tunnel *ComponentProjection `json:"tunnel,omitempty"`
+}
 
 // Script defines model for Script.
 type Script struct {
@@ -1750,6 +1857,15 @@ type AttachRenameParams struct {
 type BackingServiceListParams struct {
 	Limit  *int64  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ComponentListParams defines parameters for ComponentList.
+type ComponentListParams struct {
+	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Platform    *bool   `form:"platform,omitempty" json:"platform,omitempty"`
+	Kind        *string `form:"kind,omitempty" json:"kind,omitempty"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // ConnectorListParams defines parameters for ConnectorList.
@@ -2499,6 +2615,21 @@ type ClientInterface interface {
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShow(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ComponentList List Components
+	//
+	// Corresponds with GET /components (the `ComponentList` operationId).
+	ComponentList(ctx context.Context, params *ComponentListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentShow Show a Component
+	//
+	// Corresponds with GET /components/{id} (the `ComponentShow` operationId).
+	ComponentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentConfigShow Show Component config
+	//
+	// Corresponds with GET /components/{id}/config (the `ComponentConfigShow` operationId).
+	ComponentConfigShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ConnectorList List Environment connectors
 	//
 	// Corresponds with GET /connectors (the `ConnectorList` operationId).
@@ -2678,6 +2809,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
 	BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RouterShow Show Environment router
+	//
+	// Corresponds with GET /environments/{id}/router (the `RouterShow` operationId).
+	RouterShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// HostShow Show host health
 	//
@@ -3463,6 +3599,51 @@ func (c *Client) BackingServiceShow(ctx context.Context, projectId string, reqEd
 	return c.Client.Do(req)
 }
 
+// ComponentList List Components
+//
+// Corresponds with GET /components (the `ComponentList` operationId).
+func (c *Client) ComponentList(ctx context.Context, params *ComponentListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentShow Show a Component
+//
+// Corresponds with GET /components/{id} (the `ComponentShow` operationId).
+func (c *Client) ComponentShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentConfigShow Show Component config
+//
+// Corresponds with GET /components/{id}/config (the `ComponentConfigShow` operationId).
+func (c *Client) ComponentConfigShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentConfigShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ConnectorList List Environment connectors
 //
 // Corresponds with GET /connectors (the `ConnectorList` operationId).
@@ -3933,6 +4114,21 @@ func (c *Client) EnvironmentRename(ctx context.Context, id string, params *Envir
 // Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
 func (c *Client) BackupKeyRotate(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackupKeyRotateRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RouterShow Show Environment router
+//
+// Corresponds with GET /environments/{id}/router (the `RouterShow` operationId).
+func (c *Client) RouterShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRouterShowRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -6094,6 +6290,176 @@ func NewBackingServiceShowRequest(server string, projectId string) (*http.Reques
 	return req, nil
 }
 
+// NewComponentListRequest constructs an http.Request for the ComponentList method
+func NewComponentListRequest(server string, params *ComponentListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Environment != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Platform != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "platform", *params.Platform, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Kind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "kind", *params.Kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewComponentShowRequest constructs an http.Request for the ComponentShow method
+func NewComponentShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewComponentConfigShowRequest constructs an http.Request for the ComponentConfigShow method
+func NewComponentConfigShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/components/%s/config", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewConnectorListRequest constructs an http.Request for the ConnectorList method
 func NewConnectorListRequest(server string, params *ConnectorListParams) (*http.Request, error) {
 	var err error
@@ -7282,6 +7648,40 @@ func NewBackupKeyRotateRequest(server string, id string, params *BackupKeyRotate
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewRouterShowRequest constructs an http.Request for the RouterShow method
+func NewRouterShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/router", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -10827,6 +11227,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /backing-services/{project_id} (the `BackingServiceShow` operationId).
 	BackingServiceShowWithResponse(ctx context.Context, projectId string, reqEditors ...RequestEditorFn) (*BackingServiceShowResponse, error)
 
+	// ComponentListWithResponse List Components
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /components (the `ComponentList` operationId).
+	ComponentListWithResponse(ctx context.Context, params *ComponentListParams, reqEditors ...RequestEditorFn) (*ComponentListResponse, error)
+
+	// ComponentShowWithResponse Show a Component
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /components/{id} (the `ComponentShow` operationId).
+	ComponentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ComponentShowResponse, error)
+
+	// ComponentConfigShowWithResponse Show Component config
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /components/{id}/config (the `ComponentConfigShow` operationId).
+	ComponentConfigShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ComponentConfigShowResponse, error)
+
 	// ConnectorListWithResponse List Environment connectors
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -11036,6 +11457,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/rotate-key (the `BackupKeyRotate` operationId).
 	BackupKeyRotateWithResponse(ctx context.Context, id string, params *BackupKeyRotateParams, reqEditors ...RequestEditorFn) (*BackupKeyRotateResponse, error)
+
+	// RouterShowWithResponse Show Environment router
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments/{id}/router (the `RouterShow` operationId).
+	RouterShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RouterShowResponse, error)
 
 	// HostShowWithResponse Show host health
 	//
@@ -12390,6 +12818,150 @@ func (r BackingServiceShowResponse) ContentType() string {
 	return ""
 }
 
+type ComponentListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PageComponent
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ComponentListResponse) GetJSON200() *PageComponent {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ComponentShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Component
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ComponentShowResponse) GetJSON200() *Component {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ComponentConfigShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ComponentConfig
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ComponentConfigShowResponse) GetJSON200() *ComponentConfig {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ComponentConfigShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ComponentConfigShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ComponentConfigShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ComponentConfigShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ComponentConfigShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ConnectorListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -13567,6 +14139,54 @@ func (r BackupKeyRotateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackupKeyRotateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RouterShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Router
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RouterShowResponse) GetJSON200() *Router {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RouterShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RouterShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RouterShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RouterShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RouterShowResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17023,6 +17643,45 @@ func (c *ClientWithResponses) BackingServiceShowWithResponse(ctx context.Context
 	return ParseBackingServiceShowResponse(rsp)
 }
 
+// ComponentListWithResponse List Components
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /components (the `ComponentList` operationId).
+func (c *ClientWithResponses) ComponentListWithResponse(ctx context.Context, params *ComponentListParams, reqEditors ...RequestEditorFn) (*ComponentListResponse, error) {
+	rsp, err := c.ComponentList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentListResponse(rsp)
+}
+
+// ComponentShowWithResponse Show a Component
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /components/{id} (the `ComponentShow` operationId).
+func (c *ClientWithResponses) ComponentShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ComponentShowResponse, error) {
+	rsp, err := c.ComponentShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentShowResponse(rsp)
+}
+
+// ComponentConfigShowWithResponse Show Component config
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /components/{id}/config (the `ComponentConfigShow` operationId).
+func (c *ClientWithResponses) ComponentConfigShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ComponentConfigShowResponse, error) {
+	rsp, err := c.ComponentConfigShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentConfigShowResponse(rsp)
+}
+
 // ConnectorListWithResponse List Environment connectors
 //
 // Returns a wrapper object for the known response body format(s).
@@ -17411,6 +18070,19 @@ func (c *ClientWithResponses) BackupKeyRotateWithResponse(ctx context.Context, i
 		return nil, err
 	}
 	return ParseBackupKeyRotateResponse(rsp)
+}
+
+// RouterShowWithResponse Show Environment router
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /environments/{id}/router (the `RouterShow` operationId).
+func (c *ClientWithResponses) RouterShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RouterShowResponse, error) {
+	rsp, err := c.RouterShow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRouterShowResponse(rsp)
 }
 
 // HostShowWithResponse Show host health
@@ -19080,6 +19752,105 @@ func ParseBackingServiceShowResponse(rsp *http.Response) (*BackingServiceShowRes
 	return response, nil
 }
 
+// ParseComponentListResponse parses an HTTP response from a ComponentListWithResponse call
+func ParseComponentListResponse(rsp *http.Response) (*ComponentListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PageComponent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseComponentShowResponse parses an HTTP response from a ComponentShowWithResponse call
+func ParseComponentShowResponse(rsp *http.Response) (*ComponentShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Component
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseComponentConfigShowResponse parses an HTTP response from a ComponentConfigShowWithResponse call
+func ParseComponentConfigShowResponse(rsp *http.Response) (*ComponentConfigShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ComponentConfigShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ComponentConfig
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseConnectorListResponse parses an HTTP response from a ConnectorListWithResponse call
 func ParseConnectorListResponse(rsp *http.Response) (*ConnectorListResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -19997,6 +20768,39 @@ func ParseBackupKeyRotateResponse(rsp *http.Response) (*BackupKeyRotateResponse,
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRouterShowResponse parses an HTTP response from a RouterShowWithResponse call
+func ParseRouterShowResponse(rsp *http.Response) (*RouterShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RouterShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Router
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
