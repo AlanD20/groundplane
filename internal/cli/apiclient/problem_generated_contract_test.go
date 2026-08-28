@@ -43,8 +43,8 @@ func TestGeneratedParsersRegisterCloseBeforeRead(t *testing.T) {
 	const parserMarker = "\nfunc Parse"
 	const firstStatements = "\tdefer func() { _ = rsp.Body.Close() }()\n\tbodyBytes, err := problemresponse.Read(rsp)\n"
 	parsers := strings.Split(string(generatedSource), parserMarker)[1:]
-	if len(parsers) != 97 {
-		t.Fatalf("generated parser count = %d, want 97", len(parsers))
+	if len(parsers) != 113 {
+		t.Fatalf("generated parser count = %d, want 113", len(parsers))
 	}
 	for index, parser := range parsers {
 		bodyStart := strings.Index(parser, "{\n")
