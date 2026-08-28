@@ -3,6 +3,7 @@ package desiredrevision
 import (
 	"context"
 	"crypto/sha256"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -262,15 +263,19 @@ func boundaryProjection(
 func boundaryClaimInput(now time.Time, environmentID, revisionID string) ClaimInput {
 	ciphertext := []byte("protected-boundary-intent")
 	digest := sha256.Sum256(ciphertext)
+	intent := etcd.ProtectedIntentRecord{
+		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
+		CiphertextDigest: stringDigest(digest), Ciphertext: ciphertext,
+	}
 	return ClaimInput{
 		EnvironmentID: environmentID, CandidateTaskID: revisionID,
 		Locator: etcd.IdempotencyLocator{
 			ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
 			Method: "PUT", Route: blueprintRoute, Key: "boundary-idempotency-key-0001",
 		},
-		Intent: etcd.ProtectedIntentRecord{
-			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
-			CiphertextDigest: stringDigest(digest), Ciphertext: ciphertext,
+		Intent: intent,
+		MatchExistingIntent: func(_ context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+			return reflect.DeepEqual(existing, intent), nil
 		},
 		SourceKind: etcd.EnvironmentBlueprintSourceApply, RenderGeneration: 1, CreatedAt: now,
 	}
