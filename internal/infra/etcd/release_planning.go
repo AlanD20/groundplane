@@ -70,9 +70,20 @@ func (ledger *ReleaseLedger) LoadPlanningScope(
 	if err != nil || project.ID != environment.ProjectID || project.Kind != ProjectKindTenant {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
+	hierarchy, err := newHierarchyRepository(ledger.store)
+	if err != nil {
+		return ReleasePlanningScope{}, err
+	}
+	compose, found, err := hierarchy.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, initial.ReadRevision)
+	if err != nil {
+		return ReleasePlanningScope{}, err
+	}
+	if !found || compose.ReadRevision != initial.ReadRevision {
+		return ReleasePlanningScope{}, corruptReleaseRecord()
+	}
 	keys := []string{
 		environmentKey(environmentID), projectKey(project.ID), tenantKey(project.TenantID),
-		environmentComposeProjectionKey(environmentID), environmentMutationEpochKey(environmentID),
+		environmentMutationEpochKey(environmentID),
 		environmentOperationLockKey(environmentID), releaseFenceSetKey(environmentID),
 		deletionTombstoneKey("environment", environmentID), deletionTombstoneKey("project", project.ID),
 		deletionTombstoneKey("tenant", project.TenantID),
@@ -84,12 +95,12 @@ func (ledger *ReleaseLedger) LoadPlanningScope(
 	if loaded == nil || loaded.ReadRevision != initial.ReadRevision || len(loaded.Values) != len(keys) {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
-	for _, index := range []int{0, 1, 2, 3, 4} {
+	for _, index := range []int{0, 1, 2, 3} {
 		if loaded.Values[index] == nil {
 			return ReleasePlanningScope{}, corruptReleaseRecord()
 		}
 	}
-	if loaded.Values[5] != nil || loaded.Values[6] != nil || loaded.Values[7] != nil || loaded.Values[8] != nil || loaded.Values[9] != nil {
+	if loaded.Values[4] != nil || loaded.Values[5] != nil || loaded.Values[6] != nil || loaded.Values[7] != nil || loaded.Values[8] != nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindResourceInUse, "release planning scope is locked or deleting")
 	}
 	environment, err = decodeEnvironment(loaded.Values[0].Value)
@@ -104,11 +115,7 @@ func (ledger *ReleaseLedger) LoadPlanningScope(
 	if err != nil || tenant.ID != project.TenantID {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
-	compose, err := decodeEnvironmentComposeProjection(loaded.Values[3].Value)
-	if err != nil || compose.EnvironmentID != environmentID {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
-	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(loaded.Values[4].Value)
+	epoch, err := decodeEnvironmentMutationEpochRecord(loaded.Values[3].Value)
 	if err != nil || epoch.EnvironmentID != environmentID {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
@@ -116,9 +123,9 @@ func (ledger *ReleaseLedger) LoadPlanningScope(
 		Environment:              Versioned[EnvironmentRecord]{Record: environment, Revision: loaded.Values[0].ModRevision, ReadRevision: loaded.ReadRevision},
 		Project:                  Versioned[ProjectRecord]{Record: project, Revision: loaded.Values[1].ModRevision, ReadRevision: loaded.ReadRevision},
 		Tenant:                   Versioned[TenantRecord]{Record: tenant, Revision: loaded.Values[2].ModRevision, ReadRevision: loaded.ReadRevision},
-		Compose:                  Versioned[EnvironmentComposeProjection]{Record: compose, Revision: loaded.Values[3].ModRevision, ReadRevision: loaded.ReadRevision},
-		EnvironmentEpochRevision: loaded.Values[4].ModRevision,
-		EnvironmentEpochValue:    slices.Clone(loaded.Values[4].Value), ReadRevision: loaded.ReadRevision,
+		Compose:                  compose,
+		EnvironmentEpochRevision: loaded.Values[3].ModRevision,
+		EnvironmentEpochValue:    slices.Clone(loaded.Values[3].Value), ReadRevision: loaded.ReadRevision,
 	}, nil
 }
 
