@@ -78,6 +78,34 @@ func TestEvaluateComposeConvergenceScopesSelectedServices(t *testing.T) {
 	}
 }
 
+func TestEvaluateComposeConvergenceDistinguishesReleaseRuntimes(t *testing.T) {
+	workloadLabels := []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "slot"}}
+	proxyLabels := []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "proxy"}}
+	artifact := &agentpb.ComposeArtifact{
+		ProjectName: "groundplane-release",
+		Services: []*agentpb.ComposeService{
+			{ServiceId: "svc_api", ComposeName: "api", ExpectedReplicas: 1, ExpectedLabels: proxyLabels},
+			{ServiceId: "svc_api", ComposeName: "api--blue", ExpectedReplicas: 1, HasHealthcheck: true, ExpectedLabels: workloadLabels},
+		},
+	}
+	workload := healthyContainer("ctr_api_blue_1", "svc_api")
+	workload.Labels = workloadLabels
+	proxy := healthyContainer("ctr_api_proxy_1", "svc_api")
+	proxy.Labels = proxyLabels
+	observed := &agentpb.ObservedProject{
+		ProjectName: artifact.ProjectName,
+		Containers:  []*agentpb.ObservedContainer{proxy, workload},
+	}
+
+	result, err := evaluateComposeConvergence(artifact, observed, []string{"api--blue"})
+	if err != nil {
+		t.Fatalf("evaluateComposeConvergence() error = %v", err)
+	}
+	if !result.Ready {
+		t.Fatalf("evaluateComposeConvergence() = %#v, want selected workload ready", result)
+	}
+}
+
 func TestEvaluateComposeConvergenceRejectsUnsafeWaitInputs(t *testing.T) {
 	artifact := convergenceArtifact()
 	observed := &agentpb.ObservedProject{ProjectName: artifact.GetProjectName()}

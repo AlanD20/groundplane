@@ -54,7 +54,7 @@ func evaluateComposeConvergence(
 				service.GetComposeName(),
 			)
 		}
-		matching := containersForService(containers, service.GetServiceId())
+		matching := containersForService(containers, service)
 		if len(matching) != int(service.GetExpectedReplicas()) {
 			return composeConvergence{
 				Summary: fmt.Sprintf(
@@ -129,13 +129,28 @@ func convergenceServices(
 
 func containersForService(
 	containers []*agentpb.ObservedContainer,
-	serviceID string,
+	service *agentpb.ComposeService,
 ) []*agentpb.ObservedContainer {
 	matching := make([]*agentpb.ObservedContainer, 0, len(containers))
 	for _, container := range containers {
-		if container != nil && container.GetServiceId() == serviceID {
+		if container != nil && container.GetServiceId() == service.GetServiceId() &&
+			labelPairsEqual(container.GetLabels(), service.GetExpectedLabels()) {
 			matching = append(matching, container)
 		}
 	}
 	return matching
+}
+
+func labelPairsEqual(left, right []*agentpb.LabelPair) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] == nil || right[index] == nil ||
+			left[index].GetKey() != right[index].GetKey() ||
+			left[index].GetValue() != right[index].GetValue() {
+			return false
+		}
+	}
+	return true
 }
