@@ -287,6 +287,14 @@ type Service struct {
 	CurrentSuccessfulReleaseID string                       `json:"current_successful_release_id,omitempty"`
 }
 
+// ServiceDetail adds the lossless normalized native Compose source used by
+// operator detail surfaces. Direct mutation responses and collection pages
+// intentionally retain the smaller Service projection.
+type ServiceDetail struct {
+	Service
+	NativeCompose string `json:"native_compose,omitempty"`
+}
+
 type ServiceCreate struct {
 	EnvironmentID string             `json:"environment_id"`
 	Name          string             `json:"name"`

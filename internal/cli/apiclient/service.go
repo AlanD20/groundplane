@@ -75,15 +75,15 @@ func (c *Client) ListServices(
 	return page, nil
 }
 
-func (c *Client) GetService(ctx context.Context, id string) (apiTypes.Service, error) {
+func (c *Client) GetService(ctx context.Context, id string) (apiTypes.ServiceDetail, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.Service{}, err
+		return apiTypes.ServiceDetail{}, err
 	}
 	path := "/api/v1/services/" + id
 	response, err := client.ServiceShowWithResponse(ctx, id)
 	if err != nil {
-		return apiTypes.Service{}, generatedCallError(ctx, http.MethodGet, path, err)
+		return apiTypes.ServiceDetail{}, generatedCallError(ctx, http.MethodGet, path, err)
 	}
 	if err := generatedResponseError(
 		http.MethodGet,
@@ -92,9 +92,13 @@ func (c *Client) GetService(ctx context.Context, id string) (apiTypes.Service, e
 		response.Body,
 		http.StatusOK,
 	); err != nil {
-		return apiTypes.Service{}, err
+		return apiTypes.ServiceDetail{}, err
 	}
-	return decodeServiceResponse(http.MethodGet, path, response.Body)
+	result := apiTypes.ServiceDetail{}
+	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &result); err != nil {
+		return apiTypes.ServiceDetail{}, err
+	}
+	return result, nil
 }
 
 func (c *Client) EditService(ctx context.Context, id string, input apiTypes.ServiceEdit) (apiTypes.Service, error) {

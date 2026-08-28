@@ -1519,6 +1519,39 @@ type ServiceDependency struct {
 	Phases    *[]string `json:"phases,omitempty"`
 }
 
+// ServiceDetail defines model for ServiceDetail.
+type ServiceDetail struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ServiceDetail.json
+	Schema                     *string                       `json:"$schema,omitempty"`
+	Adapter                    *string                       `json:"adapter,omitempty"`
+	Aliases                    *map[string]*[]string         `json:"aliases,omitempty"`
+	BackingNetworkId           *string                       `json:"backing_network_id,omitempty"`
+	Command                    *[]string                     `json:"command,omitempty"`
+	CurrentSuccessfulReleaseId *string                       `json:"current_successful_release_id,omitempty"`
+	DependsOn                  *map[string]ServiceDependency `json:"depends_on,omitempty"`
+	EnvironmentId              string                        `json:"environment_id"`
+	Expose                     *[]string                     `json:"expose,omitempty"`
+	FactsPrefix                *string                       `json:"facts_prefix,omitempty"`
+	Healthcheck                *ServiceHealthcheck           `json:"healthcheck,omitempty"`
+	Id                         string                        `json:"id"`
+	Image                      string                        `json:"image"`
+	Label                      *string                       `json:"label,omitempty"`
+	Logging                    *ServiceLogging               `json:"logging,omitempty"`
+	Mounts                     *[]ServiceMount               `json:"mounts,omitempty"`
+	Name                       string                        `json:"name"`
+	NativeCompose              *string                       `json:"native_compose,omitempty"`
+	OnFailure                  *string                       `json:"on_failure,omitempty"`
+	Replicas                   *int64                        `json:"replicas,omitempty"`
+	Resources                  *ServiceResources             `json:"resources,omitempty"`
+	Restart                    *string                       `json:"restart,omitempty"`
+	RuntimeIntent              string                        `json:"runtime_intent"`
+	ServingReleaseId           *string                       `json:"serving_release_id,omitempty"`
+	Strategy                   *string                       `json:"strategy,omitempty"`
+	Zones                      *[]string                     `json:"zones,omitempty"`
+}
+
 // ServiceEdit defines model for ServiceEdit.
 type ServiceEdit struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -17205,13 +17238,13 @@ type ServiceShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Service
+	JSON200 *ServiceDetail
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ServiceShowResponse) GetJSON200() *Service {
+func (r ServiceShowResponse) GetJSON200() *ServiceDetail {
 	return r.JSON200
 }
 
@@ -23954,7 +23987,7 @@ func ParseServiceShowResponse(rsp *http.Response) (*ServiceShowResponse, error) 
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Service
+		var dest ServiceDetail
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

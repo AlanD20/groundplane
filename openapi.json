@@ -3409,6 +3409,140 @@
         ],
         "type": "object"
       },
+      "ServiceDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ServiceDetail.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "adapter": {
+            "type": "string"
+          },
+          "aliases": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "type": "object"
+          },
+          "backing_network_id": {
+            "type": "string"
+          },
+          "command": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "current_successful_release_id": {
+            "type": "string"
+          },
+          "depends_on": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ServiceDependency"
+            },
+            "type": "object"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "expose": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "facts_prefix": {
+            "type": "string"
+          },
+          "healthcheck": {
+            "$ref": "#/components/schemas/ServiceHealthcheck"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "logging": {
+            "$ref": "#/components/schemas/ServiceLogging"
+          },
+          "mounts": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceMount"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "native_compose": {
+            "type": "string"
+          },
+          "on_failure": {
+            "type": "string"
+          },
+          "replicas": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ServiceResources"
+          },
+          "restart": {
+            "type": "string"
+          },
+          "runtime_intent": {
+            "type": "string"
+          },
+          "serving_release_id": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "zones": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "environment_id",
+          "name",
+          "image",
+          "runtime_intent"
+        ],
+        "type": "object"
+      },
       "ServiceEdit": {
         "additionalProperties": false,
         "properties": {
@@ -9198,7 +9332,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Service"
+                  "$ref": "#/components/schemas/ServiceDetail"
                 }
               }
             },

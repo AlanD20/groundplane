@@ -16,6 +16,7 @@ import (
 
 type ServiceReader interface {
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	GetServiceNativeCompose(context.Context, string, string) (string, error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 }
 
@@ -53,6 +54,8 @@ type serviceEditInput struct {
 }
 
 type serviceOutput struct{ Body apiTypes.Service }
+
+type serviceDetailOutput struct{ Body apiTypes.ServiceDetail }
 
 type serviceMutationOutput struct {
 	Status      int
@@ -135,7 +138,7 @@ func (s *Server) listServices(
 	return &servicePageOutput{Body: response}, nil
 }
 
-func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*serviceOutput, error) {
+func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*serviceDetailOutput, error) {
 	if s.services == nil {
 		return nil, errs.New(errs.KindInternal, "Service reader is not configured")
 	}
@@ -143,7 +146,18 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &serviceOutput{Body: serviceResponse(record.Record)}, nil
+	nativeCompose, err := s.services.GetServiceNativeCompose(
+		ctx,
+		record.Record.EnvironmentID,
+		record.Record.Desired.Name,
+	)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &serviceDetailOutput{Body: apiTypes.ServiceDetail{
+		Service:       serviceResponse(record.Record),
+		NativeCompose: nativeCompose,
+	}}, nil
 }
 
 func (s *Server) createService(ctx context.Context, request *serviceCreateInput) (*serviceMutationOutput, error) {

@@ -13,10 +13,19 @@ import (
 
 type fakeServiceReader struct {
 	record      etcd.Versioned[etcd.ServiceRecord]
+	native      string
 	page        etcd.Page[etcd.ServiceRecord]
 	wantRequest etcd.PageRequest
 	wantEnv     string
 	listed      bool
+}
+
+func (fake *fakeServiceReader) GetServiceNativeCompose(
+	_ context.Context,
+	_ string,
+	_ string,
+) (string, error) {
+	return fake.native, nil
 }
 
 func (fake *fakeServiceReader) GetService(
@@ -60,11 +69,14 @@ func TestShowServiceProjectsStableOwnerAndFullDesiredState(t *testing.T) {
 		},
 		Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 	}
-	server := &Server{services: &fakeServiceReader{record: etcd.Versioned[etcd.ServiceRecord]{Record: record}}}
+	server := &Server{services: &fakeServiceReader{
+		record: etcd.Versioned[etcd.ServiceRecord]{Record: record},
+		native: "services:\n  api:\n    image: app:stable\n",
+	}}
 	output, err := server.showService(context.Background(), &serviceShowInput{ID: serviceID})
 	if err != nil || output.Body.EnvironmentID != environmentID || output.Body.Healthcheck == nil ||
 		output.Body.Healthcheck.HTTP != "/up" ||
-		output.Body.Resources.CPUs != 0.5 {
+		output.Body.Resources.CPUs != 0.5 || output.Body.NativeCompose == "" {
 		t.Fatalf("showService() = %#v, %v", output, err)
 	}
 }

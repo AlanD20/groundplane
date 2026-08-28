@@ -50,8 +50,10 @@ func newServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fields, values := fieldsOfVia(serviceFields(service))
-			return fromContext(cmd).Out.RenderOne(fields, values, service)
+			fields := serviceFields(service.Service)
+			fields["native_compose"] = service.NativeCompose
+			fieldNames, values := fieldsOfVia(fields)
+			return fromContext(cmd).Out.RenderOne(fieldNames, values, service)
 		},
 	})
 
