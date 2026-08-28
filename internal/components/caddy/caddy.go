@@ -284,6 +284,7 @@ func renderRouteBlocks(routes []resolvedRoute) string {
 				routes[index].route.TargetPort,
 			)
 		}
+		output.WriteString("\t\trespond 404\n")
 		output.WriteString("\t}\n}\n")
 		if end < len(routes) {
 			output.WriteByte('\n')

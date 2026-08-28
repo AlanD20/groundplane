@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -74,8 +75,23 @@ func newComponentCmd() *cobra.Command {
 	var upstreamResolvers []string
 	var forwarders []string
 	var tailnetDelegation bool
+	var configFile string
 	set := &cobra.Command{Use: "set <id>", Short: "Set a component's config", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		body := make(map[string]any)
+		flagConfig := cmd.Flags().Changed("upstream-auto") || cmd.Flags().Changed("upstream") ||
+			cmd.Flags().Changed("forward") || cmd.Flags().Changed("tailnet-delegation")
+		if cmd.Flags().Changed("file") {
+			if flagConfig {
+				return fmt.Errorf("--file cannot be combined with kind-specific config flags")
+			}
+			value, err := readValueFile(configFile, cmd.InOrStdin(), 64<<10, "component config")
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal([]byte(value), &body); err != nil {
+				return fmt.Errorf("component config file must contain one JSON object: %w", err)
+			}
+		}
 		if cmd.Flags().Changed("upstream-auto") {
 			body["upstream_auto"] = upstreamAuto
 		}
@@ -107,6 +123,7 @@ func newComponentCmd() *cobra.Command {
 	set.Flags().StringArrayVar(&upstreamResolvers, "upstream", nil, "repeatable upstream resolver endpoint")
 	set.Flags().StringArrayVar(&forwarders, "forward", nil, "repeatable DOMAIN=RESOLVER[,RESOLVER...]")
 	set.Flags().BoolVar(&tailnetDelegation, "tailnet-delegation", false, "delegate ts.net to the tailnet resolver")
+	set.Flags().StringVar(&configFile, "file", "", "read the complete kind-specific JSON config object from PATH, or -")
 	config.AddCommand(set)
 	cmd.AddCommand(config)
 	cmd.AddCommand(&cobra.Command{Use: "update <id>", Short: "Update a component", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
