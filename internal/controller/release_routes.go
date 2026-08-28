@@ -86,13 +86,17 @@ func (s *Server) listReleases(ctx context.Context, input *releaseListInput) (*re
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
+	return &releasePageOutput{Body: releasePageResponse(page)}, nil
+}
+
+func releasePageResponse(page etcd.ReleasePage) apiTypes.Page[apiTypes.ReleaseSummary] {
 	items := make([]apiTypes.ReleaseSummary, len(page.Items))
 	for index, item := range page.Items {
 		items[index] = releaseSummary(item)
 	}
-	return &releasePageOutput{Body: apiTypes.Page[apiTypes.ReleaseSummary]{
+	return apiTypes.Page[apiTypes.ReleaseSummary]{
 		Items: items, NextCursor: page.NextCursor, Revision: page.Revision,
-	}}, nil
+	}
 }
 
 func (s *Server) showRelease(ctx context.Context, input *releaseShowInput) (*releaseOutput, error) {

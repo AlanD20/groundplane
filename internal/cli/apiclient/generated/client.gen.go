@@ -1543,6 +1543,7 @@ type ServiceDetail struct {
 	Name                       string                        `json:"name"`
 	NativeCompose              *string                       `json:"native_compose,omitempty"`
 	OnFailure                  *string                       `json:"on_failure,omitempty"`
+	ReleaseLedger              PageReleaseSummary            `json:"release_ledger"`
 	Replicas                   *int64                        `json:"replicas,omitempty"`
 	Resources                  *ServiceResources             `json:"resources,omitempty"`
 	Restart                    *string                       `json:"restart,omitempty"`

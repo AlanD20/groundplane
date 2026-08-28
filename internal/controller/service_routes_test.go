@@ -20,6 +20,22 @@ type fakeServiceReader struct {
 	listed      bool
 }
 
+type fakeServiceReleaseReader struct {
+	request etcd.ReleasePageRequest
+}
+
+func (fake *fakeServiceReleaseReader) Get(context.Context, string) (etcd.ReleaseView, error) {
+	return etcd.ReleaseView{}, nil
+}
+
+func (fake *fakeServiceReleaseReader) List(
+	_ context.Context,
+	request etcd.ReleasePageRequest,
+) (etcd.ReleasePage, error) {
+	fake.request = request
+	return etcd.ReleasePage{Revision: 73}, nil
+}
+
 func (fake *fakeServiceReader) GetServiceNativeCompose(
 	_ context.Context,
 	_ string,
@@ -69,14 +85,17 @@ func TestShowServiceProjectsStableOwnerAndFullDesiredState(t *testing.T) {
 		},
 		Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 	}
+	releases := &fakeServiceReleaseReader{}
 	server := &Server{services: &fakeServiceReader{
 		record: etcd.Versioned[etcd.ServiceRecord]{Record: record},
 		native: "services:\n  api:\n    image: app:stable\n",
-	}}
+	}, releases: releases}
 	output, err := server.showService(context.Background(), &serviceShowInput{ID: serviceID})
 	if err != nil || output.Body.EnvironmentID != environmentID || output.Body.Healthcheck == nil ||
 		output.Body.Healthcheck.HTTP != "/up" ||
-		output.Body.Resources.CPUs != 0.5 || output.Body.NativeCompose == "" {
+		output.Body.Resources.CPUs != 0.5 || output.Body.NativeCompose == "" ||
+		output.Body.ReleaseLedger.Revision != 73 || releases.request.EnvironmentID != environmentID ||
+		releases.request.ServiceID != serviceID || releases.request.Limit != 50 {
 		t.Fatalf("showService() = %#v, %v", output, err)
 	}
 }

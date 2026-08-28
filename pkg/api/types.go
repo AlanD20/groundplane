@@ -292,7 +292,8 @@ type Service struct {
 // intentionally retain the smaller Service projection.
 type ServiceDetail struct {
 	Service
-	NativeCompose string `json:"native_compose,omitempty"`
+	NativeCompose string               `json:"native_compose,omitempty"`
+	ReleaseLedger Page[ReleaseSummary] `json:"release_ledger"`
 }
 
 type ServiceCreate struct {

@@ -3505,6 +3505,9 @@
           "on_failure": {
             "type": "string"
           },
+          "release_ledger": {
+            "$ref": "#/components/schemas/PageReleaseSummary"
+          },
           "replicas": {
             "format": "int64",
             "type": "integer"
@@ -3535,6 +3538,7 @@
           }
         },
         "required": [
+          "release_ledger",
           "id",
           "environment_id",
           "name",

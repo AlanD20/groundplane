@@ -154,9 +154,21 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
+	if s.releases == nil {
+		return nil, errs.New(errs.KindInternal, "release reader is not configured")
+	}
+	ledger, err := s.releases.List(ctx, etcd.ReleasePageRequest{
+		EnvironmentID: record.Record.EnvironmentID,
+		ServiceID:     record.Record.Desired.ID,
+		Limit:         50,
+	})
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
 	return &serviceDetailOutput{Body: apiTypes.ServiceDetail{
 		Service:       serviceResponse(record.Record),
 		NativeCompose: nativeCompose,
+		ReleaseLedger: releasePageResponse(ledger),
 	}}, nil
 }
 
