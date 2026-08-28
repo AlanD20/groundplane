@@ -40,7 +40,7 @@ func TestBackingServiceRoutesProjectExactFacade(t *testing.T) {
 	t.Parallel()
 	record := etcd.BackingServiceRecord{
 		ProjectID: ids.New(ids.KindProject), EnvironmentID: ids.New(ids.KindEnvironment),
-		ServiceID: ids.New(ids.KindService),
+		ServiceID: ids.New(ids.KindService), BackingNetworkID: ids.New(ids.KindNetwork),
 	}
 	request := etcd.PageRequest{Limit: 3, Cursor: "opaque"}
 	reader := &fakeBackingServiceReader{

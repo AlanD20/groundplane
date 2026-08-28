@@ -79,9 +79,10 @@ type ProjectPage struct {
 // main Environment, and its sole adapter-backed Service. ProjectID is the
 // facade's stable public identity; the other ids address shared operations.
 type BackingService struct {
-	ProjectID     string `json:"project_id"`
-	EnvironmentID string `json:"environment_id"`
-	ServiceID     string `json:"service_id"`
+	ProjectID        string `json:"project_id"`
+	EnvironmentID    string `json:"environment_id"`
+	ServiceID        string `json:"service_id"`
+	BackingNetworkID string `json:"backing_network_id"`
 }
 
 type Environment struct {
@@ -814,8 +815,15 @@ type ComponentEnableRequest struct {
 }
 
 type RunnerCreateRequest struct {
-	TenantID          string `json:"tenant_id,omitempty"`
-	ProjectID         string `json:"project_id,omitempty"`
+	Slug              string   `json:"slug"`
+	TenantID          string   `json:"tenant_id,omitempty"`
+	ProjectID         string   `json:"project_id,omitempty"`
+	GitHubURL         string   `json:"github_url"`
+	Labels            []string `json:"labels,omitempty"`
+	RegistrationToken string   `json:"registration_token"` // discarded by the Controller after registration
+}
+
+type RunnerRetryRequest struct {
 	RegistrationToken string `json:"registration_token"` // discarded by the Controller after registration
 }
 

@@ -24,7 +24,7 @@ func (s *Server) registerRunnerRemove() {
 	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "runner.remove", Method: http.MethodDelete, Path: "/runners/{id}",
-		Summary: "Remove a failed managed Runner", Tags: []string{"Runner"}, DefaultStatus: http.StatusAccepted,
+		Summary: "Remove a managed Runner", Tags: []string{"Runner"}, DefaultStatus: http.StatusAccepted,
 		Middlewares: huma.Middlewares{s.rejectRunnerRemoveBody, s.rejectRunnerRemoveQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeRunner)

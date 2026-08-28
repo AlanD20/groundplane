@@ -26,6 +26,11 @@ type RunnerRemover interface {
 	RemoveRunner(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
+type RunnerProvisioner interface {
+	CreateRunner(context.Context, apiTypes.RunnerCreateRequest, string) (etcd.IdempotencyResponse, error)
+	RetryRunner(context.Context, string, apiTypes.RunnerRetryRequest, string) (etcd.IdempotencyResponse, error)
+}
+
 type runnerListInput struct {
 	Tenant  string `query:"tenant" pattern:"^tnt_[0-9A-HJKMNP-TV-Z]{26}$"`
 	Project string `query:"project" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
@@ -54,6 +59,7 @@ func (s *Server) registerRunners() {
 		OperationID: "runner.show", Method: http.MethodGet, Path: "/runners/{id}",
 		Summary: "Show a managed runner", Tags: []string{"Runner"},
 	}, s.showRunner)
+	s.registerRunnerProvisioning()
 	s.registerRunnerEdit()
 	s.registerRunnerRemove()
 }

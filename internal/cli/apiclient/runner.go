@@ -85,6 +85,74 @@ func (c *Client) ShowRunner(ctx context.Context, id string) (apiTypes.Runner, er
 	return generatedRunnerBody(http.MethodGet, path, response.Body, response.JSON200)
 }
 
+func (c *Client) CreateRunner(
+	ctx context.Context,
+	request apiTypes.RunnerCreateRequest,
+) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	body := generated.RunnerCreateJSONRequestBody{
+		Slug: request.Slug, GithubUrl: request.GitHubURL,
+		RegistrationToken: request.RegistrationToken,
+	}
+	defer func() { body.RegistrationToken = "" }()
+	if request.TenantID != "" {
+		body.TenantId = &request.TenantID
+	}
+	if request.ProjectID != "" {
+		body.ProjectId = &request.ProjectID
+	}
+	if request.Labels != nil {
+		labels := append([]string(nil), request.Labels...)
+		body.Labels = &labels
+	}
+	response, err := client.RunnerCreateWithResponse(
+		ctx,
+		&generated.RunnerCreateParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, "/api/v1/runners", err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, "/api/v1/runners", response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, "/api/v1/runners", response.Body, response.JSON202)
+}
+
+func (c *Client) RetryRunner(
+	ctx context.Context,
+	id string,
+	registrationToken string,
+) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/runners/" + id + "/retry"
+	body := generated.RunnerRetryJSONRequestBody{RegistrationToken: registrationToken}
+	defer func() { body.RegistrationToken = "" }()
+	response, err := client.RunnerRetryWithResponse(
+		ctx,
+		id,
+		&generated.RunnerRetryParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
+}
+
 func (c *Client) EditRunner(ctx context.Context, id, slug string) (apiTypes.Runner, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {

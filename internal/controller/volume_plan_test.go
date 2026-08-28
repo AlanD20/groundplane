@@ -182,7 +182,8 @@ func newVolumePlanState(t *testing.T, removal bool) volumePlanState {
 		identities.Volumes = []ComposeResourceIdentity{{ID: volumeID, Name: volumeKey}}
 	}
 	baseArtifact, err := RenderCompose(ComposeRenderInput{
-		Project: baseProject, ArtifactID: baselineArtifactID, TenantID: tenantID, ProjectID: projectID,
+		Project: baseProject, ArtifactID: baselineArtifactID,
+		ProjectOwnerKind: ComposeProjectOwnerTenant, TenantID: tenantID, ProjectID: projectID,
 		EnvironmentID: environmentID, PlanID: ids.NewAt(ids.KindPlan, at, 19), RenderGeneration: 1,
 		AuthorizedVolumeDir: volumeDir, Identities: identities,
 	})

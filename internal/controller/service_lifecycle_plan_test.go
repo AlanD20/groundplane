@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {
@@ -62,19 +63,7 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		apiID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		migrateID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	)
-	reader.revision.Files[0].Content = []byte(`kind: environment
-schema: 1
-metadata: {tenant: acme, project: shop, environment: production}
-services:
-  api:
-    image: example/api:1
-    networks: [frontend]
-    x-gp-depends_on:
-      migrate: {condition: service_completed_successfully, phases: [always]}
-  migrate: {image: example/migrate:1, networks: [frontend]}
-networks:
-  frontend: {}
-`)
+	reader.revision.Files[0].Content = []byte("not runtime authority")
 	reader.projection.Services = []etcd.EnvironmentComposeIdentity{
 		{ID: apiID, Name: "api"},
 		{ID: migrateID, Name: "migrate"},
@@ -89,6 +78,38 @@ networks:
 		ArtifactID:          "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Projection:          reader.projection,
 	}
+	project := &composetypes.Project{
+		Services: composetypes.Services{
+			"api": {
+				Name: "api", Image: "example/api:1",
+				Networks: map[string]*composetypes.ServiceNetworkConfig{"frontend": {}},
+				DependsOn: map[string]composetypes.ServiceDependency{
+					"migrate": {Condition: "service_completed_successfully", Required: true},
+				},
+			},
+			"migrate": {
+				Name: "migrate", Image: "example/migrate:1",
+				Networks: map[string]*composetypes.ServiceNetworkConfig{"frontend": {}},
+			},
+		},
+		Networks: composetypes.Networks{"frontend": {}},
+	}
+	artifact, err := RenderCompose(ComposeRenderInput{
+		Project: project, ArtifactID: input.ArtifactID,
+		ProjectOwnerKind: ComposeProjectOwnerTenant,
+		TenantID:         reader.tenant.ID, ProjectID: reader.project.ID, EnvironmentID: reader.environment.ID,
+		PlanID: input.PlanID, RenderGeneration: reader.projection.RenderGeneration,
+		AuthorizedVolumeDir: reader.environment.VolumeDir,
+		Identities:          composeIdentitySnapshotFromProjection(reader.projection),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.Projection = reader.projection
 	task := etcd.TaskRecord{
 		ID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAW", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Executor: etcd.TaskExecutorAgent, PlanID: input.PlanID, Type: etcd.TaskStart,

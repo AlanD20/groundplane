@@ -172,6 +172,9 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 		if ids.Validate(ids.KindEnvEntry, task.Target) == nil {
 			return resolver.resolveEntryRemovalPlan(ctx, task)
 		}
+		if ids.Validate(ids.KindService, task.Target) == nil {
+			return resolver.resolveServiceRemovalPlan(ctx, task)
+		}
 		return nil, errs.New(errs.KindInternal, "durable removal Task target is invalid")
 	}
 	if task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskCreate ||
@@ -526,48 +529,27 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	transform environmentComposeTransform,
 	releases map[string]ComposeReleaseIdentity,
 ) (*agentpb.ComposeArtifact, error) {
-	parsed, err := resolver.parsePinnedEnvironmentBlueprint(ctx, identity, revisionID)
+	if projection.RevisionID != revisionID || projection.EnvironmentID != identity.EnvironmentID {
+		return nil, errs.New(errs.KindInternal, "pinned Environment normalized projection changed")
+	}
+	project, err := loadNormalizedEnvironmentProject(ctx, projection)
 	if err != nil {
 		return nil, err
 	}
-	if len(parsed.Extensions.Requires) != 0 || len(parsed.Extensions.Attachments) != 0 ||
-		len(parsed.Extensions.Entries) != 0 || parsed.Extensions.Backup != nil ||
-		(len(parsed.Extensions.ReleaseGroups) != 0 && releases == nil) || len(parsed.Project.Configs) != 0 ||
-		len(parsed.Project.Secrets) != 0 {
-		return nil, errs.New(errs.KindNotImplemented, "Blueprint materialized resources are not yet executable")
-	}
-	if phase != "" {
-		if err := applyServiceDependencyPhase(parsed.Project, parsed.ServiceExtensions, phase); err != nil {
-			return nil, err
-		}
+	if err := applyProjectedServiceDependencyPhase(project, projection.ServiceDependencyPlans, phase); err != nil {
+		return nil, err
 	}
 	externalNetworks := []ComposeResourceIdentity(nil)
 	if transform != nil {
-		externalNetworks, err = transform(parsed.Project, projection)
+		externalNetworks, err = transform(project, projection)
 		if err != nil {
 			return nil, err
 		}
 	}
-	renderProject := parsed.Project
-	if len(projection.Components) != 0 {
-		componentProjection, componentErr := projectPinnedEnvironmentComponents(
-			parsed.Project,
-			parsed.ServiceExtensions,
-			identity,
-			projection,
-			parsed.Extensions.Routes,
-			parsed.Extensions.Components,
-			projectedEnvironmentEntries(projection.Entries),
-			resolver.componentCatalog,
-		)
-		if componentErr != nil {
-			return nil, componentErr
-		}
-		renderProject = componentProjection.Project
-	}
 	return RenderCompose(ComposeRenderInput{
-		Project: renderProject, ArtifactID: artifactID,
-		TenantID: identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
+		Project: project, ArtifactID: artifactID,
+		ProjectOwnerKind: ComposeProjectOwnerTenant,
+		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
 		Identities:          composeIdentitySnapshotFromProjection(projection),

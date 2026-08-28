@@ -5,6 +5,7 @@
 environment_pool: 10.0.0.0/9
 system_pool: 10.128.0.0/9
 runner:
+  image: ghcr.io/example/groundplane-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
   # Reserved exclusively from system_pool before the Controller serves.
   network_pool: 10.240.0.0/24
   host_uid_range: 200000-200007

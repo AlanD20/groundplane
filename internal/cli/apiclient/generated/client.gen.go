@@ -525,10 +525,42 @@ type BackingService struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/BackingService.json
-	Schema        *string `json:"$schema,omitempty"`
-	EnvironmentId string  `json:"environment_id"`
-	ProjectId     string  `json:"project_id"`
-	ServiceId     string  `json:"service_id"`
+	Schema           *string `json:"$schema,omitempty"`
+	BackingNetworkId string  `json:"backing_network_id"`
+	EnvironmentId    string  `json:"environment_id"`
+	ProjectId        string  `json:"project_id"`
+	ServiceId        string  `json:"service_id"`
+}
+
+// BackingServiceCreate defines model for BackingServiceCreate.
+type BackingServiceCreate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackingServiceCreate.json
+	Schema      *string                  `json:"$schema,omitempty"`
+	Adapter     string                   `json:"adapter"`
+	Description *string                  `json:"description,omitempty"`
+	Name        string                   `json:"name"`
+	NetworkPool string                   `json:"network_pool"`
+	Slug        string                   `json:"slug"`
+	Zone        BackingServiceZoneCreate `json:"zone"`
+}
+
+// BackingServiceCreated defines model for BackingServiceCreated.
+type BackingServiceCreated struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/BackingServiceCreated.json
+	Schema         *string        `json:"$schema,omitempty"`
+	BackingService BackingService `json:"backing_service"`
+	TaskId         string         `json:"task_id"`
+}
+
+// BackingServiceZoneCreate defines model for BackingServiceZoneCreate.
+type BackingServiceZoneCreate struct {
+	Internal bool   `json:"internal"`
+	Name     string `json:"name"`
+	Subnet   string `json:"subnet"`
 }
 
 // BackupPolicy defines model for BackupPolicy.
@@ -1423,6 +1455,20 @@ type Runner struct {
 // RunnerLifecycle defines model for Runner.Lifecycle.
 type RunnerLifecycle string
 
+// RunnerCreateRequest defines model for RunnerCreateRequest.
+type RunnerCreateRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerCreateRequest.json
+	Schema            *string   `json:"$schema,omitempty"`
+	GithubUrl         string    `json:"github_url"`
+	Labels            *[]string `json:"labels,omitempty"`
+	ProjectId         *string   `json:"project_id,omitempty"`
+	RegistrationToken string    `json:"registration_token"`
+	Slug              string    `json:"slug"`
+	TenantId          *string   `json:"tenant_id,omitempty"`
+}
+
 // RunnerEditRequest defines model for RunnerEditRequest.
 type RunnerEditRequest struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1430,6 +1476,15 @@ type RunnerEditRequest struct {
 	// Examples: /api/v1/RunnerEditRequest.json
 	Schema *string `json:"$schema,omitempty"`
 	Slug   string  `json:"slug"`
+}
+
+// RunnerRetryRequest defines model for RunnerRetryRequest.
+type RunnerRetryRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerRetryRequest.json
+	Schema            *string `json:"$schema,omitempty"`
+	RegistrationToken string  `json:"registration_token"`
 }
 
 // Script defines model for Script.
@@ -1971,6 +2026,11 @@ type BackingServiceListParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// BackingServiceCreateParams defines parameters for BackingServiceCreate.
+type BackingServiceCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // BackingServiceDestroyParams defines parameters for BackingServiceDestroy.
 type BackingServiceDestroyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -2208,6 +2268,11 @@ type RunnerListParams struct {
 	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// RunnerCreateParams defines parameters for RunnerCreate.
+type RunnerCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // RunnerRemoveParams defines parameters for RunnerRemove.
 type RunnerRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -2215,6 +2280,11 @@ type RunnerRemoveParams struct {
 
 // RunnerEditParams defines parameters for RunnerEdit.
 type RunnerEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// RunnerRetryParams defines parameters for RunnerRetry.
+type RunnerRetryParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -2267,6 +2337,11 @@ type ServiceListParams struct {
 
 // ServiceCreateParams defines parameters for ServiceCreate.
 type ServiceCreateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ServiceRemoveParams defines parameters for ServiceRemove.
+type ServiceRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -2407,6 +2482,9 @@ type AttachCreateJSONRequestBody = AttachRequest
 // AttachRenameJSONRequestBody defines body for AttachRename for application/json ContentType.
 type AttachRenameJSONRequestBody = AttachRenameRequest
 
+// BackingServiceCreateJSONRequestBody defines body for BackingServiceCreate for application/json ContentType.
+type BackingServiceCreateJSONRequestBody = BackingServiceCreate
+
 // ComponentConfigSetJSONRequestBody defines body for ComponentConfigSet for application/json ContentType.
 type ComponentConfigSetJSONRequestBody = ComponentConfig
 
@@ -2458,8 +2536,14 @@ type RouteCreateJSONRequestBody = RouteCreate
 // RouteEditJSONRequestBody defines body for RouteEdit for application/json ContentType.
 type RouteEditJSONRequestBody = RouteEdit
 
+// RunnerCreateJSONRequestBody defines body for RunnerCreate for application/json ContentType.
+type RunnerCreateJSONRequestBody = RunnerCreateRequest
+
 // RunnerEditJSONRequestBody defines body for RunnerEdit for application/json ContentType.
 type RunnerEditJSONRequestBody = RunnerEditRequest
+
+// RunnerRetryJSONRequestBody defines body for RunnerRetry for application/json ContentType.
+type RunnerRetryJSONRequestBody = RunnerRetryRequest
 
 // ScriptCreateJSONRequestBody defines body for ScriptCreate for application/json ContentType.
 type ScriptCreateJSONRequestBody = ScriptCreate
@@ -2780,6 +2864,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /backing-services (the `BackingServiceList` operationId).
 	BackingServiceList(ctx context.Context, params *BackingServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceCreateWithBody Create a backing service
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+	BackingServiceCreateWithBody(ctx context.Context, params *BackingServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BackingServiceCreate Create a backing service
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+	BackingServiceCreate(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackingServiceShow Show a backing service
 	//
@@ -3212,7 +3310,21 @@ type ClientInterface interface {
 	// Corresponds with GET /runners (the `RunnerList` operationId).
 	RunnerList(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RunnerRemove Remove a failed managed Runner
+	// RunnerCreateWithBody Create a managed Runner
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /runners (the `RunnerCreate` operationId).
+	RunnerCreateWithBody(ctx context.Context, params *RunnerCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerCreate Create a managed Runner
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /runners (the `RunnerCreate` operationId).
+	RunnerCreate(ctx context.Context, params *RunnerCreateParams, body RunnerCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerRemove Remove a managed Runner
 	//
 	// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
 	RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3235,6 +3347,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 	RunnerEdit(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerRetryWithBody Retry failed Runner creation
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+	RunnerRetryWithBody(ctx context.Context, id string, params *RunnerRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerRetry Retry failed Runner creation
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+	RunnerRetry(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ScriptList List scripts
 	//
@@ -3331,6 +3457,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /services (the `ServiceCreate` operationId).
 	ServiceCreate(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceRemove Remove a service
+	//
+	// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+	ServiceRemove(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceShow Show a service
 	//
@@ -3818,6 +3949,40 @@ func (c *Client) AttachRename(ctx context.Context, id string, params *AttachRena
 // Corresponds with GET /backing-services (the `BackingServiceList` operationId).
 func (c *Client) BackingServiceList(ctx context.Context, params *BackingServiceListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackingServiceListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceCreateWithBody Create a backing service
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+func (c *Client) BackingServiceCreateWithBody(ctx context.Context, params *BackingServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BackingServiceCreate Create a backing service
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+func (c *Client) BackingServiceCreate(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBackingServiceCreateRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4989,7 +5154,41 @@ func (c *Client) RunnerList(ctx context.Context, params *RunnerListParams, reqEd
 	return c.Client.Do(req)
 }
 
-// RunnerRemove Remove a failed managed Runner
+// RunnerCreateWithBody Create a managed Runner
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /runners (the `RunnerCreate` operationId).
+func (c *Client) RunnerCreateWithBody(ctx context.Context, params *RunnerCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerCreate Create a managed Runner
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /runners (the `RunnerCreate` operationId).
+func (c *Client) RunnerCreate(ctx context.Context, params *RunnerCreateParams, body RunnerCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerRemove Remove a managed Runner
 //
 // Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
 func (c *Client) RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5043,6 +5242,40 @@ func (c *Client) RunnerEditWithBody(ctx context.Context, id string, params *Runn
 // Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 func (c *Client) RunnerEdit(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRunnerEditRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerRetryWithBody Retry failed Runner creation
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+func (c *Client) RunnerRetryWithBody(ctx context.Context, id string, params *RunnerRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerRetryRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerRetry Retry failed Runner creation
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+func (c *Client) RunnerRetry(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerRetryRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5299,6 +5532,21 @@ func (c *Client) ServiceCreateWithBody(ctx context.Context, params *ServiceCreat
 // Corresponds with POST /services (the `ServiceCreate` operationId).
 func (c *Client) ServiceCreate(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceRemove Remove a service
+//
+// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+func (c *Client) ServiceRemove(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6698,6 +6946,59 @@ func NewBackingServiceListRequest(server string, params *BackingServiceListParam
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBackingServiceCreateRequest calls the generic BackingServiceCreate builder with application/json body
+func NewBackingServiceCreateRequest(server string, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewBackingServiceCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewBackingServiceCreateRequestWithBody constructs an http.Request for the BackingServiceCreate method, with any body, and a specified content type
+func NewBackingServiceCreateRequestWithBody(server string, params *BackingServiceCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backing-services")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -9700,6 +10001,59 @@ func NewRunnerListRequest(server string, params *RunnerListParams) (*http.Reques
 	return req, nil
 }
 
+// NewRunnerCreateRequest calls the generic RunnerCreate builder with application/json body
+func NewRunnerCreateRequest(server string, params *RunnerCreateParams, body RunnerCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewRunnerCreateRequestWithBody constructs an http.Request for the RunnerCreate method, with any body, and a specified content type
+func NewRunnerCreateRequestWithBody(server string, params *RunnerCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewRunnerRemoveRequest constructs an http.Request for the RunnerRemove method
 func NewRunnerRemoveRequest(server string, id string, params *RunnerRemoveParams) (*http.Request, error) {
 	var err error
@@ -9819,6 +10173,66 @@ func NewRunnerEditRequestWithBody(server string, id string, params *RunnerEditPa
 	}
 
 	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewRunnerRetryRequest calls the generic RunnerRetry builder with application/json body
+func NewRunnerRetryRequest(server string, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerRetryRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRunnerRetryRequestWithBody constructs an http.Request for the RunnerRetry method, with any body, and a specified content type
+func NewRunnerRetryRequestWithBody(server string, id string, params *RunnerRetryParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s/retry", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -10477,6 +10891,53 @@ func NewServiceCreateRequestWithBody(server string, params *ServiceCreateParams,
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewServiceRemoveRequest constructs an http.Request for the ServiceRemove method
+func NewServiceRemoveRequest(server string, id string, params *ServiceRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -12240,6 +12701,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /backing-services (the `BackingServiceList` operationId).
 	BackingServiceListWithResponse(ctx context.Context, params *BackingServiceListParams, reqEditors ...RequestEditorFn) (*BackingServiceListResponse, error)
 
+	// BackingServiceCreateWithBodyWithResponse Create a backing service
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+	BackingServiceCreateWithBodyWithResponse(ctx context.Context, params *BackingServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceCreateResponse, error)
+
+	// BackingServiceCreateWithResponse Create a backing service
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+	BackingServiceCreateWithResponse(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceCreateResponse, error)
+
 	// BackingServiceShowWithResponse Show a backing service
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -12751,7 +13226,21 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /runners (the `RunnerList` operationId).
 	RunnerListWithResponse(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*RunnerListResponse, error)
 
-	// RunnerRemoveWithResponse Remove a failed managed Runner
+	// RunnerCreateWithBodyWithResponse Create a managed Runner
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners (the `RunnerCreate` operationId).
+	RunnerCreateWithBodyWithResponse(ctx context.Context, params *RunnerCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerCreateResponse, error)
+
+	// RunnerCreateWithResponse Create a managed Runner
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners (the `RunnerCreate` operationId).
+	RunnerCreateWithResponse(ctx context.Context, params *RunnerCreateParams, body RunnerCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCreateResponse, error)
+
+	// RunnerRemoveWithResponse Remove a managed Runner
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -12778,6 +13267,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
 	RunnerEditWithResponse(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerEditResponse, error)
+
+	// RunnerRetryWithBodyWithResponse Retry failed Runner creation
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+	RunnerRetryWithBodyWithResponse(ctx context.Context, id string, params *RunnerRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerRetryResponse, error)
+
+	// RunnerRetryWithResponse Retry failed Runner creation
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+	RunnerRetryWithResponse(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerRetryResponse, error)
 
 	// ScriptListWithResponse List scripts
 	//
@@ -12890,6 +13393,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /services (the `ServiceCreate` operationId).
 	ServiceCreateWithResponse(ctx context.Context, params *ServiceCreateParams, body ServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ServiceCreateResponse, error)
+
+	// ServiceRemoveWithResponse Remove a service
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+	ServiceRemoveWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error)
 
 	// ServiceShowWithResponse Show a service
 	//
@@ -13875,6 +14385,61 @@ func (r BackingServiceListResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackingServiceListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BackingServiceCreateResponse201Headers the declared response headers of an HTTP 201 response for BackingServiceCreate
+type BackingServiceCreateResponse201Headers struct {
+	ContentType *string
+}
+
+type BackingServiceCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *BackingServiceCreated
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *BackingServiceCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r BackingServiceCreateResponse) GetJSON201() *BackingServiceCreated {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BackingServiceCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BackingServiceCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BackingServiceCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BackingServiceCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BackingServiceCreateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16822,6 +17387,61 @@ func (r RunnerListResponse) ContentType() string {
 	return ""
 }
 
+// RunnerCreateResponse202Headers the declared response headers of an HTTP 202 response for RunnerCreate
+type RunnerCreateResponse202Headers struct {
+	ContentType *string
+}
+
+type RunnerCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RunnerCreateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RunnerCreateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerCreateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // RunnerRemoveResponse202Headers the declared response headers of an HTTP 202 response for RunnerRemove
 type RunnerRemoveResponse202Headers struct {
 	ContentType *string
@@ -16974,6 +17594,61 @@ func (r RunnerEditResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RunnerEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RunnerRetryResponse202Headers the declared response headers of an HTTP 202 response for RunnerRetry
+type RunnerRetryResponse202Headers struct {
+	ContentType *string
+}
+
+type RunnerRetryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RunnerRetryResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RunnerRetryResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerRetryResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerRetryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerRetryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerRetryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerRetryResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17592,6 +18267,61 @@ func (r ServiceCreateResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ServiceCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ServiceRemoveResponse202Headers the declared response headers of an HTTP 202 response for ServiceRemove
+type ServiceRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type ServiceRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ServiceRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ServiceRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceRemoveResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -19332,6 +20062,32 @@ func (c *ClientWithResponses) BackingServiceListWithResponse(ctx context.Context
 	return ParseBackingServiceListResponse(rsp)
 }
 
+// BackingServiceCreateWithBodyWithResponse Create a backing service
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+func (c *ClientWithResponses) BackingServiceCreateWithBodyWithResponse(ctx context.Context, params *BackingServiceCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BackingServiceCreateResponse, error) {
+	rsp, err := c.BackingServiceCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceCreateResponse(rsp)
+}
+
+// BackingServiceCreateWithResponse Create a backing service
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backing-services (the `BackingServiceCreate` operationId).
+func (c *ClientWithResponses) BackingServiceCreateWithResponse(ctx context.Context, params *BackingServiceCreateParams, body BackingServiceCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*BackingServiceCreateResponse, error) {
+	rsp, err := c.BackingServiceCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBackingServiceCreateResponse(rsp)
+}
+
 // BackingServiceShowWithResponse Show a backing service
 //
 // Returns a wrapper object for the known response body format(s).
@@ -20281,7 +21037,33 @@ func (c *ClientWithResponses) RunnerListWithResponse(ctx context.Context, params
 	return ParseRunnerListResponse(rsp)
 }
 
-// RunnerRemoveWithResponse Remove a failed managed Runner
+// RunnerCreateWithBodyWithResponse Create a managed Runner
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners (the `RunnerCreate` operationId).
+func (c *ClientWithResponses) RunnerCreateWithBodyWithResponse(ctx context.Context, params *RunnerCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerCreateResponse, error) {
+	rsp, err := c.RunnerCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCreateResponse(rsp)
+}
+
+// RunnerCreateWithResponse Create a managed Runner
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners (the `RunnerCreate` operationId).
+func (c *ClientWithResponses) RunnerCreateWithResponse(ctx context.Context, params *RunnerCreateParams, body RunnerCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerCreateResponse, error) {
+	rsp, err := c.RunnerCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerCreateResponse(rsp)
+}
+
+// RunnerRemoveWithResponse Remove a managed Runner
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -20331,6 +21113,32 @@ func (c *ClientWithResponses) RunnerEditWithResponse(ctx context.Context, id str
 		return nil, err
 	}
 	return ParseRunnerEditResponse(rsp)
+}
+
+// RunnerRetryWithBodyWithResponse Retry failed Runner creation
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+func (c *ClientWithResponses) RunnerRetryWithBodyWithResponse(ctx context.Context, id string, params *RunnerRetryParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerRetryResponse, error) {
+	rsp, err := c.RunnerRetryWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerRetryResponse(rsp)
+}
+
+// RunnerRetryWithResponse Retry failed Runner creation
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /runners/{id}/retry (the `RunnerRetry` operationId).
+func (c *ClientWithResponses) RunnerRetryWithResponse(ctx context.Context, id string, params *RunnerRetryParams, body RunnerRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerRetryResponse, error) {
+	rsp, err := c.RunnerRetry(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerRetryResponse(rsp)
 }
 
 // ScriptListWithResponse List scripts
@@ -20539,6 +21347,19 @@ func (c *ClientWithResponses) ServiceCreateWithResponse(ctx context.Context, par
 		return nil, err
 	}
 	return ParseServiceCreateResponse(rsp)
+}
+
+// ServiceRemoveWithResponse Remove a service
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /services/{id} (the `ServiceRemove` operationId).
+func (c *ClientWithResponses) ServiceRemoveWithResponse(ctx context.Context, id string, params *ServiceRemoveParams, reqEditors ...RequestEditorFn) (*ServiceRemoveResponse, error) {
+	rsp, err := c.ServiceRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceRemoveResponse(rsp)
 }
 
 // ServiceShowWithResponse Show a service
@@ -21585,6 +22406,52 @@ func ParseBackingServiceListResponse(rsp *http.Response) (*BackingServiceListRes
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseBackingServiceCreateResponse parses an HTTP response from a BackingServiceCreateWithResponse call
+func ParseBackingServiceCreateResponse(rsp *http.Response) (*BackingServiceCreateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BackingServiceCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest BackingServiceCreated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers BackingServiceCreateResponse201Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers201 = &headers
 	}
 
 	return response, nil
@@ -23868,6 +24735,52 @@ func ParseRunnerListResponse(rsp *http.Response) (*RunnerListResponse, error) {
 	return response, nil
 }
 
+// ParseRunnerCreateResponse parses an HTTP response from a RunnerCreateWithResponse call
+func ParseRunnerCreateResponse(rsp *http.Response) (*RunnerCreateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RunnerCreateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseRunnerRemoveResponse parses an HTTP response from a RunnerRemoveWithResponse call
 func ParseRunnerRemoveResponse(rsp *http.Response) (*RunnerRemoveResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -23988,6 +24901,52 @@ func ParseRunnerEditResponse(rsp *http.Response) (*RunnerEditResponse, error) {
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseRunnerRetryResponse parses an HTTP response from a RunnerRetryWithResponse call
+func ParseRunnerRetryResponse(rsp *http.Response) (*RunnerRetryResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerRetryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RunnerRetryResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil
@@ -24462,6 +25421,52 @@ func ParseServiceCreateResponse(rsp *http.Response) (*ServiceCreateResponse, err
 			headers.ContentType = &value
 		}
 		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceRemoveResponse parses an HTTP response from a ServiceRemoveWithResponse call
+func ParseServiceRemoveResponse(rsp *http.Response) (*ServiceRemoveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ServiceRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

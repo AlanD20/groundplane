@@ -19,7 +19,7 @@ import (
 
 const (
 	runnerRemoveRoute          = "/runners/{id}"
-	runnerRemoveTimeoutSeconds = int64(30)
+	runnerRemoveTimeoutSeconds = int64(300)
 )
 
 type removalRepository interface {
@@ -33,9 +33,8 @@ type removalRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-// RemovalService publishes the ownership-free failed-create cleanup path.
-// Ready Runners remain fenced until the Agent-owned host cleanup transport is
-// available; deleting their durable allocation without absence proof is unsafe.
+// RemovalService fences one managed Runner and publishes its native cleanup
+// Task. Durable allocation remains owned until exact host absence is proven.
 type RemovalService struct {
 	repository  removalRepository
 	idempotency *etcd.IdempotencyRepository
@@ -81,10 +80,10 @@ func (service *RemovalService) RemoveRunner(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if current.Record.ProvisioningState != etcd.RunnerProvisioningFailed || current.Record.ContainerID != "" {
+	if current.Record.ProvisioningState == etcd.RunnerProvisioningProvisioning {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
-			"Runner removal requires a failed creation with no runtime ownership",
+			"Runner provisioning must finish before removal",
 		)
 	}
 	locator = runnerRemovalLocator(current.Record.Desired, idempotencyKey)

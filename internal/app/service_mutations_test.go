@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,16 +14,42 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type fakeServiceMutationRepository struct {
 	serviceMutationRepository
 	environment etcd.Versioned[etcd.EnvironmentRecord]
 	project     etcd.Versioned[etcd.ProjectRecord]
+	tenant      etcd.Versioned[etcd.TenantRecord]
+	head        etcd.Versioned[etcd.EnvironmentBlueprintHead]
+	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
 	zones       etcd.Page[etcd.ZoneRecord]
 	record      etcd.ServiceRecord
 	references  etcd.ServiceMutationReferences
 	marker      etcd.IdempotencyMarker
+}
+
+func (fake *fakeServiceMutationRepository) GetTenant(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.TenantRecord], error) {
+	return fake.tenant, nil
+}
+
+func (fake *fakeServiceMutationRepository) GetEnvironmentBlueprintHead(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+	return fake.head, true, nil
+}
+
+func (fake *fakeServiceMutationRepository) GetEnvironmentComposeProjection(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return fake.projection, true, nil
 }
 
 func (fake *fakeServiceMutationRepository) GetEnvironment(
@@ -54,23 +82,59 @@ func (fake *fakeServiceMutationRepository) ListServices(
 	return etcd.Page[etcd.ServiceRecord]{}, nil
 }
 
-func (fake *fakeServiceMutationRepository) CreateServiceIdempotent(
+func (fake *fakeServiceMutationRepository) ClaimEnvironmentBlueprintStage(
 	_ context.Context,
-	_ etcd.Versioned[etcd.EnvironmentRecord],
-	_ etcd.Versioned[etcd.ProjectRecord],
-	record etcd.ServiceRecord,
-	references etcd.ServiceMutationReferences,
-	marker etcd.IdempotencyMarker,
+	request etcd.EnvironmentBlueprintStageClaimRequest,
+) (etcd.EnvironmentBlueprintStageClaim, error) {
+	return etcd.EnvironmentBlueprintStageClaim{
+		DescriptorID:  strings.TrimPrefix(request.CandidateRevisionID, "task_"),
+		EnvironmentID: request.EnvironmentID, RevisionID: request.CandidateRevisionID,
+		TaskID: request.CandidateTaskID, Locator: request.Locator, Intent: request.Intent,
+		BaselineHeadRevision: request.BaselineHeadRevision, SourceKind: request.SourceKind,
+		RenderGeneration: request.RenderGeneration, ProjectionSchema: request.ProjectionSchema,
+		CreatedAt: request.CreatedAt,
+	}, nil
+}
+
+func (fake *fakeServiceMutationRepository) StageEnvironmentBlueprintRevision(
+	_ context.Context,
+	request etcd.EnvironmentBlueprintStageRequest,
+) (etcd.EnvironmentBlueprintSeal, error) {
+	fake.projection.Record = request.Projection
+	return etcd.EnvironmentBlueprintSeal{}, nil
+}
+
+func (fake *fakeServiceMutationRepository) PublishEnvironmentServiceDesiredRevisionDirect(
+	_ context.Context,
+	input etcd.EnvironmentServiceDesiredPublication,
 ) (etcd.IdempotencyTransactionResult, error) {
-	fake.record = record
-	fake.references = references
-	fake.marker = marker
-	fake.marker.Intent.Ciphertext = append([]byte(nil), marker.Intent.Ciphertext...)
-	fake.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
+	fake.record = input.Change.Record
+	fake.references = input.References
+	fake.marker = input.Marker
+	fake.marker.Intent.Ciphertext = append([]byte(nil), input.Marker.Intent.Ciphertext...)
+	fake.marker.Response.Body = append([]byte(nil), input.Marker.Response.Body...)
 	return etcd.IdempotencyTransactionResult{}, nil
 }
 
 type fakeServiceMutationIdempotency struct{ evidence serviceMutationEvidence }
+
+func (fake *fakeServiceMutationIdempotency) ResolveReplayLocator(
+	context.Context,
+	etcd.IdempotencyReplayTarget,
+	string,
+	string,
+	string,
+) (etcd.IdempotencyLocator, bool, error) {
+	return etcd.IdempotencyLocator{}, false, nil
+}
+
+func (fake *fakeServiceMutationIdempotency) MatchesStaged(
+	context.Context,
+	serviceMutationEvidence,
+	etcd.ProtectedIntentRecord,
+) (bool, error) {
+	return true, nil
+}
 
 func (fake *fakeServiceMutationIdempotency) Prepare(
 	context.Context,
@@ -112,6 +176,20 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
 	projectID := ids.NewAt(ids.KindProject, at, 2)
 	zoneID := ids.NewAt(ids.KindNetwork, at, 3)
+	tenantID := ids.NewAt(ids.KindTenant, at, 4)
+	revisionID := ids.NewAt(ids.KindTask, at, 5)
+	artifactID := ids.NewAt(ids.KindConfig, at, 6)
+	canonical := []byte("networks: {}\nservices: {}\n")
+	digest := sha256.Sum256(canonical)
+	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId: environmentID, ProjectName: "gp-" + strings.ToLower(environmentID),
+		CanonicalYaml: canonical, YamlSha256: digest[:],
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/tenant/project/" + environmentID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	repository := &fakeServiceMutationRepository{
 		environment: etcd.Versioned[etcd.EnvironmentRecord]{
 			Record: etcd.EnvironmentRecord{
@@ -123,9 +201,23 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 			ReadRevision: 7,
 		},
 		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record:       etcd.ProjectRecord{ID: projectID, Kind: etcd.ProjectKindTenant},
+			Record:       etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant},
 			Revision:     8,
 			ReadRevision: 8,
+		},
+		tenant: etcd.Versioned[etcd.TenantRecord]{
+			Record: etcd.TenantRecord{ID: tenantID}, Revision: 6, ReadRevision: 6,
+		},
+		head: etcd.Versioned[etcd.EnvironmentBlueprintHead]{
+			Record:   etcd.EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: revisionID},
+			Revision: 11, ReadRevision: 11,
+		},
+		projection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
+			Record: etcd.EnvironmentComposeProjection{
+				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+				ComposeArtifact: artifact,
+			},
+			Revision: 11, ReadRevision: 11,
 		},
 		zones: etcd.Page[etcd.ZoneRecord]{
 			Items: []etcd.Versioned[etcd.ZoneRecord]{

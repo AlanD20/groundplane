@@ -180,7 +180,15 @@ func newServiceCmd() *cobra.Command {
 		Short:   "Remove a service (destructive — dispatches a task)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDestroy(cmd, "/api/v1/services/"+target(fromContext(cmd), args[0]))
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			accepted, err := fromContext(cmd).Client.RemoveService(cmd.Context(), serviceID)
+			if err != nil {
+				return err
+			}
+			return renderDispatchedTask(cmd, accepted)
 		},
 	})
 

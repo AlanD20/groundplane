@@ -29,9 +29,10 @@ type controllerTaskLocalAgents interface {
 }
 
 type controllerTaskHandler struct {
-	agents       controllerTaskLocalAgents
-	backingZones backingZoneCascadeExecutor
-	runners      controllerTaskRunners
+	agents          controllerTaskLocalAgents
+	backingZones    backingZoneCascadeExecutor
+	runners         controllerTaskRunners
+	runnerLifecycle controllerTaskRunnerLifecycle
 }
 
 type backingZoneCascadeExecutor interface {
@@ -42,15 +43,30 @@ type controllerTaskRunners interface {
 	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
 }
 
+type controllerTaskRunnerLifecycle interface {
+	ExecuteCreate(context.Context, etcd.TaskRecord) error
+	ExecuteRemove(context.Context, etcd.TaskRecord) error
+}
+
 func newControllerTaskHandler(
 	agents controllerTaskLocalAgents,
 	backingZones backingZoneCascadeExecutor,
 	runners controllerTaskRunners,
+	runnerLifecycle ...controllerTaskRunnerLifecycle,
 ) (*controllerTaskHandler, error) {
 	if agents == nil || backingZones == nil || runners == nil {
 		return nil, errs.New(errs.KindInternal, "Controller Task handlers are not configured")
 	}
-	return &controllerTaskHandler{agents: agents, backingZones: backingZones, runners: runners}, nil
+	var lifecycle controllerTaskRunnerLifecycle
+	if len(runnerLifecycle) > 1 {
+		return nil, errs.New(errs.KindInternal, "Controller Task Runner lifecycle is ambiguous")
+	}
+	if len(runnerLifecycle) == 1 {
+		lifecycle = runnerLifecycle[0]
+	}
+	return &controllerTaskHandler{
+		agents: agents, backingZones: backingZones, runners: runners, runnerLifecycle: lifecycle,
+	}, nil
 }
 
 func (handler *controllerTaskHandler) Execute(
@@ -115,6 +131,15 @@ func (handler *controllerTaskHandler) Execute(
 	case etcd.TaskResourceBackingZone:
 		return handler.backingZones.Execute(ctx, task)
 	case etcd.TaskResourceRunner:
+		if task.Type == etcd.TaskCreate {
+			if handler.runnerLifecycle == nil {
+				return errs.New(errs.KindInternal, "Controller Task Runner lifecycle is not configured")
+			}
+			return handler.runnerLifecycle.ExecuteCreate(ctx, task)
+		}
+		if task.Type == etcd.TaskRemove && handler.runnerLifecycle != nil {
+			return handler.runnerLifecycle.ExecuteRemove(ctx, task)
+		}
 		return handler.executeRunnerRemoval(ctx, task)
 	default:
 		return errs.New(errs.KindValidationFailed, "Controller Task resource kind is invalid")
@@ -140,7 +165,7 @@ func (handler *controllerTaskHandler) executeRunnerRemoval(ctx context.Context, 
 		return err
 	}
 	if current.Record.ProvisioningState != etcd.RunnerProvisioningFailed || current.Record.ContainerID != "" {
-		return errs.New(errs.KindStateConflict, "Runner host cleanup requires the Agent lifecycle executor")
+		return errs.New(errs.KindStateConflict, "Runner host cleanup requires the Controller lifecycle executor")
 	}
 	return nil
 }

@@ -7,9 +7,8 @@ import (
 )
 
 // backing-service (bs): list | show | create | start | stop | destroy.
-// Created explicitly — never lazily. The creation form is the SAME full
-// service form plus adapter + facts-prefix fields. See mvp.md, "Backing
-// services are created explicitly."
+// Create accepts only operator decisions; the adapter owns image, command,
+// volume, bootstrap entries, and health defaults.
 func newBackingServiceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "backing-service",
@@ -52,25 +51,40 @@ func newBackingServiceCmd() *cobra.Command {
 		},
 	})
 
-	var adapter, image, name, prefix string
+	var adapter, name, description, networkPool, zoneName, zoneSubnet string
+	var zoneInternal bool
 	create := &cobra.Command{
 		Use:   "create <slug>",
 		Short: "Create a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCreate(cmd, "/api/v1/backing-services", map[string]string{
-				"slug": args[0], "adapter": adapter, "image": image, "name": name, "facts_prefix": prefix,
+			created, err := fromContext(cmd).Client.CreateBackingService(cmd.Context(), apiTypes.BackingServiceCreate{
+				Slug: args[0], Name: name, Description: description, Adapter: adapter,
+				NetworkPool: networkPool,
+				Zone:        apiTypes.BackingServiceZoneCreate{Name: zoneName, Subnet: zoneSubnet, Internal: zoneInternal},
 			})
+			if err != nil {
+				return err
+			}
+			fields := backingServiceFields(created.BackingService)
+			fields["task_id"] = created.TaskID
+			headers, values := fieldsOfVia(fields)
+			return fromContext(cmd).Out.RenderOne(headers, values, created)
 		},
 	}
 	create.Flags().
 		StringVar(&adapter, "adapter", "", "adapter key, e.g. postgres:16 (see `groundplane backing-service create --help` for the registry)")
-	create.Flags().StringVar(&image, "image", "", "container image (defaults to the adapter's default image)")
-	create.Flags().StringVar(&name, "name", "", "unique DNS-resolvable service name, e.g. 'postgres'")
-	create.Flags().
-		StringVar(&prefix, "facts-prefix", "", "facts key prefix, e.g. 'pg16_' (defaults to the adapter's default)")
+	create.Flags().StringVar(&name, "name", "", "display name")
+	create.Flags().StringVar(&description, "description", "", "optional description")
+	create.Flags().StringVar(&networkPool, "network-pool", "", "reserved Environment pool, e.g. 10.200.0.0/24")
+	create.Flags().StringVar(&zoneName, "zone-name", "", "dedicated backing Zone name")
+	create.Flags().StringVar(&zoneSubnet, "zone-subnet", "", "Zone subnet inside the Environment pool")
+	create.Flags().BoolVar(&zoneInternal, "zone-internal", false, "disable Zone egress through the host gateway")
 	_ = create.MarkFlagRequired("adapter")
 	_ = create.MarkFlagRequired("name")
+	_ = create.MarkFlagRequired("network-pool")
+	_ = create.MarkFlagRequired("zone-name")
+	_ = create.MarkFlagRequired("zone-subnet")
 	cmd.AddCommand(create)
 
 	cmd.AddCommand(&cobra.Command{
@@ -180,5 +194,6 @@ func renderBackingService(cmd *cobra.Command, backing apiTypes.BackingService) e
 func backingServiceFields(backing apiTypes.BackingService) map[string]any {
 	return map[string]any{
 		"project_id": backing.ProjectID, "environment_id": backing.EnvironmentID, "service_id": backing.ServiceID,
+		"backing_network_id": backing.BackingNetworkID,
 	}
 }

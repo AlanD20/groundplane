@@ -354,6 +354,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "backing_network_id": {
+            "type": "string"
+          },
           "environment_id": {
             "type": "string"
           },
@@ -367,7 +370,93 @@
         "required": [
           "project_id",
           "environment_id",
-          "service_id"
+          "service_id",
+          "backing_network_id"
+        ],
+        "type": "object"
+      },
+      "BackingServiceCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/BackingServiceCreate.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "adapter": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "network_pool": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "zone": {
+            "$ref": "#/components/schemas/BackingServiceZoneCreate"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "adapter",
+          "network_pool",
+          "zone"
+        ],
+        "type": "object"
+      },
+      "BackingServiceCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/BackingServiceCreated.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "backing_service": {
+            "$ref": "#/components/schemas/BackingService"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "backing_service",
+          "task_id"
+        ],
+        "type": "object"
+      },
+      "BackingServiceZoneCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "internal": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subnet": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "subnet",
+          "internal"
         ],
         "type": "object"
       },
@@ -3029,6 +3118,50 @@
         ],
         "type": "object"
       },
+      "RunnerCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerCreateRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "github_url": {
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "registration_token": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "github_url",
+          "registration_token"
+        ],
+        "type": "object"
+      },
       "RunnerEditRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3049,6 +3182,27 @@
         },
         "required": [
           "slug"
+        ],
+        "type": "object"
+      },
+      "RunnerRetryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerRetryRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "registration_token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "registration_token"
         ],
         "type": "object"
       },
@@ -5347,6 +5501,65 @@
           }
         },
         "summary": "List backing services",
+        "tags": [
+          "Backing service"
+        ]
+      },
+      "post": {
+        "operationId": "backing-service.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackingServiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackingServiceCreated"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a backing service",
         "tags": [
           "Backing service"
         ]
@@ -8659,6 +8872,65 @@
         "tags": [
           "Runner"
         ]
+      },
+      "post": {
+        "operationId": "runner.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a managed Runner",
+        "tags": [
+          "Runner"
+        ]
       }
     },
     "/runners/{id}": {
@@ -8715,7 +8987,7 @@
             "description": "Error"
           }
         },
-        "summary": "Remove a failed managed Runner",
+        "summary": "Remove a managed Runner",
         "tags": [
           "Runner"
         ]
@@ -8831,6 +9103,76 @@
           }
         },
         "summary": "Replace a Runner slug",
+        "tags": [
+          "Runner"
+        ]
+      }
+    },
+    "/runners/{id}/retry": {
+      "post": {
+        "operationId": "runner.retry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRetryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Retry failed Runner creation",
         "tags": [
           "Runner"
         ]
@@ -9518,6 +9860,64 @@
       }
     },
     "/services/{id}": {
+      "delete": {
+        "operationId": "service.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Remove a service",
+        "tags": [
+          "Service"
+        ]
+      },
       "get": {
         "operationId": "service.show",
         "parameters": [

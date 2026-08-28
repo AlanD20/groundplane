@@ -1,0 +1,42 @@
+ARG RUNNER_VERSION=2.337.0
+
+FROM docker/compose-bin:v2.40.3@sha256:e39da8206cc48c6e2c99ce371935eef9d7eff7db600a993fd357de8b75621edf AS compose
+FROM docker:29.1.3-cli@sha256:4fa0ee1f3a7e4354c4ea34558b6d4ee32859baf4973d4c8ccc8e7fe3dd730c04 AS dockercli
+
+FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+ARG RUNNER_VERSION
+ARG RUNNER_SHA256_AMD64=70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613
+ARG RUNNER_SHA256_ARM64=9b1dc70626422526e3c94767cf024896beb15da5342a3f4819bf2feac13e0393
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -eu; \
+    architecture="$(dpkg --print-architecture)"; \
+    case "$architecture" in \
+        amd64) artifact_arch=x64; artifact_sha256="$RUNNER_SHA256_AMD64" ;; \
+        arm64) artifact_arch=arm64; artifact_sha256="$RUNNER_SHA256_ARM64" ;; \
+        *) echo "unsupported Runner architecture: $architecture" >&2; exit 1 ;; \
+    esac; \
+    artifact="actions-runner-linux-${artifact_arch}-${RUNNER_VERSION}.tar.gz"; \
+    curl -fsSL "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${artifact}" -o "/tmp/${artifact}"; \
+    printf '%s  %s\n' "$artifact_sha256" "/tmp/${artifact}" | sha256sum -c -; \
+    install -d -m 0755 /opt/actions-runner /runner; \
+    tar -xzf "/tmp/${artifact}" -C /opt/actions-runner; \
+    rm -f "/tmp/${artifact}"; \
+    /opt/actions-runner/bin/installdependencies.sh; \
+    rm -rf /var/lib/apt/lists/*; \
+    printf '%s\n' "$RUNNER_VERSION" > /opt/actions-runner/.groundplane-runner-version; \
+    chown -R 1000:1000 /opt/actions-runner /runner
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=compose /docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
+COPY release/runner/entrypoint.sh /usr/local/bin/groundplane-runner
+RUN chmod 0755 /usr/local/bin/groundplane-runner
+ENV HOME=/runner
+LABEL org.opencontainers.image.source="https://github.com/AlanD20/groundplane" \
+      org.opencontainers.image.title="Groundplane Runner" \
+      org.opencontainers.image.version="${RUNNER_VERSION}"
+USER 1000:1000
+WORKDIR /runner
+ENTRYPOINT ["/usr/local/bin/groundplane-runner"]
+CMD []

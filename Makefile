@@ -1,10 +1,12 @@
-.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check swarm-check clean test tidy ci
+.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check swarm-check clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
 NPM_VERSION := 11.17.0
 AGENT_IMAGE ?= groundplane-agent:dev
 AGENT_VERSION ?= dev
+RUNNER_IMAGE ?= groundplane-runner:dev
+RUNNER_VERSION ?= $(shell cat .runner-version)
 DOCKER ?= docker
 
 build: cli controller agent
@@ -33,6 +35,20 @@ agent-image-smoke: agent-image
 		test "$$($(DOCKER) image inspect "$$image" --format '{{json .Config.Entrypoint}}')" = '["/usr/local/bin/groundplane-agent"]'; \
 		test "$$($(DOCKER) image inspect "$$image" --format '{{json .Config.Cmd}}')" = 'null'; \
 		test "$$($(DOCKER) image inspect "$$image" --format '{{.Config.User}}')" = '0:0'; \
+		docker_version="$$($(DOCKER) run --rm --entrypoint docker "$$image" --version | awk '{gsub(/,/, "", $$3); print $$3}')"; \
+		compose_version="$$($(DOCKER) run --rm --entrypoint docker "$$image" compose version --short)"; \
+		test "$$docker_version" = '29.1.3'; \
+		test "$$compose_version" = '2.40.3'
+
+runner-image:
+	$(DOCKER) build --pull --file Dockerfile.runner --build-arg RUNNER_VERSION="$(RUNNER_VERSION)" --tag "$(RUNNER_IMAGE)" .
+
+runner-image-smoke: runner-image
+	@set -eu; \
+		image="$(RUNNER_IMAGE)"; \
+		test "$$($(DOCKER) image inspect "$$image" --format '{{json .Config.Entrypoint}}')" = '["/usr/local/bin/groundplane-runner"]'; \
+		test "$$($(DOCKER) image inspect "$$image" --format '{{json .Config.Cmd}}')" = 'null'; \
+		test "$$($(DOCKER) image inspect "$$image" --format '{{.Config.User}}')" = '1000:1000'; \
 		docker_version="$$($(DOCKER) run --rm --entrypoint docker "$$image" --version | awk '{gsub(/,/, "", $$3); print $$3}')"; \
 		compose_version="$$($(DOCKER) run --rm --entrypoint docker "$$image" compose version --short)"; \
 		test "$$docker_version" = '29.1.3'; \

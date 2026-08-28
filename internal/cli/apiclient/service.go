@@ -132,6 +132,26 @@ func (c *Client) EditService(ctx context.Context, id string, input apiTypes.Serv
 	return decodeServiceResponse(http.MethodPatch, path, response.Body)
 }
 
+func (c *Client) RemoveService(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/services/" + id
+	response, err := client.ServiceRemoveWithResponse(
+		ctx, id, &generated.ServiceRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+}
+
 func (c *Client) DeployService(
 	ctx context.Context,
 	id string,

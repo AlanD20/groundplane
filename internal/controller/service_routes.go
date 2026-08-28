@@ -23,6 +23,7 @@ type ServiceReader interface {
 type ServiceMutator interface {
 	CreateService(context.Context, apiTypes.ServiceCreate, string) (etcd.IdempotencyResponse, error)
 	EditService(context.Context, string, apiTypes.ServiceEdit, string) (etcd.IdempotencyResponse, error)
+	RemoveService(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	StartService(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	StopService(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	DestroyService(context.Context, string, string) (etcd.IdempotencyResponse, error)
@@ -51,6 +52,11 @@ type serviceEditInput struct {
 	ID             string `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	Body           apiTypes.ServiceEdit
+}
+
+type serviceRemoveInput struct {
+	ID             string `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
 type serviceOutput struct{ Body apiTypes.Service }
@@ -110,8 +116,20 @@ func (s *Server) registerServices() {
 			},
 		},
 	}, s.editService)
+	taskSchema := s.API.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted")
+	huma.Register(s.API, huma.Operation{
+		OperationID: "service.remove", Method: http.MethodDelete, Path: "/services/{id}",
+		Summary: "Remove a service", Tags: []string{"Service"}, DefaultStatus: http.StatusAccepted,
+		Responses: map[string]*huma.Response{
+			"202": {
+				Description: http.StatusText(http.StatusAccepted),
+				Content:     map[string]*huma.MediaType{"application/json": {Schema: taskSchema}},
+			},
+		},
+	}, s.removeService)
 	s.setRoutePolicy("POST /api/v1/services", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/services/{id}", routePolicy{body: jsonBody})
+	s.setRoutePolicy("DELETE /api/v1/services/{id}", routePolicy{})
 }
 
 func (s *Server) listServices(
@@ -188,6 +206,17 @@ func (s *Server) editService(ctx context.Context, request *serviceEditInput) (*s
 		return nil, errs.New(errs.KindInternal, "Service mutator is not configured")
 	}
 	response, err := s.serviceMutations.EditService(ctx, request.ID, request.Body, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return s.serviceMutationResponse(response), nil
+}
+
+func (s *Server) removeService(ctx context.Context, request *serviceRemoveInput) (*serviceMutationOutput, error) {
+	if s.serviceMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Service mutator is not configured")
+	}
+	response, err := s.serviceMutations.RemoveService(ctx, request.ID, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -18,6 +19,7 @@ type BackingServiceReader interface {
 }
 
 type BackingServiceMutator interface {
+	CreateBackingService(context.Context, apiTypes.BackingServiceCreate, string) (etcd.IdempotencyResponse, error)
 	StartBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	StopBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	DestroyBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
@@ -37,6 +39,11 @@ type backingServiceActionInput struct {
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
 
+type backingServiceCreateInput struct {
+	IdempotencyKey string                        `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           apiTypes.BackingServiceCreate `required:"true"`
+}
+
 type backingServicePageOutput struct {
 	Body apiTypes.Page[apiTypes.BackingService]
 }
@@ -49,11 +56,25 @@ func (s *Server) registerBackingServices() {
 	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
 		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
 	)
+	createdSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.BackingServiceCreated](), true, "BackingServiceCreated",
+	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.list", Method: http.MethodGet, Path: "/backing-services",
 		Summary: "List backing services", Tags: []string{"Backing service"},
 		Middlewares: huma.Middlewares{s.validateBackingServiceListQuery},
 	}, s.listBackingServices)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "backing-service.create", Method: http.MethodPost, Path: "/backing-services",
+		Summary: "Create a backing service", Tags: []string{"Backing service"}, DefaultStatus: http.StatusCreated,
+		Middlewares: huma.Middlewares{s.rejectTaskMutationQuery},
+		Responses: map[string]*huma.Response{
+			strconv.Itoa(http.StatusCreated): {
+				Description: http.StatusText(http.StatusCreated),
+				Content:     map[string]*huma.MediaType{"application/json": {Schema: createdSchema}},
+			},
+		},
+	}, s.createBackingService)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.show", Method: http.MethodGet, Path: "/backing-services/{project_id}",
 		Summary: "Show a backing service", Tags: []string{"Backing service"},
@@ -80,6 +101,26 @@ type backingServiceMutationOutput struct {
 	Status      int
 	ContentType string `header:"Content-Type"`
 	Body        func(huma.Context)
+}
+
+func (s *Server) createBackingService(
+	ctx context.Context,
+	request *backingServiceCreateInput,
+) (*backingServiceMutationOutput, error) {
+	if s.backingServiceMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Backing-service mutator is not configured")
+	}
+	response, err := s.backingServiceMutations.CreateBackingService(ctx, request.Body, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &backingServiceMutationOutput{
+		Status: response.Status, ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			_, _ = ctx.BodyWriter().Write(response.Body)
+		},
+	}, nil
 }
 
 func (s *Server) startBackingService(
@@ -184,6 +225,7 @@ func backingServiceListRequest(limit int, cursor string) (etcd.PageRequest, erro
 func backingServiceResponse(record etcd.BackingServiceRecord) apiTypes.BackingService {
 	return apiTypes.BackingService{
 		ProjectID: record.ProjectID, EnvironmentID: record.EnvironmentID, ServiceID: record.ServiceID,
+		BackingNetworkID: record.BackingNetworkID,
 	}
 }
 

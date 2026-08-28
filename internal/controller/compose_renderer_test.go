@@ -314,6 +314,7 @@ func composeRenderTestInput(project *composetypes.Project) ComposeRenderInput {
 	return ComposeRenderInput{
 		Project:          project,
 		ArtifactID:       composeRenderTestArtifactID,
+		ProjectOwnerKind: ComposeProjectOwnerTenant,
 		TenantID:         "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ProjectID:        "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		EnvironmentID:    composeRenderTestEnvironmentID,
@@ -321,6 +322,29 @@ func composeRenderTestInput(project *composetypes.Project) ComposeRenderInput {
 		RenderGeneration: 7,
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 			"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + composeRenderTestEnvironmentID,
+	}
+}
+
+func TestRenderComposeBackingOwnerOmitsTenantLabel(t *testing.T) {
+	input := composeRenderTestInput(&composetypes.Project{Services: composetypes.Services{
+		"postgres": {Name: "postgres", Image: "postgres:16-alpine"},
+	}})
+	input.ProjectOwnerKind = ComposeProjectOwnerBacking
+	input.TenantID = ""
+	input.Identities.Services = []ComposeResourceIdentity{{
+		ID: composeIdentityTestID(ids.KindService, 30), Name: "postgres",
+	}}
+	artifact, err := RenderCompose(input)
+	if err != nil {
+		t.Fatalf("RenderCompose(backing) error = %v", err)
+	}
+	if len(artifact.Services) != 1 {
+		t.Fatalf("backing services = %d, want 1", len(artifact.Services))
+	}
+	for _, label := range artifact.Services[0].ExpectedLabels {
+		if label.Key == composeLabelTenantID {
+			t.Fatalf("backing expected labels contain Tenant identity: %#v", label)
+		}
 	}
 }
 

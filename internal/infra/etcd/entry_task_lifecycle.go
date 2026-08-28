@@ -18,7 +18,11 @@ func (repository *TaskRepository) prepareRemovalTaskRetry(
 	if err != nil || change.applies {
 		return change, err
 	}
-	return repository.prepareEntryTaskRetry(ctx, source, retry, revision)
+	change, err = repository.prepareEntryTaskRetry(ctx, source, retry, revision)
+	if err != nil || change.applies {
+		return change, err
+	}
+	return repository.prepareServiceRemovalTaskRetry(ctx, source, revision)
 }
 
 func (repository *TaskRepository) prepareEntryTaskRetry(
@@ -234,7 +238,11 @@ func (repository *TaskRepository) prepareRemovalTaskAcknowledgement(
 	if err != nil || change.applies {
 		return change, err
 	}
-	return repository.prepareEntryTaskAcknowledgement(ctx, task, terminalStatus, terminalAt, revision)
+	change, err = repository.prepareEntryTaskAcknowledgement(ctx, task, terminalStatus, terminalAt, revision)
+	if err != nil || change.applies {
+		return change, err
+	}
+	return repository.prepareServiceRemovalTaskAcknowledgement(ctx, task, terminalStatus, terminalAt, revision)
 }
 
 func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
@@ -374,7 +382,10 @@ func (repository *TaskRepository) validateRemovalTaskAcknowledgementReplay(
 	if err := repository.validateRouteTaskAcknowledgementReplay(ctx, task, terminalStatus, revision); err != nil {
 		return err
 	}
-	return repository.validateEntryTaskAcknowledgementReplay(ctx, task, terminalStatus, revision)
+	if err := repository.validateEntryTaskAcknowledgementReplay(ctx, task, terminalStatus, revision); err != nil {
+		return err
+	}
+	return repository.validateServiceRemovalTaskAcknowledgementReplay(ctx, task, terminalStatus, revision)
 }
 
 func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(

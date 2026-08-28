@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/version"
 	agentcomponent "github.com/AlanD20/groundplane/internal/components/agent"
 	"github.com/AlanD20/groundplane/internal/components/caddy"
@@ -269,7 +270,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Zone repository: %w", err)
 	}
-	serviceMutationRepository, err := newDurableServiceMutationRepository(hierarchyRecords, serviceRecords, zoneRecords)
+	serviceDesiredRevisionRecords, err := desiredrevisionstore.NewRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service desired revision repository: %w", err)
+	}
+	serviceMutationRepository, err := newDurableServiceMutationRepository(
+		hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service mutation repositories: %w", err)
@@ -454,6 +462,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	runnerPools, err := cfg.AllocationPools()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Runner allocation: %w", err)
+	}
+	runnerTokens := runnercapability.NewTokenBroker()
+	runnerProvisioning, err := runnercapability.NewProvisioningService(
+		runnerRecords, tasks, hierarchyRecords, idempotency, intentCoordinator, runnerTokens,
+		runnerallocation.RunnerAllocationConfigFromPools(runnerPools), cfg.Runner.Image,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Runner provisioning service: %w", err)
 	}
 	runnerMutations, err := runnercapability.NewMutationService(runnerRecords, idempotency, intentCoordinator)
 	if err != nil {
@@ -878,6 +900,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
 	}
+	backingServiceCreations, err := newBackingServiceCreationService(
+		cfg.Storage.VolumeRoot,
+		runnerPools.Environment,
+		environmentBlueprintRepository,
+		environmentBlueprintIdempotency,
+		intentProtector,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Backing-service creation: %w", err)
+	}
 	componentMutations, err := componentcapability.NewMutationService(
 		componentRecords, environmentBlueprintRepository, environmentBlueprints,
 	)
@@ -885,7 +918,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component mutations: %w", err)
 	}
-	backingServiceMutations, err := newBackingServiceMutationService(backingServiceReads, serviceMutations)
+	backingServiceMutations, err := newBackingServiceMutationService(backingServiceReads, serviceMutations, backingServiceCreations)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing-service mutations: %w", err)
@@ -1068,7 +1101,18 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
 	}
-	controllerTaskHandler, err := newControllerTaskHandler(localAgentManager, backingZoneCascades, runnerRecords)
+	runnerLifecycle, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerTokens, cfg, runnerPools)
+	if err != nil {
+		_ = containerManager.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
+	}
+	controllerTaskHandler, err := newControllerTaskHandler(
+		localAgentManager,
+		backingZoneCascades,
+		runnerRecords,
+		runnerLifecycle,
+	)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()
@@ -1166,6 +1210,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ConnectorMutations:    connectorMutations,
 		ConnectorDeletions:    connectorDeletions,
 		Runners:               runnerRecords,
+		RunnerProvisioning:    runnerProvisioning,
 		RunnerMutations:       runnerMutations,
 		RunnerRemovals:        runnerRemovals,
 		BackupPolicies:        backupPolicies,

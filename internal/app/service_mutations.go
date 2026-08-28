@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -24,26 +27,35 @@ const (
 )
 
 type serviceMutationRepository interface {
+	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentComposeProjection(context.Context, string) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
-	CreateServiceIdempotent(
+	ClaimEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaimRequest) (etcd.EnvironmentBlueprintStageClaim, error)
+	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
+	PublishEnvironmentServiceDesiredRevisionDirect(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.ServiceRecord,
-		etcd.ServiceMutationReferences,
-		etcd.IdempotencyMarker,
+		etcd.EnvironmentServiceDesiredPublication,
 	) (etcd.IdempotencyTransactionResult, error)
-	ReplaceDesiredIdempotent(
+	ValidateServiceRemovalReferences(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
-		core.Service,
-		etcd.ServiceMutationReferences,
+		etcd.Versioned[etcd.EnvironmentComposeProjection],
+	) error
+	BeginServiceRemovalWithTask(
+		context.Context,
+		etcd.Versioned[etcd.TenantRecord],
+		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.Versioned[etcd.ServiceRecord],
+		etcd.Versioned[etcd.EnvironmentComposeProjection],
+		etcd.DeletionTombstoneRecord,
+		etcd.ServiceRemovalIntent,
+		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -52,17 +64,19 @@ type durableServiceMutationRepository struct {
 	hierarchy *etcd.HierarchyRepository
 	services  *etcd.ServiceRepository
 	zones     *etcd.ZoneRepository
+	desired   *desiredrevisionstore.Repository
 }
 
 func newDurableServiceMutationRepository(
 	hierarchy *etcd.HierarchyRepository,
 	services *etcd.ServiceRepository,
 	zones *etcd.ZoneRepository,
+	desired *desiredrevisionstore.Repository,
 ) (*durableServiceMutationRepository, error) {
-	if hierarchy == nil || services == nil || zones == nil {
+	if hierarchy == nil || services == nil || zones == nil || desired == nil {
 		return nil, errs.New(errs.KindInternal, "Service mutation repositories are not configured")
 	}
-	return &durableServiceMutationRepository{hierarchy: hierarchy, services: services, zones: zones}, nil
+	return &durableServiceMutationRepository{hierarchy: hierarchy, services: services, zones: zones, desired: desired}, nil
 }
 
 func (repository *durableServiceMutationRepository) GetEnvironment(
@@ -77,6 +91,13 @@ func (repository *durableServiceMutationRepository) GetProject(
 	id string,
 ) (etcd.Versioned[etcd.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
+}
+
+func (repository *durableServiceMutationRepository) GetEnvironmentBlueprintHead(
+	ctx context.Context,
+	environmentID string,
+) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
 }
 
 func (repository *durableServiceMutationRepository) GetService(
@@ -102,27 +123,50 @@ func (repository *durableServiceMutationRepository) ListZones(
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
-func (repository *durableServiceMutationRepository) CreateServiceIdempotent(
+func (repository *durableServiceMutationRepository) ClaimEnvironmentBlueprintStage(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	record etcd.ServiceRecord,
-	references etcd.ServiceMutationReferences,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.services.CreateServiceIdempotent(ctx, environment, project, record, references, marker)
+	request etcd.EnvironmentBlueprintStageClaimRequest,
+) (etcd.EnvironmentBlueprintStageClaim, error) {
+	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
 }
 
-func (repository *durableServiceMutationRepository) ReplaceDesiredIdempotent(
+func (repository *durableServiceMutationRepository) StageEnvironmentBlueprintRevision(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	request etcd.EnvironmentBlueprintStageRequest,
+) (etcd.EnvironmentBlueprintSeal, error) {
+	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
+}
+
+func (repository *durableServiceMutationRepository) PublishEnvironmentServiceDesiredRevisionDirect(
+	ctx context.Context,
+	input etcd.EnvironmentServiceDesiredPublication,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.hierarchy.PublishEnvironmentServiceDesiredRevisionDirect(ctx, input)
+}
+
+func (repository *durableServiceMutationRepository) ValidateServiceRemovalReferences(
+	ctx context.Context,
 	current etcd.Versioned[etcd.ServiceRecord],
-	desired core.Service,
-	references etcd.ServiceMutationReferences,
+	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+) error {
+	return repository.services.ValidateServiceRemovalReferences(ctx, current, projection)
+}
+
+func (repository *durableServiceMutationRepository) BeginServiceRemovalWithTask(
+	ctx context.Context,
+	tenant etcd.Versioned[etcd.TenantRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	current etcd.Versioned[etcd.ServiceRecord],
+	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	tombstone etcd.DeletionTombstoneRecord,
+	intent etcd.ServiceRemovalIntent,
+	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.services.ReplaceDesiredIdempotent(ctx, environment, project, current, desired, references, marker)
+	return repository.services.BeginServiceRemovalWithTask(
+		ctx, tenant, project, environment, current, projection, tombstone, intent, task, marker,
+	)
 }
 
 type serviceMutationEvidence struct {
@@ -139,7 +183,15 @@ type serviceMutationIntent struct {
 }
 
 type serviceMutationIdempotency interface {
+	ResolveReplayLocator(
+		context.Context,
+		etcd.IdempotencyReplayTarget,
+		string,
+		string,
+		string,
+	) (etcd.IdempotencyLocator, bool, error)
 	Prepare(context.Context, serviceMutationIntent) (serviceMutationEvidence, error)
+	MatchesStaged(context.Context, serviceMutationEvidence, etcd.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
@@ -161,6 +213,16 @@ type serviceMutationIdempotency interface {
 type durableServiceMutationIdempotency struct {
 	coordinator *idempotentintent.Coordinator
 	repository  *etcd.IdempotencyRepository
+}
+
+func (service *durableServiceMutationIdempotency) ResolveReplayLocator(
+	ctx context.Context,
+	target etcd.IdempotencyReplayTarget,
+	method string,
+	route string,
+	key string,
+) (etcd.IdempotencyLocator, bool, error) {
+	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
 func (service *durableServiceMutationIdempotency) MatchesStaged(
@@ -189,10 +251,14 @@ func (service *durableServiceMutationIdempotency) Prepare(
 	if intent.serviceID != "" {
 		path = []idempotentintent.PathBinding{{Name: "id", Value: intent.serviceID}}
 	}
+	body := idempotentintent.JSONBody(intent.body)
+	if intent.method == http.MethodDelete {
+		body = idempotentintent.NoBody()
+	}
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: intent.method, Route: intent.route,
 		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: intent.environmentID},
-		Path:  path, Query: idempotentintent.Object(), Body: idempotentintent.JSONBody(intent.body),
+		Path:  path, Query: idempotentintent.Object(), Body: body,
 	})
 	if err != nil {
 		return serviceMutationEvidence{}, err
@@ -314,30 +380,13 @@ func (service *serviceMutationService) createServiceOnce(
 			"Environment is not ready for Service creation",
 		)
 	}
-	desired.ID = ids.New(ids.KindService)
-	record, err := etcd.NewServiceRecord(input.EnvironmentID, desired, "")
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	references, err := service.resolveServiceReferences(ctx, record)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	response, marker, err := service.serviceResponseMarker(locator, evidence, record, http.StatusCreated)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.CreateServiceIdempotent(
-		ctx,
-		environment,
-		project,
-		record,
-		references,
-		marker,
+	return service.publishServiceDesiredMutation(
+		ctx, environment, project, nil,
+		etcd.ServiceRecord{EnvironmentID: input.EnvironmentID, Desired: desired},
+		etcd.ServiceMutationReferences{},
+		serviceMutationAuditFromCreate(input), etcd.EnvironmentServiceMutationCreate,
+		http.StatusCreated, locator, evidence,
 	)
-	return service.resolveServiceMutation(ctx, locator, evidence, result, mutationErr, response)
 }
 
 func (service *serviceMutationService) EditService(
@@ -367,6 +416,203 @@ func (service *serviceMutationService) EditService(
 		}
 	}
 	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service edit retry bound was not enforced")
+}
+
+func (service *serviceMutationService) RemoveService(
+	ctx context.Context,
+	serviceID string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	if ctx == nil || ids.Validate(ids.KindService, serviceID) != nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Service removal input is invalid")
+	}
+	for attempt := 0; attempt < maximumServiceMutationAttempts; attempt++ {
+		response, err := service.removeServiceOnce(ctx, serviceID, idempotencyKey)
+		if err == nil {
+			return response, nil
+		}
+		kind, ok := errs.KindOf(err)
+		if !ok || kind != errs.KindStateConflict || attempt == maximumServiceMutationAttempts-1 {
+			return etcd.IdempotencyResponse{}, err
+		}
+	}
+	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service removal retry bound was not enforced")
+}
+
+func (service *serviceMutationService) removeServiceOnce(
+	ctx context.Context,
+	serviceID string,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetService, ID: serviceID}
+	locator, indexed, err := service.idempotency.ResolveReplayLocator(
+		ctx, target, http.MethodDelete, serviceEditRoute, idempotencyKey,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if indexed {
+		return service.replayIndexedServiceRemoval(ctx, serviceID, locator)
+	}
+	current, err := service.repository.GetService(ctx, serviceID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	intentValue := serviceMutationIntent{
+		method: http.MethodDelete, route: serviceEditRoute,
+		environmentID: current.Record.EnvironmentID, serviceID: serviceID,
+	}
+	evidence, err := service.idempotency.Prepare(ctx, intentValue)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(evidence.durable.Ciphertext)
+	locator = serviceMutationLocator(intentValue, idempotencyKey)
+	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if existing {
+		return serviceReplayResponse(resolution)
+	}
+	environment, project, err := service.serviceHierarchy(ctx, current.Record.EnvironmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if project.Record.Kind != etcd.ProjectKindTenant ||
+		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Environment is not ready for Service removal")
+	}
+	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	projection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	expectedHeadRevision, generation, err := serviceDesiredState(
+		environment.Record.ID, head, hasHead, projection, hasProjection,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if !hasProjection || generation > math.MaxInt32 {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Service removal requires initialized desired state")
+	}
+	if err := service.repository.ValidateServiceRemovalReferences(ctx, current, projection); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	candidateRevisionID := ids.New(ids.KindTask)
+	candidate, err := buildServiceRemovalProjection(
+		tenant.Record.ID, project.Record.ID, projection.Record, current.Record, candidateRevisionID, generation,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	claim, err := service.claimServiceDesiredRevision(
+		ctx, candidate, candidateRevisionID, expectedHeadRevision, locator, evidence, service.now().UTC(),
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	candidate, err = buildServiceRemovalProjection(
+		tenant.Record.ID, project.Record.ID, projection.Record, current.Record, claim.RevisionID, generation,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	projectionEvidence, err := controllerrevision.PreflightProjection(candidate)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+		Claim: claim,
+		Mutation: &etcd.EnvironmentDesiredMutationAudit{Service: &etcd.EnvironmentServiceMutationAudit{
+			Action: etcd.EnvironmentServiceMutationRemove, BaseRevisionID: projection.Record.RevisionID,
+			ServiceID: serviceID,
+		}},
+		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
+	}); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	taskID := claim.TaskID
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: serviceStableIDFromRevision(ids.KindOperation, taskID),
+		IdempotencyKey: idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
+		Executor: etcd.TaskExecutorAgent, PlanID: serviceStableIDFromRevision(ids.KindPlan, taskID),
+		Type: etcd.TaskRemove, Target: serviceID, TimeoutSeconds: serviceLifecycleAgentTimeoutSeconds,
+		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+	}
+	removalIntent, err := etcd.NewServiceRemovalIntent(
+		taskID, current, projection, expectedHeadRevision, claim, candidate, claim.CreatedAt,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if service.lifecycle == nil || service.lifecycle.plans == nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service removal planner is not configured")
+	}
+	task, err = service.lifecycle.plans.PrepareServiceRemovalTask(
+		ctx, task, removalIntent,
+		serviceStableIDFromRevision(ids.KindConfig, taskID), serviceStableIDFromRevision(ids.KindStep, taskID),
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
+	if err != nil {
+		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(body)
+	response := etcd.IdempotencyResponse{
+		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
+	}
+	marker := etcd.IdempotencyMarker{
+		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+		Locator: locator, ReplayTarget: &target, Intent: claim.Intent, Response: response, TaskID: taskID,
+		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+	}
+	tombstone := etcd.DeletionTombstoneRecord{
+		TargetKind: etcd.DeletionTargetService, TargetID: serviceID, TargetRevision: current.Revision,
+		TaskID: taskID, Phase: etcd.DeletionPhaseHostEffects, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+	}
+	result, mutationErr := service.repository.BeginServiceRemovalWithTask(
+		ctx, tenant, project, environment, current, projection, tombstone, removalIntent, task, marker,
+	)
+	return service.resolveServiceMutation(ctx, locator, evidence, result, mutationErr, response)
+}
+
+func (service *serviceMutationService) replayIndexedServiceRemoval(
+	ctx context.Context,
+	serviceID string,
+	locator etcd.IdempotencyLocator,
+) (etcd.IdempotencyResponse, error) {
+	intent := serviceMutationIntent{
+		method: http.MethodDelete, route: serviceEditRoute,
+		environmentID: locator.ScopeID, serviceID: serviceID,
+	}
+	evidence, err := service.idempotency.Prepare(ctx, intent)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clear(evidence.durable.Ciphertext)
+	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if !existing {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service removal replay target is inconsistent")
+	}
+	return serviceReplayResponse(resolution)
 }
 
 func (service *serviceMutationService) editServiceOnce(
@@ -415,22 +661,11 @@ func (service *serviceMutationService) editServiceOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	response, marker, err := service.serviceResponseMarker(locator, evidence, replacement, http.StatusOK)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.ReplaceDesiredIdempotent(
-		ctx,
-		environment,
-		project,
-		current,
-		desired,
-		references,
-		marker,
+	return service.publishServiceDesiredMutation(
+		ctx, environment, project, &current, replacement, references,
+		serviceMutationAuditFromEdit(input), etcd.EnvironmentServiceMutationEdit,
+		http.StatusOK, locator, evidence,
 	)
-	return service.resolveServiceMutation(ctx, locator, evidence, result, mutationErr, response)
 }
 
 func (service *serviceMutationService) serviceHierarchy(
@@ -541,9 +776,10 @@ func (service *serviceMutationService) listAllServices(
 
 func (service *serviceMutationService) serviceResponseMarker(
 	locator etcd.IdempotencyLocator,
-	evidence serviceMutationEvidence,
+	intent etcd.ProtectedIntentRecord,
 	record etcd.ServiceRecord,
 	status int,
+	createdAt time.Time,
 ) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
 	body, err := json.Marshal(serviceAPIResponse(record))
 	if err != nil {
@@ -555,7 +791,7 @@ func (service *serviceMutationService) serviceResponseMarker(
 		ContentKind: "application/json",
 		Body:        append([]byte(nil), body...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, intent, response, createdAt)
 	if err != nil {
 		clear(response.Body)
 		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, err

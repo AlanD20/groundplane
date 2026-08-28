@@ -10,6 +10,48 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+func (c *Client) CreateBackingService(
+	ctx context.Context,
+	input apiTypes.BackingServiceCreate,
+) (apiTypes.BackingServiceCreated, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.BackingServiceCreated{}, err
+	}
+	body := generated.BackingServiceCreate{
+		Slug: input.Slug, Name: input.Name, Adapter: input.Adapter, NetworkPool: input.NetworkPool,
+		Zone: generated.BackingServiceZoneCreate{Name: input.Zone.Name, Subnet: input.Zone.Subnet, Internal: input.Zone.Internal},
+	}
+	if input.Description != "" {
+		body.Description = &input.Description
+	}
+	path := "/api/v1/backing-services"
+	response, err := client.BackingServiceCreateWithResponse(
+		ctx,
+		&generated.BackingServiceCreateParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
+	if err != nil {
+		return apiTypes.BackingServiceCreated{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusCreated,
+	); err != nil {
+		return apiTypes.BackingServiceCreated{}, err
+	}
+	parsed := response.JSON201
+	if parsed == nil {
+		parsed = &generated.BackingServiceCreated{}
+		if err := decodeSingleJSON(http.MethodPost, path, bytes.NewReader(response.Body), parsed); err != nil {
+			return apiTypes.BackingServiceCreated{}, err
+		}
+	}
+	return apiTypes.BackingServiceCreated{
+		BackingService: backingServiceFromGenerated(parsed.BackingService),
+		TaskID:         parsed.TaskId,
+	}, nil
+}
+
 func (c *Client) ListBackingServices(
 	ctx context.Context,
 	limit int,
@@ -149,5 +191,6 @@ func (c *Client) DestroyBackingService(ctx context.Context, projectID string) (a
 func backingServiceFromGenerated(item generated.BackingService) apiTypes.BackingService {
 	return apiTypes.BackingService{
 		ProjectID: item.ProjectId, EnvironmentID: item.EnvironmentId, ServiceID: item.ServiceId,
+		BackingNetworkID: item.BackingNetworkId,
 	}
 }

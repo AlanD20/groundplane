@@ -1,10 +1,15 @@
 package cli
 
 import (
+	"io"
+	"strings"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
 )
+
+const maximumGitHubRegistrationTokenBytes = 4096
 
 // runner: list | add | show | edit | retry | remove. Scope = tenant (org-scoped) OR
 // project (repo-scoped) — see api-cli.md: "`?tenant=` or `?project=`".
@@ -44,26 +49,48 @@ func newRunnerCmd() *cobra.Command {
 	}
 	cmd.AddCommand(list)
 
-	var project, token string
+	var project, tokenFile, githubURL string
+	var labels []string
 	add := &cobra.Command{
-		Use:   "add",
+		Use:   "add <slug>",
 		Short: "Register a runner (repo-scoped with -p/--project, org-scoped without)",
-		Args:  cobra.NoArgs,
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			proj := project
 			if proj == "" {
 				proj = app.Scope.Project
 			}
-			return runCreate(cmd, "/api/v1/runners", map[string]string{
-				"tenant": app.Scope.Tenant, "project": proj, "registration_token": token,
-			})
+			request := apiTypes.RunnerCreateRequest{Slug: args[0], GitHubURL: githubURL, Labels: labels}
+			var err error
+			if proj != "" {
+				request.ProjectID, err = resolveProjectTarget(cmd, proj)
+			} else {
+				request.TenantID, err = resolveTenantTarget(cmd, app.Scope.Tenant)
+			}
+			if err != nil {
+				return err
+			}
+			request.RegistrationToken, err = readRegistrationToken(tokenFile, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			accepted, err := app.Client.CreateRunner(cmd.Context(), request)
+			request.RegistrationToken = ""
+			if err != nil {
+				return err
+			}
+			headers, rows := tabulateVia(app, []map[string]any{{"task_id": accepted.TaskID}})
+			return app.Out.Render(headers, rows, accepted)
 		},
 	}
 	add.Flags().
 		StringVar(&project, "project", "", "repo-scoped: the project slug (defaults to -p/--project; omit both for org-scoped)")
-	add.Flags().StringVar(&token, "token", "", "short-lived GitHub registration token (obtained manually — see mvp.md)")
-	_ = add.MarkFlagRequired("token")
+	add.Flags().StringVar(&tokenFile, "registration-token-file", "", "read the short-lived GitHub registration token from PATH, or - for stdin")
+	add.Flags().StringVar(&githubURL, "github-url", "", "GitHub organization or repository URL")
+	add.Flags().StringSliceVar(&labels, "label", nil, "additional GitHub Runner label (repeatable)")
+	_ = add.MarkFlagRequired("registration-token-file")
+	_ = add.MarkFlagRequired("github-url")
 	cmd.AddCommand(add)
 
 	cmd.AddCommand(&cobra.Command{
@@ -107,6 +134,34 @@ func newRunnerCmd() *cobra.Command {
 	_ = edit.MarkFlagRequired("slug")
 	cmd.AddCommand(edit)
 
+	var retryTokenFile string
+	retry := &cobra.Command{
+		Use:   "retry <slug>",
+		Short: "Retry failed Runner creation with a fresh registration token",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app := fromContext(cmd)
+			runnerID, err := resolveRunnerTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			retryToken, err := readRegistrationToken(retryTokenFile, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			accepted, err := app.Client.RetryRunner(cmd.Context(), runnerID, retryToken)
+			retryToken = ""
+			if err != nil {
+				return err
+			}
+			headers, rows := tabulateVia(app, []map[string]any{{"task_id": accepted.TaskID}})
+			return app.Out.Render(headers, rows, accepted)
+		},
+	}
+	retry.Flags().StringVar(&retryTokenFile, "registration-token-file", "", "read the fresh short-lived GitHub registration token from PATH, or - for stdin")
+	_ = retry.MarkFlagRequired("registration-token-file")
+	cmd.AddCommand(retry)
+
 	cmd.AddCommand(&cobra.Command{
 		Use:     "remove <slug>",
 		Aliases: []string{"delete"},
@@ -128,6 +183,18 @@ func newRunnerCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func readRegistrationToken(path string, stdin io.Reader) (string, error) {
+	token, err := readValueFile(path, stdin, maximumGitHubRegistrationTokenBytes, "GitHub registration token")
+	if err != nil {
+		return "", err
+	}
+	token = strings.TrimRight(token, "\r\n")
+	if token == "" {
+		return "", errs.New(errs.KindValidationFailed, "GitHub registration token is required")
+	}
+	return token, nil
 }
 
 func resolveRunnerTarget(cmd *cobra.Command, argument string) (string, error) {

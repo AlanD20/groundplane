@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type routeRemovalPlanReader struct {
@@ -123,11 +124,40 @@ func routeRemovalPlanTestState(
 	t *testing.T,
 ) (*routeRemovalPlanReader, etcd.RouteRemovalIntent, etcd.TaskRecord) {
 	t.Helper()
-	_, identity, projection, _, _ := componentPlanProjectionInput(t)
+	project, identity, projection, routeSpecs, catalog := componentPlanProjectionInput(t)
 	identity.TenantID = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	identity.TenantSlug = "acme"
 	identity.ProjectSlug = "shop"
 	at := time.Date(2026, 8, 23, 4, 0, 0, 0, time.UTC)
+	catalog[0].Environment = routeRemovalPlanCaddyRenderer{}
+	componentProjection, err := projectPinnedEnvironmentComponents(
+		project,
+		nil,
+		identity,
+		projection,
+		routeSpecs,
+		map[string]core.ComponentSpec{"caddy": {Kind: core.ComponentKindIngressCaddy, Enabled: true}},
+		nil,
+		catalog,
+	)
+	if err != nil {
+		t.Fatalf("project Route removal fixture components: %v", err)
+	}
+	artifact, err := RenderCompose(ComposeRenderInput{
+		Project: componentProjection.Project, ArtifactID: ids.NewAt(ids.KindConfig, at, 90),
+		ProjectOwnerKind: ComposeProjectOwnerTenant,
+		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
+		PlanID: ids.NewAt(ids.KindPlan, at, 91), RenderGeneration: projection.RenderGeneration,
+		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
+		Identities:          composeIdentitySnapshotFromProjection(projection),
+	})
+	if err != nil {
+		t.Fatalf("RenderCompose(Route removal fixture) error = %v", err)
+	}
+	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal Route removal fixture artifact: %v", err)
+	}
 	content := []byte(`kind: environment
 schema: 1
 metadata: {tenant: acme, project: shop, environment: production}

@@ -10,6 +10,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"google.golang.org/protobuf/proto"
 )
 
 type blueprintPlanReader struct {
@@ -141,33 +143,32 @@ volumes:
 			}},
 		},
 	}
-	reader.projection.ComposeArtifact = normalizedProjectionArtifactFixture(
-		t,
-		artifactID,
-		environmentID,
-		reader.environment.VolumeDir,
-		[]byte("services: {}\nnetworks: {}\nvolumes:\n  app-data: {}\n"),
-		[]*agentpb.ComposeService{{
-			ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ComposeName: "api", ExpectedReplicas: 1,
-			ExpectedLabels: labelPairs(map[string]string{
-				composeLabelEnvironmentID: environmentID,
-				composeLabelKind:          "service",
-				composeLabelManaged:       "true",
-				composeLabelPlanID:        planID,
-				composeLabelProjectID:     projectID,
-				composeLabelRenderGen:     "1",
-				composeLabelServiceID:     "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-				composeLabelTenantID:      tenantID,
-			}),
+	project := &composetypes.Project{
+		Services: composetypes.Services{"api": {
+			Name: "api", Image: "example/api:latest",
+			Networks: map[string]*composetypes.ServiceNetworkConfig{"frontend": {}},
+			Volumes: []composetypes.ServiceVolumeConfig{{
+				Type: composetypes.VolumeTypeVolume, Source: "app-data", Target: "/data",
+			}},
 		}},
-		[]*agentpb.ComposeVolume{{
-			VolumeId: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", ComposeName: "app-data",
-			DockerName: "gp_vol_vol_01arz3ndektsv4rrffq69g5fav",
-			ExpectedLabels: labelPairs(volumeArtifactOwnershipLabels(environmentID, VolumeArtifactMutation{
-				PlanID: planID, TenantID: tenantID, ProjectID: projectID, RenderGeneration: 1,
-			})),
-		}},
-	)
+		Networks: composetypes.Networks{"frontend": {}},
+		Volumes:  composetypes.Volumes{"app-data": {}},
+	}
+	artifact, err := RenderCompose(ComposeRenderInput{
+		Project: project, ArtifactID: artifactID,
+		ProjectOwnerKind: ComposeProjectOwnerTenant,
+		TenantID:         tenantID, ProjectID: projectID, EnvironmentID: environmentID,
+		PlanID: planID, RenderGeneration: reader.projection.RenderGeneration,
+		AuthorizedVolumeDir: reader.environment.VolumeDir,
+		Identities:          composeIdentitySnapshotFromProjection(reader.projection),
+	})
+	if err != nil {
+		t.Fatalf("RenderCompose(Blueprint fixture) error = %v", err)
+	}
+	reader.projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal Blueprint fixture artifact: %v", err)
+	}
 	intentDigest := sha256.Sum256([]byte("protected Blueprint intent"))
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",

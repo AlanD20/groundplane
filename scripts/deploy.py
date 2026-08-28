@@ -73,6 +73,14 @@ fi
 if ! command -v etcd >/dev/null; then
     packages="$packages etcd-server"
 fi
+if ! command -v rootlesskit >/dev/null ||
+    ! command -v newuidmap >/dev/null ||
+    ! command -v slirp4netns >/dev/null ||
+    ! command -v fuse-overlayfs >/dev/null ||
+    ! command -v socat >/dev/null ||
+    ! command -v nft >/dev/null; then
+    packages="$packages rootlesskit uidmap slirp4netns fuse-overlayfs socat nftables"
+fi
 if test "$docker_fresh" -eq 1; then
     packages="$packages docker.io docker-compose-v2"
 fi
@@ -170,7 +178,8 @@ set -eu
 setup=$1
 deploy_dir=$2
 version=$3
-source_image=$4
+source_agent_image=$4
+source_runner_image=$5
 
 deploy_id=${deploy_dir#/tmp/groundplane-deploy-}
 if test "$deploy_dir" != "/tmp/groundplane-deploy-$deploy_id" ||
@@ -205,7 +214,7 @@ install -d -m 0700 "$deploy_dir"
 tar -xf - -C "$deploy_dir"
 trap - EXIT HUP INT TERM
 exec sh "$deploy_dir/remote-deploy.sh" \
-    "$setup" "$deploy_dir" "$version" "$source_image"
+    "$setup" "$deploy_dir" "$version" "$source_agent_image" "$source_runner_image"
 """
 
 REMOTE_INSTALL = r"""
@@ -213,7 +222,8 @@ set -eu
 
 deploy_dir=$1
 version=$2
-source_image=$3
+source_agent_image=$3
+source_runner_image=$4
 
 deploy_id=${deploy_dir#/tmp/groundplane-deploy-}
 if test "$deploy_dir" != "/tmp/groundplane-deploy-$deploy_id" ||
@@ -324,9 +334,9 @@ systemctl is-active --quiet docker.service
 systemctl is-active --quiet etcd.service
 curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
 
-docker load --input "$deploy_dir/agent-image.tar"
+docker load --input "$deploy_dir/images.tar"
 target_image="localhost:5000/groundplane-agent:$version"
-docker tag "$source_image" "$target_image"
+docker tag "$source_agent_image" "$target_image"
 push_output=$(docker push "$target_image")
 printf '%s\n' "$push_output"
 agent_digest=$(printf '%s\n' "$push_output" |
@@ -339,6 +349,21 @@ if ! printf '%s\n' "$agent_digest" |
 fi
 agent_ref="localhost:5000/groundplane-agent@$agent_digest"
 docker pull "$agent_ref" >/dev/null
+
+target_image="localhost:5000/groundplane-runner:$version"
+docker tag "$source_runner_image" "$target_image"
+push_output=$(docker push "$target_image")
+printf '%s\n' "$push_output"
+runner_digest=$(printf '%s\n' "$push_output" |
+    sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\) size:.*$/\1/p' |
+    tail -n 1)
+if ! printf '%s\n' "$runner_digest" |
+    grep -Eq '^sha256:[0-9a-f]{64}$'; then
+    echo "target registry did not report the pushed Runner digest" >&2
+    exit 1
+fi
+runner_ref="localhost:5000/groundplane-runner@$runner_digest"
+docker pull "$runner_ref" >/dev/null
 
 if systemctl is-active --quiet groundplane-controller.service; then
     service_was_active=1
@@ -428,6 +453,46 @@ END {
 }
 ' /etc/groundplane/controller.yaml > "$rendered_config"
 install -m 0600 -o root -g root "$rendered_config" /etc/groundplane/controller.yaml
+
+rendered_runner_config="$deploy_dir/controller.runner.yaml.rendered"
+awk -v image="$runner_ref" '
+BEGIN {
+    in_runner = 0
+    saw_runner = 0
+    wrote_image = 0
+}
+$0 ~ /^runner:[[:space:]]*$/ {
+    saw_runner = 1
+    in_runner = 1
+    print
+    next
+}
+in_runner && $0 ~ /^[^[:space:]#]/ {
+    if (!wrote_image) {
+        print "  image: " image
+        wrote_image = 1
+    }
+    in_runner = 0
+}
+in_runner && $0 ~ /^[[:space:]]+image:[[:space:]]*/ {
+    print "  image: " image
+    wrote_image = 1
+    next
+}
+{
+    print
+}
+END {
+    if (in_runner && !wrote_image) {
+        print "  image: " image
+    } else if (!saw_runner) {
+        print ""
+        print "runner:"
+        print "  image: " image
+    }
+}
+' /etc/groundplane/controller.yaml > "$rendered_runner_config"
+install -m 0600 -o root -g root "$rendered_runner_config" /etc/groundplane/controller.yaml
 
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/groundplane.conf
 systemctl daemon-reload
@@ -678,6 +743,7 @@ fi
 
 printf 'Controller: active\n'
 printf 'Agent image: %s\n' "$agent_ref"
+printf 'Runner image: %s\n' "$runner_ref"
 """
 
 
@@ -899,8 +965,9 @@ def build_environment() -> dict[str, str]:
     )
 
 
-def build_artifacts(deployment: Deployment, image_archive: Path, invocation_id: str) -> str:
-    source_image = f"groundplane-agent:deploy-{invocation_id}"
+def build_artifacts(deployment: Deployment, image_archive: Path, invocation_id: str) -> tuple[str, str]:
+    source_agent_image = f"groundplane-agent:deploy-{invocation_id}"
+    source_runner_image = f"groundplane-runner:deploy-{invocation_id}"
     run(
         ["make", "controller", "cli"],
         cwd=REPOSITORY_ROOT,
@@ -911,12 +978,22 @@ def build_artifacts(deployment: Deployment, image_archive: Path, invocation_id: 
             "make",
             "agent-image",
             f"AGENT_VERSION={deployment.version}",
-            f"AGENT_IMAGE={source_image}",
+            f"AGENT_IMAGE={source_agent_image}",
         ],
         cwd=REPOSITORY_ROOT,
     )
-    run(["docker", "save", "--output", str(image_archive), source_image])
-    return source_image
+    run(
+        [
+            "make",
+            "runner-image",
+            f"RUNNER_IMAGE={source_runner_image}",
+        ],
+        cwd=REPOSITORY_ROOT,
+    )
+    run(
+        ["docker", "save", "--output", str(image_archive), source_agent_image, source_runner_image],
+    )
+    return source_agent_image, source_runner_image
 
 
 def create_transfer_archive(image_archive: Path, transfer_archive: Path) -> None:
@@ -951,7 +1028,8 @@ def create_transfer_archive(image_archive: Path, transfer_archive: Path) -> None
 def transfer_and_deploy(
     deployment: Deployment,
     remote_directory: str,
-    source_image: str,
+    source_agent_image: str,
+    source_runner_image: str,
     transfer_archive: Path,
 ) -> None:
     remote_command = shlex.join(
@@ -963,7 +1041,8 @@ def transfer_and_deploy(
             "1" if deployment.setup else "0",
             remote_directory,
             deployment.version,
-            source_image,
+            source_agent_image,
+            source_runner_image,
         ],
     )
     command = [*deployment.ssh_base, remote_command]
@@ -979,11 +1058,21 @@ def deploy(deployment: Deployment) -> None:
     invocation_id = secrets.token_hex(16)
     remote_directory = f"/tmp/groundplane-deploy-{invocation_id}"
     with tempfile.TemporaryDirectory(prefix="groundplane-deploy-") as temporary_directory:
-        image_archive = Path(temporary_directory) / "agent-image.tar"
+        image_archive = Path(temporary_directory) / "images.tar"
         transfer_archive = Path(temporary_directory) / "deployment.tar"
-        source_image = build_artifacts(deployment, image_archive, invocation_id)
+        source_agent_image, source_runner_image = build_artifacts(
+            deployment,
+            image_archive,
+            invocation_id,
+        )
         create_transfer_archive(image_archive, transfer_archive)
-        transfer_and_deploy(deployment, remote_directory, source_image, transfer_archive)
+        transfer_and_deploy(
+            deployment,
+            remote_directory,
+            source_agent_image,
+            source_runner_image,
+            transfer_archive,
+        )
 
 
 def console_tunnel_command(deployment: Deployment, local_port: int) -> list[str]:

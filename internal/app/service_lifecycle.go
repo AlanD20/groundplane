@@ -212,6 +212,13 @@ type serviceLifecyclePlanResolver interface {
 		etcd.ServiceLifecycleRenderInput,
 		string,
 	) (etcd.TaskRecord, error)
+	PrepareServiceRemovalTask(
+		context.Context,
+		etcd.TaskRecord,
+		etcd.ServiceRemovalIntent,
+		string,
+		string,
+	) (etcd.TaskRecord, error)
 }
 
 type serviceLifecycleService struct {

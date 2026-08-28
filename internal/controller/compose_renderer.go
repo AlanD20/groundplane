@@ -15,17 +15,17 @@ import (
 )
 
 const (
-	composeLabelEnvironmentID  = "com.groundplane.environment-id"
-	composeLabelKind           = "com.groundplane.kind"
-	composeLabelManaged        = "com.groundplane.managed"
-	composeLabelPlanID         = "com.groundplane.plan-id"
-	composeLabelProjectID      = "com.groundplane.project-id"
-	composeLabelRenderGen      = "com.groundplane.render-generation"
-	composeLabelServiceID      = "com.groundplane.service-id"
-	composeLabelTenantID       = "com.groundplane.tenant-id"
-	composeLabelReleaseID      = "com.groundplane.release-id"
-	composeLabelSlot           = "com.groundplane.slot"
-	composeLabelRuntimeRole    = "com.groundplane.runtime-role"
+	composeLabelEnvironmentID    = "com.groundplane.environment-id"
+	composeLabelKind             = "com.groundplane.kind"
+	composeLabelManaged          = "com.groundplane.managed"
+	composeLabelPlanID           = "com.groundplane.plan-id"
+	composeLabelProjectID        = "com.groundplane.project-id"
+	composeLabelRenderGen        = "com.groundplane.render-generation"
+	composeLabelServiceID        = "com.groundplane.service-id"
+	composeLabelTenantID         = "com.groundplane.tenant-id"
+	composeLabelReleaseID        = "com.groundplane.release-id"
+	composeLabelSlot             = "com.groundplane.slot"
+	composeLabelRuntimeRole      = "com.groundplane.runtime-role"
 	composeResourceExtension     = "x-gp-resource"
 	composeNetworkExtension      = "x-gp-network"
 	composeVolumeBackupExtension = "x-gp-backup"
@@ -36,6 +36,7 @@ const (
 type ComposeRenderInput struct {
 	Project             *composetypes.Project
 	ArtifactID          string
+	ProjectOwnerKind    ComposeProjectOwnerKind
 	TenantID            string
 	ProjectID           string
 	EnvironmentID       string
@@ -46,6 +47,13 @@ type ComposeRenderInput struct {
 	ExternalNetworks    []ComposeResourceIdentity
 	Releases            map[string]ComposeReleaseIdentity
 }
+
+type ComposeProjectOwnerKind string
+
+const (
+	ComposeProjectOwnerTenant  ComposeProjectOwnerKind = "tenant"
+	ComposeProjectOwnerBacking ComposeProjectOwnerKind = "backing"
+)
 
 type ComposeReleaseIdentity struct {
 	ReleaseID              string
@@ -199,7 +207,6 @@ func validateComposeRenderInput(input ComposeRenderInput) error {
 		value string
 	}{
 		{kind: ids.KindConfig, value: input.ArtifactID},
-		{kind: ids.KindTenant, value: input.TenantID},
 		{kind: ids.KindProject, value: input.ProjectID},
 		{kind: ids.KindEnvironment, value: input.EnvironmentID},
 		{kind: ids.KindPlan, value: input.PlanID},
@@ -208,6 +215,18 @@ func validateComposeRenderInput(input ComposeRenderInput) error {
 		if ids.Validate(identity.kind, identity.value) != nil {
 			return errs.New(errs.KindInternal, "compose render identity is invalid")
 		}
+	}
+	switch input.ProjectOwnerKind {
+	case ComposeProjectOwnerTenant:
+		if ids.Validate(ids.KindTenant, input.TenantID) != nil {
+			return errs.New(errs.KindInternal, "tenant-owned Compose render requires a Tenant id")
+		}
+	case ComposeProjectOwnerBacking:
+		if input.TenantID != "" {
+			return errs.New(errs.KindInternal, "backing-owned Compose render must not carry a Tenant id")
+		}
+	default:
+		return errs.New(errs.KindInternal, "Compose render Project owner kind is invalid")
 	}
 	if !filepath.IsAbs(input.AuthorizedVolumeDir) ||
 		filepath.Clean(input.AuthorizedVolumeDir) != input.AuthorizedVolumeDir {
@@ -314,7 +333,9 @@ func composeOwnershipLabels(
 		composeLabelPlanID:        input.PlanID,
 		composeLabelProjectID:     input.ProjectID,
 		composeLabelRenderGen:     strconv.FormatUint(input.RenderGeneration, 10),
-		composeLabelTenantID:      input.TenantID,
+	}
+	if input.ProjectOwnerKind == ComposeProjectOwnerTenant {
+		expected[composeLabelTenantID] = input.TenantID
 	}
 	if resourceKind == "service" {
 		expected[composeLabelServiceID] = serviceID

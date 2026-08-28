@@ -66,6 +66,7 @@ type Server struct {
 	connectorMutations      ConnectorMutator
 	connectorDeletions      ConnectorDeleter
 	runners                 RunnerReader
+	runnerProvisioning      RunnerProvisioner
 	runnerMutations         RunnerMutator
 	runnerRemovals          RunnerRemover
 	backupPolicies          BackupPolicyReader
@@ -126,6 +127,7 @@ type Options struct {
 	ConnectorMutations      ConnectorMutator
 	ConnectorDeletions      ConnectorDeleter
 	Runners                 RunnerReader
+	RunnerProvisioning      RunnerProvisioner
 	RunnerMutations         RunnerMutator
 	RunnerRemovals          RunnerRemover
 	BackupPolicies          BackupPolicyReader
@@ -199,6 +201,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		connectorMutations:      options.ConnectorMutations,
 		connectorDeletions:      options.ConnectorDeletions,
 		runners:                 options.Runners,
+		runnerProvisioning:      options.RunnerProvisioning,
 		runnerMutations:         options.RunnerMutations,
 		runnerRemovals:          options.RunnerRemovals,
 		backupPolicies:          options.BackupPolicies,
@@ -281,7 +284,6 @@ func (s *Server) routes() {
 	// never PUT (api-cli.md, section 4). Managed entirely through /components.
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
-	mux.HandleFunc("DELETE /api/v1/services/{id}", s.acceptTask)
 	s.streamRoute("GET /api/v1/services/{id}/logs", s.notImplemented)
 
 	// Release Group metadata is registered as typed Huma operations.
@@ -299,16 +301,11 @@ func (s *Server) routes() {
 	// component (?environment= or ?platform=true) — one resource across both owners
 
 	// backing-service
-	s.jsonRoute("POST /api/v1/backing-services", s.notImplemented)
 
 	// Secret reads, protected create/delete, and explicit reveal are typed
 	// Huma operations.
 
-	// runner (?tenant= or ?project=) — typed list/show/edit/failed-create removal
-	s.jsonRoute(
-		"POST /api/v1/runners",
-		s.notImplemented,
-	) // {tenant_id|project_id, registration_token} — token discarded after registration
+	// Runner list, detail, create, retry, edit, and removal are typed Huma operations.
 
 	// host / agents
 	s.registerAgents()

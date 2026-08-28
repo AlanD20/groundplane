@@ -229,6 +229,7 @@ func validControllerConfig() ControllerConfig {
 	cfg.EnvironmentPool = "10.0.0.19/9"
 	cfg.SystemPool = "10.128.0.0/9"
 	cfg.Runner.NetworkPool = "10.240.0.0/24"
+	cfg.Runner.Image = "ghcr.io/example/groundplane-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	cfg.Runner.HostUIDRange = "200000-200007"
 	cfg.Runner.SubUIDRange = "300000-824287"
 	cfg.Runner.SubGIDRange = "900000-1424287"

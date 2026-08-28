@@ -11,9 +11,10 @@ import (
 // BackingServiceRecord is a read-only facade over the three durable hierarchy
 // records that make up one backing service. It is never persisted itself.
 type BackingServiceRecord struct {
-	ProjectID     string
-	EnvironmentID string
-	ServiceID     string
+	ProjectID        string
+	EnvironmentID    string
+	ServiceID        string
+	BackingNetworkID string
 }
 
 // BackingServiceRepository joins every facade member at one MVCC revision.
@@ -149,6 +150,7 @@ func (repository *BackingServiceRepository) composeBackingService(
 	return Versioned[BackingServiceRecord]{
 		Record: BackingServiceRecord{
 			ProjectID: project.Record.ID, EnvironmentID: environmentID, ServiceID: serviceID,
+			BackingNetworkID: service.BackingNetworkID,
 		},
 		Revision:     max(project.Revision, environmentValue.ModRevision, serviceValue.ModRevision),
 		ReadRevision: project.ReadRevision,

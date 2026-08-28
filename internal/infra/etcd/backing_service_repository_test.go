@@ -157,5 +157,8 @@ func seedBackingService(
 	if _, err := services.CreateService(ctx, environment, project, serviceRecord); err != nil {
 		t.Fatalf("CreateService() error = %v", err)
 	}
-	return BackingServiceRecord{ProjectID: projectRecord.ID, EnvironmentID: environmentID, ServiceID: serviceID}
+	return BackingServiceRecord{
+		ProjectID: projectRecord.ID, EnvironmentID: environmentID, ServiceID: serviceID,
+		BackingNetworkID: serviceRecord.BackingNetworkID,
+	}
 }

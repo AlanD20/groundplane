@@ -38,7 +38,7 @@ type headRecord struct {
 	Digest   string `json:"digest"`
 }
 
-// Journal persists Agent-owned write-before-host-effect state. The trusted
+// Journal persists Controller-owned write-before-host-effect state. The trusted
 // root is constructor policy; no path from a persisted record is ever opened.
 type Journal struct{ root string }
 

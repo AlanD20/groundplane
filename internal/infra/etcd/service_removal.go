@@ -1,0 +1,292 @@
+package etcd
+
+import (
+	"context"
+	"slices"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// ValidateServiceRemovalReferences enforces Remove's no-cascade contract at a
+// fixed durable view. The removal tombstone and Environment mutation fence
+// close races with new references during task publication.
+func (repository *ServiceRepository) ValidateServiceRemovalReferences(
+	ctx context.Context,
+	current Versioned[ServiceRecord],
+	projection Versioned[EnvironmentComposeProjection],
+) error {
+	if err := validateServiceVersion(current); err != nil {
+		return err
+	}
+	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
+		projection.Record.EnvironmentID != current.Record.EnvironmentID ||
+		validateEnvironmentComposeProjection(projection.Record) != nil {
+		return errs.New(errs.KindValidationFailed, "Service removal projection is invalid")
+	}
+	if current.Record.BackingNetworkID != "" || current.Record.Desired.Adapter != "" {
+		return errs.New(errs.KindResourceInUse, "Backing Services are removed through their backing lifecycle")
+	}
+	for _, component := range projection.Record.Components {
+		if slices.Contains(component.Runtime.GeneratedServices, current.Record.Desired.ID) {
+			return errs.New(errs.KindResourceInUse, "Component-generated Services are removed through their Component")
+		}
+	}
+	for _, prefix := range []string{
+		"/v1/indexes/attaches/by-service/service/" + current.Record.Desired.ID + "/",
+		"/v1/indexes/attaches/by-backing-service/service/" + current.Record.Desired.ID + "/",
+	} {
+		page, err := repository.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision})
+		if err != nil {
+			return err
+		}
+		if page == nil {
+			return errs.New(errs.KindInternal, "Service removal reference read is empty")
+		}
+		if len(page.Values) != 0 {
+			return errs.New(errs.KindResourceInUse, "Service is referenced by an Attach")
+		}
+	}
+	if err := repository.scanServiceRemovalRecords(ctx, projection.ReadRevision, current.Record); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (repository *ServiceRepository) scanServiceRemovalRecords(
+	ctx context.Context,
+	revision int64,
+	current ServiceRecord,
+) error {
+	for _, scan := range []struct {
+		prefix string
+		check  func([]byte) (bool, error)
+	}{
+		{prefix: servicePrefix, check: func(value []byte) (bool, error) {
+			record, err := decodeServiceRecord(value)
+			if err != nil {
+				return false, err
+			}
+			if record.EnvironmentID != current.EnvironmentID || record.Desired.ID == current.Desired.ID {
+				return false, nil
+			}
+			_, referenced := record.Desired.DependsOn[current.Desired.Name]
+			return referenced, nil
+		}},
+		{prefix: routePrefix, check: func(value []byte) (bool, error) {
+			record, err := decodeRouteRecord(value)
+			if err != nil {
+				return false, err
+			}
+			return record.EnvironmentID == current.EnvironmentID && record.Desired.TargetServiceID == current.Desired.ID, nil
+		}},
+	} {
+		cursor := ""
+		for {
+			page, err := repository.store.Range(ctx, RangeRequest{
+				Prefix: scan.prefix, StartExclusive: cursor, Limit: 200, Revision: revision,
+			})
+			if err != nil {
+				return err
+			}
+			if page == nil {
+				return errs.New(errs.KindInternal, "Service removal reference scan is empty")
+			}
+			for _, value := range page.Values {
+				referenced, checkErr := scan.check(value.Value)
+				if checkErr != nil {
+					return checkErr
+				}
+				if referenced {
+					return errs.New(errs.KindResourceInUse, "Service is referenced by another desired resource")
+				}
+				cursor = value.Key
+			}
+			if !page.More {
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// BeginServiceRemovalWithTask seals ownership of an already-staged candidate
+// without changing the active desired head or deleting the visible Service.
+func (repository *ServiceRepository) BeginServiceRemovalWithTask(
+	ctx context.Context,
+	tenant Versioned[TenantRecord],
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	current Versioned[ServiceRecord],
+	projection Versioned[EnvironmentComposeProjection],
+	tombstone DeletionTombstoneRecord,
+	intent ServiceRemovalIntent,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	if err := validateServiceLifecycleHierarchy(tenant, project, environment, current); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateDeletionTombstone(tombstone); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateServiceRemovalIntent(intent); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateServiceRemovalTaskOwner(task, intent); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if projection.Revision != intent.CurrentProjectionRevision ||
+		!sameRouteRemovalProjection(projection.Record, intent.CurrentProjection) ||
+		intent.ServiceRevision != current.Revision || intent.ExpectedHeadRevision != projection.Revision ||
+		tombstone.TargetKind != DeletionTargetService || tombstone.TargetID != current.Record.Desired.ID ||
+		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
+		tombstone.Phase != DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Status != TaskStatusPending {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Service removal state does not match its Task")
+	}
+	wantReplay := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
+	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != task.ID ||
+		marker.Locator != intent.Claim.Locator || marker.ReplayTarget == nil || *marker.ReplayTarget != wantReplay ||
+		!sameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) ||
+		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Service removal marker does not match its Task")
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
+		return existing, err
+	}
+	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+		ctx, repository.store, environment.Record.ID, serviceKey(current.Record.Desired.ID),
+		project.Record.ID, tenant.Record.ID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(&tenant, project, environment)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := repository.ValidateServiceRemovalReferences(ctx, current, projection); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		serviceNameKey(environment.Record.ID, current.Record.Desired.Name),
+		serviceOwnerKey(environment.Record.ID, current.Record.Desired.ID),
+		environmentBlueprintHeadKey(environment.Record.ID),
+		environmentComposeProjectionKey(environment.Record.ID),
+		serviceLifecycleActiveKey(current.Record.Desired.ID),
+		componentTaskActiveEnvironmentKey(environment.Record.ID),
+	}, Revision: mutationContext.readRevision})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if indexes == nil || len(indexes.Values) != 6 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+		indexes.Values[2] == nil || indexes.Values[3] == nil || indexes.Values[4] != nil || indexes.Values[5] != nil ||
+		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
+		string(indexes.Values[1].Value) != current.Record.Desired.ID ||
+		indexes.Values[2].ModRevision != intent.ExpectedHeadRevision ||
+		indexes.Values[3].ModRevision != projection.Revision {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Service removal baseline changed")
+	}
+	hierarchy := &HierarchyRepository{store: repository.store}
+	publication, err := hierarchy.prepareEnvironmentDirectPublication(
+		ctx, intent.Claim,
+		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		intent.CandidateProjection,
+		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
+		intent.ExpectedHeadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(publication.publishedDescriptor)
+	task = cloneTaskRecord(task)
+	if task.IdempotencyKey == "" {
+		task.IdempotencyKey = marker.Locator.Key
+	}
+	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	if err := validateTaskRecord(task); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	taskValue, err := encodeTaskRecord(task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskValue)
+	reference, err := encodeTaskReference(task.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(reference)
+	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(tombstoneValue)
+	intentValue, err := encodeServiceRemovalIntent(intent)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(intentValue)
+	conditions := []Condition{
+		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: serviceKey(current.Record.Desired.ID), ModRevision: current.Revision},
+		{Key: serviceNameKey(environment.Record.ID, current.Record.Desired.Name), ModRevision: indexes.Values[0].ModRevision},
+		{Key: serviceOwnerKey(environment.Record.ID, current.Record.Desired.ID), ModRevision: indexes.Values[1].ModRevision},
+		{Key: deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID)},
+		{Key: serviceRemovalIntentKey(task.ID)},
+		{Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: indexes.Values[2].ModRevision},
+		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: indexes.Values[3].ModRevision},
+		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
+		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
+		{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
+		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID), Value: tombstoneValue},
+		{Type: MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: intentValue},
+		{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
+	}
+	originalClassify := func(_ int64, values []*KeyValue) error {
+		if len(values) != len(conditions) {
+			return errs.New(errs.KindInternal, "Service removal compare evidence is incomplete")
+		}
+		if values[4] == nil {
+			return errs.New(errs.KindServiceNotFound, "Service was not found")
+		}
+		if values[7] != nil || values[8] != nil || values[11] != nil || values[12] != nil {
+			return errs.New(errs.KindResourceInUse, "Service removal or Environment mutation is already active")
+		}
+		return errs.New(errs.KindStateConflict, "Service removal state changed")
+	}
+	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer binding.clear()
+	defer clearMutationValues(binding.mutations)
+	initiation, err := newEnvironmentTaskInitiation(versionedTenant, versionedProject, versionedEnvironment, TaskActorOperator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, binding.conditions, binding.mutations,
+		func(revision int64, values []*KeyValue) error {
+			return binding.classify(revision, values, originalClassify)
+		})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}

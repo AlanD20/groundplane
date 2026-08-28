@@ -11,12 +11,17 @@ import (
 // revision in one transaction so readers can never observe a partial facade.
 type BackingServiceCreation struct {
 	VolumeRoot   string
+	Stage        Versioned[BackingServiceCreationStage]
 	PoolRegistry Versioned[EnvironmentPoolRegistry]
 	Project      ProjectRecord
 	Environment  EnvironmentRecord
 	Components   []ComponentRecord
 	Zone         ZoneRecord
 	Service      ServiceRecord
+	Secrets      []SecretRecord
+	SecretValues []SecretEncryptedValue
+	Entries      []EntryRecord
+	EntryValues  []EntryValueGeneration
 	Claim        EnvironmentBlueprintStageClaim
 	Revision     EnvironmentDesiredRevisionIdentity
 	Projection   EnvironmentComposeProjection
@@ -114,9 +119,46 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		}
 		defer clear(componentValues[index])
 	}
+	entryValues := make([][]byte, len(creation.Entries))
+	entryGenerationKeys := make([]string, len(creation.Entries))
+	entryGenerationValues := make([][]byte, len(creation.Entries))
+	for index := range creation.Entries {
+		entryValues[index], err = encodeEntryRecord(creation.Entries[index])
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clear(entryValues[index])
+		entryGenerationKeys[index], entryGenerationValues[index], err = prepareEntryGeneration(
+			creation.Entries[index],
+			creation.EntryValues[index],
+		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clear(entryGenerationValues[index])
+	}
+	secretValues := make([][]byte, len(creation.Secrets))
+	secretEncryptedValues := make([][]byte, len(creation.Secrets))
+	for index := range creation.Secrets {
+		secretValues[index], err = encodeSecretRecord(creation.Secrets[index])
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clear(secretValues[index])
+		secretEncryptedValues[index], err = encodeSecretEncryptedValue(creation.SecretValues[index])
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clear(secretEncryptedValues[index])
+	}
 
-	conditions := backingServiceCreationConditions(creation, publication)
+	creationStageKey, err := backingServiceCreationStageKey(creation.Stage.Record.Locator)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	conditions := backingServiceCreationConditions(creation, publication, creationStageKey)
 	mutations := []Mutation{
+		{Type: MutationDelete, Key: creationStageKey},
 		{Type: MutationPut, Key: taskKey(creation.Task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID), Value: taskReference},
 		{Type: MutationPut, Key: taskActiveOperationKey(creation.Task.OperationID), Value: taskReference},
@@ -147,6 +189,21 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			Mutation{Type: MutationPut, Key: componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind), Value: []byte(component.Desired.ID)},
 		)
 	}
+	for index, entry := range creation.Entries {
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: entryRecordKey(entry.Entry.ID), Value: entryValues[index]},
+			Mutation{Type: MutationPut, Key: entryOwnerKey(creation.Environment.ID, entry.Entry.ID), Value: []byte(entry.Entry.ID)},
+			Mutation{Type: MutationPut, Key: entryGenerationKeys[index], Value: entryGenerationValues[index]},
+		)
+	}
+	for index, secret := range creation.Secrets {
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: secretRecordKey(secret.Secret.ID), Value: secretValues[index]},
+			Mutation{Type: MutationPut, Key: secretOwnerKey(secret.Secret), Value: []byte(secret.Secret.ID)},
+			Mutation{Type: MutationPut, Key: secretScopedKey(secret.Secret), Value: []byte(secret.Secret.ID)},
+			Mutation{Type: MutationPut, Key: secretValueKey(secret.Secret.ID), Value: secretEncryptedValues[index]},
+		)
+	}
 	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))
 	initiation, err := newTaskInitiation(creation.Task.Owner, TaskActorOperator)
 	if err != nil {
@@ -175,6 +232,15 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	}
 	if creation.Project.Kind != ProjectKindBacking || creation.Project.TenantID != "" {
 		return errs.New(errs.KindValidationFailed, "Backing-service Project ownership is invalid")
+	}
+	if err := validateBackingServiceCreationStage(creation.Stage.Record); err != nil {
+		return err
+	}
+	if creation.Stage.Revision <= 0 || creation.Stage.ReadRevision < creation.Stage.Revision ||
+		creation.Stage.Record.ProjectID != creation.Project.ID ||
+		creation.Stage.Record.EnvironmentID != creation.Environment.ID ||
+		creation.Stage.Record.TaskID != creation.Task.ID || creation.Stage.Record.Locator != creation.Marker.Locator {
+		return errs.New(errs.KindValidationFailed, "Backing-service creation stage does not match publication")
 	}
 	if err := validateEnvironment(creation.Environment); err != nil {
 		return err
@@ -217,6 +283,44 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Service.BackingNetworkID != creation.Zone.Desired.ID {
 		return errs.New(errs.KindValidationFailed, "Backing-service adapter Service is invalid")
 	}
+	if len(creation.Entries) == 0 || len(creation.Entries) != len(creation.EntryValues) {
+		return errs.New(errs.KindValidationFailed, "Backing-service bootstrap entries are invalid")
+	}
+	seenEntries := make(map[string]struct{}, len(creation.Entries))
+	for index, entry := range creation.Entries {
+		if entry.EnvironmentID != creation.Environment.ID {
+			return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Entry ownership is invalid")
+		}
+		if _, exists := seenEntries[entry.Entry.ID]; exists {
+			return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Entry identity is duplicated")
+		}
+		seenEntries[entry.Entry.ID] = struct{}{}
+		_, value, err := prepareEntryGeneration(entry, creation.EntryValues[index])
+		if err != nil {
+			return err
+		}
+		clear(value)
+	}
+	if len(creation.Secrets) == 0 || len(creation.Secrets) != len(creation.SecretValues) {
+		return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Secrets are invalid")
+	}
+	seenSecrets := make(map[string]struct{}, len(creation.Secrets))
+	for index, secret := range creation.Secrets {
+		if secret.Secret.ProjectID != creation.Project.ID || secret.Secret.Scope != "project" ||
+			secret.Secret.ID != creation.SecretValues[index].SecretID {
+			return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Secret ownership is invalid")
+		}
+		if _, exists := seenSecrets[secret.Secret.ID]; exists {
+			return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Secret identity is duplicated")
+		}
+		seenSecrets[secret.Secret.ID] = struct{}{}
+		if err := validateSecretRecord(secret); err != nil {
+			return err
+		}
+		if err := validateSecretEncryptedValue(creation.SecretValues[index]); err != nil {
+			return err
+		}
+	}
 	if err := validateBackingServiceProjection(creation); err != nil {
 		return err
 	}
@@ -257,12 +361,19 @@ func validateBackingServiceProjection(creation BackingServiceCreation) error {
 		projection.EnvironmentID != creation.Environment.ID || projection.RevisionID != creation.Task.ID ||
 		projection.RenderGeneration != 1 || len(projection.ComposeArtifact) == 0 ||
 		len(projection.Services) != 1 || len(projection.Networks) != 1 || len(projection.Volumes) != 1 ||
-		len(projection.VolumeMounts) != 1 ||
+		len(projection.VolumeMounts) != 1 || len(projection.Entries) != len(creation.Entries) ||
 		projection.Services[0] != (EnvironmentComposeIdentity{ID: creation.Service.Desired.ID, Name: creation.Service.Desired.Name}) ||
 		projection.Networks[0] != (EnvironmentComposeIdentity{ID: creation.Zone.Desired.ID, Name: creation.Zone.Desired.Name}) ||
 		projection.VolumeMounts[0].ServiceID != creation.Service.Desired.ID ||
 		projection.VolumeMounts[0].VolumeID != projection.Volumes[0].ID {
 		return errs.New(errs.KindValidationFailed, "Backing-service desired projection is invalid")
+	}
+	for index, entry := range creation.Entries {
+		if projection.Entries[index].EnvironmentID != creation.Environment.ID ||
+			projection.Entries[index].Entry.ID != entry.Entry.ID ||
+			projection.Entries[index].CurrentValueGenerationID != entry.CurrentValueGenerationID {
+			return errs.New(errs.KindValidationFailed, "Backing-service desired Entry projection is invalid")
+		}
 	}
 	return nil
 }
@@ -270,8 +381,10 @@ func validateBackingServiceProjection(creation BackingServiceCreation) error {
 func backingServiceCreationConditions(
 	creation BackingServiceCreation,
 	publication environmentBlueprintPublicationEvidence,
+	creationStageKey string,
 ) []Condition {
 	conditions := []Condition{
+		{Key: creationStageKey, ModRevision: creation.Stage.Revision},
 		{Key: taskKey(creation.Task.ID)},
 		{Key: taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID)},
 		{Key: taskActiveOperationKey(creation.Task.OperationID)},
@@ -305,6 +418,26 @@ func backingServiceCreationConditions(
 			Condition{Key: componentKey(component.Desired.ID)},
 			Condition{Key: componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID)},
 			Condition{Key: componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind)},
+		)
+	}
+	for index, entry := range creation.Entries {
+		generationKey := secretEntryValueGenerationKey(entry.Entry.ID, entry.CurrentValueGenerationID)
+		if creation.EntryValues[index].Plain != nil {
+			generationKey = plainEntryValueGenerationKey(entry.Entry.ID, entry.CurrentValueGenerationID)
+		}
+		conditions = append(conditions,
+			Condition{Key: entryRecordKey(entry.Entry.ID)},
+			Condition{Key: entryOwnerKey(creation.Environment.ID, entry.Entry.ID)},
+			Condition{Key: generationKey},
+		)
+	}
+	for _, secret := range creation.Secrets {
+		conditions = append(conditions,
+			Condition{Key: secretRecordKey(secret.Secret.ID)},
+			Condition{Key: secretOwnerKey(secret.Secret)},
+			Condition{Key: secretScopedKey(secret.Secret)},
+			Condition{Key: secretValueKey(secret.Secret.ID)},
+			Condition{Key: deletionTombstoneKey("secret", secret.Secret.ID)},
 		)
 	}
 	return conditions

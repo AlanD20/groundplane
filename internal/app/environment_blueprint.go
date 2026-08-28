@@ -515,7 +515,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	artifactID := allocator.Named(ids.KindConfig, "compose-artifact")
 	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: artifactID,
-		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID,
+		ProjectOwnerKind: controller.ComposeProjectOwnerTenant,
+		TenantID:         tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID,
 		PlanID: planID, RenderGeneration: generation, AuthorizedVolumeDir: environment.Record.VolumeDir,
 		Identities: renderIdentities,
 	})

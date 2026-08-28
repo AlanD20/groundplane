@@ -68,6 +68,7 @@ type ControllerConfig struct {
 		Runtime AgentRuntimeConfig `yaml:"runtime"`
 	} `yaml:"agent"`
 	Runner struct {
+		Image        string `yaml:"image"`
 		NetworkPool  string `yaml:"network_pool"`
 		HostUIDRange string `yaml:"host_uid_range"`
 		SubUIDRange  string `yaml:"subuid_range"`
@@ -202,6 +203,9 @@ func (c ControllerConfig) Validate() error {
 	}
 	if c.Agent.Image != "" && !imageref.IsDigestPinned(c.Agent.Image) {
 		return fmt.Errorf("config: controller agent.image must be empty or a digest-pinned OCI reference")
+	}
+	if !imageref.IsDigestPinned(c.Runner.Image) {
+		return fmt.Errorf("config: controller runner.image must be a digest-pinned OCI reference")
 	}
 	if err := validateAgentRuntime("controller agent.runtime", c.Agent.Runtime); err != nil {
 		return err

@@ -130,14 +130,23 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	if err := resolver.validateAttachGrantTargets(ctx, current.Record); err != nil {
 		return nil, err
 	}
-	projection := etcd.EnvironmentComposeProjection{
-		EnvironmentID:          current.Record.EnvironmentID,
-		RevisionID:             renderInput.Record.BlueprintRevisionID,
-		RenderGeneration:       renderInput.Record.RenderGeneration,
-		Services:               append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Services...),
-		Networks:               append([]etcd.EnvironmentComposeIdentity(nil), renderInput.Record.Networks...),
-		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), renderInput.Record.Volumes...),
-		ServiceDependencyPlans: renderInput.Record.ServiceDependencyPlans.Clone(),
+	pinned, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
+		ctx,
+		current.Record.EnvironmentID,
+		renderInput.Record.BlueprintRevisionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	projection := pinned.Record
+	if !found || projection.EnvironmentID != current.Record.EnvironmentID ||
+		projection.RevisionID != renderInput.Record.BlueprintRevisionID ||
+		projection.RenderGeneration != renderInput.Record.RenderGeneration ||
+		!slices.Equal(projection.Services, renderInput.Record.Services) ||
+		!slices.Equal(projection.Networks, renderInput.Record.Networks) ||
+		!slices.Equal(projection.Volumes, renderInput.Record.Volumes) ||
+		!projection.ServiceDependencyPlans.Equal(renderInput.Record.ServiceDependencyPlans) {
+		return nil, errs.New(errs.KindInternal, "durable Attach Task projection does not match its render input")
 	}
 	artifact, err := resolver.renderPinnedEnvironmentArtifact(
 		ctx,
