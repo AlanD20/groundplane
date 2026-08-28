@@ -125,7 +125,7 @@ func renderServiceProxyTopology(
 		proxy := composetypes.ServiceConfig{
 			Name: name, Image: serviceProxyImage, Networks: cloneProxyNetworks(authored.Networks),
 			Ports: slices.Clone(authored.Ports), Expose: slices.Clone(authored.Expose), Restart: authored.Restart,
-			Command: composetypes.ShellCommand{"run", "--config", serviceProxyConfigPath},
+			Command: composetypes.ShellCommand{"caddy", "run", "--config", serviceProxyConfigPath},
 			Configs: []composetypes.ServiceConfigObjConfig{
 				composetypes.ServiceConfigObjConfig(
 					composetypes.FileReferenceConfig{Source: configName, Target: serviceProxyConfigPath},

@@ -65,6 +65,18 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 		roles[agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT] != 0 || !candidate {
 		t.Fatalf("addressable recreate roles = %#v candidate=%v", roles, candidate)
 	}
+	var rendered struct {
+		Services map[string]struct {
+			Command []string `yaml:"command"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(artifact.CanonicalYaml, &rendered); err != nil {
+		t.Fatalf("decode rendered Compose YAML: %v", err)
+	}
+	wantCommand := []string{"caddy", "run", "--config", serviceProxyConfigPath}
+	if !reflect.DeepEqual(rendered.Services["api"].Command, wantCommand) {
+		t.Fatalf("stable proxy command = %#v, want %#v", rendered.Services["api"].Command, wantCommand)
+	}
 }
 
 // Rationale: rendering must preserve native Compose fields and profile-disabled services while adding only generated
