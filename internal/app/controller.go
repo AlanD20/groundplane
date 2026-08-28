@@ -460,6 +460,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Runner mutation service: %w", err)
 	}
+	runnerRemovals, err := runnercapability.NewRemovalService(runnerRecords, idempotency, intentCoordinator)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Runner removal service: %w", err)
+	}
 	releaseGroupMutations, err := newReleaseGroupMutationService(
 		releaseGroups, hierarchyRecords, tasks, idempotency, intentCoordinator,
 	)
@@ -1063,7 +1068,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
 	}
-	controllerTaskHandler, err := newControllerTaskHandler(localAgentManager, backingZoneCascades)
+	controllerTaskHandler, err := newControllerTaskHandler(localAgentManager, backingZoneCascades, runnerRecords)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()
@@ -1162,6 +1167,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ConnectorDeletions:    connectorDeletions,
 		Runners:               runnerRecords,
 		RunnerMutations:       runnerMutations,
+		RunnerRemovals:        runnerRemovals,
 		BackupPolicies:        backupPolicies,
 		BackupPolicyMutations: backupPolicies,
 		RecoveryPoints:        backupPointReads,

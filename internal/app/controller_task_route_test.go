@@ -11,7 +11,7 @@ import (
 // Controller-local no-op whose durable effect belongs only to Task acknowledgement.
 func TestControllerTaskHandlerAcceptsOnlyExactRouteRemoval(t *testing.T) {
 	t.Parallel()
-	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t))
+	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}

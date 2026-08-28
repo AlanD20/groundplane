@@ -67,6 +67,7 @@ type Server struct {
 	connectorDeletions      ConnectorDeleter
 	runners                 RunnerReader
 	runnerMutations         RunnerMutator
+	runnerRemovals          RunnerRemover
 	backupPolicies          BackupPolicyReader
 	backupPolicyMutations   BackupPolicyMutator
 	recoveryPoints          RecoveryPointReader
@@ -126,6 +127,7 @@ type Options struct {
 	ConnectorDeletions      ConnectorDeleter
 	Runners                 RunnerReader
 	RunnerMutations         RunnerMutator
+	RunnerRemovals          RunnerRemover
 	BackupPolicies          BackupPolicyReader
 	BackupPolicyMutations   BackupPolicyMutator
 	RecoveryPoints          RecoveryPointReader
@@ -198,6 +200,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		connectorDeletions:      options.ConnectorDeletions,
 		runners:                 options.Runners,
 		runnerMutations:         options.RunnerMutations,
+		runnerRemovals:          options.RunnerRemovals,
 		backupPolicies:          options.BackupPolicies,
 		backupPolicyMutations:   options.BackupPolicyMutations,
 		recoveryPoints:          options.RecoveryPoints,
@@ -301,12 +304,11 @@ func (s *Server) routes() {
 	// Secret reads, protected create/delete, and explicit reveal are typed
 	// Huma operations.
 
-	// runner (?tenant= or ?project=) — typed list/show; mutations remain task-backed placeholders
+	// runner (?tenant= or ?project=) — typed list/show/edit/failed-create removal
 	s.jsonRoute(
 		"POST /api/v1/runners",
 		s.notImplemented,
 	) // {tenant_id|project_id, registration_token} — token discarded after registration
-	mux.HandleFunc("DELETE /api/v1/runners/{id}", s.acceptTask)
 
 	// host / agents
 	s.registerAgents()

@@ -11,7 +11,7 @@ import (
 // no-op; only terminal Task acknowledgement may delete its durable state.
 func TestControllerTaskHandlerAcceptsOnlyExactEntryRemoval(t *testing.T) {
 	t.Parallel()
-	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t))
+	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}

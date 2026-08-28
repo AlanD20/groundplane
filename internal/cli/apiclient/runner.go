@@ -105,6 +105,28 @@ func (c *Client) EditRunner(ctx context.Context, id, slug string) (apiTypes.Runn
 	return generatedRunnerBody(http.MethodPatch, path, response.Body, response.JSON200)
 }
 
+func (c *Client) RemoveRunner(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	path := "/api/v1/runners/" + id
+	response, err := client.RunnerRemoveWithResponse(
+		ctx,
+		id,
+		&generated.RunnerRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
+	if err != nil {
+		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodDelete, path, response.HTTPResponse, response.Body, http.StatusAccepted,
+	); err != nil {
+		return apiTypes.TaskAccepted{}, err
+	}
+	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
+}
+
 func runnerFromGenerated(runner generated.Runner) apiTypes.Runner {
 	projectID := ""
 	if runner.ProjectId != nil {

@@ -113,11 +113,17 @@ func newRunnerCmd() *cobra.Command {
 		Short:   "Remove the managed runner container and record (GitHub deregistration remains manual)",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			app := fromContext(cmd)
 			runnerID, err := resolveRunnerTarget(cmd, args[0])
 			if err != nil {
 				return err
 			}
-			return runDestroy(cmd, "/api/v1/runners/"+runnerID)
+			accepted, err := app.Client.RemoveRunner(cmd.Context(), runnerID)
+			if err != nil {
+				return err
+			}
+			headers, rows := tabulateVia(app, []map[string]any{{"task_id": accepted.TaskID}})
+			return app.Out.Render(headers, rows, accepted)
 		},
 	})
 

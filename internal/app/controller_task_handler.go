@@ -31,20 +31,26 @@ type controllerTaskLocalAgents interface {
 type controllerTaskHandler struct {
 	agents       controllerTaskLocalAgents
 	backingZones backingZoneCascadeExecutor
+	runners      controllerTaskRunners
 }
 
 type backingZoneCascadeExecutor interface {
 	Execute(context.Context, etcd.TaskRecord) error
 }
 
+type controllerTaskRunners interface {
+	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
+}
+
 func newControllerTaskHandler(
 	agents controllerTaskLocalAgents,
 	backingZones backingZoneCascadeExecutor,
+	runners controllerTaskRunners,
 ) (*controllerTaskHandler, error) {
-	if agents == nil || backingZones == nil {
+	if agents == nil || backingZones == nil || runners == nil {
 		return nil, errs.New(errs.KindInternal, "Controller Task handlers are not configured")
 	}
-	return &controllerTaskHandler{agents: agents, backingZones: backingZones}, nil
+	return &controllerTaskHandler{agents: agents, backingZones: backingZones, runners: runners}, nil
 }
 
 func (handler *controllerTaskHandler) Execute(
@@ -108,6 +114,8 @@ func (handler *controllerTaskHandler) Execute(
 		return nil
 	case etcd.TaskResourceBackingZone:
 		return handler.backingZones.Execute(ctx, task)
+	case etcd.TaskResourceRunner:
+		return handler.executeRunnerRemoval(ctx, task)
 	default:
 		return errs.New(errs.KindValidationFailed, "Controller Task resource kind is invalid")
 	}
@@ -121,6 +129,20 @@ func (handler *controllerTaskHandler) Execute(
 	default:
 		return errs.New(errs.KindValidationFailed, "Controller Task Agent mutation type is invalid")
 	}
+}
+
+func (handler *controllerTaskHandler) executeRunnerRemoval(ctx context.Context, task etcd.TaskRecord) error {
+	if task.Type != etcd.TaskRemove || ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 6 {
+		return errs.New(errs.KindValidationFailed, "Controller Task Runner removal is invalid")
+	}
+	current, err := handler.runners.GetRunner(ctx, task.Target)
+	if err != nil {
+		return err
+	}
+	if current.Record.ProvisioningState != etcd.RunnerProvisioningFailed || current.Record.ContainerID != "" {
+		return errs.New(errs.KindStateConflict, "Runner host cleanup requires the Agent lifecycle executor")
+	}
+	return nil
 }
 
 func (handler *controllerTaskHandler) executeUpdate(

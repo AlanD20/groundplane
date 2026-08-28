@@ -22,6 +22,10 @@ type RunnerMutator interface {
 	RenameRunner(context.Context, string, apiTypes.RunnerEditRequest, string) (etcd.IdempotencyResponse, error)
 }
 
+type RunnerRemover interface {
+	RemoveRunner(context.Context, string, string) (etcd.IdempotencyResponse, error)
+}
+
 type runnerListInput struct {
 	Tenant  string `query:"tenant" pattern:"^tnt_[0-9A-HJKMNP-TV-Z]{26}$"`
 	Project string `query:"project" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
@@ -51,6 +55,7 @@ func (s *Server) registerRunners() {
 		Summary: "Show a managed runner", Tags: []string{"Runner"},
 	}, s.showRunner)
 	s.registerRunnerEdit()
+	s.registerRunnerRemove()
 }
 
 func (s *Server) listRunners(

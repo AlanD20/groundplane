@@ -147,7 +147,7 @@ func (s *Server) runnerMutationResponse(response etcd.IdempotencyResponse) *runn
 		Body: func(ctx huma.Context) {
 			ctx.SetStatus(response.Status)
 			if _, err := ctx.BodyWriter().Write(response.Body); err != nil && s.Logger != nil {
-				s.Logger.Error("controller: write Runner edit response", slog.Any("error", err))
+				s.Logger.Error("controller: write Runner mutation response", slog.Any("error", err))
 			}
 		},
 	}

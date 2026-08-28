@@ -2208,6 +2208,11 @@ type RunnerListParams struct {
 	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// RunnerRemoveParams defines parameters for RunnerRemove.
+type RunnerRemoveParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // RunnerEditParams defines parameters for RunnerEdit.
 type RunnerEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -3206,6 +3211,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /runners (the `RunnerList` operationId).
 	RunnerList(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerRemove Remove a failed managed Runner
+	//
+	// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+	RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RunnerShow Show a managed runner
 	//
@@ -4969,6 +4979,21 @@ func (c *Client) RouteEdit(ctx context.Context, id string, params *RouteEditPara
 // Corresponds with GET /runners (the `RunnerList` operationId).
 func (c *Client) RunnerList(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRunnerListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerRemove Remove a failed managed Runner
+//
+// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+func (c *Client) RunnerRemove(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -9675,6 +9700,53 @@ func NewRunnerListRequest(server string, params *RunnerListParams) (*http.Reques
 	return req, nil
 }
 
+// NewRunnerRemoveRequest constructs an http.Request for the RunnerRemove method
+func NewRunnerRemoveRequest(server string, id string, params *RunnerRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewRunnerShowRequest constructs an http.Request for the RunnerShow method
 func NewRunnerShowRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -12678,6 +12750,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /runners (the `RunnerList` operationId).
 	RunnerListWithResponse(ctx context.Context, params *RunnerListParams, reqEditors ...RequestEditorFn) (*RunnerListResponse, error)
+
+	// RunnerRemoveWithResponse Remove a failed managed Runner
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+	RunnerRemoveWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error)
 
 	// RunnerShowWithResponse Show a managed runner
 	//
@@ -16743,6 +16822,61 @@ func (r RunnerListResponse) ContentType() string {
 	return ""
 }
 
+// RunnerRemoveResponse202Headers the declared response headers of an HTTP 202 response for RunnerRemove
+type RunnerRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type RunnerRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RunnerRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RunnerRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerRemoveResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type RunnerShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -20145,6 +20279,19 @@ func (c *ClientWithResponses) RunnerListWithResponse(ctx context.Context, params
 		return nil, err
 	}
 	return ParseRunnerListResponse(rsp)
+}
+
+// RunnerRemoveWithResponse Remove a failed managed Runner
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /runners/{id} (the `RunnerRemove` operationId).
+func (c *ClientWithResponses) RunnerRemoveWithResponse(ctx context.Context, id string, params *RunnerRemoveParams, reqEditors ...RequestEditorFn) (*RunnerRemoveResponse, error) {
+	rsp, err := c.RunnerRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerRemoveResponse(rsp)
 }
 
 // RunnerShowWithResponse Show a managed runner
@@ -23716,6 +23863,52 @@ func ParseRunnerListResponse(rsp *http.Response) (*RunnerListResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseRunnerRemoveResponse parses an HTTP response from a RunnerRemoveWithResponse call
+func ParseRunnerRemoveResponse(rsp *http.Response) (*RunnerRemoveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers RunnerRemoveResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

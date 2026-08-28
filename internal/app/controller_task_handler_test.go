@@ -18,7 +18,7 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 
 	task := testAgentEnrollmentTask()
 	agents := &fakeControllerTaskLocalAgents{healthErr: errs.New(errs.KindAgentNotFound, "missing")}
-	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
+	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -37,6 +37,38 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 	}
 }
 
+func TestControllerTaskHandlerFinalizesOwnershipFreeFailedRunner(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	runnerID := ids.NewAt(ids.KindRunner, now, 30)
+	tenantID := ids.NewAt(ids.KindTenant, now, 31)
+	task := etcd.TaskRecord{
+		ID: ids.NewAt(ids.KindTask, now, 32), Executor: etcd.TaskExecutorController,
+		Type: etcd.TaskRemove, Target: runnerID,
+		Params: map[string]string{
+			etcd.TaskResourceKindParam: etcd.TaskResourceRunner,
+			etcd.RunnerTenantIDParam:   tenantID, etcd.RunnerOwnerKindParam: string(etcd.RunnerOwnerTenant),
+			etcd.RunnerOwnerIDParam: tenantID, etcd.RunnerHostSlotParam: "1",
+			etcd.RunnerNetworkCIDRParam: "10.0.0.0/29",
+		},
+	}
+	runners := &fakeControllerTaskRunners{runner: etcd.Versioned[etcd.RunnerRecord]{Record: etcd.RunnerRecord{
+		RunnerLifecycleRecord: etcd.RunnerLifecycleRecord{
+			RunnerID: runnerID, ProvisioningState: etcd.RunnerProvisioningFailed,
+		},
+	}}}
+	handler, err := newControllerTaskHandler(
+		&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), runners,
+	)
+	if err != nil {
+		t.Fatalf("newControllerTaskHandler() error = %v", err)
+	}
+	if err := handler.Execute(context.Background(), task); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+}
+
 func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	t.Parallel()
 
@@ -44,7 +76,7 @@ func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	agents := &fakeControllerTaskLocalAgents{health: localagent.Health{Agent: localagent.Agent{
 		ID: task.Target, EnrollmentTaskID: task.ID, Phase: localagent.PhaseReady,
 	}}}
-	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
+	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -70,7 +102,7 @@ func TestLocalAgentControllerTaskHandlerRejectsAnotherEnrollmentOwner(t *testing
 		EnrollmentTaskID: ids.NewAt(ids.KindTask, task.CreatedAt.Add(time.Second), 22),
 		Phase:            localagent.PhaseReady,
 	}}}
-	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
+	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -85,7 +117,7 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 
 	task := testAgentEnrollmentTask()
 	task.Params["surprise"] = "value"
-	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t))
+	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -119,6 +151,18 @@ type fakeControllerTaskLocalAgents struct {
 	updateCalls    int
 	request        localagent.EnrollRequest
 	updateRequest  localagent.UpdateRequest
+}
+
+type fakeControllerTaskRunners struct {
+	runner etcd.Versioned[etcd.RunnerRecord]
+	err    error
+}
+
+func (runners *fakeControllerTaskRunners) GetRunner(
+	_ context.Context,
+	_ string,
+) (etcd.Versioned[etcd.RunnerRecord], error) {
+	return runners.runner, runners.err
 }
 
 func (agents *fakeControllerTaskLocalAgents) Enroll(

@@ -17,7 +17,7 @@ func TestControllerTaskHandlerExecutesExactAgentUpdate(t *testing.T) {
 	t.Parallel()
 
 	agents := &fakeControllerTaskLocalAgents{}
-	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
+	handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}
@@ -69,7 +69,7 @@ func TestControllerTaskHandlerRejectsUnclosedAgentUpdate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			agents := &fakeControllerTaskLocalAgents{}
-			handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t))
+			handler, err := newControllerTaskHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 			if err != nil {
 				t.Fatalf("newControllerTaskHandler() error = %v", err)
 			}
