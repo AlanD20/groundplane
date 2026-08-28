@@ -15,6 +15,7 @@ import (
 
 const (
 	agentTaskImageKey         = "image"
+	agentTaskEnrollmentKey    = "enrollment_task_id"
 	agentTaskPullIntervalKey  = "pull_interval_seconds"
 	agentTaskMaxConcurrentKey = "max_concurrent_tasks"
 	agentTaskLabelPrefix      = "label:"
@@ -224,7 +225,7 @@ func (handler *controllerTaskHandler) executeEnrollment(
 	if err != nil {
 		return err
 	}
-	if health.Agent.EnrollmentTaskID != task.ID {
+	if health.Agent.EnrollmentTaskID != request.EnrollmentTaskID {
 		return errs.New(errs.KindStateConflict, "local Agent belongs to another enrollment Task")
 	}
 	if health.Agent.Phase == localagent.PhaseDeleting {
@@ -237,7 +238,8 @@ func (handler *controllerTaskHandler) executeEnrollment(
 	if err != nil {
 		return err
 	}
-	if health.Agent.EnrollmentTaskID != task.ID || health.Agent.Phase != localagent.PhaseReady {
+	if health.Agent.EnrollmentTaskID != request.EnrollmentTaskID ||
+		health.Agent.Phase != localagent.PhaseReady {
 		return errs.New(errs.KindStateConflict, "local Agent enrollment did not reach Ready")
 	}
 	return nil
@@ -255,12 +257,13 @@ func (handler *controllerTaskHandler) executeRemoval(
 
 func decodeAgentEnrollmentTask(task etcd.TaskRecord) (localagent.EnrollRequest, error) {
 	request := localagent.EnrollRequest{
-		AgentID: task.Target, EnrollmentTaskID: task.ID,
-		Config: localagent.Config{Labels: map[string]string{}},
+		AgentID: task.Target,
+		Config:  localagent.Config{Labels: map[string]string{}},
 	}
 	required := map[string]bool{
 		etcd.TaskResourceKindParam: false, agentTaskImageKey: false,
-		agentTaskPullIntervalKey: false, agentTaskMaxConcurrentKey: false,
+		agentTaskEnrollmentKey: false, agentTaskPullIntervalKey: false,
+		agentTaskMaxConcurrentKey: false,
 	}
 	for key, value := range task.Params {
 		switch key {
@@ -271,6 +274,13 @@ func decodeAgentEnrollmentTask(task etcd.TaskRecord) (localagent.EnrollRequest, 
 			required[key] = true
 		case agentTaskImageKey:
 			request.Image = value
+			required[key] = true
+		case agentTaskEnrollmentKey:
+			if ids.Validate(ids.KindTask, value) != nil ||
+				(task.RetryOf == "" && value != task.ID) {
+				return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
+			}
+			request.EnrollmentTaskID = value
 			required[key] = true
 		case agentTaskPullIntervalKey:
 			parsed, err := parseCanonicalPositiveInt32(value)
@@ -301,10 +311,15 @@ func decodeAgentEnrollmentTask(task etcd.TaskRecord) (localagent.EnrollRequest, 
 	return request, nil
 }
 
-func agentEnrollmentTaskParams(image string, config localagent.Config) map[string]string {
+func agentEnrollmentTaskParams(
+	enrollmentTaskID string,
+	image string,
+	config localagent.Config,
+) map[string]string {
 	params := map[string]string{
 		etcd.TaskResourceKindParam: etcd.TaskResourceAgent,
 		agentTaskImageKey:          image,
+		agentTaskEnrollmentKey:     enrollmentTaskID,
 		agentTaskPullIntervalKey:   strconv.FormatInt(int64(config.PullIntervalSeconds), 10),
 		agentTaskMaxConcurrentKey:  strconv.FormatInt(int64(config.MaxConcurrentTasks), 10),
 	}

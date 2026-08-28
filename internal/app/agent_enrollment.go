@@ -209,13 +209,14 @@ func (service *agentEnrollmentService) newTask(
 	idempotencyKey string,
 ) (etcd.TaskRecord, error) {
 	agentID := ids.New(ids.KindAgent)
-	params := agentEnrollmentTaskParams(service.image, service.config)
+	taskID := ids.New(ids.KindTask)
+	params := agentEnrollmentTaskParams(taskID, service.image, service.config)
 	planHash, err := agentEnrollmentPlanHash(agentID, params)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
 	return etcd.TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
+		ID: taskID, OperationID: ids.New(ids.KindOperation),
 		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
 		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,

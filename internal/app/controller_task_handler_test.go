@@ -93,6 +93,37 @@ func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	}
 }
 
+func TestLocalAgentControllerTaskHandlerReconcilesEnrollmentRetry(t *testing.T) {
+	t.Parallel()
+
+	original := testAgentEnrollmentTask()
+	retry := original
+	retry.ID = ids.NewAt(ids.KindTask, original.CreatedAt.Add(time.Second), 23)
+	retry.RetryOf = original.ID
+	agents := &fakeControllerTaskLocalAgents{health: localagent.Health{Agent: localagent.Agent{
+		ID: retry.Target, EnrollmentTaskID: original.ID, Phase: localagent.PhaseReady,
+	}}}
+	handler, err := newControllerTaskHandler(
+		agents,
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+	)
+	if err != nil {
+		t.Fatalf("newControllerTaskHandler() error = %v", err)
+	}
+	if err := handler.Execute(context.Background(), retry); err != nil {
+		t.Fatalf("Execute(retry) error = %v", err)
+	}
+	if agents.enrollCalls != 0 || agents.reconcileCalls != 1 || agents.healthCalls != 2 {
+		t.Fatalf(
+			"retry calls = enroll %d, reconcile %d, health %d",
+			agents.enrollCalls,
+			agents.reconcileCalls,
+			agents.healthCalls,
+		)
+	}
+}
+
 func TestLocalAgentControllerTaskHandlerRejectsAnotherEnrollmentOwner(t *testing.T) {
 	t.Parallel()
 
@@ -131,14 +162,15 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 
 func testAgentEnrollmentTask() etcd.TaskRecord {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	taskID := ids.NewAt(ids.KindTask, now, 1)
 	config := localagent.Config{
 		PullIntervalSeconds: 2, MaxConcurrentTasks: 3,
 		Labels: map[string]string{"arch": "arm64"},
 	}
 	return etcd.TaskRecord{
-		ID: ids.NewAt(ids.KindTask, now, 1), Executor: etcd.TaskExecutorController,
+		ID: taskID, Executor: etcd.TaskExecutorController,
 		Type: etcd.TaskCreate, Target: ids.NewAt(ids.KindAgent, now, 2),
-		Params: agentEnrollmentTaskParams(testAppAgentImage, config), CreatedAt: now,
+		Params: agentEnrollmentTaskParams(taskID, testAppAgentImage, config), CreatedAt: now,
 	}
 }
 

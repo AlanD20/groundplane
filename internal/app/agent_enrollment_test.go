@@ -50,6 +50,7 @@ func TestAgentEnrollmentServiceCreatesControllerTaskFromBootstrapInput(t *testin
 		tasks.task.TimeoutSeconds != 120 || tasks.task.Status != etcd.TaskStatusPending ||
 		tasks.task.Target == "" || tasks.task.PlanHash == "" ||
 		tasks.task.Params[agentTaskImageKey] != testAppAgentImage ||
+		tasks.task.Params[agentTaskEnrollmentKey] != tasks.task.ID ||
 		tasks.task.Params[agentTaskLabelPrefix+"arch"] != "arm64" {
 		t.Fatalf("created Agent enrollment Task = %#v", tasks.task)
 	}
