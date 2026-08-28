@@ -105,15 +105,31 @@ func (token *RegistrationToken) clear() {
 }
 
 func (lifecycle *Lifecycle) Create(ctx context.Context, attempt Attempt, token *RegistrationToken) error {
+	_, err := lifecycle.CreateWithEvidence(ctx, attempt, token)
+	return err
+}
+
+func (lifecycle *Lifecycle) CreateWithEvidence(
+	ctx context.Context,
+	attempt Attempt,
+	token *RegistrationToken,
+) (RuntimeEvidence, error) {
 	if token == nil {
-		return errs.New(errs.KindValidationFailed, "runner registration token is required")
+		return RuntimeEvidence{}, errs.New(
+			errs.KindValidationFailed,
+			"runner registration token is required",
+		)
 	}
 	defer token.clear()
-	return lifecycle.execute(ctx, attempt, OperationCreate, runnerallocation.CreationRuntimeSteps(), token)
+	var evidence RuntimeEvidence
+	err := lifecycle.execute(
+		ctx, attempt, OperationCreate, runnerallocation.CreationRuntimeSteps(), token, &evidence,
+	)
+	return evidence, err
 }
 
 func (lifecycle *Lifecycle) Remove(ctx context.Context, attempt Attempt) error {
-	return lifecycle.execute(ctx, attempt, OperationRemove, runnerallocation.RemovalRuntimeSteps(), nil)
+	return lifecycle.execute(ctx, attempt, OperationRemove, runnerallocation.RemovalRuntimeSteps(), nil, nil)
 }
 
 func (lifecycle *Lifecycle) execute(
@@ -122,6 +138,7 @@ func (lifecycle *Lifecycle) execute(
 	operation Operation,
 	steps []runnerallocation.RunnerRuntimeStep,
 	token *RegistrationToken,
+	result *RuntimeEvidence,
 ) error {
 	if ctx == nil || ctx.Err() != nil || attempt.TaskID == "" || attempt.Plan.Digest() == "" {
 		return errs.New(errs.KindValidationFailed, "runner lifecycle attempt is invalid")
@@ -132,6 +149,12 @@ func (lifecycle *Lifecycle) execute(
 	}
 	if operation == OperationCreate && progress.Status == StatusReady ||
 		operation == OperationRemove && progress.Status == StatusRemoved {
+		if operation == OperationCreate {
+			if progress.Evidence == nil || !progress.Evidence.Valid() || result == nil {
+				return errs.New(errs.KindInternal, "runner ready journal is missing ownership evidence")
+			}
+			*result = *progress.Evidence
+		}
 		return nil
 	}
 	if progress.Status == StatusFailed {
@@ -185,6 +208,10 @@ func (lifecycle *Lifecycle) execute(
 	if progress.Evidence == nil || !progress.Evidence.Valid() {
 		return lifecycle.fail(ctx, progress, errs.New(errs.KindInternal, "runner runtime returned invalid ownership evidence"))
 	}
+	if result == nil {
+		return lifecycle.fail(ctx, progress, errs.New(errs.KindInternal, "runner creation evidence destination is missing"))
+	}
+	*result = *progress.Evidence
 	return lifecycle.journal.Ready(ctx, progress, *progress.Evidence)
 }
 
