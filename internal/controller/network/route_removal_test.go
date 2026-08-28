@@ -20,6 +20,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: a Route that never reached an enabled Caddy projection must
@@ -465,18 +467,19 @@ func TestRouteRemovalSelectsAgentCaddyPlanForAppliedRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewComponentRecord(edge) error = %v", err)
 	}
+	projection := etcd.EnvironmentComposeProjection{
+		EnvironmentID: repository.environment.Record.ID,
+		RevisionID:    ids.NewAt(ids.KindTask, at, 22), RenderGeneration: 7,
+		Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
+		Routes: []etcd.EnvironmentRouteIdentity{{
+			ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,
+			Path: repository.route.Record.Desired.Path,
+		}},
+		Components: []etcd.ComponentRecord{component, edge},
+	}
+	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
 	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
-		Record: etcd.EnvironmentComposeProjection{
-			EnvironmentID: repository.environment.Record.ID,
-			RevisionID:    ids.NewAt(ids.KindTask, at, 22), RenderGeneration: 7,
-			Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
-			Routes: []etcd.EnvironmentRouteIdentity{{
-				ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,
-				Path: repository.route.Record.Desired.Path,
-			}},
-			Components: []etcd.ComponentRecord{component, edge},
-		},
-		Revision: 15, ReadRevision: 15,
+		Record: projection, Revision: 15, ReadRevision: 15,
 	}
 	if _, err := service.RemoveRoute(
 		context.Background(), repository.route.Record.Desired.ID, "route-remove-key-0004",
@@ -516,18 +519,19 @@ func TestRouteRemovalPropagatesCaddyPlannerError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewComponentRecord(edge) error = %v", err)
 	}
+	projection := etcd.EnvironmentComposeProjection{
+		EnvironmentID: repository.environment.Record.ID,
+		RevisionID:    ids.NewAt(ids.KindTask, at, 32), RenderGeneration: 9,
+		Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
+		Routes: []etcd.EnvironmentRouteIdentity{{
+			ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,
+			Path: repository.route.Record.Desired.Path,
+		}},
+		Components: []etcd.ComponentRecord{component, edge},
+	}
+	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
 	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
-		Record: etcd.EnvironmentComposeProjection{
-			EnvironmentID: repository.environment.Record.ID,
-			RevisionID:    ids.NewAt(ids.KindTask, at, 32), RenderGeneration: 9,
-			Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
-			Routes: []etcd.EnvironmentRouteIdentity{{
-				ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,
-				Path: repository.route.Record.Desired.Path,
-			}},
-			Components: []etcd.ComponentRecord{component, edge},
-		},
-		Revision: 16, ReadRevision: 16,
+		Record: projection, Revision: 16, ReadRevision: 16,
 	}
 	plans.err = errs.New(errs.KindInternal, "injected Caddy planner failure")
 	_, err = service.RemoveRoute(
@@ -537,6 +541,26 @@ func TestRouteRemovalPropagatesCaddyPlannerError(t *testing.T) {
 	if !errors.Is(err, plans.err) || !ok || kind != errs.KindInternal || plans.calls != 1 || repository.begins != 0 {
 		t.Fatalf("RemoveRoute(planner failure) = %v, calls %d, begins %d", err, plans.calls, repository.begins)
 	}
+}
+
+func routeRemovalTestComposeArtifact(projection etcd.EnvironmentComposeProjection) []byte {
+	canonicalYAML := []byte("services: {}\n")
+	digest := sha256.Sum256(canonicalYAML)
+	services := make([]*agentpb.ComposeService, len(projection.Services))
+	for index, service := range projection.Services {
+		services[index] = &agentpb.ComposeService{ServiceId: service.ID, ComposeName: service.Name}
+	}
+	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:    projection.EnvironmentID, ProjectName: "groundplane-test",
+		CanonicalYaml: canonicalYAML, YamlSha256: digest[:],
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test", Services: services,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 // Rationale: compare conflicts are expected under concurrent Environment
