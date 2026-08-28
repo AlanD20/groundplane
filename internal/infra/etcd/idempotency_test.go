@@ -63,9 +63,9 @@ func TestIdempotencyMarkerCodecIsStrictAndTupleBound(t *testing.T) {
 	}
 }
 
-// Rationale: Task replay must always be the exact original canonical 202 body
-// and its task_id must equal the marker's stable Task reference.
-func TestIdempotencyTaskMarkerRequiresExactResponse(t *testing.T) {
+// Rationale: Task replay must preserve the exact original compact 202 body,
+// including endpoint-specific fields, and bind it to the marker's stable Task.
+func TestIdempotencyTaskMarkerRequiresCanonicalResponse(t *testing.T) {
 	t.Parallel()
 
 	marker := testDirectMarker()
@@ -81,6 +81,14 @@ func TestIdempotencyTaskMarkerRequiresExactResponse(t *testing.T) {
 	}
 	if _, err := encodeIdempotencyMarker(marker); err != nil {
 		t.Fatalf("encodeIdempotencyMarker(task) error = %v", err)
+	}
+	marker.Response.Body = []byte(`{"task_id":"` + marker.TaskID + `","operation_id":"op_01M12TQSNE508NMQWCJQWEW4MZ","release_id":"dep_01M12TQSNE508NMQWCKBCJGEEW"}`)
+	if _, err := encodeIdempotencyMarker(marker); err != nil {
+		t.Fatalf("encodeIdempotencyMarker(endpoint-specific task) error = %v", err)
+	}
+	marker.Response.Body = []byte(`{"task_id":"task_01M12TQSNE508NMQWCJRYKK0Y8"}`)
+	if _, err := encodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {
+		t.Fatalf("mismatched Task response error = %v, want internal", err)
 	}
 	marker.Response.Body = []byte(`{ "task_id": "` + marker.TaskID + `" }`)
 	if _, err := encodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {

@@ -432,10 +432,17 @@ func validTaskResponse(response IdempotencyResponse, taskID string) bool {
 	if response.Status != http.StatusAccepted || response.ContentKind != "application/json" {
 		return false
 	}
-	want, _ := json.Marshal(struct {
+	var body struct {
 		TaskID string `json:"task_id"`
-	}{TaskID: taskID})
-	return bytes.Equal(response.Body, want)
+	}
+	if err := json.Unmarshal(response.Body, &body); err != nil || body.TaskID != taskID {
+		return false
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, response.Body); err != nil {
+		return false
+	}
+	return bytes.Equal(response.Body, compact.Bytes())
 }
 
 func encodeIdempotencyMarker(marker IdempotencyMarker) ([]byte, error) {
