@@ -28,7 +28,7 @@ const agentChannelTransportTestAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 func TestAgentChannelRuntimeServesUDSAndFailsClosedWithoutAuthenticator(t *testing.T) {
 	socketPath := shortUnixSocketPath(t)
 	listening := make(chan struct{})
-	runtime := newAgentChannelRuntime(nil, nil, nil, nil, nil)
+	runtime := newAgentChannelRuntime(nil, nil, nil, nil, nil, nil)
 	runtime.listen = func(context.Context) (net.Listener, error) {
 		listener, err := net.Listen("unix", socketPath)
 		if err == nil {
@@ -230,7 +230,7 @@ func startAgentChannelTransportRuntime(
 	t.Helper()
 	socketPath := shortUnixSocketPath(t)
 	listening := make(chan struct{})
-	runtime := newAgentChannelRuntime(authenticator, nil, nil, nil, nil)
+	runtime := newAgentChannelRuntime(authenticator, nil, nil, nil, nil, nil)
 	runtime.listen = func(context.Context) (net.Listener, error) {
 		listener, err := net.Listen("unix", socketPath)
 		if err == nil {
