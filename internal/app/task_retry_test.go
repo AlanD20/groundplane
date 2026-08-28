@@ -25,6 +25,24 @@ type fakeTaskRetryRepository struct {
 	mutationCalls int
 }
 
+type fakeBackupTaskRetryer struct {
+	sourceID string
+	retryID  string
+	marker   etcd.IdempotencyMarker
+}
+
+func (retryer *fakeBackupTaskRetryer) RetryBackupTask(
+	_ context.Context,
+	sourceID string,
+	retryID string,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	retryer.sourceID = sourceID
+	retryer.retryID = retryID
+	retryer.marker = marker
+	return etcd.IdempotencyTransactionResult{}, nil
+}
+
 func (repository *fakeTaskRetryRepository) GetTask(
 	context.Context,
 	string,
@@ -67,7 +85,7 @@ func TestTaskRetryRejectsInternalBackupPruneBeforeIntentOrMutation(t *testing.T)
 		scope: etcd.TaskRetryScope{Kind: etcd.IdempotencyScopeEnvironment, ID: environmentID},
 	}
 	idempotency := &fakeTaskRetryIdempotency{}
-	service, err := newTaskRetryService(repository, idempotency)
+	service, err := newTaskRetryService(repository, idempotency, &fakeBackupTaskRetryer{})
 	if err != nil {
 		t.Fatalf("newTaskRetryService() error = %v", err)
 	}
@@ -146,7 +164,7 @@ func TestTaskRetryUsesSourceOwnerAndReturnsNewAttempt(t *testing.T) {
 		Kind: etcd.IdempotencyScopeEnvironment, ID: environmentID,
 	}}
 	idempotency := &fakeTaskRetryIdempotency{}
-	service, err := newTaskRetryService(repository, idempotency)
+	service, err := newTaskRetryService(repository, idempotency, &fakeBackupTaskRetryer{})
 	if err != nil {
 		t.Fatalf("newTaskRetryService() error = %v", err)
 	}
@@ -170,6 +188,38 @@ func TestTaskRetryUsesSourceOwnerAndReturnsNewAttempt(t *testing.T) {
 	}
 }
 
+func TestTaskRetryDelegatesBackupToDomainProtocol(t *testing.T) {
+	const sourceID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	repository := &fakeTaskRetryRepository{
+		task: etcd.TaskRecord{ID: sourceID, Type: etcd.TaskBackup, Status: etcd.TaskStatusFailed},
+		scope: etcd.TaskRetryScope{
+			Kind: etcd.IdempotencyScopeEnvironment,
+			ID:   environmentID,
+		},
+	}
+	retryer := &fakeBackupTaskRetryer{}
+	service, err := newTaskRetryService(repository, &fakeTaskRetryIdempotency{}, retryer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+	response, err := service.RetryTask(context.Background(), sourceID, "backup-retry-key-0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var accepted apiTypes.TaskAccepted
+	if err := json.Unmarshal(response.Body, &accepted); err != nil {
+		t.Fatal(err)
+	}
+	if repository.mutationCalls != 0 || retryer.sourceID != sourceID ||
+		retryer.retryID != accepted.TaskID || retryer.marker.TaskID != accepted.TaskID ||
+		retryer.marker.CreatedAt != now {
+		t.Fatalf("backup retry delegation = %#v/%#v/%d", retryer, accepted, repository.mutationCalls)
+	}
+}
+
 func TestSystemTaskRetryUsesImmediateSourceOwnerScope(t *testing.T) {
 	// Rationale: cascade authority changes the actor and parent fence, never the
 	// durable owner used to scope retry idempotency.
@@ -179,7 +229,7 @@ func TestSystemTaskRetryUsesImmediateSourceOwnerScope(t *testing.T) {
 		Kind: etcd.IdempotencyScopeProject, ID: projectID,
 	}}
 	idempotency := &fakeTaskRetryIdempotency{}
-	service, err := newTaskRetryService(repository, idempotency)
+	service, err := newTaskRetryService(repository, idempotency, &fakeBackupTaskRetryer{})
 	if err != nil {
 		t.Fatalf("newTaskRetryService() error = %v", err)
 	}

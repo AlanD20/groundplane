@@ -46,6 +46,19 @@ type BackupRunPrepared struct {
 	Publication backupRunPublication
 }
 
+type BackupRunRetryPrepareInput struct {
+	SourceTaskID string
+	TaskID       string
+	CreatedAt    time.Time
+}
+
+type BackupRunRetryPrepared struct {
+	SourceTask  etcd.TaskRecord
+	Run         etcd.BackupRunRecord
+	Owner       etcd.TaskOwner
+	Publication backupRunPublication
+}
+
 type backupRunPublication interface {
 	Publish(
 		context.Context,
@@ -61,6 +74,27 @@ type backupRunPublication interface {
 // idempotency coordinator has completed ResolveExisting.
 type BackupRunRepository interface {
 	PrepareBackupRun(context.Context, BackupRunPrepareInput) (BackupRunPrepared, error)
+	PrepareBackupRunRetry(context.Context, BackupRunRetryPrepareInput) (BackupRunRetryPrepared, error)
+}
+
+func (repository *durableBackupRunRepository) PrepareBackupRunRetry(
+	ctx context.Context,
+	input BackupRunRetryPrepareInput,
+) (BackupRunRetryPrepared, error) {
+	prepared, err := repository.runtime.PrepareBackupRunRetry(ctx, etcd.BackupRunRetryInput{
+		SourceTaskID: input.SourceTaskID,
+		TaskID:       input.TaskID,
+		CreatedAt:    input.CreatedAt,
+	})
+	if err != nil {
+		return BackupRunRetryPrepared{}, err
+	}
+	return BackupRunRetryPrepared{
+		SourceTask:  prepared.SourceTask,
+		Run:         prepared.Run,
+		Owner:       prepared.Owner,
+		Publication: prepared.Publication,
+	}, nil
 }
 
 type durableBackupRunRepository struct {
@@ -299,6 +333,62 @@ func (service *BackupRunService) RunScheduledBackup(
 		ctx, environmentID, key, scheduledBackupRunRoute,
 		etcd.BackupRunInitiatorSchedule, &scheduledAt, evaluatedAt, fixedRevision...,
 	)
+}
+
+func (service *BackupRunService) RetryBackupTask(
+	ctx context.Context,
+	sourceTaskID string,
+	retryTaskID string,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	if service == nil || service.repository == nil || service.plans == nil {
+		return etcd.IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"backup run service is not configured",
+		)
+	}
+	planID := ids.New(ids.KindPlan)
+	prepared, err := service.repository.PrepareBackupRunRetry(ctx, BackupRunRetryPrepareInput{
+		SourceTaskID: sourceTaskID,
+		TaskID:       retryTaskID,
+		CreatedAt:    marker.CreatedAt,
+	})
+	if err != nil {
+		return etcd.IdempotencyTransactionResult{}, err
+	}
+	defer prepared.Publication.Clear()
+	steps := make([]etcd.TaskStepRecord, len(prepared.Run.Sources))
+	for index := range steps {
+		steps[index] = etcd.TaskStepRecord{ID: ids.New(ids.KindStep)}
+	}
+	task := etcd.TaskRecord{
+		ID:                retryTaskID,
+		OperationID:       prepared.SourceTask.OperationID,
+		RetryOf:           sourceTaskID,
+		IdempotencyKey:    prepared.SourceTask.IdempotencyKey,
+		Owner:             prepared.Owner,
+		Actor:             etcd.TaskActorOperator,
+		Executor:          etcd.TaskExecutorAgent,
+		PlanID:            planID,
+		Type:              etcd.TaskBackup,
+		Target:            prepared.Run.EnvironmentID,
+		Steps:             steps,
+		TimeoutSeconds:    backupRunTaskTimeoutSeconds,
+		Status:            etcd.TaskStatusPending,
+		NextEventSequence: 1,
+		CreatedAt:         marker.CreatedAt,
+		UpdatedAt:         marker.CreatedAt,
+	}
+	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{
+		Task:   task,
+		Run:    prepared.Run,
+		Upload: BackupRunUploadAuthorities(prepared.Run),
+	})
+	if err != nil {
+		return etcd.IdempotencyTransactionResult{}, err
+	}
+	task.PlanHash = hex.EncodeToString(sealed.PlanHash)
+	return prepared.Publication.Publish(ctx, task, sealed, marker)
 }
 
 func (service *BackupRunService) runBackup(

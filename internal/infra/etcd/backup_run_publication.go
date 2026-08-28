@@ -748,7 +748,8 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	task, taskErr := decodeTaskRecord(read.Values[1].Value)
 	if taskErr != nil || task.ID != marker.TaskID || task.Type != TaskBackup ||
 		(task.Actor != TaskActorOperator && task.Actor != TaskActorSystem) || task.Executor != TaskExecutorAgent ||
-		task.IdempotencyKey != marker.Locator.Key || task.idempotencyMarker == nil ||
+		(task.RetryOf == "" && task.IdempotencyKey != marker.Locator.Key) ||
+		task.idempotencyMarker == nil ||
 		*task.idempotencyMarker != marker.Locator || task.Owner.EnvironmentID != marker.Locator.ScopeID {
 		return corruptBackupRuntimeRecord()
 	}
@@ -769,8 +770,9 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	run, runErr := decodeBackupRunRecord(read.Values[0].Value)
 	lock, lockErr := decodeBackupOperationLockRecord(read.Values[2].Value)
 	if runErr != nil || lockErr != nil || validateBackupRunTaskBinding(task, run) != nil ||
-		(run.Initiator == BackupRunInitiatorOperator && task.Actor != TaskActorOperator) ||
-		(run.Initiator == BackupRunInitiatorSchedule && task.Actor != TaskActorSystem) ||
+		(run.RetryOfTaskID != "" && task.Actor != TaskActorOperator) ||
+		(run.RetryOfTaskID == "" && run.Initiator == BackupRunInitiatorOperator && task.Actor != TaskActorOperator) ||
+		(run.RetryOfTaskID == "" && run.Initiator == BackupRunInitiatorSchedule && task.Actor != TaskActorSystem) ||
 		lock.TaskID != marker.TaskID || lock.OperationID != run.OperationID ||
 		lock.EnvironmentID != run.EnvironmentID || lock.Kind != BackupOperationBackup ||
 		!lock.CreatedAt.Equal(run.CreatedAt) || !lock.UpdatedAt.Equal(lock.CreatedAt) {
@@ -805,7 +807,7 @@ func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 			return corruptBackupRuntimeRecord()
 		}
 	}
-	if run.Initiator == BackupRunInitiatorSchedule &&
+	if run.RetryOfTaskID == "" && run.Initiator == BackupRunInitiatorSchedule &&
 		!repository.exactScheduledBackupRunSubordinates(ctx, run, readRevision, commitRevision) {
 		return corruptBackupRuntimeRecord()
 	}
@@ -1254,9 +1256,11 @@ func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 		if err != nil {
 			return false
 		}
-		if len(read.Values) != len(keys) || read.Values[0] == nil ||
+		primaryRevisionValid := read.Values[0] != nil &&
+			((run.RetryOfTaskID == "" && read.Values[0].ModRevision >= publicationRevision) ||
+				run.RetryOfTaskID != "")
+		if len(read.Values) != len(keys) || !primaryRevisionValid ||
 			read.Values[1] == nil || read.Values[2] == nil ||
-			read.Values[0].ModRevision < publicationRevision ||
 			read.Values[1].ModRevision != publicationRevision ||
 			read.Values[2].ModRevision != publicationRevision ||
 			string(read.Values[1].Value) != snapshot.ConfigSnapshotID ||
@@ -1266,10 +1270,12 @@ func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 		}
 		stored, decodeErr := decodeBackupConfigSnapshotRecord(read.Values[0].Value)
 		clearKeyValues(read.Values)
+		createdAtValid := (run.RetryOfTaskID == "" && stored.CreatedAt.Equal(run.CreatedAt)) ||
+			(run.RetryOfTaskID != "" && stored.CreatedAt.Before(run.CreatedAt))
 		if decodeErr != nil || stored.SnapshotID != snapshot.ConfigSnapshotID ||
 			stored.EnvironmentID != run.EnvironmentID || stored.SourceID != source.SourceID ||
 			stored.State == BackupConfigSnapshotUninitialized ||
-			stored.ReadRevision != snapshot.ReadRevision || !stored.CreatedAt.Equal(run.CreatedAt) {
+			stored.ReadRevision != snapshot.ReadRevision || !createdAtValid {
 			return false
 		}
 	}

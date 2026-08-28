@@ -35,6 +35,15 @@ type taskRetryRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
+type backupTaskRetryer interface {
+	RetryBackupTask(
+		context.Context,
+		string,
+		string,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
 type taskRetryEvidence struct {
 	candidate idempotentintent.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
@@ -128,17 +137,24 @@ func (service *durableTaskRetryIdempotency) ResolveUnknown(
 type taskRetryService struct {
 	repository  taskRetryRepository
 	idempotency taskRetryIdempotency
+	backups     backupTaskRetryer
 	now         func() time.Time
 }
 
 func newTaskRetryService(
 	repository taskRetryRepository,
 	idempotency taskRetryIdempotency,
+	backups backupTaskRetryer,
 ) (*taskRetryService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || idempotency == nil || backups == nil {
 		return nil, errs.New(errs.KindInternal, "task retry service is not configured")
 	}
-	return &taskRetryService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+	return &taskRetryService{
+		repository:  repository,
+		idempotency: idempotency,
+		backups:     backups,
+		now:         time.Now,
+	}, nil
 }
 
 func (service *taskRetryService) RetryTask(
@@ -226,7 +242,17 @@ func (service *taskRetryService) retryTask(
 	}
 	var result etcd.IdempotencyTransactionResult
 	var retryErr error
-	if initiation == nil {
+	if source.Record.Type == etcd.TaskBackup {
+		if initiation != nil {
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindTaskNotRetryable,
+				"backup Tasks do not accept system retry initiation",
+			)
+		}
+		result, retryErr = service.backups.RetryBackupTask(
+			ctx, sourceTaskID, retryTaskID, marker,
+		)
+	} else if initiation == nil {
 		result, retryErr = service.repository.RetryTask(
 			ctx, sourceTaskID, retryTaskID, etcd.TaskActorOperator, marker,
 		)

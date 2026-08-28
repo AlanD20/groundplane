@@ -34,6 +34,13 @@ func (repository *backupRunReplayRepository) PrepareBackupRun(
 	return BackupRunPrepared{}, nil
 }
 
+func (*backupRunReplayRepository) PrepareBackupRunRetry(
+	context.Context,
+	BackupRunRetryPrepareInput,
+) (BackupRunRetryPrepared, error) {
+	return BackupRunRetryPrepared{}, nil
+}
+
 type backupRunReplayPlans struct{}
 
 func (backupRunReplayPlans) BuildBackupRunPlan(
@@ -124,6 +131,13 @@ func (repository *backupRunServiceRepository) PrepareBackupRun(
 		},
 		Publication: repository.publication,
 	}, nil
+}
+
+func (*backupRunServiceRepository) PrepareBackupRunRetry(
+	context.Context,
+	BackupRunRetryPrepareInput,
+) (BackupRunRetryPrepared, error) {
+	return BackupRunRetryPrepared{}, nil
 }
 
 type backupRunServicePlans struct{}

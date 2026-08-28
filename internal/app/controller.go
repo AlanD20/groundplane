@@ -811,7 +811,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry idempotency: %w", err)
 	}
-	taskMutations, err := newTaskRetryService(tasks, taskRetryIdempotency)
+	taskMutations, err := newTaskRetryService(tasks, taskRetryIdempotency, backupRuns)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)

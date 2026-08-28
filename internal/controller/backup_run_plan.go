@@ -176,12 +176,19 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 			"backup run task must be agent-executed",
 		)
 	}
-	switch run.Initiator {
-	case etcd.BackupRunInitiatorOperator:
+	switch {
+	case run.RetryOfTaskID != "":
+		if task.Actor != etcd.TaskActorOperator || task.RetryOf != run.RetryOfTaskID {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"backup retry task must be operator-acted and name its source",
+			)
+		}
+	case run.Initiator == etcd.BackupRunInitiatorOperator:
 		if task.Actor != etcd.TaskActorOperator {
 			return nil, errs.New(errs.KindValidationFailed, "operator backup run task must be operator-acted")
 		}
-	case etcd.BackupRunInitiatorSchedule:
+	case run.Initiator == etcd.BackupRunInitiatorSchedule:
 		if task.Actor != etcd.TaskActorSystem {
 			return nil, errs.New(errs.KindValidationFailed, "scheduled backup run task must be system-acted")
 		}
@@ -198,7 +205,7 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 		)
 	}
 	if task.ID == "" || task.OperationID == "" || task.PlanID == "" || run.TaskID != task.ID ||
-		run.OperationID != task.OperationID {
+		run.OperationID != task.OperationID || task.RetryOf != run.RetryOfTaskID {
 		return nil, errs.New(
 			errs.KindValidationFailed,
 			"backup run task and run identities do not match",
@@ -385,13 +392,13 @@ func backupRunCapture(
 		KeyEra:            uint64(run.KeyEra),
 		AgeRecipient:      run.Recipient,
 		Upload: &agentpb.BackupUploadAuthority{
-			ConnectorEndpoint:            upload.ConnectorEndpoint,
-			ConnectorBucket:              upload.ConnectorBucket,
-			ConnectorPrefix:              upload.ConnectorPrefix,
-			ConnectorRegion:              upload.ConnectorRegion,
-			ConnectorAddressing:          backupRunPlanAddressing(upload.ConnectorAddressing),
-			ProtectedObjectKey:           upload.ObjectKey,
-			ImmutableCreate:              upload.ImmutableCreate,
+			ConnectorEndpoint:           upload.ConnectorEndpoint,
+			ConnectorBucket:             upload.ConnectorBucket,
+			ConnectorPrefix:             upload.ConnectorPrefix,
+			ConnectorRegion:             upload.ConnectorRegion,
+			ConnectorAddressing:         backupRunPlanAddressing(upload.ConnectorAddressing),
+			ProtectedObjectKey:          upload.ObjectKey,
+			ImmutableCreate:             upload.ImmutableCreate,
 			PutAfterArtifactPreparedAck: upload.PutAfterArtifactPreparedAck,
 			HeadAfterUploadCompletedAck: upload.HeadAfterUploadCompletedAck,
 		},
