@@ -160,6 +160,7 @@ func (ledger *ReleaseLedger) Publish(
 	if err := ctx.Err(); err != nil {
 		return ReleasePublicationResult{}, err
 	}
+	evidence.Task.idempotencyMarker = cloneIdempotencyLocator(&evidence.Marker.Locator)
 	if err := validateReleasePublicationEvidence(evidence); err != nil {
 		return ReleasePublicationResult{}, err
 	}
