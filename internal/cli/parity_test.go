@@ -16,18 +16,19 @@ import (
 
 func TestRouterShowRequestsEnvironmentProjection(t *testing.T) {
 	t.Parallel()
+	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 	server := exactRequestServer(
 		t,
 		http.MethodGet,
-		"/api/v1/environments/production/router",
+		"/api/v1/environments/"+environmentID+"/router",
 		"",
 		http.StatusOK,
 		`{}`,
 	)
 	defer server.Close()
 
-	output := executeNoun(t, newRouterCmd(), server.URL, Scope{Environment: "production"}, "show")
+	output := executeNoun(t, newRouterCmd(), server.URL, Scope{Environment: environmentID, AsID: true}, "show")
 	if output != "{}\n" {
 		t.Fatalf("output = %q, want %q", output, "{}\n")
 	}
@@ -355,7 +356,11 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := exactRequestServer(t, test.method, test.path, "", test.status, test.response)
+			body := ""
+			if test.name == "config set" {
+				body = `{"config":{}}`
+			}
+			server := exactRequestServer(t, test.method, test.path, body, test.status, test.response)
 			defer server.Close()
 			executeNoun(t, newComponentCmd(), server.URL, Scope{}, test.args...)
 		})
