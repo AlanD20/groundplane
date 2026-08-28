@@ -1509,7 +1509,24 @@ func connectorDeletionPolicyCandidate(
 	if err != nil {
 		t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 	}
-	return backupPolicyReplacementCandidate{
+	coordinationValue, err := fixture.store.Get(
+		context.Background(), environmentCoordinationKey(fixture.environment.Record.ID),
+	)
+	if err != nil || coordinationValue == nil {
+		t.Fatalf("get Environment coordination = %#v, %v", coordinationValue, err)
+	}
+	coordination := EnvironmentCoordinationRecord{
+		EnvironmentID: fixture.environment.Record.ID, ScheduleClockFloor: fixture.now,
+	}
+	coordinationRevision := int64(0)
+	if coordinationValue.Entry != nil {
+		coordination, err = decodeEnvironmentCoordinationRecord(coordinationValue.Entry.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		coordinationRevision = coordinationValue.Entry.ModRevision
+	}
+	candidate := backupPolicyReplacementCandidate{
 		Environment: fixture.environment,
 		Project:     fixture.project,
 		MutationEpoch: mustBackupPolicyMutationEpoch(
@@ -1517,6 +1534,9 @@ func connectorDeletionPolicyCandidate(
 			fixture.store,
 			fixture.environment.Record.ID,
 		),
+		Coordination: Versioned[EnvironmentCoordinationRecord]{
+			Record: coordination, Revision: coordinationRevision, ReadRevision: coordinationValue.ReadRevision,
+		},
 		Replacement: BackupPolicyRecord{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,
@@ -1567,6 +1587,10 @@ func connectorDeletionPolicyCandidate(
 			},
 		},
 	}
+	if err := sealBackupPolicyCandidateSchedule(&candidate, fixture.now); err != nil {
+		t.Fatal(err)
+	}
+	return candidate
 }
 
 func connectorDeletionRequiredKey(
