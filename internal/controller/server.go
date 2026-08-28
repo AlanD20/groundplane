@@ -66,6 +66,7 @@ type Server struct {
 	connectorMutations      ConnectorMutator
 	connectorDeletions      ConnectorDeleter
 	runners                 RunnerReader
+	runnerMutations         RunnerMutator
 	backupPolicies          BackupPolicyReader
 	backupPolicyMutations   BackupPolicyMutator
 	recoveryPoints          RecoveryPointReader
@@ -124,6 +125,7 @@ type Options struct {
 	ConnectorMutations      ConnectorMutator
 	ConnectorDeletions      ConnectorDeleter
 	Runners                 RunnerReader
+	RunnerMutations         RunnerMutator
 	BackupPolicies          BackupPolicyReader
 	BackupPolicyMutations   BackupPolicyMutator
 	RecoveryPoints          RecoveryPointReader
@@ -195,6 +197,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		connectorMutations:      options.ConnectorMutations,
 		connectorDeletions:      options.ConnectorDeletions,
 		runners:                 options.Runners,
+		runnerMutations:         options.RunnerMutations,
 		backupPolicies:          options.BackupPolicies,
 		backupPolicyMutations:   options.BackupPolicyMutations,
 		recoveryPoints:          options.RecoveryPoints,

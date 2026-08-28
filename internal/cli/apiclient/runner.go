@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -84,6 +85,26 @@ func (c *Client) ShowRunner(ctx context.Context, id string) (apiTypes.Runner, er
 	return generatedRunnerBody(http.MethodGet, path, response.Body, response.JSON200)
 }
 
+func (c *Client) EditRunner(ctx context.Context, id, slug string) (apiTypes.Runner, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.Runner{}, err
+	}
+	path := "/api/v1/runners/" + id
+	params := &generated.RunnerEditParams{IdempotencyKey: ids.NewULID()}
+	body := generated.RunnerEditJSONRequestBody{Slug: slug}
+	response, err := client.RunnerEditWithResponse(ctx, id, params, body)
+	if err != nil {
+		return apiTypes.Runner{}, generatedCallError(ctx, http.MethodPatch, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPatch, path, response.HTTPResponse, response.Body, http.StatusOK,
+	); err != nil {
+		return apiTypes.Runner{}, err
+	}
+	return generatedRunnerBody(http.MethodPatch, path, response.Body, response.JSON200)
+}
+
 func runnerFromGenerated(runner generated.Runner) apiTypes.Runner {
 	projectID := ""
 	if runner.ProjectId != nil {
@@ -94,8 +115,11 @@ func runnerFromGenerated(runner generated.Runner) apiTypes.Runner {
 		labels = append(labels, (*runner.Labels)...)
 	}
 	return apiTypes.Runner{
-		ID: runner.Id, TenantID: runner.TenantId, ProjectID: projectID,
-		Labels: labels, Online: runner.Online,
+		ID: runner.Id, Slug: runner.Slug, TenantID: runner.TenantId, ProjectID: projectID,
+		GitHubURL: runner.GithubUrl, Name: runner.Name, Labels: labels,
+		Lifecycle: apiTypes.RunnerLifecycle(runner.Lifecycle), CreateTaskID: runner.CreateTaskId,
+		RemoveTaskID: runner.RemoveTaskId, Online: runner.Online,
+		ObservedAt: runner.ObservedAt, CreatedAt: runner.CreatedAt,
 	}
 }
 

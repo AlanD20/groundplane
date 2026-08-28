@@ -32,6 +32,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
+	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
@@ -453,6 +454,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
+	runnerMutations, err := runnercapability.NewMutationService(runnerRecords, idempotency, intentCoordinator)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Runner mutation service: %w", err)
 	}
 	releaseGroupMutations, err := newReleaseGroupMutationService(
 		releaseGroups, hierarchyRecords, tasks, idempotency, intentCoordinator,
@@ -1155,6 +1161,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ConnectorMutations:    connectorMutations,
 		ConnectorDeletions:    connectorDeletions,
 		Runners:               runnerRecords,
+		RunnerMutations:       runnerMutations,
 		BackupPolicies:        backupPolicies,
 		BackupPolicyMutations: backupPolicies,
 		RecoveryPoints:        backupPointReads,

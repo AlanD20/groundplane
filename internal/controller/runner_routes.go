@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,6 +15,11 @@ type RunnerReader interface {
 	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
 	ListRunners(context.Context, etcd.RunnerFilter, etcd.PageRequest) (etcd.Page[etcd.RunnerRecord], error)
 	GetRunnerObservation(context.Context, string) (etcd.Versioned[etcd.RunnerObservationRecord], bool, error)
+	GetRunnerDeletionTombstone(context.Context, string) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error)
+}
+
+type RunnerMutator interface {
+	RenameRunner(context.Context, string, apiTypes.RunnerEditRequest, string) (etcd.IdempotencyResponse, error)
 }
 
 type runnerListInput struct {
@@ -44,6 +50,7 @@ func (s *Server) registerRunners() {
 		OperationID: "runner.show", Method: http.MethodGet, Path: "/runners/{id}",
 		Summary: "Show a managed runner", Tags: []string{"Runner"},
 	}, s.showRunner)
+	s.registerRunnerEdit()
 }
 
 func (s *Server) listRunners(
@@ -64,11 +71,11 @@ func (s *Server) listRunners(
 	}
 	items := make([]apiTypes.Runner, len(page.Items))
 	for index, item := range page.Items {
-		online, err := s.runnerOnline(ctx, item.Record.Desired.ID)
+		projection, err := s.runnerProjection(ctx, item.Record)
 		if err != nil {
 			return nil, normalizeProjectError(err)
 		}
-		items[index] = runnerResponse(item.Record, online)
+		items[index] = projection
 	}
 	return &runnerPageOutput{Body: apiTypes.Page[apiTypes.Runner]{
 		Items: items, NextCursor: page.NextCursor,
@@ -86,28 +93,29 @@ func (s *Server) showRunner(
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	online, err := s.runnerOnline(ctx, runner.Record.Desired.ID)
+	projection, err := s.runnerProjection(ctx, runner.Record)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &runnerOutput{Body: runnerResponse(runner.Record, online)}, nil
+	return &runnerOutput{Body: projection}, nil
 }
 
-func (s *Server) runnerOnline(ctx context.Context, runnerID string) (bool, error) {
-	observation, found, err := s.runners.GetRunnerObservation(ctx, runnerID)
-	if err != nil || !found {
-		return false, err
+func (s *Server) runnerProjection(ctx context.Context, record etcd.RunnerRecord) (apiTypes.Runner, error) {
+	observation, observed, err := s.runners.GetRunnerObservation(ctx, record.Desired.ID)
+	if err != nil {
+		return apiTypes.Runner{}, err
 	}
-	return observation.Record.Online, nil
-}
-
-func runnerResponse(record etcd.RunnerRecord, online bool) apiTypes.Runner {
-	projectID := ""
-	if record.Desired.OwnerKind == etcd.RunnerOwnerProject {
-		projectID = record.Desired.OwnerID
+	tombstone, deleting, err := s.runners.GetRunnerDeletionTombstone(ctx, record.Desired.ID)
+	if err != nil {
+		return apiTypes.Runner{}, err
 	}
-	return apiTypes.Runner{
-		ID: record.Desired.ID, TenantID: record.Desired.TenantID, ProjectID: projectID,
-		Labels: append([]string(nil), record.Desired.Labels...), Online: online,
+	var observationRecord *etcd.RunnerObservationRecord
+	if observed {
+		observationRecord = &observation.Record
 	}
+	var tombstoneRecord *etcd.DeletionTombstoneRecord
+	if deleting {
+		tombstoneRecord = &tombstone.Record
+	}
+	return runnercapability.PublicProjection(record, observationRecord, tombstoneRecord)
 }

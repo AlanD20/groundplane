@@ -91,7 +91,7 @@ func TestRunnerTenantSlugIndexAndReplacementReplay(t *testing.T) {
 	}
 	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil ||
 		outcome != IdempotencyKnownConflict ||
-		!isKind(conflict, errs.KindSlugConflict) {
+		!isKind(conflict, errs.KindRunnerSlugConflict) {
 		t.Fatalf("slug collision = %v, %v, %v", outcome, conflict, classifyErr)
 	}
 

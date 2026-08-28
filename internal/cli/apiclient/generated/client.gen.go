@@ -232,6 +232,30 @@ func (e RouteEditExposure) Valid() bool {
 	}
 }
 
+// Defines values for RunnerLifecycle.
+const (
+	RunnerLifecycleDeleting     RunnerLifecycle = "deleting"
+	RunnerLifecycleFailed       RunnerLifecycle = "failed"
+	RunnerLifecycleProvisioning RunnerLifecycle = "provisioning"
+	RunnerLifecycleReady        RunnerLifecycle = "ready"
+)
+
+// Valid indicates whether the value is a known member of the RunnerLifecycle enum.
+func (e RunnerLifecycle) Valid() bool {
+	switch e {
+	case RunnerLifecycleDeleting:
+		return true
+	case RunnerLifecycleFailed:
+		return true
+	case RunnerLifecycleProvisioning:
+		return true
+	case RunnerLifecycleReady:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskActor.
 const (
 	Operator TaskActor = "operator"
@@ -1380,12 +1404,32 @@ type Runner struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Runner.json
-	Schema    *string   `json:"$schema,omitempty"`
-	Id        string    `json:"id"`
-	Labels    *[]string `json:"labels,omitempty"`
-	Online    bool      `json:"online"`
-	ProjectId *string   `json:"project_id,omitempty"`
-	TenantId  string    `json:"tenant_id"`
+	Schema       *string         `json:"$schema,omitempty"`
+	CreateTaskId string          `json:"create_task_id"`
+	CreatedAt    string          `json:"created_at"`
+	GithubUrl    string          `json:"github_url"`
+	Id           string          `json:"id"`
+	Labels       *[]string       `json:"labels,omitempty"`
+	Lifecycle    RunnerLifecycle `json:"lifecycle"`
+	Name         string          `json:"name"`
+	ObservedAt   *string         `json:"observed_at"`
+	Online       bool            `json:"online"`
+	ProjectId    *string         `json:"project_id,omitempty"`
+	RemoveTaskId *string         `json:"remove_task_id"`
+	Slug         string          `json:"slug"`
+	TenantId     string          `json:"tenant_id"`
+}
+
+// RunnerLifecycle defines model for Runner.Lifecycle.
+type RunnerLifecycle string
+
+// RunnerEditRequest defines model for RunnerEditRequest.
+type RunnerEditRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RunnerEditRequest.json
+	Schema *string `json:"$schema,omitempty"`
+	Slug   string  `json:"slug"`
 }
 
 // Script defines model for Script.
@@ -2164,6 +2208,11 @@ type RunnerListParams struct {
 	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// RunnerEditParams defines parameters for RunnerEdit.
+type RunnerEditParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // ScriptListParams defines parameters for ScriptList.
 type ScriptListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -2403,6 +2452,9 @@ type RouteCreateJSONRequestBody = RouteCreate
 
 // RouteEditJSONRequestBody defines body for RouteEdit for application/json ContentType.
 type RouteEditJSONRequestBody = RouteEdit
+
+// RunnerEditJSONRequestBody defines body for RunnerEdit for application/json ContentType.
+type RunnerEditJSONRequestBody = RunnerEditRequest
 
 // ScriptCreateJSONRequestBody defines body for ScriptCreate for application/json ContentType.
 type ScriptCreateJSONRequestBody = ScriptCreate
@@ -3159,6 +3211,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
 	RunnerShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerEditWithBody Replace a Runner slug
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+	RunnerEditWithBody(ctx context.Context, id string, params *RunnerEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RunnerEdit Replace a Runner slug
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+	RunnerEdit(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ScriptList List scripts
 	//
@@ -4918,6 +4984,40 @@ func (c *Client) RunnerList(ctx context.Context, params *RunnerListParams, reqEd
 // Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
 func (c *Client) RunnerShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRunnerShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerEditWithBody Replace a Runner slug
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+func (c *Client) RunnerEditWithBody(ctx context.Context, id string, params *RunnerEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerEditRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunnerEdit Replace a Runner slug
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+func (c *Client) RunnerEdit(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunnerEditRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9609,6 +9709,66 @@ func NewRunnerShowRequest(server string, id string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewRunnerEditRequest calls the generic RunnerEdit builder with application/json body
+func NewRunnerEditRequest(server string, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRunnerEditRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewRunnerEditRequestWithBody constructs an http.Request for the RunnerEdit method, with any body, and a specified content type
+func NewRunnerEditRequestWithBody(server string, id string, params *RunnerEditParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/runners/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewScriptListRequest constructs an http.Request for the ScriptList method
 func NewScriptListRequest(server string, params *ScriptListParams) (*http.Request, error) {
 	var err error
@@ -12525,6 +12685,20 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /runners/{id} (the `RunnerShow` operationId).
 	RunnerShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RunnerShowResponse, error)
+
+	// RunnerEditWithBodyWithResponse Replace a Runner slug
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+	RunnerEditWithBodyWithResponse(ctx context.Context, id string, params *RunnerEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerEditResponse, error)
+
+	// RunnerEditWithResponse Replace a Runner slug
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+	RunnerEditWithResponse(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerEditResponse, error)
 
 	// ScriptListWithResponse List scripts
 	//
@@ -16617,6 +16791,61 @@ func (r RunnerShowResponse) ContentType() string {
 	return ""
 }
 
+// RunnerEditResponse200Headers the declared response headers of an HTTP 200 response for RunnerEdit
+type RunnerEditResponse200Headers struct {
+	ContentType *string
+}
+
+type RunnerEditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Runner
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *RunnerEditResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RunnerEditResponse) GetJSON200() *Runner {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunnerEditResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunnerEditResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunnerEditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunnerEditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunnerEditResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ScriptListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19929,6 +20158,32 @@ func (c *ClientWithResponses) RunnerShowWithResponse(ctx context.Context, id str
 		return nil, err
 	}
 	return ParseRunnerShowResponse(rsp)
+}
+
+// RunnerEditWithBodyWithResponse Replace a Runner slug
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+func (c *ClientWithResponses) RunnerEditWithBodyWithResponse(ctx context.Context, id string, params *RunnerEditParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RunnerEditResponse, error) {
+	rsp, err := c.RunnerEditWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerEditResponse(rsp)
+}
+
+// RunnerEditWithResponse Replace a Runner slug
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /runners/{id} (the `RunnerEdit` operationId).
+func (c *ClientWithResponses) RunnerEditWithResponse(ctx context.Context, id string, params *RunnerEditParams, body RunnerEditJSONRequestBody, reqEditors ...RequestEditorFn) (*RunnerEditResponse, error) {
+	rsp, err := c.RunnerEdit(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunnerEditResponse(rsp)
 }
 
 // ScriptListWithResponse List scripts
@@ -23494,6 +23749,52 @@ func ParseRunnerShowResponse(rsp *http.Response) (*RunnerShowResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseRunnerEditResponse parses an HTTP response from a RunnerEditWithResponse call
+func ParseRunnerEditResponse(rsp *http.Response) (*RunnerEditResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunnerEditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Runner
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers RunnerEditResponse200Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

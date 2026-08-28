@@ -19,6 +19,7 @@ const (
 	CodeSecretNotFound         Code = "secret.not_found"
 	CodeConnectorNotFound      Code = "connector.not_found"
 	CodeRunnerNotFound         Code = "runner.not_found"
+	CodeRunnerSlugConflict     Code = "runner.slug_conflict"
 	CodeAgentNotFound          Code = "agent.not_found"
 	CodeReleaseGroupNotFound   Code = "release_group.not_found"
 	CodeComponentNotFound      Code = "component.not_found"
@@ -98,6 +99,7 @@ const (
 	KindSecretNotFound
 	KindConnectorNotFound
 	KindRunnerNotFound
+	KindRunnerSlugConflict
 	KindAgentNotFound
 	KindReleaseGroupNotFound
 	KindComponentNotFound
@@ -164,6 +166,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindSecretNotFound:              {CodeSecretNotFound, ClassNotFound, 404},
 	KindConnectorNotFound:           {CodeConnectorNotFound, ClassNotFound, 404},
 	KindRunnerNotFound:              {CodeRunnerNotFound, ClassNotFound, 404},
+	KindRunnerSlugConflict:          {CodeRunnerSlugConflict, ClassConflict, 409},
 	KindAgentNotFound:               {CodeAgentNotFound, ClassNotFound, 404},
 	KindReleaseGroupNotFound:        {CodeReleaseGroupNotFound, ClassNotFound, 404},
 	KindComponentNotFound:           {CodeComponentNotFound, ClassNotFound, 404},

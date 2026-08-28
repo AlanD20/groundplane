@@ -23,6 +23,7 @@ func TestKindCatalogIsCompleteAndExact(t *testing.T) {
 		KindSecretNotFound:              {CodeSecretNotFound, ClassNotFound, 404},
 		KindConnectorNotFound:           {CodeConnectorNotFound, ClassNotFound, 404},
 		KindRunnerNotFound:              {CodeRunnerNotFound, ClassNotFound, 404},
+		KindRunnerSlugConflict:          {CodeRunnerSlugConflict, ClassConflict, 409},
 		KindAgentNotFound:               {CodeAgentNotFound, ClassNotFound, 404},
 		KindReleaseGroupNotFound:        {CodeReleaseGroupNotFound, ClassNotFound, 404},
 		KindComponentNotFound:           {CodeComponentNotFound, ClassNotFound, 404},
@@ -134,6 +135,7 @@ func TestMalformedAndSemanticValidationRemainDistinct(t *testing.T) {
 // and cannot be selected independently at a call site.
 func TestAcceptedPersistenceAndIdempotencyStatuses(t *testing.T) {
 	tests := map[Kind]int{
+		KindRunnerSlugConflict:    409,
 		KindSlugConflict:          409,
 		KindNameConflict:          409,
 		KindStateConflict:         409,

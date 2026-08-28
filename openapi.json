@@ -2956,6 +2956,15 @@
             "readOnly": true,
             "type": "string"
           },
+          "create_task_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "github_url": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -2968,10 +2977,37 @@
               "null"
             ]
           },
+          "lifecycle": {
+            "enum": [
+              "provisioning",
+              "ready",
+              "failed",
+              "deleting"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "online": {
             "type": "boolean"
           },
           "project_id": {
+            "type": "string"
+          },
+          "remove_task_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
             "type": "string"
           },
           "tenant_id": {
@@ -2980,8 +3016,39 @@
         },
         "required": [
           "id",
+          "slug",
           "tenant_id",
-          "online"
+          "github_url",
+          "name",
+          "lifecycle",
+          "create_task_id",
+          "remove_task_id",
+          "online",
+          "observed_at",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "RunnerEditRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RunnerEditRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "slug": {
+            "maxLength": 63,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
         ],
         "type": "object"
       },
@@ -8631,6 +8698,81 @@
           }
         },
         "summary": "Show a managed runner",
+        "tags": [
+          "Runner"
+        ]
+      },
+      "patch": {
+        "operationId": "runner.edit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^run_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerEditRequest"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Runner"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace a Runner slug",
         "tags": [
           "Runner"
         ]

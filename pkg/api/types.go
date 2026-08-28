@@ -551,12 +551,29 @@ type RecoveryPointPage struct {
 }
 
 type Runner struct {
-	ID        string   `json:"id"`
-	TenantID  string   `json:"tenant_id"`
-	ProjectID string   `json:"project_id,omitempty"` // set => repo-scoped; unset => org-scoped
-	Labels    []string `json:"labels,omitempty"`
-	Online    bool     `json:"online"`
+	ID           string          `json:"id"`
+	Slug         string          `json:"slug"`
+	TenantID     string          `json:"tenant_id"`
+	ProjectID    string          `json:"project_id,omitempty"`
+	GitHubURL    string          `json:"github_url"`
+	Name         string          `json:"name"`
+	Labels       []string        `json:"labels,omitempty"`
+	Lifecycle    RunnerLifecycle `json:"lifecycle" enum:"provisioning,ready,failed,deleting"`
+	CreateTaskID string          `json:"create_task_id"`
+	RemoveTaskID *string         `json:"remove_task_id"`
+	Online       bool            `json:"online"`
+	ObservedAt   *string         `json:"observed_at"`
+	CreatedAt    string          `json:"created_at"`
 }
+
+type RunnerLifecycle string
+
+const (
+	RunnerLifecycleProvisioning RunnerLifecycle = "provisioning"
+	RunnerLifecycleReady        RunnerLifecycle = "ready"
+	RunnerLifecycleFailed       RunnerLifecycle = "failed"
+	RunnerLifecycleDeleting     RunnerLifecycle = "deleting"
+)
 
 type RunnerPage struct {
 	Items      []Runner `json:"items"`
@@ -800,6 +817,10 @@ type RunnerCreateRequest struct {
 	TenantID          string `json:"tenant_id,omitempty"`
 	ProjectID         string `json:"project_id,omitempty"`
 	RegistrationToken string `json:"registration_token"` // discarded by the Controller after registration
+}
+
+type RunnerEditRequest struct {
+	Slug string `json:"slug"`
 }
 
 // --- Task / activity ---

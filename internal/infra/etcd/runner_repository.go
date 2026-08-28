@@ -273,7 +273,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "runner mutation is in progress")
 	}
 	if renaming && secondary.Values[2] != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindSlugConflict, "runner slug is already in use")
+		return IdempotencyTransactionResult{}, errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
 	}
 	replacement := cloneRunnerRecord(current.Record)
 	replacement.Desired.Slug = slug
@@ -318,7 +318,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 			return errs.New(errs.KindResourceInUse, "runner mutation is in progress")
 		}
 		if renaming && values[4] != nil {
-			return errs.New(errs.KindSlugConflict, "runner slug is already in use")
+			return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
 		}
 		return stateConflict("runner", runnerID)
 	})
@@ -594,7 +594,7 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 			return errs.New(errs.KindStateConflict, "runner stable identity is already in use")
 		}
 		if values[evidence.slug] != nil {
-			return errs.New(errs.KindSlugConflict, "runner slug is already in use")
+			return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
 		}
 		if revisionChanged(values[evidence.quota], evidence.allocation.quota.Revision) {
 			return stateConflict("runner tenant quota", evidence.desired.TenantID)
@@ -1023,6 +1023,38 @@ func (repository *RunnerRepository) GetRunnerObservation(
 		return Versioned[RunnerObservationRecord]{}, false, errs.New(errs.KindInternal, "runner observation is corrupt")
 	}
 	return Versioned[RunnerObservationRecord]{
+		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
+	}, true, nil
+}
+
+func (repository *RunnerRepository) GetRunnerDeletionTombstone(
+	ctx context.Context,
+	runnerID string,
+) (Versioned[DeletionTombstoneRecord], bool, error) {
+	if err := validateContext(ctx); err != nil {
+		return Versioned[DeletionTombstoneRecord]{}, false, err
+	}
+	if err := validateDeletionTarget(DeletionTargetRunner, runnerID); err != nil {
+		return Versioned[DeletionTombstoneRecord]{}, false, err
+	}
+	result, err := repository.store.Get(ctx, deletionTombstoneKey(string(DeletionTargetRunner), runnerID))
+	if err != nil {
+		return Versioned[DeletionTombstoneRecord]{}, false, err
+	}
+	if result == nil {
+		return Versioned[DeletionTombstoneRecord]{}, false, errs.New(
+			errs.KindInternal,
+			"Runner deletion tombstone read is empty",
+		)
+	}
+	if result.Entry == nil {
+		return Versioned[DeletionTombstoneRecord]{ReadRevision: result.ReadRevision}, false, nil
+	}
+	record, err := decodeDeletionTombstone(result.Entry.Value)
+	if err != nil || record.TargetKind != DeletionTargetRunner || record.TargetID != runnerID {
+		return Versioned[DeletionTombstoneRecord]{}, false, corruptDeletionTombstone()
+	}
+	return Versioned[DeletionTombstoneRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
