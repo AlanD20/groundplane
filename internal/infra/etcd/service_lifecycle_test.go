@@ -28,6 +28,7 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 			Services: []EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
 		},
 	}
+	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
 	value, err := encodeServiceLifecycleRenderInput(input)
 	if err != nil {
 		t.Fatalf("encodeServiceLifecycleRenderInput() error = %v", err)

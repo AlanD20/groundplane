@@ -284,12 +284,12 @@ func seedComponentRetryProjection(
 	sort.Slice(components, func(left int, right int) bool {
 		return components[left].Desired.Kind < components[right].Desired.Kind
 	})
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID:    task.Target,
 		RevisionID:       ids.NewAt(ids.KindTask, task.CreatedAt, 1282),
 		RenderGeneration: uint64(task.RenderGeneration),
 		Components:       components,
-	}
+	})
 	value, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)

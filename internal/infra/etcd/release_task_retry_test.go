@@ -49,6 +49,7 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 			ServiceDependencyPlans: core.ServiceDependencyPlans{},
 		},
 	}
+	render.Projection = withTestEnvironmentComposeArtifact(render.Projection)
 	rawRender, err := EncodeReleaseRenderInput(render)
 	if err != nil {
 		t.Fatalf("EncodeReleaseRenderInput() error = %v", err)

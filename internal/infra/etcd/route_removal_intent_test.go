@@ -23,6 +23,7 @@ func TestRouteRemovalIntentCodecPinsSuppressionCandidate(t *testing.T) {
 		},
 		Revision: 9, ReadRevision: 10,
 	}
+	projection.Record = withTestEnvironmentComposeArtifact(projection.Record)
 	intent, err := NewRouteRemovalIntent(
 		ids.NewAt(ids.KindTask, now, 4), environmentID, routeID, 8, &projection, now,
 	)
@@ -62,6 +63,7 @@ func TestRouteRemovalIntentWithoutAppliedRouteHasNoProjectionCandidate(t *testin
 		},
 		Revision: 7, ReadRevision: 7,
 	}
+	projection.Record = withTestEnvironmentComposeArtifact(projection.Record)
 	intent, err := NewRouteRemovalIntent(
 		ids.NewAt(ids.KindTask, now, 3), environmentID, ids.NewAt(ids.KindRoute, now, 4), 6, &projection, now,
 	)

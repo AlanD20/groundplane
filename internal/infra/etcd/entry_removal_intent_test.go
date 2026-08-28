@@ -31,6 +31,7 @@ func TestEntryRemovalIntentCodecPinsGenerationCandidate(t *testing.T) {
 		},
 		Revision: 9, ReadRevision: 10,
 	}
+	projection.Record = withTestEnvironmentComposeArtifact(projection.Record)
 	intent, err := NewEntryRemovalIntent(
 		ids.NewAt(ids.KindTask, now, 5), environmentID, entryID, 8, &projection, now,
 	)
@@ -71,6 +72,7 @@ func TestEntryRemovalIntentWithoutAppliedEntryHasNoProjectionCandidate(t *testin
 		},
 		Revision: 7, ReadRevision: 7,
 	}
+	projection.Record = withTestEnvironmentComposeArtifact(projection.Record)
 	intent, err := NewEntryRemovalIntent(
 		ids.NewAt(ids.KindTask, now, 3), environmentID, ids.NewAt(ids.KindEnvEntry, now, 4), 6, &projection, now,
 	)

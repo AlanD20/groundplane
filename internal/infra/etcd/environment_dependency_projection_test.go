@@ -29,7 +29,7 @@ func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.
 			Service: "api", Dependency: "database", Condition: core.ServiceDependencyCompletedSuccessfully,
 		}},
 	}
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID:    ids.NewAt(ids.KindEnvironment, at, 3),
 		RevisionID:       ids.NewAt(ids.KindTask, at, 4),
 		RenderGeneration: 1,
@@ -37,7 +37,7 @@ func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.
 		ServiceDependencyPlans: core.ServiceDependencyPlans{
 			DeployDependencyPlan: deploy, RollbackDependencyPlan: rollback,
 		},
-	}
+	})
 	if err := validateEnvironmentComposeProjection(projection); err != nil {
 		t.Fatalf("validateEnvironmentComposeProjection() error = %v", err)
 	}

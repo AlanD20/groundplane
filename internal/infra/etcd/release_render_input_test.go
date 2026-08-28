@@ -108,5 +108,6 @@ func portlessReleaseRenderInput(strategy domain.Strategy) ReleaseRenderInput {
 		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 8), RenderGeneration: 1,
 		Services: []EnvironmentComposeIdentity{{ID: serviceID, Name: "worker"}},
 	}
+	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
 	return input
 }

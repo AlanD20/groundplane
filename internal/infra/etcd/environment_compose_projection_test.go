@@ -16,7 +16,7 @@ func TestEnvironmentComposeProjectionPinsSortedRouteIdentities(t *testing.T) {
 	// assigned at apply without consulting mutable Route records.
 	t.Parallel()
 	now := time.Date(2026, 8, 22, 22, 0, 0, 0, time.UTC)
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID:    ids.NewAt(ids.KindEnvironment, now, 1),
 		RevisionID:       ids.NewAt(ids.KindTask, now, 2),
 		RenderGeneration: 1,
@@ -24,7 +24,7 @@ func TestEnvironmentComposeProjectionPinsSortedRouteIdentities(t *testing.T) {
 			{ID: ids.NewAt(ids.KindRoute, now, 3), Host: "api.example.com", Path: "/"},
 			{ID: ids.NewAt(ids.KindRoute, now, 4), Host: "app.example.com", Path: "/app/*"},
 		},
-	}
+	})
 	encoded, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
@@ -48,11 +48,11 @@ func TestSuppressEnvironmentRouteMovesIdentityOutOfEffectiveSet(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
 	routeID := ids.NewAt(ids.KindRoute, now, 3)
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 1),
 		RevisionID:    ids.NewAt(ids.KindTask, now, 2), RenderGeneration: 7,
 		Routes: []EnvironmentRouteIdentity{{ID: routeID, Host: "app.example.com", Path: "/app/*"}},
-	}
+	})
 	next, changed, err := SuppressEnvironmentRoute(projection, routeID)
 	if err != nil {
 		t.Fatalf("SuppressEnvironmentRoute() error = %v", err)
@@ -86,14 +86,14 @@ func TestEnvironmentComposeProjectionPinsSortedComponentSnapshots(t *testing.T) 
 		}
 		return record
 	}
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 11),
 		RenderGeneration: 1,
 		Components: []ComponentRecord{
 			componentRecord(core.ComponentKindIngressCaddy, 12),
 			componentRecord(core.ComponentKindEdgeCloudflare, 13),
 		},
-	}
+	})
 	encoded, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
@@ -133,10 +133,10 @@ func TestEnvironmentComposeProjectionPinsSortedEntrySnapshots(t *testing.T) {
 		entryRecord(23, "SECOND_TOKEN"),
 	}
 	sort.Slice(entries, func(left int, right int) bool { return entries[left].Entry.ID < entries[right].Entry.ID })
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 21),
 		RenderGeneration: 1, Entries: entries,
-	}
+	})
 	encoded, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
@@ -170,10 +170,10 @@ func TestRemoveEnvironmentEntryDropsPinnedGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 2),
 		RenderGeneration: 7, Entries: []EntryRecord{record},
-	}
+	})
 	next, changed, err := RemoveEnvironmentEntry(projection, entryID)
 	if err != nil {
 		t.Fatalf("RemoveEnvironmentEntry() error = %v", err)
@@ -207,7 +207,7 @@ func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemov
 		}
 		return record
 	}
-	previous := EnvironmentComposeProjection{
+	previous := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 44),
 		RenderGeneration: 1,
 		Services:         []EnvironmentComposeIdentity{{ID: generatedServiceID, Name: "cloudflare-tunnel"}},
@@ -215,15 +215,15 @@ func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemov
 			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),
 			componentRecord(core.ComponentKindEdgeCloudflare, 43, true, []string{generatedServiceID}),
 		},
-	}
-	next := EnvironmentComposeProjection{
+	})
+	next := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 45),
 		RenderGeneration: 2,
 		Components: []ComponentRecord{
 			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),
 			componentRecord(core.ComponentKindEdgeCloudflare, 43, false, nil),
 		},
-	}
+	})
 	if err := validateEnvironmentComposeProjectionAdvance(previous, true, next); err != nil {
 		t.Fatalf("validateEnvironmentComposeProjectionAdvance() error = %v", err)
 	}
@@ -233,6 +233,7 @@ func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemov
 	sort.Slice(previous.Services, func(left int, right int) bool {
 		return previous.Services[left].Name < previous.Services[right].Name
 	})
+	previous = withTestEnvironmentComposeArtifact(previous)
 	if err := validateEnvironmentComposeProjectionAdvance(previous, true, next); !errors.Is(
 		err,
 		errs.New(errs.KindResourceInUse, ""),

@@ -664,12 +664,12 @@ func entryDeletionTestProjection(
 	entry Versioned[EntryRecord],
 ) Versioned[EnvironmentComposeProjection] {
 	t.Helper()
-	projection := EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID:    entry.Record.EnvironmentID,
 		RevisionID:       ids.NewAt(ids.KindTask, serviceRecordTestTime().Add(5*time.Hour), 9150),
 		RenderGeneration: 4,
 		Entries:          []EntryRecord{cloneEntryRecord(entry.Record)},
-	}
+	})
 	value, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
