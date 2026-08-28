@@ -65,7 +65,7 @@ func TestBuildBackupRunPlanReconnectAfterProgressIsIdentical(t *testing.T) {
 		Initiator:   etcd.BackupRunInitiatorOperator,
 		ConnectorID: connectorID, ConnectorRevision: 20,
 		ConnectorEndpoint: "https://s3.example.test",
-		ConnectorBucket:   "groundplane-backups", ConnectorPrefix: "objects",
+		ConnectorBucket:   "groundplane-backups", ConnectorPrefix: "objects/",
 		ConnectorRegion: "auto",
 		Encryption:      etcd.BackupRuntimeEncryptionAge,
 		KeyEra:          1, Recipient: identity.Recipient().String(),
@@ -81,9 +81,10 @@ func TestBuildBackupRunPlanReconnectAfterProgressIsIdentical(t *testing.T) {
 				},
 			},
 			Format:          etcd.BackupRuntimeFormatConfig,
-			RecoveryPointID: pointID, ObjectKey: "objects/" + pointID,
-			State: etcd.BackupSourceAttemptPending,
-			Phase: etcd.BackupSourcePhaseCapture,
+			RecoveryPointID: pointID,
+			ObjectKey:       "objects/" + environmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
+			State:           etcd.BackupSourceAttemptPending,
+			Phase:           etcd.BackupSourcePhaseCapture,
 		}},
 	}
 	input := BackupRunPlanInput{

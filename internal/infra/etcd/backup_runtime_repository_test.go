@@ -4064,7 +4064,11 @@ func newBackupRuntimeBareFixture(
 	run.Sources[0].State = BackupSourceAttemptPending
 	run.Sources[0].Phase = BackupSourcePhaseCapture
 	run.ConnectorID = createdConnector.Record.Connector.ID
+	run.ConnectorEndpoint = createdConnector.Record.Connector.Endpoint
+	run.ConnectorBucket = createdConnector.Record.Connector.Bucket
 	run.ConnectorPrefix = createdConnector.Record.Connector.Prefix
+	run.ConnectorRegion = createdConnector.Record.Connector.Region
+	run.ConnectorPathStyle = createdConnector.Record.Connector.PathStyle
 	run.ConnectorRevision = createdConnector.Revision
 	run.ConnectorHasDirectCredentials = true
 	run.ConnectorCredentialsRevision = createdConnector.Revision
@@ -4486,6 +4490,13 @@ func backupRuntimeSealedRunPlan(
 			SourceFormat: backupPlanSourceFormat(source.Format),
 			Encryption:   backupPlanEncryption(run.Encryption),
 			KeyEra:       uint64(run.KeyEra), AgeRecipient: run.Recipient,
+			Upload: &agentpb.BackupUploadAuthority{
+				ConnectorEndpoint: run.ConnectorEndpoint, ConnectorBucket: run.ConnectorBucket,
+				ConnectorPrefix: run.ConnectorPrefix, ConnectorRegion: run.ConnectorRegion,
+				ConnectorAddressing: backupPlanAddressing(run.ConnectorPathStyle),
+				ProtectedObjectKey:  source.ObjectKey,
+				ImmutableCreate:     true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
+			},
 		}
 		switch source.Kind {
 		case BackupRuntimeSourceAttach:
@@ -4500,15 +4511,24 @@ func backupRuntimeSealedRunPlan(
 				SnapshotRevision: uint64(source.Snapshot.Config.ReadRevision),
 			}}
 		case BackupRuntimeSourceVolume:
+			artifactSHA256, err := hex.DecodeString(source.Snapshot.Volume.ArtifactDigest)
+			if err != nil {
+				t.Fatal(err)
+			}
 			services := make([]*agentpb.BackupVolumeService, len(source.Snapshot.Volume.Services))
 			for serviceIndex, service := range source.Snapshot.Volume.Services {
 				services[serviceIndex] = &agentpb.BackupVolumeService{
 					ServiceId: service.ServiceID, ServiceRevision: uint64(service.ServiceRevision),
 					PriorIntent: backupPlanServiceIntent(service.PriorIntent),
+					ComposeKey:  service.ComposeKey, MountPaths: append([]string(nil), service.MountPaths...),
 				}
 			}
+			volume := source.Snapshot.Volume
 			capture.Source = &agentpb.BackupSourceCapture_Volume{Volume: &agentpb.BackupVolumeSource{
-				Services: services,
+				Services: services, ArtifactId: volume.ArtifactID, ArtifactSha256: artifactSHA256,
+				ArtifactRevision: uint64(volume.ArtifactRevision), ProjectionRoot: uint64(volume.ProjectionRoot),
+				RenderGeneration: volume.RenderGeneration, ComposeVolumeKey: volume.ComposeVolumeKey,
+				DockerVolumeName: volume.DockerVolumeName, AuthorizedVolumeDir: volume.AuthorizedVolumeDir,
 			}}
 		}
 		plan.Steps[index] = &agentpb.ExecutionStep{

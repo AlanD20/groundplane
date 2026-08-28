@@ -438,6 +438,14 @@ func agentBackupSecretAssignment(t *testing.T) Assignment {
 				ConnectorRevision: 4,
 				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
 				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
+				Upload: &agentpb.BackupUploadAuthority{
+					ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "groundplane-backups",
+					ConnectorPrefix: "production/", ConnectorRegion: "auto",
+					ConnectorAddressing: agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
+					ProtectedObjectKey: "production/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+						"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV/rp_01ARZ3NDEKTSV4RRFFQ69G5FAV/artifact.bin",
+					ImmutableCreate: true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
+				},
 				Source: &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
 					BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 5,
 					Database: "application", Role: "application_owner",

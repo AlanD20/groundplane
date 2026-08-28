@@ -484,6 +484,10 @@ func validBackupPlan(t *testing.T) *agentpb.ExecutionPlan {
 				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
 				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE, KeyEra: 2,
 				AgeRecipient: recipient,
+				Upload: testBackupUpload(
+					"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+					"rp_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				),
 				Source: &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
 					BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceRevision: 14,
 					Database: "application", Role: "application_owner",
@@ -497,6 +501,10 @@ func validBackupPlan(t *testing.T) *agentpb.ExecutionPlan {
 				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1,
 				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE, KeyEra: 2,
 				AgeRecipient: recipient,
+				Upload: testBackupUpload(
+					"spt_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+					"rp_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+				),
 				Source: &agentpb.BackupSourceCapture_Config{Config: &agentpb.BackupConfigSource{
 					SnapshotRevision: 24,
 				}},
@@ -509,14 +517,35 @@ func validBackupPlan(t *testing.T) *agentpb.ExecutionPlan {
 				SourceFormat:      agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1,
 				Encryption:        agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE, KeyEra: 2,
 				AgeRecipient: recipient,
+				Upload: testBackupUpload(
+					"spt_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+					"rp_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+				),
 				Source: &agentpb.BackupSourceCapture_Volume{Volume: &agentpb.BackupVolumeSource{
+					ArtifactId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV", ArtifactSha256: bytes.Repeat([]byte{1}, 32),
+					ArtifactRevision: 35, ProjectionRoot: 36, RenderGeneration: 1,
+					ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_vol_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+					AuthorizedVolumeDir: "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+						"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + testBackupEnvironmentID,
 					Services: []*agentpb.BackupVolumeService{{
 						ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceRevision: 34,
 						PriorIntent: agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
+						ComposeKey:  "application", MountPaths: []string{"/var/lib/application"},
 					}},
 				}},
 			}),
 		},
+	}
+}
+
+func testBackupUpload(sourceID string, pointID string) *agentpb.BackupUploadAuthority {
+	const prefix = "production/"
+	return &agentpb.BackupUploadAuthority{
+		ConnectorEndpoint: "https://objects.example.test", ConnectorBucket: "groundplane-backups",
+		ConnectorPrefix: prefix, ConnectorRegion: "auto",
+		ConnectorAddressing: agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_PATH_STYLE,
+		ProtectedObjectKey:  prefix + testBackupEnvironmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
+		ImmutableCreate:     true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
 	}
 }
 
