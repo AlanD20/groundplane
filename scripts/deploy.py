@@ -334,7 +334,6 @@ systemctl is-active --quiet docker.service
 systemctl is-active --quiet etcd.service
 curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
 
-docker load --input "$deploy_dir/images.tar"
 target_image="localhost:5000/groundplane-agent:$version"
 docker tag "$source_agent_image" "$target_image"
 push_output=$(docker push "$target_image")
@@ -965,7 +964,7 @@ def build_environment() -> dict[str, str]:
     )
 
 
-def build_artifacts(deployment: Deployment, image_archive: Path, invocation_id: str) -> tuple[str, str]:
+def build_artifacts(deployment: Deployment, invocation_id: str) -> tuple[str, str]:
     source_agent_image = f"groundplane-agent:deploy-{invocation_id}"
     source_runner_image = f"groundplane-runner:deploy-{invocation_id}"
     run(
@@ -990,20 +989,16 @@ def build_artifacts(deployment: Deployment, image_archive: Path, invocation_id: 
         ],
         cwd=REPOSITORY_ROOT,
     )
-    run(
-        ["docker", "save", "--output", str(image_archive), source_agent_image, source_runner_image],
-    )
     return source_agent_image, source_runner_image
 
 
-def create_transfer_archive(image_archive: Path, transfer_archive: Path) -> None:
+def create_transfer_archive(transfer_archive: Path) -> None:
     sources = [
         CONTROLLER,
         CLI,
         CONTROLLER_UNIT,
         TMPFILES,
         CONFIG_EXAMPLE,
-        image_archive,
     ]
     remote_script = (REMOTE_DEPLOY_PREFIX + REMOTE_SETUP + REMOTE_DEPLOY_MIDDLE + REMOTE_INSTALL).encode()
     with tarfile.open(transfer_archive, mode="w") as archive:
@@ -1051,23 +1046,58 @@ def transfer_and_deploy(
         subprocess.run(command, check=True, stdin=content)
 
 
+def prepare_target(deployment: Deployment) -> None:
+    if not deployment.setup:
+        return
+    run([*deployment.ssh_base, "sh", "-s"], input_text=REMOTE_SETUP)
+
+
+def stream_images(
+    deployment: Deployment,
+    source_agent_image: str,
+    source_runner_image: str,
+) -> None:
+    save_command = ["docker", "save", source_agent_image, source_runner_image]
+    load_command = [*deployment.ssh_base, "docker", "load"]
+    print(f"+ {command_text(save_command)} | {command_text(load_command)}", flush=True)
+    with subprocess.Popen(save_command, stdout=subprocess.PIPE) as save:
+        if save.stdout is None:
+            raise RuntimeError("docker save did not expose its output stream")
+        try:
+            load = subprocess.run(load_command, check=False, stdin=save.stdout)
+        finally:
+            save.stdout.close()
+        save_status = save.wait()
+    if save_status != 0:
+        raise subprocess.CalledProcessError(save_status, save_command)
+    if load.returncode != 0:
+        raise subprocess.CalledProcessError(load.returncode, load_command)
+
+
 def deploy(deployment: Deployment) -> None:
     require_local_tools()
     verify_architecture(deployment)
+    prepare_target(deployment)
 
     invocation_id = secrets.token_hex(16)
     remote_directory = f"/tmp/groundplane-deploy-{invocation_id}"
     with tempfile.TemporaryDirectory(prefix="groundplane-deploy-") as temporary_directory:
-        image_archive = Path(temporary_directory) / "images.tar"
         transfer_archive = Path(temporary_directory) / "deployment.tar"
         source_agent_image, source_runner_image = build_artifacts(
             deployment,
-            image_archive,
             invocation_id,
         )
-        create_transfer_archive(image_archive, transfer_archive)
+        stream_images(deployment, source_agent_image, source_runner_image)
+        create_transfer_archive(transfer_archive)
         transfer_and_deploy(
-            deployment,
+            Deployment(
+                key=deployment.key,
+                ip=deployment.ip,
+                version=deployment.version,
+                setup=False,
+                expose_port=deployment.expose_port,
+                known_hosts=deployment.known_hosts,
+            ),
             remote_directory,
             source_agent_image,
             source_runner_image,
