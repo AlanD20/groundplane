@@ -14,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
 	"github.com/AlanD20/groundplane/internal/core"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -542,7 +541,7 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 		result.Entry = entry
 	} else {
 		count := reader.uint16()
-		if count == 0 || count > apiTypes.MaximumBulkEntryCount {
+		if count == 0 || count > core.MaximumBulkEntryCount {
 			return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
 		}
 		result.Entries = make([]EnvironmentEntryMutationAudit, int(count))
@@ -601,7 +600,7 @@ func validateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAud
 		return validateEnvironmentEntryMutationAudit(*value.Entry)
 	}
 	if len(value.Entries) != 0 {
-		if len(value.Entries) > apiTypes.MaximumBulkEntryCount {
+		if len(value.Entries) > core.MaximumBulkEntryCount {
 			return errs.New(errs.KindValidationFailed, "Entry bulk mutation audit is too large")
 		}
 		seen := make(map[string]struct{}, len(value.Entries))

@@ -3,7 +3,6 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"reflect"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -262,7 +261,7 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 		}
 		current, decodeErr := decodeAttachRecord(value.Value)
 		if decodeErr != nil || current.ID != candidate.ID || current.EnvironmentID != intent.EnvironmentID ||
-			current.TaskID != task.ID || !reflect.DeepEqual(current.FactSets, candidate.FactSets) {
+			current.TaskID != task.ID || !sameBlueprintAttachFactSets(current.FactSets, candidate.FactSets) {
 			clearBlueprintAttachTaskChange(change)
 			return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach candidate changed")
 		}

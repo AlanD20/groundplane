@@ -1,12 +1,13 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
-	"reflect"
 	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -143,11 +144,140 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		}
 	}
 	expected.ServiceDependencyPlans = expected.ServiceDependencyPlans.WithoutService(intent.ServiceName)
-	if !removed || !slices.Equal(expected.Services, intent.CandidateProjection.Services) ||
-		!reflect.DeepEqual(expected, intent.CandidateProjection) {
+	if !removed || !sameServiceRemovalProjection(expected, intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Service removal candidate projection changed")
 	}
 	return nil
+}
+
+func sameServiceRemovalProjection(left, right EnvironmentComposeProjection) bool {
+	return left.EnvironmentID == right.EnvironmentID && left.RevisionID == right.RevisionID &&
+		left.RenderGeneration == right.RenderGeneration && sameServiceRemovalBytes(left.ComposeArtifact, right.ComposeArtifact) &&
+		sameServiceRemovalComparableSlices(left.Services, right.Services) &&
+		sameServiceRemovalComparableSlices(left.Networks, right.Networks) &&
+		sameServiceRemovalComparableSlices(left.Volumes, right.Volumes) &&
+		sameServiceRemovalComparableSlices(left.VolumeMounts, right.VolumeMounts) &&
+		sameServiceRemovalComparableSlices(left.Routes, right.Routes) &&
+		sameServiceRemovalComparableSlices(left.SuppressedRoutes, right.SuppressedRoutes) &&
+		sameServiceRemovalComponents(left.Components, right.Components) &&
+		sameServiceRemovalEntries(left.Entries, right.Entries) &&
+		sameServiceRemovalDependencyPlans(left.ServiceDependencyPlans, right.ServiceDependencyPlans)
+}
+
+func sameServiceRemovalBytes(left, right []byte) bool {
+	return (left == nil) == (right == nil) && bytes.Equal(left, right)
+}
+
+func sameServiceRemovalComparableSlices[E comparable](left, right []E) bool {
+	return (left == nil) == (right == nil) && slices.Equal(left, right)
+}
+
+func sameServiceRemovalComponents(left, right []ComponentRecord) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !sameServiceRemovalComponentRecord(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalEntries(left, right []EntryRecord) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !sameServiceRemovalEntryRecord(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalDependencyPlans(left, right core.ServiceDependencyPlans) bool {
+	return sameServiceRemovalDependencyPlan(left.DeployDependencyPlan, right.DeployDependencyPlan) &&
+		sameServiceRemovalDependencyPlan(left.RollbackDependencyPlan, right.RollbackDependencyPlan)
+}
+
+func sameServiceRemovalDependencyPlan(left, right core.ServiceDependencyPhasePlan) bool {
+	return left.Phase == right.Phase &&
+		sameServiceRemovalComparableSlices(left.OrderedServices, right.OrderedServices) &&
+		sameServiceRemovalComparableSlices(left.Edges, right.Edges)
+}
+
+func sameServiceRemovalComponentRecord(left, right ComponentRecord) bool {
+	return left.Desired.ID == right.Desired.ID && left.Desired.Owner == right.Desired.Owner &&
+		left.Desired.OwnerID == right.Desired.OwnerID && left.Desired.Kind == right.Desired.Kind &&
+		left.Desired.Enabled == right.Desired.Enabled &&
+		sameServiceRemovalComponentConfig(left.Desired.Config, right.Desired.Config) &&
+		sameServiceRemovalComparableSlices(left.Runtime.GeneratedServices, right.Runtime.GeneratedServices) &&
+		left.Runtime.PinnedIPv4 == right.Runtime.PinnedIPv4 && left.Runtime.Healthy == right.Runtime.Healthy
+}
+
+func sameServiceRemovalComponentConfig(left, right core.ComponentConfig) bool {
+	if (left.Caddy == nil) != (right.Caddy == nil) ||
+		(left.CloudflareTunnel == nil) != (right.CloudflareTunnel == nil) ||
+		(left.CoreDNS == nil) != (right.CoreDNS == nil) {
+		return false
+	}
+	if left.Caddy != nil && *left.Caddy != *right.Caddy {
+		return false
+	}
+	if left.CloudflareTunnel != nil && *left.CloudflareTunnel != *right.CloudflareTunnel {
+		return false
+	}
+	if left.CoreDNS == nil {
+		return true
+	}
+	if left.CoreDNS.UpstreamAuto != right.CoreDNS.UpstreamAuto ||
+		left.CoreDNS.TailnetDelegation != right.CoreDNS.TailnetDelegation ||
+		!sameServiceRemovalComparableSlices(left.CoreDNS.UpstreamResolvers, right.CoreDNS.UpstreamResolvers) ||
+		(left.CoreDNS.Forwarders == nil) != (right.CoreDNS.Forwarders == nil) ||
+		len(left.CoreDNS.Forwarders) != len(right.CoreDNS.Forwarders) {
+		return false
+	}
+	for index := range left.CoreDNS.Forwarders {
+		leftForwarder := left.CoreDNS.Forwarders[index]
+		rightForwarder := right.CoreDNS.Forwarders[index]
+		if leftForwarder.Domain != rightForwarder.Domain ||
+			!sameServiceRemovalComparableSlices(leftForwarder.Resolvers, rightForwarder.Resolvers) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalEntryRecord(left, right EntryRecord) bool {
+	return left.EnvironmentID == right.EnvironmentID && left.BlueprintKey == right.BlueprintKey &&
+		left.CurrentValueGenerationID == right.CurrentValueGenerationID &&
+		sameServiceRemovalEnvEntry(left.Entry, right.Entry)
+}
+
+func sameServiceRemovalEnvEntry(left, right core.EnvEntry) bool {
+	return left.ID == right.ID && left.Kind == right.Kind && left.Key == right.Key && left.Path == right.Path &&
+		sameServiceRemovalOptionalUint32(left.UID, right.UID) &&
+		sameServiceRemovalOptionalUint32(left.GID, right.GID) && left.Secret == right.Secret &&
+		sameServiceRemovalEntrySource(left.Source, right.Source) &&
+		sameServiceRemovalComparableSlices(left.Exposure, right.Exposure)
+}
+
+func sameServiceRemovalOptionalUint32(left, right *uint32) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func sameServiceRemovalEntrySource(left, right core.EntrySource) bool {
+	if left.Kind != right.Kind || left.Literal != right.Literal || left.SecretRef != right.SecretRef {
+		return false
+	}
+	if left.Fact == nil || right.Fact == nil {
+		return left.Fact == nil && right.Fact == nil
+	}
+	return *left.Fact == *right.Fact
 }
 
 func validateServiceRemovalTaskOwner(task TaskRecord, intent ServiceRemovalIntent) error {

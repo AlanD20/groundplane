@@ -1,7 +1,9 @@
 package api
 
+import "github.com/AlanD20/groundplane/internal/common/entrylimits"
+
 const (
-	MaximumBulkEntryCount        = 200
+	MaximumBulkEntryCount        = entrylimits.MaximumBulkEntryCount
 	MaximumBulkEntryPayloadBytes = 1 << 20
 )
 

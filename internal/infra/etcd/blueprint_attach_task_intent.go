@@ -2,7 +2,7 @@ package etcd
 
 import (
 	"context"
-	"reflect"
+	"slices"
 	"sort"
 	"time"
 
@@ -162,7 +162,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	byID := make(map[string]EnvironmentBlueprintAttachCandidateInput, len(preparation.candidates))
 	byName := make(map[string]string, len(preparation.candidates))
 	for index, input := range preparation.candidates {
-		if !reflect.DeepEqual(input.Record, preparation.Intent.Candidates[index]) {
+		if !sameBlueprintAttachCandidateRecord(input.Record, preparation.Intent.Candidates[index]) {
 			return errs.New(errs.KindValidationFailed, "Blueprint Attach preparation changed its durable intent")
 		}
 		if input.BackingProject.Revision <= 0 || input.BackingEnvironment.Revision <= 0 ||
@@ -205,6 +205,35 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 		}
 	}
 	return nil
+}
+
+func sameBlueprintAttachCandidateRecord(left, right AttachRecord) bool {
+	return left.ID == right.ID && left.EnvironmentID == right.EnvironmentID && left.Name == right.Name &&
+		left.BackingProjectID == right.BackingProjectID && left.BackingEnvironmentID == right.BackingEnvironmentID &&
+		left.BackingServiceID == right.BackingServiceID && left.BackingNetworkID == right.BackingNetworkID &&
+		left.ServiceID == right.ServiceID && left.CredentialAttachID == right.CredentialAttachID &&
+		sameBlueprintAttachStrings(left.GrantAttachIDs, right.GrantAttachIDs) &&
+		sameBlueprintAttachFactSets(left.FactSets, right.FactSets) &&
+		left.Status == right.Status && left.Operation == right.Operation && left.TaskID == right.TaskID &&
+		left.CreatedAt == right.CreatedAt
+}
+
+func sameBlueprintAttachStrings(left, right []string) bool {
+	return (left == nil) == (right == nil) && slices.Equal(left, right)
+}
+
+func sameBlueprintAttachFactSets(left, right []AttachFactSetMetadata) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].GrantAttachID != right[index].GrantAttachID ||
+			(left[index].Facts == nil) != (right[index].Facts == nil) ||
+			!slices.Equal(left[index].Facts, right[index].Facts) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) error {

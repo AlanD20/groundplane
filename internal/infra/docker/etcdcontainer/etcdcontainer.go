@@ -6,9 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"os"
-	"reflect"
+	"slices"
 	"time"
 
 	containerderrdefs "github.com/containerd/errdefs"
@@ -228,12 +229,90 @@ func matchesDesired(inspected container.InspectResponse) bool {
 	desired := createOptions()
 	return inspected.Config.Image == desired.Config.Image &&
 		inspected.Config.User == desired.Config.User &&
-		reflect.DeepEqual([]string(inspected.Config.Entrypoint), []string(desired.Config.Entrypoint)) &&
-		reflect.DeepEqual([]string(inspected.Config.Cmd), []string(desired.Config.Cmd)) &&
+		equalEtcdStrings(inspected.Config.Entrypoint, desired.Config.Entrypoint) &&
+		equalEtcdStrings(inspected.Config.Cmd, desired.Config.Cmd) &&
 		inspected.HostConfig.NetworkMode == desired.HostConfig.NetworkMode &&
 		inspected.HostConfig.RestartPolicy.Name == container.RestartPolicyDisabled &&
 		inspected.HostConfig.RestartPolicy.MaximumRetryCount == 0 &&
-		reflect.DeepEqual(inspected.HostConfig.Mounts, desired.HostConfig.Mounts)
+		equalEtcdMounts(inspected.HostConfig.Mounts, desired.HostConfig.Mounts)
+}
+
+func equalEtcdMounts(left, right []mount.Mount) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !equalEtcdMount(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalEtcdStrings(left, right []string) bool {
+	return (left == nil) == (right == nil) && slices.Equal(left, right)
+}
+
+func equalEtcdStringMap(left, right map[string]string) bool {
+	return (left == nil) == (right == nil) && maps.Equal(left, right)
+}
+
+func equalEtcdStringMatrix(left, right [][]string) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !equalEtcdStrings(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalEtcdMount(left, right mount.Mount) bool {
+	return left.Type == right.Type && left.Source == right.Source && left.Target == right.Target &&
+		left.ReadOnly == right.ReadOnly && left.Consistency == right.Consistency &&
+		equalEtcdBindOptions(left.BindOptions, right.BindOptions) &&
+		equalEtcdVolumeOptions(left.VolumeOptions, right.VolumeOptions) &&
+		equalEtcdImageOptions(left.ImageOptions, right.ImageOptions) &&
+		equalEtcdTmpfsOptions(left.TmpfsOptions, right.TmpfsOptions) &&
+		(left.ClusterOptions == nil) == (right.ClusterOptions == nil)
+}
+
+func equalEtcdBindOptions(left, right *mount.BindOptions) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func equalEtcdVolumeOptions(left, right *mount.VolumeOptions) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.NoCopy == right.NoCopy && equalEtcdStringMap(left.Labels, right.Labels) && left.Subpath == right.Subpath &&
+		equalEtcdDrivers(left.DriverConfig, right.DriverConfig)
+}
+
+func equalEtcdDrivers(left, right *mount.Driver) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Name == right.Name && equalEtcdStringMap(left.Options, right.Options)
+}
+
+func equalEtcdImageOptions(left, right *mount.ImageOptions) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Subpath == right.Subpath
+}
+
+func equalEtcdTmpfsOptions(left, right *mount.TmpfsOptions) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.SizeBytes == right.SizeBytes && left.Mode == right.Mode && equalEtcdStringMatrix(left.Options, right.Options)
 }
 
 func ensureDataDirectory() error {
