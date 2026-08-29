@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"strconv"
 	"unicode/utf8"
 
@@ -33,12 +32,12 @@ type runnerMutationOutput struct {
 
 func (s *Server) registerRunnerEdit() {
 	registry := s.API.OpenAPI().Components.Schemas
-	requestSchema := registry.Schema(reflect.TypeFor[apiTypes.RunnerEditRequest](), true, "RunnerEditRequest")
+	requestSchema := openAPISchema[apiTypes.RunnerEditRequest](registry, "RunnerEditRequest")
 	requestShape := registry.SchemaFromRef(requestSchema.Ref)
 	slugLimit := 63
 	requestShape.Properties["slug"].MaxLength = &slugLimit
 	requestShape.Properties["slug"].Pattern = `^[a-z0-9]+(?:-[a-z0-9]+)*$`
-	runnerSchema := registry.Schema(reflect.TypeFor[apiTypes.Runner](), true, "Runner")
+	runnerSchema := openAPISchema[apiTypes.Runner](registry, "Runner")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "runner.edit", Method: http.MethodPatch, Path: "/runners/{id}",
 		Summary: "Replace a Runner slug", Tags: []string{"Runner"}, DefaultStatus: http.StatusOK,

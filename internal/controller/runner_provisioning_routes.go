@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"reflect"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,9 +22,7 @@ type runnerRetryInput struct {
 }
 
 func (s *Server) registerRunnerProvisioning() {
-	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
-	)
+	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "runner.create", Method: http.MethodPost, Path: "/runners",
 		Summary: "Create a managed Runner", Tags: []string{"Runner"}, DefaultStatus: http.StatusAccepted,

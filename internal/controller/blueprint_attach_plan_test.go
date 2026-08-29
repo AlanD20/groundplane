@@ -55,7 +55,7 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 	baselineState.blueprintIntent = nil
 	baselineResolver, err := NewTaskPlanResolverWithAttachments(
 		"/var/lib/groundplane/vol", reader, &baselineState, &baselineState, &baselineState,
-	nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithAttachments(baseline) error = %v", err)
@@ -100,5 +100,59 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 	}
 	if _, err := executionplan.Validate(reproduced); err != nil {
 		t.Fatalf("reconstructed Blueprint Attach plan is invalid after return: %v", err)
+	}
+}
+
+// Rationale: Blueprint Attach replay must reject any persisted representation
+// that differs from the published candidate, including nil-vs-empty slices and
+// time.Time values that describe the same instant with different internals.
+func TestBlueprintAttachRecordEqualPreservesStrictRecordEquality(t *testing.T) {
+	createdAt := time.Date(2026, 8, 29, 14, 0, 0, 0, time.UTC)
+	sameInstantDifferentLocation := createdAt.In(time.FixedZone("UTC", 0))
+	cases := []struct {
+		name  string
+		left  etcd.AttachRecord
+		right etcd.AttachRecord
+		want  bool
+	}{
+		{
+			name:  "matching zero values",
+			left:  etcd.AttachRecord{CreatedAt: createdAt},
+			right: etcd.AttachRecord{CreatedAt: createdAt},
+			want:  true,
+		},
+		{
+			name:  "nil grant IDs versus empty grant IDs",
+			left:  etcd.AttachRecord{CreatedAt: createdAt},
+			right: etcd.AttachRecord{CreatedAt: createdAt, GrantAttachIDs: []string{}},
+			want:  false,
+		},
+		{
+			name:  "nil fact sets versus empty fact sets",
+			left:  etcd.AttachRecord{CreatedAt: createdAt},
+			right: etcd.AttachRecord{CreatedAt: createdAt, FactSets: []etcd.AttachFactSetMetadata{}},
+			want:  false,
+		},
+		{
+			name: "nil facts versus empty facts",
+			left: etcd.AttachRecord{CreatedAt: createdAt, FactSets: []etcd.AttachFactSetMetadata{{}}},
+			right: etcd.AttachRecord{
+				CreatedAt: createdAt, FactSets: []etcd.AttachFactSetMetadata{{Facts: []etcd.AttachFactDefinition{}}},
+			},
+			want: false,
+		},
+		{
+			name:  "same instant with different time representation",
+			left:  etcd.AttachRecord{CreatedAt: createdAt},
+			right: etcd.AttachRecord{CreatedAt: sameInstantDifferentLocation},
+			want:  false,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := blueprintAttachRecordEqual(test.left, test.right); got != test.want {
+				t.Fatalf("blueprintAttachRecordEqual() = %t, want %t", got, test.want)
+			}
+		})
 	}
 }

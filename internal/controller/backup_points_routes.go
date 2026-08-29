@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"net/http"
-	"reflect"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -26,16 +25,8 @@ type recoveryPointPageOutput struct {
 }
 
 func (s *Server) registerRecoveryPoints() {
-	pointSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.RecoveryPoint](),
-		true,
-		"RecoveryPoint",
-	)
-	pageSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.RecoveryPointPage](),
-		true,
-		"RecoveryPointPage",
-	)
+	pointSchema := openAPISchema[apiTypes.RecoveryPoint](s.API.OpenAPI().Components.Schemas, "RecoveryPoint")
+	pageSchema := openAPISchema[apiTypes.RecoveryPointPage](s.API.OpenAPI().Components.Schemas, "RecoveryPointPage")
 	if pageSchema == nil || pointSchema == nil {
 		return
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
@@ -45,7 +44,7 @@ type backupKeyExportOutput struct {
 }
 
 func (s *Server) registerBackupKeyRoutes() {
-	acceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted")
+	acceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backup.key.rotate", Method: http.MethodPost, Path: "/environments/{id}/rotate-key",
 		Summary: "Rotate the Environment backup age key", Tags: []string{"Backup"}, DefaultStatus: http.StatusAccepted,

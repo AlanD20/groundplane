@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"reflect"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -71,12 +70,8 @@ type componentRouterInput struct {
 type componentRouterOutput struct{ Body apiTypes.Router }
 
 func (s *Server) registerComponents() {
-	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
-	)
-	configResultSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.ComponentConfigMutationResult](), true, "ComponentConfigMutationResult",
-	)
+	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
+	configResultSchema := openAPISchema[apiTypes.ComponentConfigMutationResult](s.API.OpenAPI().Components.Schemas, "ComponentConfigMutationResult")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "component.list", Method: http.MethodGet, Path: "/components",
 		Summary: "List Components", Tags: []string{"Component"},

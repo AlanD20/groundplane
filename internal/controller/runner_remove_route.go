@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"reflect"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,9 +18,7 @@ type runnerRemoveInput struct {
 }
 
 func (s *Server) registerRunnerRemove() {
-	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
-	)
+	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "runner.remove", Method: http.MethodDelete, Path: "/runners/{id}",
 		Summary: "Remove a managed Runner", Tags: []string{"Runner"}, DefaultStatus: http.StatusAccepted,

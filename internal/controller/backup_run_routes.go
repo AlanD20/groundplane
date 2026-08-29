@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"net/http"
-	"reflect"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,9 +15,7 @@ type backupRunInput struct {
 }
 
 func (s *Server) registerBackupRuns() {
-	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
-	)
+	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID:   "backup.run",
 		Method:        http.MethodPost,

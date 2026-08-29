@@ -2,7 +2,7 @@ package controller
 
 import (
 	"context"
-	"reflect"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -44,7 +44,7 @@ func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
 		}
 		expected := staged
 		expected.Status = current.Record.Status
-		if !reflect.DeepEqual(expected, current.Record) ||
+		if !blueprintAttachRecordEqual(expected, current.Record) ||
 			(current.Record.Status != core.AttachPending && current.Record.Status != core.AttachProvisioning) {
 			return nil, 0, errs.New(errs.KindStateConflict, "Blueprint Attach candidate changed after publication")
 		}
@@ -72,6 +72,29 @@ func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
 		candidates = append(candidates, candidate)
 	}
 	return candidates, totalSteps, nil
+}
+
+func blueprintAttachRecordEqual(left etcd.AttachRecord, right etcd.AttachRecord) bool {
+	if left.ID != right.ID || left.EnvironmentID != right.EnvironmentID || left.Name != right.Name ||
+		left.BackingProjectID != right.BackingProjectID || left.BackingEnvironmentID != right.BackingEnvironmentID ||
+		left.BackingServiceID != right.BackingServiceID || left.BackingNetworkID != right.BackingNetworkID ||
+		left.ServiceID != right.ServiceID || left.CredentialAttachID != right.CredentialAttachID ||
+		left.Status != right.Status || left.Operation != right.Operation || left.TaskID != right.TaskID ||
+		left.CreatedAt != right.CreatedAt ||
+		(left.GrantAttachIDs == nil) != (right.GrantAttachIDs == nil) ||
+		!slices.Equal(left.GrantAttachIDs, right.GrantAttachIDs) ||
+		(left.FactSets == nil) != (right.FactSets == nil) ||
+		len(left.FactSets) != len(right.FactSets) {
+		return false
+	}
+	for index := range left.FactSets {
+		leftSet, rightSet := left.FactSets[index], right.FactSets[index]
+		if leftSet.GrantAttachID != rightSet.GrantAttachID ||
+			(leftSet.Facts == nil) != (rightSet.Facts == nil) || !slices.Equal(leftSet.Facts, rightSet.Facts) {
+			return false
+		}
+	}
+	return true
 }
 
 func (resolver *TaskPlanResolver) blueprintAttachProcedureSteps(

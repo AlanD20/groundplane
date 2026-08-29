@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -224,43 +223,95 @@ func projectScriptRunner(
 }
 
 func validateScriptServiceDisposition(service composetypes.ServiceConfig) error {
-	allowed := map[string]struct{}{
-		"BlkioConfig": {}, "CapDrop": {}, "CPUCount": {}, "CPUPercent": {}, "CPUPeriod": {},
-		"CPUQuota": {}, "CPURTPeriod": {}, "CPURTRuntime": {}, "CPUS": {}, "CPUSet": {}, "CPUShares": {},
-		"Deploy": {}, "DNS": {}, "DNSOpts": {}, "DNSSearch": {}, "Environment": {}, "ExtraHosts": {},
-		"GroupAdd": {}, "Image": {}, "Init": {}, "Isolation": {}, "MemLimit": {}, "MemReservation": {},
-		"MemSwapLimit": {}, "MemSwappiness": {}, "Networks": {}, "OomKillDisable": {}, "OomScoreAdj": {},
-		"PidsLimit": {}, "Platform": {}, "ReadOnly": {}, "Runtime": {}, "SecurityOpt": {}, "ShmSize": {},
-		"StorageOpt": {}, "Sysctls": {}, "Tmpfs": {}, "Ulimits": {}, "User": {}, "Volumes": {}, "WorkingDir": {},
-	}
-	forced := map[string]struct{}{
-		"Name": {}, "Profiles": {}, "Attach": {}, "Command": {}, "ContainerName": {}, "DependsOn": {},
-		"Entrypoint": {}, "Expose": {}, "HealthCheck": {}, "Labels": {}, "CustomLabels": {}, "Logging": {},
-		"LogDriver": {}, "LogOpt": {}, "Ports": {}, "PullPolicy": {}, "Restart": {}, "Scale": {},
-		"StdinOpen": {}, "StopGracePeriod": {}, "StopSignal": {}, "Tty": {},
-	}
-	value := reflect.ValueOf(service)
-	typeOf := value.Type()
-	for index := 0; index < value.NumField(); index++ {
-		if value.Field(index).IsZero() {
-			continue
-		}
-		name := typeOf.Field(index).Name
-		if _, ok := allowed[name]; ok {
-			continue
-		}
-		if _, ok := forced[name]; ok {
-			continue
-		}
-		return errs.Newf(errs.KindValidationFailed, "Script runner does not support Compose service field %s", name)
-	}
-	if len(service.EnvFiles) != 0 || len(service.Configs) != 0 || len(service.Secrets) != 0 {
+	if service.Configs != nil || service.EnvFiles != nil || service.Secrets != nil {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Script runner Entry artifacts must be resolved through the private assignment channel",
 		)
 	}
+	if field := scriptServiceUnsupportedField(service); field != "" {
+		return unsupportedScriptServiceField(field)
+	}
 	return nil
+}
+
+func unsupportedScriptServiceField(name string) error {
+	return errs.Newf(errs.KindValidationFailed, "Script runner does not support Compose service field %s", name)
+}
+
+func scriptServiceUnsupportedField(service composetypes.ServiceConfig) string {
+	switch {
+	case service.Annotations != nil:
+		return "Annotations"
+	case service.Build != nil:
+		return "Build"
+	case service.Develop != nil:
+		return "Develop"
+	case service.CapAdd != nil:
+		return "CapAdd"
+	case service.CgroupParent != "":
+		return "CgroupParent"
+	case service.Cgroup != "":
+		return "Cgroup"
+	case service.CredentialSpec != nil:
+		return "CredentialSpec"
+	case service.DeviceCgroupRules != nil:
+		return "DeviceCgroupRules"
+	case service.Devices != nil:
+		return "Devices"
+	case service.Dockerfile != "":
+		return "Dockerfile"
+	case service.DomainName != "":
+		return "DomainName"
+	case service.Provider != nil:
+		return "Provider"
+	case service.Extends != nil:
+		return "Extends"
+	case service.ExternalLinks != nil:
+		return "ExternalLinks"
+	case service.Gpus != nil:
+		return "Gpus"
+	case service.Hostname != "":
+		return "Hostname"
+	case service.Ipc != "":
+		return "Ipc"
+	case service.MacAddress != "":
+		return "MacAddress"
+	case service.Models != nil:
+		return "Models"
+	case service.LabelFiles != nil:
+		return "LabelFiles"
+	case service.Links != nil:
+		return "Links"
+	case service.Net != "":
+		return "Net"
+	case service.NetworkMode != "":
+		return "NetworkMode"
+	case service.Pid != "":
+		return "Pid"
+	case service.Privileged:
+		return "Privileged"
+	case service.UserNSMode != "":
+		return "UserNSMode"
+	case service.Uts != "":
+		return "Uts"
+	case service.UseAPISocket:
+		return "UseAPISocket"
+	case service.VolumeDriver != "":
+		return "VolumeDriver"
+	case service.VolumesFrom != nil:
+		return "VolumesFrom"
+	case service.PreStart != nil:
+		return "PreStart"
+	case service.PostStart != nil:
+		return "PostStart"
+	case service.PreStop != nil:
+		return "PreStop"
+	case service.Extensions != nil:
+		return "Extensions"
+	default:
+		return ""
+	}
 }
 
 func projectScriptNetworks(
@@ -447,9 +498,11 @@ func scriptDeployResources(
 	if deploy == nil {
 		return nil, nil, nil
 	}
-	if deploy.Mode != "" && deploy.Mode != "replicated" || len(deploy.Labels) != 0 || deploy.UpdateConfig != nil ||
-		deploy.RollbackConfig != nil || deploy.RestartPolicy != nil || !reflect.ValueOf(deploy.Placement).IsZero() ||
-		deploy.EndpointMode != "" || len(deploy.Extensions) != 0 || len(deploy.Resources.Extensions) != 0 {
+	placement := deploy.Placement
+	if deploy.Mode != "" && deploy.Mode != "replicated" || deploy.Labels != nil || deploy.UpdateConfig != nil ||
+		deploy.RollbackConfig != nil || deploy.RestartPolicy != nil || placement.Constraints != nil ||
+		placement.Preferences != nil || placement.MaxReplicas != 0 || placement.Extensions != nil ||
+		deploy.EndpointMode != "" || deploy.Extensions != nil || deploy.Resources.Extensions != nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Script runner deploy section contains unsupported fields")
 	}
 	convert := func(resource *composetypes.Resource) (*agentpb.ScriptResource, error) {

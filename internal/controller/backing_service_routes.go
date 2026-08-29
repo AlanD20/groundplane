@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -53,12 +52,8 @@ type backingServiceOutput struct {
 }
 
 func (s *Server) registerBackingServices() {
-	taskAcceptedSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted",
-	)
-	createdSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.BackingServiceCreated](), true, "BackingServiceCreated",
-	)
+	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
+	createdSchema := openAPISchema[apiTypes.BackingServiceCreated](s.API.OpenAPI().Components.Schemas, "BackingServiceCreated")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.list", Method: http.MethodGet, Path: "/backing-services",
 		Summary: "List backing services", Tags: []string{"Backing service"},

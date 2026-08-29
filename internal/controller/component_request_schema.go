@@ -1,18 +1,12 @@
 package controller
 
 import (
-	"reflect"
-
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 func componentConfigMutationRequestSchema(registry huma.Registry) *huma.Schema {
-	reference := registry.Schema(
-		reflect.TypeFor[apiTypes.ComponentConfigMutationRequest](),
-		true,
-		"ComponentConfigMutationRequest",
-	)
+	reference := openAPISchema[apiTypes.ComponentConfigMutationRequest](registry, "ComponentConfigMutationRequest")
 	schema := registry.SchemaFromRef(reference.Ref)
 	if schema == nil {
 		return reference
@@ -33,28 +27,28 @@ func componentConfigMutationRequestSchema(registry huma.Registry) *huma.Schema {
 func coreDNSComponentConfigSchema() *huma.Schema {
 	four := 4
 	resolverList := &huma.Schema{
-		Type: huma.TypeArray,
+		Type:  huma.TypeArray,
 		Items: &huma.Schema{Type: huma.TypeString},
 	}
 	forwarder := &huma.Schema{
-		Type: huma.TypeObject,
+		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
-			"domain": {Type: huma.TypeString},
+			"domain":    {Type: huma.TypeString},
 			"resolvers": resolverList,
 		},
 		Required: []string{"domain", "resolvers"},
 	}
 	return &huma.Schema{
-		Type: huma.TypeObject,
+		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
-			"upstream_auto": {Type: huma.TypeBoolean},
+			"upstream_auto":      {Type: huma.TypeBoolean},
 			"upstream_resolvers": resolverList,
-			"forwarders": {Type: huma.TypeArray, Items: forwarder},
+			"forwarders":         {Type: huma.TypeArray, Items: forwarder},
 			"tailnet_delegation": {Type: huma.TypeBoolean},
 		},
-		Required: []string{"upstream_auto", "upstream_resolvers", "forwarders", "tailnet_delegation"},
+		Required:      []string{"upstream_auto", "upstream_resolvers", "forwarders", "tailnet_delegation"},
 		MinProperties: &four,
 		MaxProperties: &four,
 	}
