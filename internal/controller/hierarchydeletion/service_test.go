@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type fixedClock struct{ now time.Time }
@@ -64,17 +66,65 @@ type fakeRepository struct {
 	completed          map[string]bool
 	failCompletionOnce bool
 	rootPrepared       bool
+	resolveCalls       int
+	resolveErr         error
 }
 
 func newFakeRepository(snapshot FrozenMembership) *fakeRepository {
 	return &fakeRepository{snapshot: snapshot, byOperation: map[string]Operation{}, completed: map[string]bool{}}
 }
 
-func (r *fakeRepository) ResolveTargetKind(_ context.Context, requested TargetKind, _ string) (TargetKind, error) {
-	if r.resolvedTarget != "" {
-		return r.resolvedTarget, nil
+func (r *fakeRepository) ResolveDeletionTarget(_ context.Context, requested TargetKind, _ string) (DeletionTargetResolution, error) {
+	r.resolveCalls++
+	if r.resolveErr != nil {
+		return DeletionTargetResolution{}, r.resolveErr
 	}
-	return requested, nil
+	target := requested
+	if r.resolvedTarget != "" {
+		target = r.resolvedTarget
+	}
+	if requested == TargetProject && target == TargetBackingService {
+		return DeletionTargetResolution{}, errs.New(errs.KindValidationFailed, "project deletion requires an ordinary Project")
+	}
+	resolution := DeletionTargetResolution{TargetKind: target, ScopeKind: target, ScopeID: ""}
+	if target == TargetTenant {
+		resolution.ScopeID = "tenant-1"
+	}
+	if target == TargetProject {
+		resolution.ScopeKind = TargetTenant
+		resolution.ScopeID = "tenant-1"
+	}
+	if target == TargetBackingService {
+		resolution.ScopeID = ""
+	}
+	return resolution, nil
+}
+
+func (r *fakeRepository) ResolveDeletionReplay(_ context.Context, request DeleteRequest) (BeginResult, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.begin.IdempotencyKey == "" || r.begin.IdempotencyKey != request.IdempotencyKey {
+		return BeginResult{}, false, nil
+	}
+	target := r.begin.TargetKind
+	if target == TargetBackingService && request.TargetKind == TargetProject {
+		target = TargetProject
+	}
+	scopeKind := r.begin.IdempotencyIntent.ScopeKind
+	scopeID := r.begin.IdempotencyIntent.ScopeID
+	candidate := idempotencyIntentWithScope(target, request.TargetID, scopeKind, scopeID)
+	stored := r.begin.IdempotencyIntent
+	if stored.Method != candidate.Method || stored.RouteTemplate != candidate.RouteTemplate ||
+		stored.ScopeKind != candidate.ScopeKind || stored.ScopeID != candidate.ScopeID ||
+		len(stored.PathBindings) != len(candidate.PathBindings) {
+		return BeginResult{}, true, errs.New(errs.KindIdempotencyMismatch, "idempotency key was used for a different request")
+	}
+	for index := range stored.PathBindings {
+		if stored.PathBindings[index] != candidate.PathBindings[index] {
+			return BeginResult{}, true, errs.New(errs.KindIdempotencyMismatch, "idempotency key was used for a different request")
+		}
+	}
+	return BeginResult{Operation: r.operation, Existing: true}, true, nil
 }
 
 func (r *fakeRepository) BeginDeletion(_ context.Context, b BeginDeletion) (BeginResult, error) {
@@ -95,7 +145,7 @@ func (r *fakeRepository) BeginDeletion(_ context.Context, b BeginDeletion) (Begi
 	return BeginResult{Operation: r.operation}, nil
 }
 
-func TestDeleteUsesBackingAuthorityBehindProjectRoute(t *testing.T) {
+func TestDeleteRejectsBackingProjectBehindProjectRoute(t *testing.T) {
 	t.Parallel()
 	repository := newFakeRepository(FrozenMembership{})
 	repository.resolvedTarget = TargetBackingService
@@ -103,20 +153,11 @@ func TestDeleteUsesBackingAuthorityBehindProjectRoute(t *testing.T) {
 		now: time.Date(2026, 8, 28, 21, 0, 0, 0, time.UTC),
 	})
 
-	accepted, err := service.Delete(context.Background(), DeleteRequest{
+	_, err := service.Delete(context.Background(), DeleteRequest{
 		TargetKind: TargetProject, TargetID: "project-1", IdempotencyKey: "backing-delete-key",
 	})
-	if err != nil {
-		t.Fatalf("Delete() error = %v", err)
-	}
-	if accepted.TaskID != "task_01M15540AH211T0MA5QQ4KT50C" || repository.begin.OperationKind != OperationBackingDelete ||
-		repository.begin.TargetKind != TargetBackingService {
-		t.Fatalf("Delete() = %#v, begin = %#v", accepted, repository.begin)
-	}
-	intent := repository.begin.IdempotencyIntent
-	if intent.RouteTemplate != ProjectDeleteRoute || intent.ScopeKind != TargetProject ||
-		intent.ScopeID != "project-1" {
-		t.Fatalf("Delete() idempotency intent = %#v", intent)
+	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed {
+		t.Fatalf("Delete() error = %v, want validation.failed", err)
 	}
 }
 func (r *fakeRepository) OperationByTask(_ context.Context, task string) (Operation, error) {
@@ -346,6 +387,58 @@ func TestDeleteIdempotencyAndConcurrency(t *testing.T) {
 		t.Fatal("different key not fenced")
 	}
 }
+
+// Rationale: a finalized Project record is gone, but its durable idempotency marker and retained Task must replay the identical DELETE.
+func TestDeleteReplaysRetainedProjectAfterFinalization(t *testing.T) {
+	repository := newFakeRepository(FrozenMembership{})
+	service := NewService(repository, &fakeExecutor{}, fixedIDs{task: "task_01M15540AH211T0MA5QQ4KT50C"}, fixedClock{
+		now: time.Date(2026, 8, 28, 21, 0, 0, 0, time.UTC),
+	})
+	request := DeleteRequest{TargetKind: TargetProject, TargetID: "project-1", IdempotencyKey: "project-delete-key"}
+	first, err := service.Delete(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository.mu.Lock()
+	repository.operation.Phase = PhaseRetained
+	repository.resolveErr = errs.New(errs.KindProjectNotFound, "project was not found")
+	repository.mu.Unlock()
+
+	replay, err := service.Delete(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Delete(replay) error = %v", err)
+	}
+	if !replay.Existing || replay.TaskID != first.TaskID || replay.OperationID != first.OperationID {
+		t.Fatalf("Delete(replay) = %#v, first = %#v", replay, first)
+	}
+	if repository.resolveCalls != 1 {
+		t.Fatalf("ResolveTargetKind calls = %d, want only the initial new deletion", repository.resolveCalls)
+	}
+}
+
+// Rationale: reusing a completed deletion's key for another route intent must remain an idempotency conflict, even after the original record is finalized.
+func TestDeleteRetainedReplayRejectsDifferentIntent(t *testing.T) {
+	repository := newFakeRepository(FrozenMembership{})
+	service := NewService(repository, &fakeExecutor{}, fixedIDs{task: "task_01M15540AH211T0MA5QQ4KT50C"}, fixedClock{
+		now: time.Date(2026, 8, 28, 21, 0, 0, 0, time.UTC),
+	})
+	request := DeleteRequest{TargetKind: TargetProject, TargetID: "project-1", IdempotencyKey: "project-delete-key"}
+	if _, err := service.Delete(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	repository.mu.Lock()
+	repository.operation.Phase = PhaseRetained
+	repository.resolveErr = errs.New(errs.KindProjectNotFound, "project was not found")
+	repository.mu.Unlock()
+
+	_, err := service.Delete(context.Background(), DeleteRequest{
+		TargetKind: TargetProject, TargetID: "project-2", IdempotencyKey: request.IdempotencyKey,
+	})
+	if !errors.Is(err, errs.New(errs.KindIdempotencyMismatch, "")) {
+		t.Fatalf("Delete(mismatched replay) error = %v, want idempotency mismatch", err)
+	}
+}
+
 func TestExecuteStopsBeforeRootForAtomicTaskAcknowledgement(t *testing.T) {
 	svc, repo, executor := service(FrozenMembership{Revision: 2, RootRevision: 2, RootProcedureInput: finalizer(ActionEnvironmentFinalize, ActionTargetEnvironment, "env-1", 2, "environment"), CoordinationEpoch: 1})
 	accepted, err := svc.Delete(context.Background(), DeleteRequest{TargetKind: TargetEnvironment, TargetID: "env-1", IdempotencyKey: "key"})

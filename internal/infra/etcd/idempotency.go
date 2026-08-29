@@ -56,17 +56,22 @@ type IdempotencyLocator struct {
 type IdempotencyReplayTargetKind string
 
 const (
-	IdempotencyReplayTargetAttach       IdempotencyReplayTargetKind = "attach"
-	IdempotencyReplayTargetConnector    IdempotencyReplayTargetKind = "connector"
-	IdempotencyReplayTargetEntry        IdempotencyReplayTargetKind = "entry"
-	IdempotencyReplayTargetRoute        IdempotencyReplayTargetKind = "route"
-	IdempotencyReplayTargetRunner       IdempotencyReplayTargetKind = "runner"
-	IdempotencyReplayTargetScript       IdempotencyReplayTargetKind = "script"
-	IdempotencyReplayTargetReleaseGroup IdempotencyReplayTargetKind = "release_group"
-	IdempotencyReplayTargetSecret       IdempotencyReplayTargetKind = "secret"
-	IdempotencyReplayTargetZone         IdempotencyReplayTargetKind = "zone"
-	IdempotencyReplayTargetService      IdempotencyReplayTargetKind = "service"
-	IdempotencyReplayTargetVolume       IdempotencyReplayTargetKind = "volume"
+	IdempotencyReplayTargetAttach         IdempotencyReplayTargetKind = "attach"
+	IdempotencyReplayTargetConnector      IdempotencyReplayTargetKind = "connector"
+	IdempotencyReplayTargetEntry          IdempotencyReplayTargetKind = "entry"
+	IdempotencyReplayTargetRoute          IdempotencyReplayTargetKind = "route"
+	IdempotencyReplayTargetRunner         IdempotencyReplayTargetKind = "runner"
+	IdempotencyReplayTargetScript         IdempotencyReplayTargetKind = "script"
+	IdempotencyReplayTargetReleaseGroup   IdempotencyReplayTargetKind = "release_group"
+	IdempotencyReplayTargetSecret         IdempotencyReplayTargetKind = "secret"
+	IdempotencyReplayTargetZone           IdempotencyReplayTargetKind = "zone"
+	IdempotencyReplayTargetService        IdempotencyReplayTargetKind = "service"
+	IdempotencyReplayTargetVolume         IdempotencyReplayTargetKind = "volume"
+	IdempotencyReplayTargetTenant         IdempotencyReplayTargetKind = "tenant"
+	IdempotencyReplayTargetProject        IdempotencyReplayTargetKind = "project"
+	IdempotencyReplayTargetEnvironment    IdempotencyReplayTargetKind = "environment"
+	IdempotencyReplayTargetBacking        IdempotencyReplayTargetKind = "backing-service"
+	IdempotencyReplayTargetBackingService                             = IdempotencyReplayTargetBacking
 )
 
 type IdempotencyReplayTarget struct {
@@ -310,6 +315,18 @@ func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
 		}
 	case IdempotencyReplayTargetVolume:
 		if ids.Validate(ids.KindVolume, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetTenant:
+		if ids.Validate(ids.KindTenant, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetProject, IdempotencyReplayTargetBacking:
+		if ids.Validate(ids.KindProject, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
+	case IdempotencyReplayTargetEnvironment:
+		if ids.Validate(ids.KindEnvironment, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
 	default:
@@ -1176,101 +1193,6 @@ func clearKeyValues(values []*KeyValue) {
 			value.Value = nil
 		}
 	}
-}
-
-func (repository *IdempotencyRepository) Read(
-	ctx context.Context,
-	locator IdempotencyLocator,
-) (*IdempotencyEvidence, error) {
-	if ctx == nil {
-		return nil, errs.New(errs.KindInternal, "idempotency context is required")
-	}
-	key, err := idempotencyMarkerKey(locator)
-	if err != nil {
-		return nil, err
-	}
-	result, err := repository.store.Get(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return nil, errs.New(errs.KindInternal, "idempotency read result is missing")
-	}
-	if result.Entry == nil {
-		return nil, nil
-	}
-	defer clear(result.Entry.Value)
-	marker, err := decodeIdempotencyMarker(result.Entry.Value, locator)
-	if err != nil {
-		return nil, err
-	}
-	if result.Entry.ModRevision <= 0 {
-		return nil, corruptIdempotencyMarker()
-	}
-	return &IdempotencyEvidence{marker: marker, modRevision: result.Entry.ModRevision}, nil
-}
-
-func (repository *IdempotencyRepository) ResolveReplayLocator(
-	ctx context.Context,
-	target IdempotencyReplayTarget,
-	method string,
-	route string,
-	key string,
-) (IdempotencyLocator, bool, error) {
-	if ctx == nil {
-		return IdempotencyLocator{}, false, errs.New(errs.KindInternal, "idempotency context is required")
-	}
-	targetKey, err := idempotencyReplayTargetKey(target, method, route, key)
-	if err != nil {
-		return IdempotencyLocator{}, false, err
-	}
-	result, err := repository.store.Get(ctx, targetKey)
-	if err != nil {
-		return IdempotencyLocator{}, false, err
-	}
-	if result == nil {
-		return IdempotencyLocator{}, false, errs.New(errs.KindInternal, "idempotency replay lookup result is missing")
-	}
-	if result.Entry == nil {
-		return IdempotencyLocator{}, false, nil
-	}
-	defer clear(result.Entry.Value)
-	if result.Entry.Key != targetKey || result.Entry.ModRevision <= 0 || result.ReadRevision <= 0 {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
-	}
-	var reference replayTargetReferenceJSON
-	decoder := json.NewDecoder(bytes.NewReader(result.Entry.Value))
-	decoder.DisallowUnknownFields()
-	if rejectDuplicateJSONFields(result.Entry.Value) != nil || decoder.Decode(&reference) != nil ||
-		requireJSONEOF(decoder) != nil || reference.Schema != 1 {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
-	}
-	locator, err := parseIdempotencyMarkerKey(reference.MarkerKey)
-	if err != nil || locator.Method != method || locator.Route != route || locator.Key != key {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
-	}
-	markers, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{reference.MarkerKey}, Revision: result.ReadRevision,
-	})
-	if err != nil {
-		return IdempotencyLocator{}, false, err
-	}
-	if markers == nil || markers.ReadRevision != result.ReadRevision || len(markers.Values) != 1 ||
-		markers.Values[0] == nil {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
-	}
-	defer clear(markers.Values[0].Value)
-	marker, err := decodeIdempotencyMarker(markers.Values[0].Value, locator)
-	if err != nil {
-		return IdempotencyLocator{}, false, err
-	}
-	defer clear(marker.Intent.Ciphertext)
-	defer clear(marker.Response.Body)
-	if marker.ReplayTarget == nil || *marker.ReplayTarget != target ||
-		decodeReplayTargetReference(result.Entry.Value, reference.MarkerKey) != nil {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
-	}
-	return locator, true, nil
 }
 
 func (evidence *IdempotencyEvidence) Marker() (IdempotencyMarker, error) {

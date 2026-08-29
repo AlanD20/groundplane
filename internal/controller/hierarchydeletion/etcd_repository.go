@@ -4,9 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -35,19 +32,36 @@ func NewEtcdRepository(
 	}, nil
 }
 
+func (repository *EtcdRepository) ResolveDeletionTarget(
+	ctx context.Context,
+	requested TargetKind,
+	targetID string,
+) (DeletionTargetResolution, error) {
+	resolved, err := repository.journal.ResolveDeletionTarget(
+		ctx, etcdinfra.HierarchyDeletionTargetKind(requested), targetID,
+	)
+	if err != nil {
+		return DeletionTargetResolution{}, err
+	}
+	scopeKind, err := domainScopeKind(resolved.ScopeKind)
+	if err != nil {
+		return DeletionTargetResolution{}, err
+	}
+	return DeletionTargetResolution{
+		TargetKind: TargetKind(resolved.TargetKind), ScopeKind: scopeKind, ScopeID: resolved.ScopeID,
+	}, nil
+}
+
 func (repository *EtcdRepository) ResolveTargetKind(
 	ctx context.Context,
 	requested TargetKind,
 	targetID string,
 ) (TargetKind, error) {
-	if requested != TargetProject {
-		return requested, nil
-	}
-	resolved, err := repository.journal.ResolveProjectDeletionTargetKind(ctx, targetID)
+	resolved, err := repository.ResolveDeletionTarget(ctx, requested, targetID)
 	if err != nil {
 		return "", err
 	}
-	return TargetKind(resolved), nil
+	return resolved.TargetKind, nil
 }
 
 func (repository *EtcdRepository) BeginDeletion(
@@ -61,14 +75,21 @@ func (repository *EtcdRepository) BeginDeletion(
 	defer protected.Destroy()
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	resolution, found, err := repository.coordinator.ResolveExisting(
-		ctx, repository.idempotency, marker.Locator, protected,
-	)
+	request, err := replayRequestFromBegin(begin)
 	if err != nil {
 		return BeginResult{}, err
 	}
-	if found {
-		return repository.replayedBegin(ctx, resolution)
+	if replayed, found, resolveErr := repository.resolveReplay(ctx, request, protected, &marker.Locator, false); resolveErr != nil {
+		return BeginResult{}, resolveErr
+	} else if found {
+		return replayed, nil
+	}
+	if replayed, found, resolveErr := repository.resolveReplayAfterMiss(
+		ctx, request, protected, marker.Locator,
+	); resolveErr != nil {
+		return BeginResult{}, resolveErr
+	} else if found {
+		return replayed, nil
 	}
 	created, err := repository.journal.Begin(ctx, etcdinfra.HierarchyDeletionBegin{
 		OperationID: begin.OperationID, TaskOperationID: begin.TaskOperationIDCandidate,
@@ -78,99 +99,39 @@ func (repository *EtcdRepository) BeginDeletion(
 		Marker: marker, CreatedAt: begin.CreatedAt, DeadlineAt: begin.DeadlineAt,
 	})
 	if err != nil {
-		kind, isKind := errs.KindOf(err)
-		if !errors.Is(err, context.DeadlineExceeded) && (!isKind || kind != errs.KindStorageUnavailable) {
+		if !isUnknownBeginError(err) {
 			return BeginResult{}, err
 		}
-		resolution, resolveErr := repository.coordinator.ResolveUnknown(
-			ctx, repository.idempotency, marker.Locator, protected, err,
-		)
-		if resolveErr != nil {
+		if replayed, found, resolveErr := repository.resolveReplay(ctx, request, protected, &marker.Locator, false); resolveErr != nil {
 			return BeginResult{}, resolveErr
+		} else if found {
+			return replayed, nil
 		}
-		return repository.replayedBegin(ctx, resolution)
-	}
-	resolution, err = repository.coordinator.ResolveKnown(ctx, protected, created.Idempotency)
-	if err != nil {
+		if replayed, found, resolveErr := repository.resolveReplayAfterMiss(
+			ctx, request, protected, marker.Locator,
+		); resolveErr != nil {
+			return BeginResult{}, resolveErr
+		} else if found {
+			return replayed, nil
+		}
 		return BeginResult{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
-		return repository.replayedBegin(ctx, resolution)
+	if !created.Existing {
+		return BeginResult{Operation: operationFromEtcd(created.Operation), Existing: false}, nil
 	}
-	return BeginResult{Operation: operationFromEtcd(created.Operation), Existing: created.Existing}, nil
-}
-
-func (repository *EtcdRepository) protectBegin(
-	ctx context.Context,
-	begin BeginDeletion,
-) (idempotentintent.ProtectedEvidence, etcdinfra.IdempotencyMarker, error) {
-	intent := idempotentintent.CanonicalIntentV1{
-		Method: begin.IdempotencyIntent.Method, Route: begin.IdempotencyIntent.RouteTemplate,
-		Scope: idempotentintent.Scope{
-			Kind: idempotencyScopeKind(begin.IdempotencyIntent.ScopeKind),
-			ID:   begin.IdempotencyIntent.ScopeID,
-		},
-		Path:  make([]idempotentintent.PathBinding, len(begin.IdempotencyIntent.PathBindings)),
-		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+	if replayed, found, resolveErr := repository.resolveReplay(ctx, request, protected, &marker.Locator, false); resolveErr != nil {
+		return BeginResult{}, resolveErr
+	} else if found {
+		return replayed, nil
 	}
-	for index, binding := range begin.IdempotencyIntent.PathBindings {
-		intent.Path[index] = idempotentintent.PathBinding{Name: binding.Name, Value: binding.Value}
+	if replayed, found, resolveErr := repository.resolveReplayAfterMiss(
+		ctx, request, protected, marker.Locator,
+	); resolveErr != nil {
+		return BeginResult{}, resolveErr
+	} else if found {
+		return replayed, nil
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, intent)
-	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, err
-	}
-	protected, err := repository.coordinator.ProtectIntent(ctx, version, digest)
-	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, err
-	}
-	durable, err := protected.DurableRecord()
-	if err != nil {
-		protected.Destroy()
-		return idempotentintent.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, err
-	}
-	body, err := json.Marshal(struct {
-		TaskID string `json:"task_id"`
-	}{TaskID: begin.TaskIDCandidate})
-	if err != nil {
-		protected.Destroy()
-		clear(durable.Ciphertext)
-		return idempotentintent.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
-	}
-	marker := etcdinfra.IdempotencyMarker{
-		Kind: etcdinfra.IdempotencyMarkerTask, State: etcdinfra.IdempotencyMarkerPending,
-		Locator: etcdinfra.IdempotencyLocator{
-			ScopeKind: etcdinfra.IdempotencyScopeKind(begin.IdempotencyIntent.ScopeKind),
-			ScopeID:   begin.IdempotencyIntent.ScopeID, Method: begin.IdempotencyIntent.Method,
-			Route: begin.IdempotencyIntent.RouteTemplate, Key: begin.IdempotencyKey,
-		},
-		Intent: durable,
-		Response: etcdinfra.IdempotencyResponse{
-			Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
-		},
-		TaskID: begin.TaskIDCandidate, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
-	}
-	return protected, marker, nil
-}
-
-func (repository *EtcdRepository) replayedBegin(
-	ctx context.Context,
-	resolution idempotentintent.Resolution,
-) (BeginResult, error) {
-	if resolution.Kind != idempotentintent.ResolutionReplay || resolution.Response.Status != http.StatusAccepted {
-		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay response is invalid")
-	}
-	var response struct {
-		TaskID string `json:"task_id"`
-	}
-	if json.Unmarshal(resolution.Response.Body, &response) != nil || response.TaskID == "" {
-		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay Task is invalid")
-	}
-	operation, err := repository.journal.OperationByTask(ctx, response.TaskID)
-	if err != nil {
-		return BeginResult{}, err
-	}
-	return BeginResult{Operation: operationFromEtcd(operation), Existing: true}, nil
+	return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion publication has no replay index")
 }
 
 func (repository *EtcdRepository) OperationByTask(
@@ -537,19 +498,6 @@ func plannedActionToEtcd(value PlannedAction) etcdinfra.HierarchyDeletionPlanned
 func idempotencyKeyHash(value string) string {
 	digest := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(digest[:])
-}
-
-func idempotencyScopeKind(target TargetKind) idempotentintent.ScopeKind {
-	switch target {
-	case TargetTenant:
-		return idempotentintent.ScopeTenant
-	case TargetProject:
-		return idempotentintent.ScopeProject
-	case TargetEnvironment:
-		return idempotentintent.ScopeEnvironment
-	default:
-		return ""
-	}
 }
 
 var _ Repository = (*EtcdRepository)(nil)

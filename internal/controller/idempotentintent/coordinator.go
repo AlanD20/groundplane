@@ -171,6 +171,21 @@ func (coordinator *Coordinator) ResolveExisting(
 	return resolution, true, err
 }
 
+// ResolveMarker classifies marker evidence already read by a caller at a
+// fixed revision. It is deliberately separate from ResolveExisting so durable
+// reverse-index replays do not perform an unconstrained second read.
+func (coordinator *Coordinator) ResolveMarker(
+	ctx context.Context,
+	candidate ProtectedEvidence,
+	marker infraetcd.IdempotencyMarker,
+) (Resolution, error) {
+	if ctx == nil {
+		return Resolution{}, internalError("marker-outcome evidence is incomplete")
+	}
+	defer clearProtectedMarker(marker)
+	return coordinator.classifyMarker(ctx, candidate, marker)
+}
+
 // ResolveOperationRootExisting classifies an immutable operation-root
 // response. Unlike ordinary Task idempotency, an equal accepted operation
 // replays its stored root response while the current attempt is still active.

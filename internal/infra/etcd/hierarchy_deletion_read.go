@@ -96,6 +96,9 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	if err != nil || task.ID != taskID || task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
 		return HierarchyDeletionOperation{}, corruptHierarchyDeletion()
 	}
+	if task.idempotencyMarker == nil || validateIdempotencyLocator(*task.idempotencyMarker) != nil {
+		return HierarchyDeletionOperation{}, corruptHierarchyDeletion()
+	}
 	operationID := task.Params[TaskHierarchyDeletionOperationParam]
 	if !validHierarchyDeletionPrivateID(operationID, "del") {
 		return HierarchyDeletionOperation{}, corruptHierarchyDeletion()
@@ -169,8 +172,9 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		return HierarchyDeletionOperation{}, err
 	}
 	return HierarchyDeletionOperation{
-		Tombstone: tombstone, TombstoneRevision: tombstoneResult.Values[0].ModRevision,
-		Fence: fence, FenceRevision: replayResult.Values[1].ModRevision,
+		Tombstone: tombstone, RootTaskID: replay.RootTaskID, MarkerLocator: *task.idempotencyMarker, Owner: task.Owner,
+		TombstoneRevision: tombstoneResult.Values[0].ModRevision,
+		Fence:             fence, FenceRevision: replayResult.Values[1].ModRevision,
 		Intent: intent, IntentRevision: replayResult.Values[0].ModRevision,
 		PlanCursor:     hierarchyDeletionPlanCursor(tombstone),
 		SucceededCount: tombstone.Checkpoint.CompletedCount,
@@ -190,10 +194,13 @@ func validateHierarchyDeletionOperationSet(
 		tombstone.OperationID != replay.ParentOperationID || tombstone.TaskOperationID != task.OperationID ||
 		tombstone.DeletionEpoch != intent.DeletionEpoch || tombstone.DeletionEpoch != fence.DeletionEpoch ||
 		tombstone.DeletionEpoch != replay.DeletionEpoch || tombstone.TargetKind != intent.TargetKind ||
-		tombstone.TargetID != intent.TargetID || tombstone.CurrentTaskID != replay.CurrentTaskID ||
+		tombstone.TargetID != intent.TargetID || tombstone.OperationKind != intent.OperationKind ||
+		tombstone.OperationKind != replay.OperationKind || tombstone.TargetKind != replay.TargetKind ||
+		tombstone.TargetID != replay.TargetID || tombstone.CurrentTaskID != replay.CurrentTaskID ||
 		fence.CurrentTaskID != replay.CurrentTaskID || replay.TombstoneKey != HierarchyDeletionTombstoneKey(
 		string(tombstone.TargetKind), tombstone.TargetID,
-	) || !validHierarchyDeletionPhase(tombstone.Phase) || tombstone.Phase != fence.Phase ||
+	) || replay.ResponseDigest != hierarchyDeletionResponseDigest(replay.RootTaskID) ||
+		!validHierarchyDeletionPhase(tombstone.Phase) || tombstone.Phase != fence.Phase ||
 		fence.Generation <= 0 || !validHierarchyDeletionTimestamp(fence.UpdatedAt) {
 		return corruptHierarchyDeletion()
 	}

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T) {
@@ -86,6 +88,33 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	operation, err = NewHierarchyDeletionRepositoryForTest(t, restarted).OperationByTask(ctx, begin.TaskID)
 	if err != nil || operation.Tombstone.Phase != HierarchyDeletionRetained || operation.Tombstone.Terminal == nil {
 		t.Fatalf("retained operation = %#v/%v", operation, err)
+	}
+	replayKey, err := HierarchyDeletionReplayTargetKey(begin.OperationID)
+	if err != nil {
+		t.Fatalf("HierarchyDeletionReplayTargetKey() error = %v", err)
+	}
+	replayValue, err := restarted.Get(ctx, replayKey)
+	if err != nil || replayValue.Entry == nil {
+		t.Fatalf("retained replay locator = %#v/%v", replayValue, err)
+	}
+	var replayLocator HierarchyDeletionReplayLocator
+	if err := decodeHierarchyDeletionRecord(replayValue.Entry.Value, hierarchyDeletionSmallRecordBytes, &replayLocator); err != nil {
+		t.Fatalf("decode retained replay locator = %v", err)
+	}
+	replayLocator.OperationKind = HierarchyDeletionOperationProject
+	corruptReplay, err := encodeHierarchyDeletionRecord(replayLocator, hierarchyDeletionSmallRecordBytes)
+	if err != nil {
+		t.Fatalf("encode corrupt replay locator = %v", err)
+	}
+	corruptResult, err := restarted.Transact(ctx,
+		[]Condition{{Key: replayKey, ModRevision: replayValue.Entry.ModRevision}},
+		[]Mutation{{Type: MutationPut, Key: replayKey, Value: corruptReplay}},
+	)
+	if err != nil || !corruptResult.Succeeded {
+		t.Fatalf("corrupt replay locator write = %#v/%v", corruptResult, err)
+	}
+	if _, err := NewHierarchyDeletionRepositoryForTest(t, restarted).OperationByTask(ctx, begin.TaskID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("corrupt hierarchy replay locator read error = %v, want internal", err)
 	}
 	completionSummaryKey, _ := HierarchyDeletionCompletionSummaryKey(begin.OperationID)
 	if result, err := restarted.Get(ctx, completionSummaryKey); err != nil || result.Entry == nil {
@@ -211,6 +240,24 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 	outcome, _, conflict, err := replay.Classify()
 	if err != nil || conflict != nil || outcome != IdempotencyKnownExisting {
 		t.Fatalf("RetryTask(restart replay) classification = %v/%v/%v", outcome, conflict, err)
+	}
+	idempotency, err := NewIdempotencyRepository(restarted)
+	if err != nil {
+		t.Fatalf("NewIdempotencyRepository() error = %v", err)
+	}
+	locator, revision, found, err := idempotency.ResolveReplayLocatorAtRevision(
+		ctx, *begin.Marker.ReplayTarget, begin.Marker.Locator.Method, begin.Marker.Locator.Route, begin.Marker.Locator.Key,
+	)
+	if err != nil || !found || revision <= 0 || locator != begin.Marker.Locator {
+		t.Fatalf("replay-after-successor lookup = %#v/%d/%t/%v", locator, revision, found, err)
+	}
+	evidence, err := idempotency.ReadAtRevision(ctx, locator, revision)
+	if err != nil || evidence == nil {
+		t.Fatalf("replay-after-successor evidence = %#v/%v", evidence, err)
+	}
+	retainedMarker, err := evidence.Marker()
+	if err != nil || retainedMarker.TaskID != begin.TaskID {
+		t.Fatalf("replay-after-successor Task = %#v/%v", retainedMarker, err)
 	}
 	operation, err := NewHierarchyDeletionRepositoryForTest(t, restarted).OperationByTask(ctx, retryID)
 	if err != nil || operation.Tombstone.CurrentTaskID != retryID || operation.Intent.TaskOperationID != begin.TaskOperationID {
@@ -492,6 +539,18 @@ func hierarchyDeletionAcceptanceBegin(
 		Response: IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
 		TaskID:   taskID, CreatedAt: now, UpdatedAt: now,
 	}
+	var replayKind IdempotencyReplayTargetKind
+	switch targetKind {
+	case HierarchyDeletionTargetTenant:
+		replayKind = IdempotencyReplayTargetTenant
+	case HierarchyDeletionTargetProject:
+		replayKind = IdempotencyReplayTargetProject
+	case HierarchyDeletionTargetEnvironment:
+		replayKind = IdempotencyReplayTargetEnvironment
+	case HierarchyDeletionTargetBacking:
+		replayKind = IdempotencyReplayTargetBacking
+	}
+	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: replayKind, ID: targetID}
 	idempotencyDigest := sha256.Sum256([]byte(key))
 	return HierarchyDeletionBegin{
 		OperationID: "del_" + strings.Repeat(digestDigit, 32), TaskOperationID: taskOperationID,

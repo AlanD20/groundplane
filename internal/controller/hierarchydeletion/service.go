@@ -11,7 +11,8 @@ import (
 // Repository is a domain seam because an operation and Task must survive restarts.
 // Implementations compare-and-swap every transition and enforce the revision fence.
 type Repository interface {
-	ResolveTargetKind(context.Context, TargetKind, string) (TargetKind, error)
+	ResolveDeletionReplay(context.Context, DeleteRequest) (BeginResult, bool, error)
+	ResolveDeletionTarget(context.Context, TargetKind, string) (DeletionTargetResolution, error)
 	BeginDeletion(context.Context, BeginDeletion) (BeginResult, error)
 	OperationByTask(context.Context, string) (Operation, error)
 	FreezeMembership(context.Context, Operation) (FrozenMembership, error)
@@ -22,6 +23,12 @@ type Repository interface {
 	CompleteControllerAction(context.Context, Operation, Action) (Operation, error)
 	PrepareRootFinalization(context.Context, Operation, Action) (Operation, error)
 	GetDeletionTaskIDAtRevision(context.Context, TargetKind, string, int64) (*string, error)
+}
+
+type DeletionTargetResolution struct {
+	TargetKind TargetKind
+	ScopeKind  TargetKind
+	ScopeID    string
 }
 type BeginDeletion struct {
 	OperationID              string
@@ -56,13 +63,17 @@ type IdempotencyIntent struct {
 }
 
 func idempotencyIntent(target TargetKind, targetID string) IdempotencyIntent {
+	return idempotencyIntentWithScope(target, targetID, target, targetID)
+}
+
+func idempotencyIntentWithScope(target TargetKind, targetID string, scopeKind TargetKind, scopeID string) IdempotencyIntent {
 	route := TenantDeleteRoute
-	if target == TargetProject {
+	if target == TargetProject || target == TargetBackingService {
 		route = ProjectDeleteRoute
 	} else if target == TargetEnvironment {
 		route = EnvironmentDeleteRoute
 	}
-	return IdempotencyIntent{Method: "DELETE", RouteTemplate: route, ScopeKind: target, ScopeID: targetID, PathBindings: []PathBinding{{Name: "id", Value: targetID}}}
+	return IdempotencyIntent{Method: "DELETE", RouteTemplate: route, ScopeKind: scopeKind, ScopeID: scopeID, PathBindings: []PathBinding{{Name: "id", Value: targetID}}}
 }
 
 type BeginResult struct {
@@ -101,22 +112,29 @@ func (s *Service) Delete(ctx context.Context, request DeleteRequest) (TaskAccept
 	if err := validateRequest(request); err != nil {
 		return TaskAccepted{}, err
 	}
-	targetKind, err := s.repository.ResolveTargetKind(ctx, request.TargetKind, request.TargetID)
+	replay, found, err := s.repository.ResolveDeletionReplay(ctx, request)
 	if err != nil {
 		return TaskAccepted{}, err
 	}
-	if !targetKind.Valid() {
+	if found {
+		return TaskAccepted{TaskID: replay.Operation.TaskID, OperationID: replay.Operation.ID, Existing: true}, nil
+	}
+	resolved, err := s.repository.ResolveDeletionTarget(ctx, request.TargetKind, request.TargetID)
+	if err != nil {
+		return TaskAccepted{}, err
+	}
+	if !resolved.TargetKind.Valid() || !resolved.ScopeKind.Valid() {
 		return TaskAccepted{}, errs.New(errs.KindInternal, "hierarchy deletion resolved an invalid target kind")
 	}
 	now := s.clock.Now().UTC()
-	kind := operationForTarget(targetKind)
+	kind := operationForTarget(resolved.TargetKind)
 	operationID := stableOperationID(kind, request.TargetID, request.IdempotencyKey)
 	taskIDCandidate := s.ids.NewTaskID()
 	taskOperationID, err := taskOperationID(taskIDCandidate)
 	if err != nil {
 		return TaskAccepted{}, err
 	}
-	result, err := s.repository.BeginDeletion(ctx, BeginDeletion{OperationID: operationID, TaskOperationIDCandidate: taskOperationID, OperationKind: kind, TargetKind: targetKind, TargetID: request.TargetID, TaskIDCandidate: taskIDCandidate, IdempotencyKey: request.IdempotencyKey, IdempotencyIntent: idempotencyIntent(request.TargetKind, request.TargetID), CreatedAt: now, DeadlineAt: now.Add(OperationDeadline)})
+	result, err := s.repository.BeginDeletion(ctx, BeginDeletion{OperationID: operationID, TaskOperationIDCandidate: taskOperationID, OperationKind: kind, TargetKind: resolved.TargetKind, TargetID: request.TargetID, TaskIDCandidate: taskIDCandidate, IdempotencyKey: request.IdempotencyKey, IdempotencyIntent: idempotencyIntentWithScope(request.TargetKind, request.TargetID, resolved.ScopeKind, resolved.ScopeID), CreatedAt: now, DeadlineAt: now.Add(OperationDeadline)})
 	if err != nil {
 		return TaskAccepted{}, err
 	}
