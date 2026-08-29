@@ -17,7 +17,13 @@ func RunComposeHelper(ctx context.Context, input io.Reader, output io.Writer) er
 	if err != nil {
 		return err
 	}
-	response, err := composehelper.Execute(ctx, runner.New(nil), request)
+	catalog, err := newRegisteredActionCatalog()
+	if err != nil {
+		return err
+	}
+	response, err := composehelper.ExecuteWithComponentCatalog(
+		ctx, runner.New(nil), request, composeHelperComponentCatalog{catalog: catalog},
+	)
 	if err != nil {
 		return err
 	}

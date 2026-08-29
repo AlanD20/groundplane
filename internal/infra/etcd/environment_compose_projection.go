@@ -477,6 +477,7 @@ func validateEnvironmentComponentProjection(environmentID string, values []Compo
 	}
 	previousKind := core.ComponentKind("")
 	seenIDs := make(map[string]struct{}, len(values))
+	serviceOwners := make(map[string]string)
 	for _, value := range values {
 		kind := value.Desired.Kind
 		if validateComponentRecord(value) != nil || value.Desired.Owner != core.ComponentOwnerEnvironment ||
@@ -488,6 +489,12 @@ func validateEnvironmentComponentProjection(environmentID string, values []Compo
 			return errs.New(errs.KindValidationFailed, "Environment Component projection id is duplicated")
 		}
 		seenIDs[value.Desired.ID] = struct{}{}
+		for _, serviceID := range value.Runtime.GeneratedServices {
+			if owner, exists := serviceOwners[serviceID]; exists && owner != value.Desired.ID {
+				return errs.New(errs.KindValidationFailed, "Environment generated Service ownership is duplicated")
+			}
+			serviceOwners[serviceID] = value.Desired.ID
+		}
 		previousKind = kind
 	}
 	return nil

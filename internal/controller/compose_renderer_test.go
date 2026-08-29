@@ -238,6 +238,28 @@ func TestRenderComposeIsDeterministic(t *testing.T) {
 	}
 }
 
+// Rationale: Component actions derive their exact service from authenticated
+// Compose metadata, so generated service ownership must reach labels and wire.
+func TestRenderComposeProjectsComponentServiceOwnership(t *testing.T) {
+	serviceID := composeIdentityTestID(ids.KindService, 27)
+	componentID := composeIdentityTestID(ids.KindComponent, 28)
+	input := composeRenderTestInput(&composetypes.Project{Services: composetypes.Services{
+		"router": {Image: "example/router:1"},
+	}})
+	input.Identities.Services = []ComposeResourceIdentity{{
+		ID: serviceID, Name: "router", ComponentID: componentID,
+	}}
+
+	artifact, err := RenderCompose(input)
+	if err != nil {
+		t.Fatalf("RenderCompose() error = %v", err)
+	}
+	if len(artifact.Services) != 1 || artifact.Services[0].GetOwnerComponentId() != componentID ||
+		labelPairMap(artifact.Services[0].GetExpectedLabels())[composeLabelComponentID] != componentID {
+		t.Fatalf("Component service ownership = %#v", artifact.Services)
+	}
+}
+
 func TestRenderComposePersistentResourceLabelsExcludeExecutionIdentity(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 37)
 	project := &composetypes.Project{

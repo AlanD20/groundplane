@@ -290,7 +290,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			err = p.executeBackupArtifactPrune(stepCtx, reservation.assignment, step)
 		} else if step.GetComponentApply() != nil {
 			var payload ManagedConfigPayload
-			if step.GetComponentApply().GetComposeArtifactId() == "" {
+			if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 				payload, err = p.managedConfigs.Take(stepCtx, reservation.assignment.TaskID, step.GetStepId())
 			}
 			if err == nil {

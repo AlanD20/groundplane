@@ -12,15 +12,15 @@ import (
 )
 
 type Catalog struct {
-	definitions         []component.Definition
-	managedConfigActions []registeredManagedConfigAction
+	definitions            []component.Definition
+	managedConfigActions   []registeredManagedConfigAction
 	containerConfigActions []registeredContainerConfigAction
-	digest              [sha256.Size]byte
+	digest                 [sha256.Size]byte
 }
 
 type Registration struct {
-	Definition           component.Definition
-	ManagedConfigActions []ManagedConfigActionRecipe
+	Definition             component.Definition
+	ManagedConfigActions   []ManagedConfigActionRecipe
 	ContainerConfigActions []ContainerConfigActionRecipe
 }
 
@@ -40,6 +40,7 @@ type ContainerConfigActionRecipe struct {
 	containerPath  string
 	validateArgs   []string
 	activateArgs   []string
+	imageReference string
 }
 
 type registeredContainerConfigAction struct {
@@ -71,28 +72,32 @@ func NewContainerConfigActionRecipe(
 	containerPath string,
 	validateArgs []string,
 	activateArgs []string,
+	imageReference string,
 ) (ContainerConfigActionRecipe, error) {
 	if actionID == "" || !validManagedConfigRelativePath(relativePath) ||
 		!path.IsAbs(containerPath) || path.Clean(containerPath) != containerPath ||
-		!validContainerCommand(validateArgs) || !validContainerCommand(activateArgs) {
+		!validContainerCommand(validateArgs) || !validContainerCommand(activateArgs) ||
+		!validImmutableImageReference(imageReference) {
 		return ContainerConfigActionRecipe{}, fmt.Errorf("component catalog: container-config action recipe is invalid")
 	}
 	return ContainerConfigActionRecipe{
 		actionID: actionID, relativePath: relativePath, containerPath: containerPath,
-		validateArgs: append([]string(nil), validateArgs...),
-		activateArgs: append([]string(nil), activateArgs...),
+		validateArgs:   append([]string(nil), validateArgs...),
+		activateArgs:   append([]string(nil), activateArgs...),
+		imageReference: imageReference,
 	}, nil
 }
 
 func (recipe ContainerConfigActionRecipe) ActionID() component.ActionID { return recipe.actionID }
-func (recipe ContainerConfigActionRecipe) RelativePath() string { return recipe.relativePath }
-func (recipe ContainerConfigActionRecipe) ContainerPath() string { return recipe.containerPath }
+func (recipe ContainerConfigActionRecipe) RelativePath() string         { return recipe.relativePath }
+func (recipe ContainerConfigActionRecipe) ContainerPath() string        { return recipe.containerPath }
 func (recipe ContainerConfigActionRecipe) ValidateArgs() []string {
 	return append([]string(nil), recipe.validateArgs...)
 }
 func (recipe ContainerConfigActionRecipe) ActivateArgs() []string {
 	return append([]string(nil), recipe.activateArgs...)
 }
+func (recipe ContainerConfigActionRecipe) ImageReference() string { return recipe.imageReference }
 
 func New(definitions ...component.Definition) (Catalog, error) {
 	registrations := make([]Registration, len(definitions))
@@ -135,7 +140,8 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 				action.Operation() != component.OperationActivate ||
 				!validManagedConfigRelativePath(recipe.relativePath) ||
 				!path.IsAbs(recipe.containerPath) || path.Clean(recipe.containerPath) != recipe.containerPath ||
-				!validContainerCommand(recipe.validateArgs) || !validContainerCommand(recipe.activateArgs) {
+				!validContainerCommand(recipe.validateArgs) || !validContainerCommand(recipe.activateArgs) ||
+				!validImmutableImageReference(recipe.imageReference) {
 				return Catalog{}, fmt.Errorf(
 					"component catalog: invalid container-config recipe for %q",
 					definition.Implementation(),
@@ -190,8 +196,8 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 		}
 	}
 	catalog := Catalog{
-		definitions: canonical,
-		managedConfigActions: actions,
+		definitions:            canonical,
+		managedConfigActions:   actions,
 		containerConfigActions: containerActions,
 	}
 	catalog.digest = catalogDigest(canonical, actions, containerActions)
@@ -316,8 +322,8 @@ func catalogDigest(
 	actions []registeredManagedConfigAction,
 	containerActions []registeredContainerConfigAction,
 ) [sha256.Size]byte {
-	encoded := appendLength(nil, len("groundplane-component-catalog-v3"))
-	encoded = append(encoded, "groundplane-component-catalog-v3"...)
+	encoded := appendLength(nil, len("groundplane-component-catalog-v4"))
+	encoded = append(encoded, "groundplane-component-catalog-v4"...)
 	encoded = appendLength(encoded, len(definitions))
 	for _, definition := range definitions {
 		implementation := string(definition.Implementation())
@@ -345,7 +351,7 @@ func catalogDigest(
 		actionID := string(action.recipe.actionID)
 		encoded = appendLength(encoded, len(actionID))
 		encoded = append(encoded, actionID...)
-		for _, value := range []string{action.recipe.relativePath, action.recipe.containerPath} {
+		for _, value := range []string{action.recipe.relativePath, action.recipe.containerPath, action.recipe.imageReference} {
 			encoded = appendLength(encoded, len(value))
 			encoded = append(encoded, value...)
 		}
@@ -358,6 +364,19 @@ func catalogDigest(
 		}
 	}
 	return sha256.Sum256(encoded)
+}
+
+func validImmutableImageReference(value string) bool {
+	separator := strings.LastIndex(value, "@sha256:")
+	if separator <= 0 || len(value)-separator != len("@sha256:")+sha256.Size*2 {
+		return false
+	}
+	for _, character := range value[separator+len("@sha256:"):] {
+		if character < '0' || character > '9' && character < 'a' || character > 'f' {
+			return false
+		}
+	}
+	return true
 }
 
 func validManagedConfigRelativePath(value string) bool {

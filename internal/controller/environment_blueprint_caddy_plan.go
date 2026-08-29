@@ -100,8 +100,6 @@ func ResolveEnvironmentCaddyApply(
 		reference.MaterializationID,
 		digest,
 		input.RenderGeneration,
-		input.Artifact.GetArtifactId(),
-		serviceID,
 	)
 	if err != nil {
 		return EnvironmentCaddyApply{}, false, err
@@ -237,12 +235,14 @@ func validateEnvironmentCaddyMaterialization(
 func (apply EnvironmentCaddyApply) ExecutionStep(
 	stepID string,
 	timeoutSeconds uint32,
+	prerequisiteStepID string,
 ) (*agentpb.ExecutionStep, error) {
-	if ids.Validate(ids.KindStep, stepID) != nil || timeoutSeconds == 0 || apply.action == nil {
+	if ids.Validate(ids.KindStep, stepID) != nil || ids.Validate(ids.KindStep, prerequisiteStepID) != nil ||
+		timeoutSeconds == 0 || apply.action == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Caddy apply step is invalid")
 	}
 	return &agentpb.ExecutionStep{
-		StepId: stepID, TimeoutSeconds: timeoutSeconds,
+		StepId: stepID, TimeoutSeconds: timeoutSeconds, PrerequisiteStepId: prerequisiteStepID,
 		Payload: &agentpb.ExecutionStep_ComponentApply{
 			ComponentApply: proto.Clone(apply.action).(*agentpb.ComponentApply),
 		},

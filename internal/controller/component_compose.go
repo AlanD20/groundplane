@@ -95,7 +95,7 @@ func ProjectEnvironmentComponents(
 		}
 		projected.Services[generated.Name] = service
 		result.Services = append(result.Services, ComposeResourceIdentity{
-			ID: generated.Definition.ID, Name: generated.Name,
+			ID: generated.Definition.ID, Name: generated.Name, ComponentID: generated.ComponentID,
 		})
 		if environmentFile != nil {
 			result.EnvironmentFiles = append(result.EnvironmentFiles, *environmentFile)

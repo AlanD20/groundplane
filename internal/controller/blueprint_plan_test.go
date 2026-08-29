@@ -194,7 +194,7 @@ volumes:
 		TenantID:         tenantID, ProjectID: projectID, EnvironmentID: environmentID,
 		PlanID: planID, RenderGeneration: reader.projection.RenderGeneration,
 		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		Identities:          composeIdentitySnapshotFromProjection(reader.projection),
+		Identities:          mustComposeIdentitySnapshotFromProjection(t, reader.projection),
 	})
 	if err != nil {
 		t.Fatalf("RenderCompose(Blueprint fixture) error = %v", err)

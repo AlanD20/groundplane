@@ -100,7 +100,7 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		TenantID:         reader.tenant.ID, ProjectID: reader.project.ID, EnvironmentID: reader.environment.ID,
 		PlanID: input.PlanID, RenderGeneration: reader.projection.RenderGeneration,
 		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		Identities:          composeIdentitySnapshotFromProjection(reader.projection),
+		Identities:          mustComposeIdentitySnapshotFromProjection(t, reader.projection),
 	})
 	if err != nil {
 		t.Fatal(err)

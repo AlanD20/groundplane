@@ -17,6 +17,103 @@ const (
 	testStepID    = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
+// Rationale: a Component action must not use caller-supplied service selectors
+// to activate configuration in a service owned by another Component.
+func TestSealRejectsComponentActionAgainstForeignOwnedService(t *testing.T) {
+	plan := validPlan()
+	componentID := "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	foreignComponentID := "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	plan.TargetId = environmentID
+	plan.Artifacts[0].OwnerKind = agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT
+	plan.Artifacts[0].OwnerId = environmentID
+	plan.Artifacts[0].ProjectName = "gp-" + strings.ToLower(environmentID)
+	plan.Artifacts[0].AuthorizedVolumeDir = "/var/lib/groundplane/volumes/" +
+		"tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+		"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + environmentID
+	plan.Artifacts[0].Services[0].ExpectedLabels = []*agentpb.LabelPair{
+		{Key: "com.groundplane.component-id", Value: foreignComponentID},
+		{Key: labelEnvironmentID, Value: environmentID},
+		{Key: labelKind, Value: "service"},
+		{Key: labelManaged, Value: "true"},
+		{Key: labelPlanID, Value: testPlanID},
+		{Key: labelRenderGen, Value: "7"},
+		{Key: labelServiceID, Value: testServiceID},
+	}
+	plan.Artifacts[0].Services[0].OwnerComponentId = foreignComponentID
+	digest := sha256.Sum256([]byte("component artifact"))
+	plan.Steps[0].Payload = &agentpb.ExecutionStep_ComponentApply{
+		ComponentApply: &agentpb.ComponentApply{
+			ComponentId: componentID, DefinitionDigest: digest[:], CatalogDigest: digest[:],
+			ActionId: "activate-config", ArtifactId: testArtifact, ArtifactDigest: digest[:],
+			Generation: 7,
+		},
+	}
+
+	if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Seal(foreign Component service) error = %v, want validation.failed", err)
+	}
+}
+
+func TestSealRejectsStaleComponentActionGeneration(t *testing.T) {
+	plan := validPlan()
+	digest := sha256.Sum256([]byte("component artifact"))
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	plan.TargetId = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	plan.Artifacts[0].OwnerKind = agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT
+	plan.Artifacts[0].OwnerId = plan.TargetId
+	plan.Artifacts[0].AuthorizedVolumeDir = "/var/lib/groundplane/volumes/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + plan.TargetId
+	plan.Artifacts[0].Services[0].OwnerComponentId = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	plan.Artifacts[0].Services[0].ExpectedLabels[0] = &agentpb.LabelPair{Key: labelComponentID, Value: plan.Artifacts[0].Services[0].OwnerComponentId}
+	plan.Steps[0].Payload = &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
+		ComponentId:      plan.Artifacts[0].Services[0].OwnerComponentId,
+		DefinitionDigest: digest[:], CatalogDigest: digest[:], ActionId: "activate-config",
+		ArtifactId: testArtifact, ArtifactDigest: digest[:], Generation: plan.RenderGeneration - 1,
+	}}
+	if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Seal(stale Component generation) error = %v", err)
+	}
+}
+
+func TestSealBindsRemoveComponentActionToSelectedServiceGeneration(t *testing.T) {
+	componentID := "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	actionStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	plan := validMaterializationPlan()
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_REMOVE
+	plan.RenderGeneration = 2
+	plan.Artifacts[0].Services = []*agentpb.ComposeService{{
+		ServiceId: testServiceID, ComposeName: "caddy", ExpectedReplicas: 1,
+		OwnerComponentId: componentID,
+		ExpectedLabels: []*agentpb.LabelPair{
+			{Key: labelComponentID, Value: componentID},
+			{Key: labelEnvironmentID, Value: materializationEnvironmentID},
+			{Key: labelKind, Value: "service"},
+			{Key: labelManaged, Value: "true"},
+			{Key: labelPlanID, Value: materializationPlanID},
+			{Key: labelRenderGen, Value: "2"},
+			{Key: labelServiceID, Value: testServiceID},
+		},
+	}}
+	materialization := plan.Steps[0].GetMaterializeFile()
+	digest := append([]byte(nil), materialization.GetSha256()...)
+	plan.Steps = append(plan.Steps, &agentpb.ExecutionStep{
+		StepId: actionStepID, TimeoutSeconds: 30, PrerequisiteStepId: materializationStepID,
+		Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
+			ComponentId: componentID, DefinitionDigest: digest, CatalogDigest: digest,
+			ActionId: "activate-config", ArtifactId: materializationID,
+			ArtifactDigest: append([]byte(nil), digest...), Generation: 2,
+		}},
+	})
+	if _, err := Seal(plan); err != nil {
+		t.Fatalf("Seal(current REMOVE Component generation) error = %v", err)
+	}
+	plan.Artifacts[0].Services[0].ExpectedLabels[5].Value = "1"
+	if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Seal(stale REMOVE Component Service generation) error = %v", err)
+	}
+}
+
 // Rationale: both channel endpoints must derive one immutable digest from the
 // same complete typed plan and must own their returned message.
 func TestSealAndValidateDeterministicPlan(t *testing.T) {

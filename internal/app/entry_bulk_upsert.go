@@ -299,8 +299,12 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	identitySnapshot, err := composeIdentitySnapshot(candidate)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	removals, err := environmentBlueprintEntryRemovals(
-		input.environmentID, candidateRecords.previous, candidateRecords.entries, composeIdentitySnapshot(candidate).Services,
+		input.environmentID, candidateRecords.previous, candidateRecords.entries, identitySnapshot.Services,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

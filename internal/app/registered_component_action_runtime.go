@@ -51,13 +51,13 @@ func (runtime *registeredComponentActionRuntime) ExecuteComponentAction(
 	if err != nil {
 		return closeComponentArtifact(payload.Source, err)
 	}
-	if action.GetComposeArtifactId() != "" {
+	if assignment.Plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		if payload.Source != nil {
 			return closeComponentArtifact(payload.Source, errs.New(
 				errs.KindInternal, "agent: container Component action received managed content",
 			))
 		}
-		_, _, recipe, resolveErr := runtime.catalog.ResolveContainerConfigActionEnvelope(envelope)
+		_, _, _, resolveErr := runtime.catalog.ResolveContainerConfigActionEnvelope(envelope)
 		if resolveErr != nil {
 			return resolveErr
 		}
@@ -69,10 +69,6 @@ func (runtime *registeredComponentActionRuntime) ExecuteComponentAction(
 			Plan:           assignment.Plan,
 			StepId:         step.GetStepId(),
 			TimeoutSeconds: step.GetTimeoutSeconds(),
-			ComponentContainerConfigAction: &agentpb.ComponentContainerConfigAction{
-				RelativePath: recipe.RelativePath(), ContainerPath: recipe.ContainerPath(),
-				ValidateArgs: recipe.ValidateArgs(), ActivateArgs: recipe.ActivateArgs(),
-			},
 		})
 		if executeErr != nil {
 			return executeErr

@@ -63,8 +63,9 @@ func renderServiceProxyTopology(
 			}
 			result = append(result, &agentpb.ComposeService{
 				ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
+				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-				HasHealthcheck: authored.HealthCheck != nil && !authored.HealthCheck.Disable,
+				HasHealthcheck:   authored.HealthCheck != nil && !authored.HealthCheck.Disable,
 			})
 			continue
 		}
@@ -90,7 +91,7 @@ func renderServiceProxyTopology(
 					return nil, err
 				}
 				project.Services[name] = authored
-				result = append(result, &agentpb.ComposeService{ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected, ExpectedReplicas: expectedRuntimeReplicas(active, 1), HasHealthcheck: authored.HealthCheck != nil && !authored.HealthCheck.Disable, Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON})
+				result = append(result, &agentpb.ComposeService{ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected, ExpectedReplicas: expectedRuntimeReplicas(active, 1), HasHealthcheck: authored.HealthCheck != nil && !authored.HealthCheck.Disable, Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID)})
 				continue
 			}
 			return nil, errs.New(errs.KindValidationFailed, "release strategy is unsupported")
@@ -127,7 +128,7 @@ func renderServiceProxyTopology(
 			Name: name, Image: serviceProxyImage, Networks: cloneProxyNetworks(authored.Networks),
 			Ports: slices.Clone(authored.Ports), Expose: slices.Clone(authored.Expose), Restart: authored.Restart,
 			Profiles: slices.Clone(authored.Profiles),
-			Command: composetypes.ShellCommand{"caddy", "run", "--config", serviceProxyConfigPath},
+			Command:  composetypes.ShellCommand{"caddy", "run", "--config", serviceProxyConfigPath},
 			Configs: []composetypes.ServiceConfigObjConfig{
 				composetypes.ServiceConfigObjConfig(
 					composetypes.FileReferenceConfig{Source: configName, Target: serviceProxyConfigPath},
@@ -146,9 +147,10 @@ func renderServiceProxyTopology(
 		project.Services[name] = proxy
 		result = append(result, &agentpb.ComposeService{
 			ServiceId: serviceID, ComposeName: name, ExpectedLabels: proxyExpected,
+			OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 			ExpectedReplicas: expectedRuntimeReplicas(active, 1),
-			Role:            agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-			ProxyConfigJson: slices.Clone(proxyConfig.JSON), ProxyConfigSha256: slices.Clone(proxyConfig.SHA256[:]),
+			Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+			ProxyConfigJson:  slices.Clone(proxyConfig.JSON), ProxyConfigSha256: slices.Clone(proxyConfig.SHA256[:]),
 		})
 
 		targets := []domain.WorkloadTarget{domain.WorkloadSingleton}
@@ -200,9 +202,10 @@ func renderServiceProxyTopology(
 			}
 			result = append(result, &agentpb.ComposeService{
 				ServiceId: serviceID, ComposeName: workloadName, ExpectedLabels: expected,
+				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
-				HasHealthcheck: workload.HealthCheck != nil && !workload.HealthCheck.Disable,
-				Role: serviceRole, Slot: slot,
+				HasHealthcheck:   workload.HealthCheck != nil && !workload.HealthCheck.Disable,
+				Role:             serviceRole, Slot: slot,
 			})
 		}
 	}
@@ -213,6 +216,15 @@ func renderServiceProxyTopology(
 		return result[i].ComposeName < result[j].ComposeName
 	})
 	return result, nil
+}
+
+func composeServiceComponentOwner(identities []ComposeResourceIdentity, serviceID string) string {
+	for _, identity := range identities {
+		if identity.ID == serviceID {
+			return identity.ComponentID
+		}
+	}
+	return ""
 }
 
 func expectedRuntimeReplicas(active bool, configured int) uint32 {

@@ -280,7 +280,8 @@ func (service *routeRemovalService) removeRouteOnce(
 		task.TimeoutSeconds = routeRemovalAgentTimeoutSeconds
 		task, err = service.plans.PrepareRouteRemovalTask(ctx, task, intent, controller.RouteRemovalTaskProcedureIDs{
 			ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
-			MaterializeStepID: ids.New(ids.KindStep), ApplyStepID: ids.New(ids.KindStep),
+			MaterializeStepID: ids.New(ids.KindStep), ComposeApplyStepID: ids.New(ids.KindStep),
+			ActivateStepID: ids.New(ids.KindStep),
 		})
 	} else {
 		task, err = prepareControllerRouteRemovalTask(task, intent)

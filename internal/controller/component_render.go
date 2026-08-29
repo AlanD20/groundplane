@@ -71,17 +71,13 @@ func BuildEnvironmentComponentAction(
 	artifactID string,
 	artifactDigest [sha256.Size]byte,
 	generation uint64,
-	composeArtifactID string,
-	serviceID string,
 ) (*agentpb.ComponentApply, error) {
 	if err := ValidateEnvironmentComponentCatalog(catalog); err != nil {
 		return nil, err
 	}
 	if ids.Validate(ids.KindComponent, componentID) != nil ||
 		ids.Validate(ids.KindConfig, artifactID) != nil || generation == 0 ||
-		zeroComponentDigest(artifactDigest) ||
-		ids.Validate(ids.KindConfig, composeArtifactID) != nil ||
-		ids.Validate(ids.KindService, serviceID) != nil {
+		zeroComponentDigest(artifactDigest) {
 		return nil, errs.New(errs.KindInternal, "Environment Component action identity is invalid")
 	}
 	for _, registration := range catalog {
@@ -95,12 +91,12 @@ func BuildEnvironmentComponentAction(
 		}
 		definitionDigest := registration.Definition.Digest()
 		return &agentpb.ComponentApply{
-			ComponentId: componentID,
+			ComponentId:      componentID,
 			DefinitionDigest: append([]byte(nil), definitionDigest[:]...),
-			CatalogDigest: append([]byte(nil), registration.CatalogDigest[:]...),
-			ActionId: string(actionID), ArtifactId: artifactID,
+			CatalogDigest:    append([]byte(nil), registration.CatalogDigest[:]...),
+			ActionId:         string(actionID), ArtifactId: artifactID,
 			ArtifactDigest: append([]byte(nil), artifactDigest[:]...),
-			Generation: generation, ComposeArtifactId: composeArtifactID, ServiceId: serviceID,
+			Generation:     generation,
 		}, nil
 	}
 	return nil, errs.New(errs.KindInternal, "Environment Component action kind is not registered")

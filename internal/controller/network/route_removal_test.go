@@ -337,7 +337,9 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 		controller.EnvironmentBlueprintArtifactParam: procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
-	task.Steps = []etcd.TaskStepRecord{{ID: procedure.MaterializeStepID}, {ID: procedure.ApplyStepID}}
+	task.Steps = []etcd.TaskStepRecord{
+		{ID: procedure.MaterializeStepID}, {ID: procedure.ComposeApplyStepID}, {ID: procedure.ActivateStepID},
+	}
 	task.Materializations = []etcd.TaskMaterializationRecord{{
 		StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID,
 		EnvironmentID: intent.EnvironmentID, Destination: controller.RouteRemovalCaddyfilePath,

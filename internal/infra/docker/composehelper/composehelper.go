@@ -3,15 +3,15 @@
 package composehelper
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"math"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -27,12 +27,12 @@ import (
 )
 
 const (
-	SchemaVersion      = 1
-	WorkDirectory      = "/run/groundplane/compose"
-	DockerExecutable   = "docker"
-	maximumFramedBytes = executionplan.MaximumPlanBytes + 64*1024
-	frameHeaderBytes   = 4
-	maximumTimeout     = uint32(math.MaxInt32)
+	SchemaVersion          = 1
+	WorkDirectory          = "/run/groundplane/compose"
+	DockerExecutable       = "docker"
+	maximumFramedBytes     = executionplan.MaximumPlanBytes + 64*1024
+	frameHeaderBytes       = 4
+	maximumTimeout         = uint32(math.MaxInt32)
 	maximumComponentConfig = 1024 * 1024
 )
 
@@ -135,6 +135,29 @@ func Execute(
 	taskRunner runner.Runner,
 	request *agentpb.ComposeHelperRequest,
 ) (*agentpb.ComposeHelperResponse, error) {
+	return execute(ctx, taskRunner, request, nil)
+}
+
+// ExecuteWithComponentCatalog additionally enables the closed registered
+// Component procedure resolved inside the helper process.
+func ExecuteWithComponentCatalog(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	request *agentpb.ComposeHelperRequest,
+	catalog ComponentActionCatalog,
+) (*agentpb.ComposeHelperResponse, error) {
+	if catalog == nil {
+		return nil, errs.New(errs.KindInternal, "Compose helper Component catalog is required")
+	}
+	return execute(ctx, taskRunner, request, catalog)
+}
+
+func execute(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	request *agentpb.ComposeHelperRequest,
+	catalog ComponentActionCatalog,
+) (*agentpb.ComposeHelperResponse, error) {
 	if taskRunner == nil {
 		return nil, errs.New(errs.KindInternal, "Compose helper Runner is required")
 	}
@@ -145,10 +168,19 @@ func Execute(
 	if response, handled, removeErr := executeManagedRemove(ctx, taskRunner, owned.TimeoutSeconds, step); handled {
 		return response, removeErr
 	}
-	if apply := step.GetComponentApply(); apply != nil && apply.GetComposeArtifactId() != "" {
+	if apply := step.GetComponentApply(); apply != nil {
+		if owned.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
+			return nil, errs.New(errs.KindValidationFailed, "managed Component action is not a container helper procedure")
+		}
+		if catalog == nil {
+			return nil, errs.New(errs.KindValidationFailed, "Component action has no compiled helper catalog")
+		}
+		recipe, resolveErr := catalog.ResolveContainerConfigAction(apply)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
 		return executeComponentContainerConfigAction(
-			ctx, taskRunner, owned.TimeoutSeconds, artifact, apply,
-			owned.GetComponentContainerConfigAction(),
+			ctx, taskRunner, owned.TimeoutSeconds, artifact, apply, recipe,
 		)
 	}
 	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyProbe() != nil || step.GetServiceProxyCompensate() != nil {
@@ -234,16 +266,8 @@ func validateRequest(
 	if selected == nil || request.TimeoutSeconds > selected.TimeoutSeconds {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step selection is invalid")
 	}
-	containerAction := selected.GetComponentApply() != nil &&
-		selected.GetComponentApply().GetComposeArtifactId() != ""
-	if containerAction != (request.GetComponentContainerConfigAction() != nil) ||
-		containerAction && !validComponentContainerConfigAction(request.GetComponentContainerConfigAction()) {
-		return nil, nil, nil, errs.New(
-			errs.KindValidationFailed,
-			"Compose helper Component action recipe is invalid",
-		)
-	}
 	artifactID := ""
+	var artifact *agentpb.ComposeArtifact
 	switch payload := selected.Payload.(type) {
 	case *agentpb.ExecutionStep_ComposeApply:
 		artifactID = payload.ComposeApply.ArtifactId
@@ -254,7 +278,10 @@ func validateRequest(
 	case *agentpb.ExecutionStep_ManagedNetworkRemove, *agentpb.ExecutionStep_ManagedVolumeRemove:
 		artifactID = ""
 	case *agentpb.ExecutionStep_ComponentApply:
-		artifactID = payload.ComponentApply.GetComposeArtifactId()
+		artifact, err = componentActionArtifact(plan.GetArtifacts(), payload.ComponentApply.GetComponentId())
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
 		artifactID = payload.ComposeWorkloadApply.ArtifactId
 	case *agentpb.ExecutionStep_ServiceProxySwitch:
@@ -268,11 +295,12 @@ func validateRequest(
 	default:
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}
-	var artifact *agentpb.ComposeArtifact
-	for _, candidate := range plan.Artifacts {
-		if candidate.ArtifactId == artifactID {
-			artifact = candidate
-			break
+	if artifact == nil {
+		for _, candidate := range plan.Artifacts {
+			if candidate.ArtifactId == artifactID {
+				artifact = candidate
+				break
+			}
 		}
 	}
 	if artifactID != "" && artifact == nil {
@@ -287,12 +315,34 @@ func validateRequest(
 		}
 	}
 	for _, candidate := range owned.Plan.Artifacts {
-		if candidate.ArtifactId == artifactID {
+		if artifact != nil && candidate.ArtifactId == artifact.ArtifactId {
 			artifact = candidate
 			break
 		}
 	}
 	return owned, selected, artifact, nil
+}
+
+func componentActionArtifact(
+	artifacts []*agentpb.ComposeArtifact,
+	componentID string,
+) (*agentpb.ComposeArtifact, error) {
+	var selected *agentpb.ComposeArtifact
+	for _, artifact := range artifacts {
+		for _, service := range artifact.GetServices() {
+			if service.GetOwnerComponentId() != componentID {
+				continue
+			}
+			if selected != nil {
+				return nil, errs.New(errs.KindValidationFailed, "Compose helper Component target is not unique")
+			}
+			selected = artifact
+		}
+	}
+	if selected == nil {
+		return nil, errs.New(errs.KindValidationFailed, "Compose helper Component target is absent")
+	}
+	return selected, nil
 }
 
 type componentConfigMount struct {
@@ -302,13 +352,46 @@ type componentConfigMount struct {
 	RW          bool   `json:"RW"`
 }
 
+// ComponentActionCatalog resolves a sealed Component action to one compiled
+// registered recipe. No recipe field is accepted over the helper protocol.
+type ComponentActionCatalog interface {
+	ResolveContainerConfigAction(*agentpb.ComponentApply) (ComponentActionRecipe, error)
+}
+
+type ComponentActionRecipe struct {
+	relativePath   string
+	containerPath  string
+	imageReference string
+	validateArgs   []string
+	activateArgs   []string
+}
+
+func NewComponentActionRecipe(
+	relativePath string,
+	containerPath string,
+	imageReference string,
+	validateArgs []string,
+	activateArgs []string,
+) (ComponentActionRecipe, error) {
+	if !validRelativeComponentConfigPath(relativePath) ||
+		!filepath.IsAbs(containerPath) || filepath.Clean(containerPath) != containerPath ||
+		!validImmutableImageReference(imageReference) ||
+		!validComponentCommand(validateArgs) || !validComponentCommand(activateArgs) {
+		return ComponentActionRecipe{}, errs.New(errs.KindInternal, "compiled Component action recipe is invalid")
+	}
+	return ComponentActionRecipe{
+		relativePath: relativePath, containerPath: containerPath, imageReference: imageReference,
+		validateArgs: append([]string(nil), validateArgs...), activateArgs: append([]string(nil), activateArgs...),
+	}, nil
+}
+
 func executeComponentContainerConfigAction(
 	ctx context.Context,
 	taskRunner runner.Runner,
 	timeoutSeconds uint32,
 	artifact *agentpb.ComposeArtifact,
 	apply *agentpb.ComponentApply,
-	recipe *agentpb.ComponentContainerConfigAction,
+	recipe ComponentActionRecipe,
 ) (*agentpb.ComposeHelperResponse, error) {
 	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
@@ -340,17 +423,28 @@ func executeComponentContainerConfigAction(
 		}
 		return result, nil, nil
 	}
-	configPath := filepath.Join(artifact.AuthorizedVolumeDir, filepath.FromSlash(recipe.GetRelativePath()))
-	if !componentConfigMatches(configPath, apply.GetArtifactDigest()) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
+	configPath := filepath.Join(artifact.AuthorizedVolumeDir, filepath.FromSlash(recipe.relativePath))
+	var selectedService *agentpb.ComposeService
+	for _, service := range artifact.GetServices() {
+		if service.GetOwnerComponentId() == apply.GetComponentId() {
+			if selectedService != nil {
+				return nil, errs.New(errs.KindValidationFailed, "Component action service ownership is not unique")
+			}
+			selectedService = service
+		}
 	}
+	if selectedService == nil {
+		return nil, errs.New(errs.KindValidationFailed, "Component action service ownership is absent")
+	}
+	serviceID := selectedService.GetServiceId()
 	listed, failure, err := run(
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		"container", "ls",
 		"--filter", "label=com.groundplane.managed=true",
 		"--filter", "label=com.groundplane.kind=service",
 		"--filter", "label=com.groundplane.environment-id="+artifact.OwnerId,
-		"--filter", "label=com.groundplane.service-id="+apply.ServiceId,
+		"--filter", "label=com.groundplane.component-id="+apply.GetComponentId(),
+		"--filter", "label=com.groundplane.service-id="+serviceID,
 		"--filter", "status=running", "--format", "{{.ID}}",
 	)
 	if err != nil || failure != nil {
@@ -370,9 +464,17 @@ func executeComponentContainerConfigAction(
 	}
 	labels := map[string]string{}
 	if json.Unmarshal([]byte(strings.TrimSpace(string(inspectedLabels.Stdout))), &labels) != nil ||
-		labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "service" ||
-		labels["com.groundplane.environment-id"] != artifact.OwnerId ||
-		labels["com.groundplane.service-id"] != apply.ServiceId {
+		!hasAllExpectedLabels(labels, selectedService.GetExpectedLabels()) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
+	}
+	inspectedImage, failure, err := run(
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+		"container", "inspect", "--format", "{{.Config.Image}}", containerID,
+	)
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	if strings.TrimSpace(string(inspectedImage.Stdout)) != recipe.imageReference {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
 	inspectedMounts, failure, err := run(
@@ -384,10 +486,13 @@ func executeComponentContainerConfigAction(
 	}
 	mounts := []componentConfigMount{}
 	if json.Unmarshal([]byte(strings.TrimSpace(string(inspectedMounts.Stdout))), &mounts) != nil ||
-		!hasExactComponentConfigMount(mounts, configPath, recipe.GetContainerPath()) {
+		!hasExactComponentConfigMount(mounts, configPath, recipe.containerPath) {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
-	validateCommand := append([]string{"container", "exec", containerID}, recipe.GetValidateArgs()...)
+	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil || !matches {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), hashErr
+	}
+	validateCommand := append([]string{"container", "exec", containerID}, recipe.validateArgs...)
 	_, failure, err = run(
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED,
 		validateCommand...,
@@ -395,10 +500,10 @@ func executeComponentContainerConfigAction(
 	if err != nil || failure != nil {
 		return failure, err
 	}
-	if !componentConfigMatches(configPath, apply.GetArtifactDigest()) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
+	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil || !matches {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), hashErr
 	}
-	activateCommand := append([]string{"container", "exec", containerID}, recipe.GetActivateArgs()...)
+	activateCommand := append([]string{"container", "exec", containerID}, recipe.activateArgs...)
 	_, failure, err = run(
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		activateCommand...,
@@ -409,18 +514,38 @@ func executeComponentContainerConfigAction(
 	return completedResponse(), nil
 }
 
-func componentConfigMatches(path string, expected []byte) bool {
-	file, err := os.Open(path)
+func containerConfigMatches(
+	_ context.Context,
+	run func(agentpb.ComposeHelperDiagnostic, ...string) (runner.Result, *agentpb.ComposeHelperResponse, error),
+	containerID string,
+	containerPath string,
+	expected []byte,
+) (bool, error) {
+	result, failure, err := run(
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+		"container", "exec", containerID, "sha256sum", "--", containerPath,
+	)
 	if err != nil {
-		return false
+		return false, err
 	}
-	defer file.Close()
-	value, err := io.ReadAll(io.LimitReader(file, maximumComponentConfig+1))
-	if err != nil || len(value) > maximumComponentConfig {
-		return false
+	if failure != nil {
+		return false, nil
 	}
-	digest := sha256.Sum256(value)
-	return bytes.Equal(digest[:], expected)
+	fields := strings.Fields(string(result.Stdout))
+	if len(fields) != 2 || len(fields[0]) != 64 || fields[1] != containerPath {
+		return false, nil
+	}
+	decoded, decodeErr := hex.DecodeString(fields[0])
+	return decodeErr == nil && subtle.ConstantTimeCompare(decoded, expected) == 1, nil
+}
+
+func hasAllExpectedLabels(actual map[string]string, expected []*agentpb.LabelPair) bool {
+	for _, label := range expected {
+		if label == nil || actual[label.GetKey()] != label.GetValue() {
+			return false
+		}
+	}
+	return true
 }
 
 func hasExactComponentConfigMount(mounts []componentConfigMount, source string, destination string) bool {
@@ -449,15 +574,6 @@ func validComponentContainerID(value string) bool {
 	return true
 }
 
-func validComponentContainerConfigAction(recipe *agentpb.ComponentContainerConfigAction) bool {
-	if recipe == nil || !validRelativeComponentConfigPath(recipe.GetRelativePath()) ||
-		!filepath.IsAbs(recipe.GetContainerPath()) || filepath.Clean(recipe.GetContainerPath()) != recipe.GetContainerPath() ||
-		!validComponentCommand(recipe.GetValidateArgs()) || !validComponentCommand(recipe.GetActivateArgs()) {
-		return false
-	}
-	return true
-}
-
 func validRelativeComponentConfigPath(value string) bool {
 	return value != "" && len(value) <= 240 && !filepath.IsAbs(value) &&
 		filepath.Clean(filepath.FromSlash(value)) == filepath.FromSlash(value) &&
@@ -470,6 +586,19 @@ func validComponentCommand(arguments []string) bool {
 	}
 	for _, argument := range arguments {
 		if argument == "" || len(argument) > 1024 || strings.ContainsRune(argument, 0) {
+			return false
+		}
+	}
+	return true
+}
+
+func validImmutableImageReference(value string) bool {
+	separator := strings.LastIndex(value, "@sha256:")
+	if separator <= 0 || len(value)-separator != len("@sha256:")+64 {
+		return false
+	}
+	for _, character := range value[separator+len("@sha256:"):] {
+		if character < '0' || character > '9' && character < 'a' || character > 'f' {
 			return false
 		}
 	}

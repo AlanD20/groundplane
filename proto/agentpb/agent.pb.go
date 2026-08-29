@@ -4979,6 +4979,7 @@ type ComposeService struct {
 	Slot              string                 `protobuf:"bytes,7,opt,name=slot,proto3" json:"slot,omitempty"`
 	ProxyConfigJson   []byte                 `protobuf:"bytes,8,opt,name=proxy_config_json,json=proxyConfigJson,proto3" json:"proxy_config_json,omitempty"`
 	ProxyConfigSha256 []byte                 `protobuf:"bytes,9,opt,name=proxy_config_sha256,json=proxyConfigSha256,proto3" json:"proxy_config_sha256,omitempty"`
+	OwnerComponentId  string                 `protobuf:"bytes,10,opt,name=owner_component_id,json=ownerComponentId,proto3" json:"owner_component_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -5074,6 +5075,13 @@ func (x *ComposeService) GetProxyConfigSha256() []byte {
 		return x.ProxyConfigSha256
 	}
 	return nil
+}
+
+func (x *ComposeService) GetOwnerComponentId() string {
+	if x != nil {
+		return x.OwnerComponentId
+	}
+	return ""
 }
 
 type ComposeNetwork struct {
@@ -11607,18 +11615,16 @@ func (x *ManagedNetworkRemove) GetDockerName() string {
 // ComponentApply is the generic catalog action reference accepted by the Agent.
 // Artifact content travels through the separately validated execution bundle.
 type ComponentApply struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ComponentId       string                 `protobuf:"bytes,1,opt,name=component_id,json=componentId,proto3" json:"component_id,omitempty"`
-	DefinitionDigest  []byte                 `protobuf:"bytes,2,opt,name=definition_digest,json=definitionDigest,proto3" json:"definition_digest,omitempty"`
-	CatalogDigest     []byte                 `protobuf:"bytes,3,opt,name=catalog_digest,json=catalogDigest,proto3" json:"catalog_digest,omitempty"`
-	ActionId          string                 `protobuf:"bytes,4,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
-	ArtifactId        string                 `protobuf:"bytes,5,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
-	ArtifactDigest    []byte                 `protobuf:"bytes,6,opt,name=artifact_digest,json=artifactDigest,proto3" json:"artifact_digest,omitempty"`
-	Generation        uint64                 `protobuf:"varint,7,opt,name=generation,proto3" json:"generation,omitempty"`
-	ComposeArtifactId string                 `protobuf:"bytes,8,opt,name=compose_artifact_id,json=composeArtifactId,proto3" json:"compose_artifact_id,omitempty"`
-	ServiceId         string                 `protobuf:"bytes,9,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ComponentId      string                 `protobuf:"bytes,1,opt,name=component_id,json=componentId,proto3" json:"component_id,omitempty"`
+	DefinitionDigest []byte                 `protobuf:"bytes,2,opt,name=definition_digest,json=definitionDigest,proto3" json:"definition_digest,omitempty"`
+	CatalogDigest    []byte                 `protobuf:"bytes,3,opt,name=catalog_digest,json=catalogDigest,proto3" json:"catalog_digest,omitempty"`
+	ActionId         string                 `protobuf:"bytes,4,opt,name=action_id,json=actionId,proto3" json:"action_id,omitempty"`
+	ArtifactId       string                 `protobuf:"bytes,5,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	ArtifactDigest   []byte                 `protobuf:"bytes,6,opt,name=artifact_digest,json=artifactDigest,proto3" json:"artifact_digest,omitempty"`
+	Generation       uint64                 `protobuf:"varint,7,opt,name=generation,proto3" json:"generation,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ComponentApply) Reset() {
@@ -11698,20 +11704,6 @@ func (x *ComponentApply) GetGeneration() uint64 {
 		return x.Generation
 	}
 	return 0
-}
-
-func (x *ComponentApply) GetComposeArtifactId() string {
-	if x != nil {
-		return x.ComposeArtifactId
-	}
-	return ""
-}
-
-func (x *ComponentApply) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
 }
 
 // Host resolution mutations are closed Agent procedures. Paths and file
@@ -12088,17 +12080,16 @@ func (x *EnvironmentDirectoryHelperResponse) GetResponseSha256() []byte {
 // ComposeHelperRequest is the single length-framed stdin message accepted by
 // the static compose-helper Agent-binary mode.
 type ComposeHelperRequest struct {
-	state                          protoimpl.MessageState          `protogen:"open.v1"`
-	Schema                         uint32                          `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
-	TaskId                         string                          `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	OperationId                    string                          `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	Plan                           *ExecutionPlan                  `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
-	StepId                         string                          `protobuf:"bytes,5,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	TimeoutSeconds                 uint32                          `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // remaining bounded execution time
-	AssignmentId                   string                          `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
-	ComponentContainerConfigAction *ComponentContainerConfigAction `protobuf:"bytes,8,opt,name=component_container_config_action,json=componentContainerConfigAction,proto3" json:"component_container_config_action,omitempty"`
-	unknownFields                  protoimpl.UnknownFields
-	sizeCache                      protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Schema         uint32                 `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
+	TaskId         string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	OperationId    string                 `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	Plan           *ExecutionPlan         `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
+	StepId         string                 `protobuf:"bytes,5,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	TimeoutSeconds uint32                 `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // remaining bounded execution time
+	AssignmentId   string                 `protobuf:"bytes,7,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ComposeHelperRequest) Reset() {
@@ -12180,84 +12171,6 @@ func (x *ComposeHelperRequest) GetAssignmentId() string {
 	return ""
 }
 
-func (x *ComposeHelperRequest) GetComponentContainerConfigAction() *ComponentContainerConfigAction {
-	if x != nil {
-		return x.ComponentContainerConfigAction
-	}
-	return nil
-}
-
-// ComponentContainerConfigAction is derived exclusively from the Agent's
-// compiled Component catalog. Executable arguments and paths never originate
-// in a Controller Task or an operator request.
-type ComponentContainerConfigAction struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RelativePath  string                 `protobuf:"bytes,1,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
-	ContainerPath string                 `protobuf:"bytes,2,opt,name=container_path,json=containerPath,proto3" json:"container_path,omitempty"`
-	ValidateArgs  []string               `protobuf:"bytes,3,rep,name=validate_args,json=validateArgs,proto3" json:"validate_args,omitempty"`
-	ActivateArgs  []string               `protobuf:"bytes,4,rep,name=activate_args,json=activateArgs,proto3" json:"activate_args,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ComponentContainerConfigAction) Reset() {
-	*x = ComponentContainerConfigAction{}
-	mi := &file_proto_agent_proto_msgTypes[119]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ComponentContainerConfigAction) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ComponentContainerConfigAction) ProtoMessage() {}
-
-func (x *ComponentContainerConfigAction) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[119]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ComponentContainerConfigAction.ProtoReflect.Descriptor instead.
-func (*ComponentContainerConfigAction) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{119}
-}
-
-func (x *ComponentContainerConfigAction) GetRelativePath() string {
-	if x != nil {
-		return x.RelativePath
-	}
-	return ""
-}
-
-func (x *ComponentContainerConfigAction) GetContainerPath() string {
-	if x != nil {
-		return x.ContainerPath
-	}
-	return ""
-}
-
-func (x *ComponentContainerConfigAction) GetValidateArgs() []string {
-	if x != nil {
-		return x.ValidateArgs
-	}
-	return nil
-}
-
-func (x *ComponentContainerConfigAction) GetActivateArgs() []string {
-	if x != nil {
-		return x.ActivateArgs
-	}
-	return nil
-}
-
 type ComposeHelperResponse struct {
 	state            protoimpl.MessageState   `protogen:"open.v1"`
 	Schema           uint32                   `protobuf:"varint,1,opt,name=schema,proto3" json:"schema,omitempty"` // exactly 1
@@ -12272,7 +12185,7 @@ type ComposeHelperResponse struct {
 
 func (x *ComposeHelperResponse) Reset() {
 	*x = ComposeHelperResponse{}
-	mi := &file_proto_agent_proto_msgTypes[120]
+	mi := &file_proto_agent_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12284,7 +12197,7 @@ func (x *ComposeHelperResponse) String() string {
 func (*ComposeHelperResponse) ProtoMessage() {}
 
 func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[120]
+	mi := &file_proto_agent_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12297,7 +12210,7 @@ func (x *ComposeHelperResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComposeHelperResponse.ProtoReflect.Descriptor instead.
 func (*ComposeHelperResponse) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{120}
+	return file_proto_agent_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *ComposeHelperResponse) GetSchema() uint32 {
@@ -12353,7 +12266,7 @@ type TaskAbort struct {
 
 func (x *TaskAbort) Reset() {
 	*x = TaskAbort{}
-	mi := &file_proto_agent_proto_msgTypes[121]
+	mi := &file_proto_agent_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12365,7 +12278,7 @@ func (x *TaskAbort) String() string {
 func (*TaskAbort) ProtoMessage() {}
 
 func (x *TaskAbort) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[121]
+	mi := &file_proto_agent_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12378,7 +12291,7 @@ func (x *TaskAbort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskAbort.ProtoReflect.Descriptor instead.
 func (*TaskAbort) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{121}
+	return file_proto_agent_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *TaskAbort) GetTaskId() string {
@@ -12411,7 +12324,7 @@ type ConfigUpdate struct {
 
 func (x *ConfigUpdate) Reset() {
 	*x = ConfigUpdate{}
-	mi := &file_proto_agent_proto_msgTypes[122]
+	mi := &file_proto_agent_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12423,7 +12336,7 @@ func (x *ConfigUpdate) String() string {
 func (*ConfigUpdate) ProtoMessage() {}
 
 func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[122]
+	mi := &file_proto_agent_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12436,7 +12349,7 @@ func (x *ConfigUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigUpdate.ProtoReflect.Descriptor instead.
 func (*ConfigUpdate) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{122}
+	return file_proto_agent_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *ConfigUpdate) GetAgentConfig() *AgentConfig {
@@ -12454,7 +12367,7 @@ type Shutdown struct {
 
 func (x *Shutdown) Reset() {
 	*x = Shutdown{}
-	mi := &file_proto_agent_proto_msgTypes[123]
+	mi := &file_proto_agent_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12466,7 +12379,7 @@ func (x *Shutdown) String() string {
 func (*Shutdown) ProtoMessage() {}
 
 func (x *Shutdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_agent_proto_msgTypes[123]
+	mi := &file_proto_agent_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12479,7 +12392,7 @@ func (x *Shutdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shutdown.ProtoReflect.Descriptor instead.
 func (*Shutdown) Descriptor() ([]byte, []int) {
-	return file_proto_agent_proto_rawDescGZIP(), []int{123}
+	return file_proto_agent_proto_rawDescGZIP(), []int{122}
 }
 
 var File_proto_agent_proto protoreflect.FileDescriptor
@@ -12799,7 +12712,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\bservices\x18\b \x03(\v2$.groundplane.agent.v1.ComposeServiceR\bservices\x12@\n" +
 	"\bnetworks\x18\t \x03(\v2$.groundplane.agent.v1.ComposeNetworkR\bnetworks\x12=\n" +
 	"\avolumes\x18\n" +
-	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\xa0\x03\n" +
+	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\xce\x03\n" +
 	"\x0eComposeService\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
@@ -12810,7 +12723,9 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04role\x18\x06 \x01(\x0e2(.groundplane.agent.v1.ComposeServiceRoleR\x04role\x12\x12\n" +
 	"\x04slot\x18\a \x01(\tR\x04slot\x12*\n" +
 	"\x11proxy_config_json\x18\b \x01(\fR\x0fproxyConfigJson\x12.\n" +
-	"\x13proxy_config_sha256\x18\t \x01(\fR\x11proxyConfigSha256\"\xbd\x01\n" +
+	"\x13proxy_config_sha256\x18\t \x01(\fR\x11proxyConfigSha256\x12,\n" +
+	"\x12owner_component_id\x18\n" +
+	" \x01(\tR\x10ownerComponentId\"\xbd\x01\n" +
 	"\x0eComposeNetwork\x12\x1d\n" +
 	"\n" +
 	"network_id\x18\x01 \x01(\tR\tnetworkId\x12!\n" +
@@ -13422,7 +13337,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"network_id\x18\x01 \x01(\tR\tnetworkId\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1f\n" +
 	"\vdocker_name\x18\x03 \x01(\tR\n" +
-	"dockerName\"\xdd\x02\n" +
+	"dockerName\"\x9a\x02\n" +
 	"\x0eComponentApply\x12!\n" +
 	"\fcomponent_id\x18\x01 \x01(\tR\vcomponentId\x12+\n" +
 	"\x11definition_digest\x18\x02 \x01(\fR\x10definitionDigest\x12%\n" +
@@ -13433,10 +13348,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x0fartifact_digest\x18\x06 \x01(\fR\x0eartifactDigest\x12\x1e\n" +
 	"\n" +
 	"generation\x18\a \x01(\x04R\n" +
-	"generation\x12.\n" +
-	"\x13compose_artifact_id\x18\b \x01(\tR\x11composeArtifactId\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\t \x01(\tR\tserviceId\"X\n" +
+	"generationJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\"X\n" +
 	"\x13HostResolutionApply\x12!\n" +
 	"\fcomponent_id\x18\x01 \x01(\tR\vcomponentId\x12\x1e\n" +
 	"\n" +
@@ -13470,7 +13383,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"nextCursor\x12%\n" +
 	"\x0emutation_count\x18\x05 \x01(\rR\rmutationCount\x12\x1a\n" +
 	"\bcomplete\x18\x06 \x01(\bR\bcomplete\x12'\n" +
-	"\x0fresponse_sha256\x18\a \x01(\fR\x0eresponseSha256\"\x8b\x03\n" +
+	"\x0fresponse_sha256\x18\a \x01(\fR\x0eresponseSha256\"\x90\x02\n" +
 	"\x14ComposeHelperRequest\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12!\n" +
@@ -13478,13 +13391,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x12\x17\n" +
 	"\astep_id\x18\x05 \x01(\tR\x06stepId\x12'\n" +
 	"\x0ftimeout_seconds\x18\x06 \x01(\rR\x0etimeoutSeconds\x12#\n" +
-	"\rassignment_id\x18\a \x01(\tR\fassignmentId\x12\x7f\n" +
-	"!component_container_config_action\x18\b \x01(\v24.groundplane.agent.v1.ComponentContainerConfigActionR\x1ecomponentContainerConfigAction\"\xb6\x01\n" +
-	"\x1eComponentContainerConfigAction\x12#\n" +
-	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12%\n" +
-	"\x0econtainer_path\x18\x02 \x01(\tR\rcontainerPath\x12#\n" +
-	"\rvalidate_args\x18\x03 \x03(\tR\fvalidateArgs\x12#\n" +
-	"\ractivate_args\x18\x04 \x03(\tR\factivateArgs\"\x90\x03\n" +
+	"\rassignment_id\x18\a \x01(\tR\fassignmentIdJ\x04\b\b\x10\t\"\x90\x03\n" +
 	"\x15ComposeHelperResponse\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12D\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2*.groundplane.agent.v1.ComposeHelperOutcomeR\aoutcome\x12\x1b\n" +
@@ -13683,7 +13590,7 @@ func file_proto_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 25)
-var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 125)
+var file_proto_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 124)
 var file_proto_agent_proto_goTypes = []any{
 	(TaskState)(0),                                    // 0: groundplane.agent.v1.TaskState
 	(ObservedContainerState)(0),                       // 1: groundplane.agent.v1.ObservedContainerState
@@ -13829,16 +13736,15 @@ var file_proto_agent_proto_goTypes = []any{
 	(*EnvironmentDirectoryHelperRequest)(nil),         // 141: groundplane.agent.v1.EnvironmentDirectoryHelperRequest
 	(*EnvironmentDirectoryHelperResponse)(nil),        // 142: groundplane.agent.v1.EnvironmentDirectoryHelperResponse
 	(*ComposeHelperRequest)(nil),                      // 143: groundplane.agent.v1.ComposeHelperRequest
-	(*ComponentContainerConfigAction)(nil),            // 144: groundplane.agent.v1.ComponentContainerConfigAction
-	(*ComposeHelperResponse)(nil),                     // 145: groundplane.agent.v1.ComposeHelperResponse
-	(*TaskAbort)(nil),                                 // 146: groundplane.agent.v1.TaskAbort
-	(*ConfigUpdate)(nil),                              // 147: groundplane.agent.v1.ConfigUpdate
-	(*Shutdown)(nil),                                  // 148: groundplane.agent.v1.Shutdown
-	nil,                                               // 149: groundplane.agent.v1.AgentConfig.LabelsEntry
-	(*timestamppb.Timestamp)(nil),                     // 150: google.protobuf.Timestamp
+	(*ComposeHelperResponse)(nil),                     // 144: groundplane.agent.v1.ComposeHelperResponse
+	(*TaskAbort)(nil),                                 // 145: groundplane.agent.v1.TaskAbort
+	(*ConfigUpdate)(nil),                              // 146: groundplane.agent.v1.ConfigUpdate
+	(*Shutdown)(nil),                                  // 147: groundplane.agent.v1.Shutdown
+	nil,                                               // 148: groundplane.agent.v1.AgentConfig.LabelsEntry
+	(*timestamppb.Timestamp)(nil),                     // 149: google.protobuf.Timestamp
 }
 var file_proto_agent_proto_depIdxs = []int32{
-	149, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
+	148, // 0: groundplane.agent.v1.AgentConfig.labels:type_name -> groundplane.agent.v1.AgentConfig.LabelsEntry
 	25,  // 1: groundplane.agent.v1.AgentMessage.authenticate:type_name -> groundplane.agent.v1.Authenticate
 	28,  // 2: groundplane.agent.v1.AgentMessage.ready:type_name -> groundplane.agent.v1.Ready
 	29,  // 3: groundplane.agent.v1.AgentMessage.task_event:type_name -> groundplane.agent.v1.TaskEvent
@@ -13851,7 +13757,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	61,  // 10: groundplane.agent.v1.AgentMessage.script_checkpoint_request:type_name -> groundplane.agent.v1.ScriptCheckpointRequest
 	0,   // 11: groundplane.agent.v1.TaskEvent.state:type_name -> groundplane.agent.v1.TaskState
 	31,  // 12: groundplane.agent.v1.ObservedState.projects:type_name -> groundplane.agent.v1.ObservedProject
-	150, // 13: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
+	149, // 13: groundplane.agent.v1.ObservedProject.observed_at:type_name -> google.protobuf.Timestamp
 	32,  // 14: groundplane.agent.v1.ObservedProject.containers:type_name -> groundplane.agent.v1.ObservedContainer
 	33,  // 15: groundplane.agent.v1.ObservedProject.networks:type_name -> groundplane.agent.v1.ObservedNetwork
 	34,  // 16: groundplane.agent.v1.ObservedProject.volumes:type_name -> groundplane.agent.v1.ObservedVolume
@@ -13870,9 +13776,9 @@ var file_proto_agent_proto_depIdxs = []int32{
 	126, // 29: groundplane.agent.v1.ComposeTaskResult.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
 	130, // 30: groundplane.agent.v1.ComposeTaskResult.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
 	54,  // 31: groundplane.agent.v1.ControllerMessage.task_assignment:type_name -> groundplane.agent.v1.TaskAssignment
-	146, // 32: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
-	147, // 33: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
-	148, // 34: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
+	145, // 32: groundplane.agent.v1.ControllerMessage.task_abort:type_name -> groundplane.agent.v1.TaskAbort
+	146, // 33: groundplane.agent.v1.ControllerMessage.config_update:type_name -> groundplane.agent.v1.ConfigUpdate
+	147, // 34: groundplane.agent.v1.ControllerMessage.shutdown:type_name -> groundplane.agent.v1.Shutdown
 	46,  // 35: groundplane.agent.v1.ControllerMessage.materialization_transfer:type_name -> groundplane.agent.v1.MaterializationTransfer
 	98,  // 36: groundplane.agent.v1.ControllerMessage.backup_checkpoint_ack:type_name -> groundplane.agent.v1.BackupCheckpointAck
 	99,  // 37: groundplane.agent.v1.ControllerMessage.backup_secret_slot_transfer:type_name -> groundplane.agent.v1.BackupSecretSlotTransfer
@@ -13883,7 +13789,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	40,  // 42: groundplane.agent.v1.LogSubscribe.targets:type_name -> groundplane.agent.v1.LogTarget
 	6,   // 43: groundplane.agent.v1.LogEvent.slot:type_name -> groundplane.agent.v1.LogSlot
 	5,   // 44: groundplane.agent.v1.LogEvent.stream:type_name -> groundplane.agent.v1.LogStream
-	150, // 45: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
+	149, // 45: groundplane.agent.v1.LogEvent.timestamp:type_name -> google.protobuf.Timestamp
 	7,   // 46: groundplane.agent.v1.LogEnd.reason:type_name -> groundplane.agent.v1.LogEndReason
 	47,  // 47: groundplane.agent.v1.MaterializationTransfer.header:type_name -> groundplane.agent.v1.MaterializationTransferHeader
 	48,  // 48: groundplane.agent.v1.MaterializationTransfer.chunk:type_name -> groundplane.agent.v1.MaterializationTransferChunk
@@ -13893,11 +13799,11 @@ var file_proto_agent_proto_depIdxs = []int32{
 	52,  // 52: groundplane.agent.v1.ManagedConfigTransfer.chunk:type_name -> groundplane.agent.v1.ManagedConfigTransferChunk
 	53,  // 53: groundplane.agent.v1.ManagedConfigTransfer.end:type_name -> groundplane.agent.v1.ManagedConfigTransferEnd
 	63,  // 54: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	150, // 55: groundplane.agent.v1.TaskAssignment.deadline:type_name -> google.protobuf.Timestamp
+	149, // 55: groundplane.agent.v1.TaskAssignment.deadline:type_name -> google.protobuf.Timestamp
 	86,  // 56: groundplane.agent.v1.TaskAssignment.script_artifacts:type_name -> groundplane.agent.v1.ScriptAssignmentArtifacts
 	60,  // 57: groundplane.agent.v1.TaskAssignment.script_checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
 	9,   // 58: groundplane.agent.v1.ScriptOutcomeCheckpoint.reason:type_name -> groundplane.agent.v1.ScriptOutcomeReason
-	150, // 59: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
+	149, // 59: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
 	8,   // 60: groundplane.agent.v1.ScriptExecutionCheckpoint.state:type_name -> groundplane.agent.v1.ScriptExecutionState
 	56,  // 61: groundplane.agent.v1.ScriptExecutionCheckpoint.body_prepared:type_name -> groundplane.agent.v1.ScriptBodyPreparedCheckpoint
 	57,  // 62: groundplane.agent.v1.ScriptExecutionCheckpoint.container_created:type_name -> groundplane.agent.v1.ScriptContainerCreatedCheckpoint
@@ -14012,19 +13918,18 @@ var file_proto_agent_proto_depIdxs = []int32{
 	22,  // 171: groundplane.agent.v1.MaterializeFile.output_kind:type_name -> groundplane.agent.v1.MaterializationOutputKind
 	63,  // 172: groundplane.agent.v1.EnvironmentDirectoryHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
 	63,  // 173: groundplane.agent.v1.ComposeHelperRequest.plan:type_name -> groundplane.agent.v1.ExecutionPlan
-	144, // 174: groundplane.agent.v1.ComposeHelperRequest.component_container_config_action:type_name -> groundplane.agent.v1.ComponentContainerConfigAction
-	23,  // 175: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
-	24,  // 176: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
-	126, // 177: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
-	130, // 178: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
-	26,  // 179: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
-	27,  // 180: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
-	39,  // 181: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
-	181, // [181:182] is the sub-list for method output_type
-	180, // [180:181] is the sub-list for method input_type
-	180, // [180:180] is the sub-list for extension type_name
-	180, // [180:180] is the sub-list for extension extendee
-	0,   // [0:180] is the sub-list for field type_name
+	23,  // 174: groundplane.agent.v1.ComposeHelperResponse.outcome:type_name -> groundplane.agent.v1.ComposeHelperOutcome
+	24,  // 175: groundplane.agent.v1.ComposeHelperResponse.diagnostic:type_name -> groundplane.agent.v1.ComposeHelperDiagnostic
+	126, // 176: groundplane.agent.v1.ComposeHelperResponse.proxy_evidence:type_name -> groundplane.agent.v1.ServiceProxyEvidence
+	130, // 177: groundplane.agent.v1.ComposeHelperResponse.recreate_evidence:type_name -> groundplane.agent.v1.ServiceRecreateEvidence
+	26,  // 178: groundplane.agent.v1.ConfigUpdate.agent_config:type_name -> groundplane.agent.v1.AgentConfig
+	27,  // 179: groundplane.agent.v1.AgentChannel.Connect:input_type -> groundplane.agent.v1.AgentMessage
+	39,  // 180: groundplane.agent.v1.AgentChannel.Connect:output_type -> groundplane.agent.v1.ControllerMessage
+	180, // [180:181] is the sub-list for method output_type
+	179, // [179:180] is the sub-list for method input_type
+	179, // [179:179] is the sub-list for extension type_name
+	179, // [179:179] is the sub-list for extension extendee
+	0,   // [0:179] is the sub-list for field type_name
 }
 
 func init() { file_proto_agent_proto_init() }
@@ -14139,7 +14044,7 @@ func file_proto_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_agent_proto_rawDesc), len(file_proto_agent_proto_rawDesc)),
 			NumEnums:      25,
-			NumMessages:   125,
+			NumMessages:   124,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

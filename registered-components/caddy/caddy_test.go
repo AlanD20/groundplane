@@ -15,7 +15,7 @@ func TestPlanRendersDeterministicHTTPRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if len(plan.Services) != 1 || plan.Services[0].ID != "svc_caddy" || plan.Services[0].Image != caddyImage ||
+	if len(plan.Services) != 1 || plan.Services[0].ID != "svc_caddy" || plan.Services[0].Image != Image ||
 		len(plan.Files) != 3 {
 		t.Fatalf("Plan() = %#v", plan)
 	}

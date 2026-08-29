@@ -498,6 +498,7 @@ message ComposeService {
   string slot = 7;
   bytes proxy_config_json = 8;
   bytes proxy_config_sha256 = 9;
+  string owner_component_id = 10;
 }
 
 enum ComposeServiceRole {
@@ -1298,8 +1299,7 @@ message ComponentApply {
   string artifact_id = 5;
   bytes artifact_digest = 6;
   uint64 generation = 7;
-  string compose_artifact_id = 8;
-  string service_id = 9;
+  reserved 8, 9;
 }
 
 // Host resolution mutations are closed Agent procedures. Paths and file
@@ -1350,6 +1350,7 @@ message EnvironmentDirectoryHelperResponse {
 // ComposeHelperRequest is the single length-framed stdin message accepted by
 // the static compose-helper Agent-binary mode.
 message ComposeHelperRequest {
+  reserved 8;
   uint32 schema = 1; // exactly 1
   string task_id = 2;
   string operation_id = 3;
@@ -1357,17 +1358,6 @@ message ComposeHelperRequest {
   string step_id = 5;
   uint32 timeout_seconds = 6; // remaining bounded execution time
   string assignment_id = 7;
-  ComponentContainerConfigAction component_container_config_action = 8;
-}
-
-// ComponentContainerConfigAction is derived exclusively from the Agent's
-// compiled Component catalog. Executable arguments and paths never originate
-// in a Controller Task or an operator request.
-message ComponentContainerConfigAction {
-  string relative_path = 1;
-  string container_path = 2;
-  repeated string validate_args = 3;
-  repeated string activate_args = 4;
 }
 
 message ComposeHelperResponse {

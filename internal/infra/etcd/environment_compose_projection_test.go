@@ -112,6 +112,45 @@ func TestEnvironmentComposeProjectionPinsSortedComponentSnapshots(t *testing.T) 
 	}
 }
 
+func TestEnvironmentComposeProjectionRejectsDuplicateGeneratedServiceOwnership(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 70)
+	serviceID := ids.NewAt(ids.KindService, now, 71)
+	caddy, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, now, 72), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, now, 76),
+		}},
+		GeneratedServices: []string{serviceID},
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord(Caddy) error = %v", err)
+	}
+	tunnel, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, now, 73), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
+		Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+			SecretID: ids.NewAt(ids.KindSecret, now, 74),
+		}},
+		GeneratedServices: []string{serviceID},
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord(Tunnel) error = %v", err)
+	}
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 75), RenderGeneration: 1,
+		Services:   []EnvironmentComposeIdentity{{ID: serviceID, Name: "shared"}},
+		Components: []ComponentRecord{caddy, tunnel},
+	})
+	if err := validateEnvironmentComposeProjection(projection); !errors.Is(
+		err, errs.New(errs.KindValidationFailed, ""),
+	) {
+		t.Fatalf("validateEnvironmentComposeProjection(duplicate owner) error = %v", err)
+	}
+}
+
 // Rationale: Component secret bindings must retain exact non-secret Entry
 // metadata and immutable generation ids without storing their value bytes.
 func TestEnvironmentComposeProjectionPinsSortedEntrySnapshots(t *testing.T) {

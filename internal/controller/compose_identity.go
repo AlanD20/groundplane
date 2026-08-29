@@ -10,8 +10,9 @@ import (
 
 // ComposeResourceIdentity binds one mutable Compose key to its durable id.
 type ComposeResourceIdentity struct {
-	ID   string
-	Name string
+	ID          string
+	Name        string
+	ComponentID string
 }
 
 // ComposeIdentitySnapshot is the durable identity projection for resources owned by one Compose project.

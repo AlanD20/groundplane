@@ -204,7 +204,7 @@ func sameComposeResourceIdentities(left []ComposeResourceIdentity, right []Compo
 	sort.Slice(left, func(i, j int) bool { return left[i].Name < left[j].Name })
 	sort.Slice(right, func(i, j int) bool { return right[i].Name < right[j].Name })
 	for index := range left {
-		if left[index] != right[index] {
+		if left[index].ID != right[index].ID || left[index].Name != right[index].Name {
 			return false
 		}
 	}

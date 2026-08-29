@@ -11,7 +11,7 @@ const (
 	caddyfileName         = "components/caddy/Caddyfile"
 	caddyDataMarkerName   = "components/caddy/data/.groundplane-managed"
 	caddyConfigMarkerName = "components/caddy/config/.groundplane-managed"
-	caddyImage            = "caddy:2.11.4-alpine"
+	Image                 = "docker.io/library/caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
 	ServiceName           = "caddy"
 	defaultTemplateBody   = "{routes}\n"
 	routesMarker          = "{routes}"
@@ -79,11 +79,11 @@ func Definition() (component.Definition, error) {
 	}
 	return component.NewDefinition(component.DefinitionInput{
 		Implementation: "caddy",
-		ConfigVariant:   "caddy-v1",
-		Provides:        []component.Capability{component.CapabilityHTTPRouter},
-		Grants:          []component.Grant{routes, services, networks, managedConfig, hostTrust},
-		OwnerScopes:     []component.OwnerScope{component.OwnerScopeEnvironment},
-		Actions:         []component.ActionDefinition{activate},
+		ConfigVariant:  "caddy-v1",
+		Provides:       []component.Capability{component.CapabilityHTTPRouter},
+		Grants:         []component.Grant{routes, services, networks, managedConfig, hostTrust},
+		OwnerScopes:    []component.OwnerScope{component.OwnerScopeEnvironment},
+		Actions:        []component.ActionDefinition{activate},
 	})
 }
 
@@ -101,7 +101,7 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 	}
 	return component.CloneEnvironmentPlan(component.EnvironmentPlan{
 		Services: []component.ManagedService{{
-			ID: input.GeneratedServiceID, Name: ServiceName, Image: caddyImage,
+			ID: input.GeneratedServiceID, Name: ServiceName, Image: Image,
 			NetworkMode: component.ManagedNetworkModeZones,
 			Networks: []component.ManagedNetworkAttachment{{
 				Name: input.ZoneName, Aliases: []string{ServiceName}, StaticIPv4: input.PinnedIPv4,

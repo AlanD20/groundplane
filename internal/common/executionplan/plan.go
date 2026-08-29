@@ -39,6 +39,7 @@ const (
 
 const (
 	labelEnvironmentID = "com.groundplane.environment-id"
+	labelComponentID   = "com.groundplane.component-id"
 	labelKind          = "com.groundplane.kind"
 	labelManaged       = "com.groundplane.managed"
 	labelPlanID        = "com.groundplane.plan-id"
@@ -205,7 +206,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	materializationIDs := make(map[string]struct{})
 	materializationDestinations := make(map[string]struct{})
 	for _, step := range plan.Steps {
-		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts); err != nil {
+		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts, plan.Steps); err != nil {
 			return err
 		}
 		if procedure := step.GetAdapterProcedure(); procedure != nil &&
@@ -333,7 +334,7 @@ func validateArtifactFreeAdapterPlan(plan *agentpb.ExecutionPlan) error {
 	}
 	stepIDs := make(map[string]struct{}, len(plan.Steps))
 	for _, step := range plan.Steps {
-		if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil); err != nil {
+		if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
 			return err
 		}
 		procedure := step.GetAdapterProcedure()
@@ -354,7 +355,7 @@ func validateArtifactFreeEnvironmentRemovePlan(plan *agentpb.ExecutionPlan) erro
 		return errs.New(errs.KindValidationFailed, "artifact-free Environment remove plan shape is invalid")
 	}
 	step := plan.Steps[0]
-	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil); err != nil {
+	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
 		return err
 	}
 	remove := step.GetEnvironmentDirectoryRemove()
@@ -370,7 +371,7 @@ func validateArtifactFreeManagedNetworkRemovePlan(plan *agentpb.ExecutionPlan) e
 		return errs.New(errs.KindValidationFailed, "artifact-free managed network remove plan shape is invalid")
 	}
 	step := plan.Steps[0]
-	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil); err != nil {
+	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
 		return err
 	}
 	remove := step.GetManagedNetworkRemove()
@@ -388,7 +389,7 @@ func validateEnvironmentCreatePlan(plan *agentpb.ExecutionPlan) error {
 		return errs.New(errs.KindValidationFailed, "environment create plan shape is invalid")
 	}
 	step := plan.Steps[0]
-	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil); err != nil {
+	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
 		return err
 	}
 	return validateEnvironmentDirectoryCreateTarget(plan, step)
@@ -475,6 +476,17 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		}
 		if err := validateLabels(plan, artifact, "service", service.ServiceId, service.ExpectedLabels); err != nil {
 			return err
+		}
+		componentLabel := ""
+		for _, label := range service.ExpectedLabels {
+			if label.GetKey() == labelComponentID {
+				componentLabel = label.GetValue()
+				break
+			}
+		}
+		if service.GetOwnerComponentId() != componentLabel ||
+			(service.GetOwnerComponentId() != "" && validateID(ids.KindComponent, service.GetOwnerComponentId()) != nil) {
+			return errs.New(errs.KindValidationFailed, "Compose artifact service Component ownership is invalid")
 		}
 		switch service.Role {
 		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED:
@@ -583,6 +595,8 @@ func validateLabels(
 			kind = ids.KindProject
 		case labelEnvironmentID:
 			kind = ids.KindEnvironment
+		case labelComponentID:
+			kind = ids.KindComponent
 		case labelServiceID:
 			if validateID(ids.KindService, value) == nil || validateID(ids.KindComponent, value) == nil {
 				continue
@@ -615,6 +629,7 @@ func validateStep(
 	renderGeneration uint64,
 	step *agentpb.ExecutionStep,
 	artifacts map[string]*agentpb.ComposeArtifact,
+	steps []*agentpb.ExecutionStep,
 ) error {
 	if step == nil || validateID(ids.KindStep, step.StepId) != nil || step.TimeoutSeconds == 0 {
 		return errs.New(errs.KindValidationFailed, "execution step identity or timeout is invalid")
@@ -762,23 +777,13 @@ func validateStep(
 		if err := validateComponentAction(apply); err != nil {
 			return err
 		}
-		if apply.GetComposeArtifactId() == "" {
-			if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
-				return errs.New(errs.KindValidationFailed, "managed Component action requires a Component operation")
-			}
+		if operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 			return nil
 		}
-		artifact := artifacts[apply.GetComposeArtifactId()]
-		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-			artifact.AuthorizedVolumeDir == "" {
-			return errs.New(errs.KindValidationFailed, "Component container action artifact is invalid")
+		if apply.GetGeneration() != renderGeneration {
+			return errs.New(errs.KindValidationFailed, "Component action generation does not match its plan")
 		}
-		for _, service := range artifact.Services {
-			if service != nil && service.ServiceId == apply.GetServiceId() {
-				return nil
-			}
-		}
-		return errs.New(errs.KindValidationFailed, "Component container action Service is invalid")
+		return validateComponentContainerActionTarget(apply, step, artifacts, steps)
 	case *agentpb.ExecutionStep_HostResolutionApply:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY ||
 			!validHostResolutionAction(payload.HostResolutionApply.GetComponentId(),
@@ -811,7 +816,7 @@ func validateComponentApplyPlan(plan *agentpb.ExecutionPlan, artifacts map[strin
 		return errs.New(errs.KindValidationFailed, "component apply plan must contain one, two, or four steps")
 	}
 	for _, step := range plan.Steps {
-		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts); err != nil {
+		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts, plan.Steps); err != nil {
 			return err
 		}
 	}
@@ -873,10 +878,82 @@ func validateComponentAction(action *agentpb.ComponentApply) error {
 		!validComponentDigest(action.GetArtifactDigest()) {
 		return errs.New(errs.KindValidationFailed, "component action identity, generation, or digest is invalid")
 	}
-	containerAction := action.GetComposeArtifactId() != "" || action.GetServiceId() != ""
-	if containerAction && (validateID(ids.KindConfig, action.GetComposeArtifactId()) != nil ||
-		validateID(ids.KindService, action.GetServiceId()) != nil) {
-		return errs.New(errs.KindValidationFailed, "component container action identity is invalid")
+	return nil
+}
+
+func validateComponentContainerActionTarget(
+	action *agentpb.ComponentApply,
+	step *agentpb.ExecutionStep,
+	artifacts map[string]*agentpb.ComposeArtifact,
+	steps []*agentpb.ExecutionStep,
+) error {
+	matches := 0
+	var selectedArtifact *agentpb.ComposeArtifact
+	var selectedService *agentpb.ComposeService
+	for _, artifact := range artifacts {
+		if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+			artifact.GetAuthorizedVolumeDir() == "" {
+			continue
+		}
+		for _, service := range artifact.GetServices() {
+			if service != nil && service.GetOwnerComponentId() == action.GetComponentId() {
+				matches++
+				selectedArtifact = artifact
+				selectedService = service
+			}
+		}
+	}
+	if matches != 1 {
+		return errs.New(errs.KindValidationFailed, "Component container action target is not uniquely owned")
+	}
+	expectedGeneration := strconv.FormatUint(action.GetGeneration(), 10)
+	sealedGeneration := ""
+	for _, label := range selectedService.GetExpectedLabels() {
+		if label.GetKey() == labelRenderGen {
+			sealedGeneration = label.GetValue()
+			break
+		}
+	}
+	if sealedGeneration != expectedGeneration {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Component action generation does not match its selected Service",
+		)
+	}
+	var prerequisite *agentpb.ExecutionStep
+	for _, candidate := range steps {
+		if candidate.GetStepId() == step.GetPrerequisiteStepId() {
+			prerequisite = candidate
+			break
+		}
+	}
+	var materialization *agentpb.MaterializeFile
+	if prerequisite != nil {
+		materialization = prerequisite.GetMaterializeFile()
+	}
+	if materialization == nil && prerequisite != nil {
+		apply := prerequisite.GetComposeApply()
+		if apply == nil || apply.GetArtifactId() != selectedArtifact.GetArtifactId() ||
+			apply.GetFullReconcile() || !apply.GetForceRecreate() || !apply.GetNoDependencies() ||
+			len(apply.GetServiceIds()) != 1 ||
+			apply.GetServiceIds()[0] != selectedService.GetServiceId() {
+			return errs.New(
+				errs.KindValidationFailed,
+				"Component action prerequisite is not its targeted Compose apply",
+			)
+		}
+		for _, candidate := range steps {
+			if candidate.GetStepId() == prerequisite.GetPrerequisiteStepId() {
+				materialization = candidate.GetMaterializeFile()
+				break
+			}
+		}
+	}
+	if materialization == nil || materialization.GetMaterializationId() != action.GetArtifactId() ||
+		materialization.GetArtifactId() != selectedArtifact.GetArtifactId() ||
+		materialization.GetEnvironmentId() != selectedArtifact.GetOwnerId() ||
+		subtle.ConstantTimeCompare(materialization.GetSha256(), action.GetArtifactDigest()) != 1 {
+		return errs.New(errs.KindValidationFailed, "Component action is not bound to its materialization prerequisite")
 	}
 	return nil
 }
@@ -1399,7 +1476,7 @@ func validOperation(operation agentpb.PlanOperation) bool {
 
 func validLabelKey(key string) bool {
 	switch key {
-	case labelEnvironmentID, labelKind, labelManaged, labelPlanID, labelProjectID,
+	case labelComponentID, labelEnvironmentID, labelKind, labelManaged, labelPlanID, labelProjectID,
 		labelReleaseID, labelRenderGen, labelRuntimeRole, labelServiceID, labelSlot, labelTenantID:
 		return true
 	default:

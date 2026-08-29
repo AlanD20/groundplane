@@ -16,6 +16,7 @@ import (
 
 const (
 	composeLabelEnvironmentID    = "com.groundplane.environment-id"
+	composeLabelComponentID      = "com.groundplane.component-id"
 	composeLabelKind             = "com.groundplane.kind"
 	composeLabelManaged          = "com.groundplane.managed"
 	composeLabelPlanID           = "com.groundplane.plan-id"
@@ -295,7 +296,8 @@ func indexComposeIdentities(
 	previousName := ""
 	usedIDs := make(map[string]struct{}, len(identities))
 	for _, identity := range identities {
-		if identity.Name == "" || identity.Name <= previousName || ids.Validate(kind, identity.ID) != nil {
+		if identity.Name == "" || identity.Name <= previousName || ids.Validate(kind, identity.ID) != nil ||
+			(identity.ComponentID != "" && (kind != ids.KindService || ids.Validate(ids.KindComponent, identity.ComponentID) != nil)) {
 			return nil, errs.New(errs.KindInternal, "compose identity snapshot is invalid or unsorted")
 		}
 		if _, duplicate := usedIDs[identity.ID]; duplicate {
@@ -331,6 +333,14 @@ func composeOwnershipLabels(
 		composeLabelKind:          resourceKind,
 		composeLabelManaged:       "true",
 		composeLabelProjectID:     input.ProjectID,
+	}
+	if resourceKind == "service" {
+		for _, identity := range input.Identities.Services {
+			if identity.ID == serviceID && identity.ComponentID != "" {
+				expected[composeLabelComponentID] = identity.ComponentID
+				break
+			}
+		}
 	}
 	if input.ProjectOwnerKind == ComposeProjectOwnerTenant {
 		expected[composeLabelTenantID] = input.TenantID

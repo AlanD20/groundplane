@@ -73,10 +73,11 @@ func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
 		task,
 		intent,
 		RouteRemovalTaskProcedureIDs{
-			ArtifactID:        "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			MaterializationID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW",
-			MaterializeStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			ApplyStepID:       "step_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			ArtifactID:         "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			MaterializationID:  "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			MaterializeStepID:  "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			ComposeApplyStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			ActivateStepID:     "step_01ARZ3NDEKTSV4RRFFQ69G5FAX",
 		},
 	)
 	if err != nil {
@@ -95,11 +96,24 @@ func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeString(materialization digest) error = %v", err)
 	}
-	apply := first.Steps[1].GetComponentApply()
+	composeApply := first.Steps[1].GetComposeApply()
+	apply := first.Steps[2].GetComponentApply()
+	componentServiceOwned := false
+	for _, service := range first.Artifacts[0].GetServices() {
+		if service.GetServiceId() == intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0] &&
+			service.GetOwnerComponentId() == intent.CandidateProjection.Components[0].Desired.ID {
+			componentServiceOwned = true
+		}
+	}
 	if !bytes.Equal(first.PlanHash, second.PlanHash) || hex.EncodeToString(first.PlanHash) != prepared.PlanHash ||
 		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || first.TargetId != task.Target ||
-		len(first.Artifacts) != 1 || len(first.Steps) != 2 || first.Steps[0].GetMaterializeFile() == nil ||
-		apply == nil || apply.ServiceId != intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0] ||
+		len(first.Artifacts) != 1 || len(first.Steps) != 3 || first.Steps[0].GetMaterializeFile() == nil ||
+		composeApply == nil || len(composeApply.GetServiceIds()) != 1 ||
+		!composeApply.GetForceRecreate() || !composeApply.GetNoDependencies() ||
+		composeApply.GetServiceIds()[0] != intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0] ||
+		first.Steps[1].GetPrerequisiteStepId() != first.Steps[0].GetStepId() ||
+		first.Steps[2].GetPrerequisiteStepId() != first.Steps[1].GetStepId() ||
+		apply == nil || !componentServiceOwned ||
 		apply.ActionId != "activate-config" || !bytes.Equal(apply.ArtifactDigest, digest) {
 		t.Fatalf("resolved Route removal plans = %#v / %#v", first, second)
 	}
@@ -151,7 +165,7 @@ func routeRemovalPlanTestState(
 		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: ids.NewAt(ids.KindPlan, at, 91), RenderGeneration: projection.RenderGeneration,
 		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
-		Identities:          composeIdentitySnapshotFromProjection(projection),
+		Identities:          mustComposeIdentitySnapshotFromProjection(t, projection),
 	})
 	if err != nil {
 		t.Fatalf("RenderCompose(Route removal fixture) error = %v", err)

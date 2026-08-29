@@ -458,9 +458,17 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	})
 	stepIndex++
 	if hasCaddyApply {
+		materializationStepID := ""
+		for _, candidate := range steps {
+			if materialization := candidate.GetMaterializeFile(); materialization != nil &&
+				materialization.GetMaterializationId() == caddyApply.action.GetArtifactId() {
+				materializationStepID = candidate.GetStepId()
+			}
+		}
 		caddyStep, stepErr := caddyApply.ExecutionStep(
 			task.Steps[stepIndex].ID,
 			uint32(task.TimeoutSeconds),
+			materializationStepID,
 		)
 		if stepErr != nil {
 			return nil, stepErr
@@ -752,13 +760,17 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 			return nil, err
 		}
 	}
+	identities, err := ComposeIdentitySnapshotFromProjection(projection)
+	if err != nil {
+		return nil, err
+	}
 	return RenderCompose(ComposeRenderInput{
 		Project: project, ArtifactID: artifactID,
 		ProjectOwnerKind: ComposeProjectOwnerTenant,
 		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
-		Identities:          composeIdentitySnapshotFromProjection(projection),
+		Identities:          identities,
 		ExternalNetworks:    externalNetworks,
 		Releases:            releases,
 	})
@@ -847,13 +859,26 @@ func projectedEnvironmentEntries(records []etcd.EntryRecord) []core.EnvEntry {
 	return entries
 }
 
-func composeIdentitySnapshotFromProjection(
+func ComposeIdentitySnapshotFromProjection(
 	projection etcd.EnvironmentComposeProjection,
-) ComposeIdentitySnapshot {
+) (ComposeIdentitySnapshot, error) {
+	componentOwners := make(map[string]string)
+	for _, component := range projection.Components {
+		for _, serviceID := range component.Runtime.GeneratedServices {
+			if owner, exists := componentOwners[serviceID]; exists && owner != component.Desired.ID {
+				return ComposeIdentitySnapshot{}, errs.New(
+					errs.KindValidationFailed, "generated Service has multiple Component owners",
+				)
+			}
+			componentOwners[serviceID] = component.Desired.ID
+		}
+	}
 	convert := func(values []etcd.EnvironmentComposeIdentity) []ComposeResourceIdentity {
 		result := make([]ComposeResourceIdentity, len(values))
 		for index, value := range values {
-			result[index] = ComposeResourceIdentity{ID: value.ID, Name: value.Name}
+			result[index] = ComposeResourceIdentity{
+				ID: value.ID, Name: value.Name, ComponentID: componentOwners[value.ID],
+			}
 		}
 		return result
 	}
@@ -861,5 +886,5 @@ func composeIdentitySnapshotFromProjection(
 		Services: convert(projection.Services),
 		Networks: convert(projection.Networks),
 		Volumes:  composeVolumeResourceIdentities(projection.Volumes),
-	}
+	}, nil
 }

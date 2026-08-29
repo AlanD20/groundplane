@@ -798,7 +798,8 @@ func (s *Server) sendResolvedTaskAssignment(
 				return err
 			}
 		}
-		if action := step.GetComponentApply(); action != nil && action.GetComposeArtifactId() == "" {
+		if action := step.GetComponentApply(); action != nil &&
+			assignment.GetPlan().GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 			if err := s.sendManagedConfig(
 				stream, claim.Task.Record, assignment.GetAssignmentId(), assignment.GetPlan(), step,
 			); err != nil {

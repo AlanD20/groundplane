@@ -99,17 +99,17 @@ type environmentBlueprintRepository interface {
 }
 
 type environmentBlueprintService struct {
-	volumeRoot      string
-	environmentPool netip.Prefix
-	repository      environmentBlueprintRepository
-	idempotency     *desiredrevision.Idempotency
-	materials       environmentBlueprintMaterializationResolver
-	releaseGroups   *controller.ReleaseGroupBlueprintPlanner
-	entryGeneration *EntryGenerationService
-	attachFacts     *AttachFactService
+	volumeRoot       string
+	environmentPool  netip.Prefix
+	repository       environmentBlueprintRepository
+	idempotency      *desiredrevision.Idempotency
+	materials        environmentBlueprintMaterializationResolver
+	releaseGroups    *controller.ReleaseGroupBlueprintPlanner
+	entryGeneration  *EntryGenerationService
+	attachFacts      *AttachFactService
 	componentCatalog []controller.EnvironmentComponentRegistration
-	random          io.Reader
-	now             func() time.Time
+	random           io.Reader
+	now              func() time.Time
 }
 
 type environmentBlueprintMaterializationResolver interface {
@@ -288,9 +288,9 @@ func newEnvironmentBlueprintService(
 	return &environmentBlueprintService{
 		volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
 		materials: materials, releaseGroups: releaseGroups, entryGeneration: entryGeneration,
-		attachFacts: attachFacts,
+		attachFacts:      attachFacts,
 		componentCatalog: controller.CloneEnvironmentComponentCatalog(componentCatalog),
-		random: rand.Reader, now: time.Now,
+		random:           rand.Reader, now: time.Now,
 	}, nil
 }
 
@@ -745,9 +745,17 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: applyStepID})
 	if hasCaddyApply {
 		caddyStepID := allocator.Named(ids.KindStep, "http-router-config-activate")
+		caddyMaterializationStepID := ""
+		for _, candidate := range steps {
+			if materialization := candidate.GetMaterializeFile(); materialization != nil &&
+				materialization.GetDestination() == controller.RouteRemovalCaddyfilePath {
+				caddyMaterializationStepID = candidate.GetStepId()
+			}
+		}
 		caddyStep, stepErr := caddyApply.ExecutionStep(
 			caddyStepID,
 			uint32(environmentBlueprintTimeoutSeconds),
+			caddyMaterializationStepID,
 		)
 		if stepErr != nil {
 			return etcd.IdempotencyResponse{}, stepErr
@@ -1280,7 +1288,9 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 		values := make([]etcd.TaskGeneratedEnvironmentEntryReference, len(file.Values))
 		for index, binding := range file.Values {
 			secret, err := service.materials.PinSecretValue(ctx, projectID, binding.SecretID)
-			if err != nil { return nil, nil, err }
+			if err != nil {
+				return nil, nil, err
+			}
 			values[index] = etcd.TaskGeneratedEnvironmentEntryReference{
 				Name: binding.Name, Secret: &secret,
 			}
@@ -1457,14 +1467,20 @@ func environmentBlueprintState(
 			"Environment desired-state pointers are corrupt",
 		)
 	}
-	return head.Revision, authoredComposeIdentitySnapshot(projection.Record),
-		projection.Record.RenderGeneration + 1, nil
+	snapshot, err := authoredComposeIdentitySnapshot(projection.Record)
+	if err != nil {
+		return 0, controller.ComposeIdentitySnapshot{}, 0, err
+	}
+	return head.Revision, snapshot, projection.Record.RenderGeneration + 1, nil
 }
 
 func authoredComposeIdentitySnapshot(
 	projection etcd.EnvironmentComposeProjection,
-) controller.ComposeIdentitySnapshot {
-	snapshot := composeIdentitySnapshot(projection)
+) (controller.ComposeIdentitySnapshot, error) {
+	snapshot, err := composeIdentitySnapshot(projection)
+	if err != nil {
+		return controller.ComposeIdentitySnapshot{}, err
+	}
 	generatedServiceIDs := make(map[string]struct{})
 	for _, component := range projection.Components {
 		for _, serviceID := range component.Runtime.GeneratedServices {
@@ -1478,7 +1494,7 @@ func authoredComposeIdentitySnapshot(
 		}
 	}
 	snapshot.Services = services
-	return snapshot
+	return snapshot, nil
 }
 
 func preserveEnvironmentBlueprintVolumes(
@@ -1606,25 +1622,8 @@ func environmentBlueprintVolumeMounts(
 	return mounts, nil
 }
 
-func composeIdentitySnapshot(projection etcd.EnvironmentComposeProjection) controller.ComposeIdentitySnapshot {
-	convert := func(values []etcd.EnvironmentComposeIdentity) []controller.ComposeResourceIdentity {
-		result := make([]controller.ComposeResourceIdentity, len(values))
-		for index, value := range values {
-			result[index] = controller.ComposeResourceIdentity{ID: value.ID, Name: value.Name}
-		}
-		return result
-	}
-	return controller.ComposeIdentitySnapshot{
-		Services: convert(
-			projection.Services,
-		),
-		Networks: convert(projection.Networks),
-		Volumes: func() []controller.ComposeResourceIdentity {
-			result := make([]controller.ComposeResourceIdentity, len(projection.Volumes))
-			for index, value := range projection.Volumes {
-				result[index] = controller.ComposeResourceIdentity{ID: value.ID, Name: value.Key}
-			}
-			return result
-		}(),
-	}
+func composeIdentitySnapshot(
+	projection etcd.EnvironmentComposeProjection,
+) (controller.ComposeIdentitySnapshot, error) {
+	return controller.ComposeIdentitySnapshotFromProjection(projection)
 }

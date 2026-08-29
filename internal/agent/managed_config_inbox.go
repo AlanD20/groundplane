@@ -68,7 +68,7 @@ func (inbox *managedConfigInbox) Register(assignment Assignment) error {
 	steps := make(map[string]*managedConfigStepInbox)
 	for _, step := range assignment.Plan.GetSteps() {
 		action := step.GetComponentApply()
-		if action == nil || action.GetComposeArtifactId() != "" {
+		if action == nil || assignment.Plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 			continue
 		}
 		steps[step.GetStepId()] = &managedConfigStepInbox{

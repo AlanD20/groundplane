@@ -29,10 +29,11 @@ type routeRemovalPlanStateReader interface {
 // RouteRemovalTaskProcedureIDs are the immutable identities allocated before
 // publication for one Caddy-backed Route removal procedure.
 type RouteRemovalTaskProcedureIDs struct {
-	ArtifactID        string
-	MaterializationID string
-	MaterializeStepID string
-	ApplyStepID       string
+	ArtifactID         string
+	MaterializationID  string
+	MaterializeStepID  string
+	ComposeApplyStepID string
+	ActivateStepID     string
 }
 
 // PrepareRouteRemovalTask renders the candidate only long enough to pin its
@@ -47,7 +48,8 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	if ids.Validate(ids.KindConfig, procedure.ArtifactID) != nil ||
 		ids.Validate(ids.KindConfig, procedure.MaterializationID) != nil ||
 		ids.Validate(ids.KindStep, procedure.MaterializeStepID) != nil ||
-		ids.Validate(ids.KindStep, procedure.ApplyStepID) != nil ||
+		ids.Validate(ids.KindStep, procedure.ComposeApplyStepID) != nil ||
+		ids.Validate(ids.KindStep, procedure.ActivateStepID) != nil ||
 		intent.CandidateProjection == nil || intent.CandidateProjection.RenderGeneration > math.MaxInt32 {
 		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Route removal procedure ids are invalid")
 	}
@@ -80,7 +82,11 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		EnvironmentBlueprintArtifactParam:        procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
-	task.Steps = []etcd.TaskStepRecord{{ID: procedure.MaterializeStepID}, {ID: procedure.ApplyStepID}}
+	task.Steps = []etcd.TaskStepRecord{
+		{ID: procedure.MaterializeStepID},
+		{ID: procedure.ComposeApplyStepID},
+		{ID: procedure.ActivateStepID},
+	}
 	task.Materializations = []etcd.TaskMaterializationRecord{{
 		StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID,
 		EnvironmentID: intent.EnvironmentID, Destination: RouteRemovalCaddyfilePath,
@@ -127,7 +133,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		task.ID != intent.TaskID || task.Target != intent.RouteID || !task.CreatedAt.Equal(intent.CreatedAt) ||
 		intent.Status != etcd.TaskStatusPending || !intent.RequiresCaddy || intent.CandidateProjection == nil ||
 		intent.CurrentProjection == nil || task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 ||
-		len(task.Params) != 4 || len(task.Steps) != 2 || len(task.Materializations) != 1 {
+		len(task.Params) != 4 || len(task.Steps) != 3 || len(task.Materializations) != 1 {
 		return nil, errs.New(errs.KindInternal, "durable Route removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection
@@ -140,7 +146,8 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 			ids.KindConfig,
 			artifactID,
 		) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration ||
-		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || ids.Validate(ids.KindStep, task.Steps[1].ID) != nil {
+		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || ids.Validate(ids.KindStep, task.Steps[1].ID) != nil ||
+		ids.Validate(ids.KindStep, task.Steps[2].ID) != nil {
 		return nil, errs.New(errs.KindInternal, "durable Route removal Task parameters are invalid")
 	}
 	reference := task.Materializations[0]
@@ -216,8 +223,6 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		reference.MaterializationID,
 		digest,
 		uint64(task.RenderGeneration),
-		artifactID,
-		serviceID,
 	)
 	if err != nil {
 		return nil, err
@@ -229,8 +234,17 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		Artifacts: []*agentpb.ComposeArtifact{artifact},
 		Steps: []*agentpb.ExecutionStep{
 			materializationStep,
-			{StepId: task.Steps[1].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-				Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: action}},
+			{
+				StepId: task.Steps[1].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				PrerequisiteStepId: materializationStep.GetStepId(),
+				Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+					ArtifactId: artifactID, ServiceIds: []string{serviceID},
+					ForceRecreate: true, NoDependencies: true,
+				}},
+			},
+			{StepId: task.Steps[2].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				PrerequisiteStepId: task.Steps[1].ID,
+				Payload:            &agentpb.ExecutionStep_ComponentApply{ComponentApply: action}},
 		},
 	})
 }

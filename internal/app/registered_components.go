@@ -40,18 +40,19 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 		registeredcaddy.CaddyfileContainer,
 		registeredcaddy.ValidateConfigCommand(),
 		registeredcaddy.ActivateConfigCommand(),
+		registeredcaddy.Image,
 	)
 	if err != nil {
 		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	compiled, err := registeredcatalog.NewRegistered(
 		registeredcatalog.Registration{
-			Definition: caddy,
+			Definition:             caddy,
 			ContainerConfigActions: []registeredcatalog.ContainerConfigActionRecipe{caddyActivate},
 		},
 		registeredcatalog.Registration{Definition: tunnel},
 		registeredcatalog.Registration{
-			Definition: coreDNS,
+			Definition:           coreDNS,
 			ManagedConfigActions: []registeredcatalog.ManagedConfigActionRecipe{coreDNSActivate},
 		},
 	)

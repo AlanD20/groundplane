@@ -531,9 +531,13 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if previous != nil {
+		identitySnapshot, snapshotErr := composeIdentitySnapshot(candidate)
+		if snapshotErr != nil {
+			return etcd.IdempotencyResponse{}, snapshotErr
+		}
 		removals, err := environmentBlueprintEntryRemovals(
 			request.environmentID, []etcd.EntryRecord{*previous}, entries,
-			composeIdentitySnapshot(candidate).Services,
+			identitySnapshot.Services,
 		)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
