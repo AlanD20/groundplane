@@ -76,6 +76,43 @@ func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 	}
 }
 
+// Rationale: The generated create request represents the optional Compose key
+// as a pointer, so the mapping must omit it when the public input omits it.
+func TestGeneratedVolumeCreateBodyPreservesOptionalKey(t *testing.T) {
+	t.Parallel()
+
+	withoutKey := generatedVolumeCreateBody(apiTypes.VolumeCreate{
+		EnvironmentID: "env_1",
+		Slug:          "uploads",
+	})
+	if withoutKey.Key != nil {
+		t.Fatalf("body without key = %#v, want nil key", withoutKey)
+	}
+	if withoutKey.EnvironmentId != "env_1" || withoutKey.Slug != "uploads" {
+		t.Fatalf("body without key = %#v", withoutKey)
+	}
+
+	withKey := generatedVolumeCreateBody(apiTypes.VolumeCreate{
+		EnvironmentID: "env_1",
+		Slug:          "uploads",
+		Key:           "uploads-data",
+	})
+	if withKey.Key == nil || *withKey.Key != "uploads-data" {
+		t.Fatalf("body with key = %#v, want uploads-data", withKey)
+	}
+}
+
+// Rationale: Volume edits have one mutable field and must map directly to the
+// generated request without reserializing through an untyped intermediate.
+func TestGeneratedVolumeEditBodyMapsSlug(t *testing.T) {
+	t.Parallel()
+
+	body := generatedVolumeEditBody(apiTypes.VolumeEdit{Slug: "archive"})
+	if body.Slug != "archive" {
+		t.Fatalf("body = %#v, want slug archive", body)
+	}
+}
+
 func TestGetVolumeDeletionImpactPreservesFixedRevisionPage(t *testing.T) {
 	t.Parallel()
 

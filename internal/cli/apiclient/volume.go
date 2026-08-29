@@ -3,13 +3,11 @@ package apiclient
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) ListVolumes(
@@ -71,10 +69,7 @@ func (c *Client) CreateVolume(ctx context.Context, input apiTypes.VolumeCreate) 
 	if err != nil {
 		return apiTypes.VolumeMutationResponse{}, err
 	}
-	body, err := generatedVolumeBody[generated.VolumeCreateJSONRequestBody](input)
-	if err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
-	}
+	body := generatedVolumeCreateBody(input)
 	response, err := client.VolumeCreateWithResponse(
 		ctx, &generated.VolumeCreateParams{IdempotencyKey: ids.NewULID()}, body,
 	)
@@ -102,10 +97,7 @@ func (c *Client) EditVolume(
 	if err != nil {
 		return apiTypes.VolumeMutationResponse{}, err
 	}
-	body, err := generatedVolumeBody[generated.VolumeEditJSONRequestBody](input)
-	if err != nil {
-		return apiTypes.VolumeMutationResponse{}, err
-	}
+	body := generatedVolumeEditBody(input)
 	path := "/api/v1/volumes/" + id
 	response, err := client.VolumeEditWithResponse(
 		ctx, id, &generated.VolumeEditParams{IdempotencyKey: ids.NewULID()}, body,
@@ -183,15 +175,18 @@ func (c *Client) RemoveVolume(
 	return result, nil
 }
 
-func generatedVolumeBody[Body any](input any) (Body, error) {
-	var body Body
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return body, errs.Wrap(errs.KindInternal, err)
+func generatedVolumeCreateBody(input apiTypes.VolumeCreate) generated.VolumeCreateJSONRequestBody {
+	body := generated.VolumeCreate{
+		EnvironmentId: input.EnvironmentID,
+		Slug:          input.Slug,
 	}
-	defer clear(encoded)
-	if err := json.Unmarshal(encoded, &body); err != nil {
-		return body, errs.Wrap(errs.KindInternal, err)
+	if input.Key != "" {
+		key := input.Key
+		body.Key = &key
 	}
-	return body, nil
+	return body
+}
+
+func generatedVolumeEditBody(input apiTypes.VolumeEdit) generated.VolumeEditJSONRequestBody {
+	return generated.VolumeEdit{Slug: input.Slug}
 }
