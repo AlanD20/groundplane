@@ -7,7 +7,6 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net"
-	"net/netip"
 	"net/url"
 	"path"
 	"strconv"
@@ -136,6 +135,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	} else if plan.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "execution plan render generation must be positive")
 	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT {
+		return validateManualScriptPlan(plan)
+	}
 	if !validOperation(plan.Operation) {
 		return errs.New(errs.KindValidationFailed, "execution plan operation is unsupported")
 	}
@@ -147,7 +149,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		validateID(ids.KindAttach, plan.TargetId) != nil {
 		return errs.New(errs.KindValidationFailed, "adapter execution plan target must be an Attach")
 	}
-	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE && len(plan.Artifacts) == 0 {
 		return validateEnvironmentCreatePlan(plan)
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP {
@@ -194,6 +196,11 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if len(plan.Steps) == 0 {
 		return errs.New(errs.KindValidationFailed, "execution plan must contain at least one step")
 	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
+		if err := validateEnvironmentDirectoryCreateTarget(plan, plan.Steps[0]); err != nil {
+			return err
+		}
+	}
 	stepIDs := make(map[string]struct{}, len(plan.Steps))
 	materializationIDs := make(map[string]struct{})
 	materializationDestinations := make(map[string]struct{})
@@ -201,7 +208,8 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts); err != nil {
 			return err
 		}
-		if procedure := step.GetAdapterProcedure(); procedure != nil && procedure.AttachId != plan.TargetId {
+		if procedure := step.GetAdapterProcedure(); procedure != nil &&
+			plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE && procedure.AttachId != plan.TargetId {
 			return errs.New(errs.KindValidationFailed, "adapter procedure does not identify the plan target")
 		}
 		if remove := step.GetEnvironmentDirectoryRemove(); remove != nil && remove.EnvironmentId != plan.TargetId {
@@ -383,6 +391,10 @@ func validateEnvironmentCreatePlan(plan *agentpb.ExecutionPlan) error {
 	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil); err != nil {
 		return err
 	}
+	return validateEnvironmentDirectoryCreateTarget(plan, step)
+}
+
+func validateEnvironmentDirectoryCreateTarget(plan *agentpb.ExecutionPlan, step *agentpb.ExecutionStep) error {
 	create := step.GetEnvironmentDirectoryCreate()
 	if create.GetEnvironmentId() != plan.TargetId {
 		return errs.New(errs.KindValidationFailed, "environment directory does not identify the plan target")
@@ -426,8 +438,16 @@ func validateArtifact(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 	if subtle.ConstantTimeCompare(artifact.YamlSha256, digest[:]) != 1 {
 		return errs.New(errs.KindValidationFailed, "Compose artifact digest does not match its YAML")
 	}
-	if strings.Contains(string(artifact.CanonicalYaml), "${") {
-		return errs.New(errs.KindValidationFailed, "Compose artifact contains unresolved interpolation")
+	if interpolation := strings.Index(string(artifact.CanonicalYaml), "${"); interpolation >= 0 {
+		name := string(artifact.CanonicalYaml[interpolation+2:])
+		if end := strings.IndexAny(name, ":-?}"); end >= 0 {
+			name = name[:end]
+		}
+		return errs.Newf(
+			errs.KindValidationFailed,
+			"Compose artifact contains unresolved interpolation for variable %q",
+			name,
+		)
 	}
 	if err := validateServices(plan, artifact); err != nil {
 		return err
@@ -452,9 +472,6 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		previous = identity
 		if err := validateComposeName(service.ComposeName); err != nil {
 			return err
-		}
-		if service.ExpectedReplicas == 0 {
-			return errs.New(errs.KindValidationFailed, "Compose service expected replicas must be positive")
 		}
 		if err := validateLabels(plan, artifact, "service", service.ServiceId, service.ExpectedLabels); err != nil {
 			return err
@@ -527,10 +544,28 @@ func validateLabels(
 		previous = pair.Key
 		values[pair.Key] = pair.Value
 	}
-	if values[labelManaged] != "true" || values[labelKind] != resourceKind ||
-		values[labelPlanID] != plan.PlanId ||
-		values[labelRenderGen] != strconv.FormatUint(plan.RenderGeneration, 10) {
-		return errs.New(errs.KindValidationFailed, "expected ownership labels do not identify the current plan")
+	if values[labelManaged] != "true" || values[labelKind] != resourceKind {
+		return errs.New(errs.KindValidationFailed, "expected ownership labels do not identify the resource")
+	}
+	if resourceKind == "service" {
+		labelPlan := values[labelPlanID]
+		labelGeneration := values[labelRenderGen]
+		if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE {
+			generation, err := strconv.ParseUint(labelGeneration, 10, 64)
+			if validateID(ids.KindPlan, labelPlan) != nil || err != nil || generation == 0 ||
+				strconv.FormatUint(generation, 10) != labelGeneration {
+				return errs.New(errs.KindValidationFailed, "expected service labels do not identify a sealed plan")
+			}
+		} else if labelPlan != plan.PlanId ||
+			labelGeneration != strconv.FormatUint(plan.RenderGeneration, 10) {
+			return errs.New(errs.KindValidationFailed, "expected service labels do not identify the current plan")
+		}
+	} else {
+		_, hasPlanID := values[labelPlanID]
+		_, hasRenderGeneration := values[labelRenderGen]
+		if hasPlanID || hasRenderGeneration {
+			return errs.New(errs.KindValidationFailed, "persistent resource labels contain volatile execution identity")
+		}
 	}
 	if resourceKind == "service" && values[labelServiceID] != resourceID {
 		return errs.New(errs.KindValidationFailed, "expected service labels do not identify the service")
@@ -717,32 +752,47 @@ func validateStep(
 			return errs.New(errs.KindValidationFailed, "managed network remove payload is invalid")
 		}
 		return nil
-	case *agentpb.ExecutionStep_CaddyConfigApply:
-		apply := payload.CaddyConfigApply
-		if apply == nil ||
-			(operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
-				operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
-				operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) ||
-			validateID(ids.KindService, apply.ServiceId) != nil ||
-			len(apply.CaddyfileSha256) != sha256.Size {
-			return errs.New(errs.KindValidationFailed, "Caddy config apply payload is invalid")
+	case *agentpb.ExecutionStep_ComponentApply:
+		apply := payload.ComponentApply
+		if apply == nil || (operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) {
+			return errs.New(errs.KindValidationFailed, "component apply payload is invalid")
 		}
-		artifact := artifacts[apply.ArtifactId]
+		if err := validateComponentAction(apply); err != nil {
+			return err
+		}
+		if apply.GetComposeArtifactId() == "" {
+			if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
+				return errs.New(errs.KindValidationFailed, "managed Component action requires a Component operation")
+			}
+			return nil
+		}
+		artifact := artifacts[apply.GetComposeArtifactId()]
 		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 			artifact.AuthorizedVolumeDir == "" {
-			return errs.New(errs.KindValidationFailed, "Caddy config apply artifact is invalid")
+			return errs.New(errs.KindValidationFailed, "Component container action artifact is invalid")
 		}
 		for _, service := range artifact.Services {
-			if service.ServiceId == apply.ServiceId && service.ComposeName == "caddy" {
+			if service != nil && service.ServiceId == apply.GetServiceId() {
 				return nil
 			}
 		}
-		return errs.New(errs.KindValidationFailed, "Caddy config apply Service is invalid")
-	case *agentpb.ExecutionStep_ComponentApply:
-		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY || payload.ComponentApply == nil {
-			return errs.New(errs.KindValidationFailed, "component apply payload is invalid")
+		return errs.New(errs.KindValidationFailed, "Component container action Service is invalid")
+	case *agentpb.ExecutionStep_HostResolutionApply:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY ||
+			!validHostResolutionAction(payload.HostResolutionApply.GetComponentId(),
+				payload.HostResolutionApply.GetGeneration(), renderGeneration) {
+			return errs.New(errs.KindValidationFailed, "host resolution apply payload is invalid")
 		}
-		return validateCoreDNSComponentApply(payload.ComponentApply.GetCorednsConfigApply(), artifacts)
+		return nil
+	case *agentpb.ExecutionStep_HostResolutionRestore:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY ||
+			!validHostResolutionAction(payload.HostResolutionRestore.GetComponentId(),
+				payload.HostResolutionRestore.GetGeneration(), renderGeneration) {
+			return errs.New(errs.KindValidationFailed, "host resolution restore payload is invalid")
+		}
+		return nil
 	case *agentpb.ExecutionStep_BackupArtifactPrune:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
 			return errs.New(errs.KindValidationFailed, "backup artifact prune requires a backup prune operation")
@@ -757,149 +807,101 @@ func validateStep(
 // one CoreDNS payload is the only step, and an enabled apply must name the
 // exact platform artifact and generated service it was rendered from.
 func validateComponentApplyPlan(plan *agentpb.ExecutionPlan, artifacts map[string]*agentpb.ComposeArtifact) error {
-	if len(plan.Steps) != 1 {
-		return errs.New(errs.KindValidationFailed, "component apply plan must contain exactly one step")
+	if len(plan.Steps) != 1 && len(plan.Steps) != 2 && len(plan.Steps) != 4 {
+		return errs.New(errs.KindValidationFailed, "component apply plan must contain one, two, or four steps")
+	}
+	for _, step := range plan.Steps {
+		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts); err != nil {
+			return err
+		}
 	}
 	step := plan.Steps[0]
-	if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts); err != nil {
-		return err
-	}
 	component := step.GetComponentApply()
 	if component == nil {
-		if step.GetCaddyConfigApply() != nil {
+		if len(plan.Steps) == 2 {
+			restore := step.GetHostResolutionRestore()
+			remove := plan.Steps[1].GetComposeRemove()
+			if restore == nil || remove == nil || len(artifacts) != 1 ||
+				restore.GetComponentId() != plan.TargetId || restore.GetGeneration() != plan.RenderGeneration ||
+				step.GetPrerequisiteStepId() != "" ||
+				plan.Steps[1].GetPrerequisiteStepId() != step.GetStepId() ||
+				remove.GetWholeProject() || len(remove.GetServiceIds()) != 1 {
+				return errs.New(errs.KindValidationFailed, "component disable procedure is invalid")
+			}
 			return nil
 		}
 		return errs.New(errs.KindValidationFailed, "component apply plan must contain a ComponentApply step")
 	}
-	apply := component.GetCorednsConfigApply()
-	if err := validateCoreDNSComponentApply(apply, artifacts); err != nil {
+	if err := validateComponentAction(component); err != nil {
 		return err
 	}
-	if apply.GetComponentId() != plan.TargetId || apply.GetRenderGeneration() != plan.RenderGeneration {
-		return errs.New(errs.KindValidationFailed, "CoreDNS apply identity does not match the execution plan")
+	if component.GetComponentId() != plan.TargetId || component.GetGeneration() != plan.RenderGeneration {
+		return errs.New(errs.KindValidationFailed, "component action identity does not match the execution plan")
+	}
+	if len(plan.Steps) == 1 {
+		if len(artifacts) != 0 || step.GetPrerequisiteStepId() != "" {
+			return errs.New(errs.KindValidationFailed, "component reload carries an artifact or prerequisite")
+		}
+		return nil
+	}
+	apply := plan.Steps[1].GetComposeApply()
+	wait := plan.Steps[2].GetWaitHealthy()
+	hostResolution := plan.Steps[3].GetHostResolutionApply()
+	if len(artifacts) != 1 || apply == nil || wait == nil ||
+		plan.Steps[1].GetPrerequisiteStepId() != plan.Steps[0].GetStepId() ||
+		plan.Steps[2].GetPrerequisiteStepId() != plan.Steps[1].GetStepId() ||
+		apply.GetArtifactId() != wait.GetArtifactId() || len(apply.GetServiceIds()) != 1 ||
+		len(wait.GetServiceIds()) != 1 || apply.GetServiceIds()[0] != wait.GetServiceIds()[0] ||
+		hostResolution == nil || plan.Steps[3].GetPrerequisiteStepId() != plan.Steps[2].GetStepId() ||
+		hostResolution.GetComponentId() != plan.TargetId ||
+		hostResolution.GetGeneration() != plan.RenderGeneration {
+		return errs.New(errs.KindValidationFailed, "component Service ensure procedure is invalid")
 	}
 	return nil
 }
 
-func validateCoreDNSComponentApply(apply *agentpb.CoreDNSConfigApply, artifacts map[string]*agentpb.ComposeArtifact) error {
-	if apply == nil || validateID(ids.KindComponent, apply.ComponentId) != nil ||
-		validateID(ids.KindService, apply.ServiceId) != nil || apply.DesiredGeneration == 0 ||
-		apply.RenderGeneration == 0 || apply.AgentGeneration == 0 || apply.OwnershipGeneration == 0 ||
-		apply.AgentId == "" || validateID(ids.KindAgent, apply.AgentId) != nil ||
-		apply.ImageIndexRef == "" || apply.ImageChildDigest == "" || apply.Platform == "" ||
-		strings.IndexFunc(apply.ImageIndexRef, func(r rune) bool { return r < 0x21 || r > 0x7e }) >= 0 ||
-		strings.IndexFunc(apply.ImageChildDigest, func(r rune) bool { return r < 0x21 || r > 0x7e }) >= 0 ||
-		strings.IndexFunc(apply.Platform, func(r rune) bool { return r < 0x21 || r > 0x7e }) >= 0 {
-		return errs.New(errs.KindValidationFailed, "CoreDNS apply identity or generation is invalid")
+func validHostResolutionAction(componentID string, generation uint64, expectedGeneration uint64) bool {
+	return validateID(ids.KindComponent, componentID) == nil && generation != 0 && generation == expectedGeneration
+}
+
+func validateComponentAction(action *agentpb.ComponentApply) error {
+	if action == nil || validateID(ids.KindComponent, action.GetComponentId()) != nil ||
+		validateID(ids.KindConfig, action.GetArtifactId()) != nil ||
+		!validComponentActionID(action.GetActionId()) || action.GetGeneration() == 0 ||
+		!validComponentDigest(action.GetDefinitionDigest()) ||
+		!validComponentDigest(action.GetCatalogDigest()) ||
+		!validComponentDigest(action.GetArtifactDigest()) {
+		return errs.New(errs.KindValidationFailed, "component action identity, generation, or digest is invalid")
 	}
-	if artifacts == nil && (apply.Mode != agentpb.CoreDNSApplyMode_COREDNS_DISABLE || apply.CandidateArtifactId != "" || len(apply.CandidateComposeSha256) != 0) {
-		return errs.New(errs.KindValidationFailed, "CoreDNS disable plan must not carry an artifact")
-	}
-	if len(apply.CandidateComposeSha256) != sha256.Size || validateID(ids.KindConfig, apply.CandidateArtifactId) != nil {
-		if apply.Mode != agentpb.CoreDNSApplyMode_COREDNS_DISABLE || apply.CandidateArtifactId != "" || len(apply.CandidateComposeSha256) != 0 {
-			return errs.New(errs.KindValidationFailed, "CoreDNS candidate artifact identity is invalid")
-		}
-	} else if artifacts != nil {
-		artifact := artifacts[apply.CandidateArtifactId]
-		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM ||
-			subtle.ConstantTimeCompare(artifact.YamlSha256, apply.CandidateComposeSha256) != 1 {
-			return errs.New(errs.KindValidationFailed, "CoreDNS candidate artifact does not match its proof")
-		}
-		foundService := false
-		for _, service := range artifact.Services {
-			if service != nil && service.ServiceId == apply.ServiceId {
-				foundService = true
-				break
-			}
-		}
-		if !foundService {
-			return errs.New(errs.KindValidationFailed, "CoreDNS candidate artifact does not contain its generated service")
-		}
-	}
-	if apply.PreviousArtifactId == "" {
-		if len(apply.PreviousComposeSha256) != 0 {
-			return errs.New(errs.KindValidationFailed, "CoreDNS previous artifact digest is missing its identity")
-		}
-	} else if validateID(ids.KindConfig, apply.PreviousArtifactId) != nil || len(apply.PreviousComposeSha256) != sha256.Size {
-		return errs.New(errs.KindValidationFailed, "CoreDNS previous artifact identity is invalid")
-	} else if artifacts != nil {
-		artifact := artifacts[apply.PreviousArtifactId]
-		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM ||
-			subtle.ConstantTimeCompare(artifact.YamlSha256, apply.PreviousComposeSha256) != 1 {
-			return errs.New(errs.KindValidationFailed, "CoreDNS previous artifact does not match its proof")
-		}
-	}
-	if apply.Mode < agentpb.CoreDNSApplyMode_COREDNS_INITIAL_ENABLE || apply.Mode > agentpb.CoreDNSApplyMode_COREDNS_REPAIR {
-		return errs.New(errs.KindValidationFailed, "CoreDNS apply mode is unsupported")
-	}
-	if apply.Mode == agentpb.CoreDNSApplyMode_COREDNS_DISABLE {
-		if apply.CorefileLength != 0 || len(apply.CorefileSha256) != 0 || len(apply.NormalizedInputSha256) != 0 {
-			return errs.New(errs.KindValidationFailed, "disabled CoreDNS apply carries rendered state")
-		}
-	} else {
-		if apply.CorefileLength == 0 || apply.CorefileLength > 96*1024 ||
-			len(apply.CorefileSha256) != sha256.Size || len(apply.NormalizedInputSha256) != sha256.Size {
-			return errs.New(errs.KindValidationFailed, "CoreDNS rendered state is invalid")
-		}
-	}
-	if apply.StaticProof == nil {
-		return errs.New(errs.KindValidationFailed, "CoreDNS static proof is required")
-	}
-	if apply.StaticProof.Present {
-		if !validDNSProofName(apply.StaticProof.Hostname) || len(apply.StaticProof.CanonicalIpv4) != net.IPv4len {
-			return errs.New(errs.KindValidationFailed, "CoreDNS static proof is invalid")
-		}
-	} else if apply.StaticProof.Hostname != "" || len(apply.StaticProof.CanonicalIpv4) != 0 {
-		return errs.New(errs.KindValidationFailed, "empty CoreDNS static proof carries values")
-	}
-	previousDomain := ""
-	for _, proof := range apply.ForwardProofs {
-		if proof == nil || !validDNSProofName(proof.Domain) || proof.Domain <= previousDomain || len(proof.ResolverEndpoints) == 0 {
-			return errs.New(errs.KindValidationFailed, "CoreDNS forward proofs are invalid or unsorted")
-		}
-		previousDomain = proof.Domain
-		previousEndpoint := ""
-		for _, endpoint := range proof.ResolverEndpoints {
-			if !validResolverProofEndpoint(endpoint) || endpoint <= previousEndpoint {
-				return errs.New(errs.KindValidationFailed, "CoreDNS forward proof resolvers are invalid or unsorted")
-			}
-			previousEndpoint = endpoint
-		}
+	containerAction := action.GetComposeArtifactId() != "" || action.GetServiceId() != ""
+	if containerAction && (validateID(ids.KindConfig, action.GetComposeArtifactId()) != nil ||
+		validateID(ids.KindService, action.GetServiceId()) != nil) {
+		return errs.New(errs.KindValidationFailed, "component container action identity is invalid")
 	}
 	return nil
 }
 
-func validDNSProofName(value string) bool {
-	if value == "" || value == "." || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") ||
-		net.ParseIP(strings.TrimSuffix(value, ".")) != nil || strings.IndexFunc(value, func(r rune) bool {
-		return r < 0x21 || r > 0x7e
-	}) >= 0 {
+func validComponentActionID(value string) bool {
+	if value == "" || len(value) > 63 || value[0] == '-' || value[len(value)-1] == '-' {
 		return false
 	}
-	for _, label := range strings.Split(value, ".") {
-		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+	for _, r := range value {
+		if !(r == '-' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
 			return false
 		}
-		for _, r := range label {
-			if !(r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
-				return false
-			}
-		}
 	}
-	return len(value) <= 253
+	return true
 }
 
-func validResolverProofEndpoint(value string) bool {
-	host, port, err := net.SplitHostPort(value)
-	if err != nil || host == "" || port == "" {
+func validComponentDigest(value []byte) bool {
+	if len(value) != sha256.Size {
 		return false
 	}
-	address, err := netip.ParseAddr(host)
-	if err != nil || address.IsUnspecified() || address.IsMulticast() || address.IsLoopback() && address.String() != "127.0.0.53" {
-		return false
+	var nonzero byte
+	for _, part := range value {
+		nonzero |= part
 	}
-	parsedPort, err := strconv.Atoi(port)
-	return err == nil && parsedPort >= 1 && parsedPort <= 65535
+	return nonzero != 0
 }
 
 func validateBackupArtifactPrune(
@@ -1123,12 +1125,14 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 	}
 	switch procedure.Phase {
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION:
-		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH || len(procedure.Password) == 0 ||
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || len(procedure.Password) == 0 ||
 			!validAdapterIdentity(procedure.Database, false) || procedure.GrantOn != "" {
 			return errs.New(errs.KindValidationFailed, "adapter provision procedure is invalid")
 		}
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT:
-		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH || len(procedure.Password) != 0 ||
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || len(procedure.Password) != 0 ||
 			procedure.Database != "" || !validAdapterIdentity(procedure.GrantOn, true) {
 			return errs.New(errs.KindValidationFailed, "adapter grant procedure is invalid")
 		}
@@ -1180,16 +1184,22 @@ func validAdapterIdentity(value string, required bool) bool {
 	if value == "" {
 		return !required
 	}
-	if len(value) > maximumAdapterIdentityBytes || value[0] < 'a' || value[0] > 'z' {
+	if len(value) > maximumAdapterIdentityBytes || !isASCIIAlphaNumeric(value[0]) {
 		return false
 	}
 	for _, character := range []byte(value[1:]) {
-		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' {
+		if isASCIIAlphaNumeric(character) || character == '_' || character == '-' || character == '.' {
 			continue
 		}
 		return false
 	}
 	return true
+}
+
+func isASCIIAlphaNumeric(character byte) bool {
+	return character >= 'a' && character <= 'z' ||
+		character >= 'A' && character <= 'Z' ||
+		character >= '0' && character <= '9'
 }
 
 func validateMaterializeFile(

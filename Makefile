@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check swarm-check clean test tidy ci
+.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify swarm-check clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
@@ -115,6 +115,7 @@ console-release-smoke: | $(BIN_DIR)
 
 test:
 	go test ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
+	$(MAKE) component-modules-verify
 
 c15-connector-acceptance: console-toolchain
 	go test -race -count=1 -run '^(TestC15|TestConnector|TestPrepareConnector|TestParseConnectorDocumentRequiresExplicitPathStyle)' \
@@ -126,6 +127,12 @@ c15-connector-acceptance: console-toolchain
 
 tidy:
 	go mod tidy
+	cd component-sdk && go mod tidy
+	cd registered-components && go mod tidy
+
+component-modules-verify:
+	cd component-sdk && go vet ./... && go test ./... -count=1 -race
+	cd registered-components && go vet ./... && go test ./... -count=1 -race
 
 backupstage-host-acceptance-compile:
 	@test "$$(go env GOOS)" = linux || { echo "backupstage host acceptance requires Linux" >&2; exit 1; }
@@ -174,10 +181,12 @@ swarm-check:
 ci: console | $(BIN_DIR)
 	$(MAKE) generate
 	git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
-	go mod tidy && git diff --exit-code go.mod go.sum
+	$(MAKE) tidy
+	git diff --exit-code go.mod go.sum go.work component-sdk/go.mod registered-components/go.mod
 	test -z "$$(gofmt -l .)"
-	test -z "$$(golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./console/)"
+	test -z "$$(golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./component-sdk/ ./registered-components/ ./console/)"
 	$(MAKE) architecture-check
+	$(MAKE) component-modules-verify
 	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...
 	go vet -tags groundplane_console ./...
 	go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic

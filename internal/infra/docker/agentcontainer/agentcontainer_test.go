@@ -78,6 +78,27 @@ func TestReconcileStartsMatchingStoppedContainer(t *testing.T) {
 	}
 }
 
+// Rationale: Controller shutdown must stop its Agent so a subsequent start
+// remounts the newly created Controller runtime directory and socket.
+func TestCloseStopsOwnedRunningContainerBeforeClosingClient(t *testing.T) {
+	t.Parallel()
+
+	desired := testDesired()
+	fake := &fakeEngine{inspectResult: matchingInspect(desired, true)}
+	if err := (&Manager{client: fake}).Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if !reflect.DeepEqual(fake.stopCalls, []string{"existing-id"}) {
+		t.Fatalf("stop calls = %v, want [existing-id]", fake.stopCalls)
+	}
+	if len(fake.stopOptions) != 1 || fake.stopOptions[0].Timeout == nil || *fake.stopOptions[0].Timeout != 10 {
+		t.Fatalf("stop options = %#v, want ten-second timeout", fake.stopOptions)
+	}
+	if fake.closeCalls != 1 {
+		t.Fatalf("close calls = %d, want 1", fake.closeCalls)
+	}
+}
+
 func TestReconcileReplacesOwnedSpecDrift(t *testing.T) {
 	t.Parallel()
 
@@ -427,6 +448,10 @@ type fakeEngine struct {
 	startErr      error
 	removeCalls   []removeCall
 	removeErr     error
+	stopCalls     []string
+	stopOptions   []client.ContainerStopOptions
+	stopErr       error
+	closeCalls    int
 	closeErr      error
 }
 
@@ -456,6 +481,16 @@ func (f *fakeEngine) ContainerStart(
 	return client.ContainerStartResult{}, f.startErr
 }
 
+func (f *fakeEngine) ContainerStop(
+	_ context.Context,
+	id string,
+	options client.ContainerStopOptions,
+) (client.ContainerStopResult, error) {
+	f.stopCalls = append(f.stopCalls, id)
+	f.stopOptions = append(f.stopOptions, options)
+	return client.ContainerStopResult{}, f.stopErr
+}
+
 func (f *fakeEngine) ContainerRemove(
 	_ context.Context,
 	id string,
@@ -466,5 +501,6 @@ func (f *fakeEngine) ContainerRemove(
 }
 
 func (f *fakeEngine) Close() error {
+	f.closeCalls++
 	return f.closeErr
 }

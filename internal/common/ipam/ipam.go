@@ -155,9 +155,11 @@ func ValidateUsableIPv4(prefix netip.Prefix, address netip.Addr) error {
 	return nil
 }
 
-// FirstAvailableUsableIPv4 returns the lowest bridge address not already
+// LastAvailableUsableIPv4 returns the highest bridge address not already
 // reserved after excluding the network, gateway, and broadcast addresses.
-func FirstAvailableUsableIPv4(prefix netip.Prefix, reserved []netip.Addr) (netip.Addr, error) {
+// Component allocation runs opposite Docker's low-to-high dynamic allocation
+// so a component enabled after ordinary services does not claim their address.
+func LastAvailableUsableIPv4(prefix netip.Prefix, reserved []netip.Addr) (netip.Addr, error) {
 	prefix, err := canonicalIPv4(prefix)
 	if err != nil {
 		return netip.Addr{}, err
@@ -169,9 +171,8 @@ func FirstAvailableUsableIPv4(prefix netip.Prefix, reserved []netip.Addr) (netip
 			prefix,
 		)
 	}
-	values := make([]uint64, len(reserved))
 	seen := make(map[uint64]struct{}, len(reserved))
-	for index, address := range reserved {
+	for _, address := range reserved {
 		if err := ValidateUsableIPv4(prefix, address); err != nil {
 			return netip.Addr{}, err
 		}
@@ -184,28 +185,20 @@ func FirstAvailableUsableIPv4(prefix netip.Prefix, reserved []netip.Addr) (netip
 			)
 		}
 		seen[value] = struct{}{}
-		values[index] = value
 	}
-	sort.Slice(values, func(left, right int) bool { return values[left] < values[right] })
 	interval := intervalOf(prefix)
-	candidate := interval.start + 2
-	for _, reservedValue := range values {
-		if reservedValue == candidate {
-			candidate++
-			continue
+	candidate := interval.end - 1
+	for candidate > interval.start+1 {
+		if _, occupied := seen[candidate]; !occupied {
+			return ipv4FromNumber(candidate), nil
 		}
-		if reservedValue > candidate {
-			break
-		}
+		candidate--
 	}
-	if candidate >= interval.end {
-		return netip.Addr{}, errs.Newf(
-			errs.KindStateConflict,
-			"IPv4 subnet %s has no free usable component address",
-			prefix,
-		)
-	}
-	return ipv4FromNumber(candidate), nil
+	return netip.Addr{}, errs.Newf(
+		errs.KindStateConflict,
+		"IPv4 subnet %s has no free usable component address",
+		prefix,
+	)
 }
 
 type addressInterval struct {

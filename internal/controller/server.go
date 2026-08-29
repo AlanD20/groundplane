@@ -88,6 +88,7 @@ type Server struct {
 	console                 fs.FS
 	tasks                   taskQueries
 	taskEventStreams        taskEventStreamOpener
+	logs                    *LogService
 	routePolicies           map[string]routePolicy
 }
 
@@ -148,6 +149,7 @@ type Options struct {
 	TaskAborts              TaskAborter
 	Console                 fs.FS
 	Tasks                   *etcd.TaskRepository
+	Logs                    *LogService
 }
 
 type taskQueries interface {
@@ -222,18 +224,20 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		taskAborts:              options.TaskAborts,
 		console:                 options.Console,
 		tasks:                   options.Tasks,
+		logs:                    options.Logs,
 		routePolicies:           make(map[string]routePolicy),
 	}
 	if options.Tasks != nil {
 		s.taskEventStreams = repositoryTaskEventStreamOpener{repository: options.Tasks}
 	}
 	s.routes()
+	s.registerLogOpenAPI()
 	s.registerTenants()
 	s.registerProjects()
 	s.registerBackingServices()
 	s.registerComponents()
 	s.registerEnvironments()
-	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions)
+	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions, s.Logger)
 	s.registerEnvironmentBlueprints()
 	s.registerServices()
 	s.registerReleaseGroups()
@@ -276,7 +280,7 @@ func (s *Server) routes() {
 
 	// environment (?project=). Typed list/show/create/rename operations are
 	// registered through Huma after the legacy mux surface is assembled.
-	s.streamRoute("GET /api/v1/environments/{id}/logs", s.notImplemented)
+	s.streamRoute("GET /api/v1/environments/{id}/logs", s.environmentLogs)
 
 	// environment singleton sub-resources
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
@@ -284,7 +288,7 @@ func (s *Server) routes() {
 	// never PUT (api-cli.md, section 4). Managed entirely through /components.
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
-	s.streamRoute("GET /api/v1/services/{id}/logs", s.notImplemented)
+	s.streamRoute("GET /api/v1/services/{id}/logs", s.serviceLogs)
 
 	// Release Group metadata is registered as typed Huma operations.
 
@@ -296,7 +300,6 @@ func (s *Server) routes() {
 	// Volume reads, protected identity mutations, fixed-revision impact, and
 	// confirmed removal are registered as typed Huma operations below.
 	// Entry reads, protected mutations, and explicit reveal are typed Huma operations.
-	s.jsonRoute("POST /api/v1/scripts/{id}/run", s.acceptTask) // {parameters?}
 
 	// component (?environment= or ?platform=true) — one resource across both owners
 
@@ -317,8 +320,12 @@ func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiT
 		return apiTypes.Task{}, err
 	}
 	stepStatus := make(map[string]apiTypes.TaskStatus, len(record.Steps))
+	defaultStepStatus := apiTypes.TaskPending
+	if record.Executor == etcd.TaskExecutorController {
+		defaultStepStatus = response.Status
+	}
 	for _, step := range record.Steps {
-		stepStatus[step.ID] = apiTypes.TaskPending
+		stepStatus[step.ID] = defaultStepStatus
 	}
 	for _, event := range snapshot.Events {
 		mapped, err := taskEventAPIStatus(event.State)

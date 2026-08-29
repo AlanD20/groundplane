@@ -43,7 +43,8 @@ type ProjectFilter struct {
 
 // Repository is the persistence port for this closed hierarchy subset. It
 // owns atomic slug uniqueness, owner-at-commit validation, CAS, and pinned
-// pagination. Project methods accept and return ordinary tenant projects only.
+// pagination. GetProject returns either Project kind; tenant-only creation,
+// resolution, listing, and rename methods preserve the facade boundary.
 type Repository interface {
 	ready() bool
 

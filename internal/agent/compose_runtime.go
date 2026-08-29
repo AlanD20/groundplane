@@ -86,8 +86,6 @@ func (runtime *ComposeRuntime) executeStep(
 		return runtime.removeManagedNetwork(ctx, assignment, step)
 	case *agentpb.ExecutionStep_ManagedVolumeRemove:
 		return runtime.removeManagedVolume(ctx, assignment, step)
-	case *agentpb.ExecutionStep_CaddyConfigApply:
-		return runtime.mutate(ctx, assignment, step, payload.CaddyConfigApply.GetArtifactId(), nil)
 	case *agentpb.ExecutionStep_WaitHealthy:
 		return runtime.waitHealthy(ctx, assignment.Plan, payload.WaitHealthy)
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
@@ -151,7 +149,7 @@ func (runtime *ComposeRuntime) waitWorkloadHealthy(ctx context.Context, plan *ag
 			return result, err
 		}
 		result.Observed = observed
-		convergence, err := evaluateComposeConvergence(artifact, observed, []string{name})
+		convergence, err := evaluateReleaseWorkloadConvergence(artifact, observed, []string{name})
 		if err != nil {
 			result.ReconciliationRequired = true
 			return result, err
@@ -286,7 +284,7 @@ func (runtime *ComposeRuntime) observeRecreate(
 			result.ReconciliationRequired = true
 			return result, errs.New(errs.KindInternal, "agent: recreate singleton is missing from the plan")
 		}
-		convergence, err := evaluateComposeConvergence(artifact, observed, []string{name})
+		convergence, err := evaluateReleaseWorkloadConvergence(artifact, observed, []string{name})
 		if err != nil {
 			result.ReconciliationRequired = true
 			return result, err

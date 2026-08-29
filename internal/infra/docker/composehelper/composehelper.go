@@ -33,9 +33,7 @@ const (
 	maximumFramedBytes = executionplan.MaximumPlanBytes + 64*1024
 	frameHeaderBytes   = 4
 	maximumTimeout     = uint32(math.MaxInt32)
-	maximumCaddyfile   = 1024 * 1024
-	caddyfileRelative  = "components/caddy/Caddyfile"
-	caddyfileContainer = "/etc/caddy/Caddyfile"
+	maximumComponentConfig = 1024 * 1024
 )
 
 var fixedEnvironment = []string{
@@ -147,8 +145,11 @@ func Execute(
 	if response, handled, removeErr := executeManagedRemove(ctx, taskRunner, owned.TimeoutSeconds, step); handled {
 		return response, removeErr
 	}
-	if apply := step.GetCaddyConfigApply(); apply != nil {
-		return executeCaddyConfigApply(ctx, taskRunner, owned.TimeoutSeconds, artifact, apply)
+	if apply := step.GetComponentApply(); apply != nil && apply.GetComposeArtifactId() != "" {
+		return executeComponentContainerConfigAction(
+			ctx, taskRunner, owned.TimeoutSeconds, artifact, apply,
+			owned.GetComponentContainerConfigAction(),
+		)
 	}
 	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyProbe() != nil || step.GetServiceProxyCompensate() != nil {
 		return executeServiceProxy(ctx, taskRunner, owned.TimeoutSeconds, owned.Plan, artifact, step)
@@ -180,6 +181,15 @@ func Execute(
 				Outcome:  agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED,
 				ExitCode: int32(result.ExitCode), Diagnostic: diagnostic,
 			}, nil
+		}
+		if index == 0 && needsManagedVolumeEnsure(step, artifact) {
+			failure, ensureErr := ensureManagedComposeVolumes(executionCtx, taskRunner, artifact)
+			if ensureErr != nil {
+				return nil, ensureErr
+			}
+			if failure != nil {
+				return failure, nil
+			}
 		}
 	}
 	response := &agentpb.ComposeHelperResponse{
@@ -224,6 +234,15 @@ func validateRequest(
 	if selected == nil || request.TimeoutSeconds > selected.TimeoutSeconds {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step selection is invalid")
 	}
+	containerAction := selected.GetComponentApply() != nil &&
+		selected.GetComponentApply().GetComposeArtifactId() != ""
+	if containerAction != (request.GetComponentContainerConfigAction() != nil) ||
+		containerAction && !validComponentContainerConfigAction(request.GetComponentContainerConfigAction()) {
+		return nil, nil, nil, errs.New(
+			errs.KindValidationFailed,
+			"Compose helper Component action recipe is invalid",
+		)
+	}
 	artifactID := ""
 	switch payload := selected.Payload.(type) {
 	case *agentpb.ExecutionStep_ComposeApply:
@@ -234,8 +253,8 @@ func validateRequest(
 		artifactID = payload.ComposeRemove.ArtifactId
 	case *agentpb.ExecutionStep_ManagedNetworkRemove, *agentpb.ExecutionStep_ManagedVolumeRemove:
 		artifactID = ""
-	case *agentpb.ExecutionStep_CaddyConfigApply:
-		artifactID = payload.CaddyConfigApply.ArtifactId
+	case *agentpb.ExecutionStep_ComponentApply:
+		artifactID = payload.ComponentApply.GetComposeArtifactId()
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
 		artifactID = payload.ComposeWorkloadApply.ArtifactId
 	case *agentpb.ExecutionStep_ServiceProxySwitch:
@@ -276,19 +295,20 @@ func validateRequest(
 	return owned, selected, artifact, nil
 }
 
-type caddyMount struct {
+type componentConfigMount struct {
 	Type        string `json:"Type"`
 	Source      string `json:"Source"`
 	Destination string `json:"Destination"`
 	RW          bool   `json:"RW"`
 }
 
-func executeCaddyConfigApply(
+func executeComponentContainerConfigAction(
 	ctx context.Context,
 	taskRunner runner.Runner,
 	timeoutSeconds uint32,
 	artifact *agentpb.ComposeArtifact,
-	apply *agentpb.CaddyConfigApply,
+	apply *agentpb.ComponentApply,
+	recipe *agentpb.ComponentContainerConfigAction,
 ) (*agentpb.ComposeHelperResponse, error) {
 	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
@@ -313,19 +333,19 @@ func executeCaddyConfigApply(
 			return runner.Result{}, nil, contextErr
 		}
 		if result.ExitCode < 0 || result.ExitCode > math.MaxInt32 {
-			return runner.Result{}, nil, errs.New(errs.KindInternal, "Caddy command returned an invalid exit code")
+			return runner.Result{}, nil, errs.New(errs.KindInternal, "Component action command returned an invalid exit code")
 		}
 		if runErr != nil || result.ExitCode != 0 {
 			return result, fail(result.ExitCode, diagnostic), nil
 		}
 		return result, nil, nil
 	}
-	configPath := filepath.Join(artifact.AuthorizedVolumeDir, filepath.FromSlash(caddyfileRelative))
-	if !caddyfileMatches(configPath, apply.CaddyfileSha256) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	configPath := filepath.Join(artifact.AuthorizedVolumeDir, filepath.FromSlash(recipe.GetRelativePath()))
+	if !componentConfigMatches(configPath, apply.GetArtifactDigest()) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
 	listed, failure, err := run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		"container", "ls",
 		"--filter", "label=com.groundplane.managed=true",
 		"--filter", "label=com.groundplane.kind=service",
@@ -337,12 +357,12 @@ func executeCaddyConfigApply(
 		return failure, err
 	}
 	containers := strings.Fields(string(listed.Stdout))
-	if len(containers) != 1 || !validCaddyContainerID(containers[0]) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	if len(containers) != 1 || !validComponentContainerID(containers[0]) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
 	containerID := containers[0]
 	inspectedLabels, failure, err := run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		"container", "inspect", "--format", "{{json .Config.Labels}}", containerID,
 	)
 	if err != nil || failure != nil {
@@ -353,35 +373,35 @@ func executeCaddyConfigApply(
 		labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "service" ||
 		labels["com.groundplane.environment-id"] != artifact.OwnerId ||
 		labels["com.groundplane.service-id"] != apply.ServiceId {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
 	inspectedMounts, failure, err := run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		"container", "inspect", "--format", "{{json .Mounts}}", containerID,
 	)
 	if err != nil || failure != nil {
 		return failure, err
 	}
-	mounts := []caddyMount{}
+	mounts := []componentConfigMount{}
 	if json.Unmarshal([]byte(strings.TrimSpace(string(inspectedMounts.Stdout))), &mounts) != nil ||
-		!hasExactCaddyfileMount(mounts, configPath) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+		!hasExactComponentConfigMount(mounts, configPath, recipe.GetContainerPath()) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
+	validateCommand := append([]string{"container", "exec", containerID}, recipe.GetValidateArgs()...)
 	_, failure, err = run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_CONFIG_REJECTED,
-		"container", "exec", containerID, "caddy", "validate",
-		"--config", caddyfileContainer, "--adapter", "caddyfile",
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED,
+		validateCommand...,
 	)
 	if err != nil || failure != nil {
 		return failure, err
 	}
-	if !caddyfileMatches(configPath, apply.CaddyfileSha256) {
-		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED), nil
+	if !componentConfigMatches(configPath, apply.GetArtifactDigest()) {
+		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
+	activateCommand := append([]string{"container", "exec", containerID}, recipe.GetActivateArgs()...)
 	_, failure, err = run(
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
-		"container", "exec", containerID, "caddy", "reload",
-		"--config", caddyfileContainer, "--adapter", "caddyfile",
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+		activateCommand...,
 	)
 	if err != nil || failure != nil {
 		return failure, err
@@ -389,24 +409,24 @@ func executeCaddyConfigApply(
 	return completedResponse(), nil
 }
 
-func caddyfileMatches(path string, expected []byte) bool {
+func componentConfigMatches(path string, expected []byte) bool {
 	file, err := os.Open(path)
 	if err != nil {
 		return false
 	}
 	defer file.Close()
-	value, err := io.ReadAll(io.LimitReader(file, maximumCaddyfile+1))
-	if err != nil || len(value) > maximumCaddyfile {
+	value, err := io.ReadAll(io.LimitReader(file, maximumComponentConfig+1))
+	if err != nil || len(value) > maximumComponentConfig {
 		return false
 	}
 	digest := sha256.Sum256(value)
 	return bytes.Equal(digest[:], expected)
 }
 
-func hasExactCaddyfileMount(mounts []caddyMount, source string) bool {
+func hasExactComponentConfigMount(mounts []componentConfigMount, source string, destination string) bool {
 	matches := 0
 	for _, mount := range mounts {
-		if mount.Destination != caddyfileContainer {
+		if mount.Destination != destination {
 			continue
 		}
 		if mount.Type != "bind" || filepath.Clean(mount.Source) != filepath.Clean(source) || mount.RW {
@@ -417,12 +437,39 @@ func hasExactCaddyfileMount(mounts []caddyMount, source string) bool {
 	return matches == 1
 }
 
-func validCaddyContainerID(value string) bool {
+func validComponentContainerID(value string) bool {
 	if len(value) < 12 || len(value) > 64 {
 		return false
 	}
 	for _, character := range []byte(value) {
 		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func validComponentContainerConfigAction(recipe *agentpb.ComponentContainerConfigAction) bool {
+	if recipe == nil || !validRelativeComponentConfigPath(recipe.GetRelativePath()) ||
+		!filepath.IsAbs(recipe.GetContainerPath()) || filepath.Clean(recipe.GetContainerPath()) != recipe.GetContainerPath() ||
+		!validComponentCommand(recipe.GetValidateArgs()) || !validComponentCommand(recipe.GetActivateArgs()) {
+		return false
+	}
+	return true
+}
+
+func validRelativeComponentConfigPath(value string) bool {
+	return value != "" && len(value) <= 240 && !filepath.IsAbs(value) &&
+		filepath.Clean(filepath.FromSlash(value)) == filepath.FromSlash(value) &&
+		value != "." && !strings.HasPrefix(value, "../") && !strings.ContainsRune(value, 0)
+}
+
+func validComponentCommand(arguments []string) bool {
+	if len(arguments) == 0 || len(arguments) > 32 {
+		return false
+	}
+	for _, argument := range arguments {
+		if argument == "" || len(argument) > 1024 || strings.ContainsRune(argument, 0) {
 			return false
 		}
 	}
@@ -540,7 +587,7 @@ func commandsFor(
 ) ([]runner.RunCmdOpts, error) {
 	prefix := []string{
 		"compose", "--project-name", artifact.ProjectName,
-		"--project-directory", WorkDirectory, "--file", "-",
+		"--project-directory", composeProjectDirectory(artifact), "--file", "-",
 	}
 	base := runner.RunCmdOpts{
 		Name: DockerExecutable, Dir: WorkDirectory,
@@ -553,6 +600,18 @@ func commandsFor(
 		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
 		commands = append(commands, validation)
 		mutation := base
+		activeServices := false
+		for _, service := range artifact.Services {
+			if service.ExpectedReplicas != 0 {
+				activeServices = true
+				break
+			}
+		}
+		if apply.FullReconcile && !activeServices {
+			mutation.Args = append(append([]string(nil), prefix...), "down", "--remove-orphans")
+			commands = append(commands, mutation)
+			return commands, nil
+		}
 		mutation.Args = append(append([]string(nil), prefix...), "up", "--detach")
 		if apply.ForceRecreate {
 			mutation.Args = append(mutation.Args, "--force-recreate")
@@ -595,7 +654,7 @@ func commandsFor(
 		mutation.Args = append(mutation.Args, serviceNames(artifact, payload.ComposeStop.ServiceIds)...)
 	case *agentpb.ExecutionStep_ComposeRemove:
 		if payload.ComposeRemove.WholeProject {
-			mutation.Args = append(append([]string(nil), prefix...), "down", "--remove-orphans")
+			mutation.Args = append(append([]string(nil), prefix...), "down", "--remove-orphans", "--volumes")
 		} else {
 			mutation.Args = append(append([]string(nil), prefix...), "rm", "--stop", "--force")
 			mutation.Args = append(mutation.Args, serviceNames(artifact, payload.ComposeRemove.ServiceIds)...)
@@ -604,6 +663,13 @@ func commandsFor(
 		return nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}
 	return []runner.RunCmdOpts{mutation}, nil
+}
+
+func composeProjectDirectory(artifact *agentpb.ComposeArtifact) string {
+	if artifact.AuthorizedVolumeDir != "" {
+		return artifact.AuthorizedVolumeDir
+	}
+	return WorkDirectory
 }
 
 func serviceNames(artifact *agentpb.ComposeArtifact, selected []string) []string {
@@ -666,8 +732,8 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 		if response.ExitCode <= 0 ||
 			(response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED &&
 				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED &&
-				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_CONFIG_REJECTED &&
-				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED) {
+				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED &&
+				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED) {
 			return errs.New(errs.KindValidationFailed, "failed Compose helper response is inconsistent")
 		}
 		if response.ProxyEvidence != nil || response.RecreateEvidence != nil {

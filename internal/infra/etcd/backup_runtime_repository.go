@@ -1806,9 +1806,10 @@ func (repository *BackupRuntimeRepository) transact(
 
 func validateBackupRuntimeTransactionBounds(conditions []Condition, mutations []Mutation) error {
 	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		return errs.New(
+		return errs.Newf(
 			errs.KindInternal,
-			"backup runtime transaction exceeds the 96-operation limit",
+			"backup runtime transaction exceeds the %d-operation limit",
+			maximumTransactionOperations,
 		)
 	}
 	size := 0

@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// task: list [--env NAME | --workspace platform|<tenant>] | show <id> |
+// task: list [--env NAME | --workspace platform|<tenant>] [--limit N] [--cursor VALUE] | show <id> |
 // events <id> | retry <id> | abort <id>. The activity journal IS this record set. See mvp.md,
 // "Baked-in actions become Tasks" and "Activity IS tasks (locked)".
 func newTaskCmd() *cobra.Command {
@@ -116,12 +116,14 @@ func taskFields(task apiTypes.Task) map[string]any {
 
 func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 	var workspace string
+	var limit int
+	var cursor string
 	list := &cobra.Command{
 		Use:   "list",
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			options, err := resolveTaskJournalListOptions(cmd, workspace)
+			options, err := resolveTaskJournalListOptions(cmd, workspace, limit, cursor)
 			if err != nil {
 				return err
 			}
@@ -138,15 +140,23 @@ func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 		},
 	}
 	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")
+	list.Flags().IntVar(&limit, "limit", 50, "page size from 1 through 200")
+	list.Flags().StringVar(&cursor, "cursor", "", "opaque next-page cursor")
 	return list
 }
 
-func resolveTaskJournalListOptions(cmd *cobra.Command, workspace string) (apiclient.TaskListOptions, error) {
+func resolveTaskJournalListOptions(
+	cmd *cobra.Command,
+	workspace string,
+	limit int,
+	cursor string,
+) (apiclient.TaskListOptions, error) {
 	app := fromContext(cmd)
-	if app.Scope.Environment != "" && workspace != "" {
+	options := apiclient.TaskListOptions{Limit: limit, Cursor: cursor}
+	if workspace != "" && (app.Scope.Environment != "" || app.Scope.Project != "" || app.Scope.Tenant != "") {
 		return apiclient.TaskListOptions{}, errs.New(
 			errs.KindValidationFailed,
-			"task journal accepts only one of --env or --workspace",
+			"task journal accepts only one hierarchy scope or --workspace",
 		)
 	}
 	if app.Scope.Environment != "" {
@@ -154,16 +164,35 @@ func resolveTaskJournalListOptions(cmd *cobra.Command, workspace string) (apicli
 		if err != nil {
 			return apiclient.TaskListOptions{}, err
 		}
-		return apiclient.TaskListOptions{Environment: environmentID}, nil
+		options.Environment = environmentID
+		return options, nil
+	}
+	if app.Scope.Project != "" {
+		projectID, err := resolveProjectTarget(cmd, app.Scope.Project)
+		if err != nil {
+			return apiclient.TaskListOptions{}, err
+		}
+		options.Project = projectID
+		return options, nil
+	}
+	if app.Scope.Tenant != "" {
+		tenantID, err := resolveTenantTarget(cmd, app.Scope.Tenant)
+		if err != nil {
+			return apiclient.TaskListOptions{}, err
+		}
+		options.Workspace = tenantID
+		return options, nil
 	}
 	if workspace == "" || workspace == "platform" {
-		return apiclient.TaskListOptions{Workspace: workspace}, nil
+		options.Workspace = workspace
+		return options, nil
 	}
 	tenantID, err := resolveTenantTarget(cmd, workspace)
 	if err != nil {
 		return apiclient.TaskListOptions{}, err
 	}
-	return apiclient.TaskListOptions{Workspace: tenantID}, nil
+	options.Workspace = tenantID
+	return options, nil
 }
 
 func taskTimestamp(value time.Time) string {

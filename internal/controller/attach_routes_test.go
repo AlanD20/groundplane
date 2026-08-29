@@ -76,8 +76,8 @@ func TestAttachCreateRoutePreservesMutationContract(t *testing.T) {
 	mutator := &fakeAttachMutator{response: want}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{AttachMutations: mutator})
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/attaches", bytes.NewBufferString(
-		`{"service_ids":["`+testAttachRouteServiceID+`"],"backing_service_id":"`+
-			testAttachRouteBackingID+`","name":"api-db","grant_attach_ids":[]}`,
+		`{"service_id":"`+testAttachRouteServiceID+`","backing_service_id":"`+
+			testAttachRouteBackingID+`","name":"api-db","credential":{"mode":"new"},"grant_attach_ids":[]}`,
 	))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(idempotencyKeyHeader, "attach-create-key-0001")
@@ -93,7 +93,8 @@ func TestAttachCreateRoutePreservesMutationContract(t *testing.T) {
 		)
 	}
 	if !mutator.createHit || mutator.key != "attach-create-key-0001" || mutator.request.Name != "api-db" ||
-		len(mutator.request.ServiceIDs) != 1 || mutator.request.ServiceIDs[0] != testAttachRouteServiceID ||
+		mutator.request.ServiceID != testAttachRouteServiceID ||
+		mutator.request.Credential.Mode != apiTypes.AttachCredentialNew ||
 		mutator.request.BackingServiceID != testAttachRouteBackingID {
 		t.Fatalf("CreateAttach() input/key = %#v/%q", mutator.request, mutator.key)
 	}
@@ -144,8 +145,8 @@ func TestAttachFactRevealPreservesExactReference(t *testing.T) {
 func TestAttachCreateRouteRejectsAmbiguousJSON(t *testing.T) {
 	t.Parallel()
 	for _, body := range []string{
-		`{"service_ids":[],"service_ids":[],"backing_service_id":"` + testAttachRouteBackingID + `"}`,
-		`{"service_ids":[],"backing_service_id":"` + testAttachRouteBackingID + `","extra":true}`,
+		`{"service_id":"` + testAttachRouteServiceID + `","service_id":"` + testAttachRouteServiceID + `","backing_service_id":"` + testAttachRouteBackingID + `","credential":{"mode":"new"}}`,
+		`{"service_id":"` + testAttachRouteServiceID + `","backing_service_id":"` + testAttachRouteBackingID + `","credential":{"mode":"new"},"extra":true}`,
 	} {
 		mutator := &fakeAttachMutator{}
 		server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{AttachMutations: mutator})

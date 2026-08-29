@@ -20,6 +20,7 @@ type fakeEntryReadRepository struct {
 	wantPage        etcd.PageRequest
 	environmentRead bool
 	listed          bool
+	projection      *etcd.Versioned[etcd.EnvironmentComposeProjection]
 }
 
 func (fake *fakeEntryReadRepository) GetEnvironment(
@@ -47,6 +48,65 @@ func (fake *fakeEntryReadRepository) ListEntries(
 ) (etcd.Page[etcd.EntryRecord], error) {
 	fake.listed = environmentID == fake.environment.Record.ID && request == fake.wantPage
 	return fake.page, nil
+}
+
+func (fake *fakeEntryReadRepository) GetEnvironmentComposeProjection(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	if fake.projection != nil {
+		return *fake.projection, true, nil
+	}
+	return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, false, nil
+}
+
+func (fake *fakeEntryReadRepository) GetEnvironmentComposeProjectionRevision(
+	context.Context,
+	string,
+	string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	if fake.projection != nil {
+		return *fake.projection, true, nil
+	}
+	return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, false, nil
+}
+
+func TestEntryListPagesCurrentProjection(t *testing.T) {
+	t.Parallel()
+	now := secretReadTestTime()
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 31)
+	revisionID := ids.NewAt(ids.KindTask, now, 32)
+	records := make([]etcd.EntryRecord, 2)
+	for index := range records {
+		var err error
+		records[index], err = etcd.NewBlueprintEntryRecord(environmentID, string(rune('a'+index)), core.EnvEntry{
+			ID: ids.NewAt(ids.KindEnvEntry, now, int64(33+index)), Kind: core.EntryKindEnv,
+			Key: string(rune('A' + index)), Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"all"},
+		}, ids.NewAt(ids.KindConfig, now, int64(35+index)))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	projection := etcd.Versioned[etcd.EnvironmentComposeProjection]{
+		Record:   etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, RevisionID: revisionID, Entries: records},
+		Revision: 12, ReadRevision: 12,
+	}
+	repository := &fakeEntryReadRepository{
+		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{ID: environmentID}},
+		projection:  &projection,
+	}
+	service, err := newEntryReadService(repository, secretReadTestProtector(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.ListEntries(context.Background(), environmentID, etcd.PageRequest{Limit: 1})
+	if err != nil || len(first.Items) != 1 || first.NextCursor == "" {
+		t.Fatalf("first projection page = %#v, %v", first, err)
+	}
+	second, err := service.ListEntries(context.Background(), environmentID, etcd.PageRequest{Limit: 1, Cursor: first.NextCursor})
+	if err != nil || len(second.Items) != 1 || second.NextCursor != "" {
+		t.Fatalf("second projection page = %#v, %v", second, err)
+	}
 }
 
 func (fake *fakeEntryReadRepository) GetSecretEntryValue(

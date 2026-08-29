@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -288,6 +289,7 @@ func newServiceCmd() *cobra.Command {
 		},
 	})
 
+	var tail uint32
 	var follow bool
 	logs := &cobra.Command{
 		Use:   "logs <name>",
@@ -295,10 +297,17 @@ func newServiceCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			path := "/api/v1/services/" + target(app, args[0]) + "/logs"
-			q := map[string]string{}
-			if follow {
-				q["follow"] = "true"
+			serviceID, err := resolveServiceTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			if tail > 1000 {
+				return errs.New(errs.KindValidationFailed, "--tail must be between 0 and 1000")
+			}
+			path := "/api/v1/services/" + serviceID + "/logs"
+			q := map[string]string{
+				"tail":   strconv.FormatUint(uint64(tail), 10),
+				"follow": strconv.FormatBool(follow),
 			}
 			return app.Client.Stream(cmd.Context(), path, q, func(line string) error {
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), line)
@@ -306,16 +315,25 @@ func newServiceCmd() *cobra.Command {
 			})
 		},
 	}
+	logs.Flags().Uint32Var(&tail, "tail", 200, "number of existing lines per container (0..1000)")
 	logs.Flags().BoolVarP(&follow, "follow", "f", false, "stream new log lines as they arrive")
 	cmd.AddCommand(logs)
 
 	var attachName string
 	var grants []string
+	var newCredential bool
+	var credentialAttach string
 	attach := &cobra.Command{
 		Use:   "attach <name> <backing>",
 		Short: "Attach a backing service to this service (provisions its own database + role)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if newCredential == (credentialAttach != "") {
+				return errs.New(errs.KindValidationFailed, "choose exactly one of --new-credential or --credential")
+			}
+			if credentialAttach != "" && len(grants) > 0 {
+				return errs.New(errs.KindValidationFailed, "--grant requires --new-credential")
+			}
 			serviceID, err := resolveServiceTarget(cmd, args[0])
 			if err != nil {
 				return err
@@ -323,6 +341,14 @@ func newServiceCmd() *cobra.Command {
 			backingServiceID, err := resolveBackingAdapterServiceTarget(cmd, args[1])
 			if err != nil {
 				return err
+			}
+			credential := apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialNew}
+			if credentialAttach != "" {
+				credentialID, resolveErr := resolveAttachTarget(cmd, credentialAttach)
+				if resolveErr != nil {
+					return resolveErr
+				}
+				credential = apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialExisting, AttachID: credentialID}
 			}
 			grantAttachIDs := make([]string, len(grants))
 			for index, grant := range grants {
@@ -332,9 +358,10 @@ func newServiceCmd() *cobra.Command {
 				}
 			}
 			accepted, err := fromContext(cmd).Client.CreateAttach(cmd.Context(), apiTypes.AttachRequest{
-				ServiceIDs:       []string{serviceID},
+				ServiceID:        serviceID,
 				BackingServiceID: backingServiceID,
 				Name:             attachName,
+				Credential:       credential,
 				GrantAttachIDs:   grantAttachIDs,
 			})
 			if err != nil {
@@ -345,6 +372,8 @@ func newServiceCmd() *cobra.Command {
 	}
 	attach.Flags().
 		StringVar(&attachName, "name", "", "attach name (default: Controller-suggested, unique within the environment)")
+	attach.Flags().BoolVar(&newCredential, "new-credential", false, "provision a new backing-service credential")
+	attach.Flags().StringVar(&credentialAttach, "credential", "", "reuse the credential owned by an existing attach id/name")
 	attach.Flags().StringSliceVar(&grants, "grant", nil, "other attach id/name(s) this attach's role may also access")
 	cmd.AddCommand(attach)
 

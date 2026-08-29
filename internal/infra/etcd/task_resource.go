@@ -31,8 +31,6 @@ const (
 	TaskEntryProjectSlugParam            = "entry_project_slug"
 	TaskEntryEnvironmentNameParam        = "entry_environment_name"
 	TaskEntryAuthorizedVolumeDirParam    = "entry_authorized_volume_dir"
-	TaskEntryCloudflareComponentParam    = "entry_cloudflare_component_id"
-	TaskEntryCloudflareRevisionParam     = "entry_cloudflare_component_revision"
 	TaskRouteEnvironmentParam            = "route_environment_id"
 	TaskServiceEnvironmentParam          = "service_environment_id"
 	TaskZoneEnvironmentParam             = "zone_environment_id"

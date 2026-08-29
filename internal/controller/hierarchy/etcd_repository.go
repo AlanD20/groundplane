@@ -89,9 +89,6 @@ func (repository *EtcdRepository) GetProject(
 	if err != nil {
 		return Versioned[core.Project]{}, err
 	}
-	if stored.Record.Kind != etcdinfra.ProjectKindTenant {
-		return Versioned[core.Project]{}, errs.New(errs.KindProjectNotFound, "project was not found")
-	}
 	return projectFromEtcd(stored), nil
 }
 

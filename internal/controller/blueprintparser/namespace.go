@@ -28,6 +28,7 @@ type parsePlan struct {
 	compose     map[string][]byte
 	prepared    map[string]bool
 	referenced  map[string]struct{}
+	runtime     map[string]struct{}
 	directories map[string]struct{}
 	visiting    map[scanKey]bool
 	visitedAt   map[scanKey]int
@@ -53,7 +54,7 @@ var knownGroundplaneExtensions = map[string]struct{}{
 	"x-gp-resource": {}, "x-gp-release": {}, "x-gp-release-groups": {}, "x-gp-adapter": {},
 	"x-gp-network": {}, "x-gp-attach": {}, "x-gp-attachments": {}, "x-gp-fact": {},
 	"x-gp-entry": {}, "x-gp-exposure": {}, "x-gp-depends_on": {}, "x-gp-requires": {},
-	"x-gp-route": {}, "x-gp-routes": {}, "x-gp-components": {}, "x-gp-backup": {},
+	"x-gp-route": {}, "x-gp-routes": {}, "x-gp-components": {}, "x-gp-backup": {}, "x-gp-network-pool": {},
 	"x-gp-task": {}, "x-gp-execution": {}, "x-gp-managed": {},
 }
 
@@ -75,6 +76,7 @@ func newParsePlan(
 		compose:     map[string][]byte{bundle.RootPath: rootCompose},
 		prepared:    make(map[string]bool),
 		referenced:  make(map[string]struct{}),
+		runtime:     make(map[string]struct{}),
 		directories: make(map[string]struct{}),
 		visiting:    make(map[scanKey]bool),
 		visitedAt:   make(map[scanKey]int),
@@ -613,7 +615,7 @@ func (p *parsePlan) inspectServiceVolumes(baseDir string, raw any) error {
 		if !readOnly {
 			return validationError("blueprint bind source must be read-only")
 		}
-		if _, _, err := p.requireReference(baseDir, source, true, false); err != nil {
+		if err := p.requireRuntimeReference(baseDir, source); err != nil {
 			return err
 		}
 	}
@@ -665,7 +667,7 @@ func (p *parsePlan) inspectVolumes(baseDir string, raw any) error {
 			if !ok || device == "" {
 				return validationError("blueprint local bind volume device is required")
 			}
-			if _, _, err := p.requireReference(baseDir, device, true, false); err != nil {
+			if err := p.requireRuntimeReference(baseDir, device); err != nil {
 				return err
 			}
 		}
@@ -746,6 +748,38 @@ func (p *parsePlan) requireReference(
 		return resolved, false, nil
 	}
 	return "", false, validationError("blueprint file reference is undeclared")
+}
+
+func (p *parsePlan) requireRuntimeReference(baseDir string, reference string) error {
+	resolved, _, err := p.requireReference(baseDir, reference, true, false)
+	if err != nil {
+		return err
+	}
+	if _, exists := p.files[resolved]; exists {
+		p.runtime[resolved] = struct{}{}
+		return nil
+	}
+	prefix := ""
+	if resolved != "." {
+		prefix = strings.TrimSuffix(resolved, "/") + "/"
+	}
+	for filename := range p.files {
+		if prefix == "" || strings.HasPrefix(filename, prefix) {
+			p.runtime[filename] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func (p *parsePlan) runtimeBlueprintFiles() []core.BlueprintFile {
+	files := make([]core.BlueprintFile, 0, len(p.runtime))
+	for filename := range p.runtime {
+		files = append(files, core.BlueprintFile{
+			Path: filename, Content: append([]byte(nil), p.files[filename]...),
+		})
+	}
+	sort.Slice(files, func(left int, right int) bool { return files[left].Path < files[right].Path })
+	return files
 }
 
 func (p *parsePlan) materialize(workspace string) error {

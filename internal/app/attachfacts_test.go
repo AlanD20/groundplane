@@ -72,7 +72,7 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 	taskID := ids.NewAt(ids.KindTask, now, 9)
 	pending, err := etcd.NewPendingAttachRecord(
 		ownerID, environmentID, "api-db", backingProjectID, backingEnvironmentID, backingServiceID,
-		backingNetworkID, []string{serviceID}, []string{grantID}, metadata, taskID, now,
+		backingNetworkID, serviceID, ownerID, []string{grantID}, metadata, taskID, now,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
@@ -324,7 +324,8 @@ func readyAttachRecord(
 		backingEnvironmentID,
 		backingServiceID,
 		backingNetworkID,
-		[]string{serviceID},
+		serviceID,
+		id,
 		grantIDs,
 		factSets,
 		ids.NewAt(ids.KindTask, now, seed),

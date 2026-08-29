@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +10,22 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func TestHierarchyReadsAppliedEntryProjectionFromRuntimeRecord(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, store, environment, _, current, _ := entryDeletionTestState(t)
+	want := entryDeletionTestProjection(t, store, current)
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	got, found, err := hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
+	if err != nil || !found || got.Revision != want.Revision ||
+		got.Record.EnvironmentID != want.Record.EnvironmentID || got.Record.RevisionID != want.Record.RevisionID {
+		t.Fatalf("GetEnvironmentAppliedComposeProjection() = %#v, %v, %v; want revision %d", got, found, err, want.Revision)
+	}
+}
 
 // Rationale: a never-applied Entry deletion must atomically publish its Task,
 // retain all generations until acknowledgement, then delete them with metadata.
@@ -20,7 +35,7 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
 	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
 	result, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
+		ctx, environment, project, current, nil, tombstone, intent, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
@@ -83,7 +98,7 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
 	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
 	if _, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
+		ctx, environment, project, current, nil, tombstone, intent, task, marker,
 	); err != nil {
 		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
 	}
@@ -155,7 +170,7 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 	projection := entryDeletionTestProjection(t, store, current)
 	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, &projection)
 	result, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, &projection, nil, tombstone, intent, task, marker,
+		ctx, environment, project, current, &projection, tombstone, intent, task, marker,
 	)
 	if err != nil {
 		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
@@ -222,272 +237,15 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 // Rationale: an enabled Cloudflare Tunnel token is a live stable-id reference,
 // and even a disabled singleton must remain revision-fenced so a concurrent
 // enable or retarget cannot race Entry deletion publication.
-func TestEntryDeletionFencesCloudflareTokenReference(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	repository, store, environment, project, current, _ := entryDeletionTestState(t)
-	components, err := newComponentRepository(store)
-	if err != nil {
-		t.Fatalf("newComponentRepository() error = %v", err)
-	}
-	at := serviceRecordTestTime().Add(7 * time.Hour)
-	record, err := NewComponentRecord(core.Component{
-		ID: ids.NewAt(ids.KindComponent, at, 1), Owner: core.ComponentOwnerEnvironment,
-		OwnerID: environment.Record.ID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
-		Config:            map[string]any{"token_entry_id": current.Record.Entry.ID},
-		GeneratedServices: []string{ids.NewAt(ids.KindService, at, 2)},
-	})
-	if err != nil {
-		t.Fatalf("NewComponentRecord(enabled Cloudflare) error = %v", err)
-	}
-	cloudflare, err := components.CreateEnvironmentComponent(ctx, environment, project, record)
-	if err != nil {
-		t.Fatalf("CreateEnvironmentComponent() error = %v", err)
-	}
-	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
-	setEntryRemovalCloudflareTestFence(&task, &cloudflare)
-	if _, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, &cloudflare, tombstone, intent, task, marker,
-	); !isKind(err, errs.KindResourceInUse) {
-		t.Fatalf("BeginEntryDeletionWithTask(enabled token) error = %v", err)
-	}
-
-	desired, err := ProjectComponentRecord(cloudflare.Record)
-	if err != nil {
-		t.Fatalf("ProjectComponentRecord() error = %v", err)
-	}
-	desired.Enabled = false
-	desired.Config = map[string]any{"token_entry_id": ids.NewAt(ids.KindEnvEntry, at, 3)}
-	disabled, err := components.ReplaceDesired(ctx, environment, project, cloudflare, desired)
-	if err != nil {
-		t.Fatalf("ReplaceDesired(disable) error = %v", err)
-	}
-	setEntryRemovalCloudflareTestFence(&task, &disabled)
-	desired.Config = map[string]any{"token_entry_id": ids.NewAt(ids.KindEnvEntry, at, 4)}
-	if _, err := components.ReplaceDesired(ctx, environment, project, disabled, desired); err != nil {
-		t.Fatalf("ReplaceDesired(retarget) error = %v", err)
-	}
-	result, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, &disabled, tombstone, intent, task, marker,
-	)
-	if err != nil {
-		t.Fatalf("BeginEntryDeletionWithTask(stale Component) error = %v", err)
-	}
-	_, _, conflict, classifyErr := result.Classify()
-	if classifyErr != nil || !isKind(conflict, errs.KindStateConflict) {
-		t.Fatalf("stale Component conflict/error = %v/%v", conflict, classifyErr)
-	}
-}
-
 // Rationale: an absent Cloudflare singleton is part of the initial Entry
 // deletion compare. A singleton created before that compare must produce a
 // state conflict without publishing any deletion state.
-func TestEntryDeletionRejectsCloudflareCreateRaceFromAbsentKindIndex(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	_, store, environment, project, current, generationIDs := entryDeletionTestState(t)
-	components, err := newComponentRepository(store)
-	if err != nil {
-		t.Fatalf("newComponentRepository() error = %v", err)
-	}
-	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
-	beforeEpoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID)
-	racing := &entryDeletionCloudflareRaceStore{hierarchyStore: store}
-	racing.beforeTransact = func() error {
-		at := serviceRecordTestTime().Add(9 * time.Hour)
-		record, recordErr := NewComponentRecord(core.Component{
-			ID: ids.NewAt(ids.KindComponent, at, 9500), Owner: core.ComponentOwnerEnvironment,
-			OwnerID: environment.Record.ID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
-			Config:            map[string]any{"token_entry_id": current.Record.Entry.ID},
-			GeneratedServices: []string{ids.NewAt(ids.KindService, at, 9501)},
-		})
-		if recordErr != nil {
-			return recordErr
-		}
-		_, recordErr = components.CreateEnvironmentComponent(ctx, environment, project, record)
-		return recordErr
-	}
-	repository, err := newEntryRepository(racing)
-	if err != nil {
-		t.Fatalf("newEntryRepository() error = %v", err)
-	}
-	result, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
-	)
-	if err != nil {
-		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
-	}
-	outcome, _, conflict, classifyErr := result.Classify()
-	if classifyErr != nil || outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindStateConflict) {
-		t.Fatalf("Cloudflare create race outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	if !racing.injected {
-		t.Fatal("Cloudflare create race was not injected")
-	}
-	assertEntryRemovalPublicationAbsent(t, store, task, marker)
-	assertEntryRemovalRetained(t, repository, store, current, generationIDs)
-	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != beforeEpoch {
-		t.Fatalf("failed Entry deletion epoch = %d, want %d", epoch, beforeEpoch)
-	}
-}
-
 // Rationale: a failed removal releases its active fence, so retry must read
 // and transaction-fence the current Tunnel singleton before reacquiring the
 // Entry tombstone. Enabling or retargeting the token to the Entry must block.
-func TestEntryRemovalRetryRevalidatesCloudflareTokenAuthority(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name           string
-		initialEnabled bool
-	}{
-		{name: "enable after failure"},
-		{name: "retarget after failure", initialEnabled: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			ctx := context.Background()
-			repository, store, environment, project, current, _ := entryDeletionTestState(t)
-			components, err := newComponentRepository(store)
-			if err != nil {
-				t.Fatalf("newComponentRepository() error = %v", err)
-			}
-			at := serviceRecordTestTime().Add(8 * time.Hour)
-			componentRecord, err := NewComponentRecord(core.Component{
-				ID: ids.NewAt(ids.KindComponent, at, 1), Owner: core.ComponentOwnerEnvironment,
-				OwnerID: environment.Record.ID, Kind: core.ComponentKindEdgeCloudflare,
-				Enabled:           test.initialEnabled,
-				Config:            map[string]any{"token_entry_id": ids.NewAt(ids.KindEnvEntry, at, 2)},
-				GeneratedServices: []string{ids.NewAt(ids.KindService, at, 3)},
-			})
-			if err != nil {
-				t.Fatalf("NewComponentRecord() error = %v", err)
-			}
-			cloudflare, err := components.CreateEnvironmentComponent(ctx, environment, project, componentRecord)
-			if err != nil {
-				t.Fatalf("CreateEnvironmentComponent() error = %v", err)
-			}
-			task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
-			setEntryRemovalCloudflareTestFence(&task, &cloudflare)
-			if _, err := repository.BeginEntryDeletionWithTask(
-				ctx, environment, project, current, nil, &cloudflare, tombstone, intent, task, marker,
-			); err != nil {
-				t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
-			}
-			tasks, err := newTaskRepository(store)
-			if err != nil {
-				t.Fatalf("newTaskRepository() error = %v", err)
-			}
-			if _, found, err := tasks.ClaimNextControllerTask(
-				ctx, task.CreatedAt.Add(time.Second),
-			); err != nil || !found {
-				t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
-			}
-			failed, err := tasks.AcknowledgeControllerTask(
-				ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-			)
-			if err != nil {
-				t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
-			}
-			desired, err := ProjectComponentRecord(cloudflare.Record)
-			if err != nil {
-				t.Fatalf("ProjectComponentRecord() error = %v", err)
-			}
-			desired.Enabled = true
-			desired.Config = map[string]any{"token_entry_id": current.Record.Entry.ID}
-			if _, err := components.ReplaceDesired(ctx, environment, project, cloudflare, desired); err != nil {
-				t.Fatalf("ReplaceDesired(protect target) error = %v", err)
-			}
-			retryAt := task.CreatedAt.Add(3 * time.Second)
-			retryID := ids.NewAt(ids.KindTask, retryAt, 9400)
-			retryMarker := pendingRetryMarker(failed.Record, retryID, retryAt, "entry-retry-key-0002")
-			result, err := tasks.RetryTask(
-				ctx, task.ID, retryID, TaskActorOperator, retryMarker,
-			)
-			if err != nil {
-				t.Fatalf("RetryTask(protected token) error = %v", err)
-			}
-			_, _, conflict, classifyErr := result.Classify()
-			if classifyErr != nil || !isKind(conflict, errs.KindStateConflict) {
-				t.Fatalf("RetryTask(protected token) conflict/error = %v/%v", conflict, classifyErr)
-			}
-			reacquired, err := store.Get(
-				ctx,
-				deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
-			)
-			if err != nil || reacquired.Entry != nil {
-				t.Fatalf("RetryTask(protected token) reacquired tombstone = %#v/%v", reacquired, err)
-			}
-		})
-	}
-}
-
 // Rationale: a failed removal that originally observed no Cloudflare
 // singleton must not reacquire its tombstone when that singleton appears
 // during the retry publication compare.
-func TestEntryRemovalRetryRejectsCloudflareCreateRaceFromAbsentSource(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
-	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
-	if _, err := repository.BeginEntryDeletionWithTask(
-		ctx, environment, project, current, nil, nil, tombstone, intent, task, marker,
-	); err != nil {
-		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
-	}
-	tasks, err := newTaskRepository(store)
-	if err != nil {
-		t.Fatalf("newTaskRepository() error = %v", err)
-	}
-	if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
-		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
-	}
-	failed, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
-	)
-	if err != nil || failed.Record.Status != TaskStatusFailed {
-		t.Fatalf("AcknowledgeControllerTask(failed) = %#v/%v", failed, err)
-	}
-	components, err := newComponentRepository(store)
-	if err != nil {
-		t.Fatalf("newComponentRepository() error = %v", err)
-	}
-	racing := &entryDeletionCloudflareRaceStore{hierarchyStore: store}
-	racing.beforeTransact = func() error {
-		at := serviceRecordTestTime().Add(10 * time.Hour)
-		record, recordErr := NewComponentRecord(core.Component{
-			ID: ids.NewAt(ids.KindComponent, at, 9600), Owner: core.ComponentOwnerEnvironment,
-			OwnerID: environment.Record.ID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
-			Config:            map[string]any{"token_entry_id": current.Record.Entry.ID},
-			GeneratedServices: []string{ids.NewAt(ids.KindService, at, 9601)},
-		})
-		if recordErr != nil {
-			return recordErr
-		}
-		_, recordErr = components.CreateEnvironmentComponent(ctx, environment, project, record)
-		return recordErr
-	}
-	racingTasks, err := newTaskRepository(racing)
-	if err != nil {
-		t.Fatalf("newTaskRepository(race) error = %v", err)
-	}
-	retryAt := task.CreatedAt.Add(3 * time.Second)
-	retryID := ids.NewAt(ids.KindTask, retryAt, 9602)
-	retryMarker := pendingRetryMarker(failed.Record, retryID, retryAt, "entry-retry-key-0003")
-	result, err := racingTasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
-	if err != nil {
-		t.Fatalf("RetryTask() error = %v", err)
-	}
-	outcome, _, conflict, classifyErr := result.Classify()
-	if classifyErr != nil || outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindStateConflict) {
-		t.Fatalf("Cloudflare create race retry outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
-	}
-	if !racing.injected {
-		t.Fatal("Cloudflare create race was not injected")
-	}
-	assertEntryRetryPublicationAbsent(t, store, failed.Record, retryID, retryMarker)
-	assertEntryRemovalRetained(t, repository, store, current, generationIDs)
-}
-
 // Rationale: Entry deletion Task publication is an ordinary Environment
 // mutation, and replaying its durable marker must not advance the epoch again.
 func TestEntryDeletionPublicationFencesLockAndKeepsReplayEpoch(t *testing.T) {
@@ -511,7 +269,6 @@ func TestEntryDeletionPublicationFencesLockAndKeepsReplayEpoch(t *testing.T) {
 			project,
 			current,
 			nil,
-			nil,
 			tombstone,
 			intent,
 			task,
@@ -525,7 +282,7 @@ func TestEntryDeletionPublicationFencesLockAndKeepsReplayEpoch(t *testing.T) {
 		repository, store, environment, project, current, _ := entryDeletionTestState(t)
 		task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, nil)
 		first, err := repository.BeginEntryDeletionWithTask(
-			context.Background(), environment, project, current, nil, nil, tombstone, intent, task, marker,
+			context.Background(), environment, project, current, nil, tombstone, intent, task, marker,
 		)
 		if err != nil {
 			t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
@@ -536,7 +293,7 @@ func TestEntryDeletionPublicationFencesLockAndKeepsReplayEpoch(t *testing.T) {
 		}
 		afterFirst := mustBackupPolicyMutationEpoch(t, store, environment.Record.ID)
 		replay, err := repository.BeginEntryDeletionWithTask(
-			context.Background(), environment, project, current, nil, nil, tombstone, intent, task, marker,
+			context.Background(), environment, project, current, nil, tombstone, intent, task, marker,
 		)
 		if err != nil {
 			t.Fatalf("BeginEntryDeletionWithTask(replay) error = %v", err)
@@ -611,7 +368,6 @@ func entryDeletionTestRecords(
 	task.Target = entry.Record.Entry.ID
 	task.Params = map[string]string{
 		TaskResourceKindParam: TaskResourceEntry, TaskEntryEnvironmentParam: entry.Record.EnvironmentID,
-		TaskEntryCloudflareComponentParam: "", TaskEntryCloudflareRevisionParam: "0",
 	}
 	task.TimeoutSeconds = 30
 	task.IdempotencyKey = "entry-remove-key-0001"
@@ -630,7 +386,6 @@ func entryDeletionTestRecords(
 			TaskEntryProjectSlugParam:         project.Record.Slug,
 			TaskEntryEnvironmentNameParam:     environment.Record.Name,
 			TaskEntryAuthorizedVolumeDirParam: environment.Record.VolumeDir,
-			TaskEntryCloudflareComponentParam: "", TaskEntryCloudflareRevisionParam: "0",
 		}
 	}
 	marker := pendingTaskMarker(task)
@@ -651,11 +406,6 @@ func entryDeletionTestRecords(
 		TaskID: task.ID, Phase: entryRemovalTombstonePhase(intent), CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	return task, marker, tombstone, intent
-}
-
-func setEntryRemovalCloudflareTestFence(task *TaskRecord, component *Versioned[ComponentRecord]) {
-	task.Params[TaskEntryCloudflareComponentParam] = component.Record.Desired.ID
-	task.Params[TaskEntryCloudflareRevisionParam] = strconv.FormatInt(component.Revision, 10)
 }
 
 func entryDeletionTestProjection(

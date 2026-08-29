@@ -59,7 +59,8 @@ type AttachRecord struct {
 	BackingEnvironmentID string                  `json:"backing_environment_id"`
 	BackingServiceID     string                  `json:"backing_service_id"`
 	BackingNetworkID     string                  `json:"backing_network_id"`
-	ServiceIDs           []string                `json:"service_ids"`
+	ServiceID            string                  `json:"service_id"`
+	CredentialAttachID   string                  `json:"credential_attach_id"`
 	GrantAttachIDs       []string                `json:"grant_attach_ids,omitempty"`
 	FactSets             []AttachFactSetMetadata `json:"fact_sets,omitempty"`
 	Status               core.AttachStatus       `json:"status"`
@@ -87,7 +88,8 @@ func NewPendingAttachRecord(
 	backingEnvironmentID string,
 	backingServiceID string,
 	backingNetworkID string,
-	serviceIDs []string,
+	serviceID string,
+	credentialAttachID string,
 	grantAttachIDs []string,
 	factSets []AttachFactSetMetadata,
 	taskID string,
@@ -101,7 +103,8 @@ func NewPendingAttachRecord(
 		BackingEnvironmentID: backingEnvironmentID,
 		BackingServiceID:     backingServiceID,
 		BackingNetworkID:     backingNetworkID,
-		ServiceIDs:           append([]string(nil), serviceIDs...),
+		ServiceID:            serviceID,
+		CredentialAttachID:   credentialAttachID,
 		GrantAttachIDs:       append([]string(nil), grantAttachIDs...),
 		FactSets:             cloneAttachFactSets(factSets),
 		Status:               core.AttachPending,
@@ -109,7 +112,6 @@ func NewPendingAttachRecord(
 		TaskID:               taskID,
 		CreatedAt:            createdAt.UTC(),
 	}
-	slices.Sort(record.ServiceIDs)
 	slices.Sort(record.GrantAttachIDs)
 	slices.SortFunc(record.FactSets, func(left AttachFactSetMetadata, right AttachFactSetMetadata) int {
 		return strings.Compare(left.GrantAttachID, right.GrantAttachID)
@@ -123,6 +125,10 @@ func NewPendingAttachRecord(
 		return AttachRecord{}, err
 	}
 	return record, nil
+}
+
+func (record AttachRecord) OwnsCredential() bool {
+	return record.ID != "" && record.CredentialAttachID == record.ID
 }
 
 func NewAttachEncryptedFacts(
@@ -252,6 +258,8 @@ func validateAttachRecord(record AttachRecord) error {
 		{ids.KindEnvironment, record.BackingEnvironmentID, "Attach backing environment"},
 		{ids.KindService, record.BackingServiceID, "Attach backing service"},
 		{ids.KindNetwork, record.BackingNetworkID, "Attach backing network"},
+		{ids.KindService, record.ServiceID, "Attach consumer Service"},
+		{ids.KindAttach, record.CredentialAttachID, "Attach credential owner"},
 		{ids.KindTask, record.TaskID, "Attach task"},
 	} {
 		if err := validateAttachStableID(check.kind, check.value, check.field); err != nil {
@@ -264,14 +272,8 @@ func validateAttachRecord(record AttachRecord) error {
 	if record.CreatedAt.IsZero() {
 		return errs.New(errs.KindValidationFailed, "Attach created_at is required")
 	}
-	if len(record.ServiceIDs) != 1 {
-		return errs.New(errs.KindValidationFailed, "Attach must have exactly one consuming Service")
-	}
 	if len(record.GrantAttachIDs) > MaximumAttachGrants {
 		return errs.Newf(errs.KindValidationFailed, "Attach may have at most %d grants", MaximumAttachGrants)
-	}
-	if err := validateSortedStableIDs(record.ServiceIDs, ids.KindService, "Attach service_ids"); err != nil {
-		return err
 	}
 	if err := validateSortedStableIDs(record.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids"); err != nil {
 		return err
@@ -281,8 +283,17 @@ func validateAttachRecord(record AttachRecord) error {
 			return errs.New(errs.KindValidationFailed, "Attach cannot grant itself")
 		}
 	}
-	if err := validateAttachFactSets(record.FactSets, record.GrantAttachIDs); err != nil {
-		return err
+	if record.OwnsCredential() {
+		if err := validateAttachFactSets(record.FactSets, record.GrantAttachIDs); err != nil {
+			return err
+		}
+	} else {
+		if len(record.GrantAttachIDs) != 0 {
+			return errs.New(errs.KindValidationFailed, "Existing-credential Attach cannot own grants")
+		}
+		if err := validateInheritedAttachFactSets(record.FactSets); err != nil {
+			return err
+		}
 	}
 	switch record.Status {
 	case core.AttachPending, core.AttachProvisioning:
@@ -305,6 +316,17 @@ func validateAttachRecord(record AttachRecord) error {
 		return attachStateError(record, "unknown lifecycle state")
 	}
 	return nil
+}
+
+func validateInheritedAttachFactSets(factSets []AttachFactSetMetadata) error {
+	if len(factSets) == 0 {
+		return nil
+	}
+	grantIDs := make([]string, 0, len(factSets)-1)
+	for _, factSet := range factSets[1:] {
+		grantIDs = append(grantIDs, factSet.GrantAttachID)
+	}
+	return validateAttachFactSets(factSets, grantIDs)
 }
 
 func ValidateAttachName(name string) error {

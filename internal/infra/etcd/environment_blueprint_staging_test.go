@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -143,6 +144,83 @@ func TestEnvironmentVolumeMutationAuditIsTypedAndDeterministic(t *testing.T) {
 	decoded, err := decodeEnvironmentDesiredMutationAudit(encoded)
 	if err != nil || decoded.Volume == nil || *decoded.Volume != *audit.Volume {
 		t.Fatalf("mutation audit round trip = %#v, %v", decoded, err)
+	}
+}
+
+func TestEnvironmentServiceMutationAuditIsTypedAndDeterministic(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	audit := EnvironmentDesiredMutationAudit{Service: &EnvironmentServiceMutationAudit{
+		Action:         EnvironmentServiceMutationRemove,
+		BaseRevisionID: ids.NewAt(ids.KindTask, now, 1),
+		ServiceID:      ids.NewAt(ids.KindService, now, 2),
+	}}
+	encoded, err := encodeEnvironmentDesiredMutationAudit(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeEnvironmentDesiredMutationAudit(encoded)
+	if err != nil || decoded.Service == nil || *decoded.Service != *audit.Service {
+		t.Fatalf("mutation audit round trip = %#v, %v", decoded, err)
+	}
+}
+
+func TestEnvironmentServiceMutationAuditAllowsInitialCreateWithoutBaseRevision(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 29, 8, 0, 0, 0, time.UTC)
+	audit := EnvironmentDesiredMutationAudit{Service: &EnvironmentServiceMutationAudit{
+		Action:    EnvironmentServiceMutationCreate,
+		ServiceID: ids.NewAt(ids.KindService, now, 1),
+		Request: &EnvironmentServiceMutationRequest{
+			EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
+			Name:          "web", Image: "nginx:1.27-alpine", Strategy: core.StrategyRecreate,
+			OnFailure: core.OnFailureSwitchBack, Restart: "unless-stopped", Replicas: 1,
+		},
+	}}
+	encoded, err := encodeEnvironmentDesiredMutationAudit(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeEnvironmentDesiredMutationAudit(encoded)
+	if err != nil || decoded.Service == nil || !reflect.DeepEqual(decoded.Service, audit.Service) {
+		t.Fatalf("initial Service mutation audit round trip = %#v, %v", decoded, err)
+	}
+	audit.Service.Action = EnvironmentServiceMutationEdit
+	if _, err := encodeEnvironmentDesiredMutationAudit(audit); !isKind(err, errs.KindValidationFailed) {
+		t.Fatalf("Service edit without base revision error = %v", err)
+	}
+}
+
+func TestEnvironmentEntryMutationAuditIsTypedRedactedAndDeterministic(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	entryID := ids.NewAt(ids.KindEnvEntry, now, 2)
+	record, err := NewEntryRecord(environmentID, core.EnvEntry{
+		ID: entryID, Kind: core.EntryKindEnv, Key: "APP_MODE",
+		Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"all"},
+	}, ids.NewAt(ids.KindConfig, now, 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := EnvironmentDesiredMutationAudit{Entry: &EnvironmentEntryMutationAudit{
+		Action: EnvironmentEntryMutationCreate, BaseRevisionID: ids.NewAt(ids.KindTask, now, 4),
+		EntryID: entryID, Record: &record,
+	}}
+	encoded, err := encodeEnvironmentDesiredMutationAudit(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeEnvironmentDesiredMutationAudit(encoded)
+	if err != nil || decoded.Entry == nil || !reflect.DeepEqual(decoded.Entry, audit.Entry) {
+		t.Fatalf("Entry mutation audit round trip = %#v, %v", decoded, err)
+	}
+	record.Entry.Source.Literal = "must-not-persist"
+	if _, err := encodeEnvironmentDesiredMutationAudit(EnvironmentDesiredMutationAudit{Entry: &EnvironmentEntryMutationAudit{
+		Action: EnvironmentEntryMutationEdit, BaseRevisionID: audit.Entry.BaseRevisionID,
+		EntryID: entryID, Record: &record,
+	}}); !isKind(err, errs.KindValidationFailed) {
+		t.Fatalf("Entry mutation literal audit error = %v", err)
 	}
 }
 

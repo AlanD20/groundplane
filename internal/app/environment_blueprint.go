@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"math"
 	"net/http"
+	"net/netip"
 	"path"
 	"sort"
 	"strings"
@@ -14,7 +17,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/slug"
-	componentregistry "github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
@@ -50,8 +52,14 @@ type environmentBlueprintRepository interface {
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
 	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	ResolveBackingProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	ResolveEnvironment(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
 	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.EntryRecord], error)
+	BlueprintEntryValueGenerationExists(context.Context, etcd.EntryRecord) (bool, error)
+	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
+	BindBlueprintEntryEnvironment(context.Context, string, string) error
+	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
 	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ComponentRecord], error)
 	PrepareEnvironmentComponentTask(
 		context.Context,
@@ -69,8 +77,10 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		etcd.EnvironmentBlueprintStageRequest,
 	) (etcd.EnvironmentBlueprintSeal, error)
-	PublishEnvironmentDesiredRevisionWithTask(
+	PublishEnvironmentBlueprintDesiredRevisionWithTask(
 		context.Context,
+		netip.Prefix,
+		string,
 		etcd.Versioned[etcd.ProjectRecord],
 		etcd.Versioned[etcd.EnvironmentRecord],
 		int64,
@@ -82,21 +92,28 @@ type environmentBlueprintRepository interface {
 		[]etcd.EnvironmentBlueprintRouteChange,
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
+		etcd.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type environmentBlueprintService struct {
-	volumeRoot    string
-	repository    environmentBlueprintRepository
-	idempotency   *desiredrevision.Idempotency
-	materials     environmentBlueprintMaterializationResolver
-	releaseGroups *controller.ReleaseGroupBlueprintPlanner
-	now           func() time.Time
+	volumeRoot      string
+	environmentPool netip.Prefix
+	repository      environmentBlueprintRepository
+	idempotency     *desiredrevision.Idempotency
+	materials       environmentBlueprintMaterializationResolver
+	releaseGroups   *controller.ReleaseGroupBlueprintPlanner
+	entryGeneration *EntryGenerationService
+	attachFacts     *AttachFactService
+	componentCatalog []controller.EnvironmentComponentRegistration
+	random          io.Reader
+	now             func() time.Time
 }
 
 type environmentBlueprintMaterializationResolver interface {
+	PinSecretValue(context.Context, string, string) (etcd.TaskSecretValueReference, error)
 	ResolveTaskMaterializationSource(
 		context.Context,
 		string,
@@ -111,6 +128,8 @@ type durableEnvironmentBlueprintRepository struct {
 	services   *etcd.ServiceRepository
 	routes     *etcd.RouteRepository
 	entries    *etcd.EntryRepository
+	values     *etcd.EntryValueGenerationRepository
+	attaches   *etcd.AttachRepository
 	components *etcd.ComponentRepository
 }
 
@@ -121,9 +140,12 @@ func newDurableEnvironmentBlueprintRepository(
 	services *etcd.ServiceRepository,
 	routes *etcd.RouteRepository,
 	entries *etcd.EntryRepository,
+	values *etcd.EntryValueGenerationRepository,
+	attaches *etcd.AttachRepository,
 	components *etcd.ComponentRepository,
 ) (*durableEnvironmentBlueprintRepository, error) {
-	if hierarchy == nil || desired == nil || zones == nil || services == nil || routes == nil || entries == nil || components == nil {
+	if hierarchy == nil || desired == nil || zones == nil || services == nil || routes == nil || entries == nil || values == nil ||
+		attaches == nil || components == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint repositories are not configured")
 	}
 	return &durableEnvironmentBlueprintRepository{
@@ -133,8 +155,52 @@ func newDurableEnvironmentBlueprintRepository(
 		services:            services,
 		routes:              routes,
 		entries:             entries,
+		values:              values,
+		attaches:            attaches,
 		components:          components,
 	}, nil
+}
+
+func (repository *durableEnvironmentBlueprintRepository) BlueprintEntryValueGenerationExists(
+	ctx context.Context,
+	record etcd.EntryRecord,
+) (bool, error) {
+	if record.Entry.Secret {
+		value, found, err := repository.values.GetSecret(ctx, record.Entry.ID, record.CurrentValueGenerationID)
+		defer clear(value.Ciphertext)
+		return found && value.EnvironmentID == record.EnvironmentID, err
+	}
+	value, found, err := repository.values.GetPlain(ctx, record.Entry.ID, record.CurrentValueGenerationID)
+	defer clear(value.Content)
+	return found && value.EnvironmentID == record.EnvironmentID, err
+}
+
+func (repository *durableEnvironmentBlueprintRepository) CreateBlueprintEntryValueGeneration(
+	ctx context.Context,
+	generation etcd.EntryValueGeneration,
+) error {
+	if generation.Plain != nil && generation.Secret == nil {
+		return repository.values.CreatePlain(ctx, *generation.Plain)
+	}
+	if generation.Secret != nil && generation.Plain == nil {
+		return repository.values.CreateSecret(ctx, *generation.Secret)
+	}
+	return errs.New(errs.KindInternal, "Blueprint Entry value generation is invalid")
+}
+
+func (repository *durableEnvironmentBlueprintRepository) BindBlueprintEntryEnvironment(
+	ctx context.Context,
+	environmentID string,
+	entryID string,
+) error {
+	return repository.entries.BindBlueprintEntryEnvironment(ctx, environmentID, entryID)
+}
+
+func (repository *durableEnvironmentBlueprintRepository) ResolveBlueprintEntryEnvironment(
+	ctx context.Context,
+	entryID string,
+) (string, bool, error) {
+	return repository.entries.ResolveBlueprintEntryEnvironment(ctx, entryID)
 }
 
 func (repository *durableEnvironmentBlueprintRepository) ClaimEnvironmentBlueprintStage(
@@ -157,6 +223,14 @@ func (repository *durableEnvironmentBlueprintRepository) ListEntries(
 	request etcd.PageRequest,
 ) (etcd.Page[etcd.EntryRecord], error) {
 	return repository.entries.ListEntries(ctx, environmentID, request)
+}
+
+func (repository *durableEnvironmentBlueprintRepository) ListAttaches(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.AttachRecord], error) {
+	return repository.attaches.ListAttaches(ctx, environmentID, request)
 }
 
 func (repository *durableEnvironmentBlueprintRepository) ListEnvironmentComponents(
@@ -193,21 +267,30 @@ func (repository *durableEnvironmentBlueprintRepository) ListRoutes(
 
 func newEnvironmentBlueprintService(
 	volumeRoot string,
+	environmentPool string,
 	repository environmentBlueprintRepository,
 	idempotency *desiredrevision.Idempotency,
 	materials environmentBlueprintMaterializationResolver,
 	releaseGroups *controller.ReleaseGroupBlueprintPlanner,
+	entryGeneration *EntryGenerationService,
+	attachFacts *AttachFactService,
+	componentCatalog []controller.EnvironmentComponentRegistration,
 ) (*environmentBlueprintService, error) {
-	if repository == nil || idempotency == nil || materials == nil || releaseGroups == nil {
+	parsedEnvironmentPool, poolErr := netip.ParsePrefix(environmentPool)
+	if poolErr != nil || !parsedEnvironmentPool.Addr().Is4() || parsedEnvironmentPool != parsedEnvironmentPool.Masked() ||
+		repository == nil || idempotency == nil || materials == nil || releaseGroups == nil || entryGeneration == nil ||
+		attachFacts == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
-	if _, err := controller.NewTaskPlanResolver(volumeRoot); err != nil {
+	if _, err := controller.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
 		return nil, err
 	}
 	return &environmentBlueprintService{
-		volumeRoot: volumeRoot, repository: repository, idempotency: idempotency,
-		materials: materials, releaseGroups: releaseGroups,
-		now: time.Now,
+		volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
+		materials: materials, releaseGroups: releaseGroups, entryGeneration: entryGeneration,
+		attachFacts: attachFacts,
+		componentCatalog: controller.CloneEnvironmentComponentCatalog(componentCatalog),
+		random: rand.Reader, now: time.Now,
 	}, nil
 }
 
@@ -230,7 +313,7 @@ func (service *environmentBlueprintService) ApplyComponentBlueprint(
 	if ids.Validate(ids.KindComponent, componentID) != nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Component id is invalid")
 	}
-	return service.applyBlueprint(ctx, environmentID, componentID, bundle, idempotencyKey)
+	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey)
 }
 
 func (service *environmentBlueprintService) applyBlueprint(
@@ -269,7 +352,11 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	bundle core.BlueprintBundle,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	evidence, err := service.idempotency.Prepare(ctx, environmentID, bundle)
+	evidence, err := service.idempotency.Prepare(ctx, desiredrevision.IntentAddress{
+		Method: http.MethodPut, Route: environmentBlueprintRoute,
+		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
+		Path:  []idempotentintent.PathBinding{{Name: "id", Value: environmentID}},
+	}, bundle)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -343,6 +430,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	desiredEnvironment := environment
+	desiredEnvironment.Record.NetworkPool = parsed.Extensions.NetworkPool
 	claim, err := desiredrevision.Claim(
 		ctx, service.repository, desiredrevision.ClaimInput{
 			EnvironmentID: environmentID, CandidateTaskID: candidateTaskID,
@@ -474,6 +563,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	currentAttaches, err := service.listBlueprintAttaches(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	componentPreparation, pinnedComponents, effectiveComponents, err := service.prepareBlueprintComponents(
 		ctx,
 		environmentID,
@@ -487,26 +580,75 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	preparedAttaches, err := service.prepareBlueprintAttaches(
+		ctx, environmentID, taskID, parsed.Extensions.Attachments, serviceChanges, currentAttaches,
+		allocator.Named, componentTaskPreparationIsZeroForBlueprint(componentPreparation), now,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer preparedAttaches.clear()
 	pinnedEntries, err := environmentEntryProjection(currentEntries)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	reconciledEntries, err := controller.ReconcileBlueprintEntries(
+		environmentID, parsed.Extensions.Entries, pinnedEntries, allocator.Named,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	componentProjection, err := controller.ProjectEnvironmentComponents(
 		parsed.Project,
 		blueprintComponentEnvironment(
-			environment.Record,
+			desiredEnvironment.Record,
 			desiredZones,
 			desiredServices,
 			reconciledRoutes.Current,
 			effectiveComponents,
-			pinnedEntries,
+			reconciledEntries.Current,
 		),
-		componentregistry.All(),
+		service.componentCatalog,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	renderIdentities := environmentComponentComposeIdentities(changes.Current, componentProjection.Services)
+	entryProjection, err := controller.ProjectEnvironmentEntries(
+		componentProjection.Project,
+		environmentID,
+		environment.Record.VolumeDir,
+		changes.Current.Services,
+		reconciledEntries.Current,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	entryRemovals, err := environmentBlueprintEntryRemovals(
+		environmentID, reconciledEntries.Removed, reconciledEntries.Current, renderIdentities.Services,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	entryProjection.Materializations = append(entryProjection.Materializations, entryRemovals...)
+	componentProjection.Project = entryProjection.Project
+	attachProjection := etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		Services:      environmentComposeIdentities(renderIdentities.Services),
+		Networks:      environmentComposeIdentities(renderIdentities.Networks),
+	}
+	attachJoins, err := resolveAttachNetworkJoins(environmentID, attachProjection, preparedAttaches.effective, "")
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	externalNetworks, err := controller.ProjectAttachNetworks(
+		componentProjection.Project,
+		attachProjection,
+		attachJoins,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	volumeMounts, err := environmentBlueprintVolumeMounts(componentProjection.Project, renderIdentities)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -518,7 +660,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		ProjectOwnerKind: controller.ComposeProjectOwnerTenant,
 		TenantID:         tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID,
 		PlanID: planID, RenderGeneration: generation, AuthorizedVolumeDir: environment.Record.VolumeDir,
-		Identities: renderIdentities,
+		Identities: renderIdentities, ExternalNetworks: externalNetworks,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -527,26 +669,46 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
+	entryGeneration := *service.entryGeneration
+	entryGeneration.facts = preparedAttaches.facts
+	if err := service.prepareBlueprintEntryValues(
+		ctx, &entryGeneration, project.Record.ID, environmentID, reconciledEntries, now,
+	); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	materializations, materializationSteps, err := service.environmentComponentMaterializations(
 		ctx,
 		environmentID,
+		project.Record.ID,
 		taskID,
 		artifactID,
 		allocator.Named,
+		parsed.RuntimeFiles,
 		componentProjection,
-		pinnedEntries,
+		entryProjection.Materializations,
+		reconciledEntries.Current,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	caddyApply, hasCaddyApply, err := controller.ResolveEnvironmentCaddyApply(
+		controller.EnvironmentCaddyApplyInput{
+			RevisionID: taskID, RenderGeneration: generation, Components: pinnedComponents,
+			ComponentCatalog: service.componentCatalog,
+			Materializations: materializations, Artifact: artifact,
+		},
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	steps := append([]*agentpb.ExecutionStep(nil), materializationSteps...)
-	stepRecords := make([]etcd.TaskStepRecord, 0, len(materializationSteps)+2)
+	stepRecords := make([]etcd.TaskStepRecord, 0, len(materializationSteps)+4)
 	for _, step := range materializationSteps {
 		stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: step.StepId})
 	}
-	introducedVolumeIDs := introducedEnvironmentVolumeIDs(changes.Current.Volumes, previousProjection.Record.Volumes)
+	managedVolumeIDs := managedEnvironmentVolumeIDs(changes.Current.Volumes)
 	var volumeIntentDigest []byte
-	if len(introducedVolumeIDs) != 0 {
+	if len(managedVolumeIDs) != 0 {
 		intentDigest, decodeErr := hex.DecodeString(evidence.Durable.CiphertextDigest)
 		if decodeErr != nil || len(intentDigest) != sha256.Size {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Blueprint protected intent digest is invalid")
@@ -557,13 +719,22 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			StepId: stepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
 				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
-					ArtifactId: artifactID, VolumeIds: introducedVolumeIDs,
+					ArtifactId: artifactID, VolumeIds: managedVolumeIDs,
 					IntentSha256: append([]byte(nil), intentDigest...),
 				},
 			},
 		})
 		stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: stepID})
 	}
+	attachSteps, attachStepRecords, err := preparedAttaches.procedureSteps(
+		taskID, environmentBlueprintTimeoutSeconds, allocator.Named,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer clearBlueprintAttachProcedureSteps(attachSteps)
+	steps = append(steps, attachSteps...)
+	stepRecords = append(stepRecords, attachStepRecords...)
 	applyStepID := allocator.Named(ids.KindStep, "compose-apply")
 	steps = append(steps, &agentpb.ExecutionStep{
 		StepId: applyStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
@@ -572,13 +743,21 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		}},
 	})
 	stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: applyStepID})
-	planOperation := agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
-	if taskTarget != environmentID {
-		planOperation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
+	if hasCaddyApply {
+		caddyStepID := allocator.Named(ids.KindStep, "http-router-config-activate")
+		caddyStep, stepErr := caddyApply.ExecutionStep(
+			caddyStepID,
+			uint32(environmentBlueprintTimeoutSeconds),
+		)
+		if stepErr != nil {
+			return etcd.IdempotencyResponse{}, stepErr
+		}
+		steps = append(steps, caddyStep)
+		stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: caddyStepID})
 	}
 	plan, err := controller.BuildPlan(controller.PlanBuildInput{
 		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: generation,
-		Operation: planOperation, TargetID: taskTarget,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: environmentID,
 		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
 	})
 	if err != nil {
@@ -589,11 +768,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		etcd.TaskMaterializationEnvironmentParam:     environmentID,
 		controller.EnvironmentBlueprintArtifactParam: artifactID,
 	}
-	if taskTarget != environmentID {
-		params[etcd.TaskResourceKindParam] = etcd.TaskResourceComponent
-	}
-	if len(introducedVolumeIDs) != 0 {
-		params[controller.EnvironmentBlueprintIntroducedVolumesParam] = strings.Join(introducedVolumeIDs, ",")
+	if len(managedVolumeIDs) != 0 {
+		params[controller.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
 		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
 	}
 	task := etcd.TaskRecord{
@@ -621,7 +797,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		artifactValue,
 		reconciledRoutes.Current,
 		pinnedComponents,
-		pinnedEntries,
+		reconciledEntries.Current,
 	)
 	projection.ServiceDependencyPlans = dependencyPlans.Clone()
 	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
@@ -629,13 +805,20 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	return desiredrevision.Publish(ctx, service.repository, service.idempotency, desiredrevision.PublishInput{
-		Project: project, Environment: environment, ExpectedHeadRevision: expectedHeadRevision,
+		Project: project, Environment: environment, EnvironmentPool: service.environmentPool,
+		NetworkPool: desiredEnvironment.Record.NetworkPool, ExpectedHeadRevision: expectedHeadRevision,
 		Claim: claim, Evidence: evidence, Locator: locator, Blueprint: revision,
 		Projection: projection, DependencyDigest: projectionEvidence.DependencyDigest,
 		ZoneChanges: zoneChanges, ServiceChanges: serviceChanges, RouteChanges: routeChanges,
 		ReleaseGroupPreparation: releaseGroupPreparation,
-		ComponentPreparation:    componentPreparation, Task: task,
+		ComponentPreparation:    componentPreparation,
+		AttachPreparation:       preparedAttaches.publication,
+		Task:                    task,
 	})
+}
+
+func componentTaskPreparationIsZeroForBlueprint(preparation etcd.ComponentTaskPreparation) bool {
+	return preparation.Intent.TaskID == ""
 }
 
 func (service *environmentBlueprintService) listBlueprintZones(
@@ -781,7 +964,18 @@ func (service *environmentBlueprintService) listBlueprintEntries(
 	ctx context.Context,
 	environmentID string,
 ) ([]etcd.Versioned[etcd.EntryRecord], error) {
-	entries := []etcd.Versioned[etcd.EntryRecord](nil)
+	entriesByID := make(map[string]etcd.Versioned[etcd.EntryRecord])
+	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		for _, record := range projection.Record.Entries {
+			entriesByID[record.Entry.ID] = etcd.Versioned[etcd.EntryRecord]{
+				Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
+			}
+		}
+	}
 	cursor := ""
 	for {
 		page, err := service.repository.ListEntries(
@@ -792,12 +986,61 @@ func (service *environmentBlueprintService) listBlueprintEntries(
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, page.Items...)
+		for _, item := range page.Items {
+			if _, projected := entriesByID[item.Record.Entry.ID]; !projected {
+				entriesByID[item.Record.Entry.ID] = item
+			}
+		}
 		if page.NextCursor == "" {
+			entries := make([]etcd.Versioned[etcd.EntryRecord], 0, len(entriesByID))
+			for _, item := range entriesByID {
+				entries = append(entries, item)
+			}
+			sort.Slice(entries, func(left, right int) bool {
+				return entries[left].Record.Entry.ID < entries[right].Record.Entry.ID
+			})
 			return entries, nil
 		}
 		cursor = page.NextCursor
 	}
+}
+
+func (service *environmentBlueprintService) listBlueprintAttaches(
+	ctx context.Context,
+	environmentID string,
+) ([]etcd.Versioned[etcd.AttachRecord], error) {
+	attaches := []etcd.Versioned[etcd.AttachRecord](nil)
+	cursor := ""
+	revision := int64(0)
+	for {
+		page, err := service.repository.ListAttaches(
+			ctx,
+			environmentID,
+			etcd.PageRequest{Limit: etcd.MaximumPageLimit, Cursor: cursor},
+		)
+		if err != nil {
+			return nil, err
+		}
+		if page.Revision <= 0 || revision != 0 && page.Revision != revision {
+			return nil, errs.New(errs.KindInternal, "Blueprint Attach topology pages changed revision")
+		}
+		revision = page.Revision
+		attaches = append(attaches, page.Items...)
+		if page.NextCursor == "" {
+			return attaches, nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func environmentComposeIdentities(
+	values []controller.ComposeResourceIdentity,
+) []etcd.EnvironmentComposeIdentity {
+	result := make([]etcd.EnvironmentComposeIdentity, len(values))
+	for index, value := range values {
+		result[index] = etcd.EnvironmentComposeIdentity{ID: value.ID, Name: value.Name}
+	}
+	return result
 }
 
 func (service *environmentBlueprintService) prepareBlueprintComponents(
@@ -911,6 +1154,7 @@ func environmentEntryProjection(
 		if err != nil {
 			return nil, err
 		}
+		records[index].BlueprintKey = versioned.Record.BlueprintKey
 	}
 	sort.Slice(records, func(left int, right int) bool {
 		return records[left].Entry.ID < records[right].Entry.ID
@@ -971,6 +1215,8 @@ type environmentComponentMaterializationInput struct {
 	serviceID   string
 	serviceName string
 	outputKind  etcd.TaskMaterializationOutputKind
+	uid         uint32
+	gid         uint32
 	mode        entrymaterialization.Mode
 	source      etcd.TaskMaterializationSource
 	content     []byte
@@ -980,14 +1226,43 @@ type environmentComponentMaterializationInput struct {
 func (service *environmentBlueprintService) environmentComponentMaterializations(
 	ctx context.Context,
 	environmentID string,
+	projectID string,
 	revisionID string,
 	artifactID string,
 	allocate func(ids.Kind, string) string,
+	runtimeFiles []core.BlueprintFile,
 	projection controller.EnvironmentComponentComposeProjection,
+	entryMaterializations []controller.EnvironmentEntryMaterialization,
 	entries []etcd.EntryRecord,
 ) ([]etcd.TaskMaterializationRecord, []*agentpb.ExecutionStep, error) {
 	inputs := make([]environmentComponentMaterializationInput, 0,
-		len(projection.PlainFiles)+len(projection.EnvironmentFiles))
+		len(runtimeFiles)+len(projection.PlainFiles)+len(projection.EnvironmentFiles)+len(entryMaterializations))
+	for _, materialization := range entryMaterializations {
+		inputs = append(inputs, environmentComponentMaterializationInput{
+			destination: materialization.Destination,
+			serviceID:   materialization.ServiceID,
+			serviceName: materialization.ServiceName,
+			outputKind:  materialization.OutputKind,
+			uid:         materialization.UID,
+			gid:         materialization.GID,
+			mode:        materialization.Mode,
+			source:      materialization.Source,
+			resolve:     true,
+		})
+	}
+	for _, file := range runtimeFiles {
+		inputs = append(inputs, environmentComponentMaterializationInput{
+			destination: file.Path, outputKind: etcd.TaskMaterializationOutputPlainFile,
+			mode: entrymaterialization.ModeReadOnly,
+			source: etcd.TaskMaterializationSource{
+				Kind: etcd.TaskMaterializationSourceBlueprintFile,
+				BlueprintFile: &etcd.TaskBlueprintFileValueReference{
+					RevisionID: revisionID, Path: file.Path,
+				},
+			},
+			content: append([]byte(nil), file.Content...),
+		})
+	}
 	for _, file := range projection.PlainFiles {
 		inputs = append(inputs, environmentComponentMaterializationInput{
 			destination: file.Path, outputKind: etcd.TaskMaterializationOutputPlainFile,
@@ -1001,26 +1276,13 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 			content: append([]byte(nil), file.Content...),
 		})
 	}
-	entriesByID := make(map[string]etcd.EntryRecord, len(entries))
-	for _, record := range entries {
-		entriesByID[record.Entry.ID] = record
-	}
 	for _, file := range projection.EnvironmentFiles {
 		values := make([]etcd.TaskGeneratedEnvironmentEntryReference, len(file.Values))
 		for index, binding := range file.Values {
-			record, exists := entriesByID[binding.EntryID]
-			if !exists || record.EnvironmentID != environmentID || !record.Entry.Secret {
-				return nil, nil, errs.New(
-					errs.KindValidationFailed,
-					"Component generated Environment references an unavailable secret Entry",
-				)
-			}
+			secret, err := service.materials.PinSecretValue(ctx, projectID, binding.SecretID)
+			if err != nil { return nil, nil, err }
 			values[index] = etcd.TaskGeneratedEnvironmentEntryReference{
-				Name: binding.Name,
-				Value: etcd.TaskEntryValueReference{
-					EntryID: record.Entry.ID, ValueGenerationID: record.CurrentValueGenerationID,
-					Storage: etcd.TaskEntryValueStorageSecret,
-				},
+				Name: binding.Name, Secret: &secret,
 			}
 		}
 		sort.Slice(values, func(left int, right int) bool { return values[left].Name < values[right].Name })
@@ -1042,7 +1304,7 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 	previousDestination := ""
 	for _, input := range inputs {
 		if input.destination == previousDestination {
-			return nil, nil, errs.New(errs.KindNameConflict, "Component materialization destination is duplicated")
+			return nil, nil, errs.New(errs.KindNameConflict, "Environment materialization destination is duplicated")
 		}
 		content := input.content
 		var err error
@@ -1059,7 +1321,7 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 			MaterializationID: allocate(ids.KindConfig, "materialization/"+input.destination),
 			EnvironmentID:     environmentID, Destination: input.destination,
 			ServiceID: input.serviceID, ServiceName: input.serviceName,
-			OutputKind: input.outputKind, Mode: uint32(input.mode),
+			OutputKind: input.outputKind, UID: input.uid, GID: input.gid, Mode: uint32(input.mode),
 			Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]), Source: input.source,
 		}
 		clear(content)
@@ -1244,19 +1506,10 @@ func preserveEnvironmentBlueprintVolumes(
 	return nil
 }
 
-func introducedEnvironmentVolumeIDs(
-	current []controller.ComposeResourceIdentity,
-	previous []etcd.EnvironmentVolumeIdentity,
-) []string {
-	known := make(map[string]struct{}, len(previous))
-	for _, volume := range previous {
-		known[volume.ID] = struct{}{}
-	}
+func managedEnvironmentVolumeIDs(current []controller.ComposeResourceIdentity) []string {
 	result := make([]string, 0, len(current))
 	for _, volume := range current {
-		if _, exists := known[volume.ID]; !exists {
-			result = append(result, volume.ID)
-		}
+		result = append(result, volume.ID)
 	}
 	sort.Strings(result)
 	return result

@@ -109,10 +109,7 @@ func (service *zoneRemovalImpactService) populateBackingImpact(
 	serviceByID := make(map[string]apiTypes.ZoneRemovalImpactService, len(attaches))
 	serviceRevision := make(map[string]int64, len(attaches))
 	for _, attach := range attaches {
-		if len(attach.Record.ServiceIDs) != 1 {
-			return errs.New(errs.KindInternal, "backing Zone impact Attach has invalid Service membership")
-		}
-		consumer, err := service.services.GetService(ctx, attach.Record.ServiceIDs[0])
+		consumer, err := service.services.GetService(ctx, attach.Record.ServiceID)
 		if err != nil {
 			return err
 		}

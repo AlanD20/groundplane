@@ -99,27 +99,26 @@ func MutateEnvironmentVolumeArtifact(
 	if err := rewriteArtifactOwnership(root, mutation.PlanID, mutation.RenderGeneration); err != nil {
 		return nil, err
 	}
-	rewriteLabelPairs := func(values []*agentpb.LabelPair) {
-		for _, pair := range values {
-			if pair == nil {
-				continue
-			}
-			switch pair.Key {
-			case composeLabelPlanID:
-				pair.Value = mutation.PlanID
-			case composeLabelRenderGen:
-				pair.Value = strconv.FormatUint(mutation.RenderGeneration, 10)
-			}
+	for _, service := range owned.Services {
+		if err := rewriteServiceExpectedLabels(
+			service.GetExpectedLabels(), mutation.PlanID, mutation.RenderGeneration,
+		); err != nil {
+			return nil, err
 		}
 	}
-	for _, service := range owned.Services {
-		rewriteLabelPairs(service.GetExpectedLabels())
-	}
 	for _, network := range owned.Networks {
-		rewriteLabelPairs(network.GetExpectedLabels())
+		labels, err := stableExpectedLabels(network.GetExpectedLabels())
+		if err != nil {
+			return nil, err
+		}
+		network.ExpectedLabels = labels
 	}
 	for _, volume := range owned.Volumes {
-		rewriteLabelPairs(volume.GetExpectedLabels())
+		labels, err := stableExpectedLabels(volume.GetExpectedLabels())
+		if err != nil {
+			return nil, err
+		}
+		volume.ExpectedLabels = labels
 	}
 	sort.Slice(owned.Volumes, func(left, right int) bool {
 		return owned.Volumes[left].GetVolumeId() < owned.Volumes[right].GetVolumeId()
@@ -294,9 +293,8 @@ func scalarNode(value string) *yaml.Node {
 func volumeArtifactOwnershipLabels(environmentID string, mutation VolumeArtifactMutation) map[string]string {
 	return map[string]string{
 		composeLabelEnvironmentID: environmentID,
-		composeLabelKind:          "volume", composeLabelManaged: "true", composeLabelPlanID: mutation.PlanID,
+		composeLabelKind:          "volume", composeLabelManaged: "true",
 		composeLabelProjectID: mutation.ProjectID,
-		composeLabelRenderGen: strconv.FormatUint(mutation.RenderGeneration, 10),
 		composeLabelTenantID:  mutation.TenantID,
 	}
 }
@@ -344,11 +342,48 @@ func rewriteArtifactOwnership(root *yaml.Node, planID string, generation uint64)
 			if labels.Kind != yaml.MappingNode {
 				return errs.New(errs.KindInternal, "normalized Compose ownership labels are corrupt")
 			}
-			setMappingScalar(labels, composeLabelPlanID, planID)
-			setMappingScalar(labels, composeLabelRenderGen, strconv.FormatUint(generation, 10))
+			if section == "services" {
+				setMappingScalar(labels, composeLabelPlanID, planID)
+				setMappingScalar(labels, composeLabelRenderGen, strconv.FormatUint(generation, 10))
+			} else {
+				removeMappingValue(labels, composeLabelPlanID)
+				removeMappingValue(labels, composeLabelRenderGen)
+			}
 		}
 	}
 	return nil
+}
+
+func rewriteServiceExpectedLabels(labels []*agentpb.LabelPair, planID string, generation uint64) error {
+	foundPlan, foundGeneration := false, false
+	for _, label := range labels {
+		if label == nil {
+			return errs.New(errs.KindInternal, "Compose artifact Service labels are corrupt")
+		}
+		switch label.Key {
+		case composeLabelPlanID:
+			label.Value, foundPlan = planID, true
+		case composeLabelRenderGen:
+			label.Value, foundGeneration = strconv.FormatUint(generation, 10), true
+		}
+	}
+	if !foundPlan || !foundGeneration {
+		return errs.New(errs.KindInternal, "Compose artifact Service labels are incomplete")
+	}
+	return nil
+}
+
+func stableExpectedLabels(labels []*agentpb.LabelPair) ([]*agentpb.LabelPair, error) {
+	stable := labels[:0]
+	for _, label := range labels {
+		if label == nil {
+			return nil, errs.New(errs.KindInternal, "persistent Compose artifact labels are corrupt")
+		}
+		if label.Key != composeLabelPlanID && label.Key != composeLabelRenderGen {
+			stable = append(stable, label)
+		}
+	}
+	return stable, nil
 }
 
 func setMappingScalar(mapping *yaml.Node, key string, value string) {

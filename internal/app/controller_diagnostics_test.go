@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/localdiag"
@@ -40,8 +39,8 @@ func TestControllerConfigPathUsesDefaultAndEnvironmentOverride(t *testing.T) {
 	}
 }
 
-// Rationale: both diagnostics must load strict daemon YAML and forward its
-// exact key path and configured endpoint order through their app ports.
+// Rationale: both diagnostics validate strict daemon YAML while etcd
+// inspection remains bound to the Controller-owned private endpoint.
 func TestControllerDiagnosticsLoadAndForwardControllerConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "controller.yaml")
 	contents := []byte(
@@ -49,7 +48,7 @@ func TestControllerDiagnosticsLoadAndForwardControllerConfig(t *testing.T) {
 			"runner:\n  network_pool: 10.240.0.0/24\n  host_uid_range: 200000-200007\n" +
 			"  subuid_range: 300000-824287\n  subgid_range: 900000-1424287\n" +
 			"  image: localhost:5000/groundplane-runner@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-			"etcd:\n  endpoints: [10.0.0.2:2379, 10.0.0.1:2379]\nage_key_path: /custom/controller.age\n",
+			"age_key_path: /custom/controller.age\n",
 	)
 	if err := os.WriteFile(configPath, contents, 0o600); err != nil {
 		t.Fatalf("write Controller config: %v", err)
@@ -69,18 +68,17 @@ func TestControllerDiagnosticsLoadAndForwardControllerConfig(t *testing.T) {
 		t.Fatalf("inspectControllerKeyFromConfig() = %#v, %v", keyInfo, err)
 	}
 
-	wantEndpoints := []string{"10.0.0.2:2379", "10.0.0.1:2379"}
 	rows, err := inspectControllerEtcdFromConfig(
 		context.Background(),
 		configPath,
 		func(_ context.Context, endpoints []string) ([]localdiag.EtcdEndpoint, error) {
-			if !reflect.DeepEqual(endpoints, wantEndpoints) {
-				t.Fatalf("endpoints = %#v, want %#v", endpoints, wantEndpoints)
+			if len(endpoints) != 1 || endpoints[0] != "127.0.0.1:2379" {
+				t.Fatalf("endpoints = %#v", endpoints)
 			}
 			return []localdiag.EtcdEndpoint{{Endpoint: endpoints[0], Healthy: true}}, nil
 		},
 	)
-	if err != nil || len(rows) != 1 || rows[0].Endpoint != wantEndpoints[0] {
+	if err != nil || len(rows) != 1 || rows[0].Endpoint != "127.0.0.1:2379" {
 		t.Fatalf("inspectControllerEtcdFromConfig() = %#v, %v", rows, err)
 	}
 }
@@ -89,7 +87,7 @@ func TestControllerDiagnosticsLoadAndForwardControllerConfig(t *testing.T) {
 // touches its infrastructure dependency.
 func TestControllerDiagnosticsRejectInvalidConfigBeforeForwarding(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "controller.yaml")
-	if err := os.WriteFile(configPath, []byte("etcd:\n  endpoints: []\n"), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte("etcd:\n  key_prefix: invalid\n"), 0o600); err != nil {
 		t.Fatalf("write Controller config: %v", err)
 	}
 

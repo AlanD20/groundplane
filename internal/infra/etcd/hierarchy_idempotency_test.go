@@ -2,12 +2,102 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func TestHierarchyCreationPublishesDeletionCoordination(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryHierarchyStore()
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 191), Slug: "deletion", Name: "Deletion"}
+	if _, err := hierarchy.CreateTenant(ctx, tenant); err != nil {
+		t.Fatalf("CreateTenant() error = %v", err)
+	}
+	project := ProjectRecord{
+		ID: hierarchyTestID(ids.KindProject, 192), TenantID: tenant.ID,
+		Slug: "deletion", Name: "Deletion", Kind: ProjectKindTenant,
+	}
+	if _, err := hierarchy.CreateProject(ctx, project); err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	now := time.Date(2026, 8, 28, 17, 30, 0, 0, time.UTC)
+	environment := EnvironmentRecord{
+		ID: hierarchyTestID(ids.KindEnvironment, 193), ProjectID: project.ID,
+		Name: "deletion", NetworkPool: "10.120.253.0/24",
+		VolumeDir:         "/var/lib/groundplane/vol/" + tenant.ID + "/" + project.ID + "/" + hierarchyTestID(ids.KindEnvironment, 193),
+		ProvisioningState: EnvironmentProvisioningReady,
+		CreateTaskID:      ids.NewAt(ids.KindTask, now, 194),
+		CreatedAt:         now,
+	}
+	if _, err := hierarchy.CreateEnvironment(ctx, environment); err != nil {
+		t.Fatalf("CreateEnvironment() error = %v", err)
+	}
+	journal, err := newHierarchyDeletionRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyDeletionRepository() error = %v", err)
+	}
+	begin := hierarchyDeletionCreationTestBegin(
+		now,
+		HierarchyDeletionTargetEnvironment,
+		environment.ID,
+		HierarchyDeletionOperationEnvironment,
+		"e",
+	)
+	result, err := journal.Begin(ctx, begin)
+	if err != nil {
+		t.Fatalf("Begin(Environment deletion) error = %v", err)
+	}
+	if result.Operation.Tombstone.TargetID != environment.ID || result.Operation.Tombstone.DeletionEpoch != 2 {
+		t.Fatalf("Begin(Environment deletion) = %#v", result.Operation.Tombstone)
+	}
+}
+
+func hierarchyDeletionCreationTestBegin(
+	now time.Time,
+	targetKind HierarchyDeletionTargetKind,
+	targetID string,
+	operationKind HierarchyDeletionOperationKind,
+	digestDigit string,
+) HierarchyDeletionBegin {
+	taskID := ids.NewAt(ids.KindTask, now, 195)
+	taskOperationID := ids.NewAt(ids.KindOperation, now, 196)
+	key := "hierarchy-creation-deletion-key"
+	ciphertext := []byte("protected-" + key)
+	digest := sha256.Sum256(ciphertext)
+	body := []byte(`{"task_id":"` + taskID + `"}`)
+	marker := IdempotencyMarker{
+		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerPending,
+		Locator: IdempotencyLocator{
+			ScopeKind: IdempotencyScopeKind(targetKind), ScopeID: targetID,
+			Method: http.MethodDelete, Route: "/" + string(targetKind) + "/{id}", Key: key,
+		},
+		Intent: ProtectedIntentRecord{
+			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
+			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
+		},
+		Response: IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
+		TaskID:   taskID, CreatedAt: now, UpdatedAt: now,
+	}
+	idempotencyDigest := sha256.Sum256([]byte(key))
+	return HierarchyDeletionBegin{
+		OperationID: "del_" + strings.Repeat(digestDigit, 32), TaskOperationID: taskOperationID,
+		OperationKind: operationKind, TargetKind: targetKind, TargetID: targetID,
+		TaskID: taskID, IdempotencyHash: hex.EncodeToString(idempotencyDigest[:]), Marker: marker,
+		CreatedAt: now, DeadlineAt: now.Add(hierarchyDeletionAttemptTimeout),
+	}
+}
 
 func TestHierarchyCreateTenantIdempotentCommitsResourceIndexesAndMarker(t *testing.T) {
 	t.Parallel()
@@ -37,6 +127,7 @@ func TestHierarchyCreateTenantIdempotentCommitsResourceIndexesAndMarker(t *testi
 	if err != nil || stored.Record != record {
 		t.Fatalf("GetTenant() = %#v, %v", stored, err)
 	}
+	assertHierarchyCoordinationRecord(t, repository.store.(*memoryHierarchyStore), HierarchyDeletionTargetTenant, record.ID, stored.Revision)
 	replayed, err := repository.CreateTenantIdempotent(context.Background(), record, marker)
 	if err != nil || replayed.kind != idempotencyTransactionExisting {
 		t.Fatalf("CreateTenantIdempotent(replay) = %#v, %v", replayed, err)

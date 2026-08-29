@@ -40,8 +40,8 @@ type TaskEventSnapshot struct {
 }
 
 // TaskListScope selects one immutable Task journal. ID is empty for global
-// and platform scope, a Tenant id for tenant scope, and an Environment id for
-// environment scope.
+// and platform scope, or contains the stable Tenant, Project, or Environment
+// id selected by the corresponding scope.
 type TaskListScope struct {
 	Kind TaskListScopeKind
 	ID   string
@@ -53,6 +53,7 @@ const (
 	TaskListScopeGlobal            TaskListScopeKind = "global"
 	TaskListScopePlatformWorkspace TaskListScopeKind = "platform_workspace"
 	TaskListScopeTenantWorkspace   TaskListScopeKind = "tenant_workspace"
+	TaskListScopeProject           TaskListScopeKind = "project"
 	TaskListScopeEnvironment       TaskListScopeKind = "environment"
 )
 
@@ -271,6 +272,24 @@ func (repository *TaskRepository) ListTasksByScope(
 			func(record TaskRecord) bool {
 				return record.Owner.WorkspaceType == TaskWorkspaceTenant && record.Owner.TenantID == scope.ID
 			},
+		)
+		return repository.verifyTaskOwnerPage(ctx, page, err)
+	case TaskListScopeProject:
+		if ids.Validate(ids.KindProject, scope.ID) != nil {
+			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "project task scope is invalid")
+		}
+		page, err := listFilteredPrimaryPage(
+			ctx,
+			repository.store,
+			"tasks",
+			"project",
+			scope.ID,
+			taskPrefix,
+			ids.KindTask,
+			request,
+			decodeTaskRecord,
+			identity,
+			func(record TaskRecord) bool { return record.Owner.ProjectID == scope.ID },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeEnvironment:

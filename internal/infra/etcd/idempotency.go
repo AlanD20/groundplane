@@ -66,6 +66,7 @@ const (
 	IdempotencyReplayTargetSecret       IdempotencyReplayTargetKind = "secret"
 	IdempotencyReplayTargetZone         IdempotencyReplayTargetKind = "zone"
 	IdempotencyReplayTargetService      IdempotencyReplayTargetKind = "service"
+	IdempotencyReplayTargetVolume       IdempotencyReplayTargetKind = "volume"
 )
 
 type IdempotencyReplayTarget struct {
@@ -307,6 +308,10 @@ func validateIdempotencyReplayTarget(target IdempotencyReplayTarget) error {
 		if ids.Validate(ids.KindService, target.ID) != nil {
 			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
 		}
+	case IdempotencyReplayTargetVolume:
+		if ids.Validate(ids.KindVolume, target.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "idempotency replay target id is invalid")
+		}
 	default:
 		return errs.New(errs.KindValidationFailed, "idempotency replay target kind is invalid")
 	}
@@ -380,7 +385,8 @@ func validateIdempotencyMarker(marker IdempotencyMarker) error {
 			return corruptIdempotencyMarker()
 		}
 	case IdempotencyMarkerTask:
-		if ids.Validate(ids.KindTask, marker.TaskID) != nil || !validTaskResponse(marker.Response, marker.TaskID) {
+		if ids.Validate(ids.KindTask, marker.TaskID) != nil ||
+			(!validTaskResponse(marker.Response, marker.TaskID) && !validEntryMutationTaskResponse(marker)) {
 			return corruptIdempotencyMarker()
 		}
 		switch marker.State {
@@ -399,6 +405,31 @@ func validateIdempotencyMarker(marker IdempotencyMarker) error {
 		return corruptIdempotencyMarker()
 	}
 	return nil
+}
+
+func validEntryMutationTaskResponse(marker IdempotencyMarker) bool {
+	status := http.StatusCreated
+	if marker.Locator.Method == http.MethodPatch && marker.Locator.Route == "/entries/{id}" {
+		status = http.StatusOK
+	} else if marker.Locator.Method != http.MethodPost || marker.Locator.Route != "/entries" {
+		return false
+	}
+	if marker.ReplayTarget == nil || marker.ReplayTarget.Kind != IdempotencyReplayTargetEntry ||
+		ids.Validate(ids.KindEnvEntry, marker.ReplayTarget.ID) != nil || marker.Response.Status != status ||
+		marker.Response.ContentKind != "application/json" {
+		return false
+	}
+	var body struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(marker.Response.Body, &body) != nil || body.ID != marker.ReplayTarget.ID {
+		return false
+	}
+	var compact bytes.Buffer
+	if json.Compact(&compact, marker.Response.Body) != nil {
+		return false
+	}
+	return bytes.Equal(marker.Response.Body, compact.Bytes())
 }
 
 func validMarkerTime(value time.Time) bool {
@@ -429,7 +460,8 @@ func validDirectResponse(method string, response IdempotencyResponse) bool {
 }
 
 func validTaskResponse(response IdempotencyResponse, taskID string) bool {
-	if response.Status != http.StatusAccepted || response.ContentKind != "application/json" {
+	if response.Status != http.StatusOK && response.Status != http.StatusAccepted && response.Status != http.StatusCreated ||
+		response.ContentKind != "application/json" {
 		return false
 	}
 	var body struct {

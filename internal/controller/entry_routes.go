@@ -31,6 +31,11 @@ type EntryMutator interface {
 		apiTypes.EntryCreateRequest,
 		string,
 	) (etcd.IdempotencyResponse, error)
+	BulkUpsertEntries(
+		context.Context,
+		apiTypes.EntryBulkUpsertRequest,
+		string,
+	) (etcd.IdempotencyResponse, error)
 	EditEntry(
 		context.Context,
 		string,
@@ -47,6 +52,11 @@ type entryCreateInput struct {
 
 type entryEditInput struct {
 	ID             string `path:"id" pattern:"^ev_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	RawBody        []byte
+}
+
+type entryBulkUpsertInput struct {
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 	RawBody        []byte
 }
@@ -126,6 +136,34 @@ func (s *Server) registerEntries() {
 		},
 	}
 	huma.Register(s.API, operation, s.createEntry)
+	bulkResponseSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.EntryBulkUpsertResult](), true, "EntryBulkUpsertResult",
+	)
+	bulkOperation := huma.Operation{
+		OperationID: "entry.bulk-upsert", Method: http.MethodPost, Path: "/entries/bulk",
+		Summary: "Atomically upsert literal environment variables", Tags: []string{"Entry"},
+		DefaultStatus: http.StatusAccepted, SkipValidateBody: true,
+		Middlewares: huma.Middlewares{s.rejectEntryQuery},
+	}
+	bulkOperation.RequestBody = &huma.RequestBody{
+		Required: true,
+		Content: map[string]*huma.MediaType{
+			"application/json": {
+				Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[apiTypes.EntryBulkUpsertRequest](), true, "EntryBulkUpsertRequest",
+				),
+			},
+		},
+	}
+	bulkOperation.Responses = map[string]*huma.Response{
+		strconv.Itoa(http.StatusAccepted): {
+			Description: http.StatusText(http.StatusAccepted),
+			Content: map[string]*huma.MediaType{
+				"application/json": {Schema: bulkResponseSchema},
+			},
+		},
+	}
+	huma.Register(s.API, bulkOperation, s.bulkUpsertEntries)
 	editOperation := huma.Operation{
 		OperationID: "entry.edit", Method: http.MethodPatch, Path: "/entries/{id}",
 		Summary: "Edit an environment Entry's source and exposure", Tags: []string{"Entry"},
@@ -172,7 +210,36 @@ func (s *Server) registerEntries() {
 		Summary: "Reveal an encrypted Entry value", Tags: []string{"Entry"},
 	}, s.revealEntry)
 	s.setRoutePolicy("POST /api/v1/entries", routePolicy{body: jsonBody})
+	s.setRoutePolicy("POST /api/v1/entries/bulk", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/entries/{id}", routePolicy{body: jsonBody})
+}
+
+func (s *Server) bulkUpsertEntries(
+	ctx context.Context,
+	request *entryBulkUpsertInput,
+) (*entryMutationOutput, error) {
+	if s.entryMutations == nil {
+		return nil, errs.New(errs.KindInternal, "entry mutator is not configured")
+	}
+	defer clear(request.RawBody)
+	input, err := decodeEntryBulkUpsert(request.RawBody)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	response, err := s.entryMutations.BulkUpsertEntries(ctx, input, request.IdempotencyKey)
+	if err != nil {
+		return nil, normalizeProjectError(err)
+	}
+	return &entryMutationOutput{
+		Status:      response.Status,
+		ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			if _, writeErr := ctx.BodyWriter().Write(response.Body); writeErr != nil && s.Logger != nil {
+				s.Logger.Error("controller: write Entry bulk upsert response", slog.Any("error", writeErr))
+			}
+		},
+	}, nil
 }
 
 func (s *Server) createEntry(
@@ -334,6 +401,85 @@ func decodeEntryCreate(body []byte) (apiTypes.EntryCreateRequest, error) {
 	}
 	input.Source = source
 	return input, nil
+}
+
+func decodeEntryBulkUpsert(body []byte) (apiTypes.EntryBulkUpsertRequest, error) {
+	members, err := decodeEntryJSONObject(body, "entry bulk upsert")
+	if err != nil {
+		return apiTypes.EntryBulkUpsertRequest{}, err
+	}
+	defer clearEntryJSONMembers(members)
+	allowed := map[string]struct{}{
+		"environment_id": {}, "entries": {}, "exposure": {}, "secret": {},
+	}
+	for name := range members {
+		if _, ok := allowed[name]; !ok {
+			return apiTypes.EntryBulkUpsertRequest{}, errs.New(
+				errs.KindMalformedRequest, "entry bulk upsert body contains an unknown member",
+			)
+		}
+	}
+	for _, required := range []string{"environment_id", "entries", "exposure", "secret"} {
+		if _, present := members[required]; !present {
+			return apiTypes.EntryBulkUpsertRequest{}, errs.Newf(
+				errs.KindValidationFailed, "entry bulk upsert requires %s", required,
+			)
+		}
+	}
+	input := apiTypes.EntryBulkUpsertRequest{}
+	if err := decodeEntryJSONMember(members["environment_id"], &input.EnvironmentID); err != nil {
+		return apiTypes.EntryBulkUpsertRequest{}, err
+	}
+	if err := decodeEntryJSONMember(members["exposure"], &input.Exposure); err != nil {
+		return apiTypes.EntryBulkUpsertRequest{}, err
+	}
+	if err := decodeEntryJSONMember(members["secret"], &input.Secret); err != nil {
+		return apiTypes.EntryBulkUpsertRequest{}, err
+	}
+	var rawEntries []json.RawMessage
+	if err := decodeEntryJSONMember(members["entries"], &rawEntries); err != nil {
+		return apiTypes.EntryBulkUpsertRequest{}, err
+	}
+	input.Entries = make([]apiTypes.EntryBulkItem, len(rawEntries))
+	for index, raw := range rawEntries {
+		item, err := decodeEntryBulkItem(raw)
+		clear(raw)
+		if err != nil {
+			return apiTypes.EntryBulkUpsertRequest{}, err
+		}
+		input.Entries[index] = item
+	}
+	return input, nil
+}
+
+func decodeEntryBulkItem(body []byte) (apiTypes.EntryBulkItem, error) {
+	members, err := decodeEntryJSONObject(body, "entry bulk item")
+	if err != nil {
+		return apiTypes.EntryBulkItem{}, err
+	}
+	defer clearEntryJSONMembers(members)
+	for name := range members {
+		if name != "key" && name != "value" {
+			return apiTypes.EntryBulkItem{}, errs.New(
+				errs.KindMalformedRequest, "entry bulk item contains an unknown member",
+			)
+		}
+	}
+	for _, required := range []string{"key", "value"} {
+		if _, present := members[required]; !present {
+			return apiTypes.EntryBulkItem{}, errs.Newf(
+				errs.KindValidationFailed, "entry bulk item requires %s", required,
+			)
+		}
+	}
+	item := apiTypes.EntryBulkItem{}
+	if err := decodeEntryJSONMember(members["key"], &item.Key); err != nil {
+		return apiTypes.EntryBulkItem{}, err
+	}
+	if err := decodeEntryJSONMember(members["value"], &item.Value); err != nil {
+		return apiTypes.EntryBulkItem{}, err
+	}
+	return item, nil
 }
 
 func decodeEntrySource(body []byte) (apiTypes.EntrySource, error) {

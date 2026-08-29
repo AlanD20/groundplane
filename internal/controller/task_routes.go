@@ -20,6 +20,7 @@ type taskListInput struct {
 	Limit       int    `query:"limit" required:"false" minimum:"1" maximum:"200"`
 	Cursor      string `query:"cursor" required:"false"`
 	Environment string `query:"environment" required:"false" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Project     string `query:"project" required:"false" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
 	Workspace   string `query:"workspace" required:"false" pattern:"^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$"`
 }
 
@@ -258,7 +259,13 @@ func taskAPIType(taskType etcd.TaskType, actor etcd.TaskActor) (string, error) {
 }
 
 func taskListScope(request *taskListInput) (etcd.TaskListScope, error) {
-	if request.Environment != "" && request.Workspace != "" {
+	scopeCount := 0
+	for _, value := range []string{request.Environment, request.Project, request.Workspace} {
+		if value != "" {
+			scopeCount++
+		}
+	}
+	if scopeCount > 1 {
 		return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list scopes are mutually exclusive")
 	}
 	if request.Environment != "" {
@@ -266,6 +273,12 @@ func taskListScope(request *taskListInput) (etcd.TaskListScope, error) {
 			return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list Environment scope is invalid")
 		}
 		return etcd.TaskListScope{Kind: etcd.TaskListScopeEnvironment, ID: request.Environment}, nil
+	}
+	if request.Project != "" {
+		if ids.Validate(ids.KindProject, request.Project) != nil {
+			return etcd.TaskListScope{}, errs.New(errs.KindValidationFailed, "task list Project scope is invalid")
+		}
+		return etcd.TaskListScope{Kind: etcd.TaskListScopeProject, ID: request.Project}, nil
 	}
 	if request.Workspace == "platform" {
 		return etcd.TaskListScope{Kind: etcd.TaskListScopePlatformWorkspace}, nil
@@ -314,7 +327,7 @@ func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)
 	query := requestURL.Query()
 	for key, values := range query {
 		switch key {
-		case "environment", "workspace", "limit", "cursor":
+		case "environment", "project", "workspace", "limit", "cursor":
 		default:
 			s.writeTaskListProblem(ctx, http.StatusBadRequest, "Task list query is invalid")
 			return
@@ -324,7 +337,13 @@ func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)
 			return
 		}
 	}
-	if query.Has("environment") && query.Has("workspace") {
+	scopeCount := 0
+	for _, key := range []string{"environment", "project", "workspace"} {
+		if query.Has(key) {
+			scopeCount++
+		}
+	}
+	if scopeCount > 1 {
 		s.writeTaskListProblem(ctx, http.StatusUnprocessableEntity, "Task list scopes are mutually exclusive")
 		return
 	}

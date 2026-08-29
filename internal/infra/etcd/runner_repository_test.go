@@ -342,7 +342,7 @@ func TestRunnerMarkersAreOperationSpecific(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvisioningRunner() error = %v", err)
 	}
-	removeTask.Params = runnerRemovalTaskParams(removeRecord)
+	removeTask.Params = RunnerRemovalTaskParams(removeRecord)
 	removeMarker := runnerTestMarker(removeTask, desired)
 	if err := validateRunnerDeleteMarker(desired, removeTask, removeMarker); err != nil {
 		t.Fatalf("validateRunnerDeleteMarker() error = %v", err)
@@ -351,7 +351,7 @@ func TestRunnerMarkersAreOperationSpecific(t *testing.T) {
 	if applies, err := taskOwnsRunner(removeTask); applies || !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("taskOwnsRunner(non-canonical slot) = %v, %v", applies, err)
 	}
-	removeTask.Params = runnerRemovalTaskParams(removeRecord)
+	removeTask.Params = RunnerRemovalTaskParams(removeRecord)
 	removeMarker.ReplayTarget = nil
 	if err := validateRunnerDeleteMarker(desired, removeTask, removeMarker); !errors.Is(
 		err, errs.New(errs.KindValidationFailed, ""),
@@ -387,7 +387,7 @@ func TestRunnerObservationAndRemovalFinalizer(t *testing.T) {
 	}
 
 	removeTask := runnerTestTask(desired, TaskRemove, 62, "runner-removal-key-001")
-	removeTask.Params = runnerRemovalTaskParams(ready.Record)
+	removeTask.Params = RunnerRemovalTaskParams(ready.Record)
 	removeMarker := runnerTestMarker(removeTask, desired)
 	tombstone := DeletionTombstoneRecord{
 		TargetKind: DeletionTargetRunner, TargetID: desired.ID,
@@ -494,7 +494,7 @@ func TestRunnerRemovalFailureTimeoutAbortAndRetryRetainAllocations(t *testing.T)
 	ready := runnerTestFinishCreate(t, store, repository, createTask, TaskStatusCompleted)
 	allocation := ready.Record.Allocation
 	removeTask := runnerTestTask(desired, TaskRemove, 72, "runner-removal-failure-key")
-	removeTask.Params = runnerRemovalTaskParams(ready.Record)
+	removeTask.Params = RunnerRemovalTaskParams(ready.Record)
 	removeMarker := runnerTestMarker(removeTask, desired)
 	tombstone := DeletionTombstoneRecord{
 		TargetKind: DeletionTargetRunner, TargetID: desired.ID, TargetRevision: ready.Revision,
@@ -897,7 +897,7 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			removeTask := runnerTestTask(
 				desired, TaskRemove, 400+index, "runner-owner-evidence-remove-0"+string(rune('0'+index)),
 			)
-			removeTask.Params = runnerRemovalTaskParams(ready.Record)
+			removeTask.Params = RunnerRemovalTaskParams(ready.Record)
 			removeMarker := runnerTestMarker(removeTask, desired)
 			tombstone := DeletionTombstoneRecord{
 				TargetKind: DeletionTargetRunner, TargetID: desired.ID, TargetRevision: ready.Revision,

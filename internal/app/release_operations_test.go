@@ -1,12 +1,25 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func TestReleaseImageWithTagRejectsDigestOnlyImageWithoutCurrentTag(t *testing.T) {
+	t.Parallel()
+
+	_, _, _, err := releaseImageWithTag(
+		"registry.example.invalid/app@sha256:"+strings.Repeat("a", 64),
+		"",
+	)
+	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed {
+		t.Fatalf("releaseImageWithTag() error = %v, want validation_failed", err)
+	}
+}
 
 func TestValidateReleaseDependencyOrderRejectsConsumerBeforePrerequisite(t *testing.T) {
 	candidate := func(name string) releaseCandidateInput {

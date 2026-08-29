@@ -72,8 +72,6 @@ func validManagedVolumeDirectoryPlan() *agentpb.ExecutionPlan {
 					{Key: labelEnvironmentID, Value: testManagedEnvironmentID},
 					{Key: labelKind, Value: "volume"},
 					{Key: labelManaged, Value: "true"},
-					{Key: labelPlanID, Value: testPlanID},
-					{Key: labelRenderGen, Value: "7"},
 				},
 			}},
 		}},

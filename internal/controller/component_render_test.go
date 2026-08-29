@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"crypto/sha256"
 	"errors"
 	"testing"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -16,34 +18,33 @@ type componentRenderTestRenderer struct {
 	filePath    string
 }
 
-func (renderer componentRenderTestRenderer) Render(
+func (renderer componentRenderTestRenderer) Plan(
 	_ core.Environment,
 	component core.Component,
-) (map[string]components.GeneratedService, map[string][]byte, error) {
-	return map[string]components.GeneratedService{
-		renderer.serviceName: {
-			Service: core.Service{
-				ID: component.GeneratedServices[0], Name: renderer.serviceName, Image: "example/component:1",
-				Zones: []string{"frontend"}, Restart: "unless-stopped", Replicas: 1,
-			},
-		},
-	}, map[string][]byte{renderer.filePath: []byte(renderer.serviceName)}, nil
-}
-
-func (renderer componentRenderTestRenderer) Healthy(core.Environment, core.Component) (bool, error) {
-	return true, nil
+) (componentsdk.EnvironmentPlan, error) {
+	return componentsdk.EnvironmentPlan{
+		Services: []componentsdk.ManagedService{{
+			ID: component.GeneratedServices[0], Name: renderer.serviceName, Image: "example/component:1",
+			NetworkMode: componentsdk.ManagedNetworkModeZones,
+			Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend"}},
+			Restart:     "unless-stopped", Replicas: 1,
+		}},
+		Files: []componentsdk.ManagedFile{{Path: renderer.filePath, Content: []byte(renderer.serviceName)}},
+	}, nil
 }
 
 // Rationale: every registered renderer must fold into one deterministic,
 // owner-tagged result regardless of catalog or durable Component order.
 func TestRenderEnvironmentComponentsCompilesDeterministicCatalog(t *testing.T) {
 	environment := componentRenderTestEnvironment()
-	catalog := []components.Registration{
+	catalog := []EnvironmentComponentRegistration{
 		componentRenderTestRegistration(
+			t,
 			core.ComponentKindEdgeCloudflare,
 			componentRenderTestRenderer{serviceName: "tunnel", filePath: "components/tunnel/config"},
 		),
 		componentRenderTestRegistration(
+			t,
 			core.ComponentKindIngressCaddy,
 			componentRenderTestRenderer{serviceName: "caddy", filePath: "components/caddy/Caddyfile"},
 		),
@@ -73,7 +74,8 @@ func TestRenderEnvironmentComponentsRejectsAuthoredServiceCollision(t *testing.T
 			ID: ids.NewAt(ids.KindService, componentRenderTestTime(), 905), Name: "caddy", Image: "authored:1",
 		},
 	}
-	catalog := []components.Registration{componentRenderTestRegistration(
+	catalog := []EnvironmentComponentRegistration{componentRenderTestRegistration(
+		t,
 		core.ComponentKindIngressCaddy,
 		componentRenderTestRenderer{serviceName: "caddy", filePath: "components/caddy/Caddyfile"},
 	)}
@@ -100,11 +102,17 @@ func componentRenderTestEnvironment() core.Environment {
 				ID: ids.NewAt(ids.KindComponent, at, 902), Owner: core.ComponentOwnerEnvironment,
 				OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
 				GeneratedServices: []string{ids.NewAt(ids.KindService, at, 903)},
+				Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+					SecretID: ids.NewAt(ids.KindSecret, at, 907),
+				}},
 			},
 			{
 				ID: ids.NewAt(ids.KindComponent, at, 904), Owner: core.ComponentOwnerEnvironment,
 				OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 				GeneratedServices: []string{ids.NewAt(ids.KindService, at, 906)},
+				Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+					ZoneID: ids.NewAt(ids.KindNetwork, at, 901),
+				}},
 			},
 		},
 	}
@@ -115,11 +123,40 @@ func componentRenderTestTime() time.Time {
 }
 
 func componentRenderTestRegistration(
+	t *testing.T,
 	kind core.ComponentKind,
 	renderer componentRenderTestRenderer,
-) components.Registration {
-	return components.Registration{
-		Kind: kind, Label: string(kind), AllowedOwners: []core.ComponentOwner{core.ComponentOwnerEnvironment},
-		ApplyStrategy: components.EnvironmentRender, Environment: renderer,
+) EnvironmentComponentRegistration {
+	return componentTestRegistration(t, kind, renderer.Plan)
+}
+
+func componentTestRegistration(
+	t *testing.T,
+	kind core.ComponentKind,
+	plan EnvironmentComponentPlanFunc,
+) EnvironmentComponentRegistration {
+	t.Helper()
+	action, err := componentsdk.NewActionDefinition(
+		componentsdk.ActionID("activate-config"),
+		componentsdk.CapabilityManagedConfig,
+		componentsdk.OperationActivate,
+	)
+	if err != nil {
+		t.Fatalf("NewActionDefinition() error = %v", err)
+	}
+	definition, err := componentsdk.NewDefinition(componentsdk.DefinitionInput{
+		Implementation: componentsdk.ImplementationKey(kind),
+		ConfigVariant:  componentsdk.ConfigVariant("test"),
+		Provides:       []componentsdk.Capability{componentsdk.CapabilityServices},
+		OwnerScopes:    []componentsdk.OwnerScope{componentsdk.OwnerScopeEnvironment},
+		Actions:        []componentsdk.ActionDefinition{action},
+	})
+	if err != nil {
+		t.Fatalf("NewDefinition() error = %v", err)
+	}
+	return EnvironmentComponentRegistration{
+		Kind: kind, Definition: definition,
+		CatalogDigest: sha256.Sum256([]byte("test Component catalog:" + string(kind))),
+		Plan:          plan,
 	}
 }

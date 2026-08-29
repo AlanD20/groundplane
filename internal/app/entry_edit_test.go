@@ -195,6 +195,14 @@ type entryEditIdempotencyFake struct {
 	known    idempotentintent.Resolution
 }
 
+func (*entryEditIdempotencyFake) MatchesStaged(
+	context.Context,
+	entryEditEvidence,
+	etcd.ProtectedIntentRecord,
+) (bool, error) {
+	return true, nil
+}
+
 func (idempotency *entryEditIdempotencyFake) Prepare(
 	context.Context,
 	string,

@@ -2,10 +2,8 @@ package controller
 
 import (
 	"errors"
-	"net/netip"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -96,36 +94,5 @@ func TestRenderEnvFileClassifiesMissingResolvedValueAsInternal(t *testing.T) {
 	_, err := RenderEnvFile(entries, nil)
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("RenderEnvFile() error = %v, want %q", err, errs.CodeInternal)
-	}
-}
-
-// Rationale: the Controller must expose one canonical Corefile boundary while
-// delegating all validation and deterministic output to the pure component renderer.
-func TestRenderCorefileDelegatesToPureRenderer(t *testing.T) {
-	input := coredns.CoreDNSRenderInput{
-		Hosts: []coredns.CoreDNSHost{{
-			Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"api.example.com"},
-		}},
-		CatchAll: []coredns.ResolverEndpoint{{Address: netip.MustParseAddr("1.1.1.1")}},
-	}
-	got, err := RenderCorefile(input)
-	if err != nil {
-		t.Fatalf("RenderCorefile() error = %v", err)
-	}
-	want := ".:53 {\n" +
-		"    bind 127.0.0.1\n" +
-		"    hosts {\n" +
-		"        10.200.30.4 api.example.com\n" +
-		"        no_reverse\n" +
-		"        fallthrough\n" +
-		"    }\n" +
-		"    forward . 1.1.1.1\n" +
-		"    reload\n" +
-		"    prometheus 127.0.0.1:9153\n" +
-		"    log\n" +
-		"    errors\n" +
-		"}\n"
-	if string(got) != want {
-		t.Fatalf("RenderCorefile() = %q, want %q", got, want)
 	}
 }

@@ -414,7 +414,7 @@ func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
 	// backing service, and provisioning is a Task rather than a synchronous create.
 	t.Parallel()
 
-	body := `{"backing_service_id":"bks_1","service_ids":["svc_1"]}`
+	body := `{"backing_service_id":"bks_1","credential":{"mode":"new"},"service_id":"svc_1"}`
 	server := exactRequestServer(
 		t,
 		http.MethodPost,
@@ -425,7 +425,10 @@ func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
 	)
 	defer server.Close()
 
-	output := executeNoun(t, newServiceCmd(), server.URL, Scope{AsID: true}, "attach", "svc_1", "bks_1")
+	output := executeNoun(
+		t, newServiceCmd(), server.URL, Scope{AsID: true},
+		"attach", "svc_1", "bks_1", "--new-credential",
+	)
 	want := "{\n  \"task_id\": \"task_attach\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)

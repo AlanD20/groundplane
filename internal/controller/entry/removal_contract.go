@@ -28,14 +28,6 @@ type RemovalEnvironmentIdentity struct {
 	AuthorizedVolumeDir string
 }
 
-// RemovalDependencyFence is the exact singleton revision inspected before a
-// removal is planned. Present=false fences absence of the singleton index.
-type RemovalDependencyFence struct {
-	Present  bool
-	ID       string
-	Revision int64
-}
-
 // RemovalCandidate is capability-owned concurrency evidence. It contains no
 // persistence records, transaction descriptions, tombstones, or HTTP values.
 type RemovalCandidate struct {
@@ -46,7 +38,6 @@ type RemovalCandidate struct {
 	TenantRevision      int64
 	ProjectionRevision  int64
 	Identity            RemovalEnvironmentIdentity
-	Cloudflare          RemovalDependencyFence
 }
 
 type RemovalInspection struct {

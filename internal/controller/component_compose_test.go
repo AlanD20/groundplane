@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -17,44 +18,43 @@ type componentComposeTestRenderer struct {
 	unsupported bool
 }
 
-func (renderer componentComposeTestRenderer) Render(
+func (renderer componentComposeTestRenderer) Plan(
 	environment core.Environment,
 	component core.Component,
-) (map[string]components.GeneratedService, map[string][]byte, error) {
-	service := core.Service{
+) (componentsdk.EnvironmentPlan, error) {
+	service := componentsdk.ManagedService{
 		ID: component.GeneratedServices[0], Name: "router", Image: "router:1",
-		Zones: []string{"frontend"}, Command: []string{"serve"},
-		Aliases:   map[string][]string{"frontend": {"router"}},
-		DependsOn: map[string]core.ServiceDependency{"app": {Condition: "service_started"}},
-		Expose:    []string{"443"}, Restart: "unless-stopped", Replicas: 1,
+		NetworkMode: componentsdk.ManagedNetworkModeZones,
+		Networks: []componentsdk.ManagedNetworkAttachment{{
+			Name: "frontend", Aliases: []string{"router"}, StaticIPv4: "10.60.0.2",
+		}},
+		Dependencies: []componentsdk.ManagedDependency{{ServiceName: "app", Condition: "service_started"}},
+		Command:      []string{"serve"}, Expose: []string{"443"}, Restart: "unless-stopped", Replicas: 1,
+		Mounts: []componentsdk.ManagedMount{
+			{Source: "components/router/config", Target: "/etc/router/config", ReadOnly: true},
+			{Source: "components/router/data", Target: "/var/lib/router"},
+		},
+		SecretEnvironment: []componentsdk.ManagedSecretEnvironment{{
+			Name: "TOKEN", SecretID: ids.NewAt(ids.KindSecret, componentRenderTestTime(), 20),
+		}},
 	}
 	if renderer.unsupported {
-		service.Resources.Mem = "64m"
+		service.Image = ""
 	}
-	return map[string]components.GeneratedService{
-		"router": {
-			Service:    service,
-			StaticIPv4: map[string]string{"frontend": "10.60.0.2"},
-			Mounts: []components.GeneratedMount{
-				{Source: "components/router/config", Target: "/etc/router/config", ReadOnly: true},
-				{Source: "components/router/data", Target: "/var/lib/router"},
-			},
-			SecretEnvironment: []components.GeneratedSecretEnvironment{{
-				Name: "TOKEN", EntryID: environment.Entries[0].ID,
-			}},
+	return componentsdk.EnvironmentPlan{
+		Services: []componentsdk.ManagedService{service},
+		Files: []componentsdk.ManagedFile{
+			{Path: "components/router/config", Content: []byte("routes\n")},
+			{Path: "components/router/data/.groundplane-managed", Content: []byte{}},
 		},
-	}, map[string][]byte{"components/router/config": []byte("routes\n")}, nil
-}
-
-func (componentComposeTestRenderer) Healthy(core.Environment, core.Component) (bool, error) {
-	return true, nil
+	}, nil
 }
 
 // Rationale: Environment components must enter the authored Compose project
 // with stable identities and host paths while secret bytes remain exclusively
 // in the transient materialization pipeline.
 func TestProjectEnvironmentComponentsBuildsComposeAndMaterializationInputs(t *testing.T) {
-	environment, catalog, project := componentComposeTestInput(false)
+	environment, catalog, project := componentComposeTestInput(t, false)
 
 	projection, err := ProjectEnvironmentComponents(project, environment, catalog)
 	if err != nil {
@@ -88,8 +88,9 @@ func TestProjectEnvironmentComponentsBuildsComposeAndMaterializationInputs(t *te
 		projection.Services[0].Name != "router" {
 		t.Fatalf("generated identities = %#v", projection.Services)
 	}
-	if len(projection.PlainFiles) != 1 || projection.PlainFiles[0].Path != "components/router/config" ||
-		string(projection.PlainFiles[0].Content) != "routes\n" {
+	if len(projection.PlainFiles) != 2 || projection.PlainFiles[0].Path != "components/router/config" ||
+		string(projection.PlainFiles[0].Content) != "routes\n" ||
+		projection.PlainFiles[1].Path != "components/router/data/.groundplane-managed" {
 		t.Fatalf("plain files = %#v", projection.PlainFiles)
 	}
 	if len(projection.EnvironmentFiles) != 1 {
@@ -107,10 +108,10 @@ func TestProjectEnvironmentComponentsBuildsComposeAndMaterializationInputs(t *te
 	}
 }
 
-// Rationale: registry implementations are extensible, so a renderer using an
-// unimplemented field must fail rather than produce a lossy Compose service.
-func TestProjectEnvironmentComponentsRejectsUnsupportedGeneratedServiceField(t *testing.T) {
-	environment, catalog, project := componentComposeTestInput(true)
+// Rationale: registered implementations are untrusted plan producers, so an
+// invalid SDK service must fail before it reaches Compose projection.
+func TestProjectEnvironmentComponentsRejectsInvalidManagedService(t *testing.T) {
+	environment, catalog, project := componentComposeTestInput(t, true)
 
 	_, err := ProjectEnvironmentComponents(project, environment, catalog)
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
@@ -121,7 +122,7 @@ func TestProjectEnvironmentComponentsRejectsUnsupportedGeneratedServiceField(t *
 // Rationale: a generated service cannot safely join a Zone that is durable in
 // the Environment projection but absent from the exact parsed Compose input.
 func TestProjectEnvironmentComponentsRejectsMissingComposeZone(t *testing.T) {
-	environment, catalog, project := componentComposeTestInput(false)
+	environment, catalog, project := componentComposeTestInput(t, false)
 	project.Networks = nil
 
 	_, err := ProjectEnvironmentComponents(project, environment, catalog)
@@ -131,8 +132,9 @@ func TestProjectEnvironmentComponentsRejectsMissingComposeZone(t *testing.T) {
 }
 
 func componentComposeTestInput(
+	t *testing.T,
 	unsupported bool,
-) (core.Environment, []components.Registration, *composetypes.Project) {
+) (core.Environment, []EnvironmentComponentRegistration, *composetypes.Project) {
 	at := time.Date(2026, 8, 22, 21, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 950)
 	componentID := ids.NewAt(ids.KindComponent, at, 951)
@@ -151,6 +153,9 @@ func componentComposeTestInput(
 		Components: []core.Component{{
 			ID: componentID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID,
 			Kind: core.ComponentKindIngressCaddy, Enabled: true, GeneratedServices: []string{serviceID},
+			Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+				ZoneID: ids.NewAt(ids.KindNetwork, at, 956),
+			}},
 		}},
 		Entries: []core.EnvEntry{{
 			ID: entryID, Kind: core.EntryKindEnv, Key: "ROUTER_TOKEN",
@@ -158,11 +163,9 @@ func componentComposeTestInput(
 		}},
 	}
 	implementation := componentComposeTestRenderer{unsupported: unsupported}
-	catalog := []components.Registration{{
-		Kind: core.ComponentKindIngressCaddy, Label: "test",
-		AllowedOwners: []core.ComponentOwner{core.ComponentOwnerEnvironment},
-		ApplyStrategy: components.EnvironmentRender, Environment: implementation,
-	}}
+	catalog := []EnvironmentComponentRegistration{componentTestRegistration(
+		t, core.ComponentKindIngressCaddy, implementation.Plan,
+	)}
 	project := &composetypes.Project{
 		Services: composetypes.Services{"app": {Name: "app", Image: "app:1"}},
 		Networks: composetypes.Networks{"frontend": {Name: "frontend"}},

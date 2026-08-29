@@ -70,7 +70,7 @@ func (reader *blueprintPlanReader) GetEnvironmentComposeProjectionRevision(
 // and typed pre-apply procedure from immutable Blueprint state, not a stored render.
 func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
@@ -89,6 +89,40 @@ func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
 		first.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
 		first.Steps[2].GetComposeApply() == nil || !first.Steps[2].GetComposeApply().FullReconcile {
 		t.Fatalf("resolved Blueprint plans = %#v / %#v", first, second)
+	}
+}
+
+func TestTaskPlanResolverRebuildsProfileOnlyBlueprintAsReconcileToEmpty(t *testing.T) {
+	reader, task := blueprintPlanTestState(t)
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(reader.projection.ComposeArtifact, artifact); err != nil {
+		t.Fatalf("unmarshal Blueprint fixture artifact: %v", err)
+	}
+	artifact.Services = nil
+	artifact.CanonicalYaml = []byte("services: {}\n")
+	digest := sha256.Sum256(artifact.CanonicalYaml)
+	artifact.YamlSha256 = digest[:]
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal profile-only Blueprint fixture artifact: %v", err)
+	}
+	reader.projection.Services = nil
+	reader.projection.ComposeArtifact = encoded
+	task.Materializations = nil
+	task.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[1:]...)
+
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	if err != nil {
+		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+	}
+	plan, err := resolver.ResolveExecutionPlan(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan() error = %v", err)
+	}
+	apply := plan.Steps[len(plan.Steps)-1].GetComposeApply()
+	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || apply == nil ||
+		!apply.FullReconcile || apply.ArtifactId != artifact.ArtifactId {
+		t.Fatalf("profile-only Blueprint plan = %#v", plan)
 	}
 }
 
@@ -175,11 +209,11 @@ volumes:
 		Executor: etcd.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: 1, Type: etcd.TaskUpdate, Target: environmentID,
 		Params: map[string]string{
-			etcd.EnvironmentDesiredRevisionParam:       taskID,
-			etcd.TaskMaterializationEnvironmentParam:   environmentID,
-			EnvironmentBlueprintArtifactParam:          artifactID,
-			EnvironmentBlueprintIntroducedVolumesParam: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			VolumeTaskIntentSHA256Param:                hex.EncodeToString(intentDigest[:]),
+			etcd.EnvironmentDesiredRevisionParam:     taskID,
+			etcd.TaskMaterializationEnvironmentParam: environmentID,
+			EnvironmentBlueprintArtifactParam:        artifactID,
+			EnvironmentBlueprintManagedVolumesParam:  "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			VolumeTaskIntentSHA256Param:              hex.EncodeToString(intentDigest[:]),
 		},
 		Steps: []etcd.TaskStepRecord{
 			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},

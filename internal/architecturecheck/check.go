@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-var sourceRoots = []string{"cmd", "internal", "pkg", "console/src"}
+var sourceRoots = []string{"cmd", "internal", "pkg", "component-sdk", "registered-components", "console/src"}
 
 var ignoredDirectories = map[string]struct{}{
 	".cache":       {},

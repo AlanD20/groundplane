@@ -69,6 +69,7 @@ type MutationRepository interface {
 		[]etcd.EnvironmentBlueprintRouteChange,
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
+		etcd.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)

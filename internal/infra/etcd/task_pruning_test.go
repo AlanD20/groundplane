@@ -275,8 +275,8 @@ func TestTaskPruningWaitsForMarkerAndRemovesComponentIntent(t *testing.T) {
 }
 
 func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
-	// Rationale: 48 events require multiple deletion transactions and prove the
-	// first 47-record checkpoint uses, but never exceeds, the 96-operation cap.
+	// Rationale: 128 events require multiple deletion transactions and prove the
+	// first 127-record checkpoint uses, but never exceeds, the 256-operation cap.
 	t.Parallel()
 	ctx := context.Background()
 	store := &taskPruneOperationStore{memoryTaskStore: newMemoryTaskStore()}
@@ -292,7 +292,7 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
-	for ordinal := uint64(1); ordinal <= 48; ordinal++ {
+	for ordinal := uint64(1); ordinal <= 128; ordinal++ {
 		input := taskEventInput(task.ID, ordinal, TaskEventStateRunning)
 		input.Identity.AssignmentID = claim.Assignment.Record.AssignmentID
 		input.Identity.AgentID = agentID
@@ -305,7 +305,7 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 			t.Fatalf("AppendTaskEvent(%d) error = %v", ordinal, err)
 		}
 	}
-	terminalAt := now.Add(2 * time.Minute)
+	terminalAt := now.Add(3 * time.Minute)
 	terminal, err := repository.AcknowledgeTask(
 		ctx, agentID, 4, task.ID, taskAssignmentIDForTest(t, repository,
 			task.ID),
@@ -341,8 +341,8 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 		false,
 	)
 	assertTaskLifecycleValue(t, store.memoryTaskStore, taskPruneIntentKey(task.ID), false)
-	if terminal.Record.EventCount != 48 {
-		t.Fatalf("terminal EventCount = %d, want 48", terminal.Record.EventCount)
+	if terminal.Record.EventCount != 128 {
+		t.Fatalf("terminal EventCount = %d, want 128", terminal.Record.EventCount)
 	}
 	for _, prefix := range []string{taskEventScopePrefix(task.ID), taskEventDedupScopePrefix(task.ID)} {
 		page, err := store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1})

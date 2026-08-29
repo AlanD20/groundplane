@@ -39,12 +39,16 @@ Optional variables:
 | `GROUNDPLANE_REMOTE_HTTP_ADDR` | `127.0.0.1:8080` |
 | `GROUNDPLANE_LOCAL_HTTP_PORT` | dynamically allocated loopback port |
 | `GROUNDPLANE_EVIDENCE_DIR` | `.tmp/verify-groundplane/` |
+| `GROUNDPLANE_CLI_PATH` | empty; build the CLI from the current workspace |
 
 The two supplied slugs and the Compose key must not already exist in the
 Environment. The script fails closed rather than claiming ownership of an
 existing resource. It may leave the newly created Volume in place if a later
 assertion fails; `result.txt` records its ID so an operator can inspect and
 clean that resource through the normal API flow without losing evidence.
+When `GROUNDPLANE_CLI_PATH` is set, it must name a non-symlink executable
+regular file. The verifier copies it into its private runtime directory and
+records its checksum instead of compiling another copy.
 
 ## Journey
 
@@ -56,8 +60,10 @@ The script performs these bounded checks:
 
 1. It validates the Tenant/Project/Environment hierarchy and confirms the
    requested slugs/key are unused.
-2. It calls `POST /volumes` with a stable idempotency key, repeats the exact
-   request, and compares canonical JSON responses to prove safe replay.
+2. It calls `POST /volumes` with a stable idempotency key, proves that an exact
+   duplicate returns `idempotency.in_progress` while the create Task is active,
+   then repeats the request after completion and compares canonical JSON
+   responses to prove terminal safe replay.
 3. It runs `volume list` and `volume show` through the CLI, then edits the
    slug through `volume edit`. API and CLI reads must show the same stable ID,
    immutable Compose key, and derived path before and after the rename.

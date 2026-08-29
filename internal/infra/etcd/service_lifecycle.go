@@ -150,7 +150,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		conditions = append(conditions, Condition{Key: environmentComposeProjectionKey(environment.Record.ID)})
 	} else {
 		conditions = append(conditions, Condition{
-			Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: projection.Revision,
+			Key: serviceLifecycleProjectionFenceKey(environment.Record.ID), ModRevision: projection.Revision,
 		})
 		if renderInput != nil {
 			inputValue, encodeErr := encodeServiceLifecycleRenderInput(*renderInput)
@@ -200,6 +200,10 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
+}
+
+func serviceLifecycleProjectionFenceKey(environmentID string) string {
+	return environmentBlueprintHeadKey(environmentID)
 }
 
 func validateServiceLifecycleHierarchy(

@@ -45,6 +45,9 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateEnvironment(): %v", err)
 	}
+	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetTenant, tenant.Record.ID, tenant.Revision)
+	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetProject, project.Record.ID, project.Revision)
+	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetEnvironment, environment.Record.ID, environment.Revision)
 	epochResult, err := repository.store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
 	if err != nil || epochResult.Entry == nil || epochResult.Entry.ModRevision != environment.Revision {
 		t.Fatalf("Environment mutation epoch = %#v, %v", epochResult, err)
@@ -556,6 +559,24 @@ func containsHierarchyKey(keys []string, target string) bool {
 
 func newMemoryHierarchyStore() *memoryHierarchyStore {
 	return &memoryHierarchyStore{history: make(map[string][]memoryVersion)}
+}
+
+func assertHierarchyCoordinationRecord(
+	t *testing.T,
+	store *memoryHierarchyStore,
+	targetKind HierarchyDeletionTargetKind,
+	targetID string,
+	wantRevision int64,
+) {
+	t.Helper()
+	result, err := store.Get(context.Background(), HierarchyCoordinationKey(string(targetKind), targetID))
+	if err != nil || result.Entry == nil || result.Entry.ModRevision != wantRevision {
+		t.Fatalf("hierarchy coordination %s/%s = %#v, %v", targetKind, targetID, result, err)
+	}
+	record, err := decodeHierarchyCoordination(result.Entry.Value)
+	if err != nil || record.TargetKind != targetKind || record.TargetID != targetID || record.MutationEpoch != 1 {
+		t.Fatalf("decoded hierarchy coordination %s/%s = %#v, %v", targetKind, targetID, record, err)
+	}
 }
 
 func (store *memoryHierarchyStore) Get(_ context.Context, key string) (*GetResult, error) {

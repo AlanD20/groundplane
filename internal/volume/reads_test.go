@@ -2,11 +2,13 @@ package volume
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestVolumeReadServicePagesPinnedProjection(t *testing.T) {
@@ -36,6 +38,29 @@ func TestVolumeReadServicePagesPinnedProjection(t *testing.T) {
 	})
 	if err != nil || len(second.Items) != 1 || second.Items[0].Record.Slug != "data-b" || second.NextCursor != "" {
 		t.Fatalf("second page = %#v, %v", second, err)
+	}
+}
+
+// Rationale: Volume collection reads follow the global public pagination
+// contract, so the inclusive upper bound is 200 rather than a private
+// capability-specific limit.
+func TestVolumeReadServiceUsesGlobalPaginationBounds(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 29, 0, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	revisionID := ids.NewAt(ids.KindTask, at, 2)
+	service, err := NewReadService(&volumeReadTestRepository{projection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
+		Record: etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, RevisionID: revisionID},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ListVolumes(context.Background(), environmentID, etcd.PageRequest{Limit: 200}); err != nil {
+		t.Fatalf("ListVolumes(limit 200) error = %v", err)
+	}
+	if _, err := service.ListVolumes(context.Background(), environmentID, etcd.PageRequest{Limit: 201});
+		!errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("ListVolumes(limit 201) error = %v, want validation failure", err)
 	}
 }
 

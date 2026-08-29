@@ -50,7 +50,7 @@ func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout 
 	run := func(stdin []byte, args ...string) (runner.Result, *agentpb.ComposeHelperResponse, error) {
 		result, runErr := taskRunner.Run(executionCtx, runner.RunCmdOpts{
 			Name: DockerExecutable, Args: append(slices.Clone(base), args...), Dir: WorkDirectory,
-			Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumCaddyfile,
+			Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumComponentConfig,
 		})
 		if executionCtx.Err() != nil {
 			return runner.Result{}, nil, executionCtx.Err()
@@ -68,7 +68,7 @@ func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout 
 			}
 			return result, &agentpb.ComposeHelperResponse{
 				Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED,
-				ExitCode: int32(exitCode), Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+				ExitCode: int32(exitCode), Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 			}, nil
 		}
 		return result, nil, nil
@@ -206,7 +206,7 @@ func releaseComposeBase(artifact *agentpb.ComposeArtifact) ([]string, func(), er
 func runWithComposeBase(ctx context.Context, taskRunner runner.Runner, base []string, stdin []byte, args ...string) (runner.Result, *agentpb.ComposeHelperResponse, error) {
 	result, runErr := taskRunner.Run(ctx, runner.RunCmdOpts{
 		Name: DockerExecutable, Args: append(slices.Clone(base), args...), Dir: WorkDirectory,
-		Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumCaddyfile,
+		Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumComponentConfig,
 	})
 	if ctx.Err() != nil {
 		return runner.Result{}, nil, ctx.Err()
@@ -265,6 +265,6 @@ func canonicalProxyJSON(value []byte) ([]byte, error) {
 func failedProxyResponse() *agentpb.ComposeHelperResponse {
 	return &agentpb.ComposeHelperResponse{
 		Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED,
-		ExitCode: 1, Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+		ExitCode: 1, Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 	}
 }

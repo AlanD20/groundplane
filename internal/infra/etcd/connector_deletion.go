@@ -229,7 +229,8 @@ func validateConnectorDeletionEnvelope(
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != connector.EnvironmentID || marker.Locator.Method != http.MethodDelete ||
 		marker.Locator.Route != connectorDeletionRoute || marker.ReplayTarget == nil ||
-		*marker.ReplayTarget != wantReplayTarget || !validTaskResponse(marker.Response, task.ID) ||
+		*marker.ReplayTarget != wantReplayTarget || marker.Response.Status != http.StatusAccepted ||
+		!validTaskResponse(marker.Response, task.ID) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		!marker.TerminalAt.IsZero() || !marker.RetainUntil.IsZero() {
 		return errs.New(

@@ -71,15 +71,17 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}
 	descriptorID, locatorDigest, err := decodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
 	protectedDigest, digestErr := protectedBlueprintIntentDigest(descriptor.Claim.Intent)
+	taskEnvironmentID, materializes, taskEnvironmentErr := taskMaterializationEnvironment(task)
 	if err != nil || digestErr != nil || !sameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
 		descriptorID != descriptor.Claim.DescriptorID || locatorDigest != protectedDigest ||
 		descriptor.State != EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||
 		seal.EnvironmentID != revision.EnvironmentID || seal.RevisionID != revision.RevisionID ||
 		seal.BaselineHeadRevision != expectedHeadRevision || seal.DependencyDigest != digest ||
-		descriptor.Claim.TaskID != task.ID || task.Target != revision.EnvironmentID ||
+		descriptor.Claim.TaskID != task.ID || taskEnvironmentErr != nil || !materializes ||
+		taskEnvironmentID != revision.EnvironmentID ||
 		task.Params[EnvironmentDesiredRevisionParam] != revision.RevisionID ||
 		uint64(task.RenderGeneration) != descriptor.Claim.RenderGeneration || marker.TaskID != task.ID ||
-		marker.Locator != descriptor.Claim.Locator || !sameBlueprintProtectedIntent(marker.Intent, descriptor.Claim.Intent) {
+		!sameBlueprintProtectedIntent(marker.Intent, descriptor.Claim.Intent) {
 		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "Blueprint sealed staging evidence changed")
 	}
 	published := descriptor

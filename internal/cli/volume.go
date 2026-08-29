@@ -33,7 +33,7 @@ func resolveVolumeTarget(cmd *cobra.Command, argument string) (string, error) {
 	}
 	cursor := ""
 	for {
-		page, err := app.Client.ListVolumes(cmd.Context(), environmentID, 200, cursor)
+		page, err := app.Client.ListVolumes(cmd.Context(), environmentID, 100, cursor)
 		if err != nil {
 			return "", err
 		}

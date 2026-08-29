@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"math"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -206,6 +208,20 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
+	action, err := BuildEnvironmentComponentAction(
+		resolver.componentCatalog,
+		core.ComponentKindIngressCaddy,
+		componentID,
+		componentsdk.ActionID("activate-config"),
+		reference.MaterializationID,
+		digest,
+		uint64(task.RenderGeneration),
+		artifactID,
+		serviceID,
+	)
+	if err != nil {
+		return nil, err
+	}
 	return BuildPlan(PlanBuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
@@ -213,13 +229,8 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		Artifacts: []*agentpb.ComposeArtifact{artifact},
 		Steps: []*agentpb.ExecutionStep{
 			materializationStep,
-			{
-				StepId: task.Steps[1].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-				Payload: &agentpb.ExecutionStep_CaddyConfigApply{CaddyConfigApply: &agentpb.CaddyConfigApply{
-					ArtifactId: artifactID, ServiceId: serviceID,
-					CaddyfileSha256: append([]byte(nil), digest[:]...),
-				}},
-			},
+			{StepId: task.Steps[1].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: action}},
 		},
 	})
 }

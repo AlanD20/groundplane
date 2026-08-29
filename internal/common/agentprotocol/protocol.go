@@ -7,6 +7,7 @@ const (
 	RuntimeConfigPath = "/run/groundplane/agent.yaml"
 	TokenPath         = "/run/groundplane/agent.token"
 	AgentImageEnv     = "GROUNDPLANE_AGENT_IMAGE"
+	StatePath         = "/var/lib/groundplane/agent"
 	RawTokenBytes     = 32
 	EncodedTokenBytes = 43
 )

@@ -14,10 +14,10 @@ import (
 func TestBuildAttachTaskRenderInputCreatesCompleteNetworkUnion(t *testing.T) {
 	t.Parallel()
 	fixture := newAttachRenderFixture(t)
-	worker := fixture.attach(t, 30, fixture.networkA, []string{fixture.workerID})
+	worker := fixture.attach(t, 30, fixture.networkA, fixture.workerID)
 	worker.Status = core.AttachFailed
-	duplicate := fixture.attach(t, 31, fixture.networkA, []string{fixture.apiID})
-	detaching := fixture.attach(t, 32, fixture.networkB, []string{fixture.workerID})
+	duplicate := fixture.attach(t, 31, fixture.networkA, fixture.apiID)
+	detaching := fixture.attach(t, 32, fixture.networkB, fixture.workerID)
 	detaching, err := etcd.MarkAttachProvisioning(detaching, detaching.TaskID)
 	if err != nil {
 		t.Fatalf("MarkAttachProvisioning() error = %v", err)
@@ -77,8 +77,8 @@ func TestBuildAttachTaskRenderInputDetachesOnlyTargetMembership(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginAttachDetaching() error = %v", err)
 	}
-	shared := fixture.attach(t, 33, fixture.networkA, []string{fixture.workerID})
-	other := fixture.attach(t, 34, fixture.networkB, []string{fixture.apiID})
+	shared := fixture.attach(t, 33, fixture.networkA, fixture.workerID)
+	other := fixture.attach(t, 34, fixture.networkB, fixture.apiID)
 
 	input, err := buildAttachTaskRenderInput(
 		fixture.scope,
@@ -200,7 +200,7 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 	taskID := ids.NewAt(ids.KindTask, now, 14)
 	current, err := etcd.NewPendingAttachRecord(
 		attachID, fixture.environmentID, "api-db", fixture.backingProjectID, fixture.backingEnvID,
-		fixture.backingServiceID, fixture.networkA, []string{fixture.apiID}, nil, nil, taskID, now,
+		fixture.backingServiceID, fixture.networkA, fixture.apiID, attachID, nil, nil, taskID, now,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
@@ -217,12 +217,13 @@ func (fixture attachRenderFixture) attach(
 	t *testing.T,
 	seed int64,
 	networkID string,
-	serviceIDs []string,
+	serviceID string,
 ) etcd.AttachRecord {
 	t.Helper()
 	record, err := etcd.NewPendingAttachRecord(
 		ids.NewAt(ids.KindAttach, fixture.now, seed), fixture.environmentID, "attach", fixture.backingProjectID,
-		fixture.backingEnvID, fixture.backingServiceID, networkID, serviceIDs, nil, nil,
+		fixture.backingEnvID, fixture.backingServiceID, networkID, serviceID,
+		ids.NewAt(ids.KindAttach, fixture.now, seed), nil, nil,
 		ids.NewAt(ids.KindTask, fixture.now, seed+100), fixture.now,
 	)
 	if err != nil {

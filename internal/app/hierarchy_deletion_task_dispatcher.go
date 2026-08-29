@@ -64,7 +64,7 @@ func validateHierarchyDeletionTask(task etcd.TaskRecord) error {
 	case hierarchydeletion.TargetEnvironment:
 		idKind = ids.KindEnvironment
 	case hierarchydeletion.TargetBackingService:
-		idKind = ids.KindBackingService
+		idKind = ids.KindProject
 	default:
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion Controller Task target kind is invalid")
 	}

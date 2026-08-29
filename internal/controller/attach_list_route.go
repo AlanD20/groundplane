@@ -69,11 +69,21 @@ func attachListRequest(environmentID string, limit int, cursor string) (etcd.Pag
 func attachResponse(record etcd.AttachRecord) apiTypes.Attach {
 	return apiTypes.Attach{
 		ID: record.ID, Name: record.Name,
-		ServiceIDs: append([]string(nil), record.ServiceIDs...), BackingServiceID: record.BackingServiceID,
+		ServiceID: record.ServiceID, Credential: attachCredentialResponse(record),
+		BackingServiceID:     record.BackingServiceID,
 		BackingProjectID:     record.BackingProjectID,
 		BackingEnvironmentID: record.BackingEnvironmentID, BackingNetworkID: record.BackingNetworkID,
 		GrantAttachIDs: append([]string(nil), record.GrantAttachIDs...),
 		FactSets:       attachFactSetResponses(record.FactSets), Status: string(record.Status),
+	}
+}
+
+func attachCredentialResponse(record etcd.AttachRecord) apiTypes.AttachCredential {
+	if record.OwnsCredential() {
+		return apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialNew}
+	}
+	return apiTypes.AttachCredential{
+		Mode: apiTypes.AttachCredentialExisting, AttachID: record.CredentialAttachID,
 	}
 }
 

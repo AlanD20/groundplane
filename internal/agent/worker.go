@@ -20,12 +20,14 @@ import (
 type PlanHash [sha256.Size]byte
 
 type Assignment struct {
-	AssignmentID string
-	TaskID       string
-	OperationID  string
-	RetryOf      string
-	Plan         *agentpb.ExecutionPlan
-	Deadline     time.Time
+	AssignmentID     string
+	TaskID           string
+	OperationID      string
+	RetryOf          string
+	Plan             *agentpb.ExecutionPlan
+	ScriptArtifacts  *agentpb.ScriptAssignmentArtifacts
+	ScriptCheckpoint *agentpb.ScriptExecutionCheckpoint
+	Deadline         time.Time
 }
 
 type TaskTerminal uint8
@@ -74,12 +76,22 @@ type WorkerOutput struct {
 	Progress         *TaskProgress
 	Result           *TaskResult
 	BackupCheckpoint *agentpb.BackupCheckpointRequest
+	ScriptCheckpoint *agentpb.ScriptCheckpointRequest
 }
 
 type taskReservation struct {
 	assignment Assignment
 	ctx        context.Context
 	cancel     context.CancelFunc
+}
+
+type ScriptRuntime interface {
+	ExecuteScript(
+		context.Context,
+		Assignment,
+		*agentpb.ExecutionStep,
+		func(context.Context, *agentpb.ScriptCheckpointRequest) error,
+	) (int32, error)
 }
 
 // WorkerPool reserves at most size queued or active assignments.
@@ -95,10 +107,14 @@ type WorkerPool struct {
 	environmentDirectories *EnvironmentDirectoryRuntime
 	materializer           *MaterializationRuntime
 	adapter                *AdapterRuntime
-	coreDNS                CoreDNSStepRuntime
+	componentActions       ComponentActionRuntime
+	hostResolution         HostResolutionRuntime
+	scriptRuntime          ScriptRuntime
 	materializations       *materializationInbox
+	managedConfigs         *managedConfigInbox
 	backupSecrets          *backupSecretSlotInbox
 	backupCheckpoints      *backupCheckpointInbox
+	scriptCheckpoints      *scriptCheckpointInbox
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -116,8 +132,10 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		outputs:           make(chan WorkerOutput, size),
 		reservations:      make(map[string]*taskReservation, size),
 		materializations:  newMaterializationInbox(),
+		managedConfigs:    newManagedConfigInbox(),
 		backupSecrets:     newBackupSecretSlotInbox(),
 		backupCheckpoints: newBackupCheckpointInbox(),
+		scriptCheckpoints: newScriptCheckpointInbox(),
 		adapter:           NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
@@ -140,12 +158,22 @@ func NewWorkerPoolWithRuntimes(
 	return pool
 }
 
-// SetCoreDNSRuntime installs the typed platform component runtime without
-// changing the existing WorkerPool constructor contract.
-func (p *WorkerPool) SetCoreDNSRuntime(runtime CoreDNSStepRuntime) {
+func (p *WorkerPool) SetComponentActionRuntime(runtime ComponentActionRuntime) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.coreDNS = runtime
+	p.componentActions = runtime
+}
+
+func (p *WorkerPool) SetHostResolutionRuntime(runtime HostResolutionRuntime) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.hostResolution = runtime
+}
+
+func (p *WorkerPool) SetScriptRuntime(runtime ScriptRuntime) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.scriptRuntime = runtime
 }
 
 func (p *WorkerPool) Capacity() int {
@@ -260,8 +288,32 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			}
 		} else if step.GetBackupArtifactPrune() != nil {
 			err = p.executeBackupArtifactPrune(stepCtx, reservation.assignment, step)
-		} else if step.GetComponentApply() != nil && p.coreDNS != nil {
-			err = p.coreDNS.ExecuteCoreDNS(stepCtx, reservation.assignment, step)
+		} else if step.GetComponentApply() != nil {
+			var payload ManagedConfigPayload
+			if step.GetComponentApply().GetComposeArtifactId() == "" {
+				payload, err = p.managedConfigs.Take(stepCtx, reservation.assignment.TaskID, step.GetStepId())
+			}
+			if err == nil {
+				if p.componentActions == nil {
+					err = closeManagedConfigSource(payload.Source, "agent: Component action runtime is not configured")
+				} else {
+					err = p.componentActions.ExecuteComponentAction(stepCtx, reservation.assignment, step, payload)
+				}
+			}
+		} else if step.GetHostResolutionApply() != nil || step.GetHostResolutionRestore() != nil {
+			if p.hostResolution == nil {
+				err = errs.New(errs.KindInternal, "agent: host resolution runtime is not configured")
+			} else {
+				err = p.hostResolution.ExecuteHostResolution(stepCtx, reservation.assignment, step)
+			}
+		} else if step.GetRunScript() != nil {
+			if p.scriptRuntime == nil {
+				err = errs.New(errs.KindInternal, "agent: Script runtime is not configured")
+			} else {
+				exitCode, err = p.scriptRuntime.ExecuteScript(
+					stepCtx, reservation.assignment, step, p.CheckpointScript,
+				)
+			}
 		} else if p.compose == nil {
 			err = p.executeStep(stepCtx, step)
 		} else {
@@ -407,6 +459,8 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	case p.outputs <- WorkerOutput{Result: &owned}:
 	case <-runCtx.Done():
 	}
+	clearExecutionPlanSecrets(reservation.assignment.Plan)
+	clearScriptArtifacts(reservation.assignment.ScriptArtifacts)
 	p.mu.Lock()
 	if p.reservations[result.TaskID] == reservation {
 		delete(p.reservations, result.TaskID)
@@ -414,6 +468,7 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	p.mu.Unlock()
 	reservation.cancel()
 	p.materializations.Release(result.TaskID)
+	p.managedConfigs.Release(result.TaskID)
 }
 
 func (p *WorkerPool) stop() {
@@ -484,6 +539,7 @@ func (p *WorkerPool) Abort(ctx context.Context, taskID string, assignmentID stri
 	reservation.cancel()
 	p.mu.Unlock()
 	p.materializations.Release(taskID)
+	p.managedConfigs.Release(taskID)
 	p.backupSecrets.Release(taskID)
 	return nil
 }
@@ -493,6 +549,13 @@ func (p *WorkerPool) AcceptMaterializationTransfer(
 	transfer *agentpb.MaterializationTransfer,
 ) error {
 	return p.materializations.Accept(ctx, transfer)
+}
+
+func (p *WorkerPool) AcceptManagedConfigTransfer(
+	ctx context.Context,
+	transfer *agentpb.ManagedConfigTransfer,
+) error {
+	return p.managedConfigs.Accept(ctx, transfer)
 }
 
 func (p *WorkerPool) AcceptBackupSecretSlotTransfer(
@@ -527,6 +590,13 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	if err != nil {
 		return err
 	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			clearExecutionPlanSecrets(owned.Plan)
+			clearScriptArtifacts(owned.ScriptArtifacts)
+		}
+	}()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.stopped {
@@ -545,8 +615,13 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	if err := p.materializations.Register(owned); err != nil {
 		return err
 	}
+	if err := p.managedConfigs.Register(owned); err != nil {
+		p.materializations.Release(owned.TaskID)
+		return err
+	}
 	if err := p.backupSecrets.Register(owned); err != nil {
 		p.materializations.Release(owned.TaskID)
+		p.managedConfigs.Release(owned.TaskID)
 		return err
 	}
 	taskCtx, cancel := context.WithDeadline(ctx, owned.Deadline)
@@ -554,13 +629,29 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	p.reservations[owned.TaskID] = reservation
 	select {
 	case p.work <- reservation:
+		transferred = true
 		return nil
 	default:
 		delete(p.reservations, owned.TaskID)
 		cancel()
 		p.materializations.Release(owned.TaskID)
+		p.managedConfigs.Release(owned.TaskID)
 		p.backupSecrets.Release(owned.TaskID)
 		return errs.New(errs.KindInternal, "agent: worker queue reservation is inconsistent")
+	}
+}
+
+func clearExecutionPlanSecrets(plan *agentpb.ExecutionPlan) {
+	if plan == nil {
+		return
+	}
+	for _, step := range plan.Steps {
+		procedure := step.GetAdapterProcedure()
+		if procedure == nil {
+			continue
+		}
+		clear(procedure.Password)
+		procedure.Password = nil
 	}
 }
 
@@ -593,10 +684,26 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
 		return Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
+	scriptArtifacts, err := validateAndCopyScriptArtifacts(plan, assignment.ScriptArtifacts)
+	if err != nil {
+		return Assignment{}, err
+	}
+	var scriptCheckpoint *agentpb.ScriptExecutionCheckpoint
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT {
+		scriptCheckpoint, err = executionplan.ValidateScriptExecutionCheckpoint(assignment.ScriptCheckpoint)
+		if err != nil {
+			clearScriptArtifacts(scriptArtifacts)
+			return Assignment{}, errs.Wrap(errs.KindInternal, err)
+		}
+	} else if assignment.ScriptCheckpoint != nil {
+		clearScriptArtifacts(scriptArtifacts)
+		return Assignment{}, errs.New(errs.KindInternal, "agent: non-Script assignment contains a Script checkpoint")
+	}
 	return Assignment{
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
-		RetryOf: assignment.RetryOf, Plan: plan, Deadline: assignment.Deadline,
+		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,
+		ScriptCheckpoint: scriptCheckpoint, Deadline: assignment.Deadline,
 	}, nil
 }
 
@@ -607,8 +714,9 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 		*agentpb.ExecutionStep_ComposeRemove, *agentpb.ExecutionStep_WaitHealthy,
 		*agentpb.ExecutionStep_ManagedNetworkRemove,
 		*agentpb.ExecutionStep_ManagedVolumeRemove,
-		*agentpb.ExecutionStep_CaddyConfigApply,
 		*agentpb.ExecutionStep_ComponentApply,
+		*agentpb.ExecutionStep_HostResolutionApply,
+		*agentpb.ExecutionStep_HostResolutionRestore,
 		*agentpb.ExecutionStep_EnvironmentDirectoryCreate,
 		*agentpb.ExecutionStep_EnvironmentDirectoryRemove,
 		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,
@@ -630,14 +738,5 @@ func hashForPlan(plan *agentpb.ExecutionPlan) PlanHash {
 }
 
 func usesEnvironmentDirectory(plan *agentpb.ExecutionPlan) bool {
-	if plan == nil {
-		return false
-	}
-	for _, step := range plan.Steps {
-		if step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
-			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil {
-			return true
-		}
-	}
-	return false
+	return executionplan.UsesEnvironmentDirectoryResult(plan)
 }

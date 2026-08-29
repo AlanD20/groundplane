@@ -88,13 +88,15 @@ func TestBackingZoneRemovalImpactIsCompleteAndDeterministic(t *testing.T) {
 		fakeZoneRemovalImpactAttaches{items: []etcd.Versioned[etcd.AttachRecord]{
 			{Record: etcd.AttachRecord{
 				ID: secondAttachID, Name: "worker-db", EnvironmentID: secondEnvironmentID,
-				BackingProjectID: projectID, BackingNetworkID: zoneID, ServiceIDs: []string{secondServiceID},
-				Status: core.AttachReady,
+				BackingProjectID: projectID, BackingNetworkID: zoneID, ServiceID: secondServiceID,
+				CredentialAttachID: secondAttachID,
+				Status:             core.AttachReady,
 			}, Revision: 12, ReadRevision: 50},
 			{Record: etcd.AttachRecord{
 				ID: firstAttachID, Name: "api-db", EnvironmentID: firstEnvironmentID,
-				BackingProjectID: projectID, BackingNetworkID: zoneID, ServiceIDs: []string{firstServiceID},
-				Status: core.AttachReady,
+				BackingProjectID: projectID, BackingNetworkID: zoneID, ServiceID: firstServiceID,
+				CredentialAttachID: firstAttachID,
+				Status:             core.AttachReady,
 			}, Revision: 11, ReadRevision: 50},
 		}},
 		fakeZoneRemovalImpactServices{items: map[string]etcd.Versioned[etcd.ServiceRecord]{

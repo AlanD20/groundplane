@@ -70,7 +70,13 @@ func (c *Client) CreateAttach(ctx context.Context, input apiTypes.AttachRequest)
 	}
 	body := generated.AttachCreateJSONRequestBody{
 		BackingServiceId: input.BackingServiceID,
-		ServiceIds:       append([]string(nil), input.ServiceIDs...),
+		ServiceId:        input.ServiceID,
+		Credential: generated.AttachCredential{
+			Mode: generated.AttachCredentialMode(input.Credential.Mode),
+		},
+	}
+	if input.Credential.AttachID != "" {
+		body.Credential.AttachId = &input.Credential.AttachID
 	}
 	if input.Name != "" {
 		body.Name = &input.Name
@@ -182,9 +188,9 @@ func (c *Client) RevealAttachFact(
 }
 
 func attachFromGenerated(attach generated.Attach) apiTypes.Attach {
-	serviceIDs := []string(nil)
-	if attach.ServiceIds != nil {
-		serviceIDs = append(serviceIDs, (*attach.ServiceIds)...)
+	credentialAttachID := ""
+	if attach.Credential.AttachId != nil {
+		credentialAttachID = *attach.Credential.AttachId
 	}
 	grantIDs := []string(nil)
 	if attach.GrantAttachIds != nil {
@@ -213,7 +219,10 @@ func attachFromGenerated(attach generated.Attach) apiTypes.Attach {
 		}
 	}
 	return apiTypes.Attach{
-		ID: attach.Id, Name: attach.Name, ServiceIDs: serviceIDs,
+		ID: attach.Id, Name: attach.Name, ServiceID: attach.ServiceId,
+		Credential: apiTypes.AttachCredential{
+			Mode: apiTypes.AttachCredentialMode(attach.Credential.Mode), AttachID: credentialAttachID,
+		},
 		BackingProjectID: attach.BackingProjectId,
 		BackingServiceID: attach.BackingServiceId, BackingEnvironmentID: backingEnvironmentID,
 		BackingNetworkID: attach.BackingNetworkId, GrantAttachIDs: grantIDs, FactSets: factSets, Status: attach.Status,

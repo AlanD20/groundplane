@@ -68,7 +68,7 @@ func newComponentCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		headers, rows := tabulateVia(app, []map[string]any{{"config": config.Config}})
+		headers, rows := tabulateVia(app, []map[string]any{{"config": config}})
 		return app.Out.Render(headers, rows, config)
 	}})
 	var upstreamAuto bool
@@ -77,7 +77,7 @@ func newComponentCmd() *cobra.Command {
 	var tailnetDelegation bool
 	var configFile string
 	set := &cobra.Command{Use: "set <id>", Short: "Set a component's config", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		body := make(map[string]any)
+		body := apiTypes.ComponentConfigMutationInput{}
 		flagConfig := cmd.Flags().Changed("upstream-auto") || cmd.Flags().Changed("upstream") ||
 			cmd.Flags().Changed("forward") || cmd.Flags().Changed("tailnet-delegation")
 		if cmd.Flags().Changed("file") {
@@ -93,29 +93,29 @@ func newComponentCmd() *cobra.Command {
 			}
 		}
 		if cmd.Flags().Changed("upstream-auto") {
-			body["upstream_auto"] = upstreamAuto
+			body.UpstreamAuto = &upstreamAuto
 		}
 		if cmd.Flags().Changed("upstream") {
-			body["upstream_resolvers"] = append([]string(nil), upstreamResolvers...)
+			body.UpstreamResolvers = append([]string(nil), upstreamResolvers...)
 		}
 		if cmd.Flags().Changed("forward") {
 			parsed, err := parseCoreDNSForwardFlags(forwarders)
 			if err != nil {
 				return err
 			}
-			body["forwarders"] = parsed
+			body.Forwarders = parsed
 		}
 		if cmd.Flags().Changed("tailnet-delegation") {
-			body["tailnet_delegation"] = tailnetDelegation
+			body.TailnetDelegation = &tailnetDelegation
 		}
 		app := fromContext(cmd)
 		result, err := app.Client.SetComponentConfig(
-			cmd.Context(), target(app, args[0]), apiTypes.ComponentConfig{Config: body},
+			cmd.Context(), target(app, args[0]), body,
 		)
 		if err != nil {
 			return err
 		}
-		fields := map[string]any{"config": result.Resource.Config, "reconcile_task_id": result.ReconcileTaskID}
+		fields := map[string]any{"config": result.Resource, "reconcile_task_id": result.ReconcileTaskID}
 		headers, rows := tabulateVia(app, []map[string]any{fields})
 		return app.Out.Render(headers, rows, result)
 	}}
@@ -152,8 +152,8 @@ func componentFields(component apiTypes.Component) map[string]any {
 	}
 }
 
-func parseCoreDNSForwardFlags(values []string) ([]map[string]any, error) {
-	result := make([]map[string]any, 0, len(values))
+func parseCoreDNSForwardFlags(values []string) ([]apiTypes.ComponentDNSForwarder, error) {
+	result := make([]apiTypes.ComponentDNSForwarder, 0, len(values))
 	for _, value := range values {
 		domain, resolvers, ok := strings.Cut(value, "=")
 		if !ok || strings.TrimSpace(domain) == "" || strings.TrimSpace(resolvers) == "" {
@@ -166,7 +166,9 @@ func parseCoreDNSForwardFlags(values []string) ([]map[string]any, error) {
 				return nil, fmt.Errorf("--forward contains an empty resolver")
 			}
 		}
-		result = append(result, map[string]any{"domain": strings.TrimSpace(domain), "resolvers": parts})
+		result = append(result, apiTypes.ComponentDNSForwarder{
+			Domain: strings.TrimSpace(domain), Resolvers: parts,
+		})
 	}
 	return result, nil
 }

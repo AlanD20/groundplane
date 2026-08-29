@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) CreateScript(ctx context.Context, input apiTypes.ScriptCreate) (apiTypes.Script, error) {
@@ -18,7 +19,7 @@ func (c *Client) CreateScript(ctx context.Context, input apiTypes.ScriptCreate) 
 	response, err := client.ScriptCreateWithResponse(ctx, &generated.ScriptCreateParams{
 		IdempotencyKey: ids.NewULID(),
 	}, generated.ScriptCreateJSONRequestBody{
-		EnvironmentId: input.EnvironmentID, Name: input.Name, ServiceId: input.ServiceID,
+		EnvironmentId: input.EnvironmentID, Slug: input.Slug, ServiceId: input.ServiceID,
 		Script: input.Body, When: input.When,
 	})
 	if err != nil {
@@ -41,7 +42,7 @@ func (c *Client) CreateScript(ctx context.Context, input apiTypes.ScriptCreate) 
 			return apiTypes.Script{}, err
 		}
 	}
-	return scriptFromGenerated(*parsed), nil
+	return scriptFromGenerated(*parsed)
 }
 
 func (c *Client) ListScripts(
@@ -92,7 +93,11 @@ func (c *Client) ListScripts(
 		page.NextCursor = *parsed.NextCursor
 	}
 	for index, item := range items {
-		page.Items[index] = scriptFromGenerated(item)
+		converted, convertErr := scriptFromGenerated(item)
+		if convertErr != nil {
+			return apiTypes.Page[apiTypes.Script]{}, convertErr
+		}
+		page.Items[index] = converted
 	}
 	return page, nil
 }
@@ -123,7 +128,7 @@ func (c *Client) GetScript(ctx context.Context, id string) (apiTypes.Script, err
 			return apiTypes.Script{}, err
 		}
 	}
-	return scriptFromGenerated(*parsed), nil
+	return scriptFromGenerated(*parsed)
 }
 
 func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.ScriptEdit) (apiTypes.Script, error) {
@@ -134,7 +139,7 @@ func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.Scrip
 	path := "/api/v1/scripts/" + id
 	response, err := client.ScriptEditWithResponse(ctx, id, &generated.ScriptEditParams{
 		IdempotencyKey: ids.NewULID(),
-	}, generated.ScriptEditJSONRequestBody{Script: input.Body, When: input.When})
+	}, generated.ScriptEditJSONRequestBody{Slug: input.Slug, Script: input.Body, When: input.When})
 	if err != nil {
 		return apiTypes.Script{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
@@ -154,7 +159,7 @@ func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.Scrip
 			return apiTypes.Script{}, err
 		}
 	}
-	return scriptFromGenerated(*parsed), nil
+	return scriptFromGenerated(*parsed)
 }
 
 func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
@@ -177,9 +182,18 @@ func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAcce
 	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
-func scriptFromGenerated(script generated.Script) apiTypes.Script {
-	return apiTypes.Script{
-		ID: script.Id, Name: script.Name, ServiceName: script.Service,
-		Body: script.Script, When: script.When,
+func scriptFromGenerated(script generated.Script) (apiTypes.Script, error) {
+	if !script.Origin.Valid() || script.ActiveGeneration < 1 {
+		return apiTypes.Script{}, errs.New(errs.KindInternal, "Controller returned an invalid Script")
 	}
+	reconciliationKey := ""
+	if script.ReconciliationKey != nil {
+		reconciliationKey = *script.ReconciliationKey
+	}
+	return apiTypes.Script{
+		ID: script.Id, EnvironmentID: script.EnvironmentId, Slug: script.Slug,
+		ServiceID: script.ServiceId, ServiceName: script.Service, Body: script.Script,
+		When: script.When, Origin: string(script.Origin), ReconciliationKey: reconciliationKey,
+		ActiveGeneration: uint64(script.ActiveGeneration),
+	}, nil
 }

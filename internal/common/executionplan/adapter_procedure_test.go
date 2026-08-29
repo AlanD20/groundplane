@@ -22,6 +22,18 @@ func TestSealAcceptsTypedAdapterProvisionProcedure(t *testing.T) {
 	}
 }
 
+// Rationale: the locked adapter identity preserves the exact Compose Service name, whose valid
+// ASCII grammar includes uppercase letters, digits, hyphens, dots, and underscores.
+func TestSealAcceptsServiceDerivedAdapterIdentity(t *testing.T) {
+	plan := validAdapterProcedurePlan()
+	procedure := plan.Steps[0].GetAdapterProcedure()
+	procedure.Role = "App-Web.v2_5d3f9a"
+	procedure.Database = procedure.Role
+	if _, err := Seal(plan); err != nil {
+		t.Fatalf("Seal(service-derived adapter identity) error = %v", err)
+	}
+}
+
 // Rationale: a sealed Attach plan must not smuggle Detach behavior or apply
 // an adapter procedure to a different durable Attach target.
 func TestSealRejectsAdapterProcedureOutsideOperationAndTarget(t *testing.T) {

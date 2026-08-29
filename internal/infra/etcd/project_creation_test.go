@@ -38,6 +38,7 @@ func TestHierarchyProjectIdempotentCreateCommitsIndexesMarkerAndOwnerFence(t *te
 	if err != nil || stored.Record != record {
 		t.Fatalf("GetProject() = %#v, %v", stored.Record, err)
 	}
+	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetProject, record.ID, stored.Revision)
 	if _, err := repository.CreateProjectIdempotent(ctx, record, marker); err != nil {
 		t.Fatalf("CreateProjectIdempotent(replay) error = %v", err)
 	}

@@ -25,7 +25,7 @@ func TestZoneRemovalPlanRebuildsManagedNetworkProcedure(t *testing.T) {
 		Steps:  []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 6)}}, TimeoutSeconds: 120,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now,
 	}
-	resolver, err := NewTaskPlanResolver("/var/lib/groundplane/vol")
+	resolver, err := NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolver() error = %v", err)
 	}

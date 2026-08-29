@@ -24,7 +24,7 @@ func TestComponentAddressRegistryReserveAndRelease(t *testing.T) {
 	registry := componentAddressRegistry{Reservations: map[string]string{}}
 
 	registry, first, err := registry.reserve(zone, firstID)
-	if err != nil || first != "10.40.10.2" {
+	if err != nil || first != "10.40.10.6" {
 		t.Fatalf("first reserve = %q, %v", first, err)
 	}
 	stable, repeated, err := registry.reserve(zone, firstID)
@@ -32,7 +32,7 @@ func TestComponentAddressRegistryReserveAndRelease(t *testing.T) {
 		t.Fatalf("repeat reserve = %#v, %q, %v", stable, repeated, err)
 	}
 	registry, second, err := registry.reserve(zone, secondID)
-	if err != nil || second != "10.40.10.3" {
+	if err != nil || second != "10.40.10.5" {
 		t.Fatalf("second reserve = %q, %v", second, err)
 	}
 

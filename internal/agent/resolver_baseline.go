@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AlanD20/groundplane/internal/components/coredns"
+	coredns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -28,7 +28,7 @@ func CaptureHostResolverBaseline(ctx context.Context, path string, generation ui
 	}
 	resolvers, err := coredns.ParseResolverBaseline(content)
 	if err != nil {
-		return coredns.ResolverBaseline{}, err
+		return coredns.ResolverBaseline{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	return coredns.ResolverBaseline{Generation: generation, Resolvers: resolvers}, nil
 }

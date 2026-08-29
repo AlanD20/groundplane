@@ -330,15 +330,15 @@ func composeOwnershipLabels(
 		composeLabelEnvironmentID: input.EnvironmentID,
 		composeLabelKind:          resourceKind,
 		composeLabelManaged:       "true",
-		composeLabelPlanID:        input.PlanID,
 		composeLabelProjectID:     input.ProjectID,
-		composeLabelRenderGen:     strconv.FormatUint(input.RenderGeneration, 10),
 	}
 	if input.ProjectOwnerKind == ComposeProjectOwnerTenant {
 		expected[composeLabelTenantID] = input.TenantID
 	}
 	if resourceKind == "service" {
 		expected[composeLabelServiceID] = serviceID
+		expected[composeLabelPlanID] = input.PlanID
+		expected[composeLabelRenderGen] = strconv.FormatUint(input.RenderGeneration, 10)
 	}
 	keys := make([]string, 0, len(expected))
 	for key, value := range expected {

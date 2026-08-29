@@ -91,3 +91,34 @@ func TestHierarchyDeletionTaskDispatcherRejectsMismatchedTarget(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }
+
+func TestHierarchyDeletionTaskDispatcherAcceptsBackingFacadeProjectIdentity(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 28, 21, 0, 0, 0, time.UTC)
+	deletions := &recordingHierarchyDeletionExecutor{}
+	dispatcher, err := newHierarchyDeletionTaskDispatcher(
+		&recordingControllerTaskExecutor{},
+		deletions,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := etcd.TaskRecord{
+		ID:       ids.NewAt(ids.KindTask, at, 1),
+		Executor: etcd.TaskExecutorController,
+		Type:     etcd.TaskRemove,
+		Target:   ids.NewAt(ids.KindProject, at, 2),
+		Params: map[string]string{
+			etcd.TaskResourceKindParam:                etcd.TaskResourceHierarchyDeletion,
+			etcd.TaskHierarchyDeletionOperationParam:  "del_0123456789abcdef0123456789abcdef",
+			etcd.TaskHierarchyDeletionTargetKindParam: "backing-service",
+		},
+	}
+
+	if err = dispatcher.Execute(context.Background(), task); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if deletions.calls != 1 || deletions.taskID != task.ID {
+		t.Fatalf("hierarchy calls = %d, task = %q", deletions.calls, deletions.taskID)
+	}
+}

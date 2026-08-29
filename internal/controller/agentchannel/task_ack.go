@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,7 +29,14 @@ func (s *Server) acknowledge(
 	}
 	environmentTarget := ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
 	environmentCreation := task.Record.Type == etcd.TaskCreate && environmentTarget
-	environmentDirectory := environmentCreation || (task.Record.Type == etcd.TaskRemove && environmentTarget)
+	if s.plans == nil {
+		return errs.New(errs.KindInternal, "Agent Task plan resolver is not configured")
+	}
+	plan, err := s.plans.ResolveExecutionPlan(ctx, task.Record)
+	if err != nil {
+		return err
+	}
+	environmentDirectory := executionplan.UsesEnvironmentDirectoryResult(plan)
 	if environmentDirectory {
 		if err := validateEnvironmentDirectoryTaskResult(acknowledgement); err != nil {
 			return err

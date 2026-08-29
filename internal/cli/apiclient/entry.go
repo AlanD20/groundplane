@@ -73,6 +73,73 @@ func (c *Client) CreateEntry(
 	return entryFromGenerated(*parsed)
 }
 
+func (c *Client) BulkUpsertEntries(
+	ctx context.Context,
+	input apiTypes.EntryBulkUpsertRequest,
+) (apiTypes.EntryBulkUpsertResult, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.EntryBulkUpsertResult{}, err
+	}
+	entries := make([]generated.EntryBulkItem, len(input.Entries))
+	for index, entry := range input.Entries {
+		entries[index] = generated.EntryBulkItem{Key: entry.Key, Value: entry.Value}
+	}
+	exposure := append([]string(nil), input.Exposure...)
+	body := generated.EntryBulkUpsertRequest{
+		EnvironmentId: input.EnvironmentID,
+		Entries:       &entries,
+		Exposure:      &exposure,
+		Secret:        input.Secret,
+	}
+	response, err := client.EntryBulkUpsertWithResponse(
+		ctx,
+		&generated.EntryBulkUpsertParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
+	if err != nil {
+		return apiTypes.EntryBulkUpsertResult{}, generatedCallError(
+			ctx, http.MethodPost, "/api/v1/entries/bulk", err,
+		)
+	}
+	if err := generatedResponseError(
+		http.MethodPost,
+		"/api/v1/entries/bulk",
+		response.HTTPResponse,
+		response.Body,
+		http.StatusAccepted,
+	); err != nil {
+		return apiTypes.EntryBulkUpsertResult{}, err
+	}
+	parsed := response.JSON202
+	if parsed == nil {
+		parsed = &generated.EntryBulkUpsertResult{}
+		if err := decodeSingleJSON(
+			http.MethodPost,
+			"/api/v1/entries/bulk",
+			bytes.NewReader(response.Body),
+			parsed,
+		); err != nil {
+			return apiTypes.EntryBulkUpsertResult{}, err
+		}
+	}
+	result := apiTypes.EntryBulkUpsertResult{TaskID: parsed.TaskId}
+	if parsed.Entries == nil {
+		return apiTypes.EntryBulkUpsertResult{}, errs.New(
+			errs.KindInternal, "Entry bulk upsert response entries are missing",
+		)
+	}
+	result.Entries = make([]apiTypes.Entry, len(*parsed.Entries))
+	for index, entry := range *parsed.Entries {
+		converted, err := entryFromGenerated(entry)
+		if err != nil {
+			return apiTypes.EntryBulkUpsertResult{}, err
+		}
+		result.Entries[index] = converted
+	}
+	return result, nil
+}
+
 func (c *Client) EditEntry(
 	ctx context.Context,
 	id string,

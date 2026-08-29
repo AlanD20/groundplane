@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	containerderrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
@@ -94,6 +95,7 @@ type engineClient interface {
 	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error)
+	ContainerStop(context.Context, string, client.ContainerStopOptions) (client.ContainerStopResult, error)
 	ContainerRemove(context.Context, string, client.ContainerRemoveOptions) (client.ContainerRemoveResult, error)
 	Close() error
 }
@@ -120,10 +122,36 @@ func New(ctx context.Context) (*Manager, error) {
 }
 
 func (m *Manager) Close() error {
-	if err := m.client.Close(); err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: close Docker client: %w", err))
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	var stopErr error
+	inspected, exists, inspectErr := m.inspect(shutdownCtx)
+	if inspectErr != nil {
+		stopErr = inspectErr
+	} else if exists {
+		state := stateFromInspect(inspected)
+		switch {
+		case !state.Owned:
+			stopErr = unownedCollision()
+		case state.Running && state.ID == "":
+			stopErr = errs.New(errs.KindInternal, "agent container: Docker returned an empty inspected container id")
+		case state.Running:
+			timeout := 10
+			if _, err := m.client.ContainerStop(
+				shutdownCtx,
+				state.ID,
+				client.ContainerStopOptions{Timeout: &timeout},
+			); err != nil && !containerderrdefs.IsNotFound(err) {
+				stopErr = operationError(shutdownCtx, "stop container", err)
+			}
+		}
 	}
-	return nil
+	closeErr := m.client.Close()
+	if closeErr != nil {
+		closeErr = errs.Wrap(errs.KindInternal, fmt.Errorf("agent container: close Docker client: %w", closeErr))
+	}
+	return errors.Join(stopErr, closeErr)
 }
 
 // DockerVersion reports the daemon version through the Engine client already

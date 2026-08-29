@@ -38,6 +38,38 @@ func newHierarchyDeletionRepository(store hierarchyDeletionStore) (*HierarchyDel
 	return &HierarchyDeletionRepository{store: store}, nil
 }
 
+func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
+	ctx context.Context,
+	projectID string,
+) (HierarchyDeletionTargetKind, error) {
+	if err := validateContext(ctx); err != nil {
+		return "", err
+	}
+	if err := validateID(ids.KindProject, projectID); err != nil {
+		return "", err
+	}
+	project, err := getRecord(
+		ctx,
+		repository.store,
+		projectKey(projectID),
+		projectID,
+		errs.KindProjectNotFound,
+		decodeProject,
+		func(record ProjectRecord) string { return record.ID },
+	)
+	if err != nil {
+		return "", err
+	}
+	switch project.Record.Kind {
+	case ProjectKindTenant:
+		return HierarchyDeletionTargetProject, nil
+	case ProjectKindBacking:
+		return HierarchyDeletionTargetBacking, nil
+	default:
+		return "", errs.New(errs.KindInternal, "hierarchy deletion Project kind is invalid")
+	}
+}
+
 type HierarchyDeletionBegin struct {
 	OperationID     string
 	TaskOperationID string

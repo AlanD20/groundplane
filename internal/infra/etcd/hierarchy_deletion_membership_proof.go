@@ -51,11 +51,9 @@ func terminalHierarchyDeletionNodes(nodes []HierarchyDeletionMembershipNode) []s
 func hierarchyDeletionAgentProcedure(action HierarchyDeletionActionKind) string {
 	return map[HierarchyDeletionActionKind]string{
 		HierarchyDeletionAttachGrantRevoke: "attach.grant-revoke", HierarchyDeletionAttachDetach: "attach.detach",
-		HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup", HierarchyDeletionServiceRemove: "service.remove",
-		HierarchyDeletionEntryRemove: "entry.remove", HierarchyDeletionRouteRemove: "route.remove",
-		HierarchyDeletionComponentRemove: "component.remove", HierarchyDeletionMaterializationRemove: "materialization.remove",
-		HierarchyDeletionZoneRemove:    "zone.remove",
-		HierarchyDeletionNetworkRemove: "network.remove", HierarchyDeletionRecoveryPointRemove: "recovery-point.remove",
+		HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup",
+		HierarchyDeletionMaterializationRemove:   "materialization.remove",
+		HierarchyDeletionNetworkRemove:           "network.remove", HierarchyDeletionRecoveryPointRemove: "recovery-point.remove",
 		HierarchyDeletionOrphanObjectRemove:        "orphan-object.remove",
 		HierarchyDeletionBackingRuntimeReconstruct: "backing.runtime-reconstruct",
 	}[action]
@@ -63,9 +61,14 @@ func hierarchyDeletionAgentProcedure(action HierarchyDeletionActionKind) string 
 
 func hierarchyDeletionControllerFinalizer(action HierarchyDeletionActionKind) string {
 	return map[HierarchyDeletionActionKind]string{
-		HierarchyDeletionScriptRemove: "script.remove", HierarchyDeletionReleaseGroupRemove: "release-group.remove",
+		HierarchyDeletionServiceRemove:   "service.remove",
+		HierarchyDeletionEntryRemove:     "entry.remove",
+		HierarchyDeletionRouteRemove:     "route.remove",
+		HierarchyDeletionComponentRemove: "component.remove",
+		HierarchyDeletionScriptRemove:    "script.remove", HierarchyDeletionReleaseGroupRemove: "release-group.remove",
 		HierarchyDeletionReleaseFinalize: "release.finalize", HierarchyDeletionBackupPolicyFinalize: "backup-policy.finalize",
 		HierarchyDeletionKeyMaterialRemove:  "key-material.remove",
+		HierarchyDeletionZoneRemove:         "zone.remove",
 		HierarchyDeletionReservationRelease: "reservation.release", HierarchyDeletionConnectorFinalize: "connector.finalize",
 		HierarchyDeletionEnvironmentFinalize: "environment.finalize", HierarchyDeletionRunnerLocalRemove: "runner.remove",
 		HierarchyDeletionProjectSecretRemove: "secret.remove", HierarchyDeletionBackingServiceFinalize: "backing.finalize",
@@ -84,6 +87,14 @@ func validateHierarchyDeletionAttachOwner(value []byte, id, owner string) error 
 func validateHierarchyDeletionServiceOwner(value []byte, id, owner string) error {
 	record, err := decodeServiceRecord(value)
 	if err != nil || record.Desired.ID != id || record.EnvironmentID != owner {
+		return corruptHierarchyDeletion()
+	}
+	return nil
+}
+
+func validateHierarchyDeletionReleaseGroupOwner(value []byte, id, owner string) error {
+	record, err := decodeReleaseGroupStored(value)
+	if err != nil || record.ID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}
 	return nil

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -225,15 +224,8 @@ func newRunnerRemovalTask(record etcd.RunnerRecord, key string, now time.Time) e
 		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: record.Desired.ID,
-		Params: map[string]string{
-			etcd.TaskResourceKindParam:  etcd.TaskResourceRunner,
-			etcd.RunnerTenantIDParam:    record.Desired.TenantID,
-			etcd.RunnerOwnerKindParam:   string(record.Desired.OwnerKind),
-			etcd.RunnerOwnerIDParam:     record.Desired.OwnerID,
-			etcd.RunnerHostSlotParam:    strconv.FormatUint(uint64(record.Allocation.Slot), 10),
-			etcd.RunnerNetworkCIDRParam: record.Allocation.NetworkCIDR,
-		},
-		Steps: []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}, TimeoutSeconds: runnerRemoveTimeoutSeconds,
+		Params: etcd.RunnerRemovalTaskParams(record),
+		Steps:  []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}, TimeoutSeconds: runnerRemoveTimeoutSeconds,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 }

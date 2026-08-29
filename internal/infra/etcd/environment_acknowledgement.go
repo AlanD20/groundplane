@@ -239,13 +239,14 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			environmentPoolRegistryKey,
 			environmentMutationEpochKey(task.Target),
 			environmentOperationLockKey(task.Target),
+			releaseGroupCollectionEpochKey(task.Target),
 		},
 		Revision: readRevision,
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	if stored == nil || stored.ReadRevision != readRevision || len(stored.Values) != 7 ||
+	if stored == nil || stored.ReadRevision != readRevision || len(stored.Values) != 8 ||
 		stored.Values[0] == nil || stored.Values[1] == nil || stored.Values[4] == nil ||
 		stored.Values[5] == nil || stored.Values[6] == nil {
 		return nil, nil, errs.New(errs.KindInternal, "environment deletion state is inconsistent")
@@ -351,6 +352,10 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			Key:         environmentOperationLockKey(environment.ID),
 			ModRevision: stored.Values[6].ModRevision,
 		},
+		{
+			Key:         releaseGroupCollectionEpochKey(environment.ID),
+			ModRevision: keyValueRevision(stored.Values[7]),
+		},
 	}
 	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
 	if err != nil {
@@ -381,6 +386,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		mutations = append(
 			mutations,
 			Mutation{Type: MutationDelete, Key: environmentMutationEpochKey(environment.ID)},
+			Mutation{Type: MutationDelete, Key: releaseGroupCollectionEpochKey(environment.ID)},
 		)
 		nextPoolRegistry, err := poolRegistry.Release(environment.ID, environment.NetworkPool)
 		if err != nil {
@@ -614,13 +620,14 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			environmentPoolRegistryKey,
 			environmentMutationEpochKey(task.Target),
 			environmentOperationLockKey(task.Target),
+			releaseGroupCollectionEpochKey(task.Target),
 		},
 		Revision: readRevision,
 	})
 	if err != nil {
 		return err
 	}
-	if stored == nil || stored.ReadRevision != readRevision || len(stored.Values) != 7 ||
+	if stored == nil || stored.ReadRevision != readRevision || len(stored.Values) != 8 ||
 		(stored.Values[2] == nil) != (stored.Values[3] == nil) {
 		return errs.New(
 			errs.KindStateConflict,
@@ -631,7 +638,8 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 		if stored.Values[0] != nil || stored.Values[1] != nil || stored.Values[2] != nil ||
 			stored.Values[3] != nil ||
 			stored.Values[5] != nil ||
-			stored.Values[6] != nil {
+			stored.Values[6] != nil ||
+			stored.Values[7] != nil {
 			return errs.New(
 				errs.KindStateConflict,
 				"completed environment deletion retained its target",

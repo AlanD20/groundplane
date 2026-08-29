@@ -2,10 +2,12 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"strconv"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/hierarchyplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -88,6 +90,55 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	taskID := hierarchyDeletionChildStableID(ids.KindTask, action.AgentProcedure.ChildOperationID, attemptID)
 	planID := hierarchyDeletionChildStableID(ids.KindPlan, action.AgentProcedure.ChildOperationID, attemptID)
 	stepID := hierarchyDeletionChildStableID(ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID)
+	planHash := action.AgentProcedure.InputDigest
+	taskSteps := []TaskStepRecord{{ID: stepID}}
+	if action.AgentProcedure.TypedProcedure == "environment.cleanup" {
+		environmentResult, getErr := repository.store.Get(ctx, environmentKey(action.TargetID))
+		if getErr != nil {
+			return HierarchyDeletionChildEntry{}, getErr
+		}
+		if environmentResult.Entry == nil {
+			return HierarchyDeletionChildEntry{}, corruptHierarchyDeletion()
+		}
+		environment, decodeErr := decodeEnvironment(environmentResult.Entry.Value)
+		clear(environmentResult.Entry.Value)
+		if decodeErr != nil || environment.ID != action.TargetID {
+			return HierarchyDeletionChildEntry{}, corruptHierarchyDeletion()
+		}
+		hierarchy, hierarchyErr := newHierarchyRepository(repository.store)
+		if hierarchyErr != nil {
+			return HierarchyDeletionChildEntry{}, hierarchyErr
+		}
+		projection, found, projectionErr := hierarchy.GetEnvironmentComposeProjection(ctx, environment.ID)
+		if projectionErr != nil {
+			return HierarchyDeletionChildEntry{}, projectionErr
+		}
+		composeStepID := ""
+		directoryStepID := stepID
+		var composeArtifact []byte
+		if found {
+			composeStepID = stepID
+			directoryStepID = hierarchyDeletionChildStableID(
+				ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID, "directory",
+			)
+			taskSteps = []TaskStepRecord{{ID: composeStepID}, {ID: directoryStepID}}
+			composeArtifact = projection.Record.ComposeArtifact
+		}
+		plan, planErr := hierarchyplan.EnvironmentCleanup(
+			planID,
+			1,
+			environment.ID,
+			composeStepID,
+			directoryStepID,
+			uint32(action.AgentProcedure.TimeoutSeconds),
+			environment.VolumeDir,
+			composeArtifact,
+		)
+		if planErr != nil {
+			return HierarchyDeletionChildEntry{}, planErr
+		}
+		planHash = hex.EncodeToString(plan.PlanHash)
+	}
 	parentTask, err := repository.store.Get(ctx, taskKey(operation.Tombstone.CurrentTaskID))
 	if err != nil {
 		return HierarchyDeletionChildEntry{}, err
@@ -105,7 +156,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	task := TaskRecord{
 		ID: taskID, OperationID: action.AgentProcedure.ChildOperationID, RetryOf: retryOf,
 		Owner: parent.Owner, Actor: TaskActorSystem, Executor: TaskExecutorAgent,
-		PlanID: planID, PlanHash: action.AgentProcedure.InputDigest, RenderGeneration: 1,
+		PlanID: planID, PlanHash: planHash, RenderGeneration: 1,
 		Type: action.AgentProcedure.TaskType, Target: action.TargetID,
 		Params: map[string]string{
 			TaskResourceKindParam:                TaskResourceHierarchyDeletion,
@@ -118,7 +169,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 			TaskHierarchyDeletionProcedureParam:  action.AgentProcedure.TypedProcedure,
 			TaskHierarchyDeletionInputParam:      action.AgentProcedure.InputDigest,
 		},
-		Steps: []TaskStepRecord{{ID: stepID}}, TimeoutSeconds: action.AgentProcedure.TimeoutSeconds,
+		Steps: taskSteps, TimeoutSeconds: action.AgentProcedure.TimeoutSeconds,
 		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := validateTaskRecord(task); err != nil {

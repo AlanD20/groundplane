@@ -1,0 +1,101 @@
+package etcd
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/oklog/ulid/v2"
+)
+
+func TestAdvanceScriptExecutionRecordFullCheckpointSequence(t *testing.T) {
+	at := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	record := scriptCheckpointTestRecord(at)
+	input := scriptCheckpointTestInput(record, at.Add(time.Second))
+
+	input.State = ScriptExecutionStartAuthorized
+	input.Evidence = ScriptStartAuthorizedEvidence{}
+	record = advanceScriptCheckpointTest(t, record, input)
+
+	input.ExpectedState = record.State
+	input.State = ScriptExecutionBodyPrepared
+	input.PayloadSHA256 = strings.Repeat("2", 64)
+	input.Evidence = ScriptBodyPreparedEvidence{
+		BodySHA256: record.BodySHA256, UID: 65534, GID: 65534, Device: 10, Inode: 20, Leaf: "body",
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+
+	input.ExpectedState = record.State
+	input.State = ScriptExecutionContainerCreated
+	input.PayloadSHA256 = strings.Repeat("3", 64)
+	input.Evidence = ScriptContainerCreatedEvidence{
+		ContainerID: strings.Repeat("a", 64), OwnershipLabelsSHA256: strings.Repeat("b", 64),
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+
+	exitCode := int32(0)
+	input.ExpectedState = record.State
+	input.State = ScriptExecutionOutcomeRecorded
+	input.PayloadSHA256 = strings.Repeat("4", 64)
+	input.Evidence = ScriptOutcomeEvidence{
+		Reason: ScriptOutcomeNormalExit, ExitCode: &exitCode, ObservedAt: at.Add(2 * time.Second),
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+
+	input.ExpectedState = record.State
+	input.State = ScriptExecutionCleanupProven
+	input.PayloadSHA256 = strings.Repeat("5", 64)
+	input.Evidence = ScriptCleanupEvidence{
+		ContainerID: strings.Repeat("a", 64), BodyDevice: 10, BodyInode: 20, BodyLeaf: "body",
+		ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true,
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+	if record.State != ScriptExecutionCleanupProven || record.Cleanup == nil || !record.ActiveReference {
+		t.Fatalf("final Script checkpoint = %#v", record)
+	}
+
+	input.ExpectedState = ScriptExecutionNotStarted
+	input.State = ScriptExecutionStartAuthorized
+	input.Evidence = ScriptStartAuthorizedEvidence{}
+	if _, err := advanceScriptExecutionRecord(record, input); err == nil {
+		t.Fatal("stale Script checkpoint transition error = nil")
+	}
+}
+
+func advanceScriptCheckpointTest(
+	t *testing.T,
+	record ScriptExecutionRecord,
+	input ScriptCheckpointInput,
+) ScriptExecutionRecord {
+	t.Helper()
+	next, err := advanceScriptExecutionRecord(record, input)
+	if err != nil {
+		t.Fatalf("advanceScriptExecutionRecord(%s -> %s) error = %v", record.State, input.State, err)
+	}
+	return next
+}
+
+func scriptCheckpointTestInput(record ScriptExecutionRecord, at time.Time) ScriptCheckpointInput {
+	return ScriptCheckpointInput{
+		TaskID: record.CurrentTaskID, OperationID: record.OperationID,
+		AssignmentID: ids.NewAt(ids.KindAssignment, at, 9), AgentID: ids.NewAt(ids.KindAgent, at, 10),
+		AgentGeneration: 1, StepID: record.StepID, ExecutionID: record.ID, PlanHash: record.PlanHash,
+		ExpectedState: record.State, PayloadSHA256: strings.Repeat("1", 64), At: at,
+	}
+}
+
+func scriptCheckpointTestRecord(at time.Time) ScriptExecutionRecord {
+	return ScriptExecutionRecord{
+		ID:          ulid.MustNew(ulid.Timestamp(at), strings.NewReader(strings.Repeat("a", 32))).String(),
+		SnapshotID:  ulid.MustNew(ulid.Timestamp(at.Add(time.Millisecond)), strings.NewReader(strings.Repeat("b", 32))).String(),
+		OperationID: ids.NewAt(ids.KindOperation, at, 1), CurrentTaskID: ids.NewAt(ids.KindTask, at, 2),
+		StepID: ids.NewAt(ids.KindStep, at, 3), ScriptID: ids.NewAt(ids.KindScript, at, 4),
+		ScriptGeneration: 1, EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5),
+		ServiceID: ids.NewAt(ids.KindService, at, 6), ReleaseID: ids.NewAt(ids.KindDeployment, at, 7),
+		RenderGeneration: 1, PlanHash: strings.Repeat("a", 64), SnapshotSHA256: strings.Repeat("b", 64),
+		BodySHA256: strings.Repeat("c", 64), RunnerProjectionSHA256: strings.Repeat("d", 64),
+		Plan: []byte{1}, Snapshot: []byte{1}, State: ScriptExecutionNotStarted,
+		ActiveReference: true, CreatedAt: at, UpdatedAt: at,
+	}
+}

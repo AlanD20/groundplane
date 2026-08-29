@@ -71,6 +71,23 @@ func TestSealRejectsUnknownSelectedService(t *testing.T) {
 	}
 }
 
+func TestSealAllowsRemoveToAuthenticateServiceFromPriorPlan(t *testing.T) {
+	plan := validPlan()
+	plan.PlanId = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	plan.RenderGeneration = 1
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_REMOVE
+	plan.TargetId = plan.Artifacts[0].ArtifactId
+	plan.Steps = []*agentpb.ExecutionStep{{
+		StepId: testStepID, TimeoutSeconds: 30,
+		Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{
+			ArtifactId: plan.Artifacts[0].ArtifactId, WholeProject: true,
+		}},
+	}}
+	if _, err := Seal(plan); err != nil {
+		t.Fatalf("Seal(remove using prior plan labels) error = %v", err)
+	}
+}
+
 func validPlan() *agentpb.ExecutionPlan {
 	yaml := []byte("services:\n  api:\n    image: registry.example/api@sha256:" + strings.Repeat("a", 64) + "\n")
 	yamlDigest := sha256.Sum256(yaml)

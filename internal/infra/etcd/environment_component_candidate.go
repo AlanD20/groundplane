@@ -309,15 +309,13 @@ func projectedComponentCandidateZone(component core.Component) (string, bool, er
 	if component.Kind != core.ComponentKindIngressCaddy || !component.Enabled {
 		return "", false, nil
 	}
-	raw, found := component.Config["zone_id"]
-	zoneID, ok := raw.(string)
-	if !found || !ok || ids.Validate(ids.KindNetwork, zoneID) != nil {
+	if component.Config.Caddy == nil || ids.Validate(ids.KindNetwork, component.Config.Caddy.ZoneID) != nil {
 		return "", false, errs.New(
 			errs.KindValidationFailed,
 			"enabled Caddy Component candidate has an invalid Zone",
 		)
 	}
-	return zoneID, true, nil
+	return component.Config.Caddy.ZoneID, true, nil
 }
 
 func validatePreparedCurrentComponentReservations(

@@ -139,7 +139,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			if err := applyExternalReleaseDependencies(project, selected, dependencyPlan); err != nil {
 				return nil, err
 			}
-			return nil, nil
+			return managedAttachExternalNetworks(project)
 		},
 		labels,
 	)
@@ -202,7 +202,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 						project.DisabledServices[name] = service
 					}
 				}
-				return nil, nil
+				return managedAttachExternalNetworks(project)
 			},
 			priorLabels,
 		)

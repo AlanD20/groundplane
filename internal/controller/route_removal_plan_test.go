@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -23,33 +24,29 @@ type routeRemovalPlanReader struct {
 
 type routeRemovalPlanCaddyRenderer struct{}
 
-func (routeRemovalPlanCaddyRenderer) Render(
+func (routeRemovalPlanCaddyRenderer) Plan(
 	environment core.Environment,
 	component core.Component,
-) (map[string]components.GeneratedService, map[string][]byte, error) {
+) (componentsdk.EnvironmentPlan, error) {
 	if !component.Enabled {
-		return map[string]components.GeneratedService{}, map[string][]byte{}, nil
+		return componentsdk.EnvironmentPlan{}, nil
 	}
 	content := []byte("# no routes\n")
 	if len(environment.Routes) != 0 {
 		content = []byte(environment.Routes[0].Host + "\n")
 	}
-	return map[string]components.GeneratedService{
-		"caddy": {
-			Service: core.Service{
-				ID: component.GeneratedServices[0], Name: "caddy", Image: "caddy:2",
-				Zones: []string{"frontend"}, Restart: "unless-stopped", Replicas: 1,
-			},
-			StaticIPv4: map[string]string{"frontend": component.PinnedIPv4},
-			Mounts: []components.GeneratedMount{{
+	return componentsdk.EnvironmentPlan{
+		Services: []componentsdk.ManagedService{{
+			ID: component.GeneratedServices[0], Name: "caddy", Image: "caddy:2",
+			NetworkMode: componentsdk.ManagedNetworkModeZones,
+			Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend", StaticIPv4: component.PinnedIPv4}},
+			Restart:     "unless-stopped", Replicas: 1,
+			Mounts: []componentsdk.ManagedMount{{
 				Source: RouteRemovalCaddyfilePath, Target: "/etc/caddy/Caddyfile", ReadOnly: true,
 			}},
-		},
-	}, map[string][]byte{RouteRemovalCaddyfilePath: content}, nil
-}
-
-func (routeRemovalPlanCaddyRenderer) Healthy(core.Environment, core.Component) (bool, error) {
-	return true, nil
+		}},
+		Files: []componentsdk.ManagedFile{{Path: RouteRemovalCaddyfilePath, Content: content}},
+	}, nil
 }
 
 func (reader *routeRemovalPlanReader) GetRouteRemovalIntent(
@@ -65,13 +62,12 @@ func (reader *routeRemovalPlanReader) GetRouteRemovalIntent(
 func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
 	t.Parallel()
 	reader, intent, task := routeRemovalPlanTestState(t)
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	_, _, _, _, catalog := componentPlanProjectionInput(t)
+	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, catalog)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
-	_, _, _, _, catalog := componentPlanProjectionInput(t)
-	catalog[0].Environment = routeRemovalPlanCaddyRenderer{}
-	resolver.componentCatalog = catalog
 	prepared, err := resolver.PrepareRouteRemovalTask(
 		context.Background(),
 		task,
@@ -99,12 +95,12 @@ func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeString(materialization digest) error = %v", err)
 	}
-	apply := first.Steps[1].GetCaddyConfigApply()
+	apply := first.Steps[1].GetComponentApply()
 	if !bytes.Equal(first.PlanHash, second.PlanHash) || hex.EncodeToString(first.PlanHash) != prepared.PlanHash ||
 		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || first.TargetId != task.Target ||
 		len(first.Artifacts) != 1 || len(first.Steps) != 2 || first.Steps[0].GetMaterializeFile() == nil ||
 		apply == nil || apply.ServiceId != intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0] ||
-		!bytes.Equal(apply.CaddyfileSha256, digest) {
+		apply.ActionId != "activate-config" || !bytes.Equal(apply.ArtifactDigest, digest) {
 		t.Fatalf("resolved Route removal plans = %#v / %#v", first, second)
 	}
 	content, err := resolver.ResolveComponentFile(
@@ -129,14 +125,20 @@ func routeRemovalPlanTestState(
 	identity.TenantSlug = "acme"
 	identity.ProjectSlug = "shop"
 	at := time.Date(2026, 8, 23, 4, 0, 0, 0, time.UTC)
-	catalog[0].Environment = routeRemovalPlanCaddyRenderer{}
+	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
 	componentProjection, err := projectPinnedEnvironmentComponents(
 		project,
 		nil,
 		identity,
 		projection,
 		routeSpecs,
-		map[string]core.ComponentSpec{"caddy": {Kind: core.ComponentKindIngressCaddy, Enabled: true}},
+		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
+			Implementation: core.ComponentKindIngressCaddy,
+			Enabled:        true,
+			Settings: core.ComponentCapabilitySettings{
+				ZoneID: projection.Networks[0].ID,
+			},
+		}},
 		nil,
 		catalog,
 	)
@@ -161,6 +163,7 @@ func routeRemovalPlanTestState(
 	content := []byte(`kind: environment
 schema: 1
 metadata: {tenant: acme, project: shop, environment: production}
+x-gp-network-pool: 10.70.0.0/16
 services:
   api:
     image: api:1
@@ -178,10 +181,11 @@ x-gp-routes:
     target_port: 8080
     exposure: public
 x-gp-components:
-  caddy:
-    kind: caddy
+  http-router:
+    implementation: caddy
     enabled: true
-`)
+    settings:
+      zone_id: ` + projection.Networks[0].ID + "\n")
 	base := &blueprintPlanReader{
 		tenant: etcd.TenantRecord{ID: identity.TenantID, Slug: identity.TenantSlug, Name: "Acme"},
 		project: etcd.ProjectRecord{

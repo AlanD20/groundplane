@@ -1,9 +1,5 @@
-// Package systemd handles the host-level systemd surfaces: installing
-// unit files (groundplane-controller.service and
-// groundplane-etcd.service), the Controller's self-update via staged-
-// binary swap, and validating backup-schedule calendar expressions with
-// `systemd-analyze calendar`. See mvp.md, "Core (locked)" and
-// "groundplane-etcd.service".
+// Package systemd handles the sole Groundplane systemd unit, the Controller's
+// self-update via staged-binary swap, and backup-schedule calendar validation.
 //
 // DOCUMENTED os/exec EXCEPTION (docs/standards.md, section 5):
 // this package is one of the three listed exceptions ("systemd unit
@@ -31,7 +27,6 @@ const systemUnitDirectory = "/etc/systemd/system"
 
 var managedUnits = map[string]struct{}{
 	"groundplane-controller.service": {},
-	"groundplane-etcd.service":       {},
 }
 
 // ValidateCalendar shells out to `systemd-analyze calendar <expr>` to

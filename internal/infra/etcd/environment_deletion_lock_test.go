@@ -241,6 +241,15 @@ func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.
 	for _, terminalStatus := range []TaskStatus{TaskStatusCompleted, TaskStatusFailed, TaskStatusAborted} {
 		t.Run(string(terminalStatus), func(t *testing.T) {
 			fixture := newEnvironmentDeletionLockFixture(t)
+			collectionValue, encodeErr := encodeReleaseGroupCollectionEpoch(fixture.environment.Record.ID)
+			if encodeErr != nil {
+				t.Fatalf("encodeReleaseGroupCollectionEpoch() error = %v", encodeErr)
+			}
+			fixture.putRaw(
+				t,
+				releaseGroupCollectionEpochKey(fixture.environment.Record.ID),
+				collectionValue,
+			)
 			fixture.mustBegin(t)
 			agentID := ids.NewAt(ids.KindAgent, fixture.now, 8030)
 			var terminal Versioned[TaskRecord]
@@ -305,6 +314,12 @@ func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.
 					environmentMutationEpochKey(fixture.environment.Record.ID),
 					false,
 				)
+				assertEnvironmentDeletionCompanion(
+					t,
+					fixture.store,
+					releaseGroupCollectionEpochKey(fixture.environment.Record.ID),
+					false,
+				)
 			} else {
 				lockValue := fixture.mustGet(
 					t,
@@ -354,6 +369,12 @@ func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.
 						terminal.Revision,
 					)
 				}
+				assertEnvironmentDeletionCompanion(
+					t,
+					fixture.store,
+					releaseGroupCollectionEpochKey(fixture.environment.Record.ID),
+					true,
+				)
 			}
 			var replay Versioned[TaskRecord]
 			if terminalStatus == TaskStatusAborted {

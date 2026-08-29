@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -149,6 +150,63 @@ func TestEnvironmentBlueprintPublicationPreservesOldRevisionWhenHeadAdvances(t *
 	assertEnvironmentBlueprintTaskAuthority(t, repository.store, environment.Record.ID, secondTask, current.Revision)
 }
 
+func TestEnvironmentBlueprintCompletionPromotesAppliedComposeProjection(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryHierarchyStore()
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	project, environment := createEnvironmentBlueprintOwners(t, hierarchy)
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 50)
+	desired := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+	publishEnvironmentBlueprintTestRevision(
+		t,
+		hierarchy,
+		project,
+		environment,
+		0,
+		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
+		desired,
+		environmentBlueprintTestZoneChanges(t, hierarchy, desired),
+		environmentBlueprintTestServiceChanges(t, hierarchy, desired),
+		environmentBlueprintTestRouteChanges(t, hierarchy, desired),
+		ComponentTaskPreparation{},
+		task,
+		environmentBlueprintTestMarker(task, environment.Record.ID),
+	)
+	if applied, found, err := hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID); err != nil || found {
+		t.Fatalf("applied projection before acknowledgement = %#v, %v, %v", applied, found, err)
+	}
+
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 51)
+	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
+	if err != nil || !found || assignment.Task.Record.ID != task.ID {
+		t.Fatalf("ClaimNextTask() = %#v, %v, %v", assignment, found, err)
+	}
+	if _, err := tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		task.ID,
+		taskAssignmentIDForTest(t, tasks, task.ID),
+		TaskStatusCompleted,
+		completedComposeTaskResult(),
+		task.CreatedAt.Add(2*time.Second),
+	); err != nil {
+		t.Fatalf("AcknowledgeTask() error = %v", err)
+	}
+	applied, found, err := hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
+	if err != nil || !found || !reflect.DeepEqual(applied.Record, desired) {
+		t.Fatalf("applied projection after acknowledgement = %#v, %v, %v", applied, found, err)
+	}
+}
+
 func publishEnvironmentBlueprintTestRevision(
 	t *testing.T,
 	repository *HierarchyRepository,
@@ -184,6 +242,7 @@ func publishEnvironmentBlueprintTestRevision(
 		routeChanges,
 		ReleaseGroupBlueprintPreparedMutation{},
 		componentPreparation,
+		BlueprintAttachTaskPreparation{},
 		task,
 		marker,
 	)

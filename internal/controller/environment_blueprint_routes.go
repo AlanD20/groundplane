@@ -89,6 +89,9 @@ func (s *Server) applyEnvironmentBlueprint(
 		ctx, request.ID, bundle, request.IdempotencyKey,
 	)
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error("controller: apply Environment Blueprint", "environment_id", request.ID, "error", err)
+		}
 		return nil, normalizeProjectError(err)
 	}
 	return s.environmentMutationResponse(response, "apply Blueprint"), nil

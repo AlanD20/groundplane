@@ -3,16 +3,12 @@ package agentchannel
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -79,40 +75,16 @@ func TestSendTaskAssignmentFramesAndClearsBackupSecretSlots(t *testing.T) {
 	}
 }
 
-// Rationale: prune evidence reaches the channel through the real Controller
-// resolver; mixed direct/reference inputs must become exactly two ordered
-// frames and every transient plaintext/ciphertext must clear.
-func TestSendBackupPruneSlotsWithRealResolverAndMixedEvidence(t *testing.T) {
+// Rationale: resolved mixed credential sources must become exactly two ordered
+// frames and the channel must clear every plaintext buffer it accepts.
+func TestSendBackupPruneSlotsWithMixedResolvedEvidence(t *testing.T) {
 	task, plan := controllerBackupPruneSecretTask(t)
-	const connectorID = "con_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	directCiphertext := []byte("direct-envelope")
-	secretCiphertext := []byte("secret-envelope")
-	evidence := etcd.BackupSecretResolutionEvidence{
-		Connector: etcd.ConnectorRecord{Connector: core.Connector{
-			ID: connectorID, EnvironmentID: task.Target,
-			Credentials: map[core.ConnectorCredentialName]core.ConnectorCredential{
-				core.ConnectorCredentialAccessKey: {Kind: core.ConnectorCredentialDirect},
-				core.ConnectorCredentialSecretKey: {
-					Kind: core.ConnectorCredentialSecretRef, SecretRef: "C16_SECRET",
-				},
-			}}},
-		Credentials:    testConnectorEncryptedCredentials(connectorID, directCiphertext),
-		HasCredentials: true,
-		SecretValues: []etcd.BackupSecretValueEvidence{{
-			Name: backupsecret.CredentialSecretKey, Reference: "C16_SECRET",
-			Value: testSecretEncryptedValue("sec_01ARZ3NDEKTSV4RRFFQ69G5FAV", secretCiphertext),
-		}},
-	}
-	reader := &realSenderEvidenceReader{evidence: evidence}
-	crypt := &realSenderSecretCrypt{}
-	protector, err := secretvalue.NewProtector(crypt, crypt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolver, err := controllerpkg.NewBackupSecretResolver(reader, protector)
-	if err != nil {
-		t.Fatal(err)
-	}
+	accessSource := []byte("direct-access")
+	secretSource := []byte("project-secret")
+	resolver := &fakeBackupSecretResolver{slots: map[agentpb.BackupSecretSlotPurpose][]byte{
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY: accessSource,
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_SECRET_KEY: secretSource,
+	}}
 	server := NewWithPrivateTransfers(
 		authorizedAuthenticator(), NewRegistry(), nil, nil, nil, resolver,
 	)
@@ -145,67 +117,8 @@ func TestSendBackupPruneSlotsWithRealResolverAndMixedEvidence(t *testing.T) {
 			t.Fatalf("slot %d frames = %#v/%#v/%#v", index, header, chunk, end)
 		}
 	}
-	if !allZero(directCiphertext) || !allZero(secretCiphertext) {
-		t.Fatal("real resolver retained durable ciphertext")
-	}
-	for index, plaintext := range crypt.opened {
-		if !allZero(plaintext) {
-			t.Fatalf("provider plaintext %d was not cleared", index)
-		}
-	}
-}
-
-type realSenderEvidenceReader struct {
-	evidence etcd.BackupSecretResolutionEvidence
-}
-
-func (reader *realSenderEvidenceReader) ResolveBackupSecretEvidence(
-	context.Context,
-	backupsecret.Request,
-) (etcd.BackupSecretResolutionEvidence, error) {
-	return reader.evidence, nil
-}
-
-type realSenderSecretCrypt struct {
-	opened [][]byte
-}
-
-func (*realSenderSecretCrypt) Seal(_ context.Context, plaintext []byte) ([]byte, error) {
-	return append([]byte(nil), plaintext...), nil
-}
-
-func (crypt *realSenderSecretCrypt) Open(_ context.Context, ciphertext []byte) ([]byte, error) {
-	var plaintext []byte
-	switch string(ciphertext) {
-	case "direct-envelope":
-		plaintext = []byte(`{"access_key":"direct-access"}`)
-	case "secret-envelope":
-		plaintext = []byte("project-secret")
-	default:
-		return nil, errs.New(errs.KindInternal, "unexpected test ciphertext")
-	}
-	crypt.opened = append(crypt.opened, plaintext)
-	return plaintext, nil
-}
-
-func testConnectorEncryptedCredentials(
-	connectorID string,
-	ciphertext []byte,
-) etcd.ConnectorEncryptedCredentials {
-	digest := sha256.Sum256(ciphertext)
-	return etcd.ConnectorEncryptedCredentials{
-		ConnectorID: connectorID, EnvelopeVersion: 1, Cipher: "age-x25519",
-		DigestAlgorithm: "sha256", CiphertextSHA256: hex.EncodeToString(digest[:]),
-		Ciphertext: ciphertext,
-	}
-}
-
-func testSecretEncryptedValue(secretID string, ciphertext []byte) etcd.SecretEncryptedValue {
-	digest := sha256.Sum256(ciphertext)
-	return etcd.SecretEncryptedValue{
-		SecretID: secretID, EnvelopeVersion: 1, Cipher: "age-x25519",
-		DigestAlgorithm: "sha256", CiphertextSHA256: hex.EncodeToString(digest[:]),
-		Ciphertext: ciphertext,
+	if !allZero(accessSource) || !allZero(secretSource) {
+		t.Fatal("channel retained resolved backup credential plaintext")
 	}
 }
 

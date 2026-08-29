@@ -17,17 +17,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/version"
-	agentcomponent "github.com/AlanD20/groundplane/internal/components/agent"
-	"github.com/AlanD20/groundplane/internal/components/caddy"
-	"github.com/AlanD20/groundplane/internal/components/cloudflaretunnel"
-	controllercomponent "github.com/AlanD20/groundplane/internal/components/controller"
-	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -37,6 +31,7 @@ import (
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
+	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
@@ -85,11 +80,12 @@ type Controller struct {
 	localAgent      controllerScheduler
 	attachMutations *attachMutationService
 	container       ownedStore
+	etcdContainer   controllerEtcdLifecycle
 	store           ownedStore
 }
 
 type controllerServer interface {
-	Serve(ctx context.Context, addr string) error
+	Serve(ctx context.Context, addresses []string) error
 }
 
 type controllerScheduler interface {
@@ -104,10 +100,18 @@ type ownedStore interface {
 	Close() error
 }
 
+type controllerEtcdLifecycle interface {
+	Run(context.Context) error
+	Close() error
+}
+
 // NewController constructs the Controller composition root.
 func NewController(ctx context.Context, configPath string) (*Controller, error) {
 	registerAdapters()
-	registerComponents()
+	componentCatalog, err := registeredEnvironmentComponentCatalog()
+	if err != nil {
+		return nil, fmt.Errorf("controller: initialize registered Components: %w", err)
+	}
 
 	cfg, err := loadControllerConfig(ctx, configPath)
 	if err != nil {
@@ -141,7 +145,21 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("controller: load embedded Console: %w", err))
 	}
 
-	store, err := etcd.New(ctx, cfg.Etcd.Endpoints, cfg.Etcd.KeyPrefix)
+	etcdLifecycle, err := etcdcontainer.New(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("controller: initialize etcd container lifecycle: %w", err)
+	}
+	keepEtcdLifecycle := false
+	defer func() {
+		if !keepEtcdLifecycle {
+			_ = etcdLifecycle.Close()
+		}
+	}()
+	if err := etcdLifecycle.Reconcile(ctx); err != nil {
+		return nil, fmt.Errorf("controller: reconcile etcd container: %w", err)
+	}
+	etcdEndpoints := etcdcontainer.Endpoints()
+	store, err := etcd.New(ctx, etcdEndpoints, cfg.Etcd.KeyPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize etcd: %w", err)
 	}
@@ -283,7 +301,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Service mutation repositories: %w", err)
 	}
 	scriptMutationRepository, err := newDurableScriptMutationRepository(
-		hierarchyRecords, serviceRecords, scriptRecords,
+		hierarchyRecords, serviceRecords, scriptRecords, releaseLedger,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -299,7 +317,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)
 	}
-	platformComponents, err := etcd.DefaultPlatformComponents()
+	platformComponents, err := etcd.DefaultPlatformComponents(detectTailnetDelegationDefault())
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform Components: %w", err)
@@ -384,6 +402,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backup checkpoint service: %w", err)
 	}
+	scriptCheckpoints, err := controller.NewScriptCheckpointService(scriptRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script checkpoint service: %w", err)
+	}
 	backupPolicyRepository, err := controller.NewDurableBackupPolicyRepository(backupPolicyRecords)
 	if err != nil {
 		closeErr := store.Close()
@@ -413,6 +436,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		attachRecords,
 		serviceRecords,
 		attachFactValues,
+		componentCatalog,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -422,6 +446,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release plan resolver: %w", err)
 	}
+	if err := planResolver.EnableScriptPlans(scriptRecords); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script plan resolver: %w", err)
+	}
 	if err := planResolver.EnableBackupPlans(backupRuntimeRecords); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup plan resolver: %w", err)
@@ -429,12 +457,18 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	materializationResolver, err := controller.NewTaskMaterializationResolver(
 		hierarchyRecords,
 		entryValues,
+		secretRecords,
 		planResolver,
 		intentProtector,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize materialization value resolver: %w", err)
+	}
+	scriptArtifacts, err := controller.NewScriptArtifactService(scriptRecords, materializationResolver)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script artifact service: %w", err)
 	}
 	backupSecretEvidence, err := etcd.NewBackupSecretResolutionReader(store)
 	if err != nil {
@@ -450,8 +484,37 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	agentRuntime := newAgentChannelRuntime(
+	coreDNSRenderer, err := registeredCoreDNSRenderer()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize CoreDNS renderer: %w", err)
+	}
+	actionCatalog, err := newRegisteredActionCatalog()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
+	}
+	coreDNSRenderPlanner, err := newCoreDNSPlatformRenderPlanner(
+		hierarchyRecords, componentRecords, coreDNSRenderer, actionCatalog,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize CoreDNS render planner: %w", err)
+	}
+	platformComponentExecution, err := newPlatformComponentExecutionPlanner(
+		componentRecords, actionCatalog, coreDNSRenderer,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Platform Component execution planner: %w", err)
+	}
+	if err := planResolver.EnableComponentPlans(platformComponentExecution); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Platform Component plan resolver: %w", err)
+	}
+	agentRuntime := newAgentChannelRuntimeWithManagedConfigAndScripts(
 		authenticator, tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
+		platformComponentExecution, scriptArtifacts, scriptCheckpoints,
 	)
 	staleTasks, err := newStaleAgentTaskMaintenance(agents, agentRuntime.registry, tasks)
 	if err != nil {
@@ -634,7 +697,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script mutation idempotency: %w", err)
 	}
-	scriptMutations, err := newScriptMutationService(scriptMutationRepository, scriptMutationIdempotency)
+	scriptMutations, err := newScriptMutationService(
+		scriptMutationRepository, scriptMutationIdempotency, scriptArtifacts,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script mutation service: %w", err)
@@ -670,15 +735,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent Task adapter: %w", err)
 	}
-	entryCreationRepository, err := newDurableEntryCreationRepository(
-		hierarchyRecords,
-		entryRecords,
-		serviceRecords,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry creation repositories: %w", err)
-	}
 	entryGeneration, err := NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
 	if err != nil {
 		_ = store.Close()
@@ -689,55 +745,20 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry creation idempotency: %w", err)
 	}
-	entryCreationMutations, err := newEntryCreationService(
-		entryCreationRepository,
-		entryGeneration,
-		entryCreationIdempotency,
-	)
+	entryBulkUpsertIdempotency, err := newDurableEntryBulkUpsertIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry creation service: %w", err)
-	}
-	entryEditRepository, err := newDurableEntryEditRepository(entryCreationRepository)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry edit repositories: %w", err)
+		return nil, fmt.Errorf("controller: initialize Entry bulk upsert idempotency: %w", err)
 	}
 	entryEditIdempotency, err := newDurableEntryEditIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry edit idempotency: %w", err)
 	}
-	entryEditMutations, err := newEntryEditService(
-		entryEditRepository,
-		entryGeneration,
-		entryEditIdempotency,
-	)
+	entryRemovalIdempotency, err := newDurableEntryDesiredRemovalIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry edit service: %w", err)
-	}
-	entryRemovalPlanner, err := controller.NewEntryRemovalPlanner(planResolver, materializationResolver)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry removal planner: %w", err)
-	}
-	entryRemovalRepository, err := entrycontroller.NewEtcdRepository(
-		entryCreationRepository.hierarchy, entryCreationRepository.entries,
-		componentRecords, intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry deletion persistence: %w", err)
-	}
-	entryDeletions, err := entrycontroller.NewRemovalService(entryRemovalRepository, entryRemovalPlanner)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry deletion service: %w", err)
-	}
-	entryMutations, err := newEntryMutationService(entryCreationMutations, entryEditMutations, entryDeletions)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Entry mutation service: %w", err)
+		return nil, fmt.Errorf("controller: initialize Entry removal idempotency: %w", err)
 	}
 	secretCreationIdempotency, err := newDurableSecretCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -826,7 +847,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Attach mutation idempotency: %w", err)
 	}
 	attachMutationPlans, err := newDraftAttachPlanSealer(
-		cfg.Storage.VolumeRoot, attachMutationRecords, attachFactValues,
+		cfg.Storage.VolumeRoot, attachMutationRecords, attachFactValues, componentCatalog,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -875,11 +896,31 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		serviceRecords,
 		routeRecords,
 		entryRecords,
+		entryValues,
+		attachRecords,
 		componentRecords,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint repositories: %w", err)
+	}
+	entryDesiredMutations, err := newEntryDesiredMutationService(
+		cfg.Storage.VolumeRoot, environmentBlueprintRepository, entryGeneration, materializationResolver,
+		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry desired mutation service: %w", err)
+	}
+	entryBulkUpserts, err := newEntryBulkUpsertService(entryDesiredMutations, entryBulkUpsertIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry bulk upsert service: %w", err)
+	}
+	entryMutations, err := newEntryMutationService(entryDesiredMutations, entryBulkUpserts)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Entry mutation service: %w", err)
 	}
 	releaseGroupBlueprints, err := controller.NewReleaseGroupBlueprintPlanner(
 		releaseGroups,
@@ -891,10 +932,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	environmentBlueprints, err := newEnvironmentBlueprintService(
 		cfg.Storage.VolumeRoot,
+		cfg.EnvironmentPool,
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
 		materializationResolver,
 		releaseGroupBlueprints,
+		entryGeneration,
+		attachFactValues,
+		componentCatalog,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -906,13 +951,27 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
 		intentProtector,
+		componentCatalog,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing-service creation: %w", err)
 	}
+	componentCredentials, err := newComponentCloudflareCredentialResolver(hierarchyRecords, secretReads, secretMutations)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Component credentials: %w", err)
+	}
+	platformComponentMutations, err := newPlatformComponentMutationService(
+		componentRecords, tasks, idempotency, intentCoordinator, coreDNSRenderer, coreDNSRenderPlanner,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Platform Component mutations: %w", err)
+	}
 	componentMutations, err := componentcapability.NewMutationService(
 		componentRecords, environmentBlueprintRepository, environmentBlueprints,
+		componentCredentials, platformComponentMutations,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -1157,7 +1216,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	hostReads, err := controller.NewHostService(controller.HostDependencies{
 		System: &hostSystemSnapshotSource{system: hoststats.New(), docker: containerManager},
 		Etcd: &hostEtcdSnapshotSource{
-			endpoints: append([]string(nil), cfg.Etcd.Endpoints...),
+			endpoints: append([]string(nil), etcdEndpoints...),
 			probe:     etcd.ProbeEndpoints,
 		},
 		Agent: &hostAgentSnapshotSource{
@@ -1177,6 +1236,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Host reads: %w", err)
 	}
 
+	environmentReads := environmentcapability.NewEtcdReader(
+		environmentetcd.NewRepository(hierarchyRecords, zoneRecords),
+	)
+	logService := controller.NewLogService(environmentReads, serviceReads, releaseLedger, agentRuntime.registry)
 	srv := controller.New(store, logger, controller.Options{
 		Host: hostReads, Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
 		Projects:                hierarchyService,
@@ -1186,55 +1249,53 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackingServiceMutations: backingServiceMutations,
 		Components:              componentReads,
 		ComponentMutations:      componentMutations,
-		Environments: environmentcapability.NewEtcdReader(
-			environmentetcd.NewRepository(hierarchyRecords, zoneRecords),
-		),
-		Services:              serviceReads,
-		ServiceMutations:      serviceMutations,
-		Zones:                 networkCapability,
-		ZoneMutations:         networkCapability,
-		Routes:                networkCapability,
-		RouteMutations:        networkCapability,
-		ReleaseGroups:         releaseGroups,
-		ReleaseGroupMutations: releaseGroupMutations,
-		Releases:              releaseLedger,
-		ReleaseOperations:     releaseOperations,
-		Scripts:               scriptReads,
-		ScriptMutations:       scriptMutations,
-		Entries:               entryReads,
-		EntryMutations:        entryMutations,
-		Secrets:               secretReads,
-		SecretMutations:       secretMutations,
-		SecretDeletions:       secretDeletions,
-		Connectors:            connectorReads,
-		ConnectorMutations:    connectorMutations,
-		ConnectorDeletions:    connectorDeletions,
-		Runners:               runnerRecords,
-		RunnerProvisioning:    runnerProvisioning,
-		RunnerMutations:       runnerMutations,
-		RunnerRemovals:        runnerRemovals,
-		BackupPolicies:        backupPolicies,
-		BackupPolicyMutations: backupPolicies,
-		RecoveryPoints:        backupPointReads,
-		BackupRuns:            backupRuns,
-		BackupKeyMutations:    backupKeys,
-		BackupKeyExports:      backupKeys,
-		Volumes:               volumeReads,
-		VolumeMutations:       volumeMutations,
-		EnvironmentMutations:  environmentMutations,
-		EnvironmentChanges:    environmentChanges,
-		EnvironmentBlueprints: environmentBlueprints,
-		HierarchyDeletions:    hierarchyDeletions,
-		AttachMutations:       attachMutations,
-		AttachFacts:           attachFactReads,
-		TaskMutations:         taskMutations,
-		TaskAborts:            taskAborts,
-		TenantMutations:       tenantMutations,
-		TenantChanges:         tenantChanges,
-		Console:               consoleAssets, Tasks: tasks,
+		Environments:            environmentReads,
+		Services:                serviceReads,
+		ServiceMutations:        serviceMutations,
+		Zones:                   networkCapability,
+		ZoneMutations:           networkCapability,
+		Routes:                  networkCapability,
+		RouteMutations:          networkCapability,
+		ReleaseGroups:           releaseGroups,
+		ReleaseGroupMutations:   releaseGroupMutations,
+		Releases:                releaseLedger,
+		ReleaseOperations:       releaseOperations,
+		Scripts:                 scriptReads,
+		ScriptMutations:         scriptMutations,
+		Entries:                 entryReads,
+		EntryMutations:          entryMutations,
+		Secrets:                 secretReads,
+		SecretMutations:         secretMutations,
+		SecretDeletions:         secretDeletions,
+		Connectors:              connectorReads,
+		ConnectorMutations:      connectorMutations,
+		ConnectorDeletions:      connectorDeletions,
+		Runners:                 runnerRecords,
+		RunnerProvisioning:      runnerProvisioning,
+		RunnerMutations:         runnerMutations,
+		RunnerRemovals:          runnerRemovals,
+		BackupPolicies:          backupPolicies,
+		BackupPolicyMutations:   backupPolicies,
+		RecoveryPoints:          backupPointReads,
+		BackupRuns:              backupRuns,
+		BackupKeyMutations:      backupKeys,
+		BackupKeyExports:        backupKeys,
+		Volumes:                 volumeReads,
+		VolumeMutations:         volumeMutations,
+		EnvironmentMutations:    environmentMutations,
+		EnvironmentChanges:      environmentChanges,
+		EnvironmentBlueprints:   environmentBlueprints,
+		HierarchyDeletions:      hierarchyDeletions,
+		AttachMutations:         attachMutations,
+		AttachFacts:             attachFactReads,
+		TaskMutations:           taskMutations,
+		TaskAborts:              taskAborts,
+		TenantMutations:         tenantMutations,
+		TenantChanges:           tenantChanges,
+		Console:                 consoleAssets, Tasks: tasks, Logs: logService,
 	})
 
-	return &Controller{
+	wired := &Controller{
 		Config:          cfg,
 		Logger:          logger,
 		server:          srv,
@@ -1244,8 +1305,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		localAgent:      localAgentReconciliation,
 		attachMutations: attachMutations,
 		container:       containerManager,
+		etcdContainer:   etcdLifecycle,
 		store:           store,
-	}, nil
+	}
+	keepEtcdLifecycle = true
+	return wired, nil
 }
 
 func registerAdapters() {
@@ -1258,16 +1322,6 @@ func registerAdapters() {
 	if _, registered := adapters.Get("manual"); !registered {
 		manual.Register()
 	}
-}
-
-// registerComponents is registerAdapters' twin for the owner-aware component
-// seam.
-func registerComponents() {
-	caddy.Register()
-	cloudflaretunnel.Register()
-	coredns.Register()
-	controllercomponent.Register()
-	agentcomponent.Register()
 }
 
 // Run supervises HTTP, the local Agent channel, and the scheduler as one
@@ -1299,7 +1353,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		name string
 		err  error
 	}
-	runtimeDone := make(chan runtimeResult, 2)
+	runtimeDone := make(chan runtimeResult, 3)
 	go func() {
 		err := c.server.Serve(runCtx, c.Config.Listen.HTTP)
 		if err == nil && runCtx.Err() == nil {
@@ -1314,9 +1368,16 @@ func (c *Controller) Run(ctx context.Context) error {
 		}
 		runtimeDone <- runtimeResult{name: "serve Agent channel", err: err}
 	}()
+	go func() {
+		err := c.etcdContainer.Run(runCtx)
+		if err == nil && runCtx.Err() == nil {
+			err = errors.New("etcd container reconciliation stopped unexpectedly")
+		}
+		runtimeDone <- runtimeResult{name: "reconcile etcd container", err: err}
+	}()
 
-	runtimeErrors := make(map[string]error, 2)
-	for index := 0; index < 2; index++ {
+	runtimeErrors := make(map[string]error, 3)
+	for index := 0; index < 3; index++ {
 		result := <-runtimeDone
 		runtimeErrors[result.name] = result.err
 		if index == 0 {
@@ -1329,11 +1390,14 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	containerCloseErr := c.container.Close()
 	closeErr := c.store.Close()
+	etcdContainerCloseErr := c.etcdContainer.Close()
 	joined := errors.Join(
 		wrapControllerRunError("serve HTTP", runtimeErrors["serve HTTP"]),
 		wrapControllerRunError("serve Agent channel", runtimeErrors["serve Agent channel"]),
+		wrapControllerRunError("reconcile etcd container", runtimeErrors["reconcile etcd container"]),
 		wrapControllerRunError("close local Agent Docker lifecycle", containerCloseErr),
 		wrapControllerRunError("close etcd", closeErr),
+		wrapControllerRunError("close etcd container lifecycle", etcdContainerCloseErr),
 	)
 	if joined != nil {
 		return errs.Wrap(errs.KindInternal, joined)

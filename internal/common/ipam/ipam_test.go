@@ -94,19 +94,18 @@ func TestFirstAvailableChildRejectsExhaustion(t *testing.T) {
 	}
 }
 
-// Rationale: Caddy allocation must choose the first usable bridge address,
-// remain independent of reservation order, and never return reserved bridge
-// identities.
-func TestFirstAvailableUsableIPv4UsesLowestFreeAddress(t *testing.T) {
+// Rationale: Component allocation must run opposite Docker's low-to-high
+// dynamic allocation while remaining independent of reservation order.
+func TestLastAvailableUsableIPv4UsesHighestFreeAddress(t *testing.T) {
 	prefix := netip.MustParsePrefix("10.200.30.0/29")
-	got, err := FirstAvailableUsableIPv4(prefix, []netip.Addr{
+	got, err := LastAvailableUsableIPv4(prefix, []netip.Addr{
 		netip.MustParseAddr("10.200.30.4"),
-		netip.MustParseAddr("10.200.30.2"),
+		netip.MustParseAddr("10.200.30.6"),
 	})
 	if err != nil {
-		t.Fatalf("FirstAvailableUsableIPv4 error: %v", err)
+		t.Fatalf("LastAvailableUsableIPv4 error: %v", err)
 	}
-	if want := netip.MustParseAddr("10.200.30.3"); got != want {
+	if want := netip.MustParseAddr("10.200.30.5"); got != want {
 		t.Fatalf("address = %s, want %s", got, want)
 	}
 	for _, reserved := range []string{"10.200.30.0", "10.200.30.1", "10.200.30.7"} {
@@ -118,9 +117,9 @@ func TestFirstAvailableUsableIPv4UsesLowestFreeAddress(t *testing.T) {
 
 // Rationale: an exhausted Zone must fail without wrapping into its network,
 // gateway, or broadcast address.
-func TestFirstAvailableUsableIPv4RejectsExhaustion(t *testing.T) {
+func TestLastAvailableUsableIPv4RejectsExhaustion(t *testing.T) {
 	prefix := netip.MustParsePrefix("10.200.30.0/30")
-	_, err := FirstAvailableUsableIPv4(prefix, []netip.Addr{netip.MustParseAddr("10.200.30.2")})
+	_, err := LastAvailableUsableIPv4(prefix, []netip.Addr{netip.MustParseAddr("10.200.30.2")})
 	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindStateConflict {
 		t.Fatalf("exhaustion error = %v, kind = %d, %t", err, kind, ok)
 	}

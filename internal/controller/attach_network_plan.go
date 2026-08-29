@@ -6,6 +6,7 @@ import (
 
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -20,53 +21,129 @@ func attachNetworkTransform(input etcd.AttachTaskRenderInput) environmentCompose
 		project *composetypes.Project,
 		projection etcd.EnvironmentComposeProjection,
 	) ([]ComposeResourceIdentity, error) {
-		serviceNames := make(map[string]string, len(projection.Services))
-		for _, service := range projection.Services {
-			serviceNames[service.ID] = service.Name
+		return ProjectAttachNetworks(project, projection, input.NetworkJoins)
+	}
+}
+
+// ProjectAttachNetworks replaces the reserved Attach overlay on an owned
+// Compose project with the supplied complete network-membership union.
+func ProjectAttachNetworks(
+	project *composetypes.Project,
+	projection etcd.EnvironmentComposeProjection,
+	joins []etcd.AttachTaskNetworkJoin,
+) ([]ComposeResourceIdentity, error) {
+	if project == nil || ids.Validate(ids.KindEnvironment, projection.EnvironmentID) != nil {
+		return nil, errs.New(errs.KindInternal, "Attach network projection input is invalid")
+	}
+	removeManagedAttachNetworks(project)
+	serviceNames := make(map[string]string, len(projection.Services))
+	for _, service := range projection.Services {
+		serviceNames[service.ID] = service.Name
+	}
+	if project.Networks == nil {
+		project.Networks = make(composetypes.Networks)
+	}
+	external := make([]ComposeResourceIdentity, 0, len(joins))
+	for _, join := range joins {
+		composeName := "gp_attach_" + strings.ToLower(join.NetworkID)
+		if ids.Validate(ids.KindNetwork, join.NetworkID) != nil {
+			return nil, errs.New(errs.KindInternal, "Attach network projection contains an invalid network")
 		}
-		if project.Networks == nil {
-			project.Networks = make(composetypes.Networks)
+		if _, exists := project.Networks[composeName]; exists {
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"managed Attach network conflicts with authored Compose",
+			)
 		}
-		external := make([]ComposeResourceIdentity, 0, len(input.NetworkJoins))
-		for _, join := range input.NetworkJoins {
-			composeName := "gp_attach_" + strings.ToLower(join.NetworkID)
-			if _, exists := project.Networks[composeName]; exists {
+		project.Networks[composeName] = composetypes.NetworkConfig{External: true}
+		external = append(external, ComposeResourceIdentity{ID: join.NetworkID, Name: composeName})
+		for _, serviceID := range join.ServiceIDs {
+			serviceName, exists := serviceNames[serviceID]
+			if !exists {
 				return nil, errs.New(
-					errs.KindValidationFailed,
-					"managed Attach network conflicts with authored Compose",
+					errs.KindInternal,
+					"Attach network consumer is absent from the pinned projection",
 				)
 			}
-			project.Networks[composeName] = composetypes.NetworkConfig{External: true}
-			external = append(external, ComposeResourceIdentity{ID: join.NetworkID, Name: composeName})
-			for _, serviceID := range join.ServiceIDs {
-				serviceName, exists := serviceNames[serviceID]
-				if !exists {
-					return nil, errs.New(
-						errs.KindInternal,
-						"Attach network consumer is absent from the pinned projection",
-					)
-				}
-				service, exists := project.Services[serviceName]
-				if !exists {
-					return nil, errs.New(errs.KindInternal, "Attach network consumer is absent from the Blueprint")
-				}
-				if service.NetworkMode != "" {
-					return nil, errs.New(
-						errs.KindValidationFailed,
-						"Attach network conflicts with service network_mode",
-					)
-				}
-				if service.Networks == nil {
-					service.Networks = make(map[string]*composetypes.ServiceNetworkConfig)
-				}
-				if _, exists := service.Networks[composeName]; exists {
-					return nil, errs.New(errs.KindValidationFailed, "managed Attach network membership is duplicated")
-				}
-				service.Networks[composeName] = &composetypes.ServiceNetworkConfig{}
+			service, active := project.Services[serviceName]
+			if !active {
+				service, exists = project.DisabledServices[serviceName]
+			}
+			if !exists {
+				return nil, errs.New(errs.KindInternal, "Attach network consumer is absent from the Blueprint")
+			}
+			if service.NetworkMode != "" {
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"Attach network conflicts with service network_mode",
+				)
+			}
+			if service.Networks == nil {
+				service.Networks = make(map[string]*composetypes.ServiceNetworkConfig)
+			}
+			if _, exists := service.Networks[composeName]; exists {
+				return nil, errs.New(errs.KindValidationFailed, "managed Attach network membership is duplicated")
+			}
+			service.Networks[composeName] = &composetypes.ServiceNetworkConfig{}
+			if active {
 				project.Services[serviceName] = service
+			} else {
+				project.DisabledServices[serviceName] = service
 			}
 		}
-		sort.Slice(external, func(i, j int) bool { return external[i].Name < external[j].Name })
-		return external, nil
 	}
+	sort.Slice(external, func(i, j int) bool { return external[i].Name < external[j].Name })
+	return external, nil
+}
+
+func removeManagedAttachNetworks(project *composetypes.Project) {
+	managed := make(map[string]struct{})
+	for name := range project.Networks {
+		if _, ok := managedAttachNetworkID(name); ok {
+			managed[name] = struct{}{}
+			delete(project.Networks, name)
+		}
+	}
+	removeMemberships := func(services composetypes.Services) {
+		for name, service := range services {
+			if len(service.Networks) == 0 {
+				continue
+			}
+			networks := make(map[string]*composetypes.ServiceNetworkConfig, len(service.Networks))
+			for network, config := range service.Networks {
+				if _, remove := managed[network]; !remove {
+					networks[network] = config
+				}
+			}
+			service.Networks = networks
+			services[name] = service
+		}
+	}
+	removeMemberships(project.Services)
+	removeMemberships(project.DisabledServices)
+}
+
+func managedAttachExternalNetworks(project *composetypes.Project) ([]ComposeResourceIdentity, error) {
+	external := make([]ComposeResourceIdentity, 0)
+	for name, network := range project.Networks {
+		networkID, managed := managedAttachNetworkID(name)
+		if !managed {
+			continue
+		}
+		if !network.External {
+			return nil, errs.New(errs.KindInternal, "managed Attach network is not external")
+		}
+		external = append(external, ComposeResourceIdentity{ID: networkID, Name: name})
+	}
+	sort.Slice(external, func(left int, right int) bool { return external[left].Name < external[right].Name })
+	return external, nil
+}
+
+func managedAttachNetworkID(composeName string) (string, bool) {
+	const prefix = "gp_attach_net_"
+	if !strings.HasPrefix(composeName, prefix) {
+		return "", false
+	}
+	networkID := "net_" + strings.ToUpper(strings.TrimPrefix(composeName, prefix))
+	return networkID, ids.Validate(ids.KindNetwork, networkID) == nil
 }

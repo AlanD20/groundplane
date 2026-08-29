@@ -39,6 +39,14 @@ type ReleasePage struct {
 }
 
 type CurrentSuccessfulRelease struct {
+	Projection         domain.ServiceProjection
+	ProjectionRevision int64
+	Intent             domain.Intent
+	IntentRevision     int64
+	Revision           int64
+}
+
+type ServingRelease struct {
 	Projection domain.ServiceProjection
 	Intent     domain.Intent
 	Revision   int64
@@ -78,7 +86,50 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(ctx context.Context, envir
 		intent.EnvironmentID != environmentID || intent.ServiceID != serviceID {
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
 	}
-	return CurrentSuccessfulRelease{Projection: projection, Intent: intent, Revision: projectionRead.ReadRevision}, nil
+	return CurrentSuccessfulRelease{
+		Projection: projection, ProjectionRevision: projectionRead.Values[0].ModRevision,
+		Intent: intent, IntentRevision: intentRead.Values[0].ModRevision,
+		Revision: projectionRead.ReadRevision,
+	}, nil
+}
+
+func (ledger *ReleaseLedger) ResolveServing(ctx context.Context, environmentID, serviceID string, revision int64) (ServingRelease, error) {
+	if ctx == nil || ledger == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
+		ids.Validate(ids.KindService, serviceID) != nil || revision < 0 {
+		return ServingRelease{}, errs.New(errs.KindValidationFailed, "serving Release request is invalid")
+	}
+	projectionRead, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision})
+	if err != nil {
+		return ServingRelease{}, err
+	}
+	if projectionRead == nil || len(projectionRead.Values) != 1 || projectionRead.Values[0] == nil {
+		return ServingRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no serving Release")
+	}
+	projection, err := decodeReleaseRecord[domain.ServiceProjection](projectionRead.Values[0].Value, "service-release-projection")
+	if err != nil || projection.EnvironmentID != environmentID || projection.ServiceID != serviceID {
+		return ServingRelease{}, corruptReleaseRecord()
+	}
+	if projection.ServingReleaseID == "" {
+		return ServingRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no serving Release")
+	}
+	if ids.Validate(ids.KindDeployment, projection.ServingReleaseID) != nil {
+		return ServingRelease{}, corruptReleaseRecord()
+	}
+	intentRead, err := ledger.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{releaseIntentStagingKey("", projection.ServingReleaseID)}, Revision: projectionRead.ReadRevision,
+	})
+	if err != nil {
+		return ServingRelease{}, err
+	}
+	if intentRead == nil || intentRead.ReadRevision != projectionRead.ReadRevision || len(intentRead.Values) != 1 || intentRead.Values[0] == nil {
+		return ServingRelease{}, corruptReleaseRecord()
+	}
+	intent, err := decodeReleaseRecord[domain.Intent](intentRead.Values[0].Value, "release-intent")
+	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != projection.ServingReleaseID ||
+		intent.EnvironmentID != environmentID || intent.ServiceID != serviceID {
+		return ServingRelease{}, corruptReleaseRecord()
+	}
+	return ServingRelease{Projection: projection, Intent: intent, Revision: projectionRead.ReadRevision}, nil
 }
 
 type releaseCursor struct {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -25,11 +26,19 @@ const (
 type ServiceArtifactMutation struct {
 	Action           ServiceArtifactAction
 	Desired          core.Service
+	Zones            []ServiceArtifactZone
 	ArtifactID       string
 	PlanID           string
 	TenantID         string
 	ProjectID        string
 	RenderGeneration uint64
+}
+
+type ServiceArtifactZone struct {
+	ID       string
+	Name     string
+	Subnet   string
+	Internal bool
 }
 
 func MutateEnvironmentServiceArtifact(
@@ -43,7 +52,8 @@ func MutateEnvironmentServiceArtifact(
 		mutation.RenderGeneration == 0 ||
 		(mutation.Action != ServiceArtifactCreate && mutation.Action != ServiceArtifactEdit &&
 			mutation.Action != ServiceArtifactRemove) ||
-		mutation.Desired.Validate() != nil {
+		mutation.Desired.Validate() != nil ||
+		(mutation.Action != ServiceArtifactRemove && validateServiceArtifactZones(mutation.Desired.Zones, mutation.Zones) != nil) {
 		return nil, errs.New(errs.KindInternal, "Service artifact mutation input is invalid")
 	}
 	owned := proto.Clone(current).(*agentpb.ComposeArtifact)
@@ -103,6 +113,9 @@ func MutateEnvironmentServiceArtifact(
 		services.Content = append(services.Content[:found], services.Content[found+2:]...)
 		owned.Services = append(owned.Services[:metadataIndex], owned.Services[metadataIndex+1:]...)
 	}
+	if err := ensureServiceZoneNetworks(root, owned, mutation); err != nil {
+		return nil, err
+	}
 	if err := rewriteArtifactOwnership(root, mutation.PlanID, mutation.RenderGeneration); err != nil {
 		return nil, err
 	}
@@ -127,6 +140,163 @@ func MutateEnvironmentServiceArtifact(
 	owned.CanonicalYaml = canonical
 	owned.YamlSha256 = digest[:]
 	return owned, nil
+}
+
+func ProjectEnvironmentServiceNativeCompose(
+	artifact *agentpb.ComposeArtifact,
+	serviceName string,
+) (string, error) {
+	if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		ids.Validate(ids.KindEnvironment, artifact.GetOwnerId()) != nil ||
+		!core.ValidEnvironmentComposeName(serviceName) {
+		return "", errs.New(errs.KindInternal, "Service native Compose projection input is invalid")
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(artifact.GetCanonicalYaml(), &document); err != nil || len(document.Content) != 1 ||
+		document.Content[0].Kind != yaml.MappingNode {
+		return "", errs.New(errs.KindInternal, "normalized Compose artifact YAML is corrupt")
+	}
+	root := document.Content[0]
+	servicesIndex := mappingIndex(root, "services")
+	if servicesIndex < 0 || root.Content[servicesIndex+1].Kind != yaml.MappingNode {
+		return "", errs.New(errs.KindInternal, "normalized Compose Service mapping is missing")
+	}
+	services := root.Content[servicesIndex+1]
+	serviceIndex := mappingIndex(services, serviceName)
+	if serviceIndex < 0 || services.Content[serviceIndex+1].Kind != yaml.MappingNode {
+		return "", errs.New(errs.KindInternal, "Service is absent from its current desired revision")
+	}
+	service := services.Content[serviceIndex+1]
+	removeMappingValue(service, composeResourceExtension)
+	for _, key := range []string{"labels", "annotations"} {
+		if err := removeGroundplaneServiceMetadata(service, key); err != nil {
+			return "", err
+		}
+	}
+	projectedServices := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	appendMappingValue(projectedServices, serviceName, service)
+	projectedRoot := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	appendMappingValue(projectedRoot, "services", projectedServices)
+	projected := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{projectedRoot}}
+	encoded, err := yaml.Marshal(projected)
+	if err != nil {
+		return "", errs.Wrap(errs.KindInternal, err)
+	}
+	result := string(encoded)
+	clear(encoded)
+	return result, nil
+}
+
+func removeGroundplaneServiceMetadata(service *yaml.Node, key string) error {
+	index := mappingIndex(service, key)
+	if index < 0 {
+		return nil
+	}
+	metadata := service.Content[index+1]
+	if metadata.Kind != yaml.MappingNode {
+		return errs.New(errs.KindInternal, "normalized Compose Service metadata is corrupt")
+	}
+	kept := metadata.Content[:0]
+	for offset := 0; offset+1 < len(metadata.Content); offset += 2 {
+		if strings.HasPrefix(metadata.Content[offset].Value, "com.groundplane.") {
+			continue
+		}
+		kept = append(kept, metadata.Content[offset], metadata.Content[offset+1])
+	}
+	metadata.Content = kept
+	if len(metadata.Content) == 0 {
+		removeMappingValue(service, key)
+	}
+	return nil
+}
+
+func validateServiceArtifactZones(names []string, zones []ServiceArtifactZone) error {
+	if len(names) != len(zones) {
+		return errs.New(errs.KindInternal, "Service artifact Zone bindings are invalid")
+	}
+	seen := make(map[string]struct{}, len(zones))
+	for index, zone := range zones {
+		subnet, err := ipam.ParseIPv4Prefix(zone.Subnet)
+		if ids.Validate(ids.KindNetwork, zone.ID) != nil || zone.Name != names[index] ||
+			err != nil || subnet.String() != zone.Subnet {
+			return errs.New(errs.KindInternal, "Service artifact Zone bindings are invalid")
+		}
+		if _, exists := seen[zone.Name]; exists {
+			return errs.New(errs.KindInternal, "Service artifact Zone bindings are invalid")
+		}
+		seen[zone.Name] = struct{}{}
+	}
+	return nil
+}
+
+func ensureServiceZoneNetworks(root *yaml.Node, artifact *agentpb.ComposeArtifact, mutation ServiceArtifactMutation) error {
+	networks := ensureMappingValue(root, "networks")
+	if networks == nil {
+		return errs.New(errs.KindInternal, "normalized Compose network mapping is corrupt")
+	}
+	for _, zone := range mutation.Zones {
+		owned := false
+		for _, network := range artifact.GetNetworks() {
+			if network.GetNetworkId() == zone.ID || network.GetComposeName() == zone.Name {
+				if network.GetNetworkId() != zone.ID || network.GetComposeName() != zone.Name {
+					return errs.New(errs.KindInternal, "Service artifact Zone identity conflicts with an owned network")
+				}
+				owned = true
+				break
+			}
+		}
+		if owned {
+			if mappingIndex(networks, zone.Name) < 0 {
+				return errs.New(errs.KindInternal, "Service artifact owned Zone network is absent")
+			}
+			continue
+		}
+		network := ensureMappingValue(networks, zone.Name)
+		if network == nil {
+			return errs.New(errs.KindInternal, "normalized Compose Zone network is corrupt")
+		}
+		labels := map[string]string{
+			composeLabelEnvironmentID: artifact.GetOwnerId(), composeLabelKind: "network",
+			composeLabelManaged: "true", composeLabelProjectID: mutation.ProjectID,
+			composeLabelTenantID: mutation.TenantID,
+		}
+		setMappingScalar(network, "name", "gp_net_"+zone.ID)
+		setMappingScalar(network, "driver", "bridge")
+		removeMappingValue(network, "external")
+		if zone.Internal {
+			setMappingTypedScalar(network, "internal", "!!bool", "true")
+		} else {
+			removeMappingValue(network, "internal")
+		}
+		config := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		appendMappingValue(config, "subnet", scalarNode(zone.Subnet))
+		configs := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{config}}
+		ipamNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		appendMappingValue(ipamNode, "config", configs)
+		setMappingNode(network, "ipam", ipamNode)
+		labelNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		for _, key := range sortedStringKeys(labels) {
+			appendMappingValue(labelNode, key, scalarNode(labels[key]))
+		}
+		setMappingNode(network, "labels", labelNode)
+		resource := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		appendMappingValue(resource, "kind", scalarNode("network"))
+		appendMappingValue(resource, "id", scalarNode(zone.ID))
+		parent := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		appendMappingValue(parent, "environment_id", scalarNode(artifact.GetOwnerId()))
+		appendMappingValue(resource, "parent", parent)
+		setMappingNode(network, composeResourceExtension, resource)
+		sortMapping(network)
+		artifact.Networks = append(artifact.Networks, &agentpb.ComposeNetwork{
+			NetworkId: zone.ID, ComposeName: zone.Name, DockerName: "gp_net_" + zone.ID,
+			ExpectedLabels: labelPairs(labels),
+		})
+	}
+	sortMapping(networks)
+	sort.Slice(artifact.Networks, func(left, right int) bool {
+		return artifact.Networks[left].GetNetworkId() < artifact.Networks[right].GetNetworkId()
+	})
+	return nil
 }
 
 func serviceArtifactMapping(root *yaml.Node) (*yaml.Node, error) {

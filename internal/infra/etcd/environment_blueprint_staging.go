@@ -14,6 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
 	"github.com/AlanD20/groundplane/internal/core"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -134,6 +135,23 @@ func validateEnvironmentDesiredRevisionIdentity(value EnvironmentDesiredRevision
 type EnvironmentDesiredMutationAudit struct {
 	Volume  *EnvironmentVolumeMutationAudit
 	Service *EnvironmentServiceMutationAudit
+	Entry   *EnvironmentEntryMutationAudit
+	Entries []EnvironmentEntryMutationAudit
+}
+
+type EnvironmentEntryMutationAction uint8
+
+const (
+	EnvironmentEntryMutationCreate EnvironmentEntryMutationAction = iota + 1
+	EnvironmentEntryMutationEdit
+	EnvironmentEntryMutationRemove
+)
+
+type EnvironmentEntryMutationAudit struct {
+	Action         EnvironmentEntryMutationAction
+	BaseRevisionID string
+	EntryID        string
+	Record         *EntryRecord
 }
 
 type EnvironmentServiceMutationAction uint8
@@ -376,7 +394,7 @@ func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit
 	body := blueprintRecordWriter{}
 	body.uint16(environmentBlueprintRecordSchema)
 	family := uint8(1)
-	action := uint8(value.Volume.Action)
+	var action uint8
 	if value.Service != nil {
 		family = 2
 		action = uint8(value.Service.Action)
@@ -392,8 +410,42 @@ func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit
 		}
 		body.bytes(request)
 		clear(request)
+	} else if value.Entry != nil {
+		family = 3
+		action = uint8(value.Entry.Action)
+		body.string(value.Entry.BaseRevisionID)
+		body.string(value.Entry.EntryID)
+		var record []byte
+		if value.Entry.Record != nil {
+			var err error
+			record, err = json.Marshal(value.Entry.Record)
+			if err != nil {
+				return nil, errs.Wrap(errs.KindInternal, err)
+			}
+		}
+		body.bytes(record)
+		clear(record)
+	} else if len(value.Entries) != 0 {
+		family = 4
+		body.uint16(uint16(len(value.Entries)))
+		for _, entry := range value.Entries {
+			body.uint8(uint8(entry.Action))
+			body.string(entry.BaseRevisionID)
+			body.string(entry.EntryID)
+			var record []byte
+			if entry.Record != nil {
+				var err error
+				record, err = json.Marshal(entry.Record)
+				if err != nil {
+					return nil, errs.Wrap(errs.KindInternal, err)
+				}
+			}
+			body.bytes(record)
+			clear(record)
+		}
 	} else {
 		volume := value.Volume
+		action = uint8(volume.Action)
 		body.string(volume.VolumeID)
 		body.string(volume.Slug)
 		body.string(volume.Key)
@@ -422,7 +474,7 @@ func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit
 func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMutationAudit, error) {
 	if len(value) < 12 || string(value[:4]) != "GPMU" ||
 		binary.BigEndian.Uint16(value[4:6]) != environmentBlueprintRecordSchema ||
-		(value[6] != 1 && value[6] != 2) ||
+		(value[6] != 1 && value[6] != 2 && value[6] != 3 && value[6] != 4) ||
 		int(binary.BigEndian.Uint32(value[8:12])) != len(value)-12 {
 		return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
 	}
@@ -443,7 +495,7 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 		volume.KeySupplied = keySupplied == 1
 		volume.PreconditionDigest = reader.digest()
 		result.Volume = volume
-	} else {
+	} else if value[6] == 2 {
 		service := &EnvironmentServiceMutationAudit{
 			Action:         EnvironmentServiceMutationAction(value[7]),
 			BaseRevisionID: reader.string(128), ServiceID: reader.string(128),
@@ -465,6 +517,59 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 		}
 		clear(request)
 		result.Service = service
+	} else if value[6] == 3 {
+		entry := &EnvironmentEntryMutationAudit{
+			Action:         EnvironmentEntryMutationAction(value[7]),
+			BaseRevisionID: reader.string(128),
+			EntryID:        reader.string(128),
+		}
+		record := reader.bytes(64 * 1024)
+		if len(record) != 0 {
+			entry.Record = &EntryRecord{}
+			if json.Unmarshal(record, entry.Record) != nil {
+				clear(record)
+				return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+			}
+			canonical, err := json.Marshal(entry.Record)
+			if err != nil || !bytes.Equal(canonical, record) {
+				clear(record)
+				clear(canonical)
+				return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+			}
+			clear(canonical)
+		}
+		clear(record)
+		result.Entry = entry
+	} else {
+		count := reader.uint16()
+		if count == 0 || count > apiTypes.MaximumBulkEntryCount {
+			return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+		}
+		result.Entries = make([]EnvironmentEntryMutationAudit, int(count))
+		for index := range result.Entries {
+			entry := EnvironmentEntryMutationAudit{
+				Action:         EnvironmentEntryMutationAction(reader.uint8()),
+				BaseRevisionID: reader.string(128),
+				EntryID:        reader.string(128),
+			}
+			record := reader.bytes(64 * 1024)
+			if len(record) != 0 {
+				entry.Record = &EntryRecord{}
+				if json.Unmarshal(record, entry.Record) != nil {
+					clear(record)
+					return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+				}
+				canonical, err := json.Marshal(entry.Record)
+				if err != nil || !bytes.Equal(canonical, record) {
+					clear(record)
+					clear(canonical)
+					return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+				}
+				clear(canonical)
+			}
+			clear(record)
+			result.Entries[index] = entry
+		}
 	}
 	if reader.done() != nil || validateEnvironmentDesiredMutationAudit(result) != nil {
 		return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
@@ -473,11 +578,43 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 }
 
 func validateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit) error {
-	if (value.Volume == nil) == (value.Service == nil) {
+	kinds := 0
+	if value.Volume != nil {
+		kinds++
+	}
+	if value.Service != nil {
+		kinds++
+	}
+	if value.Entry != nil {
+		kinds++
+	}
+	if len(value.Entries) != 0 {
+		kinds++
+	}
+	if kinds != 1 {
 		return errs.New(errs.KindValidationFailed, "desired mutation audit kind is invalid")
 	}
 	if value.Service != nil {
 		return validateEnvironmentServiceMutationAudit(*value.Service)
+	}
+	if value.Entry != nil {
+		return validateEnvironmentEntryMutationAudit(*value.Entry)
+	}
+	if len(value.Entries) != 0 {
+		if len(value.Entries) > apiTypes.MaximumBulkEntryCount {
+			return errs.New(errs.KindValidationFailed, "Entry bulk mutation audit is too large")
+		}
+		seen := make(map[string]struct{}, len(value.Entries))
+		for _, entry := range value.Entries {
+			if err := validateEnvironmentEntryMutationAudit(entry); err != nil {
+				return err
+			}
+			if _, duplicate := seen[entry.EntryID]; duplicate {
+				return errs.New(errs.KindValidationFailed, "Entry bulk mutation audit identity is duplicated")
+			}
+			seen[entry.EntryID] = struct{}{}
+		}
+		return nil
 	}
 	if ids.Validate(ids.KindVolume, value.Volume.VolumeID) != nil ||
 		!validEnvironmentVolumeSlug(value.Volume.Slug) || !validEnvironmentVolumeKey(value.Volume.Key) {
@@ -502,9 +639,32 @@ func validateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAud
 	return nil
 }
 
-func validateEnvironmentServiceMutationAudit(value EnvironmentServiceMutationAudit) error {
+func validateEnvironmentEntryMutationAudit(value EnvironmentEntryMutationAudit) error {
 	if ids.Validate(ids.KindTask, value.BaseRevisionID) != nil ||
-		ids.Validate(ids.KindService, value.ServiceID) != nil {
+		ids.Validate(ids.KindEnvEntry, value.EntryID) != nil {
+		return errs.New(errs.KindValidationFailed, "Entry desired mutation audit identity is invalid")
+	}
+	if value.Action == EnvironmentEntryMutationRemove {
+		if value.Record != nil {
+			return errs.New(errs.KindValidationFailed, "Entry remove audit has a desired record")
+		}
+		return nil
+	}
+	if value.Action != EnvironmentEntryMutationCreate && value.Action != EnvironmentEntryMutationEdit ||
+		value.Record == nil || value.Record.Entry.ID != value.EntryID ||
+		validateEntryRecord(*value.Record) != nil {
+		return errs.New(errs.KindValidationFailed, "Entry desired mutation audit record is invalid")
+	}
+	if value.Record.Entry.Source.Kind == core.SourceLiteral && value.Record.Entry.Source.Literal != "" {
+		return errs.New(errs.KindValidationFailed, "Entry desired mutation audit contains literal value bytes")
+	}
+	return nil
+}
+
+func validateEnvironmentServiceMutationAudit(value EnvironmentServiceMutationAudit) error {
+	if ids.Validate(ids.KindService, value.ServiceID) != nil ||
+		(value.BaseRevisionID != "" && ids.Validate(ids.KindTask, value.BaseRevisionID) != nil) ||
+		(value.BaseRevisionID == "" && value.Action != EnvironmentServiceMutationCreate) {
 		return errs.New(errs.KindValidationFailed, "Service desired mutation audit identity is invalid")
 	}
 	if value.Action == EnvironmentServiceMutationRemove {

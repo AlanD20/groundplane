@@ -27,7 +27,12 @@ type ComponentMutator interface {
 	EnableComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	DisableComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	UpdateComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	SetComponentConfig(context.Context, string, apiTypes.ComponentConfig, string) (etcd.IdempotencyResponse, error)
+	SetComponentConfig(
+		context.Context,
+		string,
+		apiTypes.ComponentConfigMutationRequest,
+		string,
+	) (etcd.IdempotencyResponse, error)
 }
 
 type componentListInput struct {
@@ -56,7 +61,7 @@ type componentActionInput struct {
 type componentConfigInput struct {
 	ID             string `path:"id" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
-	Body           apiTypes.ComponentConfig
+	Body           apiTypes.ComponentConfigMutationRequest
 }
 
 type componentRouterInput struct {
@@ -85,14 +90,23 @@ func (s *Server) registerComponents() {
 		OperationID: "component-config.show", Method: http.MethodGet, Path: "/components/{id}/config",
 		Summary: "Show Component config", Tags: []string{"Component"},
 	}, s.showComponentConfig)
-	huma.Register(s.API, huma.Operation{
+	configSetOperation := huma.Operation{
 		OperationID: "component-config.set", Method: http.MethodPut, Path: "/components/{id}/config",
 		Summary: "Replace Component config", Tags: []string{"Component"}, DefaultStatus: http.StatusOK,
 		Responses: map[string]*huma.Response{strconv.Itoa(http.StatusOK): {
 			Description: http.StatusText(http.StatusOK),
 			Content:     map[string]*huma.MediaType{"application/json": {Schema: configResultSchema}},
 		}},
-	}, s.setComponentConfig)
+	}
+	configSetOperation.RequestBody = &huma.RequestBody{
+		Required: true,
+		Content: map[string]*huma.MediaType{
+			"application/json": {
+				Schema: componentConfigMutationRequestSchema(s.API.OpenAPI().Components.Schemas),
+			},
+		},
+	}
+	huma.Register(s.API, configSetOperation, s.setComponentConfig)
 	for _, action := range []struct {
 		id      string
 		path    string

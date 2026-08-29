@@ -136,6 +136,15 @@ func (p *WorkerPool) runReleaseStep(runCtx context.Context, reservation *taskRes
 	}
 	state.reconciliation = state.reconciliation || result.ReconciliationRequired
 	if err != nil {
+		if p.logger != nil {
+			p.logger.Error(
+				"agent: release execution step failed",
+				"task_id", reservation.assignment.TaskID,
+				"step_id", step.StepId,
+				"policy", step.Policy.String(),
+				"error", err,
+			)
+		}
 		state.err, state.failedStepID = err, step.StepId
 	} else {
 		state.completed[step.StepId] = struct{}{}

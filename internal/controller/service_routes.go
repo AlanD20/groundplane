@@ -196,7 +196,11 @@ func (s *Server) createService(ctx context.Context, request *serviceCreateInput)
 	}
 	response, err := s.serviceMutations.CreateService(ctx, request.Body, request.IdempotencyKey)
 	if err != nil {
-		return nil, normalizeProjectError(err)
+		normalized := normalizeProjectError(err)
+		if kind, ok := errs.KindOf(normalized); ok && kind == errs.KindInternal && s.Logger != nil {
+			s.Logger.Error("controller: create Service", slog.String("service_name", request.Body.Name), slog.Any("error", err))
+		}
+		return nil, normalized
 	}
 	return s.serviceMutationResponse(response), nil
 }

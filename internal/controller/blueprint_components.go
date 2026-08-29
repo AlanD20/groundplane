@@ -76,21 +76,18 @@ func ReconcileBlueprintComponents(
 	}
 
 	authored := make(map[core.ComponentKind]core.ComponentSpec, len(specs))
-	for name, spec := range specs {
-		if name != string(spec.Kind) ||
-			(spec.Kind != core.ComponentKindIngressCaddy && spec.Kind != core.ComponentKindEdgeCloudflare) {
-			return BlueprintComponentChanges{}, errs.New(
-				errs.KindValidationFailed,
-				"Blueprint Component key and kind must be a supported canonical singleton",
-			)
+	for capability, spec := range specs {
+		kind, err := validateBlueprintComponentSpec(core.ComponentCapability(capability), spec)
+		if err != nil {
+			return BlueprintComponentChanges{}, err
 		}
-		if _, duplicate := authored[spec.Kind]; duplicate {
+		if _, duplicate := authored[kind]; duplicate {
 			return BlueprintComponentChanges{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Component kind is duplicated",
 			)
 		}
-		authored[spec.Kind] = spec
+		authored[kind] = spec
 	}
 
 	kinds := []core.ComponentKind{
@@ -101,14 +98,26 @@ func ReconcileBlueprintComponents(
 	for _, kind := range kinds {
 		active := byKind[kind]
 		spec, present := authored[kind]
-		if !present || (active.Enabled == spec.Enabled &&
-			reflect.DeepEqual(normalizeBlueprintComponentConfig(active.Config), normalizeBlueprintComponentConfig(spec.Config))) {
+		config := active.Config
+		if present {
+			config = blueprintComponentConfig(kind, spec)
+		}
+		if !present || (active.Enabled == spec.Enabled && reflect.DeepEqual(active.Config, config)) {
+			if active.Enabled && !active.Healthy {
+				candidate := cloneBlueprintComponent(active)
+				candidate.PinnedIPv4 = ""
+				result.Candidates = append(result.Candidates, BlueprintComponentCandidate{
+					Current: active, Candidate: candidate,
+				})
+				result.Effective = append(result.Effective, candidate)
+				continue
+			}
 			result.Effective = append(result.Effective, cloneBlueprintComponent(active))
 			continue
 		}
 		candidate := cloneBlueprintComponent(active)
 		candidate.Enabled = spec.Enabled
-		candidate.Config = normalizeBlueprintComponentConfig(spec.Config)
+		candidate.Config = core.CloneComponentConfig(config)
 		candidate.PinnedIPv4 = ""
 		candidate.Healthy = false
 		if !candidate.Enabled {
@@ -151,20 +160,63 @@ func componentEnabled(components []core.Component, kind core.ComponentKind) bool
 	return false
 }
 
-func normalizeBlueprintComponentConfig(config map[string]any) map[string]any {
-	if len(config) == 0 {
-		return nil
+func validateBlueprintComponentSpec(
+	capability core.ComponentCapability,
+	spec core.ComponentSpec,
+) (core.ComponentKind, error) {
+	switch capability {
+	case core.ComponentCapabilityHTTPRouter:
+		if spec.Implementation != core.ComponentKindIngressCaddy || spec.Settings.SecretID != "" ||
+			(spec.Enabled && spec.Settings.ZoneID == "") {
+			return "", errs.New(
+				errs.KindValidationFailed,
+				"http-router must select Caddy and provide zone_id while enabled",
+			)
+		}
+		return core.ComponentKindIngressCaddy, nil
+	case core.ComponentCapabilityHTTPEdgeTransport:
+		if spec.Implementation != core.ComponentKindEdgeCloudflare || spec.Settings.ZoneID != "" ||
+			spec.ImplementationConfig.CaddyfileTemplate != "" ||
+			(spec.Enabled && spec.Settings.SecretID == "") {
+			return "", errs.New(
+				errs.KindValidationFailed,
+				"http-edge-transport must select Cloudflare Tunnel and provide secret_id while enabled",
+			)
+		}
+		return core.ComponentKindEdgeCloudflare, nil
+	default:
+		return "", errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Component capability is not supported for an Environment",
+		)
 	}
-	clone := make(map[string]any, len(config))
-	for key, value := range config {
-		clone[key] = value
+}
+
+func blueprintComponentConfig(kind core.ComponentKind, spec core.ComponentSpec) core.ComponentConfig {
+	switch kind {
+	case core.ComponentKindIngressCaddy:
+		if spec.Settings.ZoneID == "" && spec.ImplementationConfig.CaddyfileTemplate == "" {
+			return core.ComponentConfig{}
+		}
+		return core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: spec.Settings.ZoneID,
+			CaddyfileTemplate: spec.ImplementationConfig.CaddyfileTemplate,
+		}}
+	case core.ComponentKindEdgeCloudflare:
+		if spec.Settings.SecretID == "" {
+			return core.ComponentConfig{}
+		}
+		return core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+			SecretID: spec.Settings.SecretID,
+		}}
+	default:
+		return core.ComponentConfig{}
 	}
-	return clone
 }
 
 func cloneBlueprintComponent(component core.Component) core.Component {
 	clone := component
-	clone.Config = normalizeBlueprintComponentConfig(component.Config)
+	clone.Config = core.CloneComponentConfig(component.Config)
 	clone.GeneratedServices = append([]string(nil), component.GeneratedServices...)
 	return clone
 }

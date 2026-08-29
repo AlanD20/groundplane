@@ -26,21 +26,52 @@ type blueprintApplier interface {
 	ApplyComponentBlueprint(context.Context, string, string, core.BlueprintBundle, string) (etcd.IdempotencyResponse, error)
 }
 
+type cloudflareCredentialResolver interface {
+	ResolveCloudflareTunnelCredential(
+		context.Context,
+		string,
+		apiTypes.CloudflareTunnelCredentialInput,
+		string,
+	) (string, error)
+}
+
+type platformConfigMutator interface {
+	EnableCoreDNS(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DisableCoreDNS(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	UpdateCoreDNS(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	ReplaceCoreDNSConfig(
+		context.Context,
+		string,
+		apiTypes.ComponentConfigMutationRequest,
+		string,
+	) (etcd.IdempotencyResponse, error)
+}
+
 type MutationService struct {
 	components mutationRepository
 	blueprints mutationBlueprintRepository
 	applier    blueprintApplier
+	credentials cloudflareCredentialResolver
+	platform    platformConfigMutator
 }
 
 func NewMutationService(
 	components mutationRepository,
 	blueprints mutationBlueprintRepository,
 	applier blueprintApplier,
+	credentials cloudflareCredentialResolver,
+	platform platformConfigMutator,
 ) (*MutationService, error) {
-	if components == nil || blueprints == nil || applier == nil {
+	if components == nil || blueprints == nil || applier == nil || credentials == nil || platform == nil {
 		return nil, errs.New(errs.KindInternal, "Component mutation dependencies are not configured")
 	}
-	return &MutationService{components: components, blueprints: blueprints, applier: applier}, nil
+	return &MutationService{
+		components:  components,
+		blueprints:  blueprints,
+		applier:     applier,
+		credentials: credentials,
+		platform:    platform,
+	}, nil
 }
 
 func (service *MutationService) EnableComponent(
@@ -48,6 +79,13 @@ func (service *MutationService) EnableComponent(
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	current, err := service.components.GetComponent(ctx, componentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
+		return service.platform.EnableCoreDNS(ctx, componentID, idempotencyKey)
+	}
 	return service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
 		return replaceYAMLMappingValue(spec, "enabled", scalarNode("!!bool", strconv.FormatBool(true)))
 	})
@@ -58,6 +96,13 @@ func (service *MutationService) DisableComponent(
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	current, err := service.components.GetComponent(ctx, componentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
+		return service.platform.DisableCoreDNS(ctx, componentID, idempotencyKey)
+	}
 	return service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
 		return replaceYAMLMappingValue(spec, "enabled", scalarNode("!!bool", strconv.FormatBool(false)))
 	})
@@ -68,25 +113,87 @@ func (service *MutationService) UpdateComponent(
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	current, err := service.components.GetComponent(ctx, componentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
+		return service.platform.UpdateCoreDNS(ctx, componentID, idempotencyKey)
+	}
 	return service.mutateComponent(ctx, componentID, idempotencyKey, func(*yaml.Node) error { return nil })
 }
 
 func (service *MutationService) SetComponentConfig(
 	ctx context.Context,
 	componentID string,
-	config apiTypes.ComponentConfig,
+	request apiTypes.ComponentConfigMutationRequest,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	if config.Config == nil {
-		config.Config = map[string]any{}
+	current, err := service.components.GetComponent(ctx, componentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
 	}
-	var configNode yaml.Node
-	if err := configNode.Encode(config.Config); err != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Component config is invalid")
+	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
+		return service.platform.ReplaceCoreDNSConfig(ctx, componentID, request, idempotencyKey)
 	}
-	response, err := service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
-		return replaceYAMLMappingValue(spec, "config", &configNode)
-	})
+	var publicConfig apiTypes.ComponentConfig
+	var mutate func(*yaml.Node) error
+	if current.Record.Desired.Kind == core.ComponentKindEdgeCloudflare {
+		if request.Config.Credential == nil || request.Config.ZoneID != "" ||
+			request.Config.CaddyfileTemplate != "" || componentMutationHasCoreDNSConfig(request.Config) {
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindValidationFailed,
+				"Cloudflare Tunnel config accepts only credential",
+			)
+		}
+		secretID, err := service.credentials.ResolveCloudflareTunnelCredential(
+			ctx, current.Record.Desired.OwnerID, *request.Config.Credential, idempotencyKey,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+		publicConfig = apiTypes.ComponentConfig{SecretID: secretID}
+		mutate = func(spec *yaml.Node) error {
+			var settings yaml.Node
+			if err := settings.Encode(map[string]string{"secret_id": secretID}); err != nil {
+				return errs.New(errs.KindValidationFailed, "Component config is invalid")
+			}
+			return replaceYAMLMappingValue(spec, "settings", &settings)
+		}
+	} else {
+		if current.Record.Desired.Kind != core.ComponentKindIngressCaddy || request.Config.Credential != nil ||
+			request.Config.ZoneID == "" || componentMutationHasCoreDNSConfig(request.Config) {
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindValidationFailed,
+				"Caddy config requires zone_id and accepts only Caddy fields",
+			)
+		}
+		publicConfig = apiTypes.ComponentConfig{
+			ZoneID: request.Config.ZoneID,
+			CaddyfileTemplate: request.Config.CaddyfileTemplate,
+		}
+		mutate = func(spec *yaml.Node) error {
+			var settings yaml.Node
+			if err := settings.Encode(map[string]string{"zone_id": request.Config.ZoneID}); err != nil {
+				return errs.New(errs.KindValidationFailed, "Component config is invalid")
+			}
+			if err := replaceYAMLMappingValue(spec, "settings", &settings); err != nil {
+				return err
+			}
+			if request.Config.CaddyfileTemplate == "" {
+				removeYAMLMappingValue(spec, "implementation_config")
+				return nil
+			}
+			var implementation yaml.Node
+			if err := implementation.Encode(map[string]string{
+				"caddyfile_template": request.Config.CaddyfileTemplate,
+			}); err != nil {
+				return errs.New(errs.KindValidationFailed, "Component config is invalid")
+			}
+			return replaceYAMLMappingValue(spec, "implementation_config", &implementation)
+		}
+	}
+	response, err := service.mutateComponent(ctx, componentID, idempotencyKey, mutate)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -95,12 +202,17 @@ func (service *MutationService) SetComponentConfig(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Component Blueprint Task response is invalid")
 	}
 	body, err := json.Marshal(apiTypes.ComponentConfigMutationResult{
-		Resource: apiTypes.ComponentConfig{Config: cloneConfig(config.Config)}, ReconcileTaskID: &accepted.TaskID,
+		Resource: publicConfig, ReconcileTaskID: &accepted.TaskID,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return etcd.IdempotencyResponse{Status: http.StatusOK, ContentKind: "application/json", Body: body}, nil
+}
+
+func componentMutationHasCoreDNSConfig(config apiTypes.ComponentConfigMutationInput) bool {
+	return config.UpstreamAuto != nil || config.UpstreamResolvers != nil ||
+		config.Forwarders != nil || config.TailnetDelegation != nil
 }
 
 func (service *MutationService) mutateComponent(
@@ -196,19 +308,17 @@ func mutateComponentBlueprint(
 	if components == nil || components.Kind != yaml.MappingNode {
 		return errs.New(errs.KindStateConflict, "Environment Blueprint has no authored Components")
 	}
-	var matched *yaml.Node
-	for index := 0; index+1 < len(components.Content); index += 2 {
-		spec := components.Content[index+1]
-		kindNode := yamlMappingValue(spec, "kind")
-		if kindNode != nil && kindNode.Value == string(kind) {
-			if matched != nil {
-				return errs.New(errs.KindInternal, "Environment Blueprint repeats a Component kind")
-			}
-			matched = spec
-		}
+	capability, err := environmentComponentCapability(kind)
+	if err != nil {
+		return err
 	}
+	matched := yamlMappingValue(components, string(capability))
 	if matched == nil {
 		return errs.New(errs.KindStateConflict, "Component is not authored by the current Blueprint")
+	}
+	implementation := yamlMappingValue(matched, "implementation")
+	if implementation == nil || implementation.Value != string(kind) {
+		return errs.New(errs.KindInternal, "Environment Blueprint Component implementation is corrupt")
 	}
 	if err := mutate(matched); err != nil {
 		return err
@@ -219,6 +329,17 @@ func mutateComponentBlueprint(
 	}
 	bundle.Files[rootIndex].Content = content
 	return nil
+}
+
+func environmentComponentCapability(kind core.ComponentKind) (core.ComponentCapability, error) {
+	switch kind {
+	case core.ComponentKindIngressCaddy:
+		return core.ComponentCapabilityHTTPRouter, nil
+	case core.ComponentKindEdgeCloudflare:
+		return core.ComponentCapabilityHTTPEdgeTransport, nil
+	default:
+		return "", errs.New(errs.KindStateConflict, "Component action is unsupported for this kind")
+	}
 }
 
 func yamlMappingValue(mapping *yaml.Node, key string) *yaml.Node {
@@ -245,6 +366,18 @@ func replaceYAMLMappingValue(mapping *yaml.Node, key string, value *yaml.Node) e
 	}
 	mapping.Content = append(mapping.Content, scalarNode("!!str", key), value)
 	return nil
+}
+
+func removeYAMLMappingValue(mapping *yaml.Node, key string) {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return
+	}
+	for index := 0; index+1 < len(mapping.Content); index += 2 {
+		if mapping.Content[index].Value == key {
+			mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
+			return
+		}
+	}
 }
 
 func scalarNode(tag string, value string) *yaml.Node {

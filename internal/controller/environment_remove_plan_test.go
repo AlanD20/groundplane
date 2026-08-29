@@ -60,7 +60,7 @@ func TestResolveArtifactFreeEnvironmentRemovalPlan(t *testing.T) {
 			ID: environmentID, ProjectID: "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "main",
 			VolumeDir: directory, ProvisioningState: etcd.EnvironmentProvisioningReady,
 		}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
@@ -78,5 +78,46 @@ func TestResolveArtifactFreeEnvironmentRemovalPlan(t *testing.T) {
 	if len(plan.Artifacts) != 0 || remove == nil || remove.EnvironmentId != environmentID ||
 		remove.ExpectedVolumeDir != directory {
 		t.Fatalf("removal plan = %#v", plan)
+	}
+}
+
+func TestResolveHierarchyEnvironmentCleanupPlan(t *testing.T) {
+	const (
+		root          = "/srv/groundplane/vol"
+		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		directory     = root + "/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + environmentID
+	)
+	resolver, err := NewTaskPlanResolverWithBlueprints(root, environmentRemovalPlanReader{
+		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{
+			ID: environmentID, VolumeDir: directory,
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := etcd.TaskRecord{
+		ID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", Executor: etcd.TaskExecutorAgent,
+		PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1,
+		Type: etcd.TaskRemove, Target: environmentID, TimeoutSeconds: 120,
+		Params: map[string]string{
+			etcd.TaskResourceKindParam:                etcd.TaskResourceHierarchyDeletion,
+			etcd.TaskHierarchyDeletionParentParam:     "del_0123456789abcdef0123456789abcdef",
+			etcd.TaskHierarchyDeletionChildParam:      "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			etcd.TaskHierarchyDeletionAttemptParam:    "attempt_0123456789abcdef0123456789abcdef",
+			etcd.TaskHierarchyDeletionGenerationParam: "1",
+			etcd.TaskHierarchyDeletionOrdinalParam:    "2",
+			etcd.TaskHierarchyDeletionActionKindParam: string(etcd.HierarchyDeletionEnvironmentAgentCleanup),
+			etcd.TaskHierarchyDeletionProcedureParam:  "environment.cleanup",
+			etcd.TaskHierarchyDeletionInputParam:      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
+		Steps: []etcd.TaskStepRecord{{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}},
+	}
+	plan, err := resolver.ResolveExecutionPlan(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan() error = %v", err)
+	}
+	remove := plan.Steps[0].GetEnvironmentDirectoryRemove()
+	if remove == nil || remove.EnvironmentId != environmentID || remove.ExpectedVolumeDir != directory {
+		t.Fatalf("hierarchy cleanup plan = %#v", plan)
 	}
 }

@@ -213,7 +213,20 @@ func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemov
 		Services:         []EnvironmentComposeIdentity{{ID: generatedServiceID, Name: "cloudflare-tunnel"}},
 		Components: []ComponentRecord{
 			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),
-			componentRecord(core.ComponentKindEdgeCloudflare, 43, true, []string{generatedServiceID}),
+			func() ComponentRecord {
+				record, err := NewComponentRecord(core.Component{
+					ID: ids.NewAt(ids.KindComponent, now, 43), Owner: core.ComponentOwnerEnvironment,
+					OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
+					Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+						SecretID: ids.NewAt(ids.KindSecret, now, 47),
+					}},
+					GeneratedServices: []string{generatedServiceID},
+				})
+				if err != nil {
+					t.Fatalf("NewComponentRecord(Cloudflare) error = %v", err)
+				}
+				return record
+			}(),
 		},
 	})
 	next := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{

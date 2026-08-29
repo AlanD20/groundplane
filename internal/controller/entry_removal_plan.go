@@ -128,8 +128,6 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 		etcd.TaskEntryProjectSlugParam:           identity.ProjectSlug,
 		etcd.TaskEntryEnvironmentNameParam:       identity.EnvironmentName,
 		etcd.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
-		etcd.TaskEntryCloudflareComponentParam:   "",
-		etcd.TaskEntryCloudflareRevisionParam:    "0",
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = make([]etcd.TaskStepRecord, len(templates))
@@ -321,7 +319,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		task.Type != etcd.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
 		task.ID != intent.TaskID || task.Target != intent.EntryID || !task.CreatedAt.Equal(intent.CreatedAt) ||
 		intent.Status != etcd.TaskStatusPending || intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
-		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 10 {
+		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 8 {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection

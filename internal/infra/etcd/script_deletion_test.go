@@ -21,7 +21,7 @@ func TestScriptRepositoryRemovalFinalizesOnlyAfterSuccessfulTask(t *testing.T) {
 		t.Fatalf("newScriptRepository(): %v", err)
 	}
 	record, err := NewScriptRecord(environment.Record.ID, target.Record.Desired.ID, core.Script{
-		ID: ids.New(ids.KindScript), Name: "migrate", ServiceName: target.Record.Desired.Name,
+		ID: ids.New(ids.KindScript), Slug: "migrate", ServiceName: target.Record.Desired.Name,
 		Body: "php artisan migrate --force", When: core.ScriptHook("manual"),
 	})
 	if err != nil {
@@ -61,7 +61,7 @@ func TestScriptRepositoryRemovalFinalizesOnlyAfterSuccessfulTask(t *testing.T) {
 	for _, key := range []string{
 		scriptKey(current.Record.Desired.ID),
 		scriptOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-		scriptNameKey(current.Record.EnvironmentID, current.Record.Desired.Name),
+		scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug),
 		deletionTombstoneKey(string(DeletionTargetScript), current.Record.Desired.ID),
 	} {
 		stored, getErr := store.Get(ctx, key)
@@ -82,7 +82,7 @@ func TestScriptRemovalAbortRetainsTargetAndSupportsReplay(t *testing.T) {
 		t.Fatalf("newScriptRepository(): %v", err)
 	}
 	record, err := NewScriptRecord(environment.Record.ID, target.Record.Desired.ID, core.Script{
-		ID: ids.New(ids.KindScript), Name: "rollback", ServiceName: target.Record.Desired.Name,
+		ID: ids.New(ids.KindScript), Slug: "rollback", ServiceName: target.Record.Desired.Name,
 		Body: "php artisan migrate:rollback --force", When: core.ScriptHook("manual"),
 	})
 	if err != nil {

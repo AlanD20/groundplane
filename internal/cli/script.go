@@ -33,7 +33,7 @@ func newScriptCmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use: "show <name>", Short: "Show a script", Args: cobra.ExactArgs(1),
+		Use: "show <slug>", Short: "Show a script", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scriptID, err := resolveScriptTarget(cmd, args[0])
 			if err != nil {
@@ -50,7 +50,7 @@ func newScriptCmd() *cobra.Command {
 
 	var service, body, when string
 	add := &cobra.Command{
-		Use: "add <name>", Short: "Add a script", Args: cobra.ExactArgs(1),
+		Use: "add <slug>", Short: "Add a script", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			environmentID, err := resolveEnvironmentTarget(cmd, app.Scope.Environment)
@@ -62,7 +62,7 @@ func newScriptCmd() *cobra.Command {
 				return err
 			}
 			script, err := app.Client.CreateScript(cmd.Context(), apiTypes.ScriptCreate{
-				EnvironmentID: environmentID, Name: args[0], ServiceID: serviceID, Body: body, When: when,
+				EnvironmentID: environmentID, Slug: args[0], ServiceID: serviceID, Body: body, When: when,
 			})
 			if err != nil {
 				return err
@@ -81,19 +81,22 @@ func newScriptCmd() *cobra.Command {
 	_ = add.MarkFlagRequired("script")
 	cmd.AddCommand(add)
 
-	var editBody, editWhen string
+	var editSlug, editBody, editWhen string
 	edit := &cobra.Command{
-		Use: "edit <name>", Short: "Edit a script", Args: cobra.ExactArgs(1),
+		Use: "edit <slug>", Short: "Edit a script", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			input := apiTypes.ScriptEdit{}
+			if cmd.Flags().Changed("slug") {
+				input.Slug = &editSlug
+			}
 			if cmd.Flags().Changed("script") {
 				input.Body = &editBody
 			}
 			if cmd.Flags().Changed("when") {
 				input.When = &editWhen
 			}
-			if input.Body == nil && input.When == nil {
-				return errs.New(errs.KindValidationFailed, "Script edit requires --script or --when")
+			if input.Slug == nil && input.Body == nil && input.When == nil {
+				return errs.New(errs.KindValidationFailed, "Script edit requires --slug, --script, or --when")
 			}
 			scriptID, err := resolveScriptTarget(cmd, args[0])
 			if err != nil {
@@ -107,6 +110,7 @@ func newScriptCmd() *cobra.Command {
 			return fromContext(cmd).Out.RenderOne(fields, values, script)
 		},
 	}
+	edit.Flags().StringVar(&editSlug, "slug", "", "new Environment-unique Script slug")
 	edit.Flags().StringVar(&editBody, "script", "", "new script body")
 	edit.Flags().StringVar(
 		&editWhen, "when", "",
@@ -115,7 +119,7 @@ func newScriptCmd() *cobra.Command {
 	cmd.AddCommand(edit)
 
 	cmd.AddCommand(&cobra.Command{
-		Use: "run <name>", Short: "Run a script now", Args: cobra.ExactArgs(1),
+		Use: "run <slug>", Short: "Run a script now", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scriptID, err := resolveScriptTarget(cmd, args[0])
 			if err != nil {
@@ -126,7 +130,7 @@ func newScriptCmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use: "remove <name>", Aliases: []string{"delete"},
+		Use: "remove <slug>", Aliases: []string{"delete"},
 		Short: "Remove a script (dispatches a task)", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scriptID, err := resolveScriptTarget(cmd, args[0])
@@ -160,7 +164,7 @@ func resolveScriptTarget(cmd *cobra.Command, value string) (string, error) {
 			return "", listErr
 		}
 		for _, script := range page.Items {
-			if script.Name == value {
+			if script.Slug == value {
 				return script.ID, nil
 			}
 		}
@@ -174,7 +178,8 @@ func resolveScriptTarget(cmd *cobra.Command, value string) (string, error) {
 
 func scriptFields(script apiTypes.Script) map[string]any {
 	return map[string]any{
-		"id": script.ID, "name": script.Name, "service": script.ServiceName,
-		"script": script.Body, "when": script.When,
+		"id": script.ID, "slug": script.Slug, "service": script.ServiceName,
+		"service_id": script.ServiceID, "script": script.Body, "when": script.When,
+		"origin": script.Origin, "active_generation": script.ActiveGeneration,
 	}
 }

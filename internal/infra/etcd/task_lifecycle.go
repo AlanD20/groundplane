@@ -366,6 +366,17 @@ func (repository *TaskRepository) retryTask(
 		mutations = append(mutations, attachChange.mutations...)
 	}
 	defer clearAttachTaskChange(attachChange)
+	blueprintAttachChange, err := repository.prepareBlueprintAttachTaskRetry(
+		ctx, source.Record, retry, source.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if blueprintAttachChange.applies {
+		conditions = append(conditions, blueprintAttachChange.conditions...)
+		mutations = append(mutations, blueprintAttachChange.mutations...)
+	}
+	defer clearBlueprintAttachTaskChange(blueprintAttachChange)
 	environmentChange, err := repository.prepareEnvironmentTaskRetry(
 		ctx,
 		source.Record,
@@ -490,6 +501,7 @@ func (repository *TaskRepository) retryTask(
 		source.ReadRevision,
 		conditions,
 		mutations,
+		false,
 		attachChange.applies,
 		routeChange.applies && source.Record.Params[TaskEntryEnvironmentParam] != "",
 		serviceChange.applies,
@@ -732,11 +744,24 @@ func (repository *TaskRepository) claimNextTask(
 				mutations = append(mutations, attachChange.mutations...)
 			}
 		}
+		blueprintAttachChange, err := repository.prepareBlueprintAttachTaskClaim(ctx, task, candidate.readRevision)
+		if err != nil {
+			clear(runningValue)
+			clear(assignmentValue)
+			clear(writerValue)
+			clearAttachTaskChange(attachChange)
+			return TaskAssignment{}, false, err
+		}
+		if blueprintAttachChange.applies {
+			conditions = append(conditions, blueprintAttachChange.conditions...)
+			mutations = append(mutations, blueprintAttachChange.mutations...)
+		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(runningValue)
 		clear(assignmentValue)
 		clear(writerValue)
 		clearAttachTaskChange(attachChange)
+		clearBlueprintAttachTaskChange(blueprintAttachChange)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -816,10 +841,8 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			if err != nil {
 				return taskClaimCandidate{}, false, err
 			}
-			hierarchyChild := task.Executor == TaskExecutorAgent &&
-				task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion
 			if task.ID != taskID || task.Executor != executor || task.Status != TaskStatusPending ||
-				task.idempotencyMarker == nil && !hierarchyChild {
+				task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
 				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
 			}
 			environmentID, materializes, err := taskEnvironmentWriter(task)
@@ -955,7 +978,8 @@ func (repository *TaskRepository) ListAgentAssignments(
 		if task.ID != record.TaskID || task.Status != TaskStatusRunning ||
 			task.StartedAt == nil || !task.StartedAt.Equal(record.AssignedAt) ||
 			!record.Deadline.Equal(record.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
-			taskValue.ModRevision < assignmentValue.ModRevision || task.idempotencyMarker == nil {
+			taskValue.ModRevision < assignmentValue.ModRevision ||
+			task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
 			return nil, errs.New(errs.KindInternal, "durable Task assignment and Task are inconsistent")
 		}
 		environmentID, materializes, err := taskMaterializationEnvironment(task)
@@ -989,6 +1013,11 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 	}
 	return result, nil
+}
+
+func isMarkerlessHierarchyDeletionAgentChild(task TaskRecord) bool {
+	return task.Executor == TaskExecutorAgent && task.Actor == TaskActorSystem &&
+		task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion
 }
 
 // ListControllerTaskClaims restores the single native Controller execution
@@ -1320,6 +1349,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
+				if err := repository.validateBlueprintAttachTaskAcknowledgementReplay(
+					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
 				if err := repository.validateSecretTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
@@ -1371,6 +1405,11 @@ func (repository *TaskRepository) acknowledgeTask(
 				}
 				if err := repository.validateComponentTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				); err != nil {
+					return Versioned[TaskRecord]{}, err
+				}
+				if err := repository.validatePlatformComponentTaskAcknowledgementReplay(
+					ctx, task, primaryAndAssignment.ReadRevision,
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
@@ -1562,6 +1601,24 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
 			mutations = append(mutations, Mutation{Type: MutationDelete, Key: writerKey})
 		}
+		materializationProjectionChange, err := repository.prepareTaskMaterializationProjectionAcknowledgement(
+			ctx,
+			task,
+			terminalStatus,
+			primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			return Versioned[TaskRecord]{}, err
+		}
+		defer clearTaskMaterializationProjectionChange(materializationProjectionChange)
+		if materializationProjectionChange.applies {
+			conditions = append(conditions, materializationProjectionChange.conditions...)
+			mutations = append(mutations, materializationProjectionChange.mutations...)
+		}
 		var environmentValue []byte
 		if environmentID != "" {
 			environmentConditions, environmentMutations, value, err := repository.prepareEnvironmentCreationAcknowledgement(
@@ -1622,6 +1679,22 @@ func (repository *TaskRepository) acknowledgeTask(
 		if attachChange.applies {
 			conditions = append(conditions, attachChange.conditions...)
 			mutations = append(mutations, attachChange.mutations...)
+		}
+		blueprintAttachChange, err := repository.prepareBlueprintAttachTaskAcknowledgement(
+			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		defer clearBlueprintAttachTaskChange(blueprintAttachChange)
+		if blueprintAttachChange.applies {
+			conditions = append(conditions, blueprintAttachChange.conditions...)
+			mutations = append(mutations, blueprintAttachChange.mutations...)
 		}
 		secretChange, err := repository.prepareSecretTaskAcknowledgement(
 			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
@@ -1746,6 +1819,29 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, componentChange.conditions...)
 			mutations = append(mutations, componentChange.mutations...)
 		}
+		platformComponentChange, err := repository.preparePlatformComponentTaskAcknowledgement(
+			ctx,
+			task,
+			terminalStatus,
+			primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if platformComponentChange.applies {
+			conditions = append(conditions, platformComponentChange.conditions...)
+			mutations = append(mutations, platformComponentChange.mutations...)
+		}
 		connectorChange, err := repository.prepareConnectorTaskAcknowledgement(
 			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 		)
@@ -1760,6 +1856,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
 			return Versioned[TaskRecord]{}, err
 		}
 		if connectorChange.applies {
@@ -1780,6 +1877,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
 			clearConnectorTaskChange(connectorChange)
 			return Versioned[TaskRecord]{}, err
 		}
@@ -1802,6 +1900,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			primaryAndAssignment.ReadRevision,
 			conditions,
 			mutations,
+			materializationProjectionChange.applies,
 			attachChange.applies,
 			routeChange.applies && task.Params[TaskEntryEnvironmentParam] != "",
 			serviceChange.applies,
@@ -1819,6 +1918,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
 			clearConnectorTaskChange(connectorChange)
 			clearRunnerTaskChange(runnerChange)
 			return Versioned[TaskRecord]{}, err
@@ -1841,6 +1941,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		clearServiceTaskChange(serviceChange)
 		clearBackingZoneTaskChange(backingZoneChange)
 		clearComponentTaskChange(componentChange)
+		clearPlatformComponentTaskChange(platformComponentChange)
 		clearConnectorTaskChange(connectorChange)
 		clearRunnerTaskChange(runnerChange)
 		clear(environmentEpochValue)
@@ -2429,6 +2530,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
+			if err := repository.validateBlueprintAttachTaskAcknowledgementReplay(
+				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			if err := repository.validateSecretTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
@@ -2644,6 +2750,24 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, attachChange.conditions...)
 			mutations = append(mutations, attachChange.mutations...)
 		}
+		blueprintAttachChange, err := repository.prepareBlueprintAttachTaskAcknowledgement(
+			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		defer clearBlueprintAttachTaskChange(blueprintAttachChange)
+		if blueprintAttachChange.applies {
+			conditions = append(conditions, blueprintAttachChange.conditions...)
+			mutations = append(mutations, blueprintAttachChange.mutations...)
+		}
 		secretChange, err := repository.prepareSecretTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 		)
@@ -2837,6 +2961,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			current.ReadRevision,
 			conditions,
 			mutations,
+			false,
 			attachChange.applies,
 			routeChange.applies && current.Record.Params[TaskEntryEnvironmentParam] != "",
 			serviceChange.applies,
@@ -3145,6 +3270,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	readRevision int64,
 	conditions []Condition,
 	mutations []Mutation,
+	materializationChange bool,
 	attachChange bool,
 	entryChange bool,
 	serviceChange bool,
@@ -3152,6 +3278,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 ) (*ordinaryEnvironmentMutationBinding, error) {
 	environmentID, applies, err := ordinaryTaskEnvironmentMutationTarget(
 		task,
+		materializationChange,
 		attachChange,
 		entryChange,
 		serviceChange,
@@ -3174,12 +3301,16 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 
 func ordinaryTaskEnvironmentMutationTarget(
 	task TaskRecord,
+	materializationChange bool,
 	attachChange bool,
 	entryChange bool,
 	serviceChange bool,
 	connectorChange bool,
 ) (string, bool, error) {
 	targets := make([]string, 0, 1)
+	if materializationChange {
+		targets = append(targets, task.Params[TaskMaterializationEnvironmentParam])
+	}
 	if attachChange {
 		targets = append(targets, task.Params[TaskMutationEnvironmentParam])
 	}

@@ -115,6 +115,12 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochValue)
+	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetEnvironment, record.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(coordinationValue)
+	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
@@ -130,6 +136,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
 		{Key: environmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
 		{Key: environmentMutationEpochKey(record.ID)},
+		{Key: coordinationKey},
 	}
 	for _, component := range components {
 		conditions = append(conditions,
@@ -148,6 +155,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Type: MutationPut, Key: environmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: MutationPut, Key: environmentMutationEpochKey(record.ID), Value: epochValue},
+		{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
 	}
 	for index, component := range components {
 		mutations = append(mutations,
@@ -205,7 +213,7 @@ func validateInitialEnvironmentComponents(environmentID string, components []Com
 		if component.Desired.Owner != core.ComponentOwnerEnvironment || component.Desired.OwnerID != environmentID {
 			return errs.New(errs.KindValidationFailed, "Initial Component owner must be the new Environment")
 		}
-		if component.Desired.Enabled || len(component.Desired.Config) != 0 {
+		if component.Desired.Enabled || !component.Desired.Config.Empty() {
 			return errs.New(errs.KindValidationFailed, "Initial Components must have empty disabled desired state")
 		}
 		if len(component.Runtime.GeneratedServices) != 0 || component.Runtime.PinnedIPv4 != "" ||
@@ -234,7 +242,7 @@ func classifyEnvironmentCreateConflict(
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 13+(3*len(components)) {
+		if len(values) != 14+(3*len(components)) {
 			return errs.New(errs.KindInternal, "Environment creation compare evidence is incomplete")
 		}
 		if values[2] != nil {
@@ -282,8 +290,11 @@ func classifyEnvironmentCreateConflict(
 		if values[12] != nil {
 			return errs.New(errs.KindInternal, "environment creation collided with mutation epoch state")
 		}
+		if values[13] != nil {
+			return errs.New(errs.KindInternal, "environment creation collided with hierarchy coordination state")
+		}
 		for index := range components {
-			offset := 13 + (index * 3)
+			offset := 14 + (index * 3)
 			if values[offset] != nil || values[offset+1] != nil {
 				return errs.New(errs.KindStateConflict, "Component stable identity is already in use")
 			}

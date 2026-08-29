@@ -179,7 +179,7 @@ func runnerTestDesired(
 		Slug:      "runner-" + strings.ToLower(strings.TrimPrefix(runnerID, "run_")),
 		OwnerKind: ownerKind, OwnerID: ownerID, TenantID: tenantID,
 		GitHubURL: runnerTestGitHubURL(ownerKind), Labels: []string{"qa-workload"},
-		ImageRef: RunnerImageRef + strings.Repeat("0", 64),
+		ImageRef: "ghcr.io/groundplane/runner@sha256:" + strings.Repeat("0", 64),
 	}
 }
 

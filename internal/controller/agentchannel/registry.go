@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
@@ -35,6 +36,7 @@ type Registry struct {
 	lifecycle        map[string]*lifecycleFence
 	ready            map[readyKey]map[uint64]*readySubscription
 	terminals        map[taskTerminalKey]map[uint64]*taskTerminalSubscription
+	logs             map[string]*LogSubscription
 }
 
 type lifecycleFence struct {
@@ -55,6 +57,7 @@ type sessionState struct {
 	cancel             context.CancelFunc
 	done               <-chan struct{}
 	aborts             chan taskAbortCommand
+	logCommands        chan logCommand
 	offline            chan struct{}
 	offlineOnce        sync.Once
 }
@@ -64,6 +67,11 @@ type taskAbortCommand struct {
 	assignmentID string
 	reason       string
 	result       chan error
+}
+
+type logCommand struct {
+	message *agentpb.ControllerMessage
+	result  chan error
 }
 
 type readyKey struct {
@@ -104,6 +112,7 @@ func NewRegistry() *Registry {
 		lifecycle: make(map[string]*lifecycleFence),
 		ready:     make(map[readyKey]map[uint64]*readySubscription),
 		terminals: make(map[taskTerminalKey]map[uint64]*taskTerminalSubscription),
+		logs:      make(map[string]*LogSubscription),
 	}
 }
 
@@ -156,6 +165,7 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 		cancel:             cancel,
 		done:               ctx.Done(),
 		aborts:             make(chan taskAbortCommand),
+		logCommands:        make(chan logCommand),
 		offline:            make(chan struct{}),
 	}
 	r.agents[agentID] = state
@@ -226,6 +236,10 @@ func (s *Session) AssignmentsAllowed() bool {
 
 func (s *Session) taskAborts() <-chan taskAbortCommand {
 	return s.state.aborts
+}
+
+func (s *Session) logMessages() <-chan logCommand {
+	return s.state.logCommands
 }
 
 // AbortTask synchronously hands one demand-cancellation command to the sole
@@ -367,6 +381,7 @@ func (s *Session) Close() {
 			s.state.generation,
 			errs.New(errs.KindStateConflict, "Agent session ended before Task terminal acknowledgement"),
 		)
+		s.registry.failLogsLocked(s.state, errs.New(errs.KindStorageUnavailable, "Agent log session ended"))
 		s.registry.mu.Unlock()
 
 		s.state.offlineOnce.Do(func() { close(s.state.offline) })

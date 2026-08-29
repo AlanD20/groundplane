@@ -165,6 +165,9 @@
           "backing_service_id": {
             "type": "string"
           },
+          "credential": {
+            "$ref": "#/components/schemas/AttachCredential"
+          },
           "fact_sets": {
             "items": {
               "$ref": "#/components/schemas/AttachFactSet"
@@ -189,14 +192,8 @@
           "name": {
             "type": "string"
           },
-          "service_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
+          "service_id": {
+            "type": "string"
           },
           "status": {
             "type": "string"
@@ -205,12 +202,33 @@
         "required": [
           "id",
           "name",
-          "service_ids",
+          "service_id",
+          "credential",
           "backing_project_id",
           "backing_service_id",
           "backing_network_id",
           "fact_sets",
           "status"
+        ],
+        "type": "object"
+      },
+      "AttachCredential": {
+        "additionalProperties": false,
+        "properties": {
+          "attach_id": {
+            "pattern": "^att_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "new",
+              "existing"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
         ],
         "type": "object"
       },
@@ -311,6 +329,9 @@
             "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
           },
+          "credential": {
+            "$ref": "#/components/schemas/AttachCredential"
+          },
           "grant_attach_ids": {
             "items": {
               "pattern": "^att_[0-9A-HJKMNP-TV-Z]{26}$",
@@ -325,20 +346,15 @@
             "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
             "type": "string"
           },
-          "service_ids": {
-            "items": {
-              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
-              "type": "string"
-            },
-            "maxItems": 1,
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
+          "service_id": {
+            "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
           }
         },
         "required": [
-          "service_ids",
-          "backing_service_id"
+          "service_id",
+          "backing_service_id",
+          "credential"
         ],
         "type": "object"
       },
@@ -640,8 +656,7 @@
             "type": "string"
           },
           "config": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/ComponentConfig"
           },
           "enabled": {
             "type": "boolean"
@@ -697,6 +712,7 @@
           "environment_id",
           "kind",
           "enabled",
+          "config",
           "healthy",
           "status"
         ],
@@ -714,11 +730,193 @@
             "readOnly": true,
             "type": "string"
           },
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
+          "caddyfile_template": {
+            "type": "string"
+          },
+          "forwarders": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentDNSForwarder"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "secret_id": {
+            "type": "string"
+          },
+          "tailnet_delegation": {
+            "type": "boolean"
+          },
+          "upstream_auto": {
+            "type": "boolean"
+          },
+          "upstream_resolvers": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "zone_id": {
+            "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ComponentConfigMutationRequest": {
+        "additionalProperties": false,
+        "maxProperties": 1,
+        "minProperties": 1,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ComponentConfigMutationRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "config": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "maxProperties": 2,
+                "minProperties": 1,
+                "properties": {
+                  "caddyfile_template": {
+                    "type": "string"
+                  },
+                  "zone_id": {
+                    "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "zone_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "credential": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "maxProperties": 2,
+                        "minProperties": 2,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "existing"
+                            ],
+                            "type": "string"
+                          },
+                          "secret_id": {
+                            "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "secret_id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "maxProperties": 3,
+                        "minProperties": 3,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "new"
+                            ],
+                            "type": "string"
+                          },
+                          "secret_name": {
+                            "type": "string"
+                          },
+                          "token": {
+                            "type": "string",
+                            "writeOnly": true
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "secret_name",
+                          "token"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "credential"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "maxProperties": 4,
+                "minProperties": 4,
+                "properties": {
+                  "forwarders": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "domain": {
+                          "type": "string"
+                        },
+                        "resolvers": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "domain",
+                        "resolvers"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "tailnet_delegation": {
+                    "type": "boolean"
+                  },
+                  "upstream_auto": {
+                    "type": "boolean"
+                  },
+                  "upstream_resolvers": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "upstream_auto",
+                  "upstream_resolvers",
+                  "forwarders",
+                  "tailnet_delegation"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "config"
+        ],
         "type": "object"
       },
       "ComponentConfigMutationResult": {
@@ -746,6 +944,28 @@
         "required": [
           "resource",
           "reconcile_task_id"
+        ],
+        "type": "object"
+      },
+      "ComponentDNSForwarder": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "resolvers": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "domain",
+          "resolvers"
         ],
         "type": "object"
       },
@@ -1021,6 +1241,98 @@
           "source",
           "exposure",
           "secret"
+        ],
+        "type": "object"
+      },
+      "EntryBulkItem": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "EntryBulkUpsertRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EntryBulkUpsertRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EntryBulkItem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "exposure": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "secret": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "environment_id",
+          "entries",
+          "exposure",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "EntryBulkUpsertResult": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EntryBulkUpsertResult.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "entries"
         ],
         "type": "object"
       },
@@ -1574,6 +1886,70 @@
           "total",
           "used",
           "used_pct"
+        ],
+        "type": "object"
+      },
+      "LogEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "container_id": {
+            "type": "string"
+          },
+          "container_name": {
+            "type": "string"
+          },
+          "line": {
+            "maxLength": 32768,
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "service_name": {
+            "type": "string"
+          },
+          "slot": {
+            "enum": [
+              "blue",
+              "green",
+              "singleton"
+            ],
+            "type": "string"
+          },
+          "stream": {
+            "enum": [
+              "stdout",
+              "stderr"
+            ],
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sequence",
+          "service_id",
+          "service_name",
+          "container_id",
+          "container_name",
+          "release_id",
+          "slot",
+          "stream",
+          "timestamp",
+          "line",
+          "truncated"
         ],
         "type": "object"
       },
@@ -3218,10 +3594,25 @@
             "readOnly": true,
             "type": "string"
           },
+          "active_generation": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "environment_id": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
-          "name": {
+          "origin": {
+            "enum": [
+              "api",
+              "blueprint"
+            ],
+            "type": "string"
+          },
+          "reconciliation_key": {
             "type": "string"
           },
           "script": {
@@ -3230,16 +3621,26 @@
           "service": {
             "type": "string"
           },
+          "service_id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
           "when": {
             "type": "string"
           }
         },
         "required": [
           "id",
-          "name",
+          "environment_id",
+          "slug",
+          "service_id",
           "service",
           "script",
-          "when"
+          "when",
+          "origin",
+          "active_generation"
         ],
         "type": "object"
       },
@@ -3258,13 +3659,13 @@
           "environment_id": {
             "type": "string"
           },
-          "name": {
-            "type": "string"
-          },
           "script": {
             "type": "string"
           },
           "service_id": {
+            "type": "string"
+          },
+          "slug": {
             "type": "string"
           },
           "when": {
@@ -3273,7 +3674,7 @@
         },
         "required": [
           "environment_id",
-          "name",
+          "slug",
           "service_id",
           "script",
           "when"
@@ -3293,6 +3694,9 @@
             "type": "string"
           },
           "script": {
+            "type": "string"
+          },
+          "slug": {
             "type": "string"
           },
           "when": {
@@ -4728,6 +5132,15 @@
           {
             "explode": false,
             "in": "query",
+            "name": "project",
+            "schema": {
+              "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
             "name": "workspace",
             "schema": {
               "pattern": "^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$",
@@ -5975,7 +6388,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ComponentConfig"
+                "$ref": "#/components/schemas/ComponentConfigMutationRequest"
               }
             }
           },
@@ -6553,6 +6966,74 @@
           }
         },
         "summary": "Create an environment Entry",
+        "tags": [
+          "Entry"
+        ]
+      }
+    },
+    "/entries/bulk": {
+      "post": {
+        "operationId": "entry.bulk-upsert",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntryBulkUpsertRequest"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntryBulkUpsertResult"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Atomically upsert literal environment variables",
         "tags": [
           "Entry"
         ]
@@ -7349,6 +7830,85 @@
         "summary": "Export the current backup age identity without storing it",
         "tags": [
           "Backup"
+        ]
+      }
+    },
+    "/environments/{id}/logs": {
+      "get": {
+        "operationId": "environment.logs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tail",
+            "schema": {
+              "default": 200,
+              "format": "int32",
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "follow",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "data": {
+                        "$ref": "#/components/schemas/LogEvent"
+                      },
+                      "event": {
+                        "enum": [
+                          "log"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "event",
+                      "data"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Transient non-resumable log stream"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "tags": [
+          "Environments"
         ]
       }
     },
@@ -9465,6 +10025,66 @@
         ]
       }
     },
+    "/scripts/{id}/run": {
+      "post": {
+        "operationId": "script.run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^scr_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Run a script",
+        "tags": [
+          "Script"
+        ]
+      }
+    },
     "/secrets": {
       "get": {
         "operationId": "secret.list",
@@ -10157,6 +10777,85 @@
         ]
       }
     },
+    "/services/{id}/logs": {
+      "get": {
+        "operationId": "service.logs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tail",
+            "schema": {
+              "default": 200,
+              "format": "int32",
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "follow",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "data": {
+                        "$ref": "#/components/schemas/LogEvent"
+                      },
+                      "event": {
+                        "enum": [
+                          "log"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "event",
+                      "data"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Transient non-resumable log stream"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "tags": [
+          "Services"
+        ]
+      }
+    },
     "/services/{id}/rollback": {
       "post": {
         "operationId": "service.rollback",
@@ -10376,6 +11075,15 @@
             "name": "environment",
             "schema": {
               "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "project",
+            "schema": {
+              "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$",
               "type": "string"
             }
           },

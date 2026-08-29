@@ -3,7 +3,6 @@ package desiredrevision
 import (
 	"context"
 	"crypto/sha256"
-	"net/http"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -17,6 +16,13 @@ const blueprintRoute = "/environments/{id}/blueprint"
 type Evidence struct {
 	candidate idempotentintent.ProtectedEvidence
 	Durable   etcd.ProtectedIntentRecord
+}
+
+type IntentAddress struct {
+	Method string
+	Route  string
+	Scope  idempotentintent.Scope
+	Path   []idempotentintent.PathBinding
 }
 
 type Idempotency struct {
@@ -44,7 +50,7 @@ func (service *Idempotency) MatchesStaged(
 
 func (service *Idempotency) Prepare(
 	ctx context.Context,
-	environmentID string,
+	address IntentAddress,
 	bundle core.BlueprintBundle,
 ) (Evidence, error) {
 	manifest, err := IntentManifest(bundle)
@@ -52,10 +58,10 @@ func (service *Idempotency) Prepare(
 		return Evidence{}, err
 	}
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
-		Method: http.MethodPut,
-		Route:  blueprintRoute,
-		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:   []idempotentintent.PathBinding{{Name: "id", Value: environmentID}},
+		Method: address.Method,
+		Route:  address.Route,
+		Scope:  address.Scope,
+		Path:   append([]idempotentintent.PathBinding(nil), address.Path...),
 		Query:  idempotentintent.Object(),
 		Body:   idempotentintent.BlueprintBody(manifest),
 	})

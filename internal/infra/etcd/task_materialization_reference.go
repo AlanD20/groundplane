@@ -105,8 +105,17 @@ type TaskGeneratedEnvironmentValueReference struct {
 }
 
 type TaskGeneratedEnvironmentEntryReference struct {
-	Name  string                  `json:"name"`
-	Value TaskEntryValueReference `json:"value"`
+	Name   string                    `json:"name"`
+	Value  TaskEntryValueReference   `json:"value"`
+	Secret *TaskSecretValueReference `json:"secret,omitempty"`
+}
+
+// TaskSecretValueReference pins one reusable Secret without copying value
+// bytes into desired state or the durable Task journal.
+type TaskSecretValueReference struct {
+	SecretID         string `json:"secret_id"`
+	Revision         int64  `json:"revision"`
+	CiphertextSHA256 string `json:"ciphertext_sha256"`
 }
 
 func validateTaskMaterializationReferences(
@@ -308,8 +317,17 @@ func validateTaskGeneratedEnvironmentReference(reference TaskGeneratedEnvironmen
 			!environmentBlueprintInterpolationKey.MatchString(value.Name) {
 			return errs.New(errs.KindValidationFailed, "generated Environment value names are not uniquely sorted")
 		}
-		if err := validateTaskEntryValueReference(value.Value); err != nil {
-			return err
+		hasEntry := value.Value.EntryID != "" || value.Value.ValueGenerationID != "" || value.Value.Storage != ""
+		if hasEntry == (value.Secret != nil) {
+			return errs.New(errs.KindValidationFailed, "generated Environment value source union is invalid")
+		}
+		if hasEntry {
+			if err := validateTaskEntryValueReference(value.Value); err != nil {
+				return err
+			}
+		} else if validateStableID(ids.KindSecret, value.Secret.SecretID) != nil || value.Secret.Revision <= 0 ||
+			len(value.Secret.CiphertextSHA256) != sha256.Size*2 {
+			return errs.New(errs.KindValidationFailed, "generated Environment Secret reference is invalid")
 		}
 		previousName = value.Name
 	}
@@ -341,6 +359,12 @@ func cloneTaskMaterializationReferences(
 		if source.GeneratedEnvironment != nil {
 			value := *source.GeneratedEnvironment
 			value.Values = append([]TaskGeneratedEnvironmentEntryReference(nil), value.Values...)
+			for valueIndex := range value.Values {
+				if value.Values[valueIndex].Secret != nil {
+					secret := *value.Values[valueIndex].Secret
+					value.Values[valueIndex].Secret = &secret
+				}
+			}
 			source.GeneratedEnvironment = &value
 		}
 		cloned[index].Source = source

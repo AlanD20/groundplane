@@ -1,6 +1,9 @@
 package etcd
 
 import (
+	"context"
+	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
@@ -8,6 +11,54 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 )
+
+func TestGetReleaseRenderInputAtDecodesStoredEnvelope(t *testing.T) {
+	t.Parallel()
+	input := portlessReleaseRenderInput(domain.StrategyRecreate)
+	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 10)
+	input.PriorImage = "registry.example/worker:previous"
+	raw, err := EncodeReleaseRenderInput(input)
+	if err != nil {
+		t.Fatalf("EncodeReleaseRenderInput() error = %v", err)
+	}
+	stored, err := encodeReleaseRecord("release-render-input", json.RawMessage(raw))
+	if err != nil {
+		t.Fatalf("encodeReleaseRecord() error = %v", err)
+	}
+	store := &releaseRenderInputTestStore{memoryTaskStore: newMemoryTaskStore()}
+	seedTaskRepositoryValue(t, store.memoryTaskStore, releaseRenderInputStagingKey("", input.ReleaseID), stored)
+	revision := store.currentRevision()
+
+	got, err := (&ReleaseLedger{store: store}).GetReleaseRenderInputAt(
+		context.Background(), input.ReleaseID, revision,
+	)
+	if err != nil {
+		t.Fatalf("GetReleaseRenderInputAt() error = %v", err)
+	}
+	if got.Record.ReleaseID != input.ReleaseID || got.ReadRevision != revision {
+		t.Fatalf("GetReleaseRenderInputAt() = %#v", got)
+	}
+}
+
+type releaseRenderInputTestStore struct {
+	*memoryTaskStore
+}
+
+func (*releaseRenderInputTestStore) Close() error { return nil }
+
+func (*releaseRenderInputTestStore) Health(context.Context) error { return nil }
+
+func (store *releaseRenderInputTestStore) Put(ctx context.Context, key string, value []byte) (int64, error) {
+	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+	return result.Revision, err
+}
+
+func (store *releaseRenderInputTestStore) Delete(ctx context.Context, key string) (int64, error) {
+	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: key}})
+	return result.Revision, err
+}
+
+func (*releaseRenderInputTestStore) Snapshot(context.Context, io.Writer) error { return nil }
 
 // Rationale: both dependency-plan copies can be independently valid while
 // naming different authorities; durable decode must reject that tampering.

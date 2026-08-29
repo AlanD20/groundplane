@@ -453,7 +453,8 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	attach, attachErr := decodeAttachRecord(read.Values[0].Value)
 	facts, factsErr := decodeAttachEncryptedFacts(read.Values[1].Value)
 	if attachErr != nil || factsErr != nil || attach.ID != attempt.TargetID ||
-		attach.EnvironmentID != consumerEnvironmentID || attach.Status != backupAttachStatusReady || facts.AttachID != attach.ID {
+		attach.EnvironmentID != consumerEnvironmentID || !attach.OwnsCredential() ||
+		attach.Status != backupAttachStatusReady || facts.AttachID != attach.ID {
 		clear(facts.Ciphertext)
 		return BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,

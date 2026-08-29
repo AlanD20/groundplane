@@ -19,7 +19,9 @@ func TestReconcileBlueprintComponentsPreservesOmissionAndExplicitlyDisables(t *t
 	caddy := core.Component{
 		ID: ids.NewAt(ids.KindComponent, now, 2), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-		Config:            map[string]any{"zone_id": ids.NewAt(ids.KindNetwork, now, 3)},
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, now, 3),
+		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 4)},
 		PinnedIPv4:        "10.40.10.2", Healthy: true,
 	}
@@ -34,7 +36,7 @@ func TestReconcileBlueprintComponentsPreservesOmissionAndExplicitlyDisables(t *t
 	}
 	disabled, err := ReconcileBlueprintComponents(
 		map[string]core.ComponentSpec{
-			"caddy": {Kind: core.ComponentKindIngressCaddy, Enabled: false},
+			"http-router": {Implementation: core.ComponentKindIngressCaddy, Enabled: false},
 		},
 		[]core.Component{caddy, tunnel},
 		ids.New,
@@ -42,6 +44,33 @@ func TestReconcileBlueprintComponentsPreservesOmissionAndExplicitlyDisables(t *t
 	if err != nil || len(disabled.Candidates) != 1 || disabled.Effective[0].Enabled ||
 		len(disabled.Effective[0].GeneratedServices) != 0 || disabled.Effective[0].PinnedIPv4 != "" {
 		t.Fatalf("ReconcileBlueprintComponents(disabled) = %#v, %v", disabled, err)
+	}
+}
+
+func TestReconcileBlueprintComponentsPlansUnhealthyEnabledRepair(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 29, 2, 35, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	caddy := core.Component{
+		ID: ids.NewAt(ids.KindComponent, now, 2), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, now, 3),
+		}},
+		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 4)}, PinnedIPv4: "10.40.10.2",
+	}
+	tunnel := core.Component{
+		ID: ids.NewAt(ids.KindComponent, now, 5), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare,
+	}
+
+	result, err := ReconcileBlueprintComponents(nil, []core.Component{caddy, tunnel}, ids.New)
+	if err != nil {
+		t.Fatalf("ReconcileBlueprintComponents() error = %v", err)
+	}
+	if len(result.Candidates) != 1 || result.Candidates[0].Current.ID != caddy.ID ||
+		result.Candidates[0].Candidate.PinnedIPv4 != "" || result.Candidates[0].Candidate.Healthy {
+		t.Fatalf("unhealthy Component repair = %#v", result)
 	}
 }
 
@@ -62,9 +91,9 @@ func TestReconcileBlueprintComponentsAllocatesEnableIdentityAndRequiresCaddy(t *
 	allocated := ids.NewAt(ids.KindService, now, 4)
 	result, err := ReconcileBlueprintComponents(
 		map[string]core.ComponentSpec{
-			"caddy": {
-				Kind: core.ComponentKindIngressCaddy, Enabled: true,
-				Config: map[string]any{"zone_id": ids.NewAt(ids.KindNetwork, now, 5)},
+			"http-router": {
+				Implementation: core.ComponentKindIngressCaddy, Enabled: true,
+				Settings: core.ComponentCapabilitySettings{ZoneID: ids.NewAt(ids.KindNetwork, now, 5)},
 			},
 		},
 		[]core.Component{caddy, tunnel},
@@ -82,9 +111,9 @@ func TestReconcileBlueprintComponentsAllocatesEnableIdentityAndRequiresCaddy(t *
 	}
 	_, err = ReconcileBlueprintComponents(
 		map[string]core.ComponentSpec{
-			"cloudflare-tunnel": {
-				Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
-				Config: map[string]any{"token_entry_id": ids.NewAt(ids.KindEnvEntry, now, 6)},
+			"http-edge-transport": {
+				Implementation: core.ComponentKindEdgeCloudflare, Enabled: true,
+				Settings: core.ComponentCapabilitySettings{SecretID: ids.NewAt(ids.KindSecret, now, 6)},
 			},
 		},
 		[]core.Component{caddy, tunnel},

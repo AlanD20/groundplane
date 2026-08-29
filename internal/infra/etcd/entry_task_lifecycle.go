@@ -3,11 +3,9 @@ package etcd
 import (
 	"context"
 	"maps"
-	"strconv"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -201,34 +199,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 		keys = append(keys, projectionKey, activeKey)
 		values = append(values, projectionRead.Values...)
 	}
-	cloudflareKeys, cloudflareValues, err := readEntryRetryCloudflareAuthority(source, intent.EnvironmentID)
-	if err != nil {
-		return nil, nil, err
-	}
-	keys = append(keys, cloudflareKeys...)
-	values = append(values, cloudflareValues...)
 	return &GetManyResult{Values: values, ReadRevision: revision}, keys, nil
-}
-func readEntryRetryCloudflareAuthority(source TaskRecord, environmentID string) ([]string, []*KeyValue, error) {
-	componentID, revision, err := entryRemovalCloudflareFence(source)
-	if err != nil {
-		return nil, nil, err
-	}
-	if componentID == "" {
-		key := componentEnvironmentKindKey(environmentID, core.ComponentKindEdgeCloudflare)
-		return []string{key}, []*KeyValue{nil}, nil
-	}
-	return []string{componentKey(componentID)}, []*KeyValue{{ModRevision: revision}}, nil
-}
-
-func entryRemovalCloudflareFence(task TaskRecord) (string, int64, error) {
-	componentID := task.Params[TaskEntryCloudflareComponentParam]
-	revision, err := strconv.ParseInt(task.Params[TaskEntryCloudflareRevisionParam], 10, 64)
-	if err != nil || componentID == "" && revision != 0 || componentID != "" &&
-		(ids.Validate(ids.KindComponent, componentID) != nil || revision <= 0) {
-		return "", 0, errs.New(errs.KindInternal, "entry removal Cloudflare fence is invalid")
-	}
-	return componentID, revision, nil
 }
 
 func (repository *TaskRepository) prepareRemovalTaskAcknowledgement(
@@ -445,13 +416,12 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 
 func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) error {
 	expectedExecutor := TaskExecutorController
-	_, _, cloudflareErr := entryRemovalCloudflareFence(task)
-	validParams := cloudflareErr == nil && len(task.Params) == 4 &&
+	validParams := len(task.Params) == 2 &&
 		task.Params[TaskResourceKindParam] == TaskResourceEntry &&
 		task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID
 	if intent.CurrentProjection != nil {
 		expectedExecutor = TaskExecutorAgent
-		validParams = cloudflareErr == nil && intent.CandidateProjection != nil && len(task.Params) == 10 &&
+		validParams = intent.CandidateProjection != nil && len(task.Params) == 8 &&
 			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&

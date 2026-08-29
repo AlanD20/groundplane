@@ -69,12 +69,14 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 		{taskType: etcd.TaskDestroy, operation: agentpb.PlanOperation_PLAN_OPERATION_DESTROY},
 		{taskType: etcd.TaskRemove, operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE},
 		{taskType: etcd.TaskCreate, operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE},
+		{taskType: etcd.TaskAttach, operation: agentpb.PlanOperation_PLAN_OPERATION_ATTACH},
+		{taskType: etcd.TaskDetach, operation: agentpb.PlanOperation_PLAN_OPERATION_DETACH},
 		{taskType: etcd.TaskUpdate, operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE},
 		{taskType: etcd.TaskBackup, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP},
 		{taskType: etcd.TaskBackupPrune, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE},
 	}
 	for _, pair := range pairs {
-		if !operationMatchesTask(pair.operation, pair.taskType) {
+		if !operationMatchesTask(pair.operation, etcd.TaskRecord{Type: pair.taskType}) {
 			t.Errorf("operationMatchesTask(%s, %q) = false, want true", pair.operation, pair.taskType)
 		}
 	}
@@ -83,7 +85,7 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 			if pair.taskType == other.taskType {
 				continue
 			}
-			if operationMatchesTask(pair.operation, other.taskType) {
+			if operationMatchesTask(pair.operation, etcd.TaskRecord{Type: other.taskType}) {
 				t.Errorf(
 					"operationMatchesTask(%s, %q) = true for cross-pair with %q",
 					pair.operation,
@@ -92,6 +94,27 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 				)
 			}
 		}
+	}
+	backingCreation := etcd.TaskRecord{
+		Type: etcd.TaskUpdate,
+		Params: map[string]string{
+			etcd.TaskBackingServiceHealthParam: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+	}
+	if !operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, backingCreation) {
+		t.Error("backing-service TaskUpdate did not accept its Environment-create plan")
+	}
+	volumeCreation := etcd.TaskRecord{
+		Type: etcd.TaskCreate,
+		Params: map[string]string{
+			etcd.TaskResourceKindParam: etcd.TaskResourceVolume,
+		},
+	}
+	if !operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, volumeCreation) {
+		t.Error("Volume TaskCreate did not accept its reconciliation plan")
+	}
+	if operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, etcd.TaskRecord{Type: etcd.TaskCreate}) {
+		t.Error("ordinary TaskCreate accepted a reconciliation plan")
 	}
 }
 
@@ -183,7 +206,11 @@ func TestAcknowledgeEnvironmentRemovalAcceptsDirectoryResult(t *testing.T) {
 			PlanHash: hex.EncodeToString(planHash[:]), Status: etcd.TaskStatusRunning,
 		}},
 	}}
-	server := &Server{tasks: store, now: func() time.Time { return now }}
+	server := &Server{tasks: store, plans: &fakePlanResolver{plan: &agentpb.ExecutionPlan{
+		Steps: []*agentpb.ExecutionStep{{Payload: &agentpb.ExecutionStep_EnvironmentDirectoryRemove{
+			EnvironmentDirectoryRemove: &agentpb.EnvironmentDirectoryRemove{},
+		}}},
+	}}, now: func() time.Time { return now }}
 
 	err := server.acknowledge(context.Background(), testAgentID, 1, &agentpb.TaskAck{
 		TaskId: taskID, AssignmentId: assignmentID, PlanHash: planHash[:],
@@ -503,7 +530,10 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	}}}}
 	result := make(chan error, 1)
 	go func() {
-		result <- New(authorizedAuthenticator(), registry, tasks, nil).Connect(stream)
+		result <- New(
+			authorizedAuthenticator(), registry, tasks,
+			&fakePlanResolver{plan: &agentpb.ExecutionPlan{}},
+		).Connect(stream)
 	}()
 
 	select {

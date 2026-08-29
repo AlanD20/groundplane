@@ -82,15 +82,9 @@ func (s *Server) attachRequestSchema() *huma.Schema {
 	if schema == nil {
 		return reference
 	}
-	one := 1
 	eight := 8
 	nameLimit := 255
-	serviceIDs := schema.Properties["service_ids"]
-	serviceIDs.Nullable = false
-	serviceIDs.MinItems = &one
-	serviceIDs.MaxItems = &one
-	serviceIDs.UniqueItems = true
-	serviceIDs.Items.Pattern = `^svc_[0-9A-HJKMNP-TV-Z]{26}$`
+	schema.Properties["service_id"].Pattern = `^svc_[0-9A-HJKMNP-TV-Z]{26}$`
 	grants := schema.Properties["grant_attach_ids"]
 	grants.Nullable = false
 	grants.MaxItems = &eight
@@ -145,6 +139,9 @@ func (s *Server) createAttach(
 	}
 	response, err := s.attachMutations.CreateAttach(ctx, input, request.IdempotencyKey)
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error("controller: create Attach", slog.Any("error", err))
+		}
 		return nil, normalizeProjectError(err)
 	}
 	return s.attachMutationResponse(response, "create"), nil
@@ -195,12 +192,14 @@ func decodeAttachCreate(body []byte) (apiTypes.AttachRequest, error) {
 		}
 		seen[member] = struct{}{}
 		switch member {
-		case "service_ids":
-			request.ServiceIDs, err = decodeAttachStringList(decoder, member)
+		case "service_id":
+			err = decoder.Decode(&request.ServiceID)
 		case "backing_service_id":
 			err = decoder.Decode(&request.BackingServiceID)
 		case "name":
 			err = decoder.Decode(&request.Name)
+		case "credential":
+			request.Credential, err = decodeAttachCredential(decoder)
 		case "grant_attach_ids":
 			request.GrantAttachIDs, err = decodeAttachStringList(decoder, member)
 		default:
@@ -234,6 +233,51 @@ func decodeAttachCreate(body []byte) (apiTypes.AttachRequest, error) {
 		return apiTypes.AttachRequest{}, projectCreateJSONError(err)
 	}
 	return request, nil
+}
+
+func decodeAttachCredential(decoder *json.Decoder) (apiTypes.AttachCredential, error) {
+	opening, err := decoder.Token()
+	if err != nil {
+		return apiTypes.AttachCredential{}, err
+	}
+	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
+		return apiTypes.AttachCredential{}, errs.New(errs.KindValidationFailed, "Attach credential must be an object")
+	}
+	credential := apiTypes.AttachCredential{}
+	seen := make(map[string]struct{}, 2)
+	for decoder.More() {
+		token, tokenErr := decoder.Token()
+		if tokenErr != nil {
+			return apiTypes.AttachCredential{}, tokenErr
+		}
+		member, ok := token.(string)
+		if !ok {
+			return apiTypes.AttachCredential{}, errs.New(errs.KindMalformedRequest, "Attach credential member name is invalid")
+		}
+		if _, duplicate := seen[member]; duplicate {
+			return apiTypes.AttachCredential{}, errs.New(errs.KindMalformedRequest, "Attach credential contains a duplicate member")
+		}
+		seen[member] = struct{}{}
+		switch member {
+		case "mode":
+			err = decoder.Decode(&credential.Mode)
+		case "attach_id":
+			err = decoder.Decode(&credential.AttachID)
+		default:
+			return apiTypes.AttachCredential{}, errs.New(errs.KindMalformedRequest, "Attach credential contains an unknown member")
+		}
+		if err != nil {
+			return apiTypes.AttachCredential{}, err
+		}
+	}
+	closing, err := decoder.Token()
+	if err != nil {
+		return apiTypes.AttachCredential{}, err
+	}
+	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
+		return apiTypes.AttachCredential{}, errs.New(errs.KindMalformedRequest, "Attach credential is malformed")
+	}
+	return credential, nil
 }
 
 func decodeAttachStringList(decoder *json.Decoder, member string) ([]string, error) {

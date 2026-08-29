@@ -57,6 +57,8 @@ type fakeRepository struct {
 	mu                 sync.Mutex
 	operation          Operation
 	byOperation        map[string]Operation
+	resolvedTarget     TargetKind
+	begin              BeginDeletion
 	snapshot           FrozenMembership
 	actions            []Action
 	completed          map[string]bool
@@ -67,9 +69,21 @@ type fakeRepository struct {
 func newFakeRepository(snapshot FrozenMembership) *fakeRepository {
 	return &fakeRepository{snapshot: snapshot, byOperation: map[string]Operation{}, completed: map[string]bool{}}
 }
+
+func (r *fakeRepository) ResolveTargetKind(_ context.Context, requested TargetKind, _ string) (TargetKind, error) {
+	if r.resolvedTarget != "" {
+		return r.resolvedTarget, nil
+	}
+	return requested, nil
+}
+
 func (r *fakeRepository) BeginDeletion(_ context.Context, b BeginDeletion) (BeginResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.resolvedTarget != "" && b.TargetKind != r.resolvedTarget {
+		return BeginResult{}, errors.New("wrong deletion authority")
+	}
+	r.begin = b
 	if existing, ok := r.byOperation[b.OperationID]; ok {
 		return BeginResult{Operation: existing, Existing: true}, nil
 	}
@@ -79,6 +93,31 @@ func (r *fakeRepository) BeginDeletion(_ context.Context, b BeginDeletion) (Begi
 	r.operation = Operation{ID: b.OperationID, TaskOperationID: b.TaskOperationIDCandidate, Kind: b.OperationKind, TargetKind: b.TargetKind, TargetID: b.TargetID, TaskID: b.TaskIDCandidate, Phase: PhasePlanning, DeadlineAt: b.DeadlineAt, CreatedAt: b.CreatedAt, UpdatedAt: b.CreatedAt}
 	r.byOperation[b.OperationID] = r.operation
 	return BeginResult{Operation: r.operation}, nil
+}
+
+func TestDeleteUsesBackingAuthorityBehindProjectRoute(t *testing.T) {
+	t.Parallel()
+	repository := newFakeRepository(FrozenMembership{})
+	repository.resolvedTarget = TargetBackingService
+	service := NewService(repository, &fakeExecutor{}, fixedIDs{task: "task_01M15540AH211T0MA5QQ4KT50C"}, fixedClock{
+		now: time.Date(2026, 8, 28, 21, 0, 0, 0, time.UTC),
+	})
+
+	accepted, err := service.Delete(context.Background(), DeleteRequest{
+		TargetKind: TargetProject, TargetID: "project-1", IdempotencyKey: "backing-delete-key",
+	})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if accepted.TaskID != "task_01M15540AH211T0MA5QQ4KT50C" || repository.begin.OperationKind != OperationBackingDelete ||
+		repository.begin.TargetKind != TargetBackingService {
+		t.Fatalf("Delete() = %#v, begin = %#v", accepted, repository.begin)
+	}
+	intent := repository.begin.IdempotencyIntent
+	if intent.RouteTemplate != ProjectDeleteRoute || intent.ScopeKind != TargetProject ||
+		intent.ScopeID != "project-1" {
+		t.Fatalf("Delete() idempotency intent = %#v", intent)
+	}
 }
 func (r *fakeRepository) OperationByTask(_ context.Context, task string) (Operation, error) {
 	r.mu.Lock()

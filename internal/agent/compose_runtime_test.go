@@ -142,32 +142,6 @@ func TestComposeRuntimeReturnsBoundedHelperFailure(t *testing.T) {
 	}
 }
 
-// Rationale: Caddy validation/reload is a runtime mutation and must cross the
-// same bounded helper boundary and post-mutation observation path as Compose.
-func TestComposeRuntimeAppliesCaddyConfigThenObserves(t *testing.T) {
-	helper := completedComposeHelper()
-	observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-platform"}}}
-	runtime, err := NewComposeRuntime(helper, observer)
-	if err != nil {
-		t.Fatalf("NewComposeRuntime() error = %v", err)
-	}
-	assignment, _ := composeRuntimeAssignment()
-	step := &agentpb.ExecutionStep{
-		StepId: "step_caddy", TimeoutSeconds: 30,
-		Payload: &agentpb.ExecutionStep_CaddyConfigApply{CaddyConfigApply: &agentpb.CaddyConfigApply{
-			ArtifactId: "artifact_platform", ServiceId: "svc_api", CaddyfileSha256: make([]byte, 32),
-		}},
-	}
-	result, err := runtime.executeStep(context.Background(), assignment, step)
-	if err != nil {
-		t.Fatalf("executeStep() error = %v", err)
-	}
-	if result.Observed == nil || !result.MutationAttempted || observer.calls != 1 ||
-		helper.request.GetStepId() != step.GetStepId() {
-		t.Fatalf("result=%#v observations=%d request=%#v", result, observer.calls, helper.request)
-	}
-}
-
 func completedComposeHelper() *fakeComposeHelper {
 	return &fakeComposeHelper{response: &agentpb.ComposeHelperResponse{
 		Schema: composeHelperSchema, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -116,6 +117,13 @@ func (s *Server) deployService(ctx context.Context, input *releaseServiceDeployI
 	}
 	response, err := s.releaseOperations.DeployService(ctx, input.ID, input.Body, input.IdempotencyKey)
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error(
+				"controller: deploy Service",
+				slog.String("service_id", input.ID),
+				slog.Any("error", err),
+			)
+		}
 		return nil, normalizeProjectError(err)
 	}
 	return s.releaseGroupMutationResponse(response), nil
@@ -127,6 +135,13 @@ func (s *Server) rollbackService(ctx context.Context, input *releaseServiceRollb
 	}
 	response, err := s.releaseOperations.RollbackService(ctx, input.ID, input.Body, input.IdempotencyKey)
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error(
+				"controller: roll back Service",
+				slog.String("service_id", input.ID),
+				slog.Any("error", err),
+			)
+		}
 		return nil, normalizeProjectError(err)
 	}
 	return s.releaseGroupMutationResponse(response), nil

@@ -45,9 +45,9 @@ func TestCreateDirectoriesRejectsSymlinkTraversal(t *testing.T) {
 	}
 }
 
-// Rationale: managed volume binds need durable direct children without
-// weakening the private Environment namespace or following a hostile leaf.
-func TestEnsureManagedVolumeDirectoriesCreatesDirectAccessibleLeaves(t *testing.T) {
+// Rationale: managed volume binds need durable private direct children without
+// weakening the Environment namespace or following a hostile leaf.
+func TestEnsureManagedVolumeDirectoriesCreatesPrivateDirectLeaves(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vol")
 	if err := os.Mkdir(root, 0o700); err != nil {
 		t.Fatalf("Mkdir(root) error = %v", err)
@@ -67,7 +67,7 @@ func TestEnsureManagedVolumeDirectoriesCreatesDirectAccessibleLeaves(t *testing.
 	}
 	for _, name := range []string{"app-data", "cache"} {
 		info, err := os.Stat(filepath.Join(directory, name))
-		if err != nil || !info.IsDir() || info.Mode().Perm() != 0o755 {
+		if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
 			t.Fatalf("managed volume directory %q = %#v, %v", name, info, err)
 		}
 	}
@@ -88,7 +88,9 @@ func TestEnsureManagedVolumeDirectoriesCreatesDirectAccessibleLeaves(t *testing.
 	}
 }
 
-func TestEnsureManagedVolumeDirectoriesDoesNotAdoptExistingLeaf(t *testing.T) {
+// Rationale: workloads may change the root mode and ownership of their bind
+// directory; the private descriptor-validated Environment parent owns identity.
+func TestEnsureManagedVolumeDirectoriesAcceptsFinalizedWorkloadOwnedLeaf(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vol")
 	if err := os.Mkdir(root, 0o700); err != nil {
 		t.Fatalf("Mkdir(root) error = %v", err)
@@ -105,8 +107,20 @@ func TestEnsureManagedVolumeDirectoriesDoesNotAdoptExistingLeaf(t *testing.T) {
 		IntentSHA256: make([]byte, 32), VolumeRoot: root, VolumeDir: directory,
 		Volumes: []ManagedVolume{{ID: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", Key: "app-data"}},
 	}, uint32(os.Getuid()))
-	if err == nil {
-		t.Fatal("ensureManagedVolumeDirectories() adopted an existing leaf")
+	if err != nil {
+		t.Fatalf("ensureManagedVolumeDirectories() error = %v", err)
+	}
+	if err := os.Chmod(filepath.Join(directory, "app-data"), 0o000); err != nil {
+		t.Fatalf("Chmod(leaf) error = %v", err)
+	}
+	defer os.Chmod(filepath.Join(directory, "app-data"), 0o700)
+	err = ensureManagedVolumeDirectoriesAs(context.Background(), ManagedVolumeEnsureRequest{
+		TaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		IntentSHA256: make([]byte, 32), VolumeRoot: root, VolumeDir: directory,
+		Volumes: []ManagedVolume{{ID: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", Key: "app-data"}},
+	}, uint32(os.Getuid()))
+	if err != nil {
+		t.Fatalf("ensureManagedVolumeDirectories(after workload chmod) error = %v", err)
 	}
 }
 
@@ -157,7 +171,7 @@ func TestRemoveManagedVolumeIsBoundedAndResumable(t *testing.T) {
 		t.Fatalf("createDirectories() error = %v", err)
 	}
 	leaf := filepath.Join(directory, "app-data")
-	if err := os.Mkdir(leaf, 0o755); err != nil {
+	if err := os.Mkdir(leaf, 0o700); err != nil {
 		t.Fatalf("Mkdir(leaf) error = %v", err)
 	}
 	for index := 0; index < 200; index++ {

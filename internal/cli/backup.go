@@ -497,7 +497,7 @@ func resolveBackupPolicyVolumeNames(
 	}
 	cursor := ""
 	for {
-		page, err := app.Client.ListVolumes(ctx, environmentID, 200, cursor)
+		page, err := app.Client.ListVolumes(ctx, environmentID, 100, cursor)
 		if err != nil {
 			return nil, err
 		}

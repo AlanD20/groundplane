@@ -137,7 +137,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 			value: []byte(record.ID),
 		},
 		"service index": {
-			key:   attachServiceKey(record.ServiceIDs[0], record.ID),
+			key:   attachServiceKey(record.ServiceID, record.ID),
 			value: []byte(record.ID),
 		},
 		"encrypted facts": {key: attachFactsKey(record.ID), value: []byte(record.ID)},

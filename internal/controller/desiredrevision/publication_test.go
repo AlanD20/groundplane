@@ -3,6 +3,7 @@ package desiredrevision
 import (
 	"context"
 	"crypto/sha256"
+	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
@@ -61,8 +62,10 @@ func (repository *boundaryRepository) StageEnvironmentBlueprintRevision(
 	return etcd.EnvironmentBlueprintSeal{}, nil
 }
 
-func (repository *boundaryRepository) PublishEnvironmentDesiredRevisionWithTask(
+func (repository *boundaryRepository) PublishEnvironmentBlueprintDesiredRevisionWithTask(
 	_ context.Context,
+	_ netip.Prefix,
+	_ string,
 	_ etcd.Versioned[etcd.ProjectRecord],
 	_ etcd.Versioned[etcd.EnvironmentRecord],
 	_ int64,
@@ -74,6 +77,7 @@ func (repository *boundaryRepository) PublishEnvironmentDesiredRevisionWithTask(
 	_ []etcd.EnvironmentBlueprintRouteChange,
 	_ etcd.ReleaseGroupBlueprintPreparedMutation,
 	_ etcd.ComponentTaskPreparation,
+	_ etcd.BlueprintAttachTaskPreparation,
 	task etcd.TaskRecord,
 	_ etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -198,8 +202,10 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 	}); err != nil {
 		t.Fatalf("StageEnvironmentBlueprintRevision(recovered) error = %v", err)
 	}
-	if _, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+	if _, err := repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
 		ctx,
+		netip.Prefix{},
+		"",
 		etcd.Versioned[etcd.ProjectRecord]{},
 		etcd.Versioned[etcd.EnvironmentRecord]{},
 		0,
@@ -211,10 +217,11 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 		nil,
 		etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{},
+		etcd.BlueprintAttachTaskPreparation{},
 		etcd.TaskRecord{ID: recovered.TaskID},
 		etcd.IdempotencyMarker{},
 	); err != nil {
-		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(recovered) error = %v", err)
+		t.Fatalf("PublishEnvironmentBlueprintDesiredRevisionWithTask(recovered) error = %v", err)
 	}
 	if repository.claims != 2 || repository.stages != 1 || repository.publications != 1 ||
 		repository.stagedTaskID != first.TaskID ||

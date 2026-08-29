@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/common/slug"
@@ -18,7 +19,6 @@ import (
 )
 
 const (
-	RunnerImageRef                 = "ghcr.io/aland20/groundplane-runner@sha256:"
 	maximumRunnerPersistenceBytes  = 64 << 10
 	runnerContainerIDEncodedLength = 64
 )
@@ -376,15 +376,7 @@ func asciiAlphanumeric(value byte) bool {
 }
 
 func validRunnerImageRef(value string) bool {
-	if !strings.HasPrefix(value, RunnerImageRef) || len(value) != len(RunnerImageRef)+64 {
-		return false
-	}
-	for _, character := range value[len(RunnerImageRef):] {
-		if character < '0' || character > '9' && character < 'a' || character > 'f' {
-			return false
-		}
-	}
-	return true
+	return imageref.IsDigestPinned(value)
 }
 
 func validateRunnerObservation(record RunnerObservationRecord) error {

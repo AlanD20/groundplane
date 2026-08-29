@@ -18,7 +18,7 @@ import (
 
 const (
 	defaultVolumePageLimit = 50
-	maximumVolumePageLimit = 100
+	maximumVolumePageLimit = 200
 )
 
 type ReadService struct {
@@ -53,7 +53,7 @@ func (service *ReadService) ListVolumes(
 	}
 	if limit < 1 || limit > maximumVolumePageLimit {
 		return etcd.Page[etcd.VolumeRecord]{}, errs.New(
-			errs.KindValidationFailed, "Volume page limit must be between 1 and 100",
+			errs.KindValidationFailed, "Volume page limit must be between 1 and 200",
 		)
 	}
 	start := sort.Search(len(projection.Record.Volumes), func(index int) bool {
@@ -246,7 +246,8 @@ func (service *ReadService) GetVolumeDeletionImpact(
 	if end > len(items) {
 		end = len(items)
 	}
-	pageItems := append([]apiTypes.VolumeDeletionImpactItem(nil), items[cursor.Offset:end]...)
+	pageItems := make([]apiTypes.VolumeDeletionImpactItem, end-cursor.Offset)
+	copy(pageItems, items[cursor.Offset:end])
 	rolling, err := volumeImpactDigest(projection.Record, identity, backupImpact, items[:end])
 	if err != nil {
 		return apiTypes.VolumeDeletionImpactPage{}, err

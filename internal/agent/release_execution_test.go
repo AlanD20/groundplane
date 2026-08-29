@@ -38,7 +38,7 @@ func TestExecuteReleaseCompensatesPriorSuccessfulSwitch(t *testing.T) {
 		"switch-api": releaseExecutionSuccess("api", false),
 		"switch-worker": {
 			Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED, ExitCode: 17,
-			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		},
 		"compensate-api": releaseExecutionSuccess("api", true),
 	}}
@@ -65,7 +65,7 @@ func TestExecuteReleaseRecreateCompensatesSingletonReplacement(t *testing.T) {
 		"apply-worker": {Schema: 1, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED, Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE},
 		"fail-next": {
 			Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED, ExitCode: 17,
-			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED,
+			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		},
 		"restore-worker": {
 			Schema: 1, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,

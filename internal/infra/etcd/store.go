@@ -468,9 +468,10 @@ func (s *store) Transact(
 		return TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
 	}
 	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		return TransactionResult{}, errs.New(
+		return TransactionResult{}, errs.Newf(
 			errs.KindValidationFailed,
-			"etcd transaction exceeds the 96 compare-and-mutation limit",
+			"etcd transaction exceeds the %d compare-and-mutation limit",
+			maximumTransactionOperations,
 		)
 	}
 

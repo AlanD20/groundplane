@@ -10,8 +10,8 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// Rationale: the Agent must select one stable labeled container, reconstruct
-// only its compiled adapter, keep secrets out of argv, and clear plan bytes.
+// Rationale: the Agent must select one stable labeled container, reconstruct only its compiled
+// adapter, keep secrets out of argv, and leave the WorkerPool-owned immutable plan valid for later steps.
 func TestAdapterRuntimeExecutesCompiledPostgresProcedure(t *testing.T) {
 	postgres16.Register()
 	fake := &adapterRuntimeRunner{results: []runner.Result{
@@ -23,7 +23,6 @@ func TestAdapterRuntimeExecutesCompiledPostgresProcedure(t *testing.T) {
 		AttachId: "att_01ARZ3NDEKTSV4RRFFQ69G5FAV", BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW",
 		Role: "api_5d3f9a", Database: "api_5d3f9a", Password: []byte("URL_safe-1"),
 	}
-	password := procedure.Password
 	runtime := NewAdapterRuntime(fake)
 	_, err := runtime.executeStep(context.Background(), &agentpb.ExecutionStep{
 		Payload: &agentpb.ExecutionStep_AdapterProcedure{AdapterProcedure: procedure},
@@ -44,10 +43,8 @@ func TestAdapterRuntimeExecutesCompiledPostgresProcedure(t *testing.T) {
 	if !bytes.Contains(fake.calls[1].Stdin, []byte("URL_safe-1")) {
 		t.Fatalf("compiled stdin = %q", fake.calls[1].Stdin)
 	}
-	for _, character := range password {
-		if character != 0 {
-			t.Fatal("adapter procedure password was not cleared")
-		}
+	if string(procedure.Password) != "URL_safe-1" {
+		t.Fatalf("adapter runtime mutated its WorkerPool-owned plan password: %q", procedure.Password)
 	}
 }
 

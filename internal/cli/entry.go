@@ -1,12 +1,32 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
 )
+
+type entryLister interface {
+	ListEntries(context.Context, string, int, string) (apiTypes.Page[apiTypes.Entry], error)
+}
+
+func listAllCLIEntries(ctx context.Context, client entryLister, environmentID string) ([]apiTypes.Entry, error) {
+	entries := []apiTypes.Entry(nil)
+	for cursor := ""; ; {
+		page, err := client.ListEntries(ctx, environmentID, 200, cursor)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, page.Items...)
+		if page.NextCursor == "" {
+			return entries, nil
+		}
+		cursor = page.NextCursor
+	}
+}
 
 // entry: list | add --type env|file [entry fields] | edit | remove. The
 // unified environment-entry model — env variables AND files, plain and
@@ -25,16 +45,16 @@ func newEntryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			page, err := fromContext(cmd).Client.ListEntries(cmd.Context(), environmentID, 0, "")
+			entries, err := listAllCLIEntries(cmd.Context(), fromContext(cmd).Client, environmentID)
 			if err != nil {
 				return err
 			}
-			items := make([]map[string]any, len(page.Items))
-			for index, entry := range page.Items {
+			items := make([]map[string]any, len(entries))
+			for index, entry := range entries {
 				items[index] = entryFields(entry)
 			}
 			headers, rows := tabulateVia(fromContext(cmd), items)
-			return fromContext(cmd).Out.Render(headers, rows, page)
+			return fromContext(cmd).Out.Render(headers, rows, apiTypes.Page[apiTypes.Entry]{Items: entries})
 		},
 	})
 
@@ -53,6 +73,7 @@ func newEntryCmd() *cobra.Command {
 
 	cmd.AddCommand(newEntryAddCmd())
 	cmd.AddCommand(newEntryEditCmd())
+	cmd.AddCommand(newEntryBulkEditCmd())
 
 	cmd.AddCommand(&cobra.Command{
 		Use:     "remove <id>",
@@ -71,6 +92,89 @@ func newEntryCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func newEntryBulkEditCmd() *cobra.Command {
+	var (
+		path     string
+		services []string
+		all      bool
+		plain    bool
+		secret   bool
+	)
+	cmd := &cobra.Command{
+		Use:   "bulk-edit",
+		Short: "Upsert literal environment variables from KEY=value lines",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if plain == secret {
+				return fmt.Errorf("exactly one of --plain or --secret is required")
+			}
+			content, err := readValueFile(
+				path, cmd.InOrStdin(), apiTypes.MaximumBulkEntryPayloadBytes, "Entry bulk file",
+			)
+			if err != nil {
+				return err
+			}
+			entries, err := parseBulkEntryLines(content)
+			if err != nil {
+				return err
+			}
+			environmentID, err := resolveEnvironmentTarget(cmd, fromContext(cmd).Scope.Environment)
+			if err != nil {
+				return err
+			}
+			response, err := fromContext(cmd).Client.BulkUpsertEntries(cmd.Context(), apiTypes.EntryBulkUpsertRequest{
+				EnvironmentID: environmentID,
+				Entries:       entries,
+				Exposure:      entryExposure(services, all),
+				Secret:        secret,
+			})
+			if err != nil {
+				return err
+			}
+			return renderTaskAccepted(cmd, apiTypes.TaskAccepted{TaskID: response.TaskID})
+		},
+	}
+	cmd.Flags().StringVar(&path, "file", "-", "read KEY=value lines from PATH, or - for stdin")
+	cmd.Flags().StringSliceVar(&services, "service", nil, "expose every supplied Entry to specific service(s)")
+	cmd.Flags().BoolVar(&all, "all", true, "expose every supplied Entry to all services")
+	cmd.Flags().BoolVar(&plain, "plain", false, "store every supplied value in desired state")
+	cmd.Flags().BoolVar(&secret, "secret", false, "store every supplied value encrypted")
+	return cmd
+}
+
+func parseBulkEntryLines(content string) ([]apiTypes.EntryBulkItem, error) {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	entries := make([]apiTypes.EntryBulkItem, 0, len(lines))
+	seen := make(map[string]struct{}, len(lines))
+	for index, line := range lines {
+		line = strings.TrimSuffix(line, "\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		separator := strings.IndexByte(line, '=')
+		if separator < 0 {
+			return nil, fmt.Errorf("line %d must use KEY=value", index+1)
+		}
+		key := strings.TrimSpace(line[:separator])
+		if key == "" {
+			return nil, fmt.Errorf("line %d has an empty key", index+1)
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return nil, fmt.Errorf("line %d duplicates key %q", index+1, key)
+		}
+		seen[key] = struct{}{}
+		entries = append(entries, apiTypes.EntryBulkItem{Key: key, Value: line[separator+1:]})
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("bulk edit requires at least one KEY=value line")
+	}
+	if len(entries) > apiTypes.MaximumBulkEntryCount {
+		return nil, fmt.Errorf("bulk edit accepts at most %d entries", apiTypes.MaximumBulkEntryCount)
+	}
+	return entries, nil
 }
 
 func newEntryAddCmd() *cobra.Command {

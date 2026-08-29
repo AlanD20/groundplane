@@ -2,12 +2,18 @@ module github.com/AlanD20/groundplane
 
 go 1.26
 
+replace github.com/AlanD20/groundplane-component-sdk => ./component-sdk
+
+replace github.com/AlanD20/groundplane-registered-components => ./registered-components
+
 require (
 	github.com/aws/aws-sdk-go-v2 v1.43.7
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.3
 	github.com/containerd/errdefs v1.0.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/distribution/reference v0.6.0
+	github.com/AlanD20/groundplane-component-sdk v0.0.0
+	github.com/AlanD20/groundplane-registered-components v0.0.0
 	github.com/gowebpki/jcs v1.0.1
 	github.com/jedib0t/go-pretty/v6 v6.5.9
 	github.com/moby/moby/api v1.55.0

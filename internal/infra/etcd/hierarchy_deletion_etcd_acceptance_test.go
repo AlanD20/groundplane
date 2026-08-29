@@ -550,6 +550,10 @@ func seedHierarchyDeletionEnvironment(
 		{Type: MutationPut, Key: environmentKey(environmentID), Value: environmentValue},
 		{Type: MutationPut, Key: environmentNameKey(projectID, environment.Name), Value: []byte(environmentID)},
 		{Type: MutationPut, Key: environmentOwnerKey(projectID, environmentID), Value: []byte(environmentID)},
+		{
+			Type: MutationPut, Key: environmentBlueprintHeadKey(environmentID),
+			Value: []byte(`{"schema":1,"record_id":"` + environment.CreateTaskID + `"}`),
+		},
 	}
 	for _, coordination := range []HierarchyCoordinationRecord{
 		{Schema: 1, TargetKind: HierarchyDeletionTargetTenant, TargetID: tenantID, MutationEpoch: 1},

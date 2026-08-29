@@ -455,6 +455,9 @@ func TestRouteRemovalSelectsAgentCaddyPlanForAppliedRoute(t *testing.T) {
 	component, err := etcd.NewComponentRecord(core.Component{
 		ID: ids.NewAt(ids.KindComponent, at, 21), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: repository.environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, at, 24),
+		}},
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.2", Healthy: true,
 	})
 	if err != nil {
@@ -507,6 +510,9 @@ func TestRouteRemovalPropagatesCaddyPlannerError(t *testing.T) {
 	component, err := etcd.NewComponentRecord(core.Component{
 		ID: ids.NewAt(ids.KindComponent, at, 31), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: repository.environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, at, 34),
+		}},
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.3", Healthy: true,
 	})
 	if err != nil {

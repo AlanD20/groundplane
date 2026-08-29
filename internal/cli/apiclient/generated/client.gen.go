@@ -19,6 +19,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AttachCredentialMode.
+const (
+	AttachCredentialModeExisting AttachCredentialMode = "existing"
+	AttachCredentialModeNew      AttachCredentialMode = "new"
+)
+
+// Valid indicates whether the value is a known member of the AttachCredentialMode enum.
+func (e AttachCredentialMode) Valid() bool {
+	switch e {
+	case AttachCredentialModeExisting:
+		return true
+	case AttachCredentialModeNew:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackupPolicyEncryption.
 const (
 	BackupPolicyEncryptionAge  BackupPolicyEncryption = "age"
@@ -142,6 +160,75 @@ func (e ComponentStatus) Valid() bool {
 	}
 }
 
+// Defines values for ComponentConfigMutationRequestConfig1Credential0Mode.
+const (
+	ComponentConfigMutationRequestConfig1Credential0ModeExisting ComponentConfigMutationRequestConfig1Credential0Mode = "existing"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig1Credential0Mode enum.
+func (e ComponentConfigMutationRequestConfig1Credential0Mode) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig1Credential0ModeExisting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentConfigMutationRequestConfig1Credential1Mode.
+const (
+	ComponentConfigMutationRequestConfig1Credential1ModeNew ComponentConfigMutationRequestConfig1Credential1Mode = "new"
+)
+
+// Valid indicates whether the value is a known member of the ComponentConfigMutationRequestConfig1Credential1Mode enum.
+func (e ComponentConfigMutationRequestConfig1Credential1Mode) Valid() bool {
+	switch e {
+	case ComponentConfigMutationRequestConfig1Credential1ModeNew:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LogEventSlot.
+const (
+	Blue      LogEventSlot = "blue"
+	Green     LogEventSlot = "green"
+	Singleton LogEventSlot = "singleton"
+)
+
+// Valid indicates whether the value is a known member of the LogEventSlot enum.
+func (e LogEventSlot) Valid() bool {
+	switch e {
+	case Blue:
+		return true
+	case Green:
+		return true
+	case Singleton:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LogEventStream.
+const (
+	Stderr LogEventStream = "stderr"
+	Stdout LogEventStream = "stdout"
+)
+
+// Valid indicates whether the value is a known member of the LogEventStream enum.
+func (e LogEventStream) Valid() bool {
+	switch e {
+	case Stderr:
+		return true
+	case Stdout:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RecoveryPointSourceKind.
 const (
 	RecoveryPointSourceKindAttach RecoveryPointSourceKind = "attach"
@@ -250,6 +337,24 @@ func (e RunnerLifecycle) Valid() bool {
 	case RunnerLifecycleProvisioning:
 		return true
 	case RunnerLifecycleReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScriptOrigin.
+const (
+	Api       ScriptOrigin = "api"
+	Blueprint ScriptOrigin = "blueprint"
+)
+
+// Valid indicates whether the value is a known member of the ScriptOrigin enum.
+func (e ScriptOrigin) Valid() bool {
+	switch e {
+	case Api:
+		return true
+	case Blueprint:
 		return true
 	default:
 		return false
@@ -470,13 +575,23 @@ type Attach struct {
 	BackingNetworkId     string           `json:"backing_network_id"`
 	BackingProjectId     string           `json:"backing_project_id"`
 	BackingServiceId     string           `json:"backing_service_id"`
+	Credential           AttachCredential `json:"credential"`
 	FactSets             *[]AttachFactSet `json:"fact_sets"`
 	GrantAttachIds       *[]string        `json:"grant_attach_ids,omitempty"`
 	Id                   string           `json:"id"`
 	Name                 string           `json:"name"`
-	ServiceIds           *[]string        `json:"service_ids"`
+	ServiceId            string           `json:"service_id"`
 	Status               string           `json:"status"`
 }
+
+// AttachCredential defines model for AttachCredential.
+type AttachCredential struct {
+	AttachId *string              `json:"attach_id,omitempty"`
+	Mode     AttachCredentialMode `json:"mode"`
+}
+
+// AttachCredentialMode defines model for AttachCredential.Mode.
+type AttachCredentialMode string
 
 // AttachFact defines model for AttachFact.
 type AttachFact struct {
@@ -513,11 +628,12 @@ type AttachRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/AttachRequest.json
-	Schema           *string   `json:"$schema,omitempty"`
-	BackingServiceId string    `json:"backing_service_id"`
-	GrantAttachIds   *[]string `json:"grant_attach_ids,omitempty"`
-	Name             *string   `json:"name,omitempty"`
-	ServiceIds       []string  `json:"service_ids"`
+	Schema           *string          `json:"$schema,omitempty"`
+	BackingServiceId string           `json:"backing_service_id"`
+	Credential       AttachCredential `json:"credential"`
+	GrantAttachIds   *[]string        `json:"grant_attach_ids,omitempty"`
+	Name             *string          `json:"name,omitempty"`
+	ServiceId        string           `json:"service_id"`
 }
 
 // BackingService defines model for BackingService.
@@ -626,18 +742,18 @@ type Component struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Component.json
-	Schema            *string                 `json:"$schema,omitempty"`
-	Config            *map[string]interface{} `json:"config,omitempty"`
-	Enabled           bool                    `json:"enabled"`
-	EnvironmentId     string                  `json:"environment_id"`
-	GeneratedServices *[]string               `json:"generated_services,omitempty"`
-	Healthy           bool                    `json:"healthy"`
-	Id                string                  `json:"id"`
-	Kind              string                  `json:"kind"`
-	Owner             ComponentOwner          `json:"owner"`
-	OwnerId           *string                 `json:"owner_id,omitempty"`
-	PinnedIpv4        *string                 `json:"pinned_ipv4,omitempty"`
-	Status            ComponentStatus         `json:"status"`
+	Schema            *string         `json:"$schema,omitempty"`
+	Config            ComponentConfig `json:"config"`
+	Enabled           bool            `json:"enabled"`
+	EnvironmentId     string          `json:"environment_id"`
+	GeneratedServices *[]string       `json:"generated_services,omitempty"`
+	Healthy           bool            `json:"healthy"`
+	Id                string          `json:"id"`
+	Kind              string          `json:"kind"`
+	Owner             ComponentOwner  `json:"owner"`
+	OwnerId           *string         `json:"owner_id,omitempty"`
+	PinnedIpv4        *string         `json:"pinned_ipv4,omitempty"`
+	Status            ComponentStatus `json:"status"`
 }
 
 // ComponentOwner defines model for Component.Owner.
@@ -651,8 +767,74 @@ type ComponentConfig struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ComponentConfig.json
-	Schema *string                 `json:"$schema,omitempty"`
-	Config *map[string]interface{} `json:"config,omitempty"`
+	Schema            *string                  `json:"$schema,omitempty"`
+	CaddyfileTemplate *string                  `json:"caddyfile_template,omitempty"`
+	Forwarders        *[]ComponentDNSForwarder `json:"forwarders,omitempty"`
+	SecretId          *string                  `json:"secret_id,omitempty"`
+	TailnetDelegation *bool                    `json:"tailnet_delegation,omitempty"`
+	UpstreamAuto      *bool                    `json:"upstream_auto,omitempty"`
+	UpstreamResolvers *[]string                `json:"upstream_resolvers,omitempty"`
+	ZoneId            *string                  `json:"zone_id,omitempty"`
+}
+
+// ComponentConfigMutationRequest defines model for ComponentConfigMutationRequest.
+type ComponentConfigMutationRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ComponentConfigMutationRequest.json
+	Schema *string                               `json:"$schema,omitempty"`
+	Config ComponentConfigMutationRequest_Config `json:"config"`
+}
+
+// ComponentConfigMutationRequestConfig0 defines model for ComponentConfigMutationRequest.Config.0.
+type ComponentConfigMutationRequestConfig0 struct {
+	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
+	ZoneId            string  `json:"zone_id"`
+}
+
+// ComponentConfigMutationRequestConfig1 defines model for ComponentConfigMutationRequest.Config.1.
+type ComponentConfigMutationRequestConfig1 struct {
+	Credential ComponentConfigMutationRequest_Config_1_Credential `json:"credential"`
+}
+
+// ComponentConfigMutationRequestConfig1Credential0 defines model for ComponentConfigMutationRequest.Config.1.Credential.0.
+type ComponentConfigMutationRequestConfig1Credential0 struct {
+	Mode     ComponentConfigMutationRequestConfig1Credential0Mode `json:"mode"`
+	SecretId string                                               `json:"secret_id"`
+}
+
+// ComponentConfigMutationRequestConfig1Credential0Mode defines model for ComponentConfigMutationRequest.Config.1.Credential.0.Mode.
+type ComponentConfigMutationRequestConfig1Credential0Mode string
+
+// ComponentConfigMutationRequestConfig1Credential1 defines model for ComponentConfigMutationRequest.Config.1.Credential.1.
+type ComponentConfigMutationRequestConfig1Credential1 struct {
+	Mode       ComponentConfigMutationRequestConfig1Credential1Mode `json:"mode"`
+	SecretName string                                               `json:"secret_name"`
+	Token      *string                                              `json:"token,omitempty"`
+}
+
+// ComponentConfigMutationRequestConfig1Credential1Mode defines model for ComponentConfigMutationRequest.Config.1.Credential.1.Mode.
+type ComponentConfigMutationRequestConfig1Credential1Mode string
+
+// ComponentConfigMutationRequest_Config_1_Credential defines model for ComponentConfigMutationRequest.Config.1.Credential.
+type ComponentConfigMutationRequest_Config_1_Credential struct {
+	union json.RawMessage
+}
+
+// ComponentConfigMutationRequestConfig2 defines model for ComponentConfigMutationRequest.Config.2.
+type ComponentConfigMutationRequestConfig2 struct {
+	Forwarders []struct {
+		Domain    string   `json:"domain"`
+		Resolvers []string `json:"resolvers"`
+	} `json:"forwarders"`
+	TailnetDelegation bool     `json:"tailnet_delegation"`
+	UpstreamAuto      bool     `json:"upstream_auto"`
+	UpstreamResolvers []string `json:"upstream_resolvers"`
+}
+
+// ComponentConfigMutationRequest_Config defines model for ComponentConfigMutationRequest.Config.
+type ComponentConfigMutationRequest_Config struct {
+	union json.RawMessage
 }
 
 // ComponentConfigMutationResult defines model for ComponentConfigMutationResult.
@@ -663,6 +845,12 @@ type ComponentConfigMutationResult struct {
 	Schema          *string         `json:"$schema,omitempty"`
 	ReconcileTaskId *string         `json:"reconcile_task_id"`
 	Resource        ComponentConfig `json:"resource"`
+}
+
+// ComponentDNSForwarder defines model for ComponentDNSForwarder.
+type ComponentDNSForwarder struct {
+	Domain    string    `json:"domain"`
+	Resolvers *[]string `json:"resolvers"`
 }
 
 // ComponentProjection defines model for ComponentProjection.
@@ -758,6 +946,34 @@ type Entry struct {
 	Source   EntrySource `json:"source"`
 	Type     string      `json:"type"`
 	Uid      *int64      `json:"uid,omitempty"`
+}
+
+// EntryBulkItem defines model for EntryBulkItem.
+type EntryBulkItem struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// EntryBulkUpsertRequest defines model for EntryBulkUpsertRequest.
+type EntryBulkUpsertRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EntryBulkUpsertRequest.json
+	Schema        *string          `json:"$schema,omitempty"`
+	Entries       *[]EntryBulkItem `json:"entries"`
+	EnvironmentId string           `json:"environment_id"`
+	Exposure      *[]string        `json:"exposure"`
+	Secret        bool             `json:"secret"`
+}
+
+// EntryBulkUpsertResult defines model for EntryBulkUpsertResult.
+type EntryBulkUpsertResult struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EntryBulkUpsertResult.json
+	Schema  *string  `json:"$schema,omitempty"`
+	Entries *[]Entry `json:"entries"`
+	TaskId  string   `json:"task_id"`
 }
 
 // EntryCreateRequest defines model for EntryCreateRequest.
@@ -943,6 +1159,27 @@ type HostResource struct {
 	Used    string `json:"used"`
 	UsedPct int64  `json:"used_pct"`
 }
+
+// LogEvent defines model for LogEvent.
+type LogEvent struct {
+	ContainerId   string         `json:"container_id"`
+	ContainerName string         `json:"container_name"`
+	Line          string         `json:"line"`
+	ReleaseId     string         `json:"release_id"`
+	Sequence      int            `json:"sequence"`
+	ServiceId     string         `json:"service_id"`
+	ServiceName   string         `json:"service_name"`
+	Slot          LogEventSlot   `json:"slot"`
+	Stream        LogEventStream `json:"stream"`
+	Timestamp     time.Time      `json:"timestamp"`
+	Truncated     bool           `json:"truncated"`
+}
+
+// LogEventSlot defines model for LogEvent.Slot.
+type LogEventSlot string
+
+// LogEventStream defines model for LogEvent.Stream.
+type LogEventStream string
 
 // OptionalNullableString defines model for OptionalNullableString.
 type OptionalNullableString struct {
@@ -1492,13 +1729,21 @@ type Script struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Script.json
-	Schema  *string `json:"$schema,omitempty"`
-	Id      string  `json:"id"`
-	Name    string  `json:"name"`
-	Script  string  `json:"script"`
-	Service string  `json:"service"`
-	When    string  `json:"when"`
+	Schema            *string      `json:"$schema,omitempty"`
+	ActiveGeneration  int64        `json:"active_generation"`
+	EnvironmentId     string       `json:"environment_id"`
+	Id                string       `json:"id"`
+	Origin            ScriptOrigin `json:"origin"`
+	ReconciliationKey *string      `json:"reconciliation_key,omitempty"`
+	Script            string       `json:"script"`
+	Service           string       `json:"service"`
+	ServiceId         string       `json:"service_id"`
+	Slug              string       `json:"slug"`
+	When              string       `json:"when"`
 }
+
+// ScriptOrigin defines model for Script.Origin.
+type ScriptOrigin string
 
 // ScriptCreate defines model for ScriptCreate.
 type ScriptCreate struct {
@@ -1507,9 +1752,9 @@ type ScriptCreate struct {
 	// Examples: /api/v1/ScriptCreate.json
 	Schema        *string `json:"$schema,omitempty"`
 	EnvironmentId string  `json:"environment_id"`
-	Name          string  `json:"name"`
 	Script        string  `json:"script"`
 	ServiceId     string  `json:"service_id"`
+	Slug          string  `json:"slug"`
 	When          string  `json:"when"`
 }
 
@@ -1520,6 +1765,7 @@ type ScriptEdit struct {
 	// Examples: /api/v1/ScriptEdit.json
 	Schema *string `json:"$schema,omitempty"`
 	Script *string `json:"script,omitempty"`
+	Slug   *string `json:"slug,omitempty"`
 	When   *string `json:"when,omitempty"`
 }
 
@@ -1964,6 +2210,7 @@ type ActivityListParams struct {
 	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Project     *string `form:"project,omitempty" json:"project,omitempty"`
 	Workspace   *string `form:"workspace,omitempty" json:"workspace,omitempty"`
 }
 
@@ -2105,6 +2352,11 @@ type EntryCreateParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// EntryBulkUpsertParams defines parameters for EntryBulkUpsert.
+type EntryBulkUpsertParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EntryRemoveParams defines parameters for EntryRemove.
 type EntryRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -2153,6 +2405,12 @@ type EnvironmentApplyMultipartBody = openapi_types.File
 // EnvironmentApplyParams defines parameters for EnvironmentApply.
 type EnvironmentApplyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// EnvironmentLogsParams defines parameters for EnvironmentLogs.
+type EnvironmentLogsParams struct {
+	Tail   *int32 `form:"tail,omitempty" json:"tail,omitempty"`
+	Follow *bool  `form:"follow,omitempty" json:"follow,omitempty"`
 }
 
 // BackupPointsListParams defines parameters for BackupPointsList.
@@ -2310,6 +2568,11 @@ type ScriptEditParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ScriptRunParams defines parameters for ScriptRun.
+type ScriptRunParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // SecretListParams defines parameters for SecretList.
 type SecretListParams struct {
 	Project  *string `form:"project,omitempty" json:"project,omitempty"`
@@ -2360,6 +2623,12 @@ type ServiceDestroyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ServiceLogsParams defines parameters for ServiceLogs.
+type ServiceLogsParams struct {
+	Tail   *int32 `form:"tail,omitempty" json:"tail,omitempty"`
+	Follow *bool  `form:"follow,omitempty" json:"follow,omitempty"`
+}
+
 // ServiceRollbackParams defines parameters for ServiceRollback.
 type ServiceRollbackParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
@@ -2380,6 +2649,7 @@ type TaskListParams struct {
 	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Project     *string `form:"project,omitempty" json:"project,omitempty"`
 	Workspace   *string `form:"workspace,omitempty" json:"workspace,omitempty"`
 }
 
@@ -2486,13 +2756,16 @@ type AttachRenameJSONRequestBody = AttachRenameRequest
 type BackingServiceCreateJSONRequestBody = BackingServiceCreate
 
 // ComponentConfigSetJSONRequestBody defines body for ComponentConfigSet for application/json ContentType.
-type ComponentConfigSetJSONRequestBody = ComponentConfig
+type ComponentConfigSetJSONRequestBody = ComponentConfigMutationRequest
 
 // ConnectorCreateJSONRequestBody defines body for ConnectorCreate for application/json ContentType.
 type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
 
 // EntryCreateJSONRequestBody defines body for EntryCreate for application/json ContentType.
 type EntryCreateJSONRequestBody = EntryCreateRequest
+
+// EntryBulkUpsertJSONRequestBody defines body for EntryBulkUpsert for application/json ContentType.
+type EntryBulkUpsertJSONRequestBody = EntryBulkUpsertRequest
 
 // EntryEditJSONRequestBody defines body for EntryEdit for application/json ContentType.
 type EntryEditJSONRequestBody = EntryEditRequest
@@ -2583,6 +2856,156 @@ type VolumeEditJSONRequestBody = VolumeEdit
 
 // ZoneCreateJSONRequestBody defines body for ZoneCreate for application/json ContentType.
 type ZoneCreateJSONRequestBody = ZoneCreate
+
+// AsComponentConfigMutationRequestConfig1Credential0 returns the union data inside the ComponentConfigMutationRequest_Config_1_Credential as a ComponentConfigMutationRequestConfig1Credential0
+func (t ComponentConfigMutationRequest_Config_1_Credential) AsComponentConfigMutationRequestConfig1Credential0() (ComponentConfigMutationRequestConfig1Credential0, error) {
+	var body ComponentConfigMutationRequestConfig1Credential0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig1Credential0 overwrites any union data inside the ComponentConfigMutationRequest_Config_1_Credential as the provided ComponentConfigMutationRequestConfig1Credential0
+func (t *ComponentConfigMutationRequest_Config_1_Credential) FromComponentConfigMutationRequestConfig1Credential0(v ComponentConfigMutationRequestConfig1Credential0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig1Credential0 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_1_Credential, using the provided ComponentConfigMutationRequestConfig1Credential0
+func (t *ComponentConfigMutationRequest_Config_1_Credential) MergeComponentConfigMutationRequestConfig1Credential0(v ComponentConfigMutationRequestConfig1Credential0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfigMutationRequestConfig1Credential1 returns the union data inside the ComponentConfigMutationRequest_Config_1_Credential as a ComponentConfigMutationRequestConfig1Credential1
+func (t ComponentConfigMutationRequest_Config_1_Credential) AsComponentConfigMutationRequestConfig1Credential1() (ComponentConfigMutationRequestConfig1Credential1, error) {
+	var body ComponentConfigMutationRequestConfig1Credential1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig1Credential1 overwrites any union data inside the ComponentConfigMutationRequest_Config_1_Credential as the provided ComponentConfigMutationRequestConfig1Credential1
+func (t *ComponentConfigMutationRequest_Config_1_Credential) FromComponentConfigMutationRequestConfig1Credential1(v ComponentConfigMutationRequestConfig1Credential1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig1Credential1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_1_Credential, using the provided ComponentConfigMutationRequestConfig1Credential1
+func (t *ComponentConfigMutationRequest_Config_1_Credential) MergeComponentConfigMutationRequestConfig1Credential1(v ComponentConfigMutationRequestConfig1Credential1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentConfigMutationRequest_Config_1_Credential) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ComponentConfigMutationRequest_Config_1_Credential) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsComponentConfigMutationRequestConfig0 returns the union data inside the ComponentConfigMutationRequest_Config as a ComponentConfigMutationRequestConfig0
+func (t ComponentConfigMutationRequest_Config) AsComponentConfigMutationRequestConfig0() (ComponentConfigMutationRequestConfig0, error) {
+	var body ComponentConfigMutationRequestConfig0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig0 overwrites any union data inside the ComponentConfigMutationRequest_Config as the provided ComponentConfigMutationRequestConfig0
+func (t *ComponentConfigMutationRequest_Config) FromComponentConfigMutationRequestConfig0(v ComponentConfigMutationRequestConfig0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig0 performs a merge with any union data inside the ComponentConfigMutationRequest_Config, using the provided ComponentConfigMutationRequestConfig0
+func (t *ComponentConfigMutationRequest_Config) MergeComponentConfigMutationRequestConfig0(v ComponentConfigMutationRequestConfig0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfigMutationRequestConfig1 returns the union data inside the ComponentConfigMutationRequest_Config as a ComponentConfigMutationRequestConfig1
+func (t ComponentConfigMutationRequest_Config) AsComponentConfigMutationRequestConfig1() (ComponentConfigMutationRequestConfig1, error) {
+	var body ComponentConfigMutationRequestConfig1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig1 overwrites any union data inside the ComponentConfigMutationRequest_Config as the provided ComponentConfigMutationRequestConfig1
+func (t *ComponentConfigMutationRequest_Config) FromComponentConfigMutationRequestConfig1(v ComponentConfigMutationRequestConfig1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config, using the provided ComponentConfigMutationRequestConfig1
+func (t *ComponentConfigMutationRequest_Config) MergeComponentConfigMutationRequestConfig1(v ComponentConfigMutationRequestConfig1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfigMutationRequestConfig2 returns the union data inside the ComponentConfigMutationRequest_Config as a ComponentConfigMutationRequestConfig2
+func (t ComponentConfigMutationRequest_Config) AsComponentConfigMutationRequestConfig2() (ComponentConfigMutationRequestConfig2, error) {
+	var body ComponentConfigMutationRequestConfig2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig2 overwrites any union data inside the ComponentConfigMutationRequest_Config as the provided ComponentConfigMutationRequestConfig2
+func (t *ComponentConfigMutationRequest_Config) FromComponentConfigMutationRequestConfig2(v ComponentConfigMutationRequestConfig2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig2 performs a merge with any union data inside the ComponentConfigMutationRequest_Config, using the provided ComponentConfigMutationRequestConfig2
+func (t *ComponentConfigMutationRequest_Config) MergeComponentConfigMutationRequestConfig2(v ComponentConfigMutationRequestConfig2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentConfigMutationRequest_Config) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ComponentConfigMutationRequest_Config) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // AsConnectorCredentialInput0 returns the union data inside the ConnectorCredentialInput as a ConnectorCredentialInput0
 func (t ConnectorCredentialInput) AsConnectorCredentialInput0() (ConnectorCredentialInput0, error) {
@@ -2991,6 +3414,20 @@ type ClientInterface interface {
 	// Corresponds with POST /entries (the `EntryCreate` operationId).
 	EntryCreate(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// EntryBulkUpsertWithBody Atomically upsert literal environment variables
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+	EntryBulkUpsertWithBody(ctx context.Context, params *EntryBulkUpsertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EntryBulkUpsert Atomically upsert literal environment variables
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+	EntryBulkUpsert(ctx context.Context, params *EntryBulkUpsertParams, body EntryBulkUpsertJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// EntryRemove Remove an environment Entry
 	//
 	// Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
@@ -3098,6 +3535,9 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
 	BackupKeyExport(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnvironmentLogs performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+	EnvironmentLogs(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackupPointsList List verified Recovery Points
 	//
@@ -3405,6 +3845,11 @@ type ClientInterface interface {
 	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
 	ScriptEdit(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ScriptRun Run a script
+	//
+	// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+	ScriptRun(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SecretList List reusable secrets
 	//
 	// Corresponds with GET /secrets (the `SecretList` operationId).
@@ -3500,6 +3945,9 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ServiceLogs performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+	ServiceLogs(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceRollbackWithBody Roll back a service
 	//
@@ -4305,6 +4753,40 @@ func (c *Client) EntryCreate(ctx context.Context, params *EntryCreateParams, bod
 	return c.Client.Do(req)
 }
 
+// EntryBulkUpsertWithBody Atomically upsert literal environment variables
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+func (c *Client) EntryBulkUpsertWithBody(ctx context.Context, params *EntryBulkUpsertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryBulkUpsertRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EntryBulkUpsert Atomically upsert literal environment variables
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+func (c *Client) EntryBulkUpsert(ctx context.Context, params *EntryBulkUpsertParams, body EntryBulkUpsertJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEntryBulkUpsertRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // EntryRemove Remove an environment Entry
 //
 // Corresponds with DELETE /entries/{id} (the `EntryRemove` operationId).
@@ -4583,6 +5065,19 @@ func (c *Client) EnvironmentApplyWithBody(ctx context.Context, id string, params
 // Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
 func (c *Client) BackupKeyExport(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewBackupKeyExportRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnvironmentLogs performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+func (c *Client) EnvironmentLogs(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnvironmentLogsRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5399,6 +5894,21 @@ func (c *Client) ScriptEdit(ctx context.Context, id string, params *ScriptEditPa
 	return c.Client.Do(req)
 }
 
+// ScriptRun Run a script
+//
+// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+func (c *Client) ScriptRun(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScriptRunRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // SecretList List reusable secrets
 //
 // Corresponds with GET /secrets (the `SecretList` operationId).
@@ -5645,6 +6155,19 @@ func (c *Client) ServiceDeploy(ctx context.Context, id string, params *ServiceDe
 // Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 func (c *Client) ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceDestroyRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ServiceLogs performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+func (c *Client) ServiceLogs(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewServiceLogsRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6220,6 +6743,18 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 		if params.Environment != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Project != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", *params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -7908,6 +8443,59 @@ func NewEntryCreateRequestWithBody(server string, params *EntryCreateParams, con
 	return req, nil
 }
 
+// NewEntryBulkUpsertRequest calls the generic EntryBulkUpsert builder with application/json body
+func NewEntryBulkUpsertRequest(server string, params *EntryBulkUpsertParams, body EntryBulkUpsertJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEntryBulkUpsertRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewEntryBulkUpsertRequestWithBody constructs an http.Request for the EntryBulkUpsert method, with any body, and a specified content type
+func NewEntryBulkUpsertRequestWithBody(server string, params *EntryBulkUpsertParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/entries/bulk")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewEntryRemoveRequest constructs an http.Request for the EntryRemove method
 func NewEntryRemoveRequest(server string, id string, params *EntryRemoveParams) (*http.Request, error) {
 	var err error
@@ -8568,6 +9156,79 @@ func NewBackupKeyExportRequest(server string, id string) (*http.Request, error) 
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEnvironmentLogsRequest constructs an http.Request for the EnvironmentLogs method
+func NewEnvironmentLogsRequest(server string, id string, params *EnvironmentLogsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/logs", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Tail != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tail", *params.Tail, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int32"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Follow != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "follow", *params.Follow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -10523,6 +11184,53 @@ func NewScriptEditRequestWithBody(server string, id string, params *ScriptEditPa
 	return req, nil
 }
 
+// NewScriptRunRequest constructs an http.Request for the ScriptRun method
+func NewScriptRunRequest(server string, id string, params *ScriptRunParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scripts/%s/run", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewSecretListRequest constructs an http.Request for the SecretList method
 func NewSecretListRequest(server string, params *SecretListParams) (*http.Request, error) {
 	var err error
@@ -11156,6 +11864,79 @@ func NewServiceDestroyRequest(server string, id string, params *ServiceDestroyPa
 	return req, nil
 }
 
+// NewServiceLogsRequest constructs an http.Request for the ServiceLogs method
+func NewServiceLogsRequest(server string, id string, params *ServiceLogsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/services/%s/logs", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Tail != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tail", *params.Tail, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int32"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Follow != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "follow", *params.Follow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewServiceRollbackRequest calls the generic ServiceRollback builder with application/json body
 func NewServiceRollbackRequest(server string, id string, params *ServiceRollbackParams, body ServiceRollbackJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -11365,6 +12146,18 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 		if params.Environment != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Project != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", *params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -12855,6 +13648,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /entries (the `EntryCreate` operationId).
 	EntryCreateWithResponse(ctx context.Context, params *EntryCreateParams, body EntryCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryCreateResponse, error)
 
+	// EntryBulkUpsertWithBodyWithResponse Atomically upsert literal environment variables
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+	EntryBulkUpsertWithBodyWithResponse(ctx context.Context, params *EntryBulkUpsertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryBulkUpsertResponse, error)
+
+	// EntryBulkUpsertWithResponse Atomically upsert literal environment variables
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+	EntryBulkUpsertWithResponse(ctx context.Context, params *EntryBulkUpsertParams, body EntryBulkUpsertJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryBulkUpsertResponse, error)
+
 	// EntryRemoveWithResponse Remove an environment Entry
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -12980,6 +13787,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
 	BackupKeyExportWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BackupKeyExportResponse, error)
+
+	// EnvironmentLogsWithResponse performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	EnvironmentLogsWithResponse(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*EnvironmentLogsResponse, error)
 
 	// BackupPointsListWithResponse List verified Recovery Points
 	//
@@ -13331,6 +14143,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /scripts/{id} (the `ScriptEdit` operationId).
 	ScriptEditWithResponse(ctx context.Context, id string, params *ScriptEditParams, body ScriptEditJSONRequestBody, reqEditors ...RequestEditorFn) (*ScriptEditResponse, error)
 
+	// ScriptRunWithResponse Run a script
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+	ScriptRunWithResponse(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error)
+
 	// SecretListWithResponse List reusable secrets
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -13442,6 +14261,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
+
+	// ServiceLogsWithResponse performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ServiceLogsWithResponse(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*ServiceLogsResponse, error)
 
 	// ServiceRollbackWithBodyWithResponse Roll back a service
 	//
@@ -15332,6 +16156,61 @@ func (r EntryCreateResponse) ContentType() string {
 	return ""
 }
 
+// EntryBulkUpsertResponse202Headers the declared response headers of an HTTP 202 response for EntryBulkUpsert
+type EntryBulkUpsertResponse202Headers struct {
+	ContentType *string
+}
+
+type EntryBulkUpsertResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *EntryBulkUpsertResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *EntryBulkUpsertResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EntryBulkUpsertResponse) GetJSON202() *EntryBulkUpsertResult {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EntryBulkUpsertResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EntryBulkUpsertResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EntryBulkUpsertResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EntryBulkUpsertResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EntryBulkUpsertResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type EntryRemoveResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -16042,6 +16921,47 @@ func (r BackupKeyExportResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r BackupKeyExportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EnvironmentLogsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnvironmentLogsResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnvironmentLogsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnvironmentLogsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnvironmentLogsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnvironmentLogsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17916,6 +18836,61 @@ func (r ScriptEditResponse) ContentType() string {
 	return ""
 }
 
+// ScriptRunResponse202Headers the declared response headers of an HTTP 202 response for ScriptRun
+type ScriptRunResponse202Headers struct {
+	ContentType *string
+}
+
+type ScriptRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ScriptRunResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ScriptRunResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ScriptRunResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ScriptRunResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScriptRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScriptRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScriptRunResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SecretListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -18535,6 +19510,47 @@ func (r ServiceDestroyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ServiceDestroyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ServiceLogsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ServiceLogsResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ServiceLogsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ServiceLogsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ServiceLogsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ServiceLogsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -20348,6 +21364,32 @@ func (c *ClientWithResponses) EntryCreateWithResponse(ctx context.Context, param
 	return ParseEntryCreateResponse(rsp)
 }
 
+// EntryBulkUpsertWithBodyWithResponse Atomically upsert literal environment variables
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+func (c *ClientWithResponses) EntryBulkUpsertWithBodyWithResponse(ctx context.Context, params *EntryBulkUpsertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EntryBulkUpsertResponse, error) {
+	rsp, err := c.EntryBulkUpsertWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryBulkUpsertResponse(rsp)
+}
+
+// EntryBulkUpsertWithResponse Atomically upsert literal environment variables
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /entries/bulk (the `EntryBulkUpsert` operationId).
+func (c *ClientWithResponses) EntryBulkUpsertWithResponse(ctx context.Context, params *EntryBulkUpsertParams, body EntryBulkUpsertJSONRequestBody, reqEditors ...RequestEditorFn) (*EntryBulkUpsertResponse, error) {
+	rsp, err := c.EntryBulkUpsert(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEntryBulkUpsertResponse(rsp)
+}
+
 // EntryRemoveWithResponse Remove an environment Entry
 //
 // Returns a wrapper object for the known response body format(s).
@@ -20580,6 +21622,17 @@ func (c *ClientWithResponses) BackupKeyExportWithResponse(ctx context.Context, i
 		return nil, err
 	}
 	return ParseBackupKeyExportResponse(rsp)
+}
+
+// EnvironmentLogsWithResponse performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) EnvironmentLogsWithResponse(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*EnvironmentLogsResponse, error) {
+	rsp, err := c.EnvironmentLogs(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnvironmentLogsResponse(rsp)
 }
 
 // BackupPointsListWithResponse List verified Recovery Points
@@ -21232,6 +22285,19 @@ func (c *ClientWithResponses) ScriptEditWithResponse(ctx context.Context, id str
 	return ParseScriptEditResponse(rsp)
 }
 
+// ScriptRunWithResponse Run a script
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /scripts/{id}/run (the `ScriptRun` operationId).
+func (c *ClientWithResponses) ScriptRunWithResponse(ctx context.Context, id string, params *ScriptRunParams, reqEditors ...RequestEditorFn) (*ScriptRunResponse, error) {
+	rsp, err := c.ScriptRun(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScriptRunResponse(rsp)
+}
+
 // SecretListWithResponse List reusable secrets
 //
 // Returns a wrapper object for the known response body format(s).
@@ -21438,6 +22504,17 @@ func (c *ClientWithResponses) ServiceDestroyWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseServiceDestroyResponse(rsp)
+}
+
+// ServiceLogsWithResponse performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ServiceLogsWithResponse(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*ServiceLogsResponse, error) {
+	rsp, err := c.ServiceLogs(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseServiceLogsResponse(rsp)
 }
 
 // ServiceRollbackWithBodyWithResponse Roll back a service
@@ -23148,6 +24225,52 @@ func ParseEntryCreateResponse(rsp *http.Response) (*EntryCreateResponse, error) 
 	return response, nil
 }
 
+// ParseEntryBulkUpsertResponse parses an HTTP response from a EntryBulkUpsertWithResponse call
+func ParseEntryBulkUpsertResponse(rsp *http.Response) (*EntryBulkUpsertResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EntryBulkUpsertResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest EntryBulkUpsertResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers EntryBulkUpsertResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseEntryRemoveResponse parses an HTTP response from a EntryRemoveWithResponse call
 func ParseEntryRemoveResponse(rsp *http.Response) (*EntryRemoveResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -23703,6 +24826,32 @@ func ParseBackupKeyExportResponse(rsp *http.Response) (*BackupKeyExportResponse,
 			headers.ContentType = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEnvironmentLogsResponse parses an HTTP response from a EnvironmentLogsWithResponse call
+func ParseEnvironmentLogsResponse(rsp *http.Response) (*EnvironmentLogsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnvironmentLogsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -25156,6 +26305,52 @@ func ParseScriptEditResponse(rsp *http.Response) (*ScriptEditResponse, error) {
 	return response, nil
 }
 
+// ParseScriptRunResponse parses an HTTP response from a ScriptRunWithResponse call
+func ParseScriptRunResponse(rsp *http.Response) (*ScriptRunResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScriptRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ScriptRunResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseSecretListResponse parses an HTTP response from a SecretListWithResponse call
 func ParseSecretListResponse(rsp *http.Response) (*SecretListResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -25638,6 +26833,32 @@ func ParseServiceDestroyResponse(rsp *http.Response) (*ServiceDestroyResponse, e
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseServiceLogsResponse parses an HTTP response from a ServiceLogsWithResponse call
+func ParseServiceLogsResponse(rsp *http.Response) (*ServiceLogsResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ServiceLogsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

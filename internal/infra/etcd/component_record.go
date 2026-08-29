@@ -1,11 +1,8 @@
 package etcd
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/netip"
 	"reflect"
-	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -27,7 +24,7 @@ type ComponentDesiredRecord struct {
 	OwnerID string                     `json:"owner_id,omitempty"`
 	Kind    core.ComponentKind         `json:"kind"`
 	Enabled bool                       `json:"enabled"`
-	Config  map[string]json.RawMessage `json:"config,omitempty"`
+	Config  core.ComponentConfig       `json:"config,omitempty"`
 }
 
 type ComponentRuntimeRecord struct {
@@ -117,20 +114,10 @@ func ProjectComponentRecord(record ComponentRecord) (core.Component, error) {
 	if err := validateComponentRecord(record); err != nil {
 		return core.Component{}, err
 	}
-	config := make(map[string]any, len(record.Desired.Config))
-	for key, raw := range record.Desired.Config {
-		var value any
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return core.Component{}, corruptRecord()
-		}
-		config[key] = value
-	}
-	if len(config) == 0 {
-		config = nil
-	}
 	return core.Component{
 		ID: record.Desired.ID, Owner: record.Desired.Owner, OwnerID: record.Desired.OwnerID,
-		Kind: record.Desired.Kind, Enabled: record.Desired.Enabled, Config: config,
+		Kind: record.Desired.Kind, Enabled: record.Desired.Enabled,
+		Config: core.CloneComponentConfig(record.Desired.Config),
 		GeneratedServices: append([]string(nil), record.Runtime.GeneratedServices...),
 		PinnedIPv4:        record.Runtime.PinnedIPv4,
 		Healthy:           record.Runtime.Healthy,
@@ -138,26 +125,10 @@ func ProjectComponentRecord(record ComponentRecord) (core.Component, error) {
 }
 
 func componentDesiredRecord(component core.Component) (ComponentDesiredRecord, error) {
-	config := make(map[string]json.RawMessage, len(component.Config))
-	for key, value := range component.Config {
-		if strings.TrimSpace(key) == "" {
-			return ComponentDesiredRecord{}, errs.New(errs.KindValidationFailed, "Component config key is required")
-		}
-		raw, err := json.Marshal(value)
-		if err != nil {
-			return ComponentDesiredRecord{}, errs.New(
-				errs.KindValidationFailed,
-				"Component config must be JSON-compatible",
-			)
-		}
-		config[key] = raw
-	}
-	if len(config) == 0 {
-		config = nil
-	}
 	return ComponentDesiredRecord{
 		ID: component.ID, Owner: component.Owner, OwnerID: component.OwnerID,
-		Kind: component.Kind, Enabled: component.Enabled, Config: config,
+		Kind: component.Kind, Enabled: component.Enabled,
+		Config: core.CloneComponentConfig(component.Config),
 	}, nil
 }
 
@@ -182,6 +153,7 @@ func validateComponentRecord(record ComponentRecord) error {
 	projected := core.Component{
 		ID: record.Desired.ID, Owner: record.Desired.Owner, OwnerID: record.Desired.OwnerID,
 		Kind: record.Desired.Kind, Enabled: record.Desired.Enabled,
+		Config: core.CloneComponentConfig(record.Desired.Config),
 		GeneratedServices: record.Runtime.GeneratedServices,
 		PinnedIPv4:        record.Runtime.PinnedIPv4,
 		Healthy:           record.Runtime.Healthy,
@@ -193,6 +165,9 @@ func validateComponentRecord(record ComponentRecord) error {
 		if err := validateID(ids.KindEnvironment, record.Desired.OwnerID); err != nil {
 			return err
 		}
+	}
+	if _, _, err := componentCloudflareSecretID(record); err != nil {
+		return err
 	}
 	seenServices := make(map[string]struct{}, len(record.Runtime.GeneratedServices))
 	for _, serviceID := range record.Runtime.GeneratedServices {
@@ -208,19 +183,6 @@ func validateComponentRecord(record ComponentRecord) error {
 		address, err := netip.ParseAddr(record.Runtime.PinnedIPv4)
 		if err != nil || !address.Is4() || address.String() != record.Runtime.PinnedIPv4 {
 			return errs.New(errs.KindValidationFailed, "Component pinned IPv4 must be canonical")
-		}
-	}
-	for key, raw := range record.Desired.Config {
-		if strings.TrimSpace(key) == "" || !json.Valid(raw) {
-			return errs.New(errs.KindValidationFailed, "Component config is invalid")
-		}
-		var value any
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return errs.New(errs.KindValidationFailed, "Component config is invalid")
-		}
-		canonical, err := json.Marshal(value)
-		if err != nil || !bytes.Equal(raw, canonical) {
-			return errs.New(errs.KindValidationFailed, "Component config is not canonical")
 		}
 	}
 	return nil

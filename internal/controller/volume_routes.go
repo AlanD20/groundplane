@@ -221,7 +221,11 @@ func (s *Server) editVolume(ctx context.Context, request *volumeEditInput) (*vol
 	}
 	response, err := s.volumeMutations.EditVolume(ctx, request.ID, request.Body, request.IdempotencyKey)
 	if err != nil {
-		return nil, normalizeProjectError(err)
+		normalized := normalizeProjectError(err)
+		if kind, ok := errs.KindOf(normalized); ok && kind == errs.KindInternal && s.Logger != nil {
+			s.Logger.Error("controller: edit Volume", slog.String("volume_id", request.ID), slog.Any("error", err))
+		}
+		return nil, normalized
 	}
 	return s.volumeMutationResponse(response, "edit"), nil
 }

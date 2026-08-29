@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net"
 	"net/netip"
 	"net/url"
 	"os"
@@ -51,11 +50,10 @@ type ControllerConfig struct {
 	SystemPool              string `yaml:"system_pool"`
 	ReleaseExecutionTimeout string `yaml:"release_execution_timeout"`
 	Etcd                    struct {
-		Endpoints []string `yaml:"endpoints"`
-		KeyPrefix string   `yaml:"key_prefix"`
+		KeyPrefix string `yaml:"key_prefix"`
 	} `yaml:"etcd"`
 	Listen struct {
-		HTTP string `yaml:"http"` // human API (REST/JSON)
+		HTTP []string `yaml:"http"` // human API (REST/JSON)
 	} `yaml:"listen"`
 	Scheduler struct {
 		TickInterval string `yaml:"tick_interval"` // e.g. "30s"
@@ -100,9 +98,8 @@ type RunnerAllocationPools struct {
 
 func DefaultControllerConfig() ControllerConfig {
 	var c ControllerConfig
-	c.Etcd.Endpoints = []string{"127.0.0.1:2379"}
 	c.Etcd.KeyPrefix = "/groundplane/"
-	c.Listen.HTTP = "127.0.0.1:8080"
+	c.Listen.HTTP = []string{"127.0.0.1:8080"}
 	c.Scheduler.TickInterval = "30s"
 	c.ReleaseExecutionTimeout = "15h"
 	c.Storage.VolumeRoot = environmentpath.DefaultVolumeRoot
@@ -170,18 +167,10 @@ func (c ControllerConfig) Validate() error {
 	if _, err := c.AllocationPools(); err != nil {
 		return err
 	}
-	if len(c.Etcd.Endpoints) == 0 {
-		return fmt.Errorf("config: controller etcd.endpoints must contain at least one endpoint")
-	}
-	for i, endpoint := range c.Etcd.Endpoints {
-		if strings.TrimSpace(endpoint) == "" {
-			return fmt.Errorf("config: controller etcd.endpoints[%d] is empty", i)
-		}
-	}
 	if !strings.HasPrefix(c.Etcd.KeyPrefix, "/") || !strings.HasSuffix(c.Etcd.KeyPrefix, "/") {
 		return fmt.Errorf("config: controller etcd.key_prefix must begin and end with /")
 	}
-	if err := validateHumanHTTPAddress("controller listen.http", c.Listen.HTTP); err != nil {
+	if err := validateHumanHTTPAddresses("controller listen.http", c.Listen.HTTP); err != nil {
 		return err
 	}
 	tick, err := time.ParseDuration(c.Scheduler.TickInterval)
@@ -338,17 +327,29 @@ func (c CLIConfig) Validate() error {
 	}
 }
 
-func validateHumanHTTPAddress(label, address string) error {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return fmt.Errorf("config: %s must be host:port: %w", label, err)
+func validateHumanHTTPAddresses(label string, addresses []string) error {
+	if len(addresses) == 0 || len(addresses) > 8 {
+		return fmt.Errorf("config: %s must contain between 1 and 8 addresses", label)
 	}
-	if host != "127.0.0.1" {
-		return fmt.Errorf("config: %s host must be exactly 127.0.0.1", label)
+	seen := make(map[netip.AddrPort]struct{}, len(addresses))
+	loopback := false
+	for _, address := range addresses {
+		endpoint, err := netip.ParseAddrPort(address)
+		if err != nil || !endpoint.Addr().Is4() || endpoint.Port() == 0 {
+			return fmt.Errorf("config: %s entries must be numeric IPv4 address:port pairs", label)
+		}
+		if endpoint.Addr() == netip.MustParseAddr("127.0.0.1") {
+			loopback = true
+		} else if !endpoint.Addr().IsPrivate() {
+			return fmt.Errorf("config: %s entries must be 127.0.0.1 or trusted private IPv4 addresses", label)
+		}
+		if _, duplicate := seen[endpoint]; duplicate {
+			return fmt.Errorf("config: %s entries must be unique", label)
+		}
+		seen[endpoint] = struct{}{}
 	}
-	portNumber, err := strconv.ParseUint(port, 10, 16)
-	if err != nil || portNumber == 0 {
-		return fmt.Errorf("config: %s port must be an integer from 1 through 65535", label)
+	if !loopback {
+		return fmt.Errorf("config: %s must retain an explicit 127.0.0.1 listener", label)
 	}
 	return nil
 }

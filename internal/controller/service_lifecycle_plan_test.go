@@ -115,7 +115,7 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		Executor: etcd.TaskExecutorAgent, PlanID: input.PlanID, Type: etcd.TaskStart,
 		Target: apiID, TimeoutSeconds: 120, Status: etcd.TaskStatusPending,
 	}
-	firstResolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	firstResolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
@@ -130,7 +130,7 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		t.Fatalf("buildServiceLifecyclePlan() error = %v", err)
 	}
 	reader.projection.RevisionID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAX"
-	secondResolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	secondResolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints(restart) error = %v", err)
 	}

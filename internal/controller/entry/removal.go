@@ -106,10 +106,8 @@ func validateRemovalCandidate(candidate RemovalCandidate, entryID string) error 
 		identity.TenantSlug == "" {
 		return errs.New(errs.KindInternal, "entry deletion candidate Tenant identity is invalid")
 	}
-	if candidate.ProjectionRevision < 0 || candidate.Cloudflare.Revision < 0 ||
-		candidate.Cloudflare.Present != (candidate.Cloudflare.Revision > 0) ||
-		candidate.Cloudflare.Present && ids.Validate(ids.KindComponent, candidate.Cloudflare.ID) != nil {
-		return errs.New(errs.KindInternal, "entry deletion dependency fence is invalid")
+	if candidate.ProjectionRevision < 0 {
+		return errs.New(errs.KindInternal, "entry deletion projection fence is invalid")
 	}
 	return nil
 }

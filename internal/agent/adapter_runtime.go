@@ -36,10 +36,6 @@ func (runtime *AdapterRuntime) executeStep(
 	if procedure == nil {
 		return adapterStepResult{}, errs.New(errs.KindInternal, "agent: adapter procedure is required")
 	}
-	defer func() {
-		clear(procedure.Password)
-		procedure.Password = nil
-	}()
 	adapter, found := adapters.Get(procedure.AdapterKey)
 	if !found || adapter.Manual() {
 		return adapterStepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter procedure is not registered")

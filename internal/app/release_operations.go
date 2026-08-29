@@ -460,7 +460,7 @@ func (service *releaseOperationService) publish(
 	for index, candidate := range candidates {
 		releaseID := ids.New(ids.KindDeployment)
 		var proxyPorts []uint16
-		var candidateProxy, priorProxy domain.ProxyConfig
+		var candidateProxyDigest, priorProxyDigest string
 		priorArtifactID := ""
 		priorSlot := candidate.planning.Projection.ServingSlot
 		if candidate.priorStrategy != domain.StrategyBlueGreen {
@@ -485,14 +485,16 @@ func (service *releaseOperationService) publish(
 				proxyGeneration = 2
 			}
 			priorGeneration = proxyGeneration - 1
-			candidateProxy, err = domain.RenderProxyConfig(candidate.planning.Service.Record.Desired.Name, releaseID, candidateTarget, proxyGeneration, proxyPorts)
+			candidateProxy, err := domain.RenderProxyConfig(candidate.planning.Service.Record.Desired.Name, releaseID, candidateTarget, proxyGeneration, proxyPorts)
 			if err != nil {
 				return etcd.IdempotencyResponse{}, err
 			}
-			priorProxy, err = domain.RenderProxyConfig(candidate.planning.Service.Record.Desired.Name, candidate.priorReleaseID, priorTarget, priorGeneration, proxyPorts)
+			priorProxy, err := domain.RenderProxyConfig(candidate.planning.Service.Record.Desired.Name, candidate.priorReleaseID, priorTarget, priorGeneration, proxyPorts)
 			if err != nil {
 				return etcd.IdempotencyResponse{}, err
 			}
+			candidateProxyDigest = hex.EncodeToString(candidateProxy.SHA256[:])
+			priorProxyDigest = hex.EncodeToString(priorProxy.SHA256[:])
 		} else if candidate.strategy == domain.StrategyBlueGreen {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "blue-green release requires an addressable TCP service")
 		} else {
@@ -506,8 +508,8 @@ func (service *releaseOperationService) publish(
 			Strategy: candidate.strategy, PriorStrategy: candidate.priorStrategy, Slot: candidate.slot,
 			PriorSlot: priorSlot, CandidateTarget: candidateTarget, PriorTarget: priorTarget,
 			ProxyGeneration: proxyGeneration, PriorProxyGeneration: priorGeneration,
-			ProxyPorts: proxyPorts, ProxyConfigDigest: hex.EncodeToString(candidateProxy.SHA256[:]),
-			PriorProxyDigest:       hex.EncodeToString(priorProxy.SHA256[:]),
+			ProxyPorts: proxyPorts, ProxyConfigDigest: candidateProxyDigest,
+			PriorProxyDigest:       priorProxyDigest,
 			ServiceDependencyPlans: scope.Compose.Record.ServiceDependencyPlans.Clone(),
 			TenantID:               scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 			ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
@@ -719,12 +721,14 @@ func releaseImageWithTag(value string, requested string) (string, string, string
 	}
 	tag := requested
 	if tag == "" {
-		if tagged, ok := named.(reference.NamedTagged); ok {
-			tag = tagged.Tag()
-		} else {
-			named = reference.TagNameOnly(named)
-			tag = named.(reference.NamedTagged).Tag()
+		tagged, ok := named.(reference.NamedTagged)
+		if !ok {
+			return "", "", "", errs.New(
+				errs.KindValidationFailed,
+				"release tag is required when the Service image has no tag",
+			)
 		}
+		tag = tagged.Tag()
 	}
 	if strings.ContainsAny(tag, "@/\\") || strings.TrimSpace(tag) != tag || tag == "" {
 		return "", "", "", errs.New(errs.KindValidationFailed, "release image tag is invalid")

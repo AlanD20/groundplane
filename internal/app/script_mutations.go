@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -43,23 +44,52 @@ type scriptMutationRepository interface {
 		core.Script,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
+	LoadExecutionSources(context.Context, string) (etcd.ScriptExecutionSources, error)
+	PublishExecutionWithTask(
+		context.Context,
+		etcd.ScriptExecutionSources,
+		etcd.ScriptExecutionRecord,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type durableScriptMutationRepository struct {
 	hierarchy *etcd.HierarchyRepository
 	services  *etcd.ServiceRepository
 	scripts   *etcd.ScriptRepository
+	releases  *etcd.ReleaseLedger
 }
 
 func newDurableScriptMutationRepository(
 	hierarchy *etcd.HierarchyRepository,
 	services *etcd.ServiceRepository,
 	scripts *etcd.ScriptRepository,
+	releases *etcd.ReleaseLedger,
 ) (*durableScriptMutationRepository, error) {
-	if hierarchy == nil || services == nil || scripts == nil {
+	if hierarchy == nil || services == nil || scripts == nil || releases == nil {
 		return nil, errs.New(errs.KindInternal, "Script mutation repositories are not configured")
 	}
-	return &durableScriptMutationRepository{hierarchy: hierarchy, services: services, scripts: scripts}, nil
+	return &durableScriptMutationRepository{
+		hierarchy: hierarchy, services: services, scripts: scripts, releases: releases,
+	}, nil
+}
+
+func (repository *durableScriptMutationRepository) LoadExecutionSources(
+	ctx context.Context,
+	scriptID string,
+) (etcd.ScriptExecutionSources, error) {
+	return repository.scripts.LoadExecutionSources(ctx, repository.releases, scriptID)
+}
+
+func (repository *durableScriptMutationRepository) PublishExecutionWithTask(
+	ctx context.Context,
+	sources etcd.ScriptExecutionSources,
+	execution etcd.ScriptExecutionRecord,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.scripts.PublishExecutionWithTask(ctx, sources, execution, task, marker)
 }
 
 func (repository *durableScriptMutationRepository) GetEnvironment(
@@ -120,6 +150,7 @@ type scriptMutationIntent struct {
 	environmentID string
 	path          []idempotentintent.PathBinding
 	body          idempotentintent.Value
+	noBody        bool
 }
 
 type scriptMutationIdempotency interface {
@@ -154,11 +185,15 @@ func (service *durableScriptMutationIdempotency) Prepare(
 	ctx context.Context,
 	intent scriptMutationIntent,
 ) (scriptMutationEvidence, error) {
+	body := idempotentintent.JSONBody(intent.body)
+	if intent.noBody {
+		body = idempotentintent.NoBody()
+	}
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: intent.method,
 		Route:  intent.route,
 		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: intent.environmentID},
-		Path:   intent.path, Query: idempotentintent.Object(), Body: idempotentintent.JSONBody(intent.body),
+		Path:   intent.path, Query: idempotentintent.Object(), Body: body,
 	})
 	if err != nil {
 		return scriptMutationEvidence{}, err
@@ -205,16 +240,20 @@ type scriptMutationService struct {
 	idempotency scriptMutationIdempotency
 	deletions   *scriptDeletionService
 	now         func() time.Time
+	artifacts   *controller.ScriptArtifactService
 }
 
 func newScriptMutationService(
 	repository scriptMutationRepository,
 	idempotency scriptMutationIdempotency,
+	artifacts *controller.ScriptArtifactService,
 ) (*scriptMutationService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || idempotency == nil || artifacts == nil {
 		return nil, errs.New(errs.KindInternal, "Script mutation service is not configured")
 	}
-	return &scriptMutationService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+	return &scriptMutationService{
+		repository: repository, idempotency: idempotency, artifacts: artifacts, now: time.Now,
+	}, nil
 }
 
 func (service *scriptMutationService) RemoveScript(
@@ -243,7 +282,7 @@ func (service *scriptMutationService) CreateScript(
 		method: http.MethodPost, route: scriptCreationRoute, environmentID: input.EnvironmentID,
 		body: idempotentintent.Object(
 			idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(input.EnvironmentID)},
-			idempotentintent.Field{Name: "name", Value: idempotentintent.String(input.Name)},
+			idempotentintent.Field{Name: "slug", Value: idempotentintent.String(input.Slug)},
 			idempotentintent.Field{Name: "script", Value: idempotentintent.String(input.Body)},
 			idempotentintent.Field{Name: "service_id", Value: idempotentintent.String(input.ServiceID)},
 			idempotentintent.Field{Name: "when", Value: idempotentintent.String(input.When)},
@@ -286,7 +325,7 @@ func (service *scriptMutationService) createScriptOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	record, err := etcd.NewScriptRecord(input.EnvironmentID, input.ServiceID, core.Script{
-		ID: ids.New(ids.KindScript), Name: input.Name, ServiceName: target.Record.Desired.Name,
+		ID: ids.New(ids.KindScript), Slug: input.Slug, ServiceName: target.Record.Desired.Name,
 		Body: input.Body, When: core.ScriptHook(input.When),
 	})
 	if err != nil {
@@ -319,8 +358,8 @@ func (service *scriptMutationService) EditScript(
 			"Script edit requires a stable Script id",
 		)
 	}
-	if input.Body == nil && input.When == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script edit requires script or when")
+	if input.Slug == nil && input.Body == nil && input.When == nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script edit requires slug, script, or when")
 	}
 	for attempt := 0; attempt < maximumScriptMutationAttempts; attempt++ {
 		response, err := service.editScriptOnce(ctx, scriptID, input, idempotencyKey)
@@ -367,6 +406,9 @@ func (service *scriptMutationService) editScriptOnce(
 	}
 	desired := current.Record.Desired
 	desired.ServiceName = target.Record.Desired.Name
+	if input.Slug != nil {
+		desired.Slug = *input.Slug
+	}
 	if input.Body != nil {
 		desired.Body = *input.Body
 	}
@@ -394,7 +436,10 @@ func scriptEditMutationIntent(
 	environmentID string,
 	input apiTypes.ScriptEdit,
 ) scriptMutationIntent {
-	fields := make([]idempotentintent.Field, 0, 2)
+	fields := make([]idempotentintent.Field, 0, 3)
+	if input.Slug != nil {
+		fields = append(fields, idempotentintent.Field{Name: "slug", Value: idempotentintent.String(*input.Slug)})
+	}
 	if input.Body != nil {
 		fields = append(fields, idempotentintent.Field{Name: "script", Value: idempotentintent.String(*input.Body)})
 	}
@@ -515,7 +560,7 @@ func validateScriptCreationInput(input apiTypes.ScriptCreate) error {
 		return errs.New(errs.KindValidationFailed, "Script creation requires a stable target Service id")
 	}
 	if err := (core.Script{
-		ID: ids.New(ids.KindScript), Name: input.Name, ServiceName: "validated-after-service-resolution",
+		ID: ids.New(ids.KindScript), Slug: input.Slug, ServiceName: "validated-after-service-resolution",
 		Body: input.Body, When: core.ScriptHook(input.When),
 	}).Validate(); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
@@ -525,8 +570,10 @@ func validateScriptCreationInput(input apiTypes.ScriptCreate) error {
 
 func scriptAPIResponse(record etcd.ScriptRecord) apiTypes.Script {
 	return apiTypes.Script{
-		ID: record.Desired.ID, Name: record.Desired.Name, ServiceName: record.Desired.ServiceName,
-		Body: record.Desired.Body, When: string(record.Desired.When),
+		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Slug: record.Desired.Slug,
+		ServiceID: record.ServiceID, ServiceName: record.Desired.ServiceName,
+		Body: record.Desired.Body, When: string(record.Desired.When), Origin: record.Origin,
+		ReconciliationKey: record.ReconciliationKey, ActiveGeneration: record.ActiveGeneration,
 	}
 }
 

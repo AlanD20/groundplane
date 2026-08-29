@@ -18,7 +18,7 @@ func TestComponentRecordSeparatesDesiredAndRuntimeReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectComponentRecord() error = %v", err)
 	}
-	component.Config["caddyfile_template"] = "{routes}\n"
+	component.Config.Caddy.CaddyfileTemplate = "{routes}\n"
 	replacement, err := ReplaceComponentDesired(record, component)
 	if err != nil {
 		t.Fatalf("ReplaceComponentDesired() error = %v", err)
@@ -61,7 +61,9 @@ func componentRecordTestRecord(t *testing.T, offset int64) ComponentRecord {
 	record, err := NewComponentRecord(core.Component{
 		ID: ids.NewAt(ids.KindComponent, at, offset), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: ids.NewAt(ids.KindEnvironment, at, 2), Kind: core.ComponentKindIngressCaddy, Enabled: true,
-		Config:            map[string]any{"zone_id": ids.NewAt(ids.KindNetwork, at, 3)},
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, at, 3),
+		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, at, 4)},
 		PinnedIPv4:        "10.40.10.2",
 		Healthy:           true,

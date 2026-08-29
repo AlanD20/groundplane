@@ -171,6 +171,34 @@ func (coordinator *Coordinator) ResolveExisting(
 	return resolution, true, err
 }
 
+// ResolveOperationRootExisting classifies an immutable operation-root
+// response. Unlike ordinary Task idempotency, an equal accepted operation
+// replays its stored root response while the current attempt is still active.
+func (coordinator *Coordinator) ResolveOperationRootExisting(
+	ctx context.Context,
+	repository EvidenceRepository,
+	locator infraetcd.IdempotencyLocator,
+	candidate ProtectedEvidence,
+) (Resolution, bool, error) {
+	if ctx == nil || repository == nil {
+		return Resolution{}, false, internalError("existing-outcome evidence is incomplete")
+	}
+	evidence, err := repository.Read(ctx, locator)
+	if err != nil {
+		return Resolution{}, false, err
+	}
+	if evidence == nil {
+		return Resolution{}, false, nil
+	}
+	marker, err := evidence.Marker()
+	if err != nil {
+		return Resolution{}, true, err
+	}
+	defer clearProtectedMarker(marker)
+	resolution, err := coordinator.classifyOperationRootMarker(ctx, candidate, marker)
+	return resolution, true, err
+}
+
 // ResolveUnknown performs the only permitted latest linearizable reread: a
 // Store outcome whose commit status was unknown. Missing or unavailable
 // evidence preserves the original retryable/cancellation error.
@@ -252,6 +280,24 @@ func (coordinator *Coordinator) classifyMarker(
 	}
 	if marker.Kind == infraetcd.IdempotencyMarkerTask && marker.State == infraetcd.IdempotencyMarkerPending {
 		return Resolution{}, errs.New(errs.KindIdempotencyInProgress, "the original task is still active")
+	}
+	return Resolution{
+		Kind: ResolutionReplay,
+		Response: infraetcd.IdempotencyResponse{
+			Status: marker.Response.Status, ContentKind: marker.Response.ContentKind,
+			Body: append([]byte(nil), marker.Response.Body...),
+		},
+	}, nil
+}
+
+func (coordinator *Coordinator) classifyOperationRootMarker(
+	ctx context.Context,
+	candidate ProtectedEvidence,
+	marker infraetcd.IdempotencyMarker,
+) (Resolution, error) {
+	resolution, err := coordinator.classifyMarker(ctx, candidate, marker)
+	if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) {
+		return resolution, err
 	}
 	return Resolution{
 		Kind: ResolutionReplay,

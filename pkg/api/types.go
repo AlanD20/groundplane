@@ -378,34 +378,54 @@ type AttachFactValue struct {
 	Value string `json:"value"`
 }
 
+type AttachCredentialMode string
+
+const (
+	AttachCredentialNew      AttachCredentialMode = "new"
+	AttachCredentialExisting AttachCredentialMode = "existing"
+)
+
+// AttachCredential is a closed credential-source choice. AttachID is present
+// only for existing credentials and always names the direct credential owner.
+type AttachCredential struct {
+	Mode     AttachCredentialMode `json:"mode" enum:"new,existing"`
+	AttachID string               `json:"attach_id,omitempty" pattern:"^att_[0-9A-HJKMNP-TV-Z]{26}$"`
+}
+
 // AttachStatus values mirror internal/core's lifecycle exactly:
 // pending -> provisioning -> ready, with terminal failed and
 // detaching -> detached paths.
 type Attach struct {
-	ID                   string          `json:"id"`
-	Name                 string          `json:"name"`
-	ServiceIDs           []string        `json:"service_ids"`
-	BackingProjectID     string          `json:"backing_project_id"`
-	BackingServiceID     string          `json:"backing_service_id"`
-	BackingEnvironmentID string          `json:"backing_environment_id,omitempty"`
-	BackingNetworkID     string          `json:"backing_network_id"`
-	GrantAttachIDs       []string        `json:"grant_attach_ids,omitempty"`
-	FactSets             []AttachFactSet `json:"fact_sets"`
-	Status               string          `json:"status"`
+	ID                   string           `json:"id"`
+	Name                 string           `json:"name"`
+	ServiceID            string           `json:"service_id"`
+	Credential           AttachCredential `json:"credential"`
+	BackingProjectID     string           `json:"backing_project_id"`
+	BackingServiceID     string           `json:"backing_service_id"`
+	BackingEnvironmentID string           `json:"backing_environment_id,omitempty"`
+	BackingNetworkID     string           `json:"backing_network_id"`
+	GrantAttachIDs       []string         `json:"grant_attach_ids,omitempty"`
+	FactSets             []AttachFactSet  `json:"fact_sets"`
+	Status               string           `json:"status"`
 }
 
 type Script struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	ServiceName string `json:"service"`
-	Body        string `json:"script"`
-	When        string `json:"when"`
+	ID                string `json:"id"`
+	EnvironmentID     string `json:"environment_id"`
+	Slug              string `json:"slug"`
+	ServiceID         string `json:"service_id"`
+	ServiceName       string `json:"service"`
+	Body              string `json:"script"`
+	When              string `json:"when"`
+	Origin            string `json:"origin" enum:"api,blueprint"`
+	ReconciliationKey string `json:"reconciliation_key,omitempty"`
+	ActiveGeneration  uint64 `json:"active_generation"`
 }
 
 // ScriptCreate is the complete operator-authored durable Script input.
 type ScriptCreate struct {
 	EnvironmentID string `json:"environment_id"`
-	Name          string `json:"name"`
+	Slug          string `json:"slug"`
 	ServiceID     string `json:"service_id"`
 	Body          string `json:"script"`
 	When          string `json:"when"`
@@ -413,6 +433,7 @@ type ScriptCreate struct {
 
 // ScriptEdit contains the mutable Script desired-state fields.
 type ScriptEdit struct {
+	Slug *string `json:"slug,omitempty"`
 	Body *string `json:"script,omitempty"`
 	When *string `json:"when,omitempty"`
 }
@@ -427,7 +448,7 @@ type Component struct {
 	EnvironmentID     string         `json:"environment_id"`
 	Kind              string         `json:"kind"`
 	Enabled           bool           `json:"enabled"`
-	Config            map[string]any `json:"config,omitempty"`
+	Config            ComponentConfig `json:"config"`
 	GeneratedServices []string       `json:"generated_services,omitempty"`
 	PinnedIPv4        string         `json:"pinned_ipv4,omitempty"`
 	Healthy           bool           `json:"healthy"`
@@ -451,7 +472,39 @@ type ComponentProjection struct {
 // ComponentConfig is the complete desired configuration singleton for one
 // Component. Runtime and secret material are deliberately absent.
 type ComponentConfig struct {
-	Config map[string]any `json:"config,omitempty"`
+	ZoneID            string                  `json:"zone_id,omitempty"`
+	CaddyfileTemplate string                  `json:"caddyfile_template,omitempty"`
+	SecretID          string                  `json:"secret_id,omitempty"`
+	UpstreamAuto      *bool                   `json:"upstream_auto,omitempty"`
+	UpstreamResolvers []string                `json:"upstream_resolvers,omitempty"`
+	Forwarders        []ComponentDNSForwarder `json:"forwarders,omitempty"`
+	TailnetDelegation *bool                   `json:"tailnet_delegation,omitempty"`
+}
+
+type ComponentDNSForwarder struct {
+	Domain    string   `json:"domain"`
+	Resolvers []string `json:"resolvers"`
+}
+
+type ComponentConfigMutationRequest struct {
+	Config ComponentConfigMutationInput `json:"config"`
+}
+
+type ComponentConfigMutationInput struct {
+	ZoneID            string                            `json:"zone_id,omitempty"`
+	CaddyfileTemplate string                            `json:"caddyfile_template,omitempty"`
+	Credential        *CloudflareTunnelCredentialInput `json:"credential,omitempty"`
+	UpstreamAuto      *bool                             `json:"upstream_auto,omitempty"`
+	UpstreamResolvers []string                          `json:"upstream_resolvers,omitempty"`
+	Forwarders        []ComponentDNSForwarder           `json:"forwarders,omitempty"`
+	TailnetDelegation *bool                             `json:"tailnet_delegation,omitempty"`
+}
+
+type CloudflareTunnelCredentialInput struct {
+	Mode       string `json:"mode"`
+	SecretID   string `json:"secret_id,omitempty"`
+	SecretName string `json:"secret_name,omitempty"`
+	Token      string `json:"token,omitempty"`
 }
 
 type ComponentConfigMutationResult struct {
@@ -790,10 +843,11 @@ type ReleaseGroupDeployRequest struct {
 }
 
 type AttachRequest struct {
-	ServiceIDs       []string `json:"service_ids"`
-	BackingServiceID string   `json:"backing_service_id"`
-	Name             string   `json:"name,omitempty"` // omitted => Controller-suggested, made unique within the environment
-	GrantAttachIDs   []string `json:"grant_attach_ids,omitempty"`
+	ServiceID        string           `json:"service_id"`
+	BackingServiceID string           `json:"backing_service_id"`
+	Name             string           `json:"name,omitempty"` // omitted => Controller-suggested, made unique within the environment
+	Credential       AttachCredential `json:"credential"`
+	GrantAttachIDs   []string         `json:"grant_attach_ids,omitempty"`
 }
 
 type AttachRenameRequest struct {
@@ -804,10 +858,6 @@ type RestoreRequest struct {
 	SourceID        string `json:"source_id"`
 	RecoveryPointID string `json:"recovery_point_id,omitempty"` // empty = latest
 	AgeIdentity     string `json:"age_identity,omitempty"`
-}
-
-type ScriptRunRequest struct {
-	Parameters map[string]string `json:"parameters,omitempty"`
 }
 
 type ComponentEnableRequest struct {
@@ -980,4 +1030,23 @@ type AgentConfig struct {
 	PullIntervalSeconds int               `json:"pull_interval_seconds"`
 	MaxConcurrentTasks  int               `json:"max_concurrent_tasks"`
 	Labels              map[string]string `json:"labels"`
+}
+
+type LogEvent struct {
+	Sequence      uint64    `json:"sequence"`
+	ServiceID     string    `json:"service_id"`
+	ServiceName   string    `json:"service_name"`
+	ContainerID   string    `json:"container_id"`
+	ContainerName string    `json:"container_name"`
+	ReleaseID     string    `json:"release_id"`
+	Slot          string    `json:"slot"`
+	Stream        string    `json:"stream"`
+	Timestamp     time.Time `json:"timestamp"`
+	Line          string    `json:"line"`
+	Truncated     bool      `json:"truncated"`
+}
+
+type LogSSEEvent struct {
+	Event string   `json:"event"`
+	Data  LogEvent `json:"data"`
 }

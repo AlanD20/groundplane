@@ -48,7 +48,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			scriptOwnerKey(record.EnvironmentID, record.Desired.ID),
-			scriptNameKey(record.EnvironmentID, record.Desired.Name),
+			scriptSlugKey(record.EnvironmentID, record.Desired.Slug),
 			environmentKey(record.EnvironmentID),
 			serviceKey(record.ServiceID),
 		},
@@ -100,7 +100,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 				ModRevision: dependencies.Values[0].ModRevision,
 			},
 			{
-				Key:         scriptNameKey(record.EnvironmentID, record.Desired.Name),
+				Key:         scriptSlugKey(record.EnvironmentID, record.Desired.Slug),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID)},
@@ -177,7 +177,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			scriptOwnerKey(record.EnvironmentID, record.Desired.ID),
-			scriptNameKey(record.EnvironmentID, record.Desired.Name),
+			scriptSlugKey(record.EnvironmentID, record.Desired.Slug),
 		},
 		Revision: revision,
 	})
@@ -197,7 +197,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 				ModRevision: stored.Values[1].ModRevision,
 			},
 			{Key: scriptOwnerKey(record.EnvironmentID, task.Target), ModRevision: indexes.Values[0].ModRevision},
-			{Key: scriptNameKey(record.EnvironmentID, record.Desired.Name), ModRevision: indexes.Values[1].ModRevision},
+			{Key: scriptSlugKey(record.EnvironmentID, record.Desired.Slug), ModRevision: indexes.Values[1].ModRevision},
 		},
 		mutations: []Mutation{{
 			Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetScript), task.Target),
@@ -206,7 +206,8 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	if terminalStatus == TaskStatusCompleted {
 		change.mutations = append(change.mutations,
 			Mutation{Type: MutationDelete, Key: scriptOwnerKey(record.EnvironmentID, task.Target)},
-			Mutation{Type: MutationDelete, Key: scriptNameKey(record.EnvironmentID, record.Desired.Name)},
+			Mutation{Type: MutationDelete, Key: scriptSlugKey(record.EnvironmentID, record.Desired.Slug)},
+			Mutation{Type: MutationDelete, Key: scriptBodyGenerationPrefix(task.Target), Prefix: true},
 			Mutation{Type: MutationDelete, Key: scriptKey(task.Target)},
 		)
 	}

@@ -179,7 +179,7 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 			component.Desired.OwnerID != environment.ID || component.Desired.Kind != wantKinds[index] {
 			t.Fatalf("component[%d] identity = %#v", index, component.Desired)
 		}
-		if component.Desired.Enabled || len(component.Desired.Config) != 0 ||
+		if component.Desired.Enabled || !component.Desired.Config.Empty() ||
 			len(component.Runtime.GeneratedServices) != 0 || component.Runtime.PinnedIPv4 != "" ||
 			component.Runtime.Healthy {
 			t.Fatalf("component[%d] initial state = %#v", index, component)

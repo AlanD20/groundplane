@@ -11,6 +11,7 @@ import (
 // Repository is a domain seam because an operation and Task must survive restarts.
 // Implementations compare-and-swap every transition and enforce the revision fence.
 type Repository interface {
+	ResolveTargetKind(context.Context, TargetKind, string) (TargetKind, error)
 	BeginDeletion(context.Context, BeginDeletion) (BeginResult, error)
 	OperationByTask(context.Context, string) (Operation, error)
 	FreezeMembership(context.Context, Operation) (FrozenMembership, error)
@@ -100,15 +101,22 @@ func (s *Service) Delete(ctx context.Context, request DeleteRequest) (TaskAccept
 	if err := validateRequest(request); err != nil {
 		return TaskAccepted{}, err
 	}
+	targetKind, err := s.repository.ResolveTargetKind(ctx, request.TargetKind, request.TargetID)
+	if err != nil {
+		return TaskAccepted{}, err
+	}
+	if !targetKind.Valid() {
+		return TaskAccepted{}, errs.New(errs.KindInternal, "hierarchy deletion resolved an invalid target kind")
+	}
 	now := s.clock.Now().UTC()
-	kind := operationForTarget(request.TargetKind)
+	kind := operationForTarget(targetKind)
 	operationID := stableOperationID(kind, request.TargetID, request.IdempotencyKey)
 	taskIDCandidate := s.ids.NewTaskID()
 	taskOperationID, err := taskOperationID(taskIDCandidate)
 	if err != nil {
 		return TaskAccepted{}, err
 	}
-	result, err := s.repository.BeginDeletion(ctx, BeginDeletion{OperationID: operationID, TaskOperationIDCandidate: taskOperationID, OperationKind: kind, TargetKind: request.TargetKind, TargetID: request.TargetID, TaskIDCandidate: taskIDCandidate, IdempotencyKey: request.IdempotencyKey, IdempotencyIntent: idempotencyIntent(request.TargetKind, request.TargetID), CreatedAt: now, DeadlineAt: now.Add(OperationDeadline)})
+	result, err := s.repository.BeginDeletion(ctx, BeginDeletion{OperationID: operationID, TaskOperationIDCandidate: taskOperationID, OperationKind: kind, TargetKind: targetKind, TargetID: request.TargetID, TaskIDCandidate: taskIDCandidate, IdempotencyKey: request.IdempotencyKey, IdempotencyIntent: idempotencyIntent(request.TargetKind, request.TargetID), CreatedAt: now, DeadlineAt: now.Add(OperationDeadline)})
 	if err != nil {
 		return TaskAccepted{}, err
 	}

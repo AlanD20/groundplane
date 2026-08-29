@@ -38,6 +38,36 @@ func newAgentChannelRuntime(
 	secrets agentchannel.BackupSecretSlotResolver,
 	checkpoints agentchannel.BackupCheckpointer,
 ) *agentChannelRuntime {
+	return newAgentChannelRuntimeWithManagedConfig(
+		authenticator, tasks, plans, materials, secrets, checkpoints, nil,
+	)
+}
+
+func newAgentChannelRuntimeWithManagedConfig(
+	authenticator agentchannel.Authenticator,
+	tasks agentchannel.TaskStore,
+	plans agentchannel.PlanResolver,
+	materials agentchannel.MaterializationResolver,
+	secrets agentchannel.BackupSecretSlotResolver,
+	checkpoints agentchannel.BackupCheckpointer,
+	managed agentchannel.ManagedConfigResolver,
+) *agentChannelRuntime {
+	return newAgentChannelRuntimeWithManagedConfigAndScripts(
+		authenticator, tasks, plans, materials, secrets, checkpoints, managed, nil, nil,
+	)
+}
+
+func newAgentChannelRuntimeWithManagedConfigAndScripts(
+	authenticator agentchannel.Authenticator,
+	tasks agentchannel.TaskStore,
+	plans agentchannel.PlanResolver,
+	materials agentchannel.MaterializationResolver,
+	secrets agentchannel.BackupSecretSlotResolver,
+	checkpoints agentchannel.BackupCheckpointer,
+	managed agentchannel.ManagedConfigResolver,
+	scripts agentchannel.ScriptArtifactResolver,
+	scriptCheckpoints agentchannel.ScriptCheckpointer,
+) *agentChannelRuntime {
 	return &agentChannelRuntime{
 		registry: agentchannel.NewRegistry(),
 		listen:   agentlistener.Listen,
@@ -46,12 +76,11 @@ func newAgentChannelRuntime(
 				grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
 				grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
 			)
-			agentpb.RegisterAgentChannelServer(
-				server,
-				agentchannel.NewWithRuntimeServices(
-					authenticator, registry, tasks, plans, materials, secrets, checkpoints,
-				),
+			channel := agentchannel.NewWithScriptRuntimeServices(
+				authenticator, registry, tasks, plans, materials, secrets, checkpoints, managed,
+				scripts, scriptCheckpoints,
 			)
+			agentpb.RegisterAgentChannelServer(server, channel)
 			return server
 		},
 	}

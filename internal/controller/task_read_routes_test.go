@@ -36,6 +36,24 @@ func TestTaskPublicProjectionRejectsMalformedDurableActor(t *testing.T) {
 	}
 }
 
+func TestTaskResponseProjectsControllerStepFromTaskLifecycle(t *testing.T) {
+	record := aliasTaskRecord(time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC), 306)
+	record.Executor = etcd.TaskExecutorController
+	record.Status = etcd.TaskStatusCompleted
+	record.Steps = []etcd.TaskStepRecord{{ID: "delete_tenant"}}
+
+	response, err := taskResponse(record, etcd.TaskEventSnapshot{})
+	if err != nil {
+		t.Fatalf("taskResponse() error = %v", err)
+	}
+	if len(response.Steps) != 1 {
+		t.Fatalf("len(taskResponse().Steps) = %d, want 1", len(response.Steps))
+	}
+	if got := response.Steps[0].Status; got != apiTypes.TaskCompleted {
+		t.Fatalf("taskResponse().Steps[0].Status = %q, want %q", got, apiTypes.TaskCompleted)
+	}
+}
+
 func TestTaskPublicProjectionRejectsUnknownDurableType(t *testing.T) {
 	// Rationale: the public journal type is a closed vocabulary, so an unknown
 	// durable kind must fail the projection instead of widening the contract.
@@ -321,7 +339,8 @@ func TestTaskListDispatchesEveryScopeAndRejectsScopeConflicts(t *testing.T) {
 	server.tasks = queries
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	tenantID := ids.NewAt(ids.KindTenant, now, 21)
-	environmentID := ids.NewAt(ids.KindEnvironment, now, 22)
+	projectID := ids.NewAt(ids.KindProject, now, 22)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 23)
 	tests := []struct {
 		path string
 		want etcd.TaskListScope
@@ -331,6 +350,10 @@ func TestTaskListDispatchesEveryScopeAndRejectsScopeConflicts(t *testing.T) {
 		{
 			path: "/api/v1/tasks?workspace=" + tenantID,
 			want: etcd.TaskListScope{Kind: etcd.TaskListScopeTenantWorkspace, ID: tenantID},
+		},
+		{
+			path: "/api/v1/tasks?project=" + projectID,
+			want: etcd.TaskListScope{Kind: etcd.TaskListScopeProject, ID: projectID},
 		},
 		{
 			path: "/api/v1/tasks?environment=" + environmentID,
@@ -350,20 +373,23 @@ func TestTaskListDispatchesEveryScopeAndRejectsScopeConflicts(t *testing.T) {
 			)
 		}
 	}
-	response := httptest.NewRecorder()
-	server.Mux.ServeHTTP(response, httptest.NewRequest(
-		http.MethodGet,
-		"/api/v1/tasks?workspace=platform&environment="+environmentID,
-		nil,
-	))
-	if response.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("conflicting scope status = %d, body = %s", response.Code, response.Body.String())
+	conflicts := []string{
+		"workspace=platform&environment=" + environmentID,
+		"workspace=platform&project=" + projectID,
+		"project=" + projectID + "&environment=" + environmentID,
 	}
-	var problem struct {
-		Code string `json:"code"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&problem); err != nil || problem.Code != "validation.failed" {
-		t.Fatalf("conflicting scope problem = %#v, %v", problem, err)
+	for _, query := range conflicts {
+		response := httptest.NewRecorder()
+		server.Mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/tasks?"+query, nil))
+		if response.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("conflicting scope %q status = %d, body = %s", query, response.Code, response.Body.String())
+		}
+		var problem struct {
+			Code string `json:"code"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&problem); err != nil || problem.Code != "validation.failed" {
+			t.Fatalf("conflicting scope %q problem = %#v, %v", query, problem, err)
+		}
 	}
 }
 

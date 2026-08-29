@@ -21,7 +21,7 @@ Console (`console/`), and the Go implementation scaffold.
   for it on any spec/desired-state/YAML work. The one law: specs are pure
   inputs of decisions — nothing derived, nothing non-reproducible.
 - **docs/architecture.md** — the implementation contract: Go layout,
-  extension model (adapters, core components), OpenAPI, frontend stack.
+  adapter and closed Component Capability boundaries, OpenAPI, frontend stack.
   Reach for it when planning implementation.
 - **docs/standards.md** — the enforceable Go rules (import matrix, one
   error type, the subprocess Runner, banned patterns, CI gate). Reach
@@ -53,6 +53,10 @@ API contract. UI questions are answered here; product questions in mvp.md.
   as listed in `docs/api-cli.md`.
 - Replace superseded contracts cleanly. Remove old nouns, routes, files,
   and adapters in the same change; do not add compatibility layers.
+- Registered Components compile only against the public Component SDK. They
+  consume generic typed Groundplane Capabilities, never `internal/**`, CLI,
+  repositories, etcd, Docker, filesystem, secret plaintext, or arbitrary
+  execution. The MVP has no runtime/custom plugin loading.
 - Slugs are renamable labels (scoped uniqueness); ids are the stable
   references. CLI takes slugs, `--id` opts into ids.
 - Never edit generated artifacts: `proto/` Go code and OpenAPI-derived

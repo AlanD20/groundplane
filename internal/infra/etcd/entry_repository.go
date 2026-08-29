@@ -11,6 +11,8 @@ import (
 
 const entryOwnerPrefix = "/v1/indexes/entries/by-owner/environment/"
 
+const blueprintEntryEnvironmentPrefix = "/v1/indexes/entries/blueprint-environment/"
+
 // EntryValueGeneration is the closed atomic value input for an Entry mutation.
 type EntryValueGeneration struct {
 	Plain  *PlainEntryValueGeneration
@@ -19,6 +21,65 @@ type EntryValueGeneration struct {
 
 type EntryRepository struct {
 	store hierarchyStore
+}
+
+// BindBlueprintEntryEnvironment installs a derived lookup route. The current
+// Environment projection remains the authority, so an index written before
+// head publication cannot make staged Entry state visible.
+func (repository *EntryRepository) BindBlueprintEntryEnvironment(
+	ctx context.Context,
+	environmentID string,
+	entryID string,
+) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+	if validateStableID(ids.KindEnvironment, environmentID) != nil || validateStableID(ids.KindEnvEntry, entryID) != nil {
+		return errs.New(errs.KindValidationFailed, "Blueprint Entry lookup identity is invalid")
+	}
+	key := blueprintEntryEnvironmentPrefix + entryID
+	result, err := repository.store.Transact(ctx, []Condition{{Key: key}}, []Mutation{{Type: MutationPut, Key: key, Value: []byte(environmentID)}})
+	if err != nil {
+		return err
+	}
+	if result.Succeeded {
+		return nil
+	}
+	existing, err := repository.store.Get(ctx, key)
+	if err != nil {
+		return err
+	}
+	if existing != nil && existing.Entry != nil && string(existing.Entry.Value) == environmentID {
+		return nil
+	}
+	return errs.New(errs.KindStateConflict, "Blueprint Entry lookup identity is already occupied")
+}
+
+func (repository *EntryRepository) ResolveBlueprintEntryEnvironment(
+	ctx context.Context,
+	entryID string,
+) (string, bool, error) {
+	if err := validateContext(ctx); err != nil {
+		return "", false, err
+	}
+	if validateStableID(ids.KindEnvEntry, entryID) != nil {
+		return "", false, errs.New(errs.KindValidationFailed, "Blueprint Entry lookup id is invalid")
+	}
+	result, err := repository.store.Get(ctx, blueprintEntryEnvironmentPrefix+entryID)
+	if err != nil {
+		return "", false, err
+	}
+	if result == nil {
+		return "", false, errs.New(errs.KindInternal, "Blueprint Entry lookup read is empty")
+	}
+	if result.Entry == nil {
+		return "", false, nil
+	}
+	environmentID := string(result.Entry.Value)
+	if validateStableID(ids.KindEnvironment, environmentID) != nil {
+		return "", false, errs.New(errs.KindInternal, "Blueprint Entry lookup is corrupt")
+	}
+	return environmentID, true, nil
 }
 
 func NewEntryRepository(store Store) (*EntryRepository, error) {

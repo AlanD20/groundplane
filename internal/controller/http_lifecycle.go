@@ -470,15 +470,41 @@ func (l *readyListener) Accept() (net.Conn, error) {
 	return l.Listener.Accept()
 }
 
-// Serve starts the HTTP server and blocks until ctx is cancelled. Request
-// contexts retain ctx values but are detached from its cancellation so the
-// graceful interval can finish ordinary work.
-func (s *Server) Serve(ctx context.Context, addr string) error {
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return errs.Wrap(errs.KindInternal, err)
+// Serve binds every configured address before accepting requests, then serves
+// all listeners until ctx is cancelled or any listener stops. Binding is
+// atomic: one failed address closes every listener opened by this call.
+func (s *Server) Serve(ctx context.Context, addresses []string) error {
+	listeners := make([]net.Listener, 0, len(addresses))
+	for _, address := range addresses {
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			for _, opened := range listeners {
+				_ = opened.Close()
+			}
+			return errs.Wrap(errs.KindInternal, err)
+		}
+		listeners = append(listeners, listener)
 	}
-	return s.serveListener(ctx, listener, productionHTTPPolicy())
+	if len(listeners) == 0 {
+		return errs.New(errs.KindValidationFailed, "controller HTTP listeners are required")
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make(chan error, len(listeners))
+	for _, listener := range listeners {
+		go func() { results <- s.serveListener(runCtx, listener, productionHTTPPolicy()) }()
+	}
+	errorsByListener := make([]error, 0, len(listeners))
+	for remaining := len(listeners); remaining > 0; remaining-- {
+		err := <-results
+		if remaining == len(listeners) {
+			cancel()
+		}
+		if err != nil {
+			errorsByListener = append(errorsByListener, err)
+		}
+	}
+	return errors.Join(errorsByListener...)
 }
 
 func (s *Server) serveListener(ctx context.Context, listener net.Listener, policy httpPolicy) error {

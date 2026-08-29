@@ -10,7 +10,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -37,11 +39,17 @@ type materializationComponentFileReader interface {
 	) ([]byte, error)
 }
 
+type materializationSecretValueReader interface {
+	GetSecret(context.Context, string) (etcd.Versioned[etcd.SecretRecord], error)
+	GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error)
+}
+
 // TaskMaterializationResolver resolves only the immutable Controller source
 // named by one durable Task reference and returns one clearing byte stream.
 type TaskMaterializationResolver struct {
 	blueprints materializationBlueprintReader
 	values     materializationEntryValueReader
+	secrets    materializationSecretValueReader
 	components materializationComponentFileReader
 	protector  *secretvalue.Protector
 }
@@ -49,14 +57,15 @@ type TaskMaterializationResolver struct {
 func NewTaskMaterializationResolver(
 	blueprints materializationBlueprintReader,
 	values materializationEntryValueReader,
+	secrets materializationSecretValueReader,
 	components materializationComponentFileReader,
 	protector *secretvalue.Protector,
 ) (*TaskMaterializationResolver, error) {
-	if blueprints == nil || values == nil || components == nil || protector == nil {
+	if blueprints == nil || values == nil || secrets == nil || components == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "materialization value resolver dependencies are required")
 	}
 	return &TaskMaterializationResolver{
-		blueprints: blueprints, values: values, components: components, protector: protector,
+		blueprints: blueprints, values: values, secrets: secrets, components: components, protector: protector,
 	}, nil
 }
 
@@ -67,7 +76,7 @@ func (resolver *TaskMaterializationResolver) ResolveTaskMaterializationSource(
 	environmentID string,
 	source etcd.TaskMaterializationSource,
 ) ([]byte, error) {
-	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil ||
+	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.secrets == nil ||
 		resolver.components == nil || resolver.protector == nil {
 		return nil, errs.New(errs.KindInternal, "materialization value resolver is not configured")
 	}
@@ -89,7 +98,7 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.components == nil ||
+	if resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.secrets == nil || resolver.components == nil ||
 		resolver.protector == nil {
 		return nil, errs.New(errs.KindInternal, "materialization value resolver is not configured")
 	}
@@ -292,7 +301,13 @@ func (resolver *TaskMaterializationResolver) resolveGeneratedEnvironment(
 			clear(output)
 			return nil, corruptMaterializationSource()
 		}
-		value, err := resolver.resolveEntryValue(ctx, environmentID, entry.Value)
+		var value []byte
+		var err error
+		if entry.Secret != nil {
+			value, err = resolver.resolveSecretValue(ctx, *entry.Secret)
+		} else {
+			value, err = resolver.resolveEntryValue(ctx, environmentID, entry.Value)
+		}
 		if err != nil {
 			clear(value)
 			clear(output)
@@ -315,6 +330,80 @@ func (resolver *TaskMaterializationResolver) resolveGeneratedEnvironment(
 		previousName = entry.Name
 	}
 	return output, nil
+}
+
+// PinSecretValue verifies that one reusable Secret may be consumed by the
+// Environment's Project and returns immutable metadata for a durable Task.
+func (resolver *TaskMaterializationResolver) PinSecretValue(
+	ctx context.Context,
+	projectID string,
+	secretID string,
+) (etcd.TaskSecretValueReference, error) {
+	if ctx == nil || resolver == nil || resolver.secrets == nil || ids.Validate(ids.KindProject, projectID) != nil ||
+		ids.Validate(ids.KindSecret, secretID) != nil {
+		return etcd.TaskSecretValueReference{}, errs.New(errs.KindValidationFailed, "Component Secret reference is invalid")
+	}
+	current, err := resolver.secrets.GetSecret(ctx, secretID)
+	if err != nil {
+		return etcd.TaskSecretValueReference{}, err
+	}
+	secret := current.Record.Secret
+	if current.Revision <= 0 || secret.ID != secretID || secret.Kind != core.SecretKindEnvVar ||
+		secret.Scope == core.SecretScopeProject && secret.ProjectID != projectID ||
+		secret.Scope != core.SecretScopeProject && secret.Scope != core.SecretScopePlatform {
+		return etcd.TaskSecretValueReference{}, errs.New(errs.KindValidationFailed, "Component Secret is unavailable in this Project")
+	}
+	value, err := resolver.secrets.GetSecretValue(ctx, current)
+	if err != nil {
+		return etcd.TaskSecretValueReference{}, err
+	}
+	defer clear(value.Ciphertext)
+	if value.SecretID != secretID || len(value.Ciphertext) == 0 || len(value.CiphertextSHA256) != sha256.Size*2 {
+		return etcd.TaskSecretValueReference{}, corruptMaterializationSource()
+	}
+	return etcd.TaskSecretValueReference{
+		SecretID: secretID, Revision: current.Revision, CiphertextSHA256: value.CiphertextSHA256,
+	}, nil
+}
+
+func (resolver *TaskMaterializationResolver) resolveSecretValue(
+	ctx context.Context,
+	reference etcd.TaskSecretValueReference,
+) ([]byte, error) {
+	current, err := resolver.secrets.GetSecret(ctx, reference.SecretID)
+	if err != nil {
+		return nil, err
+	}
+	if current.Revision != reference.Revision || current.Record.Secret.ID != reference.SecretID {
+		return nil, corruptMaterializationSource()
+	}
+	record, err := resolver.secrets.GetSecretValue(ctx, current)
+	if err != nil {
+		return nil, err
+	}
+	if record.SecretID != reference.SecretID || record.CiphertextSHA256 != reference.CiphertextSHA256 {
+		clear(record.Ciphertext)
+		return nil, corruptMaterializationSource()
+	}
+	metadata := secretvalue.Metadata{
+		Version: secretvalue.EnvelopeVersion(record.EnvelopeVersion), Cipher: secretvalue.CipherSuite(record.Cipher),
+		Digest: secretvalue.Digest{Algorithm: secretvalue.DigestAlgorithm(record.DigestAlgorithm), Value: record.CiphertextSHA256},
+	}
+	envelope, err := secretvalue.Restore(metadata, record.Ciphertext)
+	clear(record.Ciphertext)
+	if err != nil {
+		return nil, err
+	}
+	var plaintext []byte
+	err = resolver.protector.Open(ctx, envelope, func(value []byte) error {
+		plaintext = append([]byte(nil), value...)
+		return nil
+	})
+	if err != nil {
+		clear(plaintext)
+		return nil, err
+	}
+	return plaintext, nil
 }
 
 func appendComposeDotEnvBytes(output []byte, value []byte) []byte {

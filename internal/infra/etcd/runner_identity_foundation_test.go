@@ -21,6 +21,7 @@ func TestRunnerDesiredCanonicalization(t *testing.T) {
 	)
 	desired.GitHubURL = "https://github.com/AlanD20/Ground_Plane/"
 	desired.Labels = []string{"Zeta", "alpha.two"}
+	desired.ImageRef = "localhost:5000/groundplane-runner@sha256:" + strings.Repeat("a", 64)
 	normalized, err := NormalizeRunnerDesired(desired)
 	if err != nil {
 		t.Fatal(err)

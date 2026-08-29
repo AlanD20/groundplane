@@ -3,6 +3,7 @@ package apiclient
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
@@ -50,25 +51,11 @@ func (c *Client) ListComponents(
 	); err != nil {
 		return apiTypes.Page[apiTypes.Component]{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.PageComponent{}
-		if err := decodeSingleJSON(
-			http.MethodGet, "/api/v1/components", bytes.NewReader(response.Body), parsed,
-		); err != nil {
-			return apiTypes.Page[apiTypes.Component]{}, err
-		}
-	}
-	items := []generated.Component(nil)
-	if parsed.Items != nil {
-		items = *parsed.Items
-	}
-	page := apiTypes.Page[apiTypes.Component]{Items: make([]apiTypes.Component, len(items))}
-	if parsed.NextCursor != nil {
-		page.NextCursor = *parsed.NextCursor
-	}
-	for index, component := range items {
-		page.Items[index] = componentFromGenerated(component)
+	var page apiTypes.Page[apiTypes.Component]
+	if err := decodeSingleJSON(
+		http.MethodGet, "/api/v1/components", bytes.NewReader(response.Body), &page,
+	); err != nil {
+		return apiTypes.Page[apiTypes.Component]{}, err
 	}
 	return page, nil
 }
@@ -88,14 +75,11 @@ func (c *Client) ShowComponent(ctx context.Context, id string) (apiTypes.Compone
 	); err != nil {
 		return apiTypes.Component{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.Component{}
-		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.Component{}, err
-		}
+	var component apiTypes.Component
+	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &component); err != nil {
+		return apiTypes.Component{}, err
 	}
-	return componentFromGenerated(*parsed), nil
+	return component, nil
 }
 
 func (c *Client) ShowComponentConfig(ctx context.Context, id string) (apiTypes.ComponentConfig, error) {
@@ -113,32 +97,33 @@ func (c *Client) ShowComponentConfig(ctx context.Context, id string) (apiTypes.C
 	); err != nil {
 		return apiTypes.ComponentConfig{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.ComponentConfig{}
-		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.ComponentConfig{}, err
-		}
+	var config apiTypes.ComponentConfig
+	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &config); err != nil {
+		return apiTypes.ComponentConfig{}, err
 	}
-	return componentConfigFromGenerated(*parsed), nil
+	return config, nil
 }
 
 func (c *Client) SetComponentConfig(
 	ctx context.Context,
 	id string,
-	config apiTypes.ComponentConfig,
+	config apiTypes.ComponentConfigMutationInput,
 ) (apiTypes.ComponentConfigMutationResult, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.ComponentConfigMutationResult{}, err
 	}
 	path := "/api/v1/components/" + id + "/config"
-	configMap := copyComponentConfig(config.Config)
-	response, err := client.ComponentConfigSetWithResponse(
+	body, err := json.Marshal(apiTypes.ComponentConfigMutationRequest{Config: config})
+	if err != nil {
+		return apiTypes.ComponentConfigMutationResult{}, err
+	}
+	response, err := client.ComponentConfigSetWithBodyWithResponse(
 		ctx,
 		id,
 		&generated.ComponentConfigSetParams{IdempotencyKey: ids.NewULID()},
-		generated.ComponentConfigSetJSONRequestBody{Config: &configMap},
+		"application/json",
+		bytes.NewReader(body),
 	)
 	if err != nil {
 		return apiTypes.ComponentConfigMutationResult{}, generatedCallError(ctx, http.MethodPut, path, err)
@@ -148,17 +133,11 @@ func (c *Client) SetComponentConfig(
 	); err != nil {
 		return apiTypes.ComponentConfigMutationResult{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.ComponentConfigMutationResult{}
-		if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.ComponentConfigMutationResult{}, err
-		}
+	var result apiTypes.ComponentConfigMutationResult
+	if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), &result); err != nil {
+		return apiTypes.ComponentConfigMutationResult{}, err
 	}
-	return apiTypes.ComponentConfigMutationResult{
-		Resource:        componentConfigFromGenerated(parsed.Resource),
-		ReconcileTaskID: parsed.ReconcileTaskId,
-	}, nil
+	return result, nil
 }
 
 func (c *Client) EnableComponent(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
@@ -219,44 +198,4 @@ func (c *Client) UpdateComponent(ctx context.Context, id string) (apiTypes.TaskA
 		return apiTypes.TaskAccepted{}, err
 	}
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
-}
-
-func componentFromGenerated(component generated.Component) apiTypes.Component {
-	ownerID := ""
-	if component.OwnerId != nil {
-		ownerID = *component.OwnerId
-	}
-	pinnedIPv4 := ""
-	if component.PinnedIpv4 != nil {
-		pinnedIPv4 = *component.PinnedIpv4
-	}
-	services := []string(nil)
-	if component.GeneratedServices != nil {
-		services = append(services, (*component.GeneratedServices)...)
-	}
-	var config map[string]any
-	if component.Config != nil {
-		config = copyComponentConfig(*component.Config)
-	}
-	return apiTypes.Component{
-		ID: component.Id, Owner: string(component.Owner), OwnerID: ownerID,
-		EnvironmentID: component.EnvironmentId, Kind: component.Kind, Enabled: component.Enabled,
-		Config: config, GeneratedServices: services, PinnedIPv4: pinnedIPv4,
-		Healthy: component.Healthy, Status: string(component.Status),
-	}
-}
-
-func componentConfigFromGenerated(config generated.ComponentConfig) apiTypes.ComponentConfig {
-	if config.Config == nil {
-		return apiTypes.ComponentConfig{}
-	}
-	return apiTypes.ComponentConfig{Config: copyComponentConfig(*config.Config)}
-}
-
-func copyComponentConfig(config map[string]any) map[string]any {
-	result := make(map[string]any, len(config))
-	for key, value := range config {
-		result[key] = value
-	}
-	return result
 }

@@ -12,7 +12,7 @@ import (
 func TestValidateScriptCreationInputUsesStableOwnersAndClosedHook(t *testing.T) {
 	// Rationale: Controller input must carry stable ownership while leaving the Service label derived.
 	input := apiTypes.ScriptCreate{
-		EnvironmentID: ids.New(ids.KindEnvironment), Name: "migrate", ServiceID: ids.New(ids.KindService),
+		EnvironmentID: ids.New(ids.KindEnvironment), Slug: "migrate", ServiceID: ids.New(ids.KindService),
 		Body: "php artisan migrate --force", When: "pre-deploy",
 	}
 	if err := validateScriptCreationInput(input); err != nil {

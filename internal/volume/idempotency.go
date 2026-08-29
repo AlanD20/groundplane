@@ -85,6 +85,26 @@ func (service *mutationIdempotency) ResolveExisting(
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
+func (service *mutationIdempotency) ResolveReplayLocator(
+	ctx context.Context,
+	target etcd.IdempotencyReplayTarget,
+	method string,
+	route string,
+	key string,
+) (etcd.IdempotencyLocator, bool, error) {
+	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
+}
+
+func (service *mutationIdempotency) ResolveOperationRootExisting(
+	ctx context.Context,
+	locator etcd.IdempotencyLocator,
+	evidence mutationEvidence,
+) (idempotentintent.Resolution, bool, error) {
+	return service.coordinator.ResolveOperationRootExisting(
+		ctx, service.repository, locator, evidence.candidate,
+	)
+}
+
 func (service *mutationIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence mutationEvidence,

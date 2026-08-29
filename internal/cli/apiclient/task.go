@@ -22,12 +22,13 @@ import (
 const taskEventReconnectDelay = time.Second
 
 // TaskListOptions is the one query contract shared by Task and Activity.
-// Environment and Workspace are mutually exclusive stable API identifiers;
-// an empty pair selects the global journal.
+// Environment, Project, and Workspace are mutually exclusive stable API
+// identifiers; an empty set selects the global journal.
 type TaskListOptions struct {
 	Limit       int
 	Cursor      string
 	Environment string
+	Project     string
 	Workspace   string
 }
 
@@ -128,7 +129,8 @@ func (c *Client) ListActivity(
 		return apiTypes.Page[apiTypes.Task]{}, err
 	}
 	params := &generated.ActivityListParams{
-		Limit: base.Limit, Cursor: base.Cursor, Environment: base.Environment, Workspace: base.Workspace,
+		Limit: base.Limit, Cursor: base.Cursor, Environment: base.Environment,
+		Project: base.Project, Workspace: base.Workspace,
 	}
 	response, err := client.ActivityListWithResponse(ctx, params)
 	if err != nil {
@@ -159,10 +161,16 @@ func (c *Client) ListActivity(
 }
 
 func taskListParams(options TaskListOptions) (*generated.TaskListParams, error) {
-	if options.Environment != "" && options.Workspace != "" {
+	scopeCount := 0
+	for _, value := range []string{options.Environment, options.Project, options.Workspace} {
+		if value != "" {
+			scopeCount++
+		}
+	}
+	if scopeCount > 1 {
 		return nil, errs.New(
 			errs.KindValidationFailed,
-			"task journal accepts only one of environment or workspace",
+			"task journal accepts only one of environment, project, or workspace",
 		)
 	}
 	params := &generated.TaskListParams{}
@@ -175,6 +183,9 @@ func taskListParams(options TaskListOptions) (*generated.TaskListParams, error) 
 	}
 	if options.Environment != "" {
 		params.Environment = &options.Environment
+	}
+	if options.Project != "" {
+		params.Project = &options.Project
 	}
 	if options.Workspace != "" {
 		params.Workspace = &options.Workspace

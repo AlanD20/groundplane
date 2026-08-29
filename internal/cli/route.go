@@ -46,7 +46,7 @@ func newRouteCmd() *cobra.Command {
 		},
 	})
 
-	var host, path, service, exposure string
+	var hostname, path, service, exposure string
 	var targetPort uint16
 	add := &cobra.Command{
 		Use:   "add",
@@ -63,7 +63,7 @@ func newRouteCmd() *cobra.Command {
 				return err
 			}
 			route, err := app.Client.CreateRoute(cmd.Context(), apiTypes.RouteCreate{
-				EnvironmentID: environmentID, Host: host, Path: path,
+				EnvironmentID: environmentID, Host: hostname, Path: path,
 				TargetServiceID: serviceID, TargetPort: targetPort, Exposure: exposure,
 			})
 			if err != nil {
@@ -73,7 +73,7 @@ func newRouteCmd() *cobra.Command {
 			return app.Out.RenderOne(fields, values, route)
 		},
 	}
-	add.Flags().StringVar(&host, "host", "", "hostname")
+	add.Flags().StringVar(&hostname, "hostname", "", "route hostname")
 	add.Flags().StringVar(&path, "path", "/", "absolute path with optional terminal *")
 	add.Flags().StringVar(&service, "service", "", "target service name")
 	add.Flags().Uint16Var(&targetPort, "target-port", 0, "required internal target port")

@@ -121,6 +121,22 @@ func TestWorkerPoolReturnsEnvironmentDirectoryResultForRemoval(t *testing.T) {
 	<-done
 }
 
+func TestEnvironmentCreateWithWorkloadStepsUsesComposeResult(t *testing.T) {
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
+		Steps: []*agentpb.ExecutionStep{{
+			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
+				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{},
+			},
+		}, {
+			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{}},
+		}},
+	}
+	if usesEnvironmentDirectory(plan) {
+		t.Fatal("workload plan was classified as an environment-directory result")
+	}
+}
+
 func TestSendTaskAckPreservesEnvironmentDirectoryResultVariant(t *testing.T) {
 	stream := newFakeStream()
 	client := &Client{}

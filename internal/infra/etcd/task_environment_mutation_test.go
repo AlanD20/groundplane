@@ -19,14 +19,14 @@ func TestOrdinaryTaskEnvironmentMutationRejectsCrossScopeIdentity(t *testing.T) 
 	task.Params = map[string]string{
 		TaskMutationEnvironmentParam: ids.NewAt(ids.KindEnvironment, at, 2),
 	}
-	if _, _, err := ordinaryTaskEnvironmentMutationTarget(task, true, false, false, false); !isKind(
+	if _, _, err := ordinaryTaskEnvironmentMutationTarget(task, false, true, false, false, false); !isKind(
 		err,
 		errs.KindInternal,
 	) {
 		t.Fatalf("ordinaryTaskEnvironmentMutationTarget(cross scope) error = %v", err)
 	}
 	task.Params[TaskEntryEnvironmentParam] = task.Owner.EnvironmentID
-	if _, _, err := ordinaryTaskEnvironmentMutationTarget(task, true, true, false, false); !isKind(
+	if _, _, err := ordinaryTaskEnvironmentMutationTarget(task, false, true, true, false, false); !isKind(
 		err,
 		errs.KindInternal,
 	) {
@@ -55,6 +55,7 @@ func TestOrdinaryTaskEnvironmentMutationUsesFixedRevisionAndFailsClosed(t *testi
 		selectedRevision,
 		[]Condition{{Key: sentinel}},
 		[]Mutation{{Type: MutationPut, Key: sentinel, Value: []byte("written")}},
+		false,
 		false,
 		false,
 		true,
@@ -109,7 +110,7 @@ func TestOrdinaryTaskEnvironmentMutationRejectsHeldLockAndOversizedBatch(t *test
 		environmentMutationFenceTestOwner(task.CreatedAt, 500),
 	)
 	if _, err := repository.bindOrdinaryTaskEnvironmentMutation(
-		context.Background(), task, store.revision, nil, nil, false, false, false, true,
+		context.Background(), task, store.revision, nil, nil, false, false, false, false, true,
 	); !isKind(err, errs.KindResourceInUse) {
 		t.Fatalf("bindOrdinaryTaskEnvironmentMutation(held lock) error = %v", err)
 	}
@@ -136,6 +137,7 @@ func TestOrdinaryTaskEnvironmentMutationRejectsHeldLockAndOversizedBatch(t *test
 		result.Revision,
 		conditions,
 		nil,
+		false,
 		false,
 		false,
 		false,

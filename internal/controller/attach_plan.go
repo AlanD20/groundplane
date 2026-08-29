@@ -39,6 +39,25 @@ type AttachPlanIdentityConsumer func(AttachPlanIdentity) error
 type attachPlanRecordReader interface {
 	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
 	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
+	GetBlueprintAttachTaskIntent(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.BlueprintAttachTaskIntent], bool, error)
+}
+
+// BuildAttachProvisionSteps compiles one already-resolved credential owner's
+// typed adapter procedure. Blueprint and direct Attach planning share this
+// exact builder so their Agent payloads cannot drift.
+func BuildAttachProvisionSteps(
+	task etcd.TaskRecord,
+	record etcd.AttachRecord,
+	adapterKey string,
+	identity AttachPlanIdentity,
+) ([]*agentpb.ExecutionStep, error) {
+	if task.Type != etcd.TaskAttach {
+		return nil, errs.New(errs.KindInternal, "Attach provision procedure requires an Attach Task shape")
+	}
+	return attachProcedureSteps(task, record, adapterKey, identity)
 }
 
 type attachPlanServiceReader interface {
@@ -60,8 +79,9 @@ func NewTaskPlanResolverWithAttachments(
 	attaches attachPlanRecordReader,
 	services attachPlanServiceReader,
 	identities attachPlanIdentityResolver,
+	componentCatalog []EnvironmentComponentRegistration,
 ) (*TaskPlanResolver, error) {
-	resolver, err := NewTaskPlanResolverWithBlueprints(volumeRoot, blueprints)
+	resolver, err := NewTaskPlanResolverWithBlueprints(volumeRoot, blueprints, componentCatalog)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +119,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		renderInput.Record.EnvironmentID != current.Record.EnvironmentID ||
 		renderInput.Record.RenderGeneration != uint64(task.RenderGeneration) ||
 		renderInput.Record.BackingProjectID != current.Record.BackingProjectID ||
-		!slices.Equal(renderInput.Record.ConsumerServiceIDs, current.Record.ServiceIDs) ||
+		!slices.Equal(renderInput.Record.ConsumerServiceIDs, []string{current.Record.ServiceID}) ||
 		!slices.Equal(renderInput.Record.GrantAttachIDs, current.Record.GrantAttachIDs) ||
 		task.Params[etcd.TaskMutationEnvironmentParam] != current.Record.EnvironmentID {
 		return nil, errs.New(errs.KindInternal, "durable Attach Task render input does not match its Task")
@@ -166,7 +186,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	if err != nil {
 		return nil, err
 	}
-	if adapter.Manual() {
+	if adapter.Manual() || !current.Record.OwnsCredential() {
 		if len(task.Steps) != 1 {
 			return nil, errs.New(errs.KindInternal, "manual Attach Task step count is invalid")
 		}
@@ -175,14 +195,14 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
 			Steps: []*agentpb.ExecutionStep{
-				attachComposeStep(task, 0, renderInput.Record.ArtifactID, current.Record.ServiceIDs),
+				attachComposeStep(task, 0, artifact, []string{current.Record.ServiceID}),
 			},
 		})
 	}
 	var plan *agentpb.ExecutionPlan
 	err = resolver.attachIdentities.ResolveTaskIdentity(ctx, current, task.ID, func(identity AttachPlanIdentity) error {
 		steps, buildErr := attachNetworkProcedureSteps(
-			task, current.Record, renderInput.Record.AdapterKey, renderInput.Record.ArtifactID, identity,
+			task, current.Record, renderInput.Record.AdapterKey, artifact, identity,
 		)
 		if buildErr != nil {
 			return buildErr
@@ -205,7 +225,7 @@ func attachNetworkProcedureSteps(
 	task etcd.TaskRecord,
 	record etcd.AttachRecord,
 	adapterKey string,
-	artifactID string,
+	artifact *agentpb.ComposeArtifact,
 	identity AttachPlanIdentity,
 ) ([]*agentpb.ExecutionStep, error) {
 	if len(task.Steps) != len(identity.Grants)+2 {
@@ -218,7 +238,7 @@ func attachNetworkProcedureSteps(
 		if err != nil {
 			return nil, err
 		}
-		return append(procedures, attachComposeStep(task, len(task.Steps)-1, artifactID, record.ServiceIDs)), nil
+		return append(procedures, attachComposeStep(task, len(task.Steps)-1, artifact, []string{record.ServiceID})), nil
 	}
 	grantCount := len(identity.Grants)
 	procedureTask.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[:grantCount]...)
@@ -228,21 +248,38 @@ func attachNetworkProcedureSteps(
 		return nil, err
 	}
 	steps := append([]*agentpb.ExecutionStep(nil), procedures[:grantCount]...)
-	steps = append(steps, attachComposeStep(task, grantCount, artifactID, record.ServiceIDs))
+	steps = append(steps, attachComposeStep(task, grantCount, artifact, []string{record.ServiceID}))
 	return append(steps, procedures[grantCount]), nil
 }
 
 func attachComposeStep(
 	task etcd.TaskRecord,
 	stepIndex int,
-	artifactID string,
+	artifact *agentpb.ComposeArtifact,
 	serviceIDs []string,
 ) *agentpb.ExecutionStep {
+	active := make(map[string]struct{}, len(artifact.Services))
+	for _, service := range artifact.Services {
+		if service.ExpectedReplicas != 0 {
+			active[service.ServiceId] = struct{}{}
+		}
+	}
+	allActive := true
+	for _, serviceID := range serviceIDs {
+		if _, exists := active[serviceID]; !exists {
+			allActive = false
+			break
+		}
+	}
+	apply := &agentpb.ComposeApply{ArtifactId: artifact.ArtifactId}
+	if allActive {
+		apply.ServiceIds = append([]string(nil), serviceIDs...)
+	} else {
+		apply.FullReconcile = true
+	}
 	return &agentpb.ExecutionStep{
 		StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-			ArtifactId: artifactID, ServiceIds: append([]string(nil), serviceIDs...),
-		}},
+		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: apply},
 	}
 }
 

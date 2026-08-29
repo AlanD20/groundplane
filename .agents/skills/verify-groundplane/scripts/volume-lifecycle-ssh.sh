@@ -257,9 +257,18 @@ fi
 		systemctl status --no-pager "$remote_service" >"$evidence_dir/service-status.txt" 2>&1
 )
 
-GOCACHE="$runtime_dir/go-cache" GOTMPDIR="$runtime_dir/go-tmp" \
-	timeout 300 go build -o "$runtime_dir/groundplane" ./cmd/groundplane \
-	2>&1 | head -c 2097152 >"$evidence_dir/build-cli.txt"
+if [[ -n "${GROUNDPLANE_CLI_PATH:-}" ]]; then
+	[[ -f "$GROUNDPLANE_CLI_PATH" && ! -L "$GROUNDPLANE_CLI_PATH" && -x "$GROUNDPLANE_CLI_PATH" ]] || {
+		printf 'GROUNDPLANE_CLI_PATH must be a non-symlink executable regular file\n' >&2
+		exit 2
+	}
+	cp -- "$GROUNDPLANE_CLI_PATH" "$runtime_dir/groundplane"
+	printf 'prebuilt_cli=%s\n' "$GROUNDPLANE_CLI_PATH" >"$evidence_dir/build-cli.txt"
+else
+	GOCACHE="$runtime_dir/go-cache" GOTMPDIR="$runtime_dir/go-tmp" \
+		timeout 300 go build -o "$runtime_dir/groundplane" ./cmd/groundplane \
+		2>&1 | head -c 2097152 >"$evidence_dir/build-cli.txt"
+fi
 sha256sum "$runtime_dir/groundplane" >"$evidence_dir/cli.sha256"
 
 stop_file="$runtime_dir/tunnel.stop"
@@ -435,13 +444,8 @@ volume_body="$(jq -cn --arg env "$GROUNDPLANE_ENVIRONMENT_ID" --arg slug "$GROUN
 	--arg key "$volume_key" '{environment_id:$env,slug:$slug,key:$key}')"
 add_key="volume-add-proof-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 api_request POST /api/v1/volumes 201 "$evidence_dir/api-volume-add.json" "$add_key" "$volume_body"
-api_request POST /api/v1/volumes 201 "$evidence_dir/api-volume-add-replay.json" "$add_key" "$volume_body"
-canonical_json "$evidence_dir/api-volume-add.json" "$runtime_dir/api-volume-add.canonical.json"
-canonical_json "$evidence_dir/api-volume-add-replay.json" "$runtime_dir/api-volume-add-replay.canonical.json"
-cmp -s "$runtime_dir/api-volume-add.canonical.json" "$runtime_dir/api-volume-add-replay.canonical.json" || {
-	printf 'idempotent Volume add replay changed its response\n' >&2
-	exit 1
-}
+api_request POST /api/v1/volumes 409 "$evidence_dir/api-volume-add-in-progress.json" "$add_key" "$volume_body"
+api_assert "$evidence_dir/api-volume-add-in-progress.json" '.code == "idempotency.in_progress"'
 created_volume_id="$(jq -r '.volume.id // empty' "$evidence_dir/api-volume-add.json")"
 create_task_id="$(jq -r '.task_id // empty' "$evidence_dir/api-volume-add.json")"
 valid_id "$created_volume_id" || { printf 'API add returned an invalid Volume ID\n' >&2; exit 1; }
@@ -456,6 +460,13 @@ api_assert "$evidence_dir/api-task-create-completed.json" --arg id "$created_vol
 cli_json task-create task show "$create_task_id"
 api_assert "$evidence_dir/cli-task-create.json" --arg id "$created_volume_id" \
 	'.target == $id and .status == "completed"'
+api_request POST /api/v1/volumes 201 "$evidence_dir/api-volume-add-replay.json" "$add_key" "$volume_body"
+canonical_json "$evidence_dir/api-volume-add.json" "$runtime_dir/api-volume-add.canonical.json"
+canonical_json "$evidence_dir/api-volume-add-replay.json" "$runtime_dir/api-volume-add-replay.canonical.json"
+cmp -s "$runtime_dir/api-volume-add.canonical.json" "$runtime_dir/api-volume-add-replay.canonical.json" || {
+	printf 'terminal idempotent Volume add replay changed its response\n' >&2
+	exit 1
+}
 
 jq '.volume' "$evidence_dir/api-volume-add.json" >"$runtime_dir/volume-before.json"
 volume_path="$(jq -r '.path // empty' "$runtime_dir/volume-before.json")"

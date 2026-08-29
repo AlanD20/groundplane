@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"slices"
 	"sync"
 	"testing"
@@ -14,9 +15,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
-var registerAttachPlanPostgres sync.Once
+var (
+	registerAttachPlanPostgres sync.Once
+	registerAttachPlanManual   sync.Once
+)
 
 // Rationale: a durable Attach task must rebuild its pinned external-network artifact and typed identity
 // procedure without persisting the plaintext password or consulting mutable environment topology.
@@ -34,7 +39,7 @@ func TestTaskPlanResolverBuildsAttachNetworkAndAdapterProcedure(t *testing.T) {
 		string(plan.Steps[0].GetAdapterProcedure().Password) != "URL_safe-1" ||
 		plan.Steps[1].GetAdapterProcedure().GrantOn != "other_4a1b2c" ||
 		plan.Steps[2].GetComposeApply() == nil ||
-		!slices.Equal(plan.Steps[2].GetComposeApply().ServiceIds, fixture.record.ServiceIDs) ||
+		!slices.Equal(plan.Steps[2].GetComposeApply().ServiceIds, []string{fixture.record.ServiceID}) ||
 		!bytes.Contains(plan.Artifacts[0].CanonicalYaml, []byte("gp_net_"+fixture.networkID)) ||
 		!bytes.Contains(plan.Artifacts[0].CanonicalYaml, []byte("external: true")) {
 		t.Fatalf("ResolveExecutionPlan() = %#v", plan)
@@ -44,7 +49,7 @@ func TestTaskPlanResolverBuildsAttachNetworkAndAdapterProcedure(t *testing.T) {
 // Rationale: the locked manual adapter performs only the same pinned external-network reconciliation and
 // must never resolve credentials or manufacture an empty adapter procedure.
 func TestTaskPlanResolverBuildsManualNetworkOnlyAttach(t *testing.T) {
-	manual.Register()
+	registerAttachPlanManual.Do(manual.Register)
 	fixture := newAttachPlanFixture(t, "manual", false)
 	plan, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task)
 	if err != nil {
@@ -53,6 +58,38 @@ func TestTaskPlanResolverBuildsManualNetworkOnlyAttach(t *testing.T) {
 	if len(plan.Artifacts) != 1 || len(plan.Steps) != 1 || plan.Steps[0].GetComposeApply() == nil ||
 		fixture.state.identityCalls != 0 {
 		t.Fatalf("manual ResolveExecutionPlan() = %#v, identity calls = %d", plan, fixture.state.identityCalls)
+	}
+}
+
+func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *testing.T) {
+	registerAttachPlanManual.Do(manual.Register)
+	fixture := newAttachPlanFixture(t, "manual", false)
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(fixture.reader.projection.ComposeArtifact, artifact); err != nil {
+		t.Fatalf("unmarshal normalized Compose artifact: %v", err)
+	}
+	artifact.CanonicalYaml = bytes.Replace(
+		artifact.CanonicalYaml,
+		[]byte("    image: example/api:latest"),
+		[]byte("    image: example/api:latest\n    profiles: [configured]"),
+		1,
+	)
+	digest := sha256.Sum256(artifact.CanonicalYaml)
+	artifact.YamlSha256 = digest[:]
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal inactive normalized Compose artifact: %v", err)
+	}
+	fixture.reader.projection.ComposeArtifact = encoded
+	plan, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan() error = %v", err)
+	}
+	apply := plan.Steps[0].GetComposeApply()
+	if apply == nil || !apply.FullReconcile || len(apply.ServiceIds) != 0 || len(plan.Artifacts[0].Services) != 1 ||
+		plan.Artifacts[0].Services[0].ExpectedReplicas != 0 ||
+		!bytes.Contains(plan.Artifacts[0].CanonicalYaml, []byte("external: true")) {
+		t.Fatalf("inactive Attach plan = %#v", plan)
 	}
 }
 
@@ -82,6 +119,7 @@ func TestTaskPlanResolverOrdersDetachNetworkRemoval(t *testing.T) {
 type attachPlanFixture struct {
 	resolver  *TaskPlanResolver
 	state     *attachPlanTestState
+	reader    *blueprintPlanReader
 	task      etcd.TaskRecord
 	record    etcd.AttachRecord
 	networkID string
@@ -109,7 +147,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	}
 	record, err := etcd.NewPendingAttachRecord(
 		attachID, reader.environment.ID, "api-db", ids.NewAt(ids.KindProject, now, 7),
-		backingEnvironmentID, backingServiceID, networkID, []string{consumerServiceID}, grantIDs, factSets, taskID, now,
+		backingEnvironmentID, backingServiceID, networkID, consumerServiceID, attachID, grantIDs, factSets, taskID, now,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
@@ -155,7 +193,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		NetworkJoins: []etcd.AttachTaskNetworkJoin{
 			{NetworkID: networkID, ServiceIDs: []string{consumerServiceID}},
 		},
-		ConsumerServiceIDs: append([]string(nil), record.ServiceIDs...),
+		ConsumerServiceIDs: []string{record.ServiceID},
 		GrantAttachIDs:     append([]string(nil), record.GrantAttachIDs...),
 	}
 	state := &attachPlanTestState{
@@ -164,6 +202,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	}
 	resolver, err := NewTaskPlanResolverWithAttachments(
 		"/var/lib/groundplane/vol", reader, state, state, state,
+	nil,
 	)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithAttachments() error = %v", err)
@@ -182,15 +221,28 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		Params:         map[string]string{etcd.TaskMutationEnvironmentParam: record.EnvironmentID},
 		TimeoutSeconds: 60, Steps: steps,
 	}
-	return attachPlanFixture{resolver: resolver, state: state, task: task, record: record, networkID: networkID}
+	return attachPlanFixture{
+		resolver: resolver, state: state, reader: reader, task: task, record: record, networkID: networkID,
+	}
 }
 
 type attachPlanTestState struct {
-	attaches      map[string]etcd.Versioned[etcd.AttachRecord]
-	service       etcd.Versioned[etcd.ServiceRecord]
-	identity      AttachPlanIdentity
-	renderInput   etcd.AttachTaskRenderInput
-	identityCalls int
+	attaches        map[string]etcd.Versioned[etcd.AttachRecord]
+	service         etcd.Versioned[etcd.ServiceRecord]
+	identity        AttachPlanIdentity
+	renderInput     etcd.AttachTaskRenderInput
+	identityCalls   int
+	blueprintIntent *etcd.BlueprintAttachTaskIntent
+}
+
+func (state *attachPlanTestState) GetBlueprintAttachTaskIntent(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.BlueprintAttachTaskIntent], bool, error) {
+	if state.blueprintIntent != nil {
+		return etcd.Versioned[etcd.BlueprintAttachTaskIntent]{Record: *state.blueprintIntent, Revision: 1}, true, nil
+	}
+	return etcd.Versioned[etcd.BlueprintAttachTaskIntent]{}, false, nil
 }
 
 func (state *attachPlanTestState) GetAttach(

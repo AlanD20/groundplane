@@ -69,7 +69,7 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	for _, key := range []string{
 		attachOwnerKey(record.EnvironmentID, record.ID),
 		attachNameKey(record.EnvironmentID, record.Name),
-		attachServiceKey(record.ServiceIDs[0], record.ID),
+		attachServiceKey(record.ServiceID, record.ID),
 		attachBackingServiceKey(record.BackingServiceID, record.ID),
 		attachBackingProjectKey(record.BackingProjectID, record.ID),
 	} {
@@ -178,8 +178,10 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 func TestAttachRepositoryMaximumCombinationFitsTransactionBudget(t *testing.T) {
 	t.Parallel()
 	record := AttachRecord{
-		ServiceIDs:     make([]string, 1),
-		GrantAttachIDs: make([]string, 8),
+		ID:                 ids.NewAt(ids.KindAttach, testAttachTime, 902),
+		ServiceID:          ids.NewAt(ids.KindService, testAttachTime, 901),
+		CredentialAttachID: ids.NewAt(ids.KindAttach, testAttachTime, 902),
+		GrantAttachIDs:     make([]string, 8),
 	}
 	if got := attachCreateWithTaskOperationCount(record, true); got > maximumTransactionOperations {
 		t.Fatalf(
@@ -188,8 +190,8 @@ func TestAttachRepositoryMaximumCombinationFitsTransactionBudget(t *testing.T) {
 			maximumTransactionOperations,
 		)
 	}
-	if got := attachDetachWithTaskOperationCount(record); got != 62 {
-		t.Fatalf("attachDetachWithTaskOperationCount() = %d, want 62", got)
+	if got := attachDetachWithTaskOperationCount(record); got != 63 {
+		t.Fatalf("attachDetachWithTaskOperationCount() = %d, want 63", got)
 	}
 }
 
@@ -934,19 +936,6 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 		t.Fatalf("marshal Environment Compose artifact: %v", err)
 	}
 	defer clear(projection.ComposeArtifact)
-	projectionValue, err := encodeEnvironmentComposeProjection(projection)
-	if err != nil {
-		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
-	}
-	defer clear(projectionValue)
-	projectionRevision, err := store.Put(
-		ctx,
-		environmentComposeProjectionKey(environment.Record.ID),
-		projectionValue,
-	)
-	if err != nil {
-		t.Fatalf("Put(Environment Compose projection) error = %v", err)
-	}
 	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
@@ -990,6 +979,19 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	if err != nil {
 		t.Fatalf("Put(Blueprint root) error = %v", err)
 	}
+	headValue, err := encodeTaskReference(blueprintRevision.RevisionID)
+	if err != nil {
+		t.Fatalf("encodeTaskReference(Blueprint head) error = %v", err)
+	}
+	defer clear(headValue)
+	headRevision, err := store.Put(
+		ctx,
+		environmentBlueprintHeadKey(environment.Record.ID),
+		headValue,
+	)
+	if err != nil {
+		t.Fatalf("Put(Blueprint head) error = %v", err)
+	}
 	for _, family := range []struct {
 		id    uint8
 		value []byte
@@ -1030,7 +1032,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 			Record: blueprintRevision, Revision: rootRevision, ReadRevision: rootRevision,
 		},
 		ComposeProjection: Versioned[EnvironmentComposeProjection]{
-			Record: projection, Revision: projectionRevision, ReadRevision: projectionRevision,
+			Record: projection, Revision: headRevision, ReadRevision: headRevision,
 		},
 		Services:       []Versioned[ServiceRecord]{service},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment, BackingService: backingService,
@@ -1071,7 +1073,8 @@ func testPendingAttach(
 		scope.BackingEnvironment.Record.ID,
 		scope.BackingService.Record.Desired.ID,
 		scope.BackingService.Record.BackingNetworkID,
-		[]string{scope.Services[0].Record.Desired.ID},
+		scope.Services[0].Record.Desired.ID,
+		id,
 		grantIDs,
 		factSets,
 		ids.NewAt(ids.KindTask, testAttachTime, seed+100),
@@ -1198,9 +1201,9 @@ func createTestAttach(
 		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		NetworkJoins: []AttachTaskNetworkJoin{{
-			NetworkID: record.BackingNetworkID, ServiceIDs: append([]string(nil), record.ServiceIDs...),
+			NetworkID: record.BackingNetworkID, ServiceIDs: []string{record.ServiceID},
 		}},
-		ConsumerServiceIDs: append([]string(nil), record.ServiceIDs...),
+		ConsumerServiceIDs: []string{record.ServiceID},
 		GrantAttachIDs:     append([]string(nil), record.GrantAttachIDs...),
 	}
 	result, err := repository.CreateAttachWithTask(ctx, scope, record, facts, renderInput, task, marker)
@@ -1284,7 +1287,7 @@ func publishTestDetach(
 		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		NetworkJoins:        nil,
-		ConsumerServiceIDs:  append([]string(nil), current.Record.ServiceIDs...),
+		ConsumerServiceIDs:  []string{current.Record.ServiceID},
 		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),
 	}
 	result, err := repository.BeginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker)

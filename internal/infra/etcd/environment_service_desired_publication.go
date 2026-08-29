@@ -37,7 +37,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		input.Environment.ReadRevision < input.Environment.Revision ||
 		input.Environment.Record.ProjectID != input.Project.Record.ID ||
 		input.Environment.Record.ProvisioningState != EnvironmentProvisioningReady ||
-		input.ExpectedHeadRevision <= 0 || input.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		input.ExpectedHeadRevision < 0 || input.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
 		input.Revision.EnvironmentID != input.Environment.Record.ID ||
 		input.Revision.RevisionID != input.Claim.RevisionID || input.Claim.TaskID != input.Claim.RevisionID ||
 		input.Projection.EnvironmentID != input.Revision.EnvironmentID ||
@@ -69,10 +69,11 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if !found || previous.Revision != input.ExpectedHeadRevision {
+	if (input.ExpectedHeadRevision == 0 && found) ||
+		(input.ExpectedHeadRevision > 0 && (!found || previous.Revision != input.ExpectedHeadRevision)) {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment desired state changed")
 	}
-	if err := validateEnvironmentComposeProjectionAdvance(previous.Record, true, input.Projection); err != nil {
+	if err := validateEnvironmentComposeProjectionAdvance(previous.Record, found, input.Projection); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	prepared, err := repository.prepareDirectEnvironmentServiceChangeAtRevision(
@@ -146,7 +147,8 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 				return errs.New(errs.KindStateConflict, "Environment sealed staging evidence changed")
 			}
 		}
-		if values[3] == nil || values[3].ModRevision != input.ExpectedHeadRevision {
+		if (input.ExpectedHeadRevision == 0 && values[3] != nil) ||
+			(input.ExpectedHeadRevision > 0 && (values[3] == nil || values[3].ModRevision != input.ExpectedHeadRevision)) {
 			return errs.New(errs.KindStateConflict, "Environment desired state changed")
 		}
 		if input.Change.Current == nil {

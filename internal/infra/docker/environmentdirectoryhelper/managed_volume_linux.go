@@ -176,9 +176,6 @@ func removeManagedVolume(
 		return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindValidationFailed, fmt.Errorf("open managed volume directory: %w", err))
 	}
 	defer unix.Close(leafFD)
-	if err := validateManagedVolumeDirectory(leafFD, expectedUID); err != nil {
-		return ManagedVolumeDirectoryRemoveResult{}, err
-	}
 	var leafStat unix.Stat_t
 	if err := unix.Fstat(leafFD, &leafStat); err != nil {
 		return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, err)
@@ -413,10 +410,24 @@ func ensureManagedVolumeDirectory(
 	leafFD, err := openDirectoryAt(environmentFD, volume.Key)
 	if err == nil {
 		defer unix.Close(leafFD)
-		if err := verifyMarker(leafFD, marker); err != nil {
+		markerErr := verifyMarker(leafFD, marker)
+		if markerErr == nil {
+			return finalizePublishedVolume(leafFD, environmentFD)
+		}
+		if !errors.Is(markerErr, syscall.ENOENT) {
 			return errs.New(errs.KindValidationFailed, "managed volume destination is not task-owned")
 		}
-		return finalizePublishedVolume(leafFD, environmentFD)
+		return nil
+	}
+	if errors.Is(err, syscall.EACCES) {
+		var leafStat unix.Stat_t
+		if statErr := unix.Fstatat(environmentFD, volume.Key, &leafStat, unix.AT_SYMLINK_NOFOLLOW); statErr != nil {
+			return errs.Wrap(errs.KindInternal, fmt.Errorf("inspect unreadable managed volume destination: %w", statErr))
+		}
+		if leafStat.Mode&unix.S_IFMT != unix.S_IFDIR {
+			return errs.New(errs.KindValidationFailed, "managed volume destination is not a directory")
+		}
+		return nil
 	}
 	if !errors.Is(err, syscall.ENOENT) {
 		return errs.Wrap(errs.KindInternal, fmt.Errorf("open managed volume destination: %w", err))
@@ -442,7 +453,7 @@ func ensureManagedVolumeDirectory(
 		_ = unix.Close(siblingFD)
 		return errs.New(errs.KindValidationFailed, "managed volume private sibling is not task-owned")
 	}
-	if err := unix.Fchmod(siblingFD, 0o755); err != nil {
+	if err := unix.Fchmod(siblingFD, 0o700); err != nil {
 		_ = unix.Close(siblingFD)
 		return errs.Wrap(errs.KindInternal, fmt.Errorf("secure published managed volume directory: %w", err))
 	}
@@ -483,15 +494,4 @@ func ensureManagedVolumeDirectory(
 		return errs.New(errs.KindInternal, "published managed volume directory lost its ownership marker")
 	}
 	return finalizePublishedVolume(leafFD, environmentFD)
-}
-
-func validateManagedVolumeDirectory(fd int, expectedUID uint32) error {
-	var stat unix.Stat_t
-	if err := unix.Fstat(fd, &stat); err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	if stat.Mode&unix.S_IFMT != unix.S_IFDIR || stat.Mode&0o777 != 0o755 || stat.Uid != expectedUID {
-		return errs.New(errs.KindValidationFailed, "Managed volume directory must be owner-owned mode 0755")
-	}
-	return nil
 }

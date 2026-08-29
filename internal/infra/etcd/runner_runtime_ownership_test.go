@@ -229,7 +229,7 @@ func TestRunnerRuntimeOwnershipCleanupFencesRemoval(t *testing.T) {
 	}
 	ready := runnerTestFinishCreate(t, store, repository, createTask, TaskStatusCompleted)
 	removeTask := runnerTestTask(desired, TaskRemove, 242, "runner-runtime-remove-01")
-	removeTask.Params = runnerRemovalTaskParams(ready.Record)
+	removeTask.Params = RunnerRemovalTaskParams(ready.Record)
 	tombstone := DeletionTombstoneRecord{
 		TargetKind: DeletionTargetRunner, TargetID: desired.ID, TargetRevision: ready.Revision,
 		TaskID: removeTask.ID, Phase: DeletionPhaseFinalizing,

@@ -65,7 +65,7 @@ func (reader *volumePlanReader) GetEnvironmentComposeProjectionRevision(
 func TestResolveVolumeAddPlanReplaysStableHash(t *testing.T) {
 	t.Parallel()
 	state := newVolumePlanState(t, false)
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", state.reader)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", state.reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
@@ -89,7 +89,7 @@ func TestResolveVolumeAddPlanReplaysStableHash(t *testing.T) {
 func TestResolveVolumeRemovePlanDetachesConsumersBeforeCleanup(t *testing.T) {
 	t.Parallel()
 	state := newVolumePlanState(t, true)
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", state.reader)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", state.reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestResolveVolumeEditRejectsControllerExecution(t *testing.T) {
 	state := newVolumePlanState(t, false)
 	state.editTask.Executor = etcd.TaskExecutorController
 	state.editTask.Type = etcd.TaskUpdate
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", state.reader)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", state.reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}

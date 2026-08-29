@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,42 +20,38 @@ type componentPlanProjectionRenderer struct {
 	serviceName string
 }
 
-func (renderer componentPlanProjectionRenderer) Render(
+func (renderer componentPlanProjectionRenderer) Plan(
 	environment core.Environment,
 	component core.Component,
-) (map[string]components.GeneratedService, map[string][]byte, error) {
+) (componentsdk.EnvironmentPlan, error) {
 	if !component.Enabled {
-		return map[string]components.GeneratedService{}, map[string][]byte{}, nil
+		return componentsdk.EnvironmentPlan{}, nil
 	}
-	services := map[string]components.GeneratedService{
-		renderer.serviceName: {
-			Service: core.Service{
-				ID: component.GeneratedServices[0], Name: renderer.serviceName, Image: "router:1",
-				Zones: []string{"frontend"}, Expose: []string{"80"}, Restart: "unless-stopped", Replicas: 1,
-			},
-			StaticIPv4: map[string]string{"frontend": component.PinnedIPv4},
-			Mounts: []components.GeneratedMount{{
-				Source: "components/router/config", Target: "/etc/router/config", ReadOnly: true,
-			}},
-		},
-	}
+	services := []componentsdk.ManagedService{{
+		ID: component.GeneratedServices[0], Name: renderer.serviceName, Image: "router:1",
+		NetworkMode: componentsdk.ManagedNetworkModeZones,
+		Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend", StaticIPv4: component.PinnedIPv4}},
+		Expose:      []string{"80"}, Restart: "unless-stopped", Replicas: 1,
+		Mounts: []componentsdk.ManagedMount{{
+			Source: "components/router/config", Target: "/etc/router/config", ReadOnly: true,
+		}},
+	}}
 	routeID := "none"
 	if len(environment.Routes) != 0 {
 		routeID = environment.Routes[0].ID
 	}
-	files := map[string][]byte{"components/router/config": []byte(routeID + "\n")}
+	content := []byte(routeID + "\n")
 	if service, exists := environment.Services["api"]; exists && service.Strategy != "" {
 		dependency := service.DependsOn["migrate"]
-		files["components/router/config"] = []byte(
+		content = []byte(
 			routeID + "\nstrategy=" + string(service.Strategy) +
 				"\ndependency=" + dependency.Condition.String() + ":" + dependency.Phases[0].String() + "\n",
 		)
 	}
-	return services, files, nil
-}
-
-func (componentPlanProjectionRenderer) Healthy(core.Environment, core.Component) (bool, error) {
-	return true, nil
+	return componentsdk.EnvironmentPlan{
+		Services: services,
+		Files:    []componentsdk.ManagedFile{{Path: "components/router/config", Content: content}},
+	}, nil
 }
 
 // Rationale: restart-time Component rendering must reuse the exact stable
@@ -79,7 +76,10 @@ func TestProjectPinnedEnvironmentComponentsRehydratesExactGraph(t *testing.T) {
 		identity,
 		projection,
 		routeSpecs,
-		map[string]core.ComponentSpec{"caddy": {Kind: core.ComponentKindIngressCaddy, Enabled: true}},
+		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
+			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
+			Settings: core.ComponentCapabilitySettings{ZoneID: projection.Networks[0].ID},
+		}},
 		nil,
 		catalog,
 	)
@@ -107,7 +107,10 @@ func TestProjectPinnedEnvironmentComponentsRejectsUnpinnedRoute(t *testing.T) {
 		identity,
 		projection,
 		routeSpecs,
-		map[string]core.ComponentSpec{"caddy": {Kind: core.ComponentKindIngressCaddy, Enabled: true}},
+		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
+			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
+			Settings: core.ComponentCapabilitySettings{ZoneID: projection.Networks[0].ID},
+		}},
 		nil,
 		catalog,
 	)
@@ -131,7 +134,10 @@ func TestProjectPinnedEnvironmentComponentsOmitsSuppressedRoute(t *testing.T) {
 		identity,
 		next,
 		routeSpecs,
-		map[string]core.ComponentSpec{"caddy": {Kind: core.ComponentKindIngressCaddy, Enabled: true}},
+		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
+			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
+			Settings: core.ComponentCapabilitySettings{ZoneID: projection.Networks[0].ID},
+		}},
 		nil,
 		catalog,
 	)
@@ -154,6 +160,7 @@ func TestTaskPlanResolverRegeneratesPinnedComponentFile(t *testing.T) {
 	content := []byte(`kind: environment
 schema: 1
 metadata: {tenant: acme, project: shop, environment: production}
+x-gp-network-pool: 10.70.0.0/16
 services:
   migrate:
     image: migrate:1
@@ -177,10 +184,11 @@ x-gp-routes:
     target_port: 8080
     exposure: public
 x-gp-components:
-  caddy:
-    kind: caddy
+  http-router:
+    implementation: caddy
     enabled: true
-`)
+    settings:
+      zone_id: ` + projection.Networks[0].ID + "\n")
 	reader := &blueprintPlanReader{
 		tenant: etcd.TenantRecord{ID: identity.TenantID, Slug: identity.TenantSlug, Name: "Acme"},
 		project: etcd.ProjectRecord{
@@ -200,11 +208,10 @@ x-gp-components:
 		},
 		projection: projection,
 	}
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, catalog)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
-	resolver.componentCatalog = catalog
 	actual, err := resolver.ResolveComponentFile(context.Background(), identity.EnvironmentID,
 		etcd.TaskComponentFileValueReference{
 			RevisionID:  projection.RevisionID,
@@ -222,7 +229,7 @@ x-gp-components:
 
 func componentPlanProjectionInput(
 	t *testing.T,
-) (*composetypes.Project, pinnedEnvironmentIdentity, etcd.EnvironmentComposeProjection, []core.RouteSpec, []components.Registration) {
+) (*composetypes.Project, pinnedEnvironmentIdentity, etcd.EnvironmentComposeProjection, []core.RouteSpec, []EnvironmentComponentRegistration) {
 	t.Helper()
 	at := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
@@ -233,6 +240,9 @@ func componentPlanProjectionInput(
 		ID: ids.NewAt(ids.KindComponent, at, 5), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.2",
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, at, 9),
+		}},
 	})
 	if err != nil {
 		t.Fatalf("etcd.NewComponentRecord(caddy) error = %v", err)
@@ -286,19 +296,15 @@ func componentPlanProjectionInput(
 	routeSpecs := []core.RouteSpec{{
 		Hostname: "app.example.com", Path: "/app/*", Target: "api", TargetPort: 8080, Exposure: "public",
 	}}
-	catalog := []components.Registration{
-		{
-			Kind: core.ComponentKindIngressCaddy, Label: "test caddy",
-			AllowedOwners: []core.ComponentOwner{core.ComponentOwnerEnvironment},
-			ApplyStrategy: components.EnvironmentRender,
-			Environment:   componentPlanProjectionRenderer{serviceName: "caddy"},
-		},
-		{
-			Kind: core.ComponentKindEdgeCloudflare, Label: "test tunnel",
-			AllowedOwners: []core.ComponentOwner{core.ComponentOwnerEnvironment},
-			ApplyStrategy: components.EnvironmentRender,
-			Environment:   componentPlanProjectionRenderer{serviceName: "cloudflare-tunnel"},
-		},
+	catalog := []EnvironmentComponentRegistration{
+		componentTestRegistration(
+			t, core.ComponentKindIngressCaddy,
+			componentPlanProjectionRenderer{serviceName: "caddy"}.Plan,
+		),
+		componentTestRegistration(
+			t, core.ComponentKindEdgeCloudflare,
+			componentPlanProjectionRenderer{serviceName: "cloudflare-tunnel"}.Plan,
+		),
 	}
 	return project, identity, projection, routeSpecs, catalog
 }

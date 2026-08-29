@@ -49,6 +49,16 @@ type resolverComponentFileReader struct {
 	content []byte
 }
 
+type resolverSecretValueReader struct{}
+
+func (resolverSecretValueReader) GetSecret(context.Context, string) (etcd.Versioned[etcd.SecretRecord], error) {
+	return etcd.Versioned[etcd.SecretRecord]{}, nil
+}
+
+func (resolverSecretValueReader) GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error) {
+	return etcd.SecretEncryptedValue{}, nil
+}
+
 func (reader *resolverComponentFileReader) ResolveComponentFile(
 	_ context.Context,
 	_ string,
@@ -195,6 +205,7 @@ func testTaskMaterializationResolver(t *testing.T, secret []byte) *TaskMateriali
 				CiphertextSHA256: hex.EncodeToString(ciphertextDigest[:]), Ciphertext: ciphertext,
 			},
 		},
+		resolverSecretValueReader{},
 		&resolverComponentFileReader{},
 		protector,
 	)

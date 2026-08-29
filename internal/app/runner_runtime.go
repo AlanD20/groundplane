@@ -26,15 +26,24 @@ func newRunnerLifecycleExecutor(
 	cfg config.ControllerConfig,
 	pools config.AllocationPools,
 ) (*runnercapability.Executor, error) {
-	endpoint, err := netip.ParseAddrPort(cfg.Listen.HTTP)
-	if err != nil || !endpoint.Addr().Is4() {
-		return nil, errs.New(errs.KindInternal, "Runner Controller endpoint must be an IPv4 address")
-	}
 	denied := []netip.Prefix{pools.Environment, pools.System}
-	if !slices.ContainsFunc(denied, func(prefix netip.Prefix) bool {
-		return prefix.Contains(endpoint.Addr())
-	}) {
-		denied = append(denied, netip.PrefixFrom(endpoint.Addr(), 32))
+	var endpoint netip.AddrPort
+	for _, address := range cfg.Listen.HTTP {
+		current, err := netip.ParseAddrPort(address)
+		if err != nil || !current.Addr().Is4() {
+			return nil, errs.New(errs.KindInternal, "Runner Controller endpoint must be an IPv4 address")
+		}
+		if current.Addr() == netip.MustParseAddr("127.0.0.1") {
+			endpoint = current
+		}
+		if !slices.ContainsFunc(denied, func(prefix netip.Prefix) bool {
+			return prefix.Contains(current.Addr())
+		}) {
+			denied = append(denied, netip.PrefixFrom(current.Addr(), 32))
+		}
+	}
+	if !endpoint.IsValid() {
+		return nil, errs.New(errs.KindInternal, "Runner Controller loopback endpoint is missing")
 	}
 	sort.Slice(denied, func(left, right int) bool {
 		return denied[left].Addr().Compare(denied[right].Addr()) < 0

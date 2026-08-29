@@ -10,15 +10,14 @@ import (
 )
 
 const (
-	TaskResourceRunner                                     = "runner"
-	RunnerRegistrationTokenPresentParam                    = "registration_token_present"
-	RunnerTenantIDParam                                    = "runner_tenant_id"
-	RunnerOwnerKindParam                                   = "runner_owner_kind"
-	RunnerOwnerIDParam                                     = "runner_owner_id"
-	RunnerHostSlotParam                                    = "runner_host_slot"
-	RunnerNetworkCIDRParam                                 = "runner_network_cidr"
-	DeletionTargetRunner                DeletionTargetKind = "runner"
-	runnerRemovalIntentPrefix                              = "/v1/runtime/runner-removal-intents/"
+	TaskResourceRunner                  = "runner"
+	RunnerRegistrationTokenPresentParam = "registration_token_present"
+	RunnerTenantIDParam                 = "runner_tenant_id"
+	RunnerOwnerKindParam                = "runner_owner_kind"
+	RunnerOwnerIDParam                  = "runner_owner_id"
+	RunnerHostSlotParam                 = "runner_host_slot"
+	RunnerNetworkCIDRParam              = "runner_network_cidr"
+	runnerRemovalIntentPrefix           = "/v1/runtime/runner-removal-intents/"
 )
 
 type runnerRemovalTaskEvidence struct {
@@ -29,7 +28,9 @@ type runnerRemovalTaskEvidence struct {
 	networkCIDR string
 }
 
-func runnerRemovalTaskParams(record RunnerRecord) map[string]string {
+// RunnerRemovalTaskParams encodes the canonical durable input for one Runner
+// removal Task. Publication and validation must share this representation.
+func RunnerRemovalTaskParams(record RunnerRecord) map[string]string {
 	return map[string]string{
 		TaskResourceKindParam:  TaskResourceRunner,
 		RunnerTenantIDParam:    record.Desired.TenantID,

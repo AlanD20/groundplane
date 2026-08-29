@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/localdiag"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
+	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
@@ -48,8 +49,8 @@ func inspectControllerKey(
 	}, nil
 }
 
-// InspectControllerEtcd probes controller.yaml's endpoints directly instead
-// of consulting the Controller's REST host projection.
+// InspectControllerEtcd probes the Controller-managed loopback endpoint
+// directly instead of consulting the Controller's REST host projection.
 func InspectControllerEtcd(ctx context.Context) ([]localdiag.EtcdEndpoint, error) {
 	return inspectControllerEtcdFromConfig(ctx, ControllerConfigPath(), etcd.ProbeEndpoints)
 }
@@ -59,11 +60,10 @@ func inspectControllerEtcdFromConfig(
 	configPath string,
 	probe controllerEndpointProber,
 ) ([]localdiag.EtcdEndpoint, error) {
-	cfg, err := loadControllerConfig(ctx, configPath)
-	if err != nil {
+	if _, err := loadControllerConfig(ctx, configPath); err != nil {
 		return nil, err
 	}
-	return probe(ctx, cfg.Etcd.Endpoints)
+	return probe(ctx, etcdcontainer.Endpoints())
 }
 
 func loadControllerConfig(ctx context.Context, path string) (config.ControllerConfig, error) {

@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/netip"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -33,10 +36,12 @@ type EnvironmentScope struct {
 // Extensions is the typed document-level Groundplane input stripped from the
 // root before native Compose loading.
 type Extensions struct {
+	NetworkPool   string
 	Requires      []core.Requirement
 	Attachments   map[string]core.AttachmentSpec
 	Entries       map[string]core.EntrySpec
 	Routes        []core.RouteSpec
+	Scripts       map[string]core.ScriptSpec
 	Components    map[string]core.ComponentSpec
 	Backup        *core.BackupSpec
 	ReleaseGroups map[string]core.ReleaseGroupSpec
@@ -48,14 +53,17 @@ type Result struct {
 	Extensions        Extensions
 	ServiceExtensions map[string]core.ServiceExtensionSpec
 	Project           *types.Project
+	RuntimeFiles      []core.BlueprintFile
 }
 
 type rootDocument struct {
 	core.Envelope `yaml:",inline"`
+	NetworkPool   string                           `yaml:"x-gp-network-pool"`
 	Requires      []core.Requirement               `yaml:"x-gp-requires,omitempty"`
 	Attachments   map[string]core.AttachmentSpec   `yaml:"x-gp-attachments,omitempty"`
 	Entries       map[string]core.EntrySpec        `yaml:"x-gp-entry,omitempty"`
 	Routes        []core.RouteSpec                 `yaml:"x-gp-routes,omitempty"`
+	Scripts       map[string]core.ScriptSpec       `yaml:"x-gp-scripts,omitempty"`
 	Components    map[string]core.ComponentSpec    `yaml:"x-gp-components,omitempty"`
 	Backup        *authoredBackupSpec              `yaml:"x-gp-backup,omitempty"`
 	ReleaseGroups map[string]core.ReleaseGroupSpec `yaml:"x-gp-release-groups,omitempty"`
@@ -75,8 +83,9 @@ type authoredBackupSpec struct {
 
 var rootGroundplaneFields = map[string]struct{}{
 	"kind": {}, "schema": {}, "metadata": {},
-	"x-gp-requires": {}, "x-gp-attachments": {}, "x-gp-entry": {}, "x-gp-routes": {},
-	"x-gp-components": {}, "x-gp-backup": {}, "x-gp-release-groups": {},
+	"x-gp-network-pool": {},
+	"x-gp-requires":     {}, "x-gp-attachments": {}, "x-gp-entry": {}, "x-gp-routes": {},
+	"x-gp-scripts": {}, "x-gp-components": {}, "x-gp-backup": {}, "x-gp-release-groups": {},
 }
 
 // Parse validates and loads a closed Blueprint bundle for one already-resolved Environment without ambient input.
@@ -178,11 +187,15 @@ func Parse(ctx context.Context, scope EnvironmentScope, bundle core.BlueprintBun
 	if err := validateReleaseGroupReferences(extensions.ReleaseGroups, project); err != nil {
 		return Result{}, err
 	}
+	if err := validateScriptReferences(extensions.Scripts, project); err != nil {
+		return Result{}, err
+	}
 	normalizeProjectPaths(project, workspace)
 
 	return Result{
 		Envelope: envelope, Extensions: extensions,
 		ServiceExtensions: serviceExtensions, Project: project,
+		RuntimeFiles: plan.runtimeBlueprintFiles(),
 	}, nil
 }
 
@@ -222,11 +235,28 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	if authored.Metadata.Tenant == "" || authored.Metadata.Project == "" || authored.Metadata.Environment == "" {
 		return core.Envelope{}, Extensions{}, nil, validationError("blueprint root metadata is incomplete")
 	}
+	networkPool, err := netip.ParsePrefix(authored.NetworkPool)
+	if err != nil || !networkPool.Addr().Is4() || networkPool != networkPool.Masked() {
+		return core.Envelope{}, Extensions{}, nil, validationError("x-gp-network-pool must be a canonical IPv4 CIDR")
+	}
+	authored.NetworkPool = networkPool.String()
 	authored.ReleaseGroups, err = normalizeReleaseGroups(authored.ReleaseGroups)
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
 	}
+	authored.Attachments, err = normalizeAttachments(authored.Attachments)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
 	authored.Routes, err = normalizeRoutes(authored.Routes)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
+	authored.Entries, err = normalizeEntries(authored.Entries)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
+	authored.Scripts, err = normalizeScripts(authored.Scripts)
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
 	}
@@ -241,11 +271,107 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 		return core.Envelope{}, Extensions{}, nil, errs.New(errs.KindInternal, "blueprint root preparation failed")
 	}
 	extensions := Extensions{
-		Requires: authored.Requires, Attachments: authored.Attachments, Entries: authored.Entries,
-		Routes: authored.Routes, Components: authored.Components, Backup: backup,
+		NetworkPool: authored.NetworkPool,
+		Requires:    authored.Requires, Attachments: authored.Attachments, Entries: authored.Entries,
+		Routes: authored.Routes, Scripts: authored.Scripts, Components: authored.Components, Backup: backup,
 		ReleaseGroups: authored.ReleaseGroups,
 	}
 	return authored.Envelope, extensions, compose, nil
+}
+
+func normalizeScripts(values map[string]core.ScriptSpec) (map[string]core.ScriptSpec, error) {
+	if len(values) > 64 {
+		return nil, validationError("x-gp-scripts exceeds the 64 Script limit")
+	}
+	seenSlugs := make(map[string]struct{}, len(values))
+	for key, value := range values {
+		if core.ValidateScriptLabel("script reconciliation key", key) != nil {
+			return nil, validationError("x-gp-scripts reconciliation key is invalid")
+		}
+		if core.ValidateScriptLabel("script slug", value.Slug) != nil {
+			return nil, validationError("x-gp-scripts slug is invalid")
+		}
+		if _, duplicate := seenSlugs[value.Slug]; duplicate {
+			return nil, validationError("x-gp-scripts slugs must be unique")
+		}
+		seenSlugs[value.Slug] = struct{}{}
+		if value.Service == "" {
+			return nil, validationError("x-gp-scripts service is required")
+		}
+		if strings.TrimSpace(value.Script) == "" || !utf8.ValidString(value.Script) ||
+			strings.ContainsRune(value.Script, '\x00') || len(value.Script) > core.MaximumScriptBodyBytes {
+			return nil, validationError("x-gp-scripts body is invalid")
+		}
+		candidate := core.Script{
+			ID: "script-validation", Slug: value.Slug, ServiceName: value.Service,
+			Body: value.Script, When: value.When,
+		}
+		if err := candidate.Validate(); err != nil {
+			return nil, validationError("x-gp-scripts entry is invalid")
+		}
+	}
+	return values, nil
+}
+
+func validateScriptReferences(values map[string]core.ScriptSpec, project *types.Project) error {
+	for _, value := range values {
+		service, exists := project.Services[value.Service]
+		if !exists {
+			return validationError("x-gp-scripts target must be an enabled Service in the same Environment")
+		}
+		if service.GetScale() != 1 {
+			return validationError("x-gp-scripts target Service must have effective replicas exactly 1")
+		}
+	}
+	return nil
+}
+
+func normalizeEntries(entries map[string]core.EntrySpec) (map[string]core.EntrySpec, error) {
+	for key, spec := range entries {
+		projected, err := core.ProjectEntrySpec(key, spec, "ev_00000000000000000000000000")
+		if err != nil {
+			return nil, validationError(err.Error())
+		}
+		if projected.Kind == core.EntryKindFile && entrymaterialization.ValidateDesiredDestination(projected.Path) != nil {
+			return nil, validationError("Blueprint file Entry destination is invalid")
+		}
+		spec.Exposure = append([]string(nil), projected.Exposure...)
+		entries[key] = spec
+	}
+	return entries, nil
+}
+
+func normalizeAttachments(
+	attachments map[string]core.AttachmentSpec,
+) (map[string]core.AttachmentSpec, error) {
+	for name, attachment := range attachments {
+		if name == "" || attachment.BackingProject == "" || attachment.BackingService == "" ||
+			attachment.Service == "" {
+			return nil, validationError("Blueprint Attachment identity is incomplete")
+		}
+		switch attachment.Credential.Mode {
+		case "new":
+			if attachment.Credential.Attach != "" {
+				return nil, validationError("new Blueprint Attachment credential cannot reference another Attach")
+			}
+			if len(attachment.Grants) > 8 {
+				return nil, validationError("Blueprint Attachment may declare at most eight grants")
+			}
+		case "existing":
+			if attachment.Credential.Attach == "" || len(attachment.Grants) != 0 {
+				return nil, validationError("existing Blueprint Attachment credential requires an Attach and rejects grants")
+			}
+			owner, exists := attachments[attachment.Credential.Attach]
+			if !exists || owner.Credential.Mode != "new" ||
+				owner.BackingProject != attachment.BackingProject ||
+				owner.BackingService != attachment.BackingService {
+				return nil, validationError("existing Blueprint Attachment credential must reference a direct owner on the same Backing Service")
+			}
+		default:
+			return nil, validationError("Blueprint Attachment credential mode must be new or existing")
+		}
+	}
+	return attachments, nil
 }
 
 func normalizeBackupSpec(authored *authoredBackupSpec) (*core.BackupSpec, error) {

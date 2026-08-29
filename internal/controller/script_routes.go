@@ -24,6 +24,7 @@ type ScriptMutator interface {
 	CreateScript(context.Context, apiTypes.ScriptCreate, string) (etcd.IdempotencyResponse, error)
 	EditScript(context.Context, string, apiTypes.ScriptEdit, string) (etcd.IdempotencyResponse, error)
 	RemoveScript(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	RunScript(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type scriptListInput struct {
@@ -48,6 +49,11 @@ type scriptEditInput struct {
 }
 
 type scriptRemoveInput struct {
+	ID             string `path:"id" pattern:"^scr_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+}
+
+type scriptRunInput struct {
 	ID             string `path:"id" pattern:"^scr_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
 }
@@ -96,11 +102,18 @@ func (s *Server) registerScripts() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "script.remove", Method: http.MethodDelete, Path: "/scripts/{id}",
 		Summary: "Remove a script", Tags: []string{"Script"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectScriptDeleteBody, s.rejectScriptDeleteQuery},
+		Middlewares: huma.Middlewares{s.rejectBodylessScriptBody, s.rejectBodylessScriptQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeScript)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "script.run", Method: http.MethodPost, Path: "/scripts/{id}/run",
+		Summary: "Run a script", Tags: []string{"Script"}, DefaultStatus: http.StatusAccepted,
+		Middlewares: huma.Middlewares{s.rejectBodylessScriptBody, s.rejectBodylessScriptQuery},
+		Responses:   attachMutationResponses(taskAcceptedSchema),
+	}, s.runScript)
 	s.setRoutePolicy("POST /api/v1/scripts", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/scripts/{id}", routePolicy{body: jsonBody})
+	s.setRoutePolicy("POST /api/v1/scripts/{id}/run", routePolicy{})
 }
 
 func (s *Server) listScripts(ctx context.Context, request *scriptListInput) (*scriptPageOutput, error) {
@@ -169,20 +182,34 @@ func (s *Server) removeScript(ctx context.Context, request *scriptRemoveInput) (
 	return s.scriptMutationResponse(response), nil
 }
 
-func (s *Server) rejectScriptDeleteBody(ctx huma.Context, next func(huma.Context)) {
+func (s *Server) runScript(ctx context.Context, request *scriptRunInput) (*scriptMutationOutput, error) {
+	if s.scriptMutations == nil {
+		return nil, errs.New(errs.KindInternal, "Script mutator is not configured")
+	}
+	response, err := s.scriptMutations.RunScript(ctx, request.ID, request.IdempotencyKey)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error("controller: run Script", slog.String("script_id", request.ID), slog.Any("error", err))
+		}
+		return nil, normalizeProjectError(err)
+	}
+	return s.scriptMutationResponse(response), nil
+}
+
+func (s *Server) rejectBodylessScriptBody(ctx huma.Context, next func(huma.Context)) {
 	var probe [1]byte
 	count, err := ctx.BodyReader().Read(probe[:])
 	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		s.writeScriptProblem(ctx, "Script deletion body is not allowed")
+		s.writeScriptProblem(ctx, "Script action body is not allowed")
 		return
 	}
 	next(ctx)
 }
 
-func (s *Server) rejectScriptDeleteQuery(ctx huma.Context, next func(huma.Context)) {
+func (s *Server) rejectBodylessScriptQuery(ctx huma.Context, next func(huma.Context)) {
 	requestURL := ctx.URL()
 	if len(requestURL.Query()) != 0 {
-		s.writeScriptProblem(ctx, "Script deletion query is invalid")
+		s.writeScriptProblem(ctx, "Script action query is invalid")
 		return
 	}
 	next(ctx)
@@ -218,7 +245,9 @@ func scriptListRequest(environmentID string, limit int, cursor string) (etcd.Pag
 
 func scriptResponse(record etcd.ScriptRecord) apiTypes.Script {
 	return apiTypes.Script{
-		ID: record.Desired.ID, Name: record.Desired.Name, ServiceName: record.Desired.ServiceName,
-		Body: record.Desired.Body, When: string(record.Desired.When),
+		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Slug: record.Desired.Slug,
+		ServiceID: record.ServiceID, ServiceName: record.Desired.ServiceName,
+		Body: record.Desired.Body, When: string(record.Desired.When), Origin: record.Origin,
+		ReconciliationKey: record.ReconciliationKey, ActiveGeneration: record.ActiveGeneration,
 	}
 }

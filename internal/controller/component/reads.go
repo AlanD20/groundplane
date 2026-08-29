@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -74,7 +75,7 @@ func (service *ReadService) GetComponentConfig(ctx context.Context, id string) (
 	if err != nil {
 		return apiTypes.ComponentConfig{}, err
 	}
-	return apiTypes.ComponentConfig{Config: cloneConfig(component.Config)}, nil
+	return component.Config, nil
 }
 
 func (service *ReadService) GetRouter(ctx context.Context, environmentID string) (apiTypes.Router, error) {
@@ -111,7 +112,7 @@ func projectComponent(record etcd.ComponentRecord) (apiTypes.Component, error) {
 	return apiTypes.Component{
 		ID: component.ID, Owner: string(component.Owner), OwnerID: component.OwnerID,
 		EnvironmentID: environmentID, Kind: string(component.Kind), Enabled: component.Enabled,
-		Config: cloneConfig(component.Config), GeneratedServices: append([]string(nil), component.GeneratedServices...),
+		Config: projectComponentConfig(component.Config), GeneratedServices: append([]string(nil), component.GeneratedServices...),
 		PinnedIPv4: component.PinnedIPv4, Healthy: component.Healthy, Status: componentStatus(component),
 	}, nil
 }
@@ -126,13 +127,46 @@ func componentStatus(component core.Component) string {
 	return "unknown"
 }
 
-func cloneConfig(source map[string]any) map[string]any {
-	if len(source) == 0 {
-		return nil
+func projectComponentConfig(config core.ComponentConfig) apiTypes.ComponentConfig {
+	if config.Caddy != nil {
+		return apiTypes.ComponentConfig{
+			ZoneID:            config.Caddy.ZoneID,
+			CaddyfileTemplate: config.Caddy.CaddyfileTemplate,
+		}
 	}
-	clone := make(map[string]any, len(source))
-	for key, value := range source {
-		clone[key] = value
+	if config.CloudflareTunnel != nil {
+		return apiTypes.ComponentConfig{SecretID: config.CloudflareTunnel.SecretID}
 	}
-	return clone
+	if config.CoreDNS == nil {
+		return apiTypes.ComponentConfig{}
+	}
+	upstreamAuto := config.CoreDNS.UpstreamAuto
+	tailnetDelegation := config.CoreDNS.TailnetDelegation
+	result := apiTypes.ComponentConfig{
+		UpstreamAuto:      &upstreamAuto,
+		UpstreamResolvers: projectResolverEndpoints(config.CoreDNS.UpstreamResolvers),
+		Forwarders:        make([]apiTypes.ComponentDNSForwarder, len(config.CoreDNS.Forwarders)),
+		TailnetDelegation: &tailnetDelegation,
+	}
+	for index, forwarder := range config.CoreDNS.Forwarders {
+		result.Forwarders[index] = apiTypes.ComponentDNSForwarder{
+			Domain:    forwarder.Domain,
+			Resolvers: projectResolverEndpoints(forwarder.Resolvers),
+		}
+	}
+	return result
+}
+
+func projectResolverEndpoints(values []core.DNSResolverEndpoint) []string {
+	result := make([]string, len(values))
+	for index, value := range values {
+		result[index] = value.Address
+		if value.Port != 0 {
+			address, err := netip.ParseAddr(value.Address)
+			if err == nil {
+				result[index] = netip.AddrPortFrom(address, value.Port).String()
+			}
+		}
+	}
+	return result
 }

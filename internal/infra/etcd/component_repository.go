@@ -34,6 +34,14 @@ func (repository *ComponentRepository) CreateEnvironmentComponent(
 	if err := validateEnvironmentComponentHierarchy(ctx, environment, project, record); err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
+	if _, configured, err := componentCloudflareSecretID(record); err != nil {
+		return Versioned[ComponentRecord]{}, err
+	} else if configured {
+		return Versioned[ComponentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"configured Cloudflare Tunnel Components must be published through reconciliation",
+		)
+	}
 	value, err := encodeComponentRecord(record)
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
@@ -161,6 +169,20 @@ func (repository *ComponentRepository) replace(
 	}
 	if current.Record.Desired.ID != replacement.Desired.ID {
 		return Versioned[ComponentRecord]{}, errs.New(errs.KindValidationFailed, "Component replacement changed id")
+	}
+	currentSecretID, currentConfigured, err := componentCloudflareSecretID(current.Record)
+	if err != nil {
+		return Versioned[ComponentRecord]{}, err
+	}
+	nextSecretID, nextConfigured, err := componentCloudflareSecretID(replacement)
+	if err != nil {
+		return Versioned[ComponentRecord]{}, err
+	}
+	if currentConfigured != nextConfigured || currentSecretID != nextSecretID {
+		return Versioned[ComponentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Cloudflare Tunnel credential changes require Component reconciliation",
+		)
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{

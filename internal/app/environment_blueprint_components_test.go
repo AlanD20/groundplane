@@ -8,8 +8,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -18,6 +19,17 @@ import (
 type environmentBlueprintMaterializationResolverFake struct {
 	content []byte
 	source  etcd.TaskMaterializationSource
+}
+
+func (resolver *environmentBlueprintMaterializationResolverFake) PinSecretValue(
+	_ context.Context,
+	_ string,
+	secretID string,
+) (etcd.TaskSecretValueReference, error) {
+	digest := sha256.Sum256(resolver.content)
+	return etcd.TaskSecretValueReference{
+		SecretID: secretID, Revision: 1, CiphertextSHA256: hex.EncodeToString(digest[:]),
+	}, nil
 }
 
 func (resolver *environmentBlueprintMaterializationResolverFake) ResolveTaskMaterializationSource(
@@ -34,25 +46,17 @@ func (resolver *environmentBlueprintMaterializationResolverFake) ResolveTaskMate
 func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *testing.T) {
 	const (
 		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		projectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		revisionID    = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		artifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		caddyID       = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		tunnelID      = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		serviceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		entryID       = "ev_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		generationID  = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		secretID      = "sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	)
 	secretContent := []byte("TUNNEL_TOKEN=\"secret-token-value\"\n")
 	resolver := &environmentBlueprintMaterializationResolverFake{content: secretContent}
 	service := &environmentBlueprintService{materials: resolver}
-	entry, err := etcd.NewEntryRecord(environmentID, core.EnvEntry{
-		ID: entryID, Kind: core.EntryKindEnv, Key: "CLOUDFLARE_TUNNEL_TOKEN",
-		Source:   core.EntrySource{Kind: core.SourceLiteral},
-		Exposure: []string{"cloudflare-tunnel"}, Secret: true,
-	}, generationID)
-	if err != nil {
-		t.Fatalf("etcd.NewEntryRecord() error = %v", err)
-	}
 	projection := controller.EnvironmentComponentComposeProjection{
 		PlainFiles: []controller.GeneratedEnvironmentFile{{
 			ComponentID: caddyID, Path: "components/caddy/Caddyfile",
@@ -61,13 +65,13 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 		EnvironmentFiles: []controller.EnvironmentComponentEnvironmentFile{{
 			ComponentID: tunnelID, ServiceID: serviceID, ServiceName: "cloudflare-tunnel",
 			Destination: "secrets/.env." + environmentID + ".cloudflare-tunnel",
-			Values:      []components.GeneratedSecretEnvironment{{Name: "TUNNEL_TOKEN", EntryID: entryID}},
+			Values:      []componentsdk.ManagedSecretEnvironment{{Name: "TUNNEL_TOKEN", SecretID: secretID}},
 		}},
 	}
 	references, steps, err := service.environmentComponentMaterializations(
-		context.Background(), environmentID, revisionID, artifactID,
+		context.Background(), environmentID, projectID, revisionID, artifactID,
 		func(kind ids.Kind, _ string) string { return ids.New(kind) },
-		projection, []etcd.EntryRecord{entry},
+		nil, projection, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("environmentComponentMaterializations() error = %v", err)
@@ -90,7 +94,8 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 	secretDigest := sha256.Sum256(secretContent)
 	if generated.Source.GeneratedEnvironment == nil ||
 		len(generated.Source.GeneratedEnvironment.Values) != 1 ||
-		generated.Source.GeneratedEnvironment.Values[0].Value.ValueGenerationID != generationID ||
+		generated.Source.GeneratedEnvironment.Values[0].Secret == nil ||
+		generated.Source.GeneratedEnvironment.Values[0].Secret.SecretID != secretID ||
 		generated.Mode != 0o600 || generated.Length != uint64(len(secretContent)) ||
 		generated.SHA256 != hex.EncodeToString(secretDigest[:]) {
 		t.Fatalf("generated Environment materialization = %#v", generated)
@@ -103,7 +108,43 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 		t.Fatal("durable materialization references contain secret bytes")
 	}
 	if resolver.source.GeneratedEnvironment == nil ||
-		resolver.source.GeneratedEnvironment.Values[0].Value.EntryID != entryID {
+		resolver.source.GeneratedEnvironment.Values[0].Secret == nil ||
+		resolver.source.GeneratedEnvironment.Values[0].Secret.SecretID != secretID {
 		t.Fatalf("resolved generated Environment source = %#v", resolver.source)
+	}
+}
+
+// Rationale: a declared read-only Blueprint bind must become a durable,
+// metadata-only Agent materialization before the Compose execution step.
+func TestEnvironmentComponentMaterializationsBuildBlueprintFileInput(t *testing.T) {
+	const (
+		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		projectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		revisionID    = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		artifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	)
+	content := []byte("example.test { reverse_proxy app:8080 }\n")
+	service := &environmentBlueprintService{}
+	references, steps, err := service.environmentComponentMaterializations(
+		context.Background(), environmentID, projectID, revisionID, artifactID,
+		func(kind ids.Kind, _ string) string { return ids.New(kind) },
+		[]core.BlueprintFile{{Path: "config/Caddyfile", Content: content}},
+		controller.EnvironmentComponentComposeProjection{}, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("environmentComponentMaterializations() error = %v", err)
+	}
+	if len(references) != 1 || len(steps) != 1 {
+		t.Fatalf("materialization references/steps = %#v / %#v", references, steps)
+	}
+	reference := references[0]
+	digest := sha256.Sum256(content)
+	if reference.Destination != "config/Caddyfile" || reference.Mode != 0o444 ||
+		reference.SHA256 != hex.EncodeToString(digest[:]) ||
+		reference.Source.Kind != etcd.TaskMaterializationSourceBlueprintFile ||
+		reference.Source.BlueprintFile == nil ||
+		reference.Source.BlueprintFile.RevisionID != revisionID ||
+		reference.Source.BlueprintFile.Path != "config/Caddyfile" {
+		t.Fatalf("Blueprint materialization = %#v", reference)
 	}
 }

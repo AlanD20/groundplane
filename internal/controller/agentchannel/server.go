@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -81,6 +83,15 @@ type PlanResolver interface {
 	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
 }
 
+type ScriptArtifactResolver interface {
+	ResolveScriptAssignmentArtifacts(
+		context.Context,
+		etcd.TaskRecord,
+		*agentpb.ExecutionPlan,
+	) (*agentpb.ScriptAssignmentArtifacts, error)
+	ResolveScriptExecutionCheckpoint(context.Context, etcd.TaskRecord) (*agentpb.ScriptExecutionCheckpoint, error)
+}
+
 // MaterializationResolver returns one task-owned transient plaintext source.
 // The channel takes ownership and closes it on every path.
 type MaterializationResolver interface {
@@ -90,6 +101,23 @@ type MaterializationResolver interface {
 		*agentpb.ExecutionPlan,
 		*agentpb.ExecutionStep,
 	) (io.ReadCloser, error)
+}
+
+type ManagedConfigSource struct {
+	MediaType string
+	Length    uint64
+	Content   io.ReadCloser
+}
+
+// ManagedConfigResolver reconstructs one immutable Component artifact from
+// durable, revision-pinned inputs. The channel owns and closes Content.
+type ManagedConfigResolver interface {
+	ResolveManagedConfig(
+		context.Context,
+		etcd.TaskRecord,
+		*agentpb.ExecutionPlan,
+		*agentpb.ExecutionStep,
+	) (ManagedConfigSource, error)
 }
 
 // BackupSecretSlotResolver returns task-owned transient plaintext slots. The
@@ -112,17 +140,45 @@ type BackupCheckpointer interface {
 	) (*agentpb.BackupCheckpointAck, error)
 }
 
+type ScriptCheckpointer interface {
+	CheckpointScript(
+		context.Context,
+		string,
+		uint64,
+		*agentpb.ScriptCheckpointRequest,
+	) (*agentpb.ScriptCheckpointAck, error)
+}
+
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
-	auth        Authenticator
-	sessions    *Registry
-	tasks       TaskStore
-	plans       PlanResolver
-	materials   MaterializationResolver
-	secrets     BackupSecretSlotResolver
-	checkpoints BackupCheckpointer
-	now         func() time.Time
+	auth              Authenticator
+	sessions          *Registry
+	tasks             TaskStore
+	plans             PlanResolver
+	materials         MaterializationResolver
+	managed           ManagedConfigResolver
+	secrets           BackupSecretSlotResolver
+	checkpoints       BackupCheckpointer
+	scriptCheckpoints ScriptCheckpointer
+	scriptArtifacts   ScriptArtifactResolver
+	now               func() time.Time
+}
+
+func (s *Server) EnableManagedConfigTransfers(resolver ManagedConfigResolver) error {
+	if s == nil || resolver == nil {
+		return errs.New(errs.KindInternal, "managed-config resolver is required")
+	}
+	s.managed = resolver
+	return nil
+}
+
+func (s *Server) EnableScriptArtifacts(resolver ScriptArtifactResolver) error {
+	if s == nil || resolver == nil {
+		return errs.New(errs.KindInternal, "Script artifact resolver is required")
+	}
+	s.scriptArtifacts = resolver
+	return nil
 }
 
 // New returns an AgentChannel server backed by the supplied authenticator and
@@ -182,6 +238,43 @@ func NewWithRuntimeServices(
 	}
 }
 
+// NewWithManagedRuntimeServices returns the authenticated Agent channel with
+// the generic managed-config transfer capability enabled when managed is set.
+func NewWithManagedRuntimeServices(
+	auth Authenticator,
+	sessions *Registry,
+	tasks TaskStore,
+	plans PlanResolver,
+	materials MaterializationResolver,
+	secrets BackupSecretSlotResolver,
+	checkpoints BackupCheckpointer,
+	managed ManagedConfigResolver,
+) *Server {
+	server := NewWithRuntimeServices(auth, sessions, tasks, plans, materials, secrets, checkpoints)
+	server.managed = managed
+	return server
+}
+
+func NewWithScriptRuntimeServices(
+	auth Authenticator,
+	sessions *Registry,
+	tasks TaskStore,
+	plans PlanResolver,
+	materials MaterializationResolver,
+	secrets BackupSecretSlotResolver,
+	checkpoints BackupCheckpointer,
+	managed ManagedConfigResolver,
+	scripts ScriptArtifactResolver,
+	scriptCheckpoints ScriptCheckpointer,
+) *Server {
+	server := NewWithManagedRuntimeServices(
+		auth, sessions, tasks, plans, materials, secrets, checkpoints, managed,
+	)
+	server.scriptArtifacts = scripts
+	server.scriptCheckpoints = scriptCheckpoints
+	return server
+}
+
 // Connect authenticates the first message, publishes the authorized config,
 // and then owns the live session until disconnect or fencing.
 func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
@@ -226,6 +319,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 	}
 	defer session.Close()
 	delivered := make(map[string]string, authorization.Config.MaxConcurrentTasks)
+	quarantined := make(map[string]string, authorization.Config.MaxConcurrentTasks)
 
 	config := proto.Clone(authorization.Config).(*agentpb.AgentConfig)
 	if err := stream.Send(&agentpb.ControllerMessage{
@@ -271,6 +365,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				return sendErr
 			}
 			abort.result <- nil
+		case command := <-session.logMessages():
+			if err := stream.Send(command.message); err != nil {
+				command.result <- errs.New(errs.KindStorageUnavailable, "Agent log command delivery failed")
+				return err
+			}
+			command.result <- nil
 		case result := <-received:
 			if result.err != nil {
 				if errors.Is(result.err, io.EOF) || errors.Is(result.err, context.Canceled) {
@@ -283,6 +383,32 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 			if result.message.GetAuthenticate() != nil {
 				return unauthenticated()
+			}
+			if ready := result.message.GetLogReady(); ready != nil {
+				if err := session.RecordLogReady(ready); err != nil {
+					return status.Error(codes.InvalidArgument, "agent LogReady is invalid")
+				}
+				continue
+			}
+			if event := result.message.GetLogEvent(); event != nil {
+				overflow, err := session.RecordLogEvent(event)
+				if err != nil {
+					return status.Error(codes.InvalidArgument, "agent LogEvent is invalid")
+				}
+				if overflow {
+					if err := stream.Send(&agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_LogCancel{
+						LogCancel: &agentpb.LogCancel{RequestId: event.GetRequestId()},
+					}}); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if end := result.message.GetLogEnd(); end != nil {
+				if err := session.RecordLogEnd(end); err != nil {
+					return status.Error(codes.InvalidArgument, "agent LogEnd is invalid")
+				}
+				continue
 			}
 
 			if ready := result.message.GetReady(); ready != nil {
@@ -340,6 +466,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					authorization,
 					ready.Capacity,
 					delivered,
+					quarantined,
 				); err != nil {
 					return taskStoreStatus(err)
 				}
@@ -355,6 +482,12 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					authorization.Generation,
 					acknowledgement,
 				); err != nil {
+					slog.Error(
+						"controller: acknowledge Agent Task",
+						slog.String("task_id", acknowledgement.TaskId),
+						slog.String("assignment_id", acknowledgement.AssignmentId),
+						slog.Any("error", err),
+					)
 					return taskStoreStatus(err)
 				}
 				if err := session.RecordTaskTerminal(
@@ -363,6 +496,7 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					return status.Error(codes.FailedPrecondition, "agent session is not current")
 				}
 				delete(delivered, acknowledgement.TaskId)
+				delete(quarantined, acknowledgement.TaskId)
 				continue
 			}
 			if event := result.message.GetTaskEvent(); event != nil {
@@ -372,6 +506,13 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if err := s.recordTaskEvent(
 					stream.Context(), authenticate.AgentId, authorization.Generation, event,
 				); err != nil {
+					slog.Error(
+						"controller: record Agent Task event",
+						slog.String("task_id", event.TaskId),
+						slog.String("assignment_id", event.AssignmentId),
+						slog.String("step_id", event.StepId),
+						slog.Any("error", err),
+					)
 					return taskStoreStatus(err)
 				}
 				continue
@@ -390,6 +531,23 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					Payload: &agentpb.ControllerMessage_BackupCheckpointAck{
 						BackupCheckpointAck: acknowledgement,
 					},
+				}); err != nil {
+					return err
+				}
+				continue
+			}
+			if request := result.message.GetScriptCheckpointRequest(); request != nil {
+				if s.scriptCheckpoints == nil {
+					return status.Error(codes.Internal, "Script checkpoint service is not configured")
+				}
+				acknowledgement, err := s.scriptCheckpoints.CheckpointScript(
+					stream.Context(), authenticate.AgentId, authorization.Generation, request,
+				)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{
+					Payload: &agentpb.ControllerMessage_ScriptCheckpointAck{ScriptCheckpointAck: acknowledgement},
 				}); err != nil {
 					return err
 				}
@@ -472,6 +630,7 @@ func (s *Server) dispatchReady(
 	authorization Authorization,
 	capacity int32,
 	delivered map[string]string,
+	quarantined map[string]string,
 ) error {
 	if capacity == 0 || !session.AssignmentsAllowed() {
 		return nil
@@ -506,10 +665,19 @@ func (s *Server) dispatchReady(
 		if remaining == 0 {
 			return nil
 		}
-		if err := s.sendTaskAssignment(stream, assignment); err != nil {
+		if quarantined[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
+			remaining--
+			continue
+		}
+		sent, err := s.dispatchTaskAssignment(stream, assignment)
+		if err != nil {
 			return err
 		}
-		delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		if sent {
+			delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		} else {
+			quarantined[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		}
 		remaining--
 	}
 	for remaining > 0 {
@@ -538,10 +706,15 @@ func (s *Server) dispatchReady(
 		if !session.AssignmentsAllowed() {
 			return nil
 		}
-		if err := s.sendTaskAssignment(stream, assignment); err != nil {
+		sent, err := s.dispatchTaskAssignment(stream, assignment)
+		if err != nil {
 			return err
 		}
-		delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		if sent {
+			delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		} else {
+			quarantined[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		}
 		remaining--
 	}
 	return nil
@@ -572,6 +745,35 @@ func (s *Server) sendTaskAssignment(
 	if err != nil {
 		return err
 	}
+	return s.sendResolvedTaskAssignment(stream, claim, assignment)
+}
+
+func (s *Server) dispatchTaskAssignment(
+	stream agentpb.AgentChannel_ConnectServer,
+	claim etcd.TaskAssignment,
+) (bool, error) {
+	assignment, err := s.taskAssignmentMessage(stream.Context(), claim)
+	if err != nil {
+		slog.Error(
+			"controller: quarantine Agent Task assignment",
+			slog.String("task_id", claim.Task.Record.ID),
+			slog.String("assignment_id", claim.Assignment.Record.AssignmentID),
+			slog.Any("error", err),
+		)
+		return false, nil
+	}
+	if err := s.sendResolvedTaskAssignment(stream, claim, assignment); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Server) sendResolvedTaskAssignment(
+	stream agentpb.AgentChannel_ConnectServer,
+	claim etcd.TaskAssignment,
+	assignment *agentpb.TaskAssignment,
+) error {
+	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
 	if err := stream.Send(&agentpb.ControllerMessage{
 		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: assignment},
 	}); err != nil {
@@ -596,6 +798,13 @@ func (s *Server) sendTaskAssignment(
 				return err
 			}
 		}
+		if action := step.GetComponentApply(); action != nil && action.GetComposeArtifactId() == "" {
+			if err := s.sendManagedConfig(
+				stream, claim.Task.Record, assignment.GetAssignmentId(), assignment.GetPlan(), step,
+			); err != nil {
+				return err
+			}
+		}
 		if step.GetMaterializeFile() == nil {
 			continue
 		}
@@ -606,6 +815,111 @@ func (s *Server) sendTaskAssignment(
 		}
 	}
 	return nil
+}
+
+func (s *Server) sendManagedConfig(
+	stream agentpb.AgentChannel_ConnectServer,
+	task etcd.TaskRecord,
+	assignmentID string,
+	plan *agentpb.ExecutionPlan,
+	step *agentpb.ExecutionStep,
+) (resultErr error) {
+	if s.managed == nil {
+		return errs.New(errs.KindInternal, "managed-config resolver is not configured")
+	}
+	source, err := s.managed.ResolveManagedConfig(stream.Context(), task, plan, step)
+	if err != nil {
+		return err
+	}
+	if source.Content == nil || !managedconfig.ValidMediaType(source.MediaType) || source.Length == 0 ||
+		source.Length > managedconfig.MaximumArtifactBytes {
+		if source.Content != nil {
+			_ = source.Content.Close()
+		}
+		return errs.New(errs.KindInternal, "managed-config resolver returned an invalid source")
+	}
+	defer func() {
+		if closeErr := source.Content.Close(); closeErr != nil {
+			resultErr = errs.Wrap(errs.KindInternal, errors.Join(resultErr, closeErr))
+		}
+	}()
+	action := step.GetComponentApply()
+	headerMessage := managedConfigControllerMessage(task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId())
+	headerMessage.GetManagedConfigTransfer().Record = &agentpb.ManagedConfigTransfer_Header{
+		Header: &agentpb.ManagedConfigTransferHeader{
+			ArtifactId: action.GetArtifactId(), MediaType: source.MediaType, Length: source.Length,
+			Sha256: append([]byte(nil), action.GetArtifactDigest()...),
+		},
+	}
+	if err := stream.Send(headerMessage); err != nil {
+		return err
+	}
+	buffer := make([]byte, managedconfig.MaximumChunkBytes)
+	defer clear(buffer)
+	hasher := sha256.New()
+	remaining := source.Length
+	var sequence uint32
+	for remaining > 0 {
+		readSize := min(uint64(len(buffer)), remaining)
+		read, readErr := source.Content.Read(buffer[:int(readSize)])
+		if read < 0 || read > int(readSize) || read == 0 && readErr == nil {
+			return errs.New(errs.KindInternal, "managed-config source returned an invalid read")
+		}
+		if read > 0 {
+			if _, err := hasher.Write(buffer[:read]); err != nil {
+				return errs.New(errs.KindInternal, "managed-config source digest failed")
+			}
+			remaining -= uint64(read)
+			sequence++
+			content := append([]byte(nil), buffer[:read]...)
+			message := managedConfigControllerMessage(task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId())
+			message.GetManagedConfigTransfer().Record = &agentpb.ManagedConfigTransfer_Chunk{
+				Chunk: &agentpb.ManagedConfigTransferChunk{Sequence: sequence, Content: content},
+			}
+			sendErr := stream.Send(message)
+			clear(content)
+			message.GetManagedConfigTransfer().GetChunk().Content = nil
+			if sendErr != nil {
+				return sendErr
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) && remaining == 0 {
+				break
+			}
+			return errs.New(errs.KindInternal, "managed-config source ended before its declared length")
+		}
+	}
+	var extra [1]byte
+	read, readErr := source.Content.Read(extra[:])
+	clear(extra[:])
+	if read != 0 || !errors.Is(readErr, io.EOF) {
+		return errs.New(errs.KindInternal, "managed-config source exceeds its declared length")
+	}
+	digest := hasher.Sum(nil)
+	defer clear(digest)
+	if subtle.ConstantTimeCompare(digest, action.GetArtifactDigest()) != 1 {
+		return errs.New(errs.KindInternal, "managed-config source digest does not match its plan")
+	}
+	endMessage := managedConfigControllerMessage(task.ID, assignmentID, plan.GetPlanHash(), step.GetStepId())
+	endMessage.GetManagedConfigTransfer().Record = &agentpb.ManagedConfigTransfer_End{
+		End: &agentpb.ManagedConfigTransferEnd{ChunkCount: sequence},
+	}
+	return stream.Send(endMessage)
+}
+
+func managedConfigControllerMessage(
+	taskID string,
+	assignmentID string,
+	planHash []byte,
+	stepID string,
+) *agentpb.ControllerMessage {
+	return &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_ManagedConfigTransfer{
+		ManagedConfigTransfer: &agentpb.ManagedConfigTransfer{
+			TaskId: taskID, AssignmentId: assignmentID,
+			PlanHash: append([]byte(nil), planHash...), StepId: stepID,
+		},
+	}}
 }
 
 func (s *Server) sendMaterialization(
@@ -765,23 +1079,65 @@ func (s *Server) taskAssignmentMessage(
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	if plan.PlanId != task.PlanID || !bytes.Equal(plan.PlanHash, planHash) ||
-		plan.RenderGeneration != uint64(task.RenderGeneration) || plan.TargetId != task.Target ||
-		!operationMatchesTask(
-			plan.Operation,
-			task.Type,
-		) || !stepSummariesMatch(plan.Steps, task.Steps) {
-		return nil, errs.New(
+	planIDMatches := plan.PlanId == task.PlanID
+	planHashMatches := bytes.Equal(plan.PlanHash, planHash)
+	renderGenerationMatches := plan.RenderGeneration == uint64(task.RenderGeneration)
+	targetMatches := plan.TargetId == task.Target
+	operationMatches := operationMatchesTask(plan.Operation, task)
+	stepsMatch := stepSummariesMatch(plan.Steps, task.Steps)
+	if !planIDMatches || !planHashMatches || !renderGenerationMatches || !targetMatches || !operationMatches || !stepsMatch {
+		return nil, errs.Newf(
 			errs.KindInternal,
-			"resolved execution plan does not match its durable Task",
+			"resolved execution plan does not match its durable Task: plan_id=%t plan_hash=%t render_generation=%t target=%t operation=%t steps=%t",
+			planIDMatches, planHashMatches, renderGenerationMatches, targetMatches, operationMatches, stepsMatch,
 		)
+	}
+	var scriptArtifacts *agentpb.ScriptAssignmentArtifacts
+	var scriptCheckpoint *agentpb.ScriptExecutionCheckpoint
+	if task.Type == etcd.TaskScript {
+		if s.scriptArtifacts == nil {
+			return nil, errs.New(errs.KindInternal, "Script artifact resolver is not configured")
+		}
+		scriptArtifacts, err = s.scriptArtifacts.ResolveScriptAssignmentArtifacts(ctx, task, plan)
+		if err != nil {
+			return nil, err
+		}
+		scriptCheckpoint, err = s.scriptArtifacts.ResolveScriptExecutionCheckpoint(ctx, task)
+		if err != nil {
+			clearScriptAssignmentArtifacts(scriptArtifacts)
+			return nil, err
+		}
 	}
 	return &agentpb.TaskAssignment{
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
-		Plan:     plan,
+		Plan: plan, ScriptArtifacts: scriptArtifacts, ScriptCheckpoint: scriptCheckpoint,
 		Deadline: timestamppb.New(record.Deadline.UTC()),
 	}, nil
+}
+
+func clearScriptAssignmentArtifacts(artifacts *agentpb.ScriptAssignmentArtifacts) {
+	if artifacts == nil {
+		return
+	}
+	for _, body := range artifacts.Bodies {
+		if body != nil {
+			clear(body.Body)
+			body.Body = nil
+		}
+	}
+	for _, secret := range artifacts.Secrets {
+		if secret != nil {
+			clear(secret.Value)
+			secret.Value = nil
+		}
+	}
+	for _, entry := range artifacts.Entries {
+		if entry != nil {
+			clear(entry.Value)
+			entry.Value = nil
+		}
+	}
 }
 
 func stepSummariesMatch(steps []*agentpb.ExecutionStep, summaries []etcd.TaskStepRecord) bool {
@@ -796,8 +1152,10 @@ func stepSummariesMatch(steps []*agentpb.ExecutionStep, summaries []etcd.TaskSte
 	return true
 }
 
-func operationMatchesTask(operation agentpb.PlanOperation, taskType etcd.TaskType) bool {
-	switch taskType {
+func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord) bool {
+	switch task.Type {
+	case etcd.TaskScript:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT
 	case etcd.TaskDeploy:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
 	case etcd.TaskRollback:
@@ -811,9 +1169,19 @@ func operationMatchesTask(operation agentpb.PlanOperation, taskType etcd.TaskTyp
 	case etcd.TaskRemove:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE
 	case etcd.TaskCreate:
-		return operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE ||
+			task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceVolume &&
+				operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	case etcd.TaskAttach:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH
+	case etcd.TaskDetach:
+		return operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH
 	case etcd.TaskUpdate:
-		return operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+		if operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE {
+			return true
+		}
+		_, backingCreation := task.Params[etcd.TaskBackingServiceHealthParam]
+		return backingCreation && operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	case etcd.TaskBackup:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP
 	case etcd.TaskBackupPrune:
@@ -965,6 +1333,7 @@ func taskStoreStatus(err error) error {
 	if status.Code(err) != codes.Unknown {
 		return err
 	}
+	slog.Error("controller: Agent task operation failed", slog.Any("error", err))
 	kind, ok := errs.KindOf(err)
 	if !ok {
 		return status.Error(codes.Internal, "agent task operation failed")

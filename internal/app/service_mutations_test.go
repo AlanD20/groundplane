@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -20,15 +21,16 @@ import (
 
 type fakeServiceMutationRepository struct {
 	serviceMutationRepository
-	environment etcd.Versioned[etcd.EnvironmentRecord]
-	project     etcd.Versioned[etcd.ProjectRecord]
-	tenant      etcd.Versioned[etcd.TenantRecord]
-	head        etcd.Versioned[etcd.EnvironmentBlueprintHead]
-	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
-	zones       etcd.Page[etcd.ZoneRecord]
-	record      etcd.ServiceRecord
-	references  etcd.ServiceMutationReferences
-	marker      etcd.IdempotencyMarker
+	environment         etcd.Versioned[etcd.EnvironmentRecord]
+	project             etcd.Versioned[etcd.ProjectRecord]
+	tenant              etcd.Versioned[etcd.TenantRecord]
+	head                etcd.Versioned[etcd.EnvironmentBlueprintHead]
+	projection          etcd.Versioned[etcd.EnvironmentComposeProjection]
+	zones               etcd.Page[etcd.ZoneRecord]
+	record              etcd.ServiceRecord
+	references          etcd.ServiceMutationReferences
+	marker              etcd.IdempotencyMarker
+	withoutDesiredState bool
 }
 
 func (fake *fakeServiceMutationRepository) GetTenant(
@@ -42,6 +44,9 @@ func (fake *fakeServiceMutationRepository) GetEnvironmentBlueprintHead(
 	context.Context,
 	string,
 ) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+	if fake.withoutDesiredState {
+		return etcd.Versioned[etcd.EnvironmentBlueprintHead]{}, false, nil
+	}
 	return fake.head, true, nil
 }
 
@@ -49,6 +54,9 @@ func (fake *fakeServiceMutationRepository) GetEnvironmentComposeProjection(
 	context.Context,
 	string,
 ) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	if fake.withoutDesiredState {
+		return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, false, nil
+	}
 	return fake.projection, true, nil
 }
 
@@ -227,6 +235,7 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 	}
 	repository.zones.Items[0].Record.Desired.ID = zoneID
 	repository.zones.Items[0].Record.Desired.Name = "backend"
+	repository.zones.Items[0].Record.Desired.Subnet = "10.40.0.0/24"
 	idempotency := &fakeServiceMutationIdempotency{
 		evidence: serviceMutationEvidence{durable: projectCreationTestEvidence().durable},
 	}
@@ -268,5 +277,56 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 		repository.marker.RetainUntil != now.Add(90*24*time.Hour) ||
 		!reflect.DeepEqual(repository.marker.Response, response) {
 		t.Fatalf("persisted Service/marker = %#v/%#v", repository.record, repository.marker)
+	}
+}
+
+func TestServiceCreationBootstrapsMissingEnvironmentDesiredState(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 29, 8, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	projectID := ids.NewAt(ids.KindProject, at, 2)
+	tenantID := ids.NewAt(ids.KindTenant, at, 3)
+	volumeDir := "/var/lib/groundplane/vol/tenant/project/" + environmentID
+	repository := &fakeServiceMutationRepository{
+		environment: etcd.Versioned[etcd.EnvironmentRecord]{
+			Record: etcd.EnvironmentRecord{
+				ID: environmentID, ProjectID: projectID, VolumeDir: volumeDir,
+				ProvisioningState: etcd.EnvironmentProvisioningReady,
+			},
+			Revision: 7, ReadRevision: 7,
+		},
+		project: etcd.Versioned[etcd.ProjectRecord]{
+			Record:   etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant},
+			Revision: 8, ReadRevision: 8,
+		},
+		tenant: etcd.Versioned[etcd.TenantRecord]{
+			Record: etcd.TenantRecord{ID: tenantID}, Revision: 6, ReadRevision: 6,
+		},
+		withoutDesiredState: true,
+	}
+	idempotency := &fakeServiceMutationIdempotency{
+		evidence: serviceMutationEvidence{durable: projectCreationTestEvidence().durable},
+	}
+	service, err := newServiceMutationService(repository, idempotency)
+	if err != nil {
+		t.Fatalf("newServiceMutationService() error = %v", err)
+	}
+	service.now = func() time.Time { return at.Add(time.Hour) }
+	response, err := service.CreateService(context.Background(), apiTypes.ServiceCreate{
+		EnvironmentID: environmentID, Name: "web", Image: "nginx:1.27-alpine",
+		Strategy: string(core.StrategyRecreate), OnFailure: apiTypes.OnFailureSwitchBack,
+		Restart: "unless-stopped", Replicas: 1,
+	}, "service-create-bootstrap-key-0001")
+	if err != nil {
+		t.Fatalf("CreateService() error = %v", err)
+	}
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(repository.projection.Record.ComposeArtifact, artifact); err != nil {
+		t.Fatalf("bootstrap Compose artifact error = %v", err)
+	}
+	if response.Status != http.StatusCreated || repository.projection.Record.EnvironmentID != environmentID ||
+		repository.projection.Record.RenderGeneration != 1 || len(repository.projection.Record.Services) != 1 ||
+		artifact.GetOwnerId() != environmentID || artifact.GetAuthorizedVolumeDir() != volumeDir {
+		t.Fatalf("bootstrap response/projection/artifact = %#v/%#v/%#v", response, repository.projection.Record, artifact)
 	}
 }

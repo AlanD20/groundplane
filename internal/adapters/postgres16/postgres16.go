@@ -43,39 +43,73 @@ func (a *adapter) Manual() bool         { return false }
 func (a *adapter) SupportsGrants() bool { return true }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
+	role := quoteIdentifier(p.Role)
+	database := quoteIdentifier(p.Database)
+	roleStatement := sql(
+		"DO $groundplane$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = ",
+		quoteLiteral(p.Role), ") THEN CREATE ROLE ", role, " WITH LOGIN; ELSE ALTER ROLE ", role,
+		" WITH LOGIN; END IF; END $groundplane$",
+	)
+	roleStatement = append(roleStatement, passwordSQL("ALTER ROLE "+role+" PASSWORD ", p.Password, "")...)
+	createDatabase := "CREATE DATABASE " + database + " OWNER " + role
+	databaseStatement := []byte(
+		"SELECT " + quoteLiteral(createDatabase) + " WHERE NOT EXISTS " +
+			"(SELECT 1 FROM pg_catalog.pg_database WHERE datname = " + quoteLiteral(p.Database) + ")\n\\gexec\n",
+	)
+	databaseStatement = append(databaseStatement, sql("ALTER DATABASE ", database, " OWNER TO ", role)...)
 	return []adapters.Step{
-		{Op: adapters.StepSQL, Database: "postgres", Stdin: passwordSQL(
-			"CREATE ROLE "+quoteIdentifier(p.Role)+" WITH LOGIN PASSWORD ", p.Password, "",
-		)},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: roleStatement},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: databaseStatement},
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
-			"CREATE DATABASE ", quoteIdentifier(p.Database), " OWNER ", quoteIdentifier(p.Role),
-		)},
-		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
-			"GRANT ALL PRIVILEGES ON DATABASE ", quoteIdentifier(p.Database), " TO ", quoteIdentifier(p.Role),
+			"GRANT ALL PRIVILEGES ON DATABASE ", database, " TO ", role,
 		)},
 	}
 }
 
 func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step {
 	// p.GrantOn is the OTHER attach's database; the role already exists.
+	role := quoteIdentifier(p.Role)
+	owner := quoteIdentifier(p.GrantOn)
+	privileges := sql("GRANT USAGE ON SCHEMA public TO ", role)
+	privileges = append(privileges, sql("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ", role)...)
+	privileges = append(privileges, sql("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ", role)...)
+	privileges = append(privileges, sql("GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO ", role)...)
+	privileges = append(privileges, sql(
+		"ALTER DEFAULT PRIVILEGES FOR ROLE ", owner,
+		" IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO ", role,
+	)...)
+	privileges = append(privileges, sql(
+		"ALTER DEFAULT PRIVILEGES FOR ROLE ", owner,
+		" IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO ", role,
+	)...)
 	return []adapters.Step{
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
-			"GRANT CONNECT ON DATABASE ", quoteIdentifier(p.GrantOn), " TO ", quoteIdentifier(p.Role),
+			"GRANT CONNECT ON DATABASE ", owner, " TO ", role,
 		)},
-		{Op: adapters.StepSQL, Database: p.GrantOn, Stdin: sql(
-			"GRANT USAGE ON SCHEMA public TO ", quoteIdentifier(p.Role),
-		)},
+		{Op: adapters.StepSQL, Database: p.GrantOn, Stdin: privileges},
 	}
 }
 
 func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step {
+	role := quoteIdentifier(p.Role)
+	owner := quoteIdentifier(p.GrantOn)
+	privileges := sql(
+		"ALTER DEFAULT PRIVILEGES FOR ROLE ", owner,
+		" IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM ", role,
+	)
+	privileges = append(privileges, sql(
+		"ALTER DEFAULT PRIVILEGES FOR ROLE ", owner,
+		" IN SCHEMA public REVOKE ALL PRIVILEGES ON SEQUENCES FROM ", role,
+	)...)
+	privileges = append(privileges, sql("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ", role)...)
+	privileges = append(privileges, sql("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ", role)...)
+	privileges = append(privileges, sql("REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM ", role)...)
+	privileges = append(privileges, sql("REVOKE USAGE ON SCHEMA public FROM ", role)...)
 	return []adapters.Step{
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
-			"REVOKE CONNECT ON DATABASE ", quoteIdentifier(p.GrantOn), " FROM ", quoteIdentifier(p.Role),
+			"REVOKE CONNECT ON DATABASE ", owner, " FROM ", role,
 		)},
-		{Op: adapters.StepSQL, Database: p.GrantOn, Stdin: sql(
-			"REVOKE USAGE ON SCHEMA public FROM ", quoteIdentifier(p.Role),
-		)},
+		{Op: adapters.StepSQL, Database: p.GrantOn, Stdin: privileges},
 	}
 }
 
@@ -123,6 +157,10 @@ func passwordSQL(prefix string, password []byte, suffix string) []byte {
 
 func quoteIdentifier(value string) string {
 	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+}
+
+func quoteLiteral(value string) string {
+	return `'` + strings.ReplaceAll(value, `'`, `''`) + `'`
 }
 
 func (a *adapter) BackupStrategy() adapters.BackupStrategy {

@@ -111,7 +111,7 @@ func TestRouteMutationsUseCanonicalOperations(t *testing.T) {
 			response: `{"id":"` + c07RouteID + `","environment_id":"` + c07EnvironmentID + `","host":"app.example.com","path":"/api/*","exposure":"public","target_service_id":"` + c07ServiceID + `","target_port":8080}`,
 			args: []string{
 				"add",
-				"--host",
+				"--hostname",
 				"app.example.com",
 				"--path",
 				"/api/*",

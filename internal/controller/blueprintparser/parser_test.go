@@ -22,6 +22,7 @@ func TestParseReturnsTypedProjectAndRootExtensions(t *testing.T) {
 		"root.yaml": `kind: environment
 schema: 1
 metadata: {tenant: acme, project: shop, environment: production}
+x-gp-network-pool: 10.40.0.0/16
 x-gp-routes:
   - {target: web, target_port: 8080, exposure: internal}
 services:
@@ -38,6 +39,9 @@ services:
 	if result.Envelope.Kind != core.KindDocEnvironment ||
 		result.Project.Services["web"].Image != "overridden" {
 		t.Fatalf("Parse() result = %+v", result)
+	}
+	if result.Extensions.NetworkPool != "10.40.0.0/16" {
+		t.Fatalf("network pool = %q", result.Extensions.NetworkPool)
 	}
 	if len(result.Extensions.Routes) != 1 || result.Extensions.Routes[0].Target != "web" ||
 		result.Extensions.Routes[0].TargetPort != 8080 || result.Extensions.Routes[0].Path != "/" {
@@ -187,6 +191,22 @@ services: {web: {image: nginx}}
 	requireValidationError(t, err)
 }
 
+func TestParseRequiresCanonicalIPv4NetworkPool(t *testing.T) {
+	for _, networkPool := range []string{"", "10.40.1.0/16", "2001:db8::/64"} {
+		root := `kind: environment
+schema: 1
+metadata: {tenant: acme, project: shop, environment: production}
+services: {web: {image: nginx}}
+`
+		if networkPool != "" {
+			root = strings.Replace(root, "services:", "x-gp-network-pool: "+networkPool+"\nservices:", 1)
+		}
+		bundle := parserBundle([]string{"root.yaml"}, map[string]string{"root.yaml": root})
+		_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+		requireValidationError(t, err)
+	}
+}
+
 // Rationale: native Compose short bind syntax must pass through the same
 // compose-go canonical model and closed-bundle checks as long syntax.
 func TestParseAcceptsReadOnlyShortBind(t *testing.T) {
@@ -203,6 +223,10 @@ func TestParseAcceptsReadOnlyShortBind(t *testing.T) {
 	volume := result.Project.Services["web"].Volumes[0]
 	if volume.Type != "bind" || !volume.ReadOnly || volume.Source != "data" {
 		t.Fatalf("resolved volume = %+v", volume)
+	}
+	if len(result.RuntimeFiles) != 1 || result.RuntimeFiles[0].Path != "data/content.txt" ||
+		string(result.RuntimeFiles[0].Content) != "declared\n" {
+		t.Fatalf("runtime files = %#v", result.RuntimeFiles)
 	}
 }
 
@@ -882,7 +906,7 @@ func parserBundle(sources []string, contents map[string]string) core.BlueprintBu
 }
 
 func environmentRoot(body string) string {
-	return "kind: environment\nschema: 1\nmetadata: {tenant: acme, project: shop, environment: production}\n" + body
+	return "kind: environment\nschema: 1\nmetadata: {tenant: acme, project: shop, environment: production}\nx-gp-network-pool: 10.40.0.0/16\n" + body
 }
 
 var parserEnvironmentScope = EnvironmentScope{

@@ -217,20 +217,19 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 			terminalHierarchyDeletionNodes(children), "environment.finalize", environment.digest,
 		))
 	}
-	if operation.Tombstone.OperationKind == HierarchyDeletionOperationBacking && root {
-		return nodes, nil
+	if operation.Tombstone.OperationKind != HierarchyDeletionOperationBacking || !root {
+		runners, freezeErr := repository.freezeIndexedResource(ctx, operation, projectID,
+			hierarchyDeletionIndexedResource{
+				targetKind: "runner", actionKind: HierarchyDeletionRunnerLocalRemove,
+				ownerPrefix: func(owner string) string { return runnerOwnerPrefix(RunnerOwnerProject, owner) },
+				primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
+				validateOwner: validateHierarchyDeletionRunnerOwner,
+			})
+		if freezeErr != nil {
+			return nil, freezeErr
+		}
+		nodes = append(nodes, runners...)
 	}
-	runners, err := repository.freezeIndexedResource(ctx, operation, projectID,
-		hierarchyDeletionIndexedResource{
-			targetKind: "runner", actionKind: HierarchyDeletionRunnerLocalRemove,
-			ownerPrefix: func(owner string) string { return runnerOwnerPrefix(RunnerOwnerProject, owner) },
-			primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
-			validateOwner: validateHierarchyDeletionRunnerOwner,
-		})
-	if err != nil {
-		return nil, err
-	}
-	nodes = append(nodes, runners...)
 	secrets, err := repository.freezeIndexedResource(ctx, operation, projectID,
 		hierarchyDeletionIndexedResource{
 			targetKind: "secret", actionKind: HierarchyDeletionProjectSecretRemove,
@@ -255,19 +254,29 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 ) ([]HierarchyDeletionMembershipNode, error) {
 	descriptors := []hierarchyDeletionIndexedResource{
 		{targetKind: "attach", actionKind: HierarchyDeletionAttachGrantRevoke, ownerPrefix: attachOwnerPrefix, primaryKey: attachKey, stableIDKind: ids.KindAttach, validateOwner: validateHierarchyDeletionAttachOwner},
-		{targetKind: "service", actionKind: HierarchyDeletionServiceRemove, ownerPrefix: serviceOwnerPrefix, primaryKey: serviceKey, stableIDKind: ids.KindService, validateOwner: validateHierarchyDeletionServiceOwner},
-		{targetKind: "entry", actionKind: HierarchyDeletionEntryRemove, ownerPrefix: entryOwnerCollectionPrefix, primaryKey: entryRecordKey, stableIDKind: ids.KindEnvEntry, validateOwner: validateHierarchyDeletionEntryOwner},
-		{targetKind: "route", actionKind: HierarchyDeletionRouteRemove, ownerPrefix: routeOwnerPrefix, primaryKey: routeKey, stableIDKind: ids.KindRoute, validateOwner: validateHierarchyDeletionRouteOwner},
-		{targetKind: "component", actionKind: HierarchyDeletionComponentRemove, ownerPrefix: componentEnvironmentOwnerPrefix, primaryKey: componentKey, stableIDKind: ids.KindComponent, validateOwner: validateHierarchyDeletionComponentOwner},
+		{targetKind: "release-group", actionKind: HierarchyDeletionReleaseGroupRemove, ownerPrefix: func(owner string) string { return releaseGroupOwnerPrefix + owner + "/" }, primaryKey: releaseGroupRecordKey, stableIDKind: ids.KindReleaseGroup, validateOwner: validateHierarchyDeletionReleaseGroupOwner, controller: true},
+		{targetKind: "service", actionKind: HierarchyDeletionServiceRemove, ownerPrefix: serviceOwnerPrefix, primaryKey: serviceKey, stableIDKind: ids.KindService, validateOwner: validateHierarchyDeletionServiceOwner, controller: true},
+		{targetKind: "entry", actionKind: HierarchyDeletionEntryRemove, ownerPrefix: entryOwnerCollectionPrefix, primaryKey: entryRecordKey, stableIDKind: ids.KindEnvEntry, validateOwner: validateHierarchyDeletionEntryOwner, controller: true},
+		{targetKind: "route", actionKind: HierarchyDeletionRouteRemove, ownerPrefix: routeOwnerPrefix, primaryKey: routeKey, stableIDKind: ids.KindRoute, validateOwner: validateHierarchyDeletionRouteOwner, controller: true},
+		{targetKind: "component", actionKind: HierarchyDeletionComponentRemove, ownerPrefix: componentEnvironmentOwnerPrefix, primaryKey: componentKey, stableIDKind: ids.KindComponent, validateOwner: validateHierarchyDeletionComponentOwner, controller: true},
 		{targetKind: "script", actionKind: HierarchyDeletionScriptRemove, ownerPrefix: scriptOwnerPrefix, primaryKey: scriptKey, stableIDKind: ids.KindScript, validateOwner: validateHierarchyDeletionScriptOwner, controller: true},
-		{targetKind: "zone", actionKind: HierarchyDeletionZoneRemove, ownerPrefix: zoneOwnerPrefix, primaryKey: zoneKey, stableIDKind: ids.KindNetwork, validateOwner: validateHierarchyDeletionZoneOwner},
+		{targetKind: "zone", actionKind: HierarchyDeletionZoneRemove, ownerPrefix: zoneOwnerPrefix, primaryKey: zoneKey, stableIDKind: ids.KindNetwork, validateOwner: validateHierarchyDeletionZoneOwner, controller: true},
 		{targetKind: "connector", actionKind: HierarchyDeletionConnectorFinalize, ownerPrefix: connectorEnvironmentPrefix, primaryKey: connectorRecordKey, stableIDKind: ids.KindConnector, validateOwner: validateHierarchyDeletionConnectorOwner, controller: true},
 	}
-	nodes := make([]HierarchyDeletionMembershipNode, 0)
+	cleanup := hierarchyDeletionAgentNode(
+		"environment:"+environmentID+":cleanup", "environment", environmentID,
+		HierarchyDeletionEnvironmentAgentCleanup, environmentRevision, nil, operation.Tombstone.OperationID,
+	)
+	cleanup.fixedInputDigest = environmentDigest
+	nodes := []HierarchyDeletionMembershipNode{cleanup}
 	for _, descriptor := range descriptors {
 		part, err := repository.freezeIndexedResource(ctx, operation, environmentID, descriptor)
 		if err != nil {
 			return nil, err
+		}
+		prerequisites := terminalHierarchyDeletionNodes(nodes)
+		for index := range part {
+			part[index].PrerequisiteNodeIDs = append([]string(nil), prerequisites...)
 		}
 		if descriptor.actionKind == HierarchyDeletionAttachGrantRevoke {
 			for _, grant := range part {
@@ -289,13 +298,6 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		terminalHierarchyDeletionNodes(nodes), "reservation.release", environmentDigest,
 	)
 	nodes = append(nodes, reservation)
-	cleanup := hierarchyDeletionAgentNode(
-		"environment:"+environmentID+":cleanup", "environment", environmentID,
-		HierarchyDeletionEnvironmentAgentCleanup, environmentRevision,
-		terminalHierarchyDeletionNodes(nodes), operation.Tombstone.OperationID,
-	)
-	cleanup.fixedInputDigest = environmentDigest
-	nodes = append(nodes, cleanup)
 	return nodes, nil
 }
 

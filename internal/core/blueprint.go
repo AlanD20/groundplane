@@ -384,8 +384,8 @@ func (a Attach) Validate() error {
 	if a.ID == "" || a.Name == "" || a.BackingProjectID == "" {
 		return fmt.Errorf("attach: id, name, and backing_project_id are required")
 	}
-	if len(a.Services) == 0 {
-		return fmt.Errorf("attach %s: at least one service is required", a.Name)
+	if a.Service == "" || a.CredentialAttachID == "" {
+		return fmt.Errorf("attach %s: service and credential_attach_id are required", a.Name)
 	}
 	switch a.Status {
 	case AttachPending,
@@ -416,6 +416,31 @@ func (c Component) Validate() error {
 		}
 	default:
 		return fmt.Errorf("component %s: unknown owner %q", c.ID, c.Owner)
+	}
+	branches := 0
+	if c.Config.Caddy != nil { branches++ }
+	if c.Config.CloudflareTunnel != nil { branches++ }
+	if c.Config.CoreDNS != nil { branches++ }
+	if branches > 1 {
+		return fmt.Errorf("component %s: desired config has multiple variants", c.ID)
+	}
+	switch c.Kind {
+	case ComponentKindIngressCaddy:
+		if c.Owner != ComponentOwnerEnvironment || c.Config.CloudflareTunnel != nil || c.Config.CoreDNS != nil ||
+			(c.Enabled && (c.Config.Caddy == nil || c.Config.Caddy.ZoneID == "")) {
+			return fmt.Errorf("component %s: Caddy ownership or config is invalid", c.ID)
+		}
+	case ComponentKindEdgeCloudflare:
+		if c.Owner != ComponentOwnerEnvironment || c.Config.Caddy != nil || c.Config.CoreDNS != nil ||
+			(c.Enabled && (c.Config.CloudflareTunnel == nil || c.Config.CloudflareTunnel.SecretID == "")) {
+			return fmt.Errorf("component %s: Cloudflare Tunnel ownership or config is invalid", c.ID)
+		}
+	case ComponentKindCoreDNS:
+		if c.Owner != ComponentOwnerPlatform || c.Config.Caddy != nil || c.Config.CloudflareTunnel != nil {
+			return fmt.Errorf("component %s: CoreDNS ownership or config is invalid", c.ID)
+		}
+	default:
+		return fmt.Errorf("component %s: unknown kind %q", c.ID, c.Kind)
 	}
 	return nil
 }

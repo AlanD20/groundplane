@@ -16,8 +16,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
+	"github.com/AlanD20/groundplane/internal/infra/docker/containerlogs"
 	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelpercontainer"
+	"github.com/AlanD20/groundplane/internal/infra/docker/hostresolutionhelpercontainer"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/materializerrunner"
+	"github.com/AlanD20/groundplane/internal/infra/docker/scriptrunner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -56,6 +60,10 @@ type agentRuntimeResources struct {
 	compose                *agentComposeResources
 	environmentDirectories ownedEnvironmentDirectoryHelper
 	materializer           ownedMaterializationHelper
+	managedConfigs         *managedconfighelpercontainer.Executor
+	hostResolution         *hostresolutionhelpercontainer.Executor
+	logs                   *containerlogs.Reader
+	scripts                *agent.DockerScriptRuntime
 }
 
 type agentComposeResources struct {
@@ -126,10 +134,60 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 			errors.Join(materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
 		)
 	}
+	managedConfigs, err := managedconfighelpercontainer.New(image)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			err,
+			errors.Join(materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
+	actionCatalog, err := newRegisteredActionCatalog()
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			err,
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
+	componentActions, err := newRegisteredComponentActionRuntime(actionCatalog, managedConfigs, resources.helper)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			err,
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
+	hostResolution, err := hostresolutionhelpercontainer.New(image)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			err,
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
+	logReader, err := containerlogs.New()
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			errs.Wrap(errs.KindInternal, err),
+			errors.Join(hostResolution.Close(), managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
+	scriptEngine, err := scriptrunner.New(ctx)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			err,
+			errors.Join(logReader.Close(), hostResolution.Close(), managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
+	scripts, err := agent.NewDockerScriptRuntime(scriptEngine)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(
+			err,
+			errors.Join(scriptEngine.Close(), logReader.Close(), hostResolution.Close(), managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
+		)
+	}
 	runtimeResources := &agentRuntimeResources{
 		compose: resources, environmentDirectories: directoryHelper, materializer: materializerHelper,
+		managedConfigs: managedConfigs, hostResolution: hostResolution, logs: logReader, scripts: scripts,
 	}
-	client, err := agent.NewClientWithRuntimes(
+	client, err := agent.NewClientWithLogReader(
 		agentprotocol.SocketPath,
 		cfg.AgentID,
 		token,
@@ -138,8 +196,18 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 		compose,
 		directories,
 		materializer,
+		logReader,
 	)
 	if err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetComponentActionRuntime(componentActions); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetHostResolutionRuntime(&hostResolutionRuntime{helper: hostResolution}); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetScriptRuntime(scripts); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 
@@ -158,9 +226,21 @@ func (resources *agentRuntimeResources) Close() error {
 	if resources == nil {
 		return nil
 	}
-	var materializerErr, directoryErr, composeErr error
+	var logErr, scriptErr, hostResolutionErr, managedConfigErr, materializerErr, directoryErr, composeErr error
+	if resources.logs != nil {
+		logErr = resources.logs.Close()
+	}
+	if resources.scripts != nil {
+		scriptErr = resources.scripts.Close()
+	}
 	if resources.materializer != nil {
 		materializerErr = resources.materializer.Close()
+	}
+	if resources.managedConfigs != nil {
+		managedConfigErr = resources.managedConfigs.Close()
+	}
+	if resources.hostResolution != nil {
+		hostResolutionErr = resources.hostResolution.Close()
 	}
 	if resources.environmentDirectories != nil {
 		directoryErr = resources.environmentDirectories.Close()
@@ -168,7 +248,7 @@ func (resources *agentRuntimeResources) Close() error {
 	if resources.compose != nil {
 		composeErr = resources.compose.Close()
 	}
-	if joined := errors.Join(materializerErr, directoryErr, composeErr); joined != nil {
+	if joined := errors.Join(logErr, scriptErr, hostResolutionErr, managedConfigErr, materializerErr, directoryErr, composeErr); joined != nil {
 		return errs.Wrap(errs.KindInternal, joined)
 	}
 	return nil

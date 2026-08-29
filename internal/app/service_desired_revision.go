@@ -47,11 +47,6 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !hasProjection {
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict, "Service mutation requires initialized Environment desired state",
-		)
-	}
 	candidateRevisionID := ids.New(ids.KindTask)
 	if current == nil {
 		desired := record.Desired
@@ -66,7 +61,8 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		}
 	}
 	candidate, err := buildServiceDesiredProjection(
-		tenant.Record.ID, project.Record.ID, projection.Record, record, current == nil,
+		tenant.Record.ID, project.Record.ID, environment.Record, projection.Record, hasProjection,
+		record, references, current == nil,
 		candidateRevisionID, generation,
 	)
 	if err != nil {
@@ -91,7 +87,8 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		}
 	}
 	candidate, err = buildServiceDesiredProjection(
-		tenant.Record.ID, project.Record.ID, projection.Record, record, current == nil,
+		tenant.Record.ID, project.Record.ID, environment.Record, projection.Record, hasProjection,
+		record, references, current == nil,
 		claim.RevisionID, generation,
 	)
 	if err != nil {
@@ -204,17 +201,25 @@ func serviceDesiredState(
 func buildServiceDesiredProjection(
 	tenantID string,
 	projectID string,
+	environment etcd.EnvironmentRecord,
 	current etcd.EnvironmentComposeProjection,
+	hasCurrent bool,
 	record etcd.ServiceRecord,
+	references etcd.ServiceMutationReferences,
 	create bool,
 	revisionID string,
 	generation uint64,
 ) (etcd.EnvironmentComposeProjection, error) {
 	candidate := current
+	candidate.EnvironmentID = environment.ID
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
 	candidate.Services = append([]etcd.EnvironmentComposeIdentity(nil), current.Services...)
-	candidate.Networks = append([]etcd.EnvironmentComposeIdentity(nil), current.Networks...)
+	networks, err := serviceZoneNetworkIdentities(current.Networks, references.Zones)
+	if err != nil {
+		return etcd.EnvironmentComposeProjection{}, err
+	}
+	candidate.Networks = networks
 	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
 	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
 	candidate.Routes = append([]etcd.EnvironmentRouteIdentity(nil), current.Routes...)
@@ -230,9 +235,17 @@ func buildServiceDesiredProjection(
 			return candidate.Services[left].Name < candidate.Services[right].Name
 		})
 	}
-	artifact := &agentpb.ComposeArtifact{}
-	if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
-		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
+	artifact := &agentpb.ComposeArtifact{
+		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:             environment.ID,
+		ProjectName:         "gp-" + strings.ToLower(environment.ID),
+		AuthorizedVolumeDir: environment.VolumeDir,
+		CanonicalYaml:       []byte("services: {}\nnetworks: {}\n"),
+	}
+	if hasCurrent {
+		if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
+			return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
+		}
 	}
 	action := controller.ServiceArtifactEdit
 	if create {
@@ -240,6 +253,7 @@ func buildServiceDesiredProjection(
 	}
 	mutated, err := controller.MutateEnvironmentServiceArtifact(artifact, controller.ServiceArtifactMutation{
 		Action: action, Desired: record.Desired,
+		Zones:      serviceArtifactZones(references),
 		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
 		RenderGeneration: generation,
@@ -252,6 +266,42 @@ func buildServiceDesiredProjection(
 		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return candidate, nil
+}
+
+func serviceArtifactZones(references etcd.ServiceMutationReferences) []controller.ServiceArtifactZone {
+	zones := make([]controller.ServiceArtifactZone, len(references.Zones))
+	for index, zone := range references.Zones {
+		zones[index] = controller.ServiceArtifactZone{
+			ID: zone.Record.Desired.ID, Name: zone.Record.Desired.Name,
+			Subnet: zone.Record.Desired.Subnet, Internal: zone.Record.Desired.Internal,
+		}
+	}
+	return zones
+}
+
+func serviceZoneNetworkIdentities(
+	current []etcd.EnvironmentComposeIdentity,
+	zones []etcd.Versioned[etcd.ZoneRecord],
+) ([]etcd.EnvironmentComposeIdentity, error) {
+	result := append([]etcd.EnvironmentComposeIdentity(nil), current...)
+	for _, zone := range zones {
+		identity := etcd.EnvironmentComposeIdentity{ID: zone.Record.Desired.ID, Name: zone.Record.Desired.Name}
+		found := false
+		for _, existing := range result {
+			if existing.ID == identity.ID || existing.Name == identity.Name {
+				if existing != identity {
+					return nil, errs.New(errs.KindInternal, "Service Zone identity conflicts with the Environment projection")
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, identity)
+		}
+	}
+	sort.Slice(result, func(left, right int) bool { return result[left].Name < result[right].Name })
+	return result, nil
 }
 
 func buildServiceRemovalProjection(

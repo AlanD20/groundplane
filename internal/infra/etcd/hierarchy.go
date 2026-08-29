@@ -79,13 +79,19 @@ func (repository *HierarchyRepository) CreateTenant(
 	if err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
+	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetTenant, record.ID)
+	if err != nil {
+		return Versioned[TenantRecord]{}, err
+	}
 	primary := tenantKey(record.ID)
 	slug := tenantSlugKey(record.Slug)
+	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
 	result, err := repository.store.Transact(ctx,
-		[]Condition{{Key: primary}, {Key: slug}},
+		[]Condition{{Key: primary}, {Key: slug}, {Key: coordinationKey}},
 		[]Mutation{
 			{Type: MutationPut, Key: primary, Value: value},
 			{Type: MutationPut, Key: slug, Value: []byte(record.ID)},
+			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 	)
 	if err != nil {
@@ -124,11 +130,18 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
+	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetTenant, record.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(coordinationValue)
+	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
 	plan, err := newIdempotencyMutationPlan(
-		[]Condition{{Key: tenantKey(record.ID)}, {Key: tenantSlugKey(record.Slug)}},
+		[]Condition{{Key: tenantKey(record.ID)}, {Key: tenantSlugKey(record.Slug)}, {Key: coordinationKey}},
 		[]Mutation{
 			{Type: MutationPut, Key: tenantKey(record.ID), Value: value},
 			{Type: MutationPut, Key: tenantSlugKey(record.Slug), Value: []byte(record.ID)},
+			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 		classifyTenantCreateConflict(record.Slug),
 	)
@@ -144,7 +157,7 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 
 func classifyTenantCreateConflict(slug string) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 2 {
+		if len(values) != 3 {
 			return errs.New(errs.KindInternal, "Tenant creation compare evidence is incomplete")
 		}
 		if values[0] != nil {
@@ -152,6 +165,9 @@ func classifyTenantCreateConflict(slug string) idempotencyPlanClassifier {
 		}
 		if values[1] != nil {
 			return errs.Newf(errs.KindSlugConflict, "tenant slug %q already exists", slug)
+		}
+		if values[2] != nil {
+			return errs.New(errs.KindInternal, "generated Tenant coordination identity collided with durable state")
 		}
 		return errs.New(errs.KindInternal, "Tenant creation compare failure was not classified")
 	}
@@ -206,6 +222,12 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
+	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetProject, record.ID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(coordinationValue)
+	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), record.ID)
 	plan, err := newIdempotencyMutationPlan(
 		[]Condition{
 			{Key: projectKey(record.ID)},
@@ -213,11 +235,13 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 			{Key: projectOwnerKey(record)},
 			{Key: tenantKey(record.TenantID), ModRevision: owner.Revision},
 			{Key: tombstoneKey},
+			{Key: coordinationKey},
 		},
 		[]Mutation{
 			{Type: MutationPut, Key: projectKey(record.ID), Value: value},
 			{Type: MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
 			{Type: MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
+			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 		classifyProjectCreateConflict(record, owner.Revision),
 	)
@@ -233,7 +257,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 
 func classifyProjectCreateConflict(record ProjectRecord, ownerRevision int64) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		if len(values) != 5 {
+		if len(values) != 6 {
 			return errs.New(errs.KindInternal, "Project creation compare evidence is incomplete")
 		}
 		if values[0] != nil {
@@ -250,6 +274,9 @@ func classifyProjectCreateConflict(record ProjectRecord, ownerRevision int64) id
 		}
 		if values[4] != nil {
 			return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
+		}
+		if values[5] != nil {
+			return errs.New(errs.KindInternal, "generated Project coordination identity collided with durable state")
 		}
 		if values[3].ModRevision != ownerRevision {
 			return stateConflict("tenant", record.TenantID)
@@ -403,10 +430,18 @@ func (repository *HierarchyRepository) CreateProject(
 	if err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
+	coordinationTarget := HierarchyDeletionTargetProject
+	coordinationValue, err := encodeInitialHierarchyCoordination(coordinationTarget, record.ID)
+	if err != nil {
+		return Versioned[ProjectRecord]{}, err
+	}
+	coordinationKey := HierarchyCoordinationKey(string(coordinationTarget), record.ID)
+	conditions = append(conditions, Condition{Key: coordinationKey})
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationPut, Key: projectKey(record.ID), Value: value},
 		{Type: MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
 		{Type: MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
+		{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
 	})
 	if err != nil {
 		return Versioned[ProjectRecord]{}, err
@@ -447,10 +482,15 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
+	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetEnvironment, record.ID)
+	if err != nil {
+		return Versioned[EnvironmentRecord]{}, err
+	}
 	primary := environmentKey(record.ID)
 	label := environmentNameKey(record.ProjectID, record.Name)
 	ownerIndex := environmentOwnerKey(record.ProjectID, record.ID)
 	epochKey := environmentMutationEpochKey(record.ID)
+	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]Condition{
 			{Key: primary},
@@ -458,19 +498,21 @@ func (repository *HierarchyRepository) CreateEnvironment(
 			{Key: ownerIndex},
 			{Key: projectKey(record.ProjectID), ModRevision: owner.Revision},
 			{Key: epochKey},
+			{Key: coordinationKey},
 		},
 		[]Mutation{
 			{Type: MutationPut, Key: primary, Value: value},
 			{Type: MutationPut, Key: label, Value: []byte(record.ID)},
 			{Type: MutationPut, Key: ownerIndex, Value: []byte(record.ID)},
 			{Type: MutationPut, Key: epochKey, Value: epochValue},
+			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 	)
 	if err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	if !result.Succeeded {
-		if len(result.FailureReads) != 5 {
+		if len(result.FailureReads) != 6 {
 			return Versioned[EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation compare evidence is incomplete",
@@ -480,6 +522,12 @@ func (repository *HierarchyRepository) CreateEnvironment(
 			return Versioned[EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation collided with mutation epoch state",
+			)
+		}
+		if result.FailureReads[5] != nil {
+			return Versioned[EnvironmentRecord]{}, errs.New(
+				errs.KindInternal,
+				"environment creation collided with hierarchy coordination state",
 			)
 		}
 		return Versioned[EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)

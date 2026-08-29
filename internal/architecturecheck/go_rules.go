@@ -140,6 +140,19 @@ func checkGoRules(ctx context.Context, root string, files []*sourceFile) []Findi
 					},
 				)
 			}
+			if subject, reason := forbiddenComponentModuleImport(unit.file.rel, importPath); reason != "" {
+				findings = append(
+					findings,
+					Finding{
+						Path:    unit.file.rel,
+						Line:    position.Line,
+						Column:  position.Column,
+						Rule:    "component-module-import",
+						Subject: subject,
+						Message: reason,
+					},
+				)
+			}
 		}
 		if unit.file.isTest || unit.ast.Name == nil {
 			continue
@@ -461,19 +474,17 @@ func forbiddenLayerImport(source, importPath, module string) (string, string) {
 			"internal/agent",
 			"internal/infra",
 			"internal/adapters",
-			"internal/components",
 		)
 	case sourceDirectory == "internal/controller" || strings.HasPrefix(sourceDirectory, "internal/controller/"):
 		denied = forbidden("internal/cli")
 	case sourceDirectory == "internal/agent" || strings.HasPrefix(sourceDirectory, "internal/agent/"):
-		denied = forbidden("internal/controller", "internal/cli", "internal/adapters", "internal/components")
+		denied = forbidden("internal/controller", "internal/cli", "internal/adapters")
 	case sourceDirectory == "internal/core" || strings.HasPrefix(sourceDirectory, "internal/core/"):
 		denied = forbidden(
 			"internal/infra",
 			"internal/controller",
 			"internal/agent",
 			"internal/adapters",
-			"internal/components",
 			"internal/cli",
 		)
 	case sourceDirectory == "internal/adapters" || strings.HasPrefix(sourceDirectory, "internal/adapters/"):
@@ -482,15 +493,6 @@ func forbiddenLayerImport(source, importPath, module string) (string, string) {
 			"internal/cli",
 			"internal/controller",
 			"internal/agent",
-			"internal/components",
-		)
-	case sourceDirectory == "internal/components" || strings.HasPrefix(sourceDirectory, "internal/components/"):
-		denied = forbidden(
-			"internal/infra",
-			"internal/cli",
-			"internal/controller",
-			"internal/agent",
-			"internal/adapters",
 		)
 	case sourceDirectory == "internal/infra" || strings.HasPrefix(sourceDirectory, "internal/infra/"):
 		denied = forbidden(
@@ -498,7 +500,6 @@ func forbiddenLayerImport(source, importPath, module string) (string, string) {
 			"internal/controller",
 			"internal/agent",
 			"internal/adapters",
-			"internal/components",
 			"pkg/api",
 		)
 	case sourceDirectory == "internal/common" || strings.HasPrefix(sourceDirectory, "internal/common/"):
@@ -509,7 +510,6 @@ func forbiddenLayerImport(source, importPath, module string) (string, string) {
 			"internal/agent",
 			"internal/infra",
 			"internal/adapters",
-			"internal/components",
 			"pkg/api",
 		)
 	case sourceDirectory == "pkg/api" || strings.HasPrefix(sourceDirectory, "pkg/api/"):
@@ -519,6 +519,42 @@ func forbiddenLayerImport(source, importPath, module string) (string, string) {
 	}
 	if denied {
 		return target, fmt.Sprintf("%s must not import %s", sourceDirectory, target)
+	}
+	return "", ""
+}
+
+const (
+	componentSDKModule          = "github.com/AlanD20/groundplane-component-sdk"
+	registeredComponentsModule = "github.com/AlanD20/groundplane-registered-components"
+)
+
+var componentStandardLibrary = map[string]struct{}{
+	"bytes": {}, "crypto/sha256": {}, "encoding/binary": {}, "encoding/hex": {},
+	"errors": {}, "fmt": {}, "math": {}, "net/netip": {}, "net/url": {},
+	"slices": {}, "sort": {}, "strconv": {}, "strings": {}, "testing": {},
+	"time": {}, "unicode/utf8": {},
+}
+
+func forbiddenComponentModuleImport(source, importPath string) (string, string) {
+	sourceDirectory := pathpkg.Dir(source)
+	inSDK := sourceDirectory == "component-sdk" || strings.HasPrefix(sourceDirectory, "component-sdk/")
+	inRegistered := sourceDirectory == "registered-components" ||
+		strings.HasPrefix(sourceDirectory, "registered-components/")
+	if inSDK || inRegistered {
+		_, standard := componentStandardLibrary[importPath]
+		ownSDK := importPath == componentSDKModule || strings.HasPrefix(importPath, componentSDKModule+"/")
+		ownRegistered := importPath == registeredComponentsModule ||
+			strings.HasPrefix(importPath, registeredComponentsModule+"/")
+		allowed := standard || inSDK && ownSDK || inRegistered && (ownSDK || ownRegistered)
+		if !allowed {
+			return importPath, fmt.Sprintf("%s may import only component-sdk and approved standard library", sourceDirectory)
+		}
+	}
+	importsRegistered := importPath == registeredComponentsModule ||
+		strings.HasPrefix(importPath, registeredComponentsModule+"/")
+	if importsRegistered && sourceDirectory != "internal/app" && !strings.HasPrefix(sourceDirectory, "internal/app/") &&
+		!inRegistered {
+		return importPath, fmt.Sprintf("%s must not import concrete registered Components", sourceDirectory)
 	}
 	return "", ""
 }

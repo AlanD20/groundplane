@@ -29,7 +29,9 @@ func TestComponentTaskIntentCodecIsStrictAndCanonical(t *testing.T) {
 	tunnelCandidate, err := NewComponentRecord(core.Component{
 		ID: tunnelCurrent.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
-		Config:            map[string]any{"token_entry_id": ids.NewAt(ids.KindEnvEntry, now, 1011)},
+		Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+			SecretID: ids.NewAt(ids.KindSecret, now, 1011),
+		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1012)},
 	})
 	if err != nil {
@@ -61,6 +63,31 @@ func TestComponentTaskIntentCodecIsStrictAndCanonical(t *testing.T) {
 	corrupt := bytes.Replace(encoded, []byte(`"status":`), []byte(`"unknown":0,"status":`), 1)
 	if _, err := decodeComponentTaskIntent(corrupt); err == nil {
 		t.Fatal("decodeComponentTaskIntent() accepted an unknown field")
+	}
+}
+
+func TestComponentTaskIntentAcceptsEnabledHealthRepair(t *testing.T) {
+	t.Parallel()
+	now := taskJournalTime().Add(time.Minute)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1051)
+	record, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, now, 1052), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, now, 1053),
+		}},
+		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1054)}, PinnedIPv4: "10.40.12.2",
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord() error = %v", err)
+	}
+	if _, err := NewComponentTaskIntent(
+		ids.NewAt(ids.KindTask, now, 1055),
+		environmentID,
+		[]ComponentTaskCandidate{{CurrentRevision: 1, Current: record, Candidate: record}},
+		now,
+	); err != nil {
+		t.Fatalf("NewComponentTaskIntent(health repair) error = %v", err)
 	}
 }
 
@@ -333,7 +360,9 @@ func componentTaskLifecycleRecords(
 	}
 	if currentEnabled {
 		currentComponent.Enabled = true
-		currentComponent.Config = map[string]any{"zone_id": currentZone.Desired.ID}
+		currentComponent.Config = core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: currentZone.Desired.ID,
+		}}
 		currentComponent.GeneratedServices = []string{serviceID}
 		currentComponent.PinnedIPv4 = "10.40.10.2"
 		currentComponent.Healthy = true
@@ -345,7 +374,9 @@ func componentTaskLifecycleRecords(
 	candidate, err := NewComponentRecord(core.Component{
 		ID: componentID, Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-		Config:            map[string]any{"zone_id": candidateZone.Desired.ID},
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: candidateZone.Desired.ID,
+		}},
 		GeneratedServices: []string{serviceID}, PinnedIPv4: "10.40.11.2",
 	})
 	if err != nil {
@@ -363,6 +394,17 @@ func seedComponentTaskLifecycle(
 	records componentTaskLifecycleFixture,
 ) {
 	t.Helper()
+	projectID := ids.NewAt(ids.KindProject, task.CreatedAt, 1290)
+	environment := EnvironmentRecord{
+		ID: task.Target, ProjectID: projectID, Name: "production", NetworkPool: "10.40.0.0/16",
+		VolumeDir:         "/var/lib/groundplane/vol/platform/" + projectID + "/" + task.Target,
+		ProvisioningState: EnvironmentProvisioningReady, CreateTaskID: task.ID, CreatedAt: task.CreatedAt,
+	}
+	environmentBytes, err := encodeEnvironment(environment)
+	if err != nil {
+		t.Fatalf("encodeEnvironment() error = %v", err)
+	}
+	seedTaskRepositoryValue(t, store, environmentKey(task.Target), environmentBytes)
 	currentBytes, err := encodeComponentRecord(records.current)
 	if err != nil {
 		t.Fatalf("encodeComponentRecord() error = %v", err)
@@ -437,6 +479,7 @@ func assertComponentTaskTerminalState(
 	want := records.current
 	if promoted {
 		want = records.candidate
+		want.Runtime.Healthy = want.Desired.Enabled
 	}
 	if !reflect.DeepEqual(component, want) {
 		t.Fatalf("active Component = %#v, want %#v", component, want)

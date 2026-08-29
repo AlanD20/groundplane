@@ -35,6 +35,21 @@ func NewEtcdRepository(
 	}, nil
 }
 
+func (repository *EtcdRepository) ResolveTargetKind(
+	ctx context.Context,
+	requested TargetKind,
+	targetID string,
+) (TargetKind, error) {
+	if requested != TargetProject {
+		return requested, nil
+	}
+	resolved, err := repository.journal.ResolveProjectDeletionTargetKind(ctx, targetID)
+	if err != nil {
+		return "", err
+	}
+	return TargetKind(resolved), nil
+}
+
 func (repository *EtcdRepository) BeginDeletion(
 	ctx context.Context,
 	begin BeginDeletion,

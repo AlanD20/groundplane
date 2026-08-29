@@ -13,7 +13,7 @@ import (
 )
 
 func TestTaskPlanResolverRebuildsExactEnvironmentCreatePlan(t *testing.T) {
-	resolver, err := NewTaskPlanResolver("/var/lib/groundplane/vol")
+	resolver, err := NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolver() error = %v", err)
 	}
@@ -35,7 +35,7 @@ func TestTaskPlanResolverRebuildsExactEnvironmentCreatePlan(t *testing.T) {
 }
 
 func TestTaskPlanResolverRejectsExtraDurableParameter(t *testing.T) {
-	resolver, err := NewTaskPlanResolver("/var/lib/groundplane/vol")
+	resolver, err := NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolver() error = %v", err)
 	}

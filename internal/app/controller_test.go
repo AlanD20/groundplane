@@ -19,7 +19,7 @@ func TestNewControllerRejectsInvalidHTTPListenerBeforeEtcdConstruction(t *testin
 		"environment_pool: 10.0.0.0/9\nsystem_pool: 10.128.0.0/9\n" +
 			"runner:\n  network_pool: 10.240.0.0/24\n  host_uid_range: 200000-200007\n" +
 			"  subuid_range: 300000-824287\n  subgid_range: 900000-1424287\n" +
-			"etcd:\n  endpoints: [\"://invalid\"]\nlisten:\n  http: 0.0.0.0:8080\nlog:\n  file:\n    enabled: false\n",
+			"listen:\n  http: [127.0.0.1:8080, 0.0.0.0:8080]\nlog:\n  file:\n    enabled: false\n",
 	)
 	if err := os.WriteFile(configPath, contents, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -90,6 +90,7 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			scheduler := &fakeControllerScheduler{stopped: make(chan struct{})}
 			controllerTasks := &fakeControllerScheduler{stopped: make(chan struct{})}
 			localAgent := &fakeControllerScheduler{stopped: make(chan struct{})}
+			etcdLifecycle := &fakeControllerEtcdLifecycle{stopped: make(chan struct{})}
 			container := &fakeOwnedContainer{
 				err: test.containerErr, localAgentStopped: localAgent.stopped,
 			}
@@ -99,6 +100,7 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 				schedulerStopped:       scheduler.stopped,
 				controllerTasksStopped: controllerTasks.stopped,
 				agentStopped:           agent.stopped,
+				etcdLifecycleStopped:   etcdLifecycle.stopped,
 				containerClosed:        &container.closed,
 			}
 			controller := &Controller{
@@ -109,6 +111,7 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 				controllerTasks: controllerTasks,
 				localAgent:      localAgent,
 				container:       container,
+				etcdContainer:   etcdLifecycle,
 				store:           store,
 			}
 
@@ -128,6 +131,9 @@ func TestControllerRunClosesOwnedStoreAndPreservesErrors(t *testing.T) {
 			}
 			if container.closeCalls != 1 {
 				t.Fatalf("Agent container Close calls = %d, want 1", container.closeCalls)
+			}
+			if etcdLifecycle.closeCalls != 1 {
+				t.Fatalf("etcd container Close calls = %d, want 1", etcdLifecycle.closeCalls)
 			}
 			if container.closedBeforeLocalAgentStopped {
 				t.Fatal("Agent container Close ran before local Agent reconciliation stopped")
@@ -186,7 +192,7 @@ type fakeControllerServer struct {
 	returned bool
 }
 
-func (s *fakeControllerServer) Serve(context.Context, string) error {
+func (s *fakeControllerServer) Serve(context.Context, []string) error {
 	s.returned = true
 	return s.err
 }
@@ -221,6 +227,7 @@ type fakeOwnedStore struct {
 	schedulerStopped                   <-chan struct{}
 	controllerTasksStopped             <-chan struct{}
 	agentStopped                       <-chan struct{}
+	etcdLifecycleStopped               <-chan struct{}
 	containerClosed                    *bool
 	closedBeforeServerReturned         bool
 	closedBeforeSchedulerStopped       bool
@@ -247,6 +254,11 @@ func (s *fakeOwnedStore) Close() error {
 	default:
 		s.closedBeforeAgentStopped = true
 	}
+	select {
+	case <-s.etcdLifecycleStopped:
+	default:
+		s.closedBeforeAgentStopped = true
+	}
 	s.closedBeforeContainer = !*s.containerClosed
 	return s.err
 }
@@ -257,6 +269,22 @@ type fakeOwnedContainer struct {
 	closed                        bool
 	localAgentStopped             <-chan struct{}
 	closedBeforeLocalAgentStopped bool
+}
+
+type fakeControllerEtcdLifecycle struct {
+	stopped    chan struct{}
+	closeCalls int
+}
+
+func (lifecycle *fakeControllerEtcdLifecycle) Run(ctx context.Context) error {
+	<-ctx.Done()
+	close(lifecycle.stopped)
+	return nil
+}
+
+func (lifecycle *fakeControllerEtcdLifecycle) Close() error {
+	lifecycle.closeCalls++
+	return nil
 }
 
 func (container *fakeOwnedContainer) Close() error {

@@ -14,7 +14,8 @@ func TestProvisionStepsCompileResolvedIdentity(t *testing.T) {
 		Database: "api_5d3f9a", Role: "api_5d3f9a", Password: []byte("URL_safe-1"),
 	})
 	if len(steps) != 3 || steps[0].Database != "postgres" ||
-		!bytes.Contains(steps[0].Stdin, []byte(`CREATE ROLE "api_5d3f9a" WITH LOGIN PASSWORD 'URL_safe-1'`)) ||
+		!bytes.Contains(steps[0].Stdin, []byte(`CREATE ROLE "api_5d3f9a" WITH LOGIN`)) ||
+		!bytes.Contains(steps[0].Stdin, []byte(`ALTER ROLE "api_5d3f9a" PASSWORD 'URL_safe-1'`)) ||
 		bytes.Contains(steps[0].Stdin, []byte("<generated>")) {
 		t.Fatalf("ProvisionSteps() = %#v", steps)
 	}
@@ -24,6 +25,23 @@ func TestProvisionStepsCompileResolvedIdentity(t *testing.T) {
 		if character != 0 {
 			t.Fatal("ClearSteps() retained PostgreSQL identity input")
 		}
+	}
+}
+
+// Rationale: task retry is repair, so replaying a partially completed Attach must converge the
+// existing role and database instead of failing on an unconditional CREATE statement.
+func TestProvisionStepsAreRetrySafe(t *testing.T) {
+	steps := (&adapter{}).ProvisionSteps(adapters.ProvisionParams{
+		Database: "api-web_5d3f9a", Role: "api-web_5d3f9a", Password: []byte("URL_safe-1"),
+	})
+	defer adapters.ClearSteps(steps)
+	if len(steps) != 3 ||
+		!bytes.Contains(steps[0].Stdin, []byte(`IF NOT EXISTS`)) ||
+		!bytes.Contains(steps[0].Stdin, []byte(`ALTER ROLE "api-web_5d3f9a"`)) ||
+		!bytes.Contains(steps[1].Stdin, []byte(`WHERE NOT EXISTS`)) ||
+		!bytes.Contains(steps[1].Stdin, []byte(`\gexec`)) ||
+		!bytes.Contains(steps[1].Stdin, []byte(`ALTER DATABASE "api-web_5d3f9a" OWNER TO "api-web_5d3f9a"`)) {
+		t.Fatalf("ProvisionSteps() is not retry-safe: %#v", steps)
 	}
 }
 
@@ -37,6 +55,36 @@ func TestGrantAndDetachStepsUseCorrectDatabaseContext(t *testing.T) {
 	if len(grant) != 2 || grant[1].Database != "other_4a1b2c" || len(detach) != 3 ||
 		!bytes.Contains(detach[1].Stdin, []byte(`ALTER DATABASE "api_5d3f9a" OWNER TO postgres`)) {
 		t.Fatalf("GrantSteps()/DetachSteps() = %#v / %#v", grant, detach)
+	}
+}
+
+func TestGrantAndRevokeStepsCoverExistingAndFutureSchemaObjects(t *testing.T) {
+	params := adapters.ProvisionParams{Role: "identity_5d3f9a", GrantOn: "api_4a1b2c"}
+	grant := (&adapter{}).GrantSteps(params)
+	revoke := (&adapter{}).RevokeSteps(params)
+	defer adapters.ClearSteps(grant)
+	defer adapters.ClearSteps(revoke)
+	for _, statement := range []string{
+		`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "identity_5d3f9a"`,
+		`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "identity_5d3f9a"`,
+		`GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO "identity_5d3f9a"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "api_4a1b2c" IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO "identity_5d3f9a"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "api_4a1b2c" IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO "identity_5d3f9a"`,
+	} {
+		if len(grant) != 2 || !bytes.Contains(grant[1].Stdin, []byte(statement)) {
+			t.Fatalf("GrantSteps() omitted %q: %#v", statement, grant)
+		}
+	}
+	for _, statement := range []string{
+		`REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM "identity_5d3f9a"`,
+		`REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM "identity_5d3f9a"`,
+		`REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM "identity_5d3f9a"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "api_4a1b2c" IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM "identity_5d3f9a"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "api_4a1b2c" IN SCHEMA public REVOKE ALL PRIVILEGES ON SEQUENCES FROM "identity_5d3f9a"`,
+	} {
+		if len(revoke) != 2 || !bytes.Contains(revoke[1].Stdin, []byte(statement)) {
+			t.Fatalf("RevokeSteps() omitted %q: %#v", statement, revoke)
+		}
 	}
 }
 

@@ -1,56 +1,138 @@
 package controller
 
 import (
+	"crypto/sha256"
+	"net/netip"
 	"path"
 	"sort"
 	"strings"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// GeneratedEnvironmentService ties one rendered Compose service to the stable
-// Component that owns its runtime identity.
+type EnvironmentComponentPlanFunc func(
+	core.Environment,
+	core.Component,
+) (componentsdk.EnvironmentPlan, error)
+
+// EnvironmentComponentRegistration is the composition-root seam between one
+// build-time registered implementation and Controller-owned plan validation.
+type EnvironmentComponentRegistration struct {
+	Kind          core.ComponentKind
+	Definition    componentsdk.Definition
+	CatalogDigest [sha256.Size]byte
+	Plan          EnvironmentComponentPlanFunc
+}
+
 type GeneratedEnvironmentService struct {
 	ComponentID string
 	Name        string
-	Definition  components.GeneratedService
+	Definition  componentsdk.ManagedService
 }
 
-// GeneratedEnvironmentFile is one Controller-rendered path beneath the
-// Environment's authorized volume root.
 type GeneratedEnvironmentFile struct {
 	ComponentID string
 	Path        string
 	Content     []byte
 }
 
-// EnvironmentComponentRender is the deterministic output of every enabled
-// EnvironmentRender registration in one Environment.
 type EnvironmentComponentRender struct {
 	Services []GeneratedEnvironmentService
 	Files    []GeneratedEnvironmentFile
 }
 
-// RenderEnvironmentComponents invokes the compiled-in component catalog
-// without branching on concrete kinds and rejects collisions before task
-// construction or secret materialization.
+func ValidateEnvironmentComponentCatalog(catalog []EnvironmentComponentRegistration) error {
+	seen := make(map[core.ComponentKind]struct{}, len(catalog))
+	for _, registration := range catalog {
+		if registration.Kind == "" || registration.Plan == nil ||
+			registration.Definition.Validate() != nil ||
+			registration.Definition.Implementation() != componentsdk.ImplementationKey(registration.Kind) ||
+			zeroComponentDigest(registration.CatalogDigest) {
+			return errs.New(errs.KindInternal, "Environment Component registration is invalid")
+		}
+		if _, duplicate := seen[registration.Kind]; duplicate {
+			return errs.New(errs.KindInternal, "Environment Component catalog repeats a kind")
+		}
+		seen[registration.Kind] = struct{}{}
+	}
+	return nil
+}
+
+func BuildEnvironmentComponentAction(
+	catalog []EnvironmentComponentRegistration,
+	kind core.ComponentKind,
+	componentID string,
+	actionID componentsdk.ActionID,
+	artifactID string,
+	artifactDigest [sha256.Size]byte,
+	generation uint64,
+	composeArtifactID string,
+	serviceID string,
+) (*agentpb.ComponentApply, error) {
+	if err := ValidateEnvironmentComponentCatalog(catalog); err != nil {
+		return nil, err
+	}
+	if ids.Validate(ids.KindComponent, componentID) != nil ||
+		ids.Validate(ids.KindConfig, artifactID) != nil || generation == 0 ||
+		zeroComponentDigest(artifactDigest) ||
+		ids.Validate(ids.KindConfig, composeArtifactID) != nil ||
+		ids.Validate(ids.KindService, serviceID) != nil {
+		return nil, errs.New(errs.KindInternal, "Environment Component action identity is invalid")
+	}
+	for _, registration := range catalog {
+		if registration.Kind != kind {
+			continue
+		}
+		action, found := registration.Definition.FindAction(actionID)
+		if !found || action.Capability() != componentsdk.CapabilityManagedConfig ||
+			action.Operation() != componentsdk.OperationActivate {
+			return nil, errs.New(errs.KindInternal, "Environment Component action is not registered")
+		}
+		definitionDigest := registration.Definition.Digest()
+		return &agentpb.ComponentApply{
+			ComponentId: componentID,
+			DefinitionDigest: append([]byte(nil), definitionDigest[:]...),
+			CatalogDigest: append([]byte(nil), registration.CatalogDigest[:]...),
+			ActionId: string(actionID), ArtifactId: artifactID,
+			ArtifactDigest: append([]byte(nil), artifactDigest[:]...),
+			Generation: generation, ComposeArtifactId: composeArtifactID, ServiceId: serviceID,
+		}, nil
+	}
+	return nil, errs.New(errs.KindInternal, "Environment Component action kind is not registered")
+}
+
+func zeroComponentDigest(value [sha256.Size]byte) bool {
+	var combined byte
+	for _, part := range value {
+		combined |= part
+	}
+	return combined == 0
+}
+
+func CloneEnvironmentComponentCatalog(
+	catalog []EnvironmentComponentRegistration,
+) []EnvironmentComponentRegistration {
+	return append([]EnvironmentComponentRegistration(nil), catalog...)
+}
+
 func RenderEnvironmentComponents(
 	environment core.Environment,
-	catalog []components.Registration,
+	catalog []EnvironmentComponentRegistration,
 ) (EnvironmentComponentRender, error) {
 	if ids.Validate(ids.KindEnvironment, environment.ID) != nil {
 		return EnvironmentComponentRender{}, errs.New(errs.KindInternal, "Component render Environment is invalid")
 	}
-	registrations, err := environmentComponentRegistrations(catalog)
-	if err != nil {
+	if err := ValidateEnvironmentComponentCatalog(catalog); err != nil {
 		return EnvironmentComponentRender{}, err
 	}
-	entries, err := environmentSecretEntries(environment.Entries)
-	if err != nil {
-		return EnvironmentComponentRender{}, err
+	registrations := make(map[core.ComponentKind]EnvironmentComponentRegistration, len(catalog))
+	for _, registration := range catalog {
+		registrations[registration.Kind] = registration
 	}
 	authoredServiceNames := make(map[string]struct{}, len(environment.Services))
 	serviceIDs := make(map[string]struct{}, len(environment.Services))
@@ -67,30 +149,29 @@ func RenderEnvironmentComponents(
 
 	componentsByKind := make(map[core.ComponentKind]core.Component, len(environment.Components))
 	componentIDs := make(map[string]struct{}, len(environment.Components))
-	for _, component := range environment.Components {
-		registration, exists := registrations[component.Kind]
-		if !exists || !registration.Allows(core.ComponentOwnerEnvironment) || registration.Environment == nil ||
-			component.Owner != core.ComponentOwnerEnvironment || component.OwnerID != environment.ID ||
-			ids.Validate(ids.KindComponent, component.ID) != nil || component.Validate() != nil {
+	for _, instance := range environment.Components {
+		if _, exists := registrations[instance.Kind]; !exists ||
+			instance.Owner != core.ComponentOwnerEnvironment || instance.OwnerID != environment.ID ||
+			ids.Validate(ids.KindComponent, instance.ID) != nil || instance.Validate() != nil {
 			return EnvironmentComponentRender{}, errs.New(
 				errs.KindValidationFailed,
 				"Environment Component is not supported by the compiled catalog",
 			)
 		}
-		if _, duplicate := componentsByKind[component.Kind]; duplicate {
+		if _, duplicate := componentsByKind[instance.Kind]; duplicate {
 			return EnvironmentComponentRender{}, errs.New(
 				errs.KindInternal,
 				"Environment Component projection repeats a kind",
 			)
 		}
-		if _, duplicate := componentIDs[component.ID]; duplicate {
+		if _, duplicate := componentIDs[instance.ID]; duplicate {
 			return EnvironmentComponentRender{}, errs.New(
 				errs.KindInternal,
 				"Environment Component projection repeats an id",
 			)
 		}
-		componentsByKind[component.Kind] = component
-		componentIDs[component.ID] = struct{}{}
+		componentsByKind[instance.Kind] = instance
+		componentIDs[instance.ID] = struct{}{}
 	}
 
 	result := EnvironmentComponentRender{}
@@ -102,19 +183,20 @@ func RenderEnvironmentComponents(
 	}
 	sort.Slice(kinds, func(left, right int) bool { return kinds[left] < kinds[right] })
 	for _, kind := range kinds {
-		component := componentsByKind[kind]
-		services, files, renderErr := registrations[kind].Environment.Render(environment, component)
-		if renderErr != nil {
-			return EnvironmentComponentRender{}, renderErr
+		instance := componentsByKind[kind]
+		plan, err := registrations[kind].Plan(environment, instance)
+		if err != nil {
+			return EnvironmentComponentRender{}, err
 		}
-		if !component.Enabled && (len(services) != 0 || len(files) != 0) {
+		plan = componentsdk.CloneEnvironmentPlan(plan)
+		if !instance.Enabled && (len(plan.Services) != 0 || len(plan.Files) != 0) {
 			return EnvironmentComponentRender{}, errs.New(
 				errs.KindInternal,
-				"disabled Environment Component rendered runtime resources",
+				"disabled Environment Component planned runtime resources",
 			)
 		}
-		generatedIDs := make(map[string]struct{}, len(component.GeneratedServices))
-		for _, serviceID := range component.GeneratedServices {
+		generatedIDs := make(map[string]struct{}, len(instance.GeneratedServices))
+		for _, serviceID := range instance.GeneratedServices {
 			if ids.Validate(ids.KindService, serviceID) != nil {
 				return EnvironmentComponentRender{}, errs.New(
 					errs.KindInternal,
@@ -123,72 +205,66 @@ func RenderEnvironmentComponents(
 			}
 			generatedIDs[serviceID] = struct{}{}
 		}
-		for name, service := range services {
-			if err := validateGeneratedEnvironmentService(
-				environment,
-				component,
-				name,
-				service,
-				entries,
-			); err != nil {
+		for _, service := range plan.Services {
+			if err := validateGeneratedEnvironmentService(environment, instance, service); err != nil {
 				return EnvironmentComponentRender{}, err
 			}
-			if _, exists := generatedIDs[service.Service.ID]; !exists {
+			if _, exists := generatedIDs[service.ID]; !exists {
 				return EnvironmentComponentRender{}, errs.New(
 					errs.KindInternal,
-					"Component renderer emitted an unowned Service identity",
+					"Component planner emitted an unowned Service identity",
 				)
 			}
-			if _, collision := authoredServiceNames[name]; collision {
+			if _, collision := authoredServiceNames[service.Name]; collision {
 				return EnvironmentComponentRender{}, errs.New(
 					errs.KindNameConflict,
 					"Component generated Service name conflicts with an authored Service",
 				)
 			}
-			if _, collision := generatedServiceNames[name]; collision {
+			if _, collision := generatedServiceNames[service.Name]; collision {
 				return EnvironmentComponentRender{}, errs.New(
 					errs.KindNameConflict,
-					"Component render repeats a generated Service name",
+					"Component plan repeats a generated Service name",
 				)
 			}
-			if _, collision := serviceIDs[service.Service.ID]; collision {
+			if _, collision := serviceIDs[service.ID]; collision {
 				return EnvironmentComponentRender{}, errs.New(
 					errs.KindInternal,
 					"Component generated Service id is already in use",
 				)
 			}
-			generatedServiceNames[name] = struct{}{}
-			serviceIDs[service.Service.ID] = struct{}{}
+			generatedServiceNames[service.Name] = struct{}{}
+			serviceIDs[service.ID] = struct{}{}
 			result.Services = append(result.Services, GeneratedEnvironmentService{
-				ComponentID: component.ID,
-				Name:        name,
+				ComponentID: instance.ID,
+				Name:        service.Name,
 				Definition:  service,
 			})
 		}
-		if component.Enabled && len(services) != len(generatedIDs) {
+		if instance.Enabled && len(plan.Services) != len(generatedIDs) {
 			return EnvironmentComponentRender{}, errs.New(
 				errs.KindInternal,
-				"Component renderer did not cover every generated Service identity",
+				"Component planner did not cover every generated Service identity",
 			)
 		}
-		for filePath, content := range files {
-			if !validGeneratedRelativePath(filePath) {
+		for _, file := range plan.Files {
+			if !validGeneratedRelativePath(file.Path) {
 				return EnvironmentComponentRender{}, errs.New(
 					errs.KindValidationFailed,
 					"Component generated file path is invalid",
 				)
 			}
-			if _, collision := generatedFilePaths[filePath]; collision {
+			if _, collision := generatedFilePaths[file.Path]; collision {
 				return EnvironmentComponentRender{}, errs.New(
 					errs.KindNameConflict,
-					"Component render repeats a generated file path",
+					"Component plan repeats a generated file path",
 				)
 			}
-			generatedFilePaths[filePath] = struct{}{}
+			generatedFilePaths[file.Path] = struct{}{}
 			result.Files = append(result.Files, GeneratedEnvironmentFile{
-				ComponentID: component.ID,
-				Path:        filePath,
-				Content:     append([]byte(nil), content...),
+				ComponentID: instance.ID,
+				Path:        file.Path,
+				Content:     append([]byte(nil), file.Content...),
 			})
 		}
 	}
@@ -199,85 +275,60 @@ func RenderEnvironmentComponents(
 	return result, nil
 }
 
-func environmentComponentRegistrations(
-	catalog []components.Registration,
-) (map[core.ComponentKind]components.Registration, error) {
-	registrations := make(map[core.ComponentKind]components.Registration)
-	for _, registration := range catalog {
-		if registration.ApplyStrategy != components.EnvironmentRender {
-			continue
-		}
-		if registration.Kind == "" || registration.Environment == nil ||
-			!registration.Allows(core.ComponentOwnerEnvironment) {
-			return nil, errs.New(errs.KindInternal, "Environment Component registration is invalid")
-		}
-		if _, duplicate := registrations[registration.Kind]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Environment Component catalog repeats a kind")
-		}
-		registrations[registration.Kind] = registration
-	}
-	return registrations, nil
-}
-
-func environmentSecretEntries(entries []core.EnvEntry) (map[string]core.EnvEntry, error) {
-	indexed := make(map[string]core.EnvEntry, len(entries))
-	for _, entry := range entries {
-		if entry.Validate() != nil || ids.Validate(ids.KindEnvEntry, entry.ID) != nil {
-			return nil, errs.New(errs.KindInternal, "Component render Entry projection is invalid")
-		}
-		if _, duplicate := indexed[entry.ID]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Component render Entry projection repeats an id")
-		}
-		indexed[entry.ID] = entry
-	}
-	return indexed, nil
-}
-
 func validateGeneratedEnvironmentService(
 	environment core.Environment,
-	component core.Component,
-	name string,
-	generated components.GeneratedService,
-	entries map[string]core.EnvEntry,
+	instance core.Component,
+	service componentsdk.ManagedService,
 ) error {
-	if name == "" || generated.Service.Name != name || ids.Validate(ids.KindService, generated.Service.ID) != nil ||
-		generated.Service.Validate() != nil {
-		return errs.New(errs.KindInternal, "Component renderer emitted an invalid Service")
+	if ids.Validate(ids.KindService, service.ID) != nil || service.Name == "" || service.Image == "" ||
+		service.Replicas == 0 || service.NetworkMode != componentsdk.ManagedNetworkModeZones {
+		return errs.New(errs.KindInternal, "Component planner emitted an invalid Service")
 	}
-	for _, zoneName := range generated.Service.Zones {
-		zone, exists := environment.Zones[zoneName]
-		if !exists || zone.Name != zoneName {
-			return errs.New(errs.KindInternal, "Component renderer referenced an unknown Zone")
+	networks := make(map[string]struct{}, len(service.Networks))
+	for _, network := range service.Networks {
+		zone, exists := environment.Zones[network.Name]
+		if !exists || zone.Name != network.Name {
+			return errs.New(errs.KindInternal, "Component planner referenced an unknown Zone")
+		}
+		if _, duplicate := networks[network.Name]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Component planner repeated a Zone")
+		}
+		networks[network.Name] = struct{}{}
+		if network.StaticIPv4 != "" {
+			address, err := netip.ParseAddr(network.StaticIPv4)
+			if err != nil || !address.Is4() || address.String() != network.StaticIPv4 {
+				return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid static address")
+			}
 		}
 	}
-	for zoneName, address := range generated.StaticIPv4 {
-		if _, exists := environment.Zones[zoneName]; !exists || address == "" {
-			return errs.New(errs.KindInternal, "Component renderer emitted an invalid static address binding")
-		}
-	}
-	mountTargets := make(map[string]struct{}, len(generated.Mounts))
-	for _, mount := range generated.Mounts {
+	mountTargets := make(map[string]struct{}, len(service.Mounts))
+	for _, mount := range service.Mounts {
 		if !validGeneratedRelativePath(mount.Source) || !path.IsAbs(mount.Target) ||
 			path.Clean(mount.Target) != mount.Target || mount.Target == "/" {
-			return errs.New(errs.KindValidationFailed, "Component renderer emitted an unsafe mount")
+			return errs.New(errs.KindValidationFailed, "Component planner emitted an unsafe mount")
 		}
 		if _, duplicate := mountTargets[mount.Target]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Component renderer repeated a mount target")
+			return errs.New(errs.KindValidationFailed, "Component planner repeated a mount target")
 		}
 		mountTargets[mount.Target] = struct{}{}
 	}
-	secretNames := make(map[string]struct{}, len(generated.SecretEnvironment))
-	for _, binding := range generated.SecretEnvironment {
-		entry, exists := entries[binding.EntryID]
-		if !validGeneratedEnvironmentVariable(binding.Name) || !exists || !entry.Secret {
-			return errs.New(errs.KindValidationFailed, "Component renderer emitted an invalid secret binding")
+	secretNames := make(map[string]struct{}, len(service.SecretEnvironment))
+	for _, binding := range service.SecretEnvironment {
+		if !validGeneratedEnvironmentVariable(binding.Name) ||
+			ids.Validate(ids.KindSecret, binding.SecretID) != nil {
+			return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid Secret binding")
 		}
 		if _, duplicate := secretNames[binding.Name]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Component renderer repeated a secret binding")
+			return errs.New(errs.KindValidationFailed, "Component planner repeated a Secret binding")
 		}
 		secretNames[binding.Name] = struct{}{}
 	}
-	if component.Enabled && len(generated.Service.Zones) == 0 {
+	for _, dependency := range service.Dependencies {
+		if dependency.ServiceName == "" || dependency.Condition == "" {
+			return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid Service dependency")
+		}
+	}
+	if instance.Enabled && len(service.Networks) == 0 {
 		return errs.New(errs.KindValidationFailed, "enabled Environment Component Service must join a Zone")
 	}
 	return nil

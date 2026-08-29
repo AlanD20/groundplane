@@ -149,7 +149,7 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 	if services["api"].ID != apiID || services["api"].ExpectedReplicas != 1 || !services["api"].HasHealthcheck {
 		t.Fatalf("api artifact projection = %#v", services["api"])
 	}
-	if services["worker"].ID != workerID || services["worker"].ExpectedReplicas != 2 {
+	if services["worker"].ID != workerID || services["worker"].ExpectedReplicas != 0 {
 		t.Fatalf("worker artifact projection = %#v", services["worker"])
 	}
 	assertSortedLabelPairs(t, artifact.Services[0].ExpectedLabels)
@@ -158,6 +158,21 @@ func TestRenderComposeBuildsCanonicalOwnedArtifact(t *testing.T) {
 	}
 	if len(artifact.Volumes) != 1 || artifact.Volumes[0].DockerName != "gp_vol_"+strings.ToLower(volumeID) {
 		t.Fatalf("volume artifact projection = %#v", artifact.Volumes)
+	}
+	for kind, labels := range map[string]map[string]string{
+		"network": labelPairMap(artifact.Networks[0].ExpectedLabels),
+		"volume":  labelPairMap(artifact.Volumes[0].ExpectedLabels),
+	} {
+		if _, exists := labels[composeLabelPlanID]; exists {
+			t.Fatalf("%s labels contain volatile plan identity: %#v", kind, labels)
+		}
+		if _, exists := labels[composeLabelRenderGen]; exists {
+			t.Fatalf("%s labels contain volatile render generation: %#v", kind, labels)
+		}
+	}
+	if labels := services["api"].Labels; labels[composeLabelPlanID] != input.PlanID ||
+		labels[composeLabelRenderGen] != "7" {
+		t.Fatalf("service labels lost execution identity: %#v", labels)
 	}
 
 	var document renderedComposeDocument
@@ -220,6 +235,51 @@ func TestRenderComposeIsDeterministic(t *testing.T) {
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("RenderCompose() returned different artifacts for identical input")
+	}
+}
+
+func TestRenderComposePersistentResourceLabelsExcludeExecutionIdentity(t *testing.T) {
+	serviceID := composeIdentityTestID(ids.KindService, 37)
+	project := &composetypes.Project{
+		Services: composetypes.Services{"api": {Image: "example/api:1"}},
+		Networks: composetypes.Networks{"private": {}},
+		Volumes:  composetypes.Volumes{"data": {}},
+	}
+	input := composeRenderTestInput(project)
+	input.Identities = ComposeIdentitySnapshot{
+		Services: []ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
+		Networks: []ComposeResourceIdentity{{ID: composeIdentityTestID(ids.KindNetwork, 35), Name: "private"}},
+		Volumes:  []ComposeResourceIdentity{{ID: composeIdentityTestID(ids.KindVolume, 36), Name: "data"}},
+	}
+
+	artifact, err := RenderCompose(input)
+	if err != nil {
+		t.Fatalf("RenderCompose() error = %v", err)
+	}
+	for kind, labels := range map[string]map[string]string{
+		"network": labelPairMap(artifact.Networks[0].ExpectedLabels),
+		"volume":  labelPairMap(artifact.Volumes[0].ExpectedLabels),
+	} {
+		if _, exists := labels[composeLabelPlanID]; exists {
+			t.Fatalf("%s labels contain volatile plan identity: %#v", kind, labels)
+		}
+		if _, exists := labels[composeLabelRenderGen]; exists {
+			t.Fatalf("%s labels contain volatile render generation: %#v", kind, labels)
+		}
+	}
+	if _, err := BuildPlan(PlanBuildInput{
+		VolumeRoot: input.AuthorizedVolumeDir[:len("/var/lib/groundplane/vol")],
+		PlanID:     input.PlanID, RenderGeneration: input.RenderGeneration,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, TargetID: serviceID,
+		Artifacts: []*agentpb.ComposeArtifact{artifact},
+		Steps: []*agentpb.ExecutionStep{{
+			StepId: composeIdentityTestID(ids.KindStep, 38), TimeoutSeconds: 30,
+			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+				ArtifactId: artifact.ArtifactId, ServiceIds: []string{serviceID},
+			}},
+		}},
+	}); err != nil {
+		t.Fatalf("BuildPlan() rejected stable persistent labels: %v", err)
 	}
 }
 

@@ -2,28 +2,32 @@ package config
 
 import "testing"
 
-// Rationale: the human API must remain loopback-only with a concrete numeric port.
+// Rationale: the unauthenticated human API must retain loopback, permit only
+// explicit trusted private interfaces, and never accept wildcard or public binds.
 func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		address string
-		wantErr bool
+		name      string
+		addresses []string
+		wantErr   bool
 	}{
-		{name: "default loopback address", address: "127.0.0.1:8080"},
-		{name: "lowest valid port", address: "127.0.0.1:1"},
-		{name: "highest valid port", address: "127.0.0.1:65535"},
-		{name: "empty host", address: ":8080", wantErr: true},
-		{name: "wildcard IPv4", address: "0.0.0.0:8080", wantErr: true},
-		{name: "public IPv4", address: "203.0.113.10:8080", wantErr: true},
-		{name: "private IPv4", address: "192.168.1.10:8080", wantErr: true},
-		{name: "localhost name", address: "localhost:8080", wantErr: true},
-		{name: "IPv6 loopback", address: "[::1]:8080", wantErr: true},
-		{name: "empty port", address: "127.0.0.1:", wantErr: true},
-		{name: "named port", address: "127.0.0.1:http", wantErr: true},
-		{name: "zero port", address: "127.0.0.1:0", wantErr: true},
-		{name: "port above range", address: "127.0.0.1:65536", wantErr: true},
+		{name: "default loopback address", addresses: []string{"127.0.0.1:8080"}},
+		{name: "explicit private address", addresses: []string{"127.0.0.1:8080", "192.0.2.10:8080"}},
+		{name: "lowest valid port", addresses: []string{"127.0.0.1:1"}},
+		{name: "highest valid port", addresses: []string{"127.0.0.1:65535"}},
+		{name: "missing addresses", wantErr: true},
+		{name: "empty host", addresses: []string{"127.0.0.1:8080", ":8080"}, wantErr: true},
+		{name: "wildcard IPv4", addresses: []string{"127.0.0.1:8080", "0.0.0.0:8080"}, wantErr: true},
+		{name: "public IPv4", addresses: []string{"127.0.0.1:8080", "203.0.113.10:8080"}, wantErr: true},
+		{name: "private without loopback", addresses: []string{"192.168.1.10:8080"}, wantErr: true},
+		{name: "duplicate", addresses: []string{"127.0.0.1:8080", "127.0.0.1:8080"}, wantErr: true},
+		{name: "localhost name", addresses: []string{"localhost:8080"}, wantErr: true},
+		{name: "IPv6 loopback", addresses: []string{"[::1]:8080"}, wantErr: true},
+		{name: "empty port", addresses: []string{"127.0.0.1:"}, wantErr: true},
+		{name: "named port", addresses: []string{"127.0.0.1:http"}, wantErr: true},
+		{name: "zero port", addresses: []string{"127.0.0.1:0"}, wantErr: true},
+		{name: "port above range", addresses: []string{"127.0.0.1:65536"}, wantErr: true},
 	}
 
 	for _, test := range tests {
@@ -31,7 +35,7 @@ func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
 			t.Parallel()
 
 			cfg := validControllerConfig()
-			cfg.Listen.HTTP = test.address
+			cfg.Listen.HTTP = test.addresses
 			err := cfg.Validate()
 			if (err != nil) != test.wantErr {
 				t.Fatalf("ControllerConfig.Validate() error = %v, want error = %t", err, test.wantErr)

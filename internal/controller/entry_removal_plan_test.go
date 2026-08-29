@@ -50,12 +50,12 @@ func TestTaskPlanResolverRebuildsFileEntryRemoval(t *testing.T) {
 		Kind: core.EntryKindFile, Path: "config/app.yaml", UID: uint32Pointer(1000), GID: uint32Pointer(1001),
 		Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"api"}, Secret: true,
 	}, nil)
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	_, _, _, _, catalog := componentPlanProjectionInput(t)
-	catalog[0].Environment = routeRemovalPlanCaddyRenderer{}
+	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
 	resolver.componentCatalog = catalog
 	prepared, err := resolver.prepareEntryRemovalTask(
 		context.Background(), task, intent,
@@ -100,12 +100,12 @@ func TestTaskPlanResolverRebuildsEntryRemovalAfterHierarchyRename(t *testing.T) 
 		Kind: core.EntryKindFile, Path: "config/runtime.env", UID: uint32Pointer(1000), GID: uint32Pointer(1000),
 		Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"api"},
 	}, nil)
-	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	_, _, _, _, catalog := componentPlanProjectionInput(t)
-	catalog[0].Environment = routeRemovalPlanCaddyRenderer{}
+	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
 	resolver.componentCatalog = catalog
 	identity := entryRemovalIdentityFromReader(reader)
 	prepared, err := resolver.prepareEntryRemovalTask(

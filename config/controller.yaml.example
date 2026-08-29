@@ -12,11 +12,12 @@ runner:
   subuid_range: 300000-824287
   subgid_range: 900000-1424287
 etcd:
-  endpoints:
-    - 127.0.0.1:2379
   key_prefix: /groundplane/
 listen:
-  http: 127.0.0.1:8080   # human API (REST/JSON)
+  # Human API (REST/JSON). Keep loopback; add only explicit trusted private
+  # addresses. Wildcard and public addresses are rejected.
+  http:
+    - 127.0.0.1:8080
 scheduler:
   tick_interval: 30s
 storage:

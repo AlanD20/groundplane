@@ -57,7 +57,9 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 			Candidate: core.Component{
 				ID: current.Record.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 				OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-				Config:            map[string]any{"zone_id": zone.Desired.ID},
+				Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+					ZoneID: zone.Desired.ID,
+				}},
 				GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1404)},
 			},
 		}},
@@ -67,9 +69,9 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 		t.Fatalf("PrepareEnvironmentComponentTask() error = %v", err)
 	}
 	if preparation.Intent.TaskID != taskID || len(preparation.Intent.Candidates) != 1 ||
-		preparation.Intent.Candidates[0].Candidate.Runtime.PinnedIPv4 != "10.40.10.2" ||
+		preparation.Intent.Candidates[0].Candidate.Runtime.PinnedIPv4 != "10.40.10.6" ||
 		len(preparation.addresses) != 1 || !preparation.addresses[0].Mutates ||
-		preparation.addresses[0].Next.Reservations[current.Record.Desired.ID] != "10.40.10.2" {
+		preparation.addresses[0].Next.Reservations[current.Record.Desired.ID] != "10.40.10.6" {
 		t.Fatalf("Component preparation = %#v", preparation)
 	}
 	if !reflect.DeepEqual(preparation.Intent.Candidates[0].Current, current.Record) ||
@@ -101,7 +103,9 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 		[]EnvironmentComponentCandidateInput{{Current: current, Candidate: core.Component{
 			ID: current.Record.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 			OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-			Config:            map[string]any{"zone_id": zone.Desired.ID},
+			Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+				ZoneID: zone.Desired.ID,
+			}},
 			GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1407)},
 		}}},
 		now,

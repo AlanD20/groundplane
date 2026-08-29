@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,9 +12,11 @@ type preparedComponentTaskPublication struct {
 	conditions  []Condition
 	mutations   []Mutation
 	values      [][]byte
+	secrets     []componentTaskSecretReference
 }
 
-func prepareComponentTaskPublication(
+func (repository *HierarchyRepository) prepareComponentTaskPublication(
+	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	task TaskRecord,
 	zoneChanges []EnvironmentBlueprintZoneChange,
@@ -37,6 +40,18 @@ func prepareComponentTaskPublication(
 	if err := validateComponentTaskPublicationZones(preparation, zoneChanges); err != nil {
 		return preparedComponentTaskPublication{}, err
 	}
+	secretReferences, secretConditions, secretMutations, err := prepareComponentTaskSecretReferences(
+		ctx,
+		repository.store,
+		environment.Record.ProjectID,
+		task.ID,
+		preparation.Intent.Candidates,
+		0,
+	)
+	if err != nil {
+		return preparedComponentTaskPublication{}, err
+	}
+	publication.secrets = secretReferences
 	publication.conditions = append(publication.conditions, Condition{
 		Key: componentTaskIntentKey(task.ID),
 	})
@@ -52,6 +67,7 @@ func prepareComponentTaskPublication(
 			ModRevision: address.Current.Revision,
 		})
 	}
+	publication.conditions = append(publication.conditions, secretConditions...)
 	intentValue, err := encodeComponentTaskIntent(preparation.Intent)
 	if err != nil {
 		return preparedComponentTaskPublication{}, err
@@ -63,6 +79,7 @@ func prepareComponentTaskPublication(
 			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		},
 	)
+	publication.mutations = append(publication.mutations, secretMutations...)
 	for _, address := range preparation.addresses {
 		if !address.Mutates {
 			continue
@@ -158,6 +175,22 @@ func (publication preparedComponentTaskPublication) classify(values []*KeyValue)
 		if value == nil || value.ModRevision != address.Current.Revision {
 			return stateConflict("Component address registry", address.Zone.Record.Desired.ID)
 		}
+	}
+	offset += len(publication.preparation.addresses)
+	for _, reference := range publication.secrets {
+		if values[offset] == nil {
+			return errs.New(errs.KindSecretNotFound, "Component Secret was not found")
+		}
+		if values[offset].ModRevision != reference.revision {
+			return stateConflict("secret", reference.secretID)
+		}
+		if values[offset+1] != nil {
+			return errs.New(errs.KindResourceInUse, "Component Secret deletion is in progress")
+		}
+		if values[offset+2] != nil {
+			return errs.New(errs.KindStateConflict, "Component Secret candidate reference already exists")
+		}
+		offset += 3
 	}
 	return nil
 }

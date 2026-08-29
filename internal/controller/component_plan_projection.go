@@ -4,7 +4,6 @@ import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,7 +21,7 @@ func projectPinnedEnvironmentComponents(
 	routeSpecs []core.RouteSpec,
 	componentSpecs map[string]core.ComponentSpec,
 	entries []core.EnvEntry,
-	catalog []components.Registration,
+	catalog []EnvironmentComponentRegistration,
 ) (EnvironmentComponentComposeProjection, error) {
 	authored, generated, err := splitPinnedServiceIdentities(project, projection.Services)
 	if err != nil {
@@ -89,6 +88,11 @@ func projectPinnedEnvironmentComponents(
 		componentRecords[index], err = etcd.ProjectComponentRecord(record)
 		if err != nil {
 			return EnvironmentComponentComposeProjection{}, err
+		}
+		// Health is mutable runtime state, not part of the immutable Blueprint
+		// projection. Replaying a pinned Task must not schedule a second repair.
+		if componentRecords[index].Enabled {
+			componentRecords[index].Healthy = true
 		}
 	}
 	componentAllocated := false

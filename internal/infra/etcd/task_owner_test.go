@@ -93,6 +93,64 @@ func TestTaskPruningRejectsMissingOwnerIndex(t *testing.T) {
 	}
 }
 
+func TestTaskPruningStartRetainsVisibleOwnerMemberships(t *testing.T) {
+	// Rationale: ADR 0039 requires the public primary and immutable owner
+	// memberships to disappear atomically, so a restartable prune intent must
+	// not make an otherwise visible Task corrupt before primary deletion.
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatalf("newTaskRepository() error = %v", err)
+	}
+	now := taskJournalTime().Add(2 * time.Minute)
+	owner, err := TenantProjectTaskOwner(
+		ids.NewAt(ids.KindTenant, now, 2151),
+		ids.NewAt(ids.KindProject, now, 2152),
+	)
+	if err != nil {
+		t.Fatalf("TenantProjectTaskOwner() error = %v", err)
+	}
+	owner.EnvironmentID = ids.NewAt(ids.KindEnvironment, now, 2153)
+	task := validTaskRecord(now)
+	task.Owner = owner
+	createOwnedLifecycleTask(t, repository, task)
+	finishedAt := now.Add(time.Second)
+	terminal, err := repository.AbortPendingTask(ctx, task.ID, finishedAt)
+	if err != nil {
+		t.Fatalf("AbortPendingTask() error = %v", err)
+	}
+	pruneAt := finishedAt.Add(TaskRetention).Add(time.Nanosecond)
+	idempotency, err := newIdempotencyRepository(store)
+	if err != nil {
+		t.Fatalf("newIdempotencyRepository() error = %v", err)
+	}
+	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
+		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
+	}
+	intent, found, err := repository.beginTaskPrune(ctx, pruneAt)
+	if err != nil || !found {
+		t.Fatalf("beginTaskPrune() = %#v/%t/%v", intent, found, err)
+	}
+	if _, err := repository.GetTask(ctx, task.ID); err != nil {
+		t.Fatalf("GetTask(after prune start) error = %v", err)
+	}
+	for _, key := range []string{
+		taskKey(task.ID),
+		taskWorkspaceTenantIndexKey(owner.TenantID, task.ID),
+		taskEnvironmentIndexKey(owner.EnvironmentID, task.ID),
+	} {
+		result, err := store.Get(ctx, key)
+		if err != nil || result.Entry == nil {
+			t.Fatalf("Get(retained key %q) = %#v, %v", key, result, err)
+		}
+	}
+	if intent.Record.TaskRevision != terminal.Revision {
+		t.Fatalf("prune Task revision = %d, want %d", intent.Record.TaskRevision, terminal.Revision)
+	}
+}
+
 func TestGetTaskRejectsMissingTenantAndEnvironmentMemberships(t *testing.T) {
 	// Rationale: a Task primary without either exact immutable owner membership is corrupt at the same MVCC view.
 	ctx := context.Background()

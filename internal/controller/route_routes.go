@@ -167,6 +167,15 @@ func (s *Server) createRoute(
 		TargetPort:      request.Body.TargetPort,
 	}, request.IdempotencyKey)
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error(
+				"controller: create Route",
+				slog.String("environment_id", request.Body.EnvironmentID),
+				slog.String("host", request.Body.Host),
+				slog.String("path", request.Body.Path),
+				slog.Any("error", err),
+			)
+		}
 		return nil, normalizeProjectError(err)
 	}
 	return s.routeMutationResponse(response), nil

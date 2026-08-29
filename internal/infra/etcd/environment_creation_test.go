@@ -91,6 +91,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		storedEnvironment.Record.CreateTaskID != task.ID {
 		t.Fatalf("stored Environment = %#v, %v", storedEnvironment.Record, err)
 	}
+	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetEnvironment, record.ID, storedEnvironment.Revision)
 	storedEpoch, err := store.Get(ctx, environmentMutationEpochKey(record.ID))
 	if err != nil || storedEpoch.Entry == nil || storedEpoch.Entry.ModRevision != storedEnvironment.Revision {
 		t.Fatalf("stored Environment mutation epoch = %#v, %v", storedEpoch, err)

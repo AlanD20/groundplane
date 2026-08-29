@@ -30,10 +30,11 @@ func loadNormalizedEnvironmentProject(
 		}},
 	}, func(options *loader.Options) {
 		options.ResolvePaths = false
+		options.SkipResolveEnvironment = true
 		options.SetProjectName(artifact.GetProjectName(), true)
 	})
 	if err != nil {
-		return nil, errs.New(errs.KindInternal, "Environment normalized Compose project is corrupt")
+		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	for name, service := range project.Services {
 		stripControllerLabels(service.Labels)

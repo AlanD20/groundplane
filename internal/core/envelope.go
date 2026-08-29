@@ -132,10 +132,16 @@ type ServiceReleaseSpec struct {
 // AttachmentSpec is one x-gp-attachments entry, keyed by attach name.
 // See blueprint.md, "x-gp-attachments".
 type AttachmentSpec struct {
-	BackingProject string   `yaml:"backing_project"`
-	BackingService string   `yaml:"backing_service"`
-	Services       []string `yaml:"services"`
-	Grants         []string `yaml:"grants,omitempty"` // other attach names/ids
+	BackingProject string                   `yaml:"backing_project"`
+	BackingService string                   `yaml:"backing_service"`
+	Service        string                   `yaml:"service"`
+	Credential     AttachmentCredentialSpec `yaml:"credential"`
+	Grants         []string                 `yaml:"grants,omitempty"` // other attach names/ids; new credentials only
+}
+
+type AttachmentCredentialSpec struct {
+	Mode   string `yaml:"mode"`
+	Attach string `yaml:"attach,omitempty"`
 }
 
 // EntrySpec is one x-gp-entry entry, keyed by entry name. Mirrors
@@ -173,13 +179,29 @@ type RouteSpec struct {
 	Exposure   string `yaml:"exposure"` // "public" | "internal"
 }
 
-// ComponentSpec is one x-gp-components entry, keyed by component name. Config is
-// typed per-kind at the component registry level (TODO, mirrors the adapter
-// registry pattern in internal/adapters); kept generic here.
+// ScriptSpec is one x-gp-scripts entry keyed by immutable reconciliation key.
+type ScriptSpec struct {
+	Slug    string     `yaml:"slug"`
+	Service string     `yaml:"service"`
+	When    ScriptHook `yaml:"when"`
+	Script  string     `yaml:"script"`
+}
+
+// ComponentSpec is one x-gp-components entry keyed by Component Capability.
 type ComponentSpec struct {
-	Kind    ComponentKind  `yaml:"kind"`
-	Enabled bool           `yaml:"enabled"`
-	Config  map[string]any `yaml:"config,omitempty"`
+	Implementation       ComponentKind                 `yaml:"implementation"`
+	Enabled              bool                          `yaml:"enabled"`
+	Settings             ComponentCapabilitySettings   `yaml:"settings"`
+	ImplementationConfig ComponentImplementationConfig `yaml:"implementation_config,omitempty"`
+}
+
+type ComponentCapabilitySettings struct {
+	ZoneID   string `yaml:"zone_id,omitempty"`
+	SecretID string `yaml:"secret_id,omitempty"`
+}
+
+type ComponentImplementationConfig struct {
+	CaddyfileTemplate string `yaml:"caddyfile_template,omitempty"`
 }
 
 // BackupSpec is x-gp-backup's authored shape. See blueprint.md,

@@ -66,6 +66,14 @@ func (mutator *fakeEntryMutator) EditEntry(
 	return mutator.response, nil
 }
 
+func (mutator *fakeEntryMutator) BulkUpsertEntries(
+	_ context.Context,
+	_ apiTypes.EntryBulkUpsertRequest,
+	_ string,
+) (etcd.IdempotencyResponse, error) {
+	return mutator.response, nil
+}
+
 func (mutator *fakeEntryMutator) RemoveEntry(
 	_ context.Context,
 	request entrycapability.RemoveRequest,

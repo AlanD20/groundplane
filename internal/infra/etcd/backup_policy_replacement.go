@@ -386,6 +386,7 @@ func validatebackupPolicySourceEvidence(
 			validateAttachRecord(evidence.Attach.Record) != nil ||
 			!validReplacementRevision(evidence.Attach.Revision, evidence.Attach.ReadRevision) ||
 			evidence.Attach.Record.ID != evidence.Source.Record.TargetID ||
+			!evidence.Attach.Record.OwnsCredential() ||
 			evidence.Attach.Record.EnvironmentID != environmentID ||
 			!validBackupPolicyIndex(
 				evidence.TargetOwnerIndex,

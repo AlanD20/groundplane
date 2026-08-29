@@ -34,6 +34,20 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == app.ManagedConfigHelperArgument {
+		if err := app.RunManagedConfigHelper(ctx, os.Stdin); err != nil {
+			fmt.Fprintln(os.Stderr, "agent managed-config helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == app.HostResolutionHelperArgument {
+		if err := app.RunHostResolutionHelper(ctx, os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, "agent host-resolution helper:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == app.EntryMaterializerArgument {
 		if err := app.RunEntryMaterializer(ctx, os.Stdin); err != nil {
 			fmt.Fprintln(os.Stderr, "agent entry materializer:", err)

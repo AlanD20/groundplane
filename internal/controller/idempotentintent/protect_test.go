@@ -128,6 +128,10 @@ func TestCoordinatorClassifiesKnownTransactionEvidence(t *testing.T) {
 	if !hasKind(err, errs.KindIdempotencyInProgress) {
 		t.Fatalf("ResolveKnown(pending) error = %v, want in-progress", err)
 	}
+	resolution, err = coordinator.classifyOperationRootMarker(context.Background(), protected, marker)
+	if err != nil || resolution.Kind != ResolutionReplay || string(resolution.Response.Body) != `{"id":"svc"}` {
+		t.Fatalf("operation-root pending replay = %#v, %v", resolution, err)
+	}
 
 	changed := canonicalTestIntent()
 	changed.Path[0].Value = ids.NewAt(ids.KindService, testTime(4), 4)

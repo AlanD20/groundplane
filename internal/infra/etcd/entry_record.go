@@ -15,6 +15,7 @@ const entryRecordPrefix = "/v1/records/entries/"
 // this primary record.
 type EntryRecord struct {
 	EnvironmentID            string        `json:"environment_id"`
+	BlueprintKey             string        `json:"blueprint_key,omitempty"`
 	Entry                    core.EnvEntry `json:"entry"`
 	CurrentValueGenerationID string        `json:"current_value_generation_id"`
 }
@@ -30,6 +31,23 @@ func NewEntryRecord(
 	if err := validateEntryRecord(record); err != nil {
 		return EntryRecord{}, err
 	}
+	return record, nil
+}
+
+func NewBlueprintEntryRecord(
+	environmentID string,
+	blueprintKey string,
+	entry core.EnvEntry,
+	valueGenerationID string,
+) (EntryRecord, error) {
+	if blueprintKey == "" {
+		return EntryRecord{}, errs.New(errs.KindValidationFailed, "Blueprint Entry key is required")
+	}
+	record, err := NewEntryRecord(environmentID, entry, valueGenerationID)
+	if err != nil {
+		return EntryRecord{}, err
+	}
+	record.BlueprintKey = blueprintKey
 	return record, nil
 }
 
@@ -50,7 +68,12 @@ func ReplaceEntryDesired(
 			"Entry edit changed immutable identity, destination, ownership, or storage class",
 		)
 	}
-	return NewEntryRecord(current.EnvironmentID, desired, valueGenerationID)
+	replacement, err := NewEntryRecord(current.EnvironmentID, desired, valueGenerationID)
+	if err != nil {
+		return EntryRecord{}, err
+	}
+	replacement.BlueprintKey = current.BlueprintKey
+	return replacement, nil
 }
 
 func entryRecordKey(entryID string) string {
@@ -90,6 +113,7 @@ func validateEntryRecord(record EntryRecord) error {
 
 func equalEntryRecord(left EntryRecord, right EntryRecord) bool {
 	return left.EnvironmentID == right.EnvironmentID &&
+		left.BlueprintKey == right.BlueprintKey &&
 		left.CurrentValueGenerationID == right.CurrentValueGenerationID &&
 		equalEnvEntry(left.Entry, right.Entry)
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -359,38 +358,23 @@ func rebindVolumeArtifactForPlan(
 	owned.CanonicalYaml = canonical
 	owned.YamlSha256 = digest[:]
 	for _, service := range owned.Services {
-		if err := rebindVolumeArtifactLabels(service.GetExpectedLabels(), planID, renderGeneration); err != nil {
+		if err := rewriteServiceExpectedLabels(service.GetExpectedLabels(), planID, renderGeneration); err != nil {
 			return nil, err
 		}
 	}
 	for _, network := range owned.Networks {
-		if err := rebindVolumeArtifactLabels(network.GetExpectedLabels(), planID, renderGeneration); err != nil {
+		labels, err := stableExpectedLabels(network.GetExpectedLabels())
+		if err != nil {
 			return nil, err
 		}
+		network.ExpectedLabels = labels
 	}
 	for _, volume := range owned.Volumes {
-		if err := rebindVolumeArtifactLabels(volume.GetExpectedLabels(), planID, renderGeneration); err != nil {
+		labels, err := stableExpectedLabels(volume.GetExpectedLabels())
+		if err != nil {
 			return nil, err
 		}
+		volume.ExpectedLabels = labels
 	}
 	return owned, nil
-}
-
-func rebindVolumeArtifactLabels(labels []*agentpb.LabelPair, planID string, renderGeneration uint64) error {
-	foundPlan, foundGeneration := false, false
-	for _, label := range labels {
-		if label == nil {
-			return errs.New(errs.KindInternal, "historical Volume artifact labels are corrupt")
-		}
-		switch label.Key {
-		case composeLabelPlanID:
-			label.Value, foundPlan = planID, true
-		case composeLabelRenderGen:
-			label.Value, foundGeneration = fmt.Sprintf("%d", renderGeneration), true
-		}
-	}
-	if !foundPlan || !foundGeneration {
-		return errs.New(errs.KindInternal, "historical Volume artifact labels are incomplete")
-	}
-	return nil
 }

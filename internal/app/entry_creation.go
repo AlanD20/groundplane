@@ -57,6 +57,7 @@ type entryCreationEvidence struct {
 
 type entryCreationIdempotency interface {
 	Prepare(context.Context, string, core.EnvEntry) (entryCreationEvidence, error)
+	MatchesStaged(context.Context, entryCreationEvidence, etcd.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
@@ -73,6 +74,14 @@ type entryCreationIdempotency interface {
 		entryCreationEvidence,
 		error,
 	) (idempotentintent.Resolution, error)
+}
+
+func (service *durableEntryCreationIdempotency) MatchesStaged(
+	ctx context.Context,
+	evidence entryCreationEvidence,
+	existing etcd.ProtectedIntentRecord,
+) (bool, error) {
+	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
 
 type durableEntryCreationIdempotency struct {

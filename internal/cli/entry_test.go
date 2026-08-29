@@ -1,6 +1,45 @@
 package cli
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+)
+
+type pagedEntryLister struct {
+	cursors []string
+}
+
+func (lister *pagedEntryLister) ListEntries(
+	_ context.Context,
+	_ string,
+	limit int,
+	cursor string,
+) (apiTypes.Page[apiTypes.Entry], error) {
+	lister.cursors = append(lister.cursors, cursor)
+	if limit != 200 {
+		panic("entry list did not request the maximum page size")
+	}
+	if cursor == "" {
+		return apiTypes.Page[apiTypes.Entry]{
+			Items: []apiTypes.Entry{{ID: "ev_first"}, {ID: "ev_second"}}, NextCursor: "next",
+		}, nil
+	}
+	return apiTypes.Page[apiTypes.Entry]{Items: []apiTypes.Entry{{ID: "ev_third"}}}, nil
+}
+
+func TestListAllCLIEntriesDrainsOpaquePagination(t *testing.T) {
+	lister := &pagedEntryLister{}
+	entries, err := listAllCLIEntries(context.Background(), lister, "env_01ARZ3NDEKTSV4RRFFQ69G5FAV")
+	if err != nil {
+		t.Fatalf("listAllCLIEntries() error = %v", err)
+	}
+	if len(entries) != 3 || entries[2].ID != "ev_third" ||
+		len(lister.cursors) != 2 || lister.cursors[0] != "" || lister.cursors[1] != "next" {
+		t.Fatalf("listAllCLIEntries() = %#v, cursors = %#v", entries, lister.cursors)
+	}
+}
 
 func TestEntryFileOwnershipRequiresBothExplicitValues(t *testing.T) {
 	// Rationale: zero is a valid numeric owner, so presence must come from the

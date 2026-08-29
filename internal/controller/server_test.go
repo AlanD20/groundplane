@@ -22,7 +22,7 @@ func TestServeReturnsNilAfterCancellation(t *testing.T) {
 	}
 	result := make(chan error, 1)
 	go func() {
-		result <- server.Serve(ctx, "127.0.0.1:0")
+		result <- server.Serve(ctx, []string{"127.0.0.1:0", "127.0.0.1:0"})
 	}()
 
 	select {
@@ -46,7 +46,7 @@ func TestServeClassifiesListenFailureAsInternal(t *testing.T) {
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Mux:    http.NewServeMux(),
 	}
-	err = server.Serve(context.Background(), listener.Addr().String())
+	err = server.Serve(context.Background(), []string{listener.Addr().String()})
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Serve() error = %v, want %q", err, errs.CodeInternal)
 	}

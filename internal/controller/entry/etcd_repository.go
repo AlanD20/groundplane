@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,7 +21,6 @@ const entryDeletionRoute = "/entries/{id}"
 type EtcdRepository struct {
 	hierarchy   *etcd.HierarchyRepository
 	entries     *etcd.EntryRepository
-	components  *etcd.ComponentRepository
 	coordinator *idempotentintent.Coordinator
 	idempotency *etcd.IdempotencyRepository
 }
@@ -31,15 +28,14 @@ type EtcdRepository struct {
 func NewEtcdRepository(
 	hierarchy *etcd.HierarchyRepository,
 	entries *etcd.EntryRepository,
-	components *etcd.ComponentRepository,
 	coordinator *idempotentintent.Coordinator,
 	idempotency *etcd.IdempotencyRepository,
 ) (*EtcdRepository, error) {
-	if hierarchy == nil || entries == nil || components == nil || coordinator == nil || idempotency == nil {
+	if hierarchy == nil || entries == nil || coordinator == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "entry deletion persistence is not configured")
 	}
 	return &EtcdRepository{
-		hierarchy: hierarchy, entries: entries, components: components,
+		hierarchy: hierarchy, entries: entries,
 		coordinator: coordinator, idempotency: idempotency,
 	}, nil
 }
@@ -50,7 +46,6 @@ type etcdRemovalState struct {
 	project     etcd.Versioned[etcd.ProjectRecord]
 	tenant      *etcd.Versioned[etcd.TenantRecord]
 	projection  *etcd.Versioned[etcd.EnvironmentComposeProjection]
-	cloudflare  *etcd.Versioned[etcd.ComponentRecord]
 }
 
 type etcdRemovalEvidence struct {
@@ -170,14 +165,6 @@ func (repository *EtcdRepository) PublishRemoval(
 	if err != nil {
 		return RemovalOutcome{}, err
 	}
-	task.Params[etcd.TaskEntryCloudflareComponentParam] = ""
-	task.Params[etcd.TaskEntryCloudflareRevisionParam] = "0"
-	if publication.Candidate.Cloudflare.Present {
-		task.Params[etcd.TaskEntryCloudflareComponentParam] = publication.Candidate.Cloudflare.ID
-		task.Params[etcd.TaskEntryCloudflareRevisionParam] = strconv.FormatInt(
-			publication.Candidate.Cloudflare.Revision, 10)
-	}
-
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return RemovalOutcome{}, errs.Wrap(errs.KindInternal, err)
@@ -203,7 +190,7 @@ func (repository *EtcdRepository) PublishRemoval(
 	}
 	result, mutationErr := repository.entries.BeginEntryDeletionWithTask(
 		ctx, state.environment, state.project, state.entry, state.projection,
-		state.cloudflare, tombstone, intent, task, marker,
+		tombstone, intent, task, marker,
 	)
 	if mutationErr != nil {
 		if !isUnknownRemovalOutcome(mutationErr) {
@@ -259,68 +246,33 @@ func (repository *EtcdRepository) loadRemovalState(
 	default:
 		return etcdRemovalState{}, errs.New(errs.KindInternal, "entry Project kind is invalid")
 	}
-	cloudflare, err := repository.cloudflareComponent(ctx, environment.Record.ID, entryID)
+	projection, found, err := repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
 	if err != nil {
 		return etcdRemovalState{}, err
 	}
-	projection, found, err := repository.hierarchy.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
-	if err != nil {
-		return etcdRemovalState{}, err
-	}
-	var projectionPointer *etcd.Versioned[etcd.EnvironmentComposeProjection]
-	if found {
-		projectionPointer = &projection
-	}
+	projectionPointer := appliedEntryProjection(projection, found, entry.Record.Entry.ID)
 	return etcdRemovalState{
 		entry: entry, environment: environment, project: project, tenant: tenant,
-		projection: projectionPointer, cloudflare: cloudflare,
+		projection: projectionPointer,
 	}, nil
 }
 
-func (repository *EtcdRepository) cloudflareComponent(
-	ctx context.Context,
-	environmentID string,
+func appliedEntryProjection(
+	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	found bool,
 	entryID string,
-) (*etcd.Versioned[etcd.ComponentRecord], error) {
-	cursor := ""
-	var selected *etcd.Versioned[etcd.ComponentRecord]
-	for {
-		page, err := repository.components.ListEnvironmentComponents(
-			ctx, environmentID, etcd.PageRequest{Limit: 200, Cursor: cursor},
-		)
-		if err != nil {
-			return nil, err
+) *etcd.Versioned[etcd.EnvironmentComposeProjection] {
+	if !found {
+		return nil
+	}
+
+	for _, record := range projection.Record.Entries {
+		if record.Entry.ID == entryID {
+			return &projection
 		}
-		for _, item := range page.Items {
-			if item.Record.Desired.Kind != core.ComponentKindEdgeCloudflare {
-				continue
-			}
-			if selected != nil {
-				return nil, errs.New(errs.KindInternal, "environment has duplicate Cloudflare Components")
-			}
-			copy := item
-			selected = &copy
-		}
-		if page.NextCursor == "" {
-			break
-		}
-		cursor = page.NextCursor
 	}
-	if selected == nil || !selected.Record.Desired.Enabled {
-		return selected, nil
-	}
-	component, err := etcd.ProjectComponentRecord(selected.Record)
-	if err != nil {
-		return nil, err
-	}
-	tokenEntryID, ok := component.Config["token_entry_id"].(string)
-	if !ok || ids.Validate(ids.KindEnvEntry, tokenEntryID) != nil {
-		return nil, errs.New(errs.KindInternal, "enabled Cloudflare Component token reference is invalid")
-	}
-	if tokenEntryID == entryID {
-		return nil, errs.New(errs.KindResourceInUse, "entry is the enabled Cloudflare Tunnel token")
-	}
-	return selected, nil
+
+	return nil
 }
 
 func removalCandidate(state etcdRemovalState) RemovalCandidate {
@@ -339,17 +291,11 @@ func removalCandidate(state etcdRemovalState) RemovalCandidate {
 	if state.projection != nil {
 		projectionRevision = state.projection.Revision
 	}
-	cloudflare := RemovalDependencyFence{}
-	if state.cloudflare != nil {
-		cloudflare = RemovalDependencyFence{
-			Present: true, ID: state.cloudflare.Record.Desired.ID, Revision: state.cloudflare.Revision,
-		}
-	}
 	return RemovalCandidate{
 		EntryID: state.entry.Record.Entry.ID, EntryRevision: state.entry.Revision,
 		EnvironmentRevision: state.environment.Revision, ProjectRevision: state.project.Revision,
 		TenantRevision: tenantRevision, ProjectionRevision: projectionRevision,
-		Identity: identity, Cloudflare: cloudflare,
+		Identity: identity,
 	}
 }
 
@@ -357,7 +303,7 @@ func sameRemovalCandidate(left RemovalCandidate, right RemovalCandidate) bool {
 	return left.EntryID == right.EntryID && left.EntryRevision == right.EntryRevision &&
 		left.EnvironmentRevision == right.EnvironmentRevision && left.ProjectRevision == right.ProjectRevision &&
 		left.TenantRevision == right.TenantRevision && left.ProjectionRevision == right.ProjectionRevision &&
-		left.Identity == right.Identity && left.Cloudflare == right.Cloudflare
+		left.Identity == right.Identity
 }
 
 func removalLocator(environmentID string, key string) etcd.IdempotencyLocator {

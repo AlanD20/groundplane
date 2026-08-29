@@ -215,7 +215,7 @@ func validateAttachTaskRenderInputScope(
 			input.ServiceDependencyPlans,
 			scope.ComposeProjection.Record.ServiceDependencyPlans,
 		) ||
-		!slices.Equal(input.ConsumerServiceIDs, record.ServiceIDs) ||
+		!slices.Equal(input.ConsumerServiceIDs, []string{record.ServiceID}) ||
 		!slices.Equal(input.GrantAttachIDs, record.GrantAttachIDs) {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input does not match its pinned desired state")
 	}
@@ -229,13 +229,11 @@ func validateAttachTaskRenderInputScope(
 				coveredByBackingNetwork[serviceID] = struct{}{}
 			}
 		}
-		for _, serviceID := range record.ServiceIDs {
-			if _, exists := coveredByBackingNetwork[serviceID]; !exists {
-				return errs.New(
-					errs.KindValidationFailed,
-					"Attach Task render input omits a consumer Service binding to the backing network",
-				)
-			}
+		if _, exists := coveredByBackingNetwork[record.ServiceID]; !exists {
+			return errs.New(
+				errs.KindValidationFailed,
+				"Attach Task render input omits a consumer Service binding to the backing network",
+			)
 		}
 	}
 	return validateAttachTaskRenderInput(input)

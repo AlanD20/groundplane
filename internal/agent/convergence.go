@@ -21,6 +21,15 @@ func evaluateComposeConvergence(
 	observed *agentpb.ObservedProject,
 	selectedServices []string,
 ) (composeConvergence, error) {
+	return evaluateSelectedComposeConvergence(artifact, observed, selectedServices, true)
+}
+
+func evaluateSelectedComposeConvergence(
+	artifact *agentpb.ComposeArtifact,
+	observed *agentpb.ObservedProject,
+	selectedServices []string,
+	requireHealthcheck bool,
+) (composeConvergence, error) {
 	if artifact == nil || observed == nil {
 		return composeConvergence{}, errs.New(errs.KindInternal, "compose convergence input is incomplete")
 	}
@@ -47,7 +56,7 @@ func evaluateComposeConvergence(
 	})
 
 	for _, service := range services {
-		if !service.GetHasHealthcheck() {
+		if requireHealthcheck && !service.GetHasHealthcheck() {
 			return composeConvergence{}, errs.Newf(
 				errs.KindValidationFailed,
 				"compose service %s cannot be used by WaitHealthy without a healthcheck",
@@ -75,7 +84,8 @@ func evaluateComposeConvergence(
 					),
 				}, nil
 			}
-			if container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
+			if service.GetHasHealthcheck() &&
+				container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 				return composeConvergence{
 					Summary: fmt.Sprintf(
 						"service %s container %s is not healthy",
@@ -88,6 +98,23 @@ func evaluateComposeConvergence(
 	}
 
 	return composeConvergence{Ready: true, Summary: "all selected services are healthy"}, nil
+}
+
+// evaluateReleaseWorkloadConvergence scopes collision evidence to the selected
+// release workload. A partial release intentionally leaves unrelated project
+// resources on their prior plan labels; selected containers still enter the
+// observation only after their exact expected labels match the release plan.
+func evaluateReleaseWorkloadConvergence(
+	artifact *agentpb.ComposeArtifact,
+	observed *agentpb.ObservedProject,
+	selectedServices []string,
+) (composeConvergence, error) {
+	if observed == nil {
+		return composeConvergence{}, errs.New(errs.KindInternal, "compose convergence input is incomplete")
+	}
+	scoped := *observed
+	scoped.Collisions = nil
+	return evaluateSelectedComposeConvergence(artifact, &scoped, selectedServices, false)
 }
 
 func convergenceServices(

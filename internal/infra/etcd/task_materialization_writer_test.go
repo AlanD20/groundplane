@@ -30,8 +30,26 @@ func TestTaskMaterializationEnvironmentAcceptsClosedRemovalTargets(t *testing.T)
 			}
 		})
 	}
+	for name, taskType := range map[string]TaskType{
+		"volume add": TaskCreate, "volume edit": TaskUpdate, "volume remove": TaskRemove,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			task := TaskRecord{
+				Executor: TaskExecutorAgent, Type: taskType, Target: ids.NewAt(ids.KindVolume, now, 4),
+				Params: map[string]string{
+					TaskMaterializationEnvironmentParam: environmentID,
+					TaskResourceKindParam:               TaskResourceVolume,
+				},
+			}
+			got, materializes, err := taskMaterializationEnvironment(task)
+			if err != nil || !materializes || got != environmentID {
+				t.Fatalf("taskMaterializationEnvironment() = %q/%t/%v", got, materializes, err)
+			}
+		})
+	}
 	serviceTask := TaskRecord{
-		Executor: TaskExecutorAgent, Type: TaskRemove, Target: ids.NewAt(ids.KindService, now, 4),
+		Executor: TaskExecutorAgent, Type: TaskRemove, Target: ids.NewAt(ids.KindService, now, 5),
 		Params: map[string]string{TaskMaterializationEnvironmentParam: environmentID},
 	}
 	if _, _, err := taskMaterializationEnvironment(serviceTask); !isKind(err, errs.KindValidationFailed) {

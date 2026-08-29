@@ -188,6 +188,36 @@ func TestCheckImportMatrixAndReflectExceptions(t *testing.T) {
 	}
 }
 
+func TestComponentModuleImportBoundary(t *testing.T) {
+	root := checkRoot(t)
+	writeFixtureAt(t, root, "component-sdk/go.mod", "module github.com/AlanD20/groundplane-component-sdk\n\ngo 1.26\n")
+	writeFixtureAt(
+		t,
+		root,
+		"component-sdk/component/good.go",
+		"package component\nimport _ \"crypto/sha256\"\n",
+	)
+	writeFixtureAt(
+		t,
+		root,
+		"registered-components/caddy/bad.go",
+		"package caddy\nimport _ \"example.com/project/internal/core\"\nimport _ \"os\"\n",
+	)
+	writeFixtureAt(
+		t,
+		root,
+		"internal/controller/bad_component.go",
+		"package controller\nimport _ \"github.com/AlanD20/groundplane-registered-components/catalog\"\n",
+	)
+	findings, err := Check(context.Background(), root, validBaseline())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if countRule(findings, "component-module-import") != 3 {
+		t.Fatalf("findings = %+v", findings)
+	}
+}
+
 func TestWriteFindingsIsDeterministic(t *testing.T) {
 	findings := []Finding{
 		{Path: "b", Line: 2, Column: 1, Rule: "z", Message: "last"},

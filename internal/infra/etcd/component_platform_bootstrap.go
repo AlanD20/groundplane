@@ -8,17 +8,22 @@ import (
 )
 
 const (
-	platformControllerComponentID = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	platformAgentComponentID      = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	platformCoreDNSComponentID    = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 )
 
 // DefaultPlatformComponents returns the stable platform singleton catalog.
-func DefaultPlatformComponents() ([]ComponentRecord, error) {
+func DefaultPlatformComponents(tailnetDelegation bool) ([]ComponentRecord, error) {
 	components := []core.Component{
-		{ID: platformControllerComponentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindController, Enabled: true},
-		{ID: platformAgentComponentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindAgent, Enabled: true},
-		{ID: platformCoreDNSComponentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS, Enabled: true},
+		{
+			ID: platformCoreDNSComponentID,
+			Owner: core.ComponentOwnerPlatform,
+			Kind: core.ComponentKindCoreDNS,
+			Enabled: true,
+			Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+				UpstreamAuto: true,
+				TailnetDelegation: tailnetDelegation,
+			}},
+		},
 	}
 	records := make([]ComponentRecord, len(components))
 	for index, component := range components {

@@ -1,7 +1,6 @@
 package etcd
 
 import (
-	"encoding/json"
 	"net/netip"
 	"reflect"
 	"sort"
@@ -150,7 +149,8 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 			return errs.New(errs.KindValidationFailed, "Component candidate kind is duplicated")
 		}
 		seenKinds[current.Kind] = struct{}{}
-		if reflect.DeepEqual(candidate.Current, candidate.Candidate) {
+		if reflect.DeepEqual(candidate.Current, candidate.Candidate) &&
+			(!candidate.Current.Desired.Enabled || candidate.Current.Runtime.Healthy) {
 			return errs.New(errs.KindValidationFailed, "Component candidate does not change active state")
 		}
 		if _, _, err := componentTaskAddress(candidate.Current); err != nil {
@@ -187,8 +187,14 @@ func componentTaskAddress(record ComponentRecord) (componentTaskAddressBinding, 
 		}
 		return componentTaskAddressBinding{}, false, nil
 	}
-	zoneID, err := componentTaskConfigString(record.Desired.Config, "zone_id")
-	if err != nil || ids.Validate(ids.KindNetwork, zoneID) != nil {
+	if record.Desired.Config.Caddy == nil {
+		return componentTaskAddressBinding{}, false, errs.New(
+			errs.KindValidationFailed,
+			"enabled Caddy Component candidate has no typed config",
+		)
+	}
+	zoneID := record.Desired.Config.Caddy.ZoneID
+	if ids.Validate(ids.KindNetwork, zoneID) != nil {
 		return componentTaskAddressBinding{}, false, errs.New(
 			errs.KindValidationFailed,
 			"enabled Caddy Component candidate has an invalid Zone",
@@ -202,18 +208,6 @@ func componentTaskAddress(record ComponentRecord) (componentTaskAddressBinding, 
 		)
 	}
 	return componentTaskAddressBinding{zoneID: zoneID, address: address.String()}, true, nil
-}
-
-func componentTaskConfigString(config map[string]json.RawMessage, key string) (string, error) {
-	raw, found := config[key]
-	if !found {
-		return "", errs.New(errs.KindValidationFailed, "Component candidate config value is missing")
-	}
-	var value string
-	if err := json.Unmarshal(raw, &value); err != nil || value == "" {
-		return "", errs.New(errs.KindValidationFailed, "Component candidate config value is invalid")
-	}
-	return value, nil
 }
 
 func componentTaskBindingsEqual(
@@ -246,12 +240,7 @@ func cloneComponentTaskCandidates(source []ComponentTaskCandidate) []ComponentTa
 
 func cloneComponentTaskRecord(record ComponentRecord) ComponentRecord {
 	clone := record
-	if record.Desired.Config != nil {
-		clone.Desired.Config = make(map[string]json.RawMessage, len(record.Desired.Config))
-		for key, value := range record.Desired.Config {
-			clone.Desired.Config[key] = append([]byte(nil), value...)
-		}
-	}
+	clone.Desired.Config = core.CloneComponentConfig(record.Desired.Config)
 	clone.Runtime.GeneratedServices = append([]string(nil), record.Runtime.GeneratedServices...)
 	return clone
 }

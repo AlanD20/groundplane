@@ -165,7 +165,7 @@ func (service *AttachFactService) ResolveTaskIdentity(
 	consume controllerpkg.AttachPlanIdentityConsumer,
 ) error {
 	if ctx == nil || consume == nil || ids.Validate(ids.KindTask, taskID) != nil ||
-		current.Record.TaskID != taskID {
+		current.Record.TaskID != taskID || !current.Record.OwnsCredential() {
 		return errs.New(errs.KindValidationFailed, "Attach task identity request is invalid")
 	}
 	allowed := current.Record.Operation == etcd.AttachOperationProvision &&
@@ -202,7 +202,7 @@ func (service *AttachFactService) ResolveReadyDatabase(
 	if ctx == nil || consume == nil {
 		return errs.New(errs.KindValidationFailed, "Attach database identity context and consumer are required")
 	}
-	if current.Record.Status != core.AttachReady {
+	if current.Record.Status != core.AttachReady || !current.Record.OwnsCredential() {
 		return errs.New(errs.KindStateConflict, "Attach database identity is available only while ready")
 	}
 	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
@@ -222,6 +222,7 @@ func (service *AttachFactService) ResolveBackupIdentity(
 	consume func(etcd.BackupPostgresIdentity) error,
 ) error {
 	if ctx == nil || consume == nil || current.Record.Status != core.AttachReady ||
+		!current.Record.OwnsCredential() ||
 		stored.AttachID != current.Record.ID {
 		return errs.New(errs.KindStateConflict, "backup Attach identity is unavailable")
 	}
@@ -247,7 +248,7 @@ func (service *AttachFactService) ResolveRemovalDatabase(
 	if ctx == nil || consume == nil {
 		return errs.New(errs.KindValidationFailed, "Attach removal database context and consumer are required")
 	}
-	if len(current.Record.FactSets) == 0 {
+	if !current.Record.OwnsCredential() || len(current.Record.FactSets) == 0 {
 		return consume("")
 	}
 	if current.Record.Status != core.AttachReady && current.Record.Status != core.AttachFailed {
@@ -279,6 +280,19 @@ func (service *AttachFactService) ResolveFact(
 	}
 	if current.Record.Status != core.AttachReady {
 		return errs.New(errs.KindStateConflict, "Attach facts are available only while the Attach is ready")
+	}
+	if !current.Record.OwnsCredential() {
+		owner, resolveErr := service.repository.ResolveAttach(
+			ctx, environmentID, current.Record.CredentialAttachID,
+		)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if owner.Record.Status != core.AttachReady || !owner.Record.OwnsCredential() ||
+			owner.Record.BackingServiceID != current.Record.BackingServiceID {
+			return errs.New(errs.KindStateConflict, "Attach credential owner is not ready")
+		}
+		current = owner
 	}
 	grantAttachID := ""
 	if reference.Grant != "" {

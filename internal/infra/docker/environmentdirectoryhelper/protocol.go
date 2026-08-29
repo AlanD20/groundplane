@@ -7,8 +7,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
+	"os"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -177,6 +179,7 @@ func Execute(
 		if contextErr := executionCtx.Err(); contextErr != nil {
 			return nil, contextErr
 		}
+		_, _ = fmt.Fprintf(os.Stderr, "Environment directory helper mutation failed: %v\n", err)
 		return withResponseDigest(&agentpb.EnvironmentDirectoryHelperResponse{
 			Schema: SchemaVersion, ExitCode: 1, FailedStepId: step.StepId,
 		})
@@ -289,7 +292,7 @@ func validateRequest(
 		return nil, nil, errs.New(errs.KindValidationFailed, "Environment directory helper step selection is invalid")
 	}
 	if step.GetEnvironmentDirectoryCreate() != nil {
-		if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE || len(plan.Steps) != 1 {
+		if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE {
 			return nil, nil, errs.New(errs.KindValidationFailed, "Environment directory helper plan is unsupported")
 		}
 	} else if step.GetEnvironmentDirectoryRemove() != nil {

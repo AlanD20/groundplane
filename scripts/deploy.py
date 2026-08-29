@@ -70,9 +70,6 @@ fi
 if ! command -v age-keygen >/dev/null; then
     packages="$packages age"
 fi
-if ! command -v etcd >/dev/null; then
-    packages="$packages etcd-server"
-fi
 if ! command -v rootlesskit >/dev/null ||
     ! command -v newuidmap >/dev/null ||
     ! command -v slirp4netns >/dev/null ||
@@ -90,15 +87,11 @@ if test -n "$packages"; then
     apt-get install -y $packages
 fi
 
-systemctl daemon-reload
 systemctl reset-failed docker.service || true
 systemctl enable docker.service >/dev/null
 systemctl start docker.service
 docker version >/dev/null
 docker compose version >/dev/null
-systemctl enable --now etcd.service >/dev/null
-systemctl is-active --quiet etcd.service
-
 if ! curl -fsS http://127.0.0.1:5000/v2/ >/dev/null 2>&1; then
     if docker container inspect groundplane-registry >/dev/null 2>&1; then
         docker start groundplane-registry >/dev/null
@@ -327,11 +320,9 @@ finish() {
 trap finish EXIT HUP INT TERM
 
 command -v docker >/dev/null
-command -v etcd >/dev/null
 command -v curl >/dev/null
 command -v flock >/dev/null
 systemctl is-active --quiet docker.service
-systemctl is-active --quiet etcd.service
 curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
 
 target_image="localhost:5000/groundplane-agent:$version"

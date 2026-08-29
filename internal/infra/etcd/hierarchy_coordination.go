@@ -21,6 +21,18 @@ type hierarchyMutationBinding struct {
 	values     [][]byte
 }
 
+func encodeInitialHierarchyCoordination(
+	targetKind HierarchyDeletionTargetKind,
+	targetID string,
+) ([]byte, error) {
+	return encodeHierarchyCoordination(HierarchyCoordinationRecord{
+		Schema:        1,
+		TargetKind:    targetKind,
+		TargetID:      targetID,
+		MutationEpoch: 1,
+	})
+}
+
 // bindHierarchyMutation is the only mutation-plan seam for the ADR 0053
 // ancestry epoch. Callers append their ordinary conditions and mutations,
 // then this binder compares and increments each applicable ancestor epoch.

@@ -63,6 +63,49 @@ type Client struct {
 	compose                *ComposeRuntime
 	environmentDirectories *EnvironmentDirectoryRuntime
 	materializer           *MaterializationRuntime
+	componentActions       ComponentActionRuntime
+	hostResolution         HostResolutionRuntime
+	scriptRuntime          ScriptRuntime
+	logs                   *logManager
+}
+
+func (c *Client) SetComponentActionRuntime(runtime ComponentActionRuntime) error {
+	if c == nil || runtime == nil {
+		return errs.New(errs.KindValidationFailed, "agent: Component action runtime is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.pool != nil {
+		return errs.New(errs.KindStateConflict, "agent: Component action runtime cannot change after start")
+	}
+	c.componentActions = runtime
+	return nil
+}
+
+func (c *Client) SetHostResolutionRuntime(runtime HostResolutionRuntime) error {
+	if c == nil || runtime == nil {
+		return errs.New(errs.KindValidationFailed, "agent: host resolution runtime is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.pool != nil {
+		return errs.New(errs.KindStateConflict, "agent: host resolution runtime cannot change after start")
+	}
+	c.hostResolution = runtime
+	return nil
+}
+
+func (c *Client) SetScriptRuntime(runtime ScriptRuntime) error {
+	if c == nil || runtime == nil {
+		return errs.New(errs.KindValidationFailed, "agent: Script runtime is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.pool != nil {
+		return errs.New(errs.KindStateConflict, "agent: Script runtime cannot change after start")
+	}
+	c.scriptRuntime = runtime
+	return nil
 }
 
 func NewClient(
@@ -99,6 +142,7 @@ func NewClient(
 		logger:     logger,
 		connect:    connectGRPC,
 		reconnect:  waitForAgentChannelReconnect,
+		logs:       newLogManager(nil),
 	}
 	copy(client.token[:], token)
 	return client, nil
@@ -124,6 +168,37 @@ func NewClientWithRuntimes(
 	client.compose = compose
 	client.environmentDirectories = environmentDirectories
 	client.materializer = materializer
+	return client, nil
+}
+
+func NewClientWithLogReader(
+	socketPath string,
+	agentID string,
+	token []byte,
+	volumeRoot string,
+	logger *slog.Logger,
+	compose *ComposeRuntime,
+	environmentDirectories *EnvironmentDirectoryRuntime,
+	materializer *MaterializationRuntime,
+	logReader agentprotocol.LogReader,
+) (*Client, error) {
+	if logReader == nil {
+		return nil, errs.New(errs.KindValidationFailed, "agent: log reader is required")
+	}
+	client, err := NewClientWithRuntimes(
+		socketPath,
+		agentID,
+		token,
+		volumeRoot,
+		logger,
+		compose,
+		environmentDirectories,
+		materializer,
+	)
+	if err != nil {
+		return nil, err
+	}
+	client.logs = newLogManager(logReader)
 	return client, nil
 }
 
@@ -271,6 +346,13 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if acknowledgement := result.message.GetScriptCheckpointAck(); acknowledgement != nil {
+				if err := c.pool.AcceptScriptCheckpointAck(acknowledgement); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
 				return false, err
@@ -280,8 +362,17 @@ func (c *Client) runSession(
 			}
 			receiveNext(streamCtx, stream, received)
 		case output := <-c.pool.Outputs():
+			if output.ScriptCheckpoint != nil {
+				if output.BackupCheckpoint != nil || output.Progress != nil || output.Result != nil {
+					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+				}
+				if err := c.sendScriptCheckpoint(stream, output.ScriptCheckpoint); err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: send Script checkpoint")
+				}
+				continue
+			}
 			if output.BackupCheckpoint != nil {
-				if output.Progress != nil || output.Result != nil {
+				if output.Progress != nil || output.Result != nil || output.ScriptCheckpoint != nil {
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}
 				if err := c.sendBackupCheckpoint(stream, output.BackupCheckpoint); err != nil {
@@ -307,6 +398,10 @@ func (c *Client) runSession(
 			if err := c.sendReady(stream); err != nil {
 				return agentChannelTransportResult(ctx, err, "agent: send readiness")
 			}
+		case message := <-c.logs.Outputs():
+			if err := stream.Send(message); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send log message")
+			}
 		}
 	}
 }
@@ -317,6 +412,15 @@ func (c *Client) sendBackupCheckpoint(
 ) error {
 	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackupCheckpointRequest{
 		BackupCheckpointRequest: proto.Clone(request).(*agentpb.BackupCheckpointRequest),
+	}})
+}
+
+func (c *Client) sendScriptCheckpoint(
+	stream agentStream,
+	request *agentpb.ScriptCheckpointRequest,
+) error {
+	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_ScriptCheckpointRequest{
+		ScriptCheckpointRequest: proto.Clone(request).(*agentpb.ScriptCheckpointRequest),
 	}})
 }
 
@@ -335,6 +439,15 @@ func (c *Client) startWorkerPool(ctx context.Context, size int) (context.CancelF
 			c.environmentDirectories,
 			c.materializer,
 		)
+	}
+	if c.componentActions != nil {
+		pool.SetComponentActionRuntime(c.componentActions)
+	}
+	if c.hostResolution != nil {
+		pool.SetHostResolutionRuntime(c.hostResolution)
+	}
+	if c.scriptRuntime != nil {
+		pool.SetScriptRuntime(c.scriptRuntime)
 	}
 	c.pool = pool
 	done := make(chan struct{})
@@ -404,15 +517,25 @@ func (c *Client) sendReady(stream agentStream) error {
 }
 
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
+	if subscription := message.GetLogSubscribe(); subscription != nil {
+		c.logs.Subscribe(ctx, proto.Clone(subscription).(*agentpb.LogSubscribe))
+		return false, nil
+	}
+	if cancellation := message.GetLogCancel(); cancellation != nil {
+		c.logs.Cancel(cancellation.GetRequestId())
+		return false, nil
+	}
 	if assignment := message.GetTaskAssignment(); assignment != nil {
 		if assignment.Deadline == nil || assignment.Deadline.CheckValid() != nil {
 			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid task deadline")
 		}
+		defer clearScriptArtifacts(assignment.ScriptArtifacts)
 		return false, c.pool.Submit(ctx, Assignment{
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
-			RetryOf: assignment.RetryOf, Plan: assignment.Plan,
-			Deadline: assignment.Deadline.AsTime(),
+			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
+			ScriptCheckpoint: assignment.ScriptCheckpoint,
+			Deadline:         assignment.Deadline.AsTime(),
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {
@@ -420,6 +543,9 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 	}
 	if transfer := message.GetMaterializationTransfer(); transfer != nil {
 		return false, c.pool.AcceptMaterializationTransfer(ctx, transfer)
+	}
+	if transfer := message.GetManagedConfigTransfer(); transfer != nil {
+		return false, c.pool.AcceptManagedConfigTransfer(ctx, transfer)
 	}
 	if transfer := message.GetBackupSecretSlotTransfer(); transfer != nil {
 		chunk := transfer.GetChunk()

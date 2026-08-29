@@ -6,6 +6,8 @@
 !go.sum
 !cmd/
 !cmd/**
+!component-sdk/
+!component-sdk/**
 !console/
 !console/*.go
 !internal/
@@ -14,6 +16,8 @@
 !pkg/**
 !proto/
 !proto/**
+!registered-components/
+!registered-components/**
 !release/
 !release/runner/
 !release/runner/entrypoint.sh

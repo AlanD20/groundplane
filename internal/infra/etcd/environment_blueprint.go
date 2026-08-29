@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"path"
 	"regexp"
 	"strings"
@@ -172,6 +173,9 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
+	if seal.SourceKind == EnvironmentBlueprintSourceMutation {
+		return Versioned[EnvironmentBlueprintRevision]{ReadRevision: rootResult.ReadRevision}, false, nil
+	}
 	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "audit")
 	if err != nil {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
@@ -187,10 +191,96 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	}, true, nil
 }
 
+type preparedEnvironmentBlueprintPoolChange struct {
+	environment      Versioned[EnvironmentRecord]
+	registryRevision int64
+	environmentValue []byte
+	registryValue    []byte
+}
+
+func (change preparedEnvironmentBlueprintPoolChange) changed() bool {
+	return len(change.environmentValue) != 0
+}
+
+func clearPreparedEnvironmentBlueprintPoolChange(change preparedEnvironmentBlueprintPoolChange) {
+	clear(change.environmentValue)
+	clear(change.registryValue)
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRevision(
+	ctx context.Context,
+	root netip.Prefix,
+	current Versioned[EnvironmentRecord],
+	desiredNetworkPool string,
+	revision int64,
+) (preparedEnvironmentBlueprintPoolChange, error) {
+	prepared := preparedEnvironmentBlueprintPoolChange{environment: current}
+	if desiredNetworkPool == current.Record.NetworkPool {
+		return prepared, nil
+	}
+	if !root.IsValid() || !root.Addr().Is4() || root != root.Masked() {
+		return preparedEnvironmentBlueprintPoolChange{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment pool root must be a canonical IPv4 CIDR",
+		)
+	}
+	prepared.environment.Record.NetworkPool = desiredNetworkPool
+	if err := validateEnvironment(prepared.environment.Record); err != nil {
+		return preparedEnvironmentBlueprintPoolChange{}, err
+	}
+	registries, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{environmentPoolRegistryKey}, Revision: revision,
+	})
+	if err != nil {
+		return preparedEnvironmentBlueprintPoolChange{}, err
+	}
+	if registries == nil || len(registries.Values) != 1 || registries.Values[0] == nil ||
+		registries.Values[0].Key != environmentPoolRegistryKey {
+		return preparedEnvironmentBlueprintPoolChange{}, errs.New(
+			errs.KindInternal,
+			"Environment pool reservation registry is missing",
+		)
+	}
+	defer clearKeyValues(registries.Values)
+	global, err := decodeEnvelope[EnvironmentPoolRegistry](
+		registries.Values[0].Value,
+		"environment_pool_registry",
+	)
+	if err != nil || validateEnvironmentPoolRegistry(global) != nil {
+		return preparedEnvironmentBlueprintPoolChange{}, corruptEnvironmentPoolRegistry()
+	}
+	nextGlobal, canonical, err := global.Replace(
+		root,
+		current.Record.ID,
+		current.Record.NetworkPool,
+		desiredNetworkPool,
+	)
+	if err != nil {
+		return preparedEnvironmentBlueprintPoolChange{}, err
+	}
+	if canonical != desiredNetworkPool {
+		return preparedEnvironmentBlueprintPoolChange{}, errs.New(
+			errs.KindValidationFailed,
+			"x-gp-network-pool must be a canonical IPv4 CIDR",
+		)
+	}
+	prepared.environmentValue, err = encodeEnvironment(prepared.environment.Record)
+	if err != nil {
+		return preparedEnvironmentBlueprintPoolChange{}, err
+	}
+	prepared.registryValue, err = encodeEnvelope("environment_pool_registry", nextGlobal)
+	if err != nil {
+		clear(prepared.environmentValue)
+		return preparedEnvironmentBlueprintPoolChange{}, err
+	}
+	prepared.registryRevision = registries.Values[0].ModRevision
+	return prepared, nil
+}
+
 // PublishEnvironmentDesiredRevisionWithTask atomically advances the sole
 // Environment desired-state pointer and enqueues the Task pinned to that
-// already sealed revision. Domain records are projections, never parallel
-// desired-state authority in this transaction.
+// already sealed revision. Direct desired mutations preserve the existing
+// Environment pool.
 func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask(
 	ctx context.Context,
 	project Versioned[ProjectRecord],
@@ -204,6 +294,64 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	routeChanges []EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
+	attachPreparation BlueprintAttachTaskPreparation,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	return repository.publishEnvironmentDesiredRevisionWithTask(
+		ctx, netip.Prefix{}, environment.Record.NetworkPool,
+		project, environment, expectedHeadRevision, claim, revision, projection,
+		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
+		componentPreparation, attachPreparation, task, marker,
+	)
+}
+
+// PublishEnvironmentBlueprintDesiredRevisionWithTask publishes an authored
+// Blueprint and atomically replaces its Environment pool reservation when the
+// authored pool changed.
+func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisionWithTask(
+	ctx context.Context,
+	environmentPool netip.Prefix,
+	desiredNetworkPool string,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	expectedHeadRevision int64,
+	claim EnvironmentBlueprintStageClaim,
+	revision EnvironmentDesiredRevisionIdentity,
+	projection EnvironmentComposeProjection,
+	zoneChanges []EnvironmentBlueprintZoneChange,
+	serviceChanges []EnvironmentBlueprintServiceChange,
+	routeChanges []EnvironmentBlueprintRouteChange,
+	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
+	componentPreparation ComponentTaskPreparation,
+	attachPreparation BlueprintAttachTaskPreparation,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	return repository.publishEnvironmentDesiredRevisionWithTask(
+		ctx, environmentPool, desiredNetworkPool,
+		project, environment, expectedHeadRevision, claim, revision, projection,
+		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
+		componentPreparation, attachPreparation, task, marker,
+	)
+}
+
+func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask(
+	ctx context.Context,
+	environmentPool netip.Prefix,
+	desiredNetworkPool string,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	expectedHeadRevision int64,
+	claim EnvironmentBlueprintStageClaim,
+	revision EnvironmentDesiredRevisionIdentity,
+	projection EnvironmentComposeProjection,
+	zoneChanges []EnvironmentBlueprintZoneChange,
+	serviceChanges []EnvironmentBlueprintServiceChange,
+	routeChanges []EnvironmentBlueprintRouteChange,
+	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
+	componentPreparation ComponentTaskPreparation,
+	attachPreparation BlueprintAttachTaskPreparation,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -269,6 +417,18 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	poolChange, err := repository.prepareEnvironmentBlueprintPoolChangeAtRevision(
+		ctx,
+		environmentPool,
+		environment,
+		desiredNetworkPool,
+		fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearPreparedEnvironmentBlueprintPoolChange(poolChange)
+	effectiveEnvironment := poolChange.environment
 	previous, hasPrevious, err := repository.getEnvironmentBlueprintProjectionAtRevision(
 		ctx, environment.Record.ID, fence.readAtRevision(),
 	)
@@ -289,38 +449,47 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	var preparedServices []preparedEnvironmentBlueprintService
 	var preparedRoutes []preparedEnvironmentBlueprintRoute
 	var componentPublication preparedComponentTaskPublication
+	var attachPublication preparedBlueprintAttachTaskPublication
 	if publishDomain {
 		preparedZones, err = repository.prepareEnvironmentBlueprintZoneChangesAtRevision(
-			ctx, environment, projection, zoneChanges, fence.readAtRevision(),
+			ctx, effectiveEnvironment, projection, zoneChanges, fence.readAtRevision(),
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clearPreparedEnvironmentBlueprintZones(preparedZones)
 		preparedServices, err = repository.prepareEnvironmentBlueprintServiceChangesAtRevision(
-			ctx, environment, projection, serviceChanges, fence.readAtRevision(),
+			ctx, effectiveEnvironment, projection, serviceChanges, fence.readAtRevision(),
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clearPreparedEnvironmentBlueprintServices(preparedServices)
 		preparedRoutes, err = repository.prepareEnvironmentBlueprintRouteChangesAtRevision(
-			ctx, environment, serviceChanges, routeChanges, fence.readAtRevision(),
+			ctx, effectiveEnvironment, serviceChanges, routeChanges, fence.readAtRevision(),
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clearPreparedEnvironmentBlueprintRoutes(preparedRoutes)
-		componentPublication, err = prepareComponentTaskPublication(
-			environment, task, zoneChanges, componentPreparation,
+		componentPublication, err = repository.prepareComponentTaskPublication(
+			ctx, effectiveEnvironment, task, zoneChanges, componentPreparation,
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clearPreparedComponentTaskPublication(componentPublication)
+		attachPublication, err = prepareBlueprintAttachTaskPublication(
+			effectiveEnvironment, projection, task, attachPreparation,
+		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clearPreparedBlueprintAttachTaskPublication(attachPublication)
 	} else if len(zoneChanges) != 0 || len(serviceChanges) != 0 || len(routeChanges) != 0 ||
 		!releaseGroupPreparation.isZero() ||
-		!componentTaskPreparationIsZero(componentPreparation) {
+		!componentTaskPreparationIsZero(componentPreparation) ||
+		!blueprintAttachTaskPreparationIsZero(attachPreparation) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment desired mutation cannot publish Blueprint domain changes",
@@ -369,7 +538,18 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		{Type: MutationDelete, Key: publication.locatorKey},
 		{Type: MutationPut, Key: environmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
 	}
-	baseCount := 8
+	poolRegistryConditionIndex := -1
+	if poolChange.changed() {
+		poolRegistryConditionIndex = len(conditions)
+		conditions = append(conditions, Condition{
+			Key: environmentPoolRegistryKey, ModRevision: poolChange.registryRevision,
+		})
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: environmentKey(environment.Record.ID), Value: poolChange.environmentValue},
+			Mutation{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolChange.registryValue},
+		)
+	}
+	baseCount := len(conditions)
 	baseClassifier := func(_ int64, values []*KeyValue) error {
 		if len(values) != baseCount+len(fence.conditions) {
 			return errs.New(errs.KindInternal, "Environment desired publication compare evidence is incomplete")
@@ -395,6 +575,12 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		if (expectedHeadRevision == 0 && head != nil) ||
 			(expectedHeadRevision > 0 && (head == nil || head.ModRevision != expectedHeadRevision)) {
 			return errs.New(errs.KindStateConflict, "Environment desired state changed")
+		}
+		if poolRegistryConditionIndex >= 0 {
+			registry := values[poolRegistryConditionIndex]
+			if registry == nil || registry.ModRevision != poolChange.registryRevision {
+				return stateConflict("environment pool registry", environment.Record.ID)
+			}
 		}
 		if conflict := fence.classifyCAS(values[baseCount:]); conflict != nil {
 			return conflict
@@ -469,10 +655,13 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		mutations = append(mutations, componentPublication.mutations...)
 		classified = classifyEnvironmentBlueprintComponentPublication(
 			classifyEnvironmentDesiredDomainPublication(
-				baseClassifier, baseCount, environment, preparedZones, preparedServices, preparedRoutes, fence,
+				baseClassifier, baseCount, effectiveEnvironment, preparedZones, preparedServices, preparedRoutes, fence,
 			),
 			componentPublication,
 		)
+		conditions = append(conditions, attachPublication.conditions...)
+		mutations = append(mutations, attachPublication.mutations...)
+		classified = classifyEnvironmentBlueprintAttachPublication(classified, attachPublication)
 		baseConditionCount := len(conditions)
 		conditions = append(conditions, releaseGroupPreparation.conditions...)
 		mutations = append(mutations, releaseGroupPreparation.mutations...)
@@ -496,7 +685,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, effectiveEnvironment, TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -522,9 +711,10 @@ func validateEnvironmentDesiredPublicationBudget(
 		return errs.New(errs.KindInternal, "Environment desired publication plan is absent")
 	}
 	if environmentBlueprintTransactionOperationCount(plan, marker) > maximumTransactionOperations {
-		return errs.New(
+		return errs.Newf(
 			errs.KindValidationFailed,
-			"Environment desired publication exceeds the 96 compare-and-mutation limit",
+			"Environment desired publication exceeds the %d compare-and-mutation limit",
+			maximumTransactionOperations,
 		)
 	}
 	return nil
@@ -978,15 +1168,20 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges
 	changes []EnvironmentBlueprintServiceChange,
 	readRevision int64,
 ) ([]preparedEnvironmentBlueprintService, error) {
-	if len(changes) != len(projection.Services) {
+	identities := make(map[string]string, len(projection.Services))
+	for _, identity := range projection.Services {
+		identities[identity.ID] = identity.Name
+	}
+	for _, component := range projection.Components {
+		for _, serviceID := range component.Runtime.GeneratedServices {
+			delete(identities, serviceID)
+		}
+	}
+	if len(changes) != len(identities) {
 		return nil, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Service changes do not cover the Compose projection",
 		)
-	}
-	identities := make(map[string]string, len(projection.Services))
-	for _, identity := range projection.Services {
-		identities[identity.ID] = identity.Name
 	}
 	prepared := make([]preparedEnvironmentBlueprintService, 0, len(changes))
 	for _, change := range changes {
@@ -1004,6 +1199,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintServiceChanges
 				"Blueprint Service change does not match its projection",
 			)
 		}
+		delete(identities, serviceID)
 		item := preparedEnvironmentBlueprintService{change: change}
 		if change.Current != nil {
 			if err := validateServiceVersion(*change.Current); err != nil {

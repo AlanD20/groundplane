@@ -1,8 +1,8 @@
 [Unit]
 Description=Groundplane Controller
 Wants=network-online.target
-After=network-online.target docker.service etcd.service
-Requires=docker.service etcd.service
+After=network-online.target docker.service
+Requires=docker.service
 
 [Service]
 Type=simple

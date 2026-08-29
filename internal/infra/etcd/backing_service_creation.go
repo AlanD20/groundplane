@@ -72,6 +72,22 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentValue)
+	projectCoordinationValue, err := encodeInitialHierarchyCoordination(
+		HierarchyDeletionTargetProject,
+		creation.Project.ID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(projectCoordinationValue)
+	environmentCoordinationValue, err := encodeInitialHierarchyCoordination(
+		HierarchyDeletionTargetEnvironment,
+		creation.Environment.ID,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(environmentCoordinationValue)
 	poolRegistryValue, err := encodeEnvelope("environment_pool_registry", creation.PoolRegistry.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -169,10 +185,12 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: MutationPut, Key: projectKey(creation.Project.ID), Value: projectValue},
 		{Type: MutationPut, Key: projectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
 		{Type: MutationPut, Key: projectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
+		{Type: MutationPut, Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID), Value: projectCoordinationValue},
 		{Type: MutationPut, Key: environmentKey(creation.Environment.ID), Value: environmentValue},
 		{Type: MutationPut, Key: environmentNameKey(creation.Project.ID, creation.Environment.Name), Value: []byte(creation.Environment.ID)},
 		{Type: MutationPut, Key: environmentOwnerKey(creation.Project.ID, creation.Environment.ID), Value: []byte(creation.Environment.ID)},
 		{Type: MutationPut, Key: environmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
+		{Type: MutationPut, Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID), Value: environmentCoordinationValue},
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: MutationPut, Key: zoneKey(creation.Zone.Desired.ID), Value: zoneValue},
 		{Type: MutationPut, Key: zoneNameKey(creation.Environment.ID, creation.Zone.Desired.Name), Value: []byte(creation.Zone.Desired.ID)},
@@ -333,7 +351,9 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Task.Target != creation.Environment.ID || creation.Task.Status != TaskStatusPending ||
 		creation.Task.RenderGeneration != 1 ||
 		creation.Task.Params[EnvironmentDesiredRevisionParam] != creation.Task.ID ||
-		creation.Task.Params[TaskMaterializationEnvironmentParam] != creation.Environment.ID {
+		creation.Task.Params[TaskMaterializationEnvironmentParam] != creation.Environment.ID ||
+		creation.Task.Params[TaskBackingServiceHealthParam] != creation.Service.Desired.ID ||
+		creation.Task.Params[TaskBackingServiceVolumeDirectoryParam] != creation.Environment.VolumeDir {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation Task is invalid")
 	}
 	if creation.Marker.Kind != IdempotencyMarkerTask || creation.Marker.State != IdempotencyMarkerPending ||
@@ -396,12 +416,14 @@ func backingServiceCreationConditions(
 		{Key: projectKey(creation.Project.ID)},
 		{Key: projectSlugKey(creation.Project)},
 		{Key: projectOwnerKey(creation.Project)},
+		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID)},
 		{Key: deletionTombstoneKey("project", creation.Project.ID)},
 		{Key: environmentKey(creation.Environment.ID)},
 		{Key: environmentNameKey(creation.Project.ID, creation.Environment.Name)},
 		{Key: environmentOwnerKey(creation.Project.ID, creation.Environment.ID)},
 		{Key: deletionTombstoneKey("environment", creation.Environment.ID)},
 		{Key: environmentMutationEpochKey(creation.Environment.ID)},
+		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
 		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: zoneKey(creation.Zone.Desired.ID)},
 		{Key: zoneNameKey(creation.Environment.ID, creation.Zone.Desired.Name)},
@@ -448,59 +470,97 @@ func classifyBackingServiceCreation(
 	publication environmentBlueprintPublicationEvidence,
 	want int,
 ) idempotencyPlanClassifier {
+	const (
+		creationStageCondition = iota
+		taskCondition
+		operationTaskCondition
+		activeOperationCondition
+		queuedTaskCondition
+		blueprintRootCondition
+		blueprintDescriptorCondition
+		blueprintLocatorCondition
+		blueprintHeadCondition
+		projectCondition
+		projectSlugCondition
+		projectOwnerCondition
+		projectCoordinationCondition
+		projectTombstoneCondition
+		environmentCondition
+		environmentNameCondition
+		environmentOwnerCondition
+		environmentTombstoneCondition
+		environmentEpochCondition
+		environmentCoordinationCondition
+		environmentPoolCondition
+		zoneCondition
+		zoneNameCondition
+		zoneOwnerCondition
+		zoneTombstoneCondition
+		zonePoolCondition
+		serviceCondition
+		serviceNameCondition
+		serviceOwnerCondition
+		serviceTombstoneCondition
+		componentConditionStart
+	)
 	return func(_ int64, values []*KeyValue) error {
 		if len(values) != want {
 			return errs.New(errs.KindInternal, "Backing-service creation compare evidence is incomplete")
 		}
-		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+		if values[operationTaskCondition] != nil {
+			activeTaskID, err := decodeTaskReference(values[operationTaskCondition].Value)
 			if err != nil {
 				return err
 			}
 			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", creation.Task.OperationID, activeTaskID)
 		}
-		for _, index := range []int{0, 1, 3} {
+		for _, index := range []int{creationStageCondition, taskCondition, activeOperationCondition, queuedTaskCondition} {
 			if values[index] != nil {
 				return errs.New(errs.KindInternal, "Backing-service creation collided with durable Task state")
 			}
 		}
-		if values[4] == nil || values[4].ModRevision != publication.rootRevision ||
-			values[5] == nil || values[5].ModRevision != publication.descriptorRevision ||
-			values[6] == nil || values[6].ModRevision != publication.locatorRevision {
+		if values[blueprintRootCondition] == nil || values[blueprintRootCondition].ModRevision != publication.rootRevision ||
+			values[blueprintDescriptorCondition] == nil || values[blueprintDescriptorCondition].ModRevision != publication.descriptorRevision ||
+			values[blueprintLocatorCondition] == nil || values[blueprintLocatorCondition].ModRevision != publication.locatorRevision {
 			return errs.New(errs.KindStateConflict, "Backing-service sealed staging evidence changed")
 		}
-		if values[7] != nil {
+		if values[blueprintHeadCondition] != nil {
 			return errs.New(errs.KindStateConflict, "Backing-service desired state already exists")
 		}
-		if values[9] != nil {
+		if values[projectSlugCondition] != nil {
 			return errs.New(errs.KindNameConflict, "Backing-service slug is already in use")
 		}
-		if values[13] != nil {
+		if values[environmentNameCondition] != nil {
 			return errs.New(errs.KindNameConflict, "Backing-service Environment name is already in use")
 		}
-		poolRegistry := values[17]
+		poolRegistry := values[environmentPoolCondition]
 		if (creation.PoolRegistry.Revision == 0 && poolRegistry != nil) ||
 			(creation.PoolRegistry.Revision > 0 &&
 				(poolRegistry == nil || poolRegistry.ModRevision != creation.PoolRegistry.Revision)) {
 			return stateConflict("environment pool registry", "global")
 		}
-		if values[19] != nil {
+		if values[zoneNameCondition] != nil {
 			return errs.New(errs.KindNameConflict, "Backing-service Zone name is already in use")
 		}
-		if values[24] != nil {
+		if values[serviceNameCondition] != nil {
 			return errs.New(errs.KindNameConflict, "Backing-service Service name is already in use")
 		}
-		for _, index := range []int{8, 10, 12, 14, 16, 18, 20, 22, 23, 25} {
+		for _, index := range []int{
+			blueprintHeadCondition, projectCondition, projectOwnerCondition,
+			projectCoordinationCondition, environmentCondition, environmentOwnerCondition,
+			environmentEpochCondition, environmentCoordinationCondition,
+			zoneCondition, zoneOwnerCondition, zonePoolCondition, serviceCondition, serviceOwnerCondition,
+		} {
 			if values[index] != nil {
 				return errs.New(errs.KindStateConflict, "Backing-service stable identity is already in use")
 			}
 		}
-		for _, index := range []int{11, 15, 21, 26} {
+		for _, index := range []int{projectTombstoneCondition, environmentTombstoneCondition, zoneTombstoneCondition, serviceTombstoneCondition} {
 			if values[index] != nil {
 				return errs.New(errs.KindResourceInUse, "Backing-service deletion is in progress")
 			}
 		}
-		for index := 27; index < len(values); index++ {
+		for index := componentConditionStart; index < len(values); index++ {
 			if values[index] != nil {
 				return errs.New(errs.KindStateConflict, "Backing-service Component identity is already in use")
 			}

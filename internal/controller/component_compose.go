@@ -1,26 +1,29 @@
 package controller
 
 import (
+	"math"
 	"path/filepath"
 	"sort"
+	"strings"
+
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/components"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 // EnvironmentComponentEnvironmentFile is one service-specific generated env
-// file. Values contain immutable Entry identities only; value bytes are
+// file. Values contain reusable Secret identities only; value bytes are
 // resolved into the transient materialization channel when a Task is sent.
 type EnvironmentComponentEnvironmentFile struct {
 	ComponentID string
 	ServiceID   string
 	ServiceName string
 	Destination string
-	Values      []components.GeneratedSecretEnvironment
+	Values      []componentsdk.ManagedSecretEnvironment
 }
 
 // EnvironmentComponentComposeProjection is the complete deterministic
@@ -39,7 +42,7 @@ type EnvironmentComponentComposeProjection struct {
 func ProjectEnvironmentComponents(
 	project *composetypes.Project,
 	environment core.Environment,
-	catalog []components.Registration,
+	catalog []EnvironmentComponentRegistration,
 ) (EnvironmentComponentComposeProjection, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, environment.ID) != nil ||
 		!filepath.IsAbs(environment.VolumeDir) || filepath.Clean(environment.VolumeDir) != environment.VolumeDir ||
@@ -92,7 +95,7 @@ func ProjectEnvironmentComponents(
 		}
 		projected.Services[generated.Name] = service
 		result.Services = append(result.Services, ComposeResourceIdentity{
-			ID: generated.Definition.Service.ID, Name: generated.Name,
+			ID: generated.Definition.ID, Name: generated.Name,
 		})
 		if environmentFile != nil {
 			result.EnvironmentFiles = append(result.EnvironmentFiles, *environmentFile)
@@ -110,8 +113,7 @@ func ProjectEnvironmentComponents(
 	}
 
 	for _, file := range rendered.Files {
-		owners := mountedFiles[file.Path]
-		if _, mounted := owners[file.ComponentID]; !mounted ||
+		if !componentGeneratedFileIsMounted(file, mountedFiles) ||
 			uint64(len(file.Content)) > entrymaterialization.MaximumContentBytes ||
 			entrymaterialization.ValidateDesiredDestination(file.Path) != nil {
 			return EnvironmentComponentComposeProjection{}, errs.New(
@@ -126,6 +128,21 @@ func ProjectEnvironmentComponents(
 		})
 	}
 	return result, nil
+}
+
+func componentGeneratedFileIsMounted(
+	file GeneratedEnvironmentFile,
+	mountedFiles map[string]map[string]struct{},
+) bool {
+	for source, owners := range mountedFiles {
+		if _, owned := owners[file.ComponentID]; !owned {
+			continue
+		}
+		if file.Path == source || strings.HasPrefix(file.Path, source+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneComposeProjectServices(project *composetypes.Project) *composetypes.Project {
@@ -146,48 +163,23 @@ func projectEnvironmentComponentService(
 	generated GeneratedEnvironmentService,
 ) (composetypes.ServiceConfig, *EnvironmentComponentEnvironmentFile, error) {
 	definition := generated.Definition
-	service := definition.Service
-	if generatedServiceHasUnsupportedComposeFields(service) {
-		return composetypes.ServiceConfig{}, nil, errs.New(
-			errs.KindInternal,
-			"Component renderer used a Service field outside the Environment component Compose contract",
-		)
-	}
 	projected := composetypes.ServiceConfig{
-		Name: service.Name, Image: service.Image,
-		Command:  composetypes.ShellCommand(append([]string(nil), service.Command...)),
-		Networks: make(map[string]*composetypes.ServiceNetworkConfig, len(service.Zones)),
-		Expose:   composetypes.StringOrNumberList(append([]string(nil), service.Expose...)),
-		Restart:  service.Restart,
+		Name: definition.Name, Image: definition.Image,
+		Command:  composetypes.ShellCommand(append([]string(nil), definition.Command...)),
+		Networks: make(map[string]*composetypes.ServiceNetworkConfig, len(definition.Networks)),
+		Expose:   composetypes.StringOrNumberList(append([]string(nil), definition.Expose...)),
+		Restart:  definition.Restart,
 	}
-	joinedZones := make(map[string]struct{}, len(service.Zones))
-	for _, zoneName := range service.Zones {
-		if _, exists := environment.Zones[zoneName]; !exists {
+	for _, network := range definition.Networks {
+		if _, exists := environment.Zones[network.Name]; !exists {
 			return composetypes.ServiceConfig{}, nil, errs.New(
 				errs.KindInternal,
 				"Component generated Service references a missing Environment Zone",
 			)
 		}
-		projected.Networks[zoneName] = &composetypes.ServiceNetworkConfig{
-			Aliases:     append([]string(nil), service.Aliases[zoneName]...),
-			Ipv4Address: definition.StaticIPv4[zoneName],
-		}
-		joinedZones[zoneName] = struct{}{}
-	}
-	for zoneName := range service.Aliases {
-		if _, joined := joinedZones[zoneName]; !joined {
-			return composetypes.ServiceConfig{}, nil, errs.New(
-				errs.KindInternal,
-				"Component generated Service alias targets an unjoined Zone",
-			)
-		}
-	}
-	for zoneName := range definition.StaticIPv4 {
-		if _, joined := joinedZones[zoneName]; !joined {
-			return composetypes.ServiceConfig{}, nil, errs.New(
-				errs.KindInternal,
-				"Component generated Service address targets an unjoined Zone",
-			)
+		projected.Networks[network.Name] = &composetypes.ServiceNetworkConfig{
+			Aliases:     append([]string(nil), network.Aliases...),
+			Ipv4Address: network.StaticIPv4,
 		}
 	}
 	for _, mount := range definition.Mounts {
@@ -198,27 +190,27 @@ func projectEnvironmentComponentService(
 			Bind: &composetypes.ServiceVolumeBind{CreateHostPath: true},
 		})
 	}
-	if len(service.DependsOn) != 0 {
-		projected.DependsOn = make(composetypes.DependsOnConfig, len(service.DependsOn))
-		for name, dependency := range service.DependsOn {
-			if len(dependency.Phases) != 0 {
-				return composetypes.ServiceConfig{}, nil, errs.New(
-					errs.KindInternal,
-					"Component generated Service dependency contains unsupported lifecycle phases",
-				)
-			}
-			projected.DependsOn[name] = composetypes.ServiceDependency{
-				Condition: dependency.Condition.String(), Required: true,
+	if len(definition.Dependencies) != 0 {
+		projected.DependsOn = make(composetypes.DependsOnConfig, len(definition.Dependencies))
+		for _, dependency := range definition.Dependencies {
+			projected.DependsOn[dependency.ServiceName] = composetypes.ServiceDependency{
+				Condition: string(dependency.Condition), Required: true,
 			}
 		}
 	}
-	replicas := service.Replicas
+	if definition.Replicas > math.MaxInt {
+		return composetypes.ServiceConfig{}, nil, errs.New(
+			errs.KindInternal,
+			"Component generated Service replica count exceeds the Compose integer range",
+		)
+	}
+	replicas := int(definition.Replicas)
 	projected.Deploy = &composetypes.DeployConfig{Replicas: &replicas}
 
 	if len(definition.SecretEnvironment) == 0 {
 		return projected, nil, nil
 	}
-	destination := ServiceEnvFileName(environment.ID, service.Name)
+	destination := ServiceEnvFileName(environment.ID, definition.Name)
 	if entrymaterialization.ValidateDesiredDestination(destination) != nil {
 		return composetypes.ServiceConfig{}, nil, errs.New(
 			errs.KindInternal,
@@ -228,18 +220,11 @@ func projectEnvironmentComponentService(
 	projected.EnvFiles = []composetypes.EnvFile{{
 		Path: filepath.Join(environment.VolumeDir, filepath.FromSlash(destination)), Required: true,
 	}}
-	values := append([]components.GeneratedSecretEnvironment(nil), definition.SecretEnvironment...)
+	values := append([]componentsdk.ManagedSecretEnvironment(nil), definition.SecretEnvironment...)
 	sort.Slice(values, func(left, right int) bool { return values[left].Name < values[right].Name })
 	return projected, &EnvironmentComponentEnvironmentFile{
 		ComponentID: generated.ComponentID,
-		ServiceID:   service.ID, ServiceName: service.Name, Destination: destination,
+		ServiceID:   definition.ID, ServiceName: definition.Name, Destination: destination,
 		Values: values,
 	}, nil
-}
-
-func generatedServiceHasUnsupportedComposeFields(service core.Service) bool {
-	return service.Strategy != "" || service.OnFailure != "" || service.Healthcheck != (core.Healthcheck{}) ||
-		service.Resources != (core.Resources{}) || len(service.Mounts) != 0 || len(service.Environment) != 0 ||
-		service.Logging.MaxSize != "" || service.Logging.MaxFile != 0 || service.Adapter != "" ||
-		service.FactsPrefix != "" || service.Label != ""
 }

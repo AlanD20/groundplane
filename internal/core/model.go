@@ -273,9 +273,8 @@ const (
 	AttachDetached     AttachStatus = "detached"
 )
 
-// Attach is how a Service consumes a backing project. Never
-// deduplicated: a service may attach the same backing project many
-// times, each attach provisioning its own database + role. Name is a
+// Attach is how one Service consumes a backing project. Each Attach chooses
+// a new credential or a direct existing credential owner. Name is a
 // MUTABLE LABEL (auto-suggested from tenant-project-environment-service
 // if omitted, unique within the environment) — renaming it is a
 // separate explicit operation and never recalculated by unrelated
@@ -286,7 +285,8 @@ type Attach struct {
 	BackingProjectID     string       `yaml:"backing_project_id"               json:"backing_project_id"`
 	BackingEnvironmentID string       `yaml:"backing_environment_id,omitempty" json:"backing_environment_id,omitempty"` // always "main" for a backing project, but resolved to an id like any environment
 	BackingServiceID     string       `yaml:"backing_service_id,omitempty"     json:"backing_service_id,omitempty"`
-	Services             []string     `yaml:"services"                         json:"services"` // attaching service name(s) sharing this attach
+	Service              string       `yaml:"service"                          json:"service"`
+	CredentialAttachID   string       `yaml:"credential_attach_id"             json:"credential_attach_id"`
 	Grants               []Grant      `yaml:"grants,omitempty"                 json:"grants,omitempty"`
 	Status               AttachStatus `yaml:"status"                           json:"status"`
 	CreatedAt            time.Time    `yaml:"created_at"                       json:"created_at"`
@@ -311,8 +311,6 @@ const (
 	ComponentKindIngressCaddy   ComponentKind = "caddy"
 	ComponentKindEdgeCloudflare ComponentKind = "cloudflare-tunnel"
 	ComponentKindCoreDNS        ComponentKind = "coredns"
-	ComponentKindController     ComponentKind = "controller"
-	ComponentKindAgent          ComponentKind = "agent"
 )
 
 // ComponentOwner discriminates the two valid component ownership scopes.
@@ -323,6 +321,77 @@ const (
 	ComponentOwnerPlatform    ComponentOwner = "platform"
 )
 
+type ComponentCapability string
+
+const (
+	ComponentCapabilityHTTPRouter        ComponentCapability = "http-router"
+	ComponentCapabilityHTTPEdgeTransport ComponentCapability = "http-edge-transport"
+	ComponentCapabilityDNSResolver       ComponentCapability = "dns-resolver"
+)
+
+type CaddyComponentConfig struct {
+	ZoneID            string `yaml:"zone_id" json:"zone_id"`
+	CaddyfileTemplate string `yaml:"caddyfile_template,omitempty" json:"caddyfile_template,omitempty"`
+}
+
+type CloudflareTunnelComponentConfig struct {
+	SecretID string `yaml:"secret_id" json:"secret_id"`
+}
+
+type DNSResolverEndpoint struct {
+	Address string `yaml:"address" json:"address"`
+	Port    uint16 `yaml:"port,omitempty" json:"port,omitempty"`
+}
+
+type DNSForwarder struct {
+	Domain    string                `yaml:"domain" json:"domain"`
+	Resolvers []DNSResolverEndpoint `yaml:"resolvers" json:"resolvers"`
+}
+
+type CoreDNSComponentConfig struct {
+	UpstreamAuto      bool                  `yaml:"upstream_auto" json:"upstream_auto"`
+	UpstreamResolvers []DNSResolverEndpoint `yaml:"upstream_resolvers" json:"upstream_resolvers"`
+	Forwarders        []DNSForwarder        `yaml:"forwarders" json:"forwarders"`
+	TailnetDelegation bool                  `yaml:"tailnet_delegation" json:"tailnet_delegation"`
+}
+
+// ComponentConfig is the closed desired-configuration union for the compiled
+// MVP Component catalog. Exactly one branch may be present.
+type ComponentConfig struct {
+	Caddy            *CaddyComponentConfig            `yaml:"caddy,omitempty" json:"caddy,omitempty"`
+	CloudflareTunnel *CloudflareTunnelComponentConfig `yaml:"cloudflare_tunnel,omitempty" json:"cloudflare_tunnel,omitempty"`
+	CoreDNS          *CoreDNSComponentConfig          `yaml:"coredns,omitempty" json:"coredns,omitempty"`
+}
+
+func (config ComponentConfig) Empty() bool {
+	return config.Caddy == nil && config.CloudflareTunnel == nil && config.CoreDNS == nil
+}
+
+func CloneComponentConfig(config ComponentConfig) ComponentConfig {
+	clone := ComponentConfig{}
+	if config.Caddy != nil {
+		value := *config.Caddy
+		clone.Caddy = &value
+	}
+	if config.CloudflareTunnel != nil {
+		value := *config.CloudflareTunnel
+		clone.CloudflareTunnel = &value
+	}
+	if config.CoreDNS != nil {
+		value := *config.CoreDNS
+		value.UpstreamResolvers = append([]DNSResolverEndpoint(nil), value.UpstreamResolvers...)
+		value.Forwarders = make([]DNSForwarder, len(config.CoreDNS.Forwarders))
+		for index, forwarder := range config.CoreDNS.Forwarders {
+			value.Forwarders[index] = DNSForwarder{
+				Domain: forwarder.Domain,
+				Resolvers: append([]DNSResolverEndpoint(nil), forwarder.Resolvers...),
+			}
+		}
+		clone.CoreDNS = &value
+	}
+	return clone
+}
+
 // Component is the generic component record shared by environment-owned and
 // platform-owned kinds. OwnerID is the environment id for environment owners
 // and empty for the singleton platform owner.
@@ -332,7 +401,7 @@ type Component struct {
 	OwnerID           string         `yaml:"owner_id,omitempty"           json:"owner_id,omitempty"`
 	Kind              ComponentKind  `yaml:"kind"                         json:"kind"`
 	Enabled           bool           `yaml:"enabled"                      json:"enabled"`
-	Config            map[string]any `yaml:"config,omitempty"             json:"config,omitempty"`             // typed per kind at the registry level; kept generic here (see internal/adapters-style component registry, TODO)
+	Config            ComponentConfig `yaml:"config,omitempty"             json:"config,omitempty"`
 	GeneratedServices []string       `yaml:"generated_services,omitempty" json:"generated_services,omitempty"` // stable Service ids allocated for this component
 	PinnedIPv4        string         `yaml:"pinned_ipv4,omitempty"        json:"pinned_ipv4,omitempty"`        // Caddy only; derived durable state, never authored
 	Healthy           bool           `yaml:"healthy"                      json:"healthy"`
@@ -365,7 +434,7 @@ const (
 
 type Script struct {
 	ID          string     `yaml:"id"      json:"id"` // scr_<ulid>
-	Name        string     `yaml:"name"    json:"name"`
+	Slug        string     `yaml:"slug"    json:"slug"`
 	ServiceName string     `yaml:"service" json:"service"`
 	Body        string     `yaml:"script"  json:"script"` // one line or many
 	When        ScriptHook `yaml:"when"    json:"when"`

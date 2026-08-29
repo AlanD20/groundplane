@@ -237,6 +237,40 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		},
 	)
+	environmentState, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{environmentKey(intent.EnvironmentID)}, Revision: revision,
+	})
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	if environmentState == nil || len(environmentState.Values) != 1 || environmentState.Values[0] == nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, errs.New(errs.KindEnvironmentNotFound, "Component retry Environment was not found")
+	}
+	environment, err := decodeEnvironment(environmentState.Values[0].Value)
+	if err != nil || environment.ID != intent.EnvironmentID {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, corruptRecord()
+	}
+	_, secretConditions, secretMutations, err := prepareComponentTaskSecretReferences(
+		ctx,
+		repository.store,
+		environment.ProjectID,
+		retry.ID,
+		intent.Candidates,
+		revision,
+	)
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	change.conditions = append(
+		change.conditions,
+		Condition{Key: environmentKey(intent.EnvironmentID), ModRevision: environmentState.Values[0].ModRevision},
+	)
+	change.conditions = append(change.conditions, secretConditions...)
+	change.mutations = append(change.mutations, secretMutations...)
 	return change, nil
 }
 
@@ -436,7 +470,17 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 
 	if terminalStatus == TaskStatusCompleted {
 		for _, candidate := range intent.Candidates {
-			value, encodeErr := encodeComponentRecord(candidate.Candidate)
+			promoted, promoteErr := SetComponentRuntime(
+				candidate.Candidate,
+				candidate.Candidate.Runtime.GeneratedServices,
+				candidate.Candidate.Runtime.PinnedIPv4,
+				candidate.Candidate.Desired.Enabled,
+			)
+			if promoteErr != nil {
+				clearComponentTaskChange(change)
+				return componentTaskChange{}, promoteErr
+			}
+			value, encodeErr := encodeComponentRecord(promoted)
 			if encodeErr != nil {
 				clearComponentTaskChange(change)
 				return componentTaskChange{}, encodeErr
@@ -447,6 +491,12 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			})
 		}
 	}
+	secretMutations, err := componentTaskTerminalSecretMutations(intent, task.ID, terminalStatus)
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	change.mutations = append(change.mutations, secretMutations...)
 	for _, zoneID := range zones {
 		if _, changed := changedRegistries[zoneID]; !changed {
 			continue

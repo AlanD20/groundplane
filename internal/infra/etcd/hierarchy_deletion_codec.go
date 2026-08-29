@@ -199,11 +199,9 @@ func validateHierarchyDeletionAction(action HierarchyDeletionAction) error {
 func hierarchyDeletionProcedureMatchesAction(action HierarchyDeletionAction) bool {
 	agent := map[HierarchyDeletionActionKind]string{
 		HierarchyDeletionAttachGrantRevoke: "attach.grant-revoke", HierarchyDeletionAttachDetach: "attach.detach",
-		HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup", HierarchyDeletionServiceRemove: "service.remove",
-		HierarchyDeletionEntryRemove: "entry.remove", HierarchyDeletionRouteRemove: "route.remove",
-		HierarchyDeletionComponentRemove: "component.remove", HierarchyDeletionMaterializationRemove: "materialization.remove",
-		HierarchyDeletionZoneRemove:    "zone.remove",
-		HierarchyDeletionNetworkRemove: "network.remove", HierarchyDeletionRecoveryPointRemove: "recovery-point.remove",
+		HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup",
+		HierarchyDeletionMaterializationRemove:   "materialization.remove",
+		HierarchyDeletionNetworkRemove:           "network.remove", HierarchyDeletionRecoveryPointRemove: "recovery-point.remove",
 		HierarchyDeletionOrphanObjectRemove:        "orphan-object.remove",
 		HierarchyDeletionBackingRuntimeReconstruct: "backing.runtime-reconstruct",
 	}
@@ -212,10 +210,15 @@ func hierarchyDeletionProcedureMatchesAction(action HierarchyDeletionAction) boo
 			action.AgentProcedure.TypedProcedure == expected
 	}
 	controller := map[HierarchyDeletionActionKind]string{
-		HierarchyDeletionScriptRemove: "script.remove", HierarchyDeletionReleaseGroupRemove: "release-group.remove",
+		HierarchyDeletionServiceRemove:   "service.remove",
+		HierarchyDeletionEntryRemove:     "entry.remove",
+		HierarchyDeletionRouteRemove:     "route.remove",
+		HierarchyDeletionComponentRemove: "component.remove",
+		HierarchyDeletionScriptRemove:    "script.remove", HierarchyDeletionReleaseGroupRemove: "release-group.remove",
 		HierarchyDeletionReleaseFinalize:      "release.finalize",
 		HierarchyDeletionBackupPolicyFinalize: "backup-policy.finalize",
 		HierarchyDeletionKeyMaterialRemove:    "key-material.remove",
+		HierarchyDeletionZoneRemove:           "zone.remove",
 		HierarchyDeletionReservationRelease:   "reservation.release",
 		HierarchyDeletionConnectorFinalize:    "connector.finalize",
 		HierarchyDeletionEnvironmentFinalize:  "environment.finalize",

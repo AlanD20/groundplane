@@ -179,11 +179,21 @@ func (service *attachMutationService) replayAttachRename(
 func attachAPI(record etcd.AttachRecord) apiTypes.Attach {
 	return apiTypes.Attach{
 		ID: record.ID, Name: record.Name,
-		ServiceIDs: append([]string(nil), record.ServiceIDs...), BackingServiceID: record.BackingServiceID,
+		ServiceID: record.ServiceID, Credential: attachAPICredential(record),
+		BackingServiceID:     record.BackingServiceID,
 		BackingProjectID:     record.BackingProjectID,
 		BackingEnvironmentID: record.BackingEnvironmentID, BackingNetworkID: record.BackingNetworkID,
 		GrantAttachIDs: append([]string(nil), record.GrantAttachIDs...),
 		FactSets:       attachAPIFactSets(record.FactSets), Status: string(record.Status),
+	}
+}
+
+func attachAPICredential(record etcd.AttachRecord) apiTypes.AttachCredential {
+	if record.OwnsCredential() {
+		return apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialNew}
+	}
+	return apiTypes.AttachCredential{
+		Mode: apiTypes.AttachCredentialExisting, AttachID: record.CredentialAttachID,
 	}
 }
 

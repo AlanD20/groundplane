@@ -74,7 +74,11 @@ func (runner *Runner) Run(ctx context.Context) {
 			return
 		}
 		if err != nil {
-			runner.logger.Error("Controller Task runner pass failed", slog.String("code", errorCode(err)))
+			runner.logger.Error(
+				"Controller Task runner pass failed",
+				slog.String("code", errorCode(err)),
+				slog.Any("error", err),
+			)
 		}
 		if progressed && err == nil {
 			continue
@@ -153,6 +157,12 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 	status := etcd.TaskStatusCompleted
 	if executionErr != nil {
 		status = etcd.TaskStatusFailed
+		runner.logger.Error(
+			"Controller Task execution failed",
+			slog.String("task_id", claim.Task.Record.ID),
+			slog.String("code", errorCode(executionErr)),
+			slog.Any("error", executionErr),
+		)
 		runner.mu.Lock()
 		operatorAbort := active.operatorAbort
 		runner.mu.Unlock()

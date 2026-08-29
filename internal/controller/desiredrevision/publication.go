@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -14,8 +15,38 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type Repository interface {
+type ClaimRepository interface {
 	ClaimEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaimRequest) (etcd.EnvironmentBlueprintStageClaim, error)
+}
+
+type PublicationRepository interface {
+	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
+	PublishEnvironmentBlueprintDesiredRevisionWithTask(
+		context.Context,
+		netip.Prefix,
+		string,
+		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[etcd.EnvironmentRecord],
+		int64,
+		etcd.EnvironmentBlueprintStageClaim,
+		etcd.EnvironmentDesiredRevisionIdentity,
+		etcd.EnvironmentComposeProjection,
+		[]etcd.EnvironmentBlueprintZoneChange,
+		[]etcd.EnvironmentBlueprintServiceChange,
+		[]etcd.EnvironmentBlueprintRouteChange,
+		etcd.ReleaseGroupBlueprintPreparedMutation,
+		etcd.ComponentTaskPreparation,
+		etcd.BlueprintAttachTaskPreparation,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
+// Repository is the aggregate used by mutation services that both stage and
+// publish direct desired revisions. Claim-only and Blueprint publication
+// boundaries use the narrower interfaces above.
+type Repository interface {
+	ClaimRepository
 	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentDesiredRevisionWithTask(
 		context.Context,
@@ -30,6 +61,7 @@ type Repository interface {
 		[]etcd.EnvironmentBlueprintRouteChange,
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
+		etcd.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -49,7 +81,7 @@ type ClaimInput struct {
 
 func Claim(
 	ctx context.Context,
-	repository Repository,
+	repository ClaimRepository,
 	input ClaimInput,
 ) (etcd.EnvironmentBlueprintStageClaim, error) {
 	if input.SourceKind != etcd.EnvironmentBlueprintSourceApply &&
@@ -108,6 +140,8 @@ func Claim(
 type PublishInput struct {
 	Project                 etcd.Versioned[etcd.ProjectRecord]
 	Environment             etcd.Versioned[etcd.EnvironmentRecord]
+	EnvironmentPool         netip.Prefix
+	NetworkPool             string
 	ExpectedHeadRevision    int64
 	Claim                   etcd.EnvironmentBlueprintStageClaim
 	Evidence                Evidence
@@ -120,6 +154,7 @@ type PublishInput struct {
 	RouteChanges            []etcd.EnvironmentBlueprintRouteChange
 	ReleaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation
 	ComponentPreparation    etcd.ComponentTaskPreparation
+	AttachPreparation       etcd.BlueprintAttachTaskPreparation
 	Task                    etcd.TaskRecord
 }
 
@@ -138,7 +173,7 @@ func PreflightProjection(projection etcd.EnvironmentComposeProjection) (Projecti
 
 func PreflightAndClaim(
 	ctx context.Context,
-	repository Repository,
+	repository ClaimRepository,
 	projection etcd.EnvironmentComposeProjection,
 	input ClaimInput,
 ) (etcd.EnvironmentBlueprintStageClaim, ProjectionEvidence, error) {
@@ -155,7 +190,7 @@ func PreflightAndClaim(
 
 func Publish(
 	ctx context.Context,
-	repository Repository,
+	repository PublicationRepository,
 	idempotency *Idempotency,
 	input PublishInput,
 ) (etcd.IdempotencyResponse, error) {
@@ -179,12 +214,12 @@ func Publish(
 		Locator: input.Locator, Intent: input.Claim.Intent, Response: response,
 		TaskID: input.Task.ID, CreatedAt: input.Claim.CreatedAt, UpdatedAt: input.Claim.CreatedAt,
 	}
-	result, publicationErr := repository.PublishEnvironmentDesiredRevisionWithTask(
-		ctx, input.Project, input.Environment, input.ExpectedHeadRevision,
+	result, publicationErr := repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
+		ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
 		input.Claim,
 		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.Environment.Record.ID, RevisionID: input.Task.ID},
 		input.Projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
-		input.ReleaseGroupPreparation, input.ComponentPreparation, input.Task, marker,
+		input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation, input.Task, marker,
 	)
 	var resolution idempotentintent.Resolution
 	if publicationErr != nil {

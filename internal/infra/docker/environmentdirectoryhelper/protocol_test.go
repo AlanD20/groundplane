@@ -173,8 +173,6 @@ func validManagedVolumeRequest(t *testing.T) *agentpb.EnvironmentDirectoryHelper
 					{Key: "com.groundplane.environment-id", Value: testEnvironmentID},
 					{Key: "com.groundplane.kind", Value: "volume"},
 					{Key: "com.groundplane.managed", Value: "true"},
-					{Key: "com.groundplane.plan-id", Value: testPlanID},
-					{Key: "com.groundplane.render-generation", Value: "1"},
 				},
 			}},
 		}},

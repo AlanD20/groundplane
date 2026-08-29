@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	containerderrdefs "github.com/containerd/errdefs"
@@ -215,7 +216,17 @@ func (executor *Executor) Execute(
 	if waited.Error != nil || waited.StatusCode != 0 {
 		return nil, errs.New(errs.KindInternal, "Environment directory helper process failed")
 	}
-	return environmentdirectoryhelper.ReadResponse(context.Background(), bytes.NewReader(output.stdout))
+	response, responseErr := environmentdirectoryhelper.ReadResponse(context.Background(), bytes.NewReader(output.stdout))
+	if responseErr != nil {
+		return nil, responseErr
+	}
+	if response.ExitCode != 0 && len(output.stderr) != 0 {
+		return nil, errs.Wrap(
+			errs.KindRequestFailed,
+			fmt.Errorf("Environment directory helper failed: %s", strings.TrimSpace(string(output.stderr))),
+		)
+	}
+	return response, nil
 }
 
 func createOptions(image string, volumeRoot string) client.ContainerCreateOptions {
@@ -282,6 +293,7 @@ func preferCleanup(original, cleanup error) error {
 
 type outputResult struct {
 	stdout []byte
+	stderr []byte
 	err    error
 }
 
@@ -293,7 +305,11 @@ func readOutput(reader io.Reader, result chan<- outputResult) {
 	stdout := &boundedBuffer{maximum: maximumHelperStdout}
 	stderr := &boundedBuffer{maximum: maximumHelperStderr}
 	_, err := stdcopy.StdCopy(stdout, stderr, reader)
-	result <- outputResult{stdout: append([]byte(nil), stdout.Bytes()...), err: err}
+	result <- outputResult{
+		stdout: append([]byte(nil), stdout.Bytes()...),
+		stderr: append([]byte(nil), stderr.Bytes()...),
+		err:    err,
+	}
 }
 
 type boundedBuffer struct {

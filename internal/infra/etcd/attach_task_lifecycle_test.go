@@ -302,7 +302,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 	if err != nil || ready.Record.Status != core.AttachReady || ready.Record.ID != record.ID ||
 		ready.Record.Name != record.Name ||
 		ready.Record.BackingServiceID != record.BackingServiceID ||
-		!reflect.DeepEqual(ready.Record.ServiceIDs, record.ServiceIDs) ||
+		ready.Record.ServiceID != record.ServiceID ||
 		!reflect.DeepEqual(ready.Record.GrantAttachIDs, record.GrantAttachIDs) ||
 		!reflect.DeepEqual(ready.Record.FactSets, record.FactSets) {
 		t.Fatalf("ready Attach after restart = %#v, %v", ready, err)
@@ -438,7 +438,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	for _, key := range []string{
 		attachNameKey(record.EnvironmentID, record.Name),
 		attachOwnerKey(record.EnvironmentID, record.ID),
-		attachServiceKey(record.ServiceIDs[0], record.ID),
+		attachServiceKey(record.ServiceID, record.ID),
 		attachBackingServiceKey(record.BackingServiceID, record.ID),
 		attachBackingProjectKey(record.BackingProjectID, record.ID),
 		attachFactsKey(record.ID),
@@ -867,7 +867,7 @@ func attachDetachRaceEnvelope(
 		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
 		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
-		ConsumerServiceIDs:  append([]string(nil), current.Record.ServiceIDs...),
+		ConsumerServiceIDs:  []string{current.Record.ServiceID},
 		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),
 	}
 	return scope, renderInput, task, marker

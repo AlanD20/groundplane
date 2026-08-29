@@ -51,6 +51,7 @@ type entryEditEvidence struct {
 
 type entryEditIdempotency interface {
 	Prepare(context.Context, string, string, entryEditInput) (entryEditEvidence, error)
+	MatchesStaged(context.Context, entryEditEvidence, etcd.ProtectedIntentRecord) (bool, error)
 	ResolveReplayLocator(
 		context.Context,
 		etcd.IdempotencyReplayTarget,
@@ -74,6 +75,14 @@ type entryEditIdempotency interface {
 		entryEditEvidence,
 		error,
 	) (idempotentintent.Resolution, error)
+}
+
+func (service *durableEntryEditIdempotency) MatchesStaged(
+	ctx context.Context,
+	evidence entryEditEvidence,
+	existing etcd.ProtectedIntentRecord,
+) (bool, error) {
+	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
 
 type durableEntryEditIdempotency struct {
@@ -172,27 +181,25 @@ type entryEditService struct {
 }
 
 type entryMutationService struct {
-	creation *entryCreationService
-	edit     *entryEditService
-	deletion *entrycontroller.RemovalService
+	desired *entryDesiredMutationService
+	bulk    *entryBulkUpsertService
 }
 
 func newEntryMutationService(
-	creation *entryCreationService,
-	edit *entryEditService,
-	deletion *entrycontroller.RemovalService,
+	desired *entryDesiredMutationService,
+	bulk *entryBulkUpsertService,
 ) (*entryMutationService, error) {
-	if creation == nil || edit == nil || deletion == nil {
+	if desired == nil || bulk == nil {
 		return nil, errs.New(errs.KindInternal, "Entry mutation service is not configured")
 	}
-	return &entryMutationService{creation: creation, edit: edit, deletion: deletion}, nil
+	return &entryMutationService{desired: desired, bulk: bulk}, nil
 }
 
 func (service *entryMutationService) RemoveEntry(
 	ctx context.Context,
 	request entrycontroller.RemoveRequest,
 ) (entrycontroller.RemovalOutcome, error) {
-	return service.deletion.RemoveEntry(ctx, request)
+	return service.desired.RemoveEntry(ctx, request)
 }
 
 func (service *entryMutationService) CreateEntry(
@@ -200,7 +207,15 @@ func (service *entryMutationService) CreateEntry(
 	input apiTypes.EntryCreateRequest,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.creation.CreateEntry(ctx, input, idempotencyKey)
+	return service.desired.CreateEntry(ctx, input, idempotencyKey)
+}
+
+func (service *entryMutationService) BulkUpsertEntries(
+	ctx context.Context,
+	input apiTypes.EntryBulkUpsertRequest,
+	idempotencyKey string,
+) (etcd.IdempotencyResponse, error) {
+	return service.bulk.BulkUpsertEntries(ctx, input, idempotencyKey)
 }
 
 func (service *entryMutationService) EditEntry(
@@ -209,7 +224,7 @@ func (service *entryMutationService) EditEntry(
 	input apiTypes.EntryEditRequest,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.edit.EditEntry(ctx, entryID, input, idempotencyKey)
+	return service.desired.EditEntry(ctx, entryID, input, idempotencyKey)
 }
 
 func newEntryEditService(

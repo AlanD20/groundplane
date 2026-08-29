@@ -546,6 +546,9 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 		if decodeErr != nil || record.ID != selection.TargetID {
 			return corruptRecord()
 		}
+		if !record.OwnsCredential() {
+			return errs.New(errs.KindValidationFailed, "backup policy requires a credential-owning Attach")
+		}
 		ownerEnvironmentID = record.EnvironmentID
 	}
 	if ownerEnvironmentID != environmentID {

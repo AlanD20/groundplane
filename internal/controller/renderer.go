@@ -12,15 +12,9 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/dotenv"
 
-	"github.com/AlanD20/groundplane/internal/components/coredns"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-// RenderCorefile is the canonical Controller render boundary for CoreDNS.
-func RenderCorefile(input coredns.CoreDNSRenderInput) ([]byte, error) {
-	return coredns.RenderCorefile(input)
-}
 
 // EnvFileName is the canonical, id-based all-services env file name for
 // an environment — renaming the environment's label never changes this

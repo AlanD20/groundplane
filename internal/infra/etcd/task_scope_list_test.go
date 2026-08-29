@@ -59,6 +59,12 @@ func TestTaskRepositoryListsImmutableOwnerScopesAtFixedRevision(t *testing.T) {
 	assertScopedTaskIDs(
 		t,
 		repository,
+		TaskListScope{Kind: TaskListScopeProject, ID: projectID},
+		environment.ID,
+	)
+	assertScopedTaskIDs(
+		t,
+		repository,
 		TaskListScope{Kind: TaskListScopeEnvironment, ID: environmentID},
 		environment.ID,
 	)
@@ -110,6 +116,7 @@ func TestTaskRepositoryScopedListRejectsInvalidScopesAndOwnerMismatch(t *testing
 		{Kind: TaskListScopeGlobal, ID: "unexpected"},
 		{Kind: TaskListScopePlatformWorkspace, ID: "unexpected"},
 		{Kind: TaskListScopeTenantWorkspace, ID: "tenant-invalid"},
+		{Kind: TaskListScopeProject, ID: "project-invalid"},
 		{Kind: TaskListScopeEnvironment, ID: "env-invalid"},
 		{Kind: TaskListScopeKind("unknown")},
 	}
@@ -217,6 +224,7 @@ func TestTaskRepositoryScopedListsBatchDefaultAndMaximumPages(t *testing.T) {
 		{Kind: TaskListScopeGlobal},
 		{Kind: TaskListScopePlatformWorkspace},
 		{Kind: TaskListScopeTenantWorkspace, ID: tenantID},
+		{Kind: TaskListScopeProject, ID: projectID},
 		{Kind: TaskListScopeEnvironment, ID: environmentID},
 	}
 	for _, scope := range scopes {

@@ -196,6 +196,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		componentTaskIntentKey(task.ID),
 		routeRemovalIntentKey(task.ID),
 		entryRemovalIntentKey(task.ID),
+		blueprintAttachTaskIntentKey(task.ID),
 	}
 	environmentDeletionFenceStart := -1
 	var environmentDeletionFenceKeys []string
@@ -296,6 +297,14 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateEntryRemovalTaskOwner(task, entryIntent) != nil ||
 			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!entryIntent.TerminalAt.Equal(*task.FinishedAt) {
+			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		}
+	}
+	if companions.Values[7] != nil {
+		attachIntent, decodeErr := decodeBlueprintAttachTaskIntent(companions.Values[7].Value)
+		if decodeErr != nil || validateBlueprintAttachTaskOwner(task, attachIntent) != nil ||
+			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
@@ -406,7 +415,6 @@ func (repository *TaskRepository) beginTaskPrune(
 	for index, key := range ownerIndexKeys {
 		value := companions.Values[ownerIndexStart+index]
 		conditions = append(conditions, Condition{Key: key, ModRevision: value.ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
 	}
 	componentCondition := Condition{Key: componentTaskIntentKey(task.ID)}
 	if companions.Values[4] != nil {
@@ -435,6 +443,14 @@ func (repository *TaskRepository) beginTaskPrune(
 		)
 	}
 	conditions = append(conditions, entryCondition)
+	if companions.Values[7] != nil {
+		conditions = append(conditions, Condition{
+			Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[7].ModRevision,
+		})
+		mutations = append(mutations, Mutation{
+			Type: MutationDelete, Key: blueprintAttachTaskIntentKey(task.ID),
+		})
+	}
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
 		conditions = append(conditions, Condition{
@@ -562,18 +578,65 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	ctx context.Context,
 	current Versioned[taskPruneIntent],
 ) (Versioned[taskPruneIntent], error) {
+	taskResult, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{taskKey(current.Record.TaskID)},
+	})
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, err
+	}
+	if taskResult == nil || taskResult.ReadRevision <= 0 || len(taskResult.Values) != 1 ||
+		taskResult.Values[0] == nil ||
+		taskResult.Values[0].ModRevision != current.Record.TaskRevision {
+		if taskResult != nil {
+			clearKeyValues(taskResult.Values)
+		}
+		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+	}
+	defer clearKeyValues(taskResult.Values)
+	task, err := decodeTaskRecord(taskResult.Values[0].Value)
+	if err != nil || task.ID != current.Record.TaskID || !isTerminalTaskStatus(task.Status) {
+		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+	}
+	ownerKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+	}
+	ownerResult, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: ownerKeys, Revision: taskResult.ReadRevision,
+	})
+	if err != nil {
+		return Versioned[taskPruneIntent]{}, err
+	}
+	if ownerResult == nil || ownerResult.ReadRevision != taskResult.ReadRevision ||
+		len(ownerResult.Values) != len(ownerKeys) {
+		if ownerResult != nil {
+			clearKeyValues(ownerResult.Values)
+		}
+		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+	}
+	defer clearKeyValues(ownerResult.Values)
+	conditions := []Condition{
+		{Key: taskKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
+		{Key: backupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
+		{Key: backupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
+	}
+	mutations := []Mutation{{Type: MutationDelete, Key: taskKey(current.Record.TaskID)}}
+	for index, key := range ownerKeys {
+		value := ownerResult.Values[index]
+		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {
+			return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		}
+		conditions = append(conditions, Condition{Key: key, ModRevision: value.ModRevision})
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+	}
 	next := current.Record
 	next.TaskPrimaryDeleted = true
 	return repository.advanceTaskPruneIntent(
 		ctx,
 		current,
 		next,
-		[]Condition{
-			{Key: taskKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
-			{Key: backupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
-			{Key: backupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
-		},
-		[]Mutation{{Type: MutationDelete, Key: taskKey(current.Record.TaskID)}},
+		conditions,
+		mutations,
 	)
 }
 

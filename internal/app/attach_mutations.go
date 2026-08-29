@@ -178,10 +178,6 @@ func (service *durableAttachMutationIdempotency) PrepareCreate(
 	environmentID string,
 	request apiTypes.AttachRequest,
 ) (attachMutationEvidence, error) {
-	services := make([]idempotentintent.Value, len(request.ServiceIDs))
-	for index, serviceID := range request.ServiceIDs {
-		services[index] = idempotentintent.String(serviceID)
-	}
 	grants := make([]idempotentintent.Value, len(request.GrantAttachIDs))
 	for index, grantID := range request.GrantAttachIDs {
 		grants[index] = idempotentintent.String(grantID)
@@ -195,9 +191,16 @@ func (service *durableAttachMutationIdempotency) PrepareCreate(
 				Name:  "backing_service_id",
 				Value: idempotentintent.String(request.BackingServiceID),
 			},
+			idempotentintent.Field{
+				Name: "credential",
+				Value: idempotentintent.Object(
+					idempotentintent.Field{Name: "attach_id", Value: idempotentintent.String(request.Credential.AttachID)},
+					idempotentintent.Field{Name: "mode", Value: idempotentintent.String(string(request.Credential.Mode))},
+				),
+			},
 			idempotentintent.Field{Name: "grant_attach_ids", Value: idempotentintent.List(grants...)},
 			idempotentintent.Field{Name: "name", Value: idempotentintent.String(request.Name)},
-			idempotentintent.Field{Name: "service_ids", Value: idempotentintent.List(services...)},
+			idempotentintent.Field{Name: "service_id", Value: idempotentintent.String(request.ServiceID)},
 		)),
 	})
 }
@@ -343,7 +346,7 @@ func (service *attachMutationService) createAttachOnce(
 	request apiTypes.AttachRequest,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	consumer, err := service.repository.GetService(ctx, request.ServiceIDs[0])
+	consumer, err := service.repository.GetService(ctx, request.ServiceID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -370,7 +373,7 @@ func (service *attachMutationService) createAttachOnce(
 	}
 
 	scope, currentAttaches, adapter, err := service.resolveAttachScope(
-		ctx, consumer, request.BackingServiceID, request.GrantAttachIDs,
+		ctx, consumer, request.BackingServiceID, request.Credential.AttachID, request.GrantAttachIDs,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -393,9 +396,18 @@ func (service *attachMutationService) createAttachOnce(
 	now := service.now().UTC()
 	attachID := ids.New(ids.KindAttach)
 	taskID := ids.New(ids.KindTask)
-	identity, metadata, encryptedFacts, err := service.prepareAttachFacts(ctx, attachID, consumer, scope, adapter)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+	credentialAttachID := attachID
+	var identity *controllerpkg.AttachPlanIdentity
+	var metadata []etcd.AttachFactSetMetadata
+	var encryptedFacts *etcd.AttachEncryptedFacts
+	if request.Credential.Mode == apiTypes.AttachCredentialNew {
+		identity, metadata, encryptedFacts, err = service.prepareAttachFacts(ctx, attachID, consumer, scope, adapter)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+	} else {
+		credentialAttachID = request.Credential.AttachID
+		metadata = cloneAttachFactMetadata(scope.CredentialOwner.Record.FactSets)
 	}
 	if identity != nil {
 		defer identity.Clear()
@@ -407,7 +419,7 @@ func (service *attachMutationService) createAttachOnce(
 	record, err := etcd.NewPendingAttachRecord(
 		attachID, environmentID, name, scope.BackingProject.Record.ID, scope.BackingEnvironment.Record.ID,
 		scope.BackingService.Record.Desired.ID, scope.BackingService.Record.BackingNetworkID,
-		[]string{consumer.Record.Desired.ID}, grantIDs, metadata, taskID, now,
+		consumer.Record.Desired.ID, credentialAttachID, grantIDs, metadata, taskID, now,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -415,7 +427,8 @@ func (service *attachMutationService) createAttachOnce(
 	task, artifactID, err := newAttachMutationTask(
 		scope.Project.Record, scope.Environment.Record,
 		taskID, record.ID, record.EnvironmentID, etcd.TaskAttach,
-		scope.ComposeProjection.Record.RenderGeneration, attachTaskStepCount(adapter, len(grantIDs)),
+		scope.ComposeProjection.Record.RenderGeneration,
+		attachTaskStepCount(adapter, len(grantIDs), record.OwnsCredential()),
 		idempotencyKey, now,
 	)
 	if err != nil {
@@ -533,12 +546,16 @@ func (service *attachMutationService) detachAttachOnce(
 		}
 		return cloneIdempotencyResponse(replay.Response), nil
 	}
-	consumer, err := service.repository.GetService(ctx, current.Record.ServiceIDs[0])
+	consumer, err := service.repository.GetService(ctx, current.Record.ServiceID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	credentialOwnerID := ""
+	if !current.Record.OwnsCredential() {
+		credentialOwnerID = current.Record.CredentialAttachID
+	}
 	scope, currentAttaches, adapter, err := service.resolveAttachScope(
-		ctx, consumer, current.Record.BackingServiceID, current.Record.GrantAttachIDs,
+		ctx, consumer, current.Record.BackingServiceID, credentialOwnerID, current.Record.GrantAttachIDs,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -553,7 +570,8 @@ func (service *attachMutationService) detachAttachOnce(
 		scope.Project.Record, scope.Environment.Record,
 		taskID, current.Record.ID, current.Record.EnvironmentID, etcd.TaskDetach,
 		scope.ComposeProjection.Record.RenderGeneration,
-		attachTaskStepCount(adapter, len(current.Record.GrantAttachIDs)), idempotencyKey, now,
+		attachTaskStepCount(adapter, len(current.Record.GrantAttachIDs), current.Record.OwnsCredential()),
+		idempotencyKey, now,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -624,6 +642,7 @@ func (service *attachMutationService) resolveAttachScope(
 	ctx context.Context,
 	consumer etcd.Versioned[etcd.ServiceRecord],
 	backingServiceID string,
+	credentialAttachID string,
 	grantIDs []string,
 ) (etcd.AttachCreateScope, []etcd.Versioned[etcd.AttachRecord], adapters.Adapter, error) {
 	environment, err := service.repository.GetEnvironment(ctx, consumer.Record.EnvironmentID)
@@ -720,6 +739,23 @@ func (service *attachMutationService) resolveAttachScope(
 		}
 		return 0
 	})
+	var credentialOwner *etcd.Versioned[etcd.AttachRecord]
+	if credentialAttachID != "" {
+		owner, ownerErr := service.repository.GetAttach(ctx, credentialAttachID)
+		if ownerErr != nil {
+			return etcd.AttachCreateScope{}, nil, nil, ownerErr
+		}
+		if owner.Record.Status != core.AttachReady || !owner.Record.OwnsCredential() ||
+			owner.Record.EnvironmentID != environment.Record.ID ||
+			owner.Record.BackingServiceID != backingService.Record.Desired.ID ||
+			owner.Record.BackingNetworkID != backingService.Record.BackingNetworkID {
+			return etcd.AttachCreateScope{}, nil, nil, errs.New(
+				errs.KindScopeUnauthorized,
+				"Existing credential must be a ready direct owner in the same Environment and Backing Service",
+			)
+		}
+		credentialOwner = &owner
+	}
 	attaches, err := service.listAllAttaches(ctx, environment.Record.ID)
 	if err != nil {
 		return etcd.AttachCreateScope{}, nil, nil, err
@@ -729,7 +765,7 @@ func (service *attachMutationService) resolveAttachScope(
 		BlueprintRevision: revision, ComposeProjection: projection,
 		Services:       []etcd.Versioned[etcd.ServiceRecord]{consumer},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment,
-		BackingService: backingService, Grants: grants,
+		BackingService: backingService, CredentialOwner: credentialOwner, Grants: grants,
 	}
 	return scope, attaches, adapter, nil
 }
@@ -825,14 +861,28 @@ func (service *attachMutationService) prepareAttachFacts(
 }
 
 func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequest, error) {
-	request.ServiceIDs = append([]string(nil), request.ServiceIDs...)
 	request.GrantAttachIDs = append([]string(nil), request.GrantAttachIDs...)
-	if len(request.ServiceIDs) != 1 || ids.Validate(ids.KindService, request.ServiceIDs[0]) != nil ||
+	if ids.Validate(ids.KindService, request.ServiceID) != nil ||
 		ids.Validate(ids.KindService, request.BackingServiceID) != nil {
 		return apiTypes.AttachRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach requires exactly one valid consumer Service and one valid backing Service",
 		)
+	}
+	switch request.Credential.Mode {
+	case apiTypes.AttachCredentialNew:
+		if request.Credential.AttachID != "" {
+			return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "New Attach credential cannot reference another Attach")
+		}
+	case apiTypes.AttachCredentialExisting:
+		if ids.Validate(ids.KindAttach, request.Credential.AttachID) != nil {
+			return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "Existing Attach credential requires a valid owner Attach id")
+		}
+		if len(request.GrantAttachIDs) != 0 {
+			return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "Existing Attach credential cannot declare grants")
+		}
+	default:
+		return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "Attach credential mode must be new or existing")
 	}
 	if request.Name != "" {
 		if err := etcd.ValidateAttachName(request.Name); err != nil {
@@ -925,11 +975,22 @@ func attachGrantIDs(grants []etcd.Versioned[etcd.AttachRecord]) []string {
 	return values
 }
 
-func attachTaskStepCount(adapter adapters.Adapter, grantCount int) int {
-	if adapter.Manual() {
+func attachTaskStepCount(adapter adapters.Adapter, grantCount int, ownsCredential bool) int {
+	if adapter.Manual() || !ownsCredential {
 		return 1
 	}
 	return grantCount + 2
+}
+
+func cloneAttachFactMetadata(values []etcd.AttachFactSetMetadata) []etcd.AttachFactSetMetadata {
+	cloned := make([]etcd.AttachFactSetMetadata, len(values))
+	for index, value := range values {
+		cloned[index] = etcd.AttachFactSetMetadata{
+			GrantAttachID: value.GrantAttachID,
+			Facts:         append([]etcd.AttachFactDefinition(nil), value.Facts...),
+		}
+	}
+	return cloned
 }
 
 func isUnknownAttachMutationOutcome(err error) bool {
@@ -1086,23 +1147,28 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInit
 }
 
 type draftAttachPlanSealer struct {
-	volumeRoot string
-	repository attachMutationRepository
-	facts      attachMutationFacts
+	volumeRoot       string
+	repository       attachMutationRepository
+	facts            attachMutationFacts
+	componentCatalog []controllerpkg.EnvironmentComponentRegistration
 }
 
 func newDraftAttachPlanSealer(
 	volumeRoot string,
 	repository attachMutationRepository,
 	facts attachMutationFacts,
+	componentCatalog []controllerpkg.EnvironmentComponentRegistration,
 ) (*draftAttachPlanSealer, error) {
 	if repository == nil || facts == nil {
 		return nil, errs.New(errs.KindInternal, "Attach draft plan dependencies are required")
 	}
-	if _, err := controllerpkg.NewTaskPlanResolver(volumeRoot); err != nil {
+	if _, err := controllerpkg.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
 		return nil, err
 	}
-	return &draftAttachPlanSealer{volumeRoot: volumeRoot, repository: repository, facts: facts}, nil
+	return &draftAttachPlanSealer{
+		volumeRoot: volumeRoot, repository: repository, facts: facts,
+		componentCatalog: controllerpkg.CloneEnvironmentComponentCatalog(componentCatalog),
+	}, nil
 }
 
 func (sealer *draftAttachPlanSealer) SealDraft(
@@ -1118,6 +1184,7 @@ func (sealer *draftAttachPlanSealer) SealDraft(
 	}
 	resolver, err := controllerpkg.NewTaskPlanResolverWithAttachments(
 		sealer.volumeRoot, sealer.repository, state, sealer.repository, state,
+		sealer.componentCatalog,
 	)
 	if err != nil {
 		return "", err
@@ -1156,6 +1223,13 @@ func (state *draftAttachPlanState) GetAttachTaskRenderInput(
 		return etcd.Versioned[etcd.AttachTaskRenderInput]{Record: state.renderInput}, nil
 	}
 	return state.repository.GetAttachTaskRenderInput(ctx, planID)
+}
+
+func (state *draftAttachPlanState) GetBlueprintAttachTaskIntent(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.BlueprintAttachTaskIntent], bool, error) {
+	return etcd.Versioned[etcd.BlueprintAttachTaskIntent]{}, false, nil
 }
 
 func (state *draftAttachPlanState) ResolveTaskIdentity(

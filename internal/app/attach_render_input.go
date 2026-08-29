@@ -113,7 +113,7 @@ func buildAttachTaskRenderInput(
 		Networks:               cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Networks),
 		Volumes:                slices.Clone(scope.ComposeProjection.Record.Volumes),
 		NetworkJoins:           joins,
-		ConsumerServiceIDs:     append([]string(nil), record.ServiceIDs...),
+		ConsumerServiceIDs:     []string{record.ServiceID},
 		GrantAttachIDs:         append([]string(nil), record.GrantAttachIDs...),
 		ServiceDependencyPlans: scope.ComposeProjection.Record.ServiceDependencyPlans.Clone(),
 	}, nil
@@ -169,15 +169,13 @@ func resolveAttachNetworkJoins(
 			services = make(map[string]struct{})
 			union[record.BackingNetworkID] = services
 		}
-		for _, serviceID := range record.ServiceIDs {
-			if _, exists := allowedServices[serviceID]; !exists {
-				return nil, errs.New(
-					errs.KindStateConflict,
-					"Attach network consumer is absent from the current Compose projection",
-				)
-			}
-			services[serviceID] = struct{}{}
+		if _, exists := allowedServices[record.ServiceID]; !exists {
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Attach network consumer is absent from the current Compose projection",
+			)
 		}
+		services[record.ServiceID] = struct{}{}
 	}
 
 	networkIDs := make([]string, 0, len(union))

@@ -124,7 +124,7 @@ func renderAttach(cmd *cobra.Command, attach apiTypes.Attach) error {
 
 func attachFields(attach apiTypes.Attach) map[string]any {
 	return map[string]any{
-		"id": attach.ID, "name": attach.Name, "service_ids": attach.ServiceIDs,
+		"id": attach.ID, "name": attach.Name, "service_id": attach.ServiceID, "credential": attach.Credential,
 		"backing_service_id": attach.BackingServiceID, "backing_environment_id": attach.BackingEnvironmentID,
 		"backing_project_id": attach.BackingProjectID, "backing_network_id": attach.BackingNetworkID,
 		"grant_attach_ids": attach.GrantAttachIDs, "fact_sets": attach.FactSets,

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/spf13/cobra"
 )
 
 const taskJournalTestResponse = `{"items":[{"id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV",` +
@@ -63,7 +64,8 @@ func TestTaskAndActivityResolveEnvironmentJournalScope(t *testing.T) {
 						`"volume_dir":"/var/lib/groundplane/vol/env","provisioning_state":"ready"}]}`)
 				case test.endpoint:
 					query := request.URL.Query()
-					if query.Get("environment") != environmentID || query.Get("workspace") != "" || len(query) != 1 {
+					if query.Get("environment") != environmentID || query.Get("project") != "" || query.Get("workspace") != "" ||
+						query.Get("limit") != "50" || len(query) != 2 {
 						t.Errorf("journal request = %s", request.URL.RequestURI())
 					}
 					writeTaskJournalTestResponse(t, writer, taskJournalTestResponse)
@@ -118,7 +120,7 @@ func TestTaskJournalResolvesWorkspaceLabelAndPlatformLiteral(t *testing.T) {
 					return
 				}
 				if request.URL.Path != "/api/v1/tasks" || request.URL.Query().Get("workspace") != test.want ||
-					request.URL.Query().Get("environment") != "" {
+					request.URL.Query().Get("environment") != "" || request.URL.Query().Get("project") != "" {
 					t.Errorf("journal request = %s", request.URL.RequestURI())
 				}
 				writeTaskJournalTestResponse(t, writer, taskJournalTestResponse)
@@ -133,22 +135,81 @@ func TestTaskJournalResolvesWorkspaceLabelAndPlatformLiteral(t *testing.T) {
 	}
 }
 
+// Rationale: Task and Activity are one pageable journal, so both CLI nouns
+// must forward the same page size and interchangeable opaque cursor.
+func TestTaskAndActivityForwardPagination(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		endpoint string
+		command  func() *cobra.Command
+	}{
+		{name: "tasks", endpoint: "/api/v1/tasks", command: newTaskCmd},
+		{name: "activity", endpoint: "/api/v1/activity", command: newActivityCmd},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				query := request.URL.Query()
+				if request.URL.Path != test.endpoint || query.Get("limit") != "17" ||
+					query.Get("cursor") != "shared-cursor" || len(query) != 2 {
+					t.Errorf("journal request = %s", request.URL.RequestURI())
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				writeTaskJournalTestResponse(t, writer, taskJournalTestResponse)
+			}))
+			defer server.Close()
+
+			executeNoun(t, test.command(), server.URL, Scope{},
+				"list", "--limit", "17", "--cursor", "shared-cursor")
+		})
+	}
+}
+
 // Rationale: --id must bypass mutable label resolution, while selecting both
 // accepted journal scopes must fail locally with the public validation kind.
 func TestTaskJournalIDBypassAndDualScopeRejection(t *testing.T) {
 	t.Parallel()
-	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const (
+		tenantID      = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		projectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	)
 	command := newTaskCmd()
 	command.SetContext(context.WithValue(context.Background(), appKey{}, &App{
 		Scope: Scope{Environment: environmentID, AsID: true},
 	}))
-	options, err := resolveTaskJournalListOptions(command, "")
+	options, err := resolveTaskJournalListOptions(command, "", 17, "shared-cursor")
 	if err != nil || options.Environment != environmentID {
 		t.Fatalf("id scope = %#v, %v", options, err)
 	}
+	if options.Limit != 17 || options.Cursor != "shared-cursor" {
+		t.Fatalf("pagination = %#v", options)
+	}
+	projectCommand := newTaskCmd()
+	projectCommand.SetContext(context.WithValue(context.Background(), appKey{}, &App{
+		Scope: Scope{Project: projectID, AsID: true},
+	}))
+	projectOptions, err := resolveTaskJournalListOptions(projectCommand, "", 0, "")
+	if err != nil || projectOptions.Project != projectID {
+		t.Fatalf("Project id scope = %#v, %v", projectOptions, err)
+	}
+	tenantCommand := newTaskCmd()
+	tenantCommand.SetContext(context.WithValue(context.Background(), appKey{}, &App{
+		Scope: Scope{Tenant: tenantID, AsID: true},
+	}))
+	tenantOptions, err := resolveTaskJournalListOptions(tenantCommand, "", 0, "")
+	if err != nil || tenantOptions.Workspace != tenantID {
+		t.Fatalf("Tenant id scope = %#v, %v", tenantOptions, err)
+	}
 
-	_, err = resolveTaskJournalListOptions(command, "platform")
+	_, err = resolveTaskJournalListOptions(command, "platform", 17, "shared-cursor")
 	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed {
 		t.Fatalf("dual-scope error = %v", err)
+	}
+	_, err = resolveTaskJournalListOptions(projectCommand, "platform", 0, "")
+	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed {
+		t.Fatalf("Project/workspace dual-scope error = %v", err)
 	}
 }

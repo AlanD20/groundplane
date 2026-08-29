@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	containerderrdefs "github.com/containerd/errdefs"
@@ -25,6 +26,7 @@ import (
 const (
 	dockerSocketPath    = "/var/run/docker.sock"
 	helperArgument      = "compose-helper"
+	helperWorkTmpfs     = "rw,noexec,nosuid,nodev,size=16m,mode=0700"
 	cleanupTimeout      = 30 * time.Second
 	maximumHelperStdout = 64 * 1024
 	maximumHelperStderr = 32 * 1024
@@ -216,7 +218,11 @@ func (executor *Executor) Execute(
 	}
 	attached.Close()
 	if waited.Error != nil || waited.StatusCode != 0 {
-		return nil, errs.New(errs.KindInternal, "Compose helper process failed")
+		message := fmt.Sprintf("Compose helper process failed with exit code %d", waited.StatusCode)
+		if stderr := strings.TrimSpace(string(output.stderr)); stderr != "" {
+			message += ": " + stderr
+		}
+		return nil, errs.New(errs.KindInternal, message)
 	}
 	return composehelper.ReadResponse(context.Background(), bytes.NewReader(output.stdout))
 }
@@ -242,7 +248,9 @@ func createOptions(image string, artifact *agentpb.ComposeArtifact) client.Conta
 			NetworkMode:    container.NetworkMode("none"),
 			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyDisabled},
 			ReadonlyRootfs: true, CapDrop: []string{"ALL"},
-			SecurityOpt: []string{"no-new-privileges"}, Mounts: mounts,
+			SecurityOpt: []string{"no-new-privileges"},
+			Tmpfs:       map[string]string{composehelper.WorkDirectory: helperWorkTmpfs},
+			Mounts:      mounts,
 		},
 	}
 }
@@ -290,6 +298,7 @@ func preferCleanup(original, cleanup error) error {
 
 type outputResult struct {
 	stdout []byte
+	stderr []byte
 	err    error
 }
 
@@ -301,7 +310,11 @@ func readOutput(reader io.Reader, result chan<- outputResult) {
 	stdout := &boundedBuffer{maximum: maximumHelperStdout}
 	stderr := &boundedBuffer{maximum: maximumHelperStderr}
 	_, err := stdcopy.StdCopy(stdout, stderr, reader)
-	result <- outputResult{stdout: append([]byte(nil), stdout.Bytes()...), err: err}
+	result <- outputResult{
+		stdout: append([]byte(nil), stdout.Bytes()...),
+		stderr: append([]byte(nil), stderr.Bytes()...),
+		err:    err,
+	}
 }
 
 type boundedBuffer struct {

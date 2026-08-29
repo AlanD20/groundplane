@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
@@ -25,13 +26,13 @@ type hierarchyDeleteOutput struct {
 	}
 }
 
-func registerHierarchyDeletionRoutes(api huma.API, service HierarchyDeletionService) {
-	registerHierarchyDeletionRoute(api, service, "tenant.delete", hierarchydeletion.TenantDeleteRoute, hierarchydeletion.TargetTenant)
-	registerHierarchyDeletionRoute(api, service, "project.delete", hierarchydeletion.ProjectDeleteRoute, hierarchydeletion.TargetProject)
-	registerHierarchyDeletionRoute(api, service, "environment.delete", hierarchydeletion.EnvironmentDeleteRoute, hierarchydeletion.TargetEnvironment)
+func registerHierarchyDeletionRoutes(api huma.API, service HierarchyDeletionService, logger *slog.Logger) {
+	registerHierarchyDeletionRoute(api, service, logger, "tenant.delete", hierarchydeletion.TenantDeleteRoute, hierarchydeletion.TargetTenant)
+	registerHierarchyDeletionRoute(api, service, logger, "project.delete", hierarchydeletion.ProjectDeleteRoute, hierarchydeletion.TargetProject)
+	registerHierarchyDeletionRoute(api, service, logger, "environment.delete", hierarchydeletion.EnvironmentDeleteRoute, hierarchydeletion.TargetEnvironment)
 }
 
-func registerHierarchyDeletionRoute(api huma.API, service HierarchyDeletionService, operationID, path string, target hierarchydeletion.TargetKind) {
+func registerHierarchyDeletionRoute(api huma.API, service HierarchyDeletionService, logger *slog.Logger, operationID, path string, target hierarchydeletion.TargetKind) {
 	tag := "Tenant"
 	if target == hierarchydeletion.TargetProject {
 		tag = "Project"
@@ -51,6 +52,14 @@ func registerHierarchyDeletionRoute(api huma.API, service HierarchyDeletionServi
 		}
 		accepted, err := service.Delete(ctx, hierarchydeletion.DeleteRequest{TargetKind: target, TargetID: input.ID, IdempotencyKey: input.IdempotencyKey})
 		if err != nil {
+			if logger != nil {
+				logger.Error(
+					"controller: hierarchy deletion request",
+					slog.String("target_kind", string(target)),
+					slog.String("target_id", input.ID),
+					slog.Any("error", err),
+				)
+			}
 			return nil, err
 		}
 		output := &hierarchyDeleteOutput{Status: http.StatusAccepted}

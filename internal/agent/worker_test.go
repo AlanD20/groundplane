@@ -196,6 +196,33 @@ func TestWorkerPoolCancellationJoinsActiveWorkers(t *testing.T) {
 	}
 }
 
+// Rationale: the validated assignment remains immutable across all task steps, then its transient
+// adapter credential must be destroyed at the WorkerPool reservation ownership boundary.
+func TestWorkerPoolCompletionClearsAdapterPlanSecret(t *testing.T) {
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	password := []byte("URL_safe-1")
+	plan := &agentpb.ExecutionPlan{Steps: []*agentpb.ExecutionStep{{
+		Payload: &agentpb.ExecutionStep_AdapterProcedure{AdapterProcedure: &agentpb.AdapterProcedure{
+			Password: password,
+		}},
+	}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	reservation := &taskReservation{
+		assignment: Assignment{TaskID: workerTestTaskID, Plan: plan},
+		ctx: ctx, cancel: cancel,
+	}
+	pool.reservations[workerTestTaskID] = reservation
+	pool.complete(context.Background(), reservation, TaskResult{TaskID: workerTestTaskID})
+	if plan.Steps[0].GetAdapterProcedure().Password != nil {
+		t.Fatal("WorkerPool retained an adapter password after reservation completion")
+	}
+	for _, character := range password {
+		if character != 0 {
+			t.Fatal("WorkerPool did not clear the owned adapter password bytes")
+		}
+	}
+}
+
 func workerAssignment(taskID, plan string) Assignment {
 	planID := "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	if plan == "plan-b" {

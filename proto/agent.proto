@@ -42,6 +42,10 @@ message AgentMessage {
     ObservedState observed_state = 4; // drift-detection feed for reconciliation
     TaskAck task_ack = 5;          // completed / failed
     BackupCheckpointRequest backup_checkpoint_request = 6;
+    LogEvent log_event = 7;
+    LogEnd log_end = 8;
+    LogReady log_ready = 9;
+    ScriptCheckpointRequest script_checkpoint_request = 10;
   }
 }
 
@@ -184,7 +188,74 @@ message ControllerMessage {
     MaterializationTransfer materialization_transfer = 5; // transient bytes; never durable Task or plan state
     BackupCheckpointAck backup_checkpoint_ack = 6;
     BackupSecretSlotTransfer backup_secret_slot_transfer = 7;
+    LogSubscribe log_subscribe = 8;
+    LogCancel log_cancel = 9;
+    ManagedConfigTransfer managed_config_transfer = 10;
+    ScriptCheckpointAck script_checkpoint_ack = 11;
   }
+}
+
+message LogTarget {
+  string environment_id = 1;
+  string service_id = 2;
+  string service_name = 3;
+  string release_id = 4;
+}
+
+message LogSubscribe {
+  string request_id = 1;
+  repeated LogTarget targets = 2;
+  uint32 tail = 3;
+  bool follow = 4;
+}
+
+message LogCancel {
+  string request_id = 1;
+}
+
+message LogReady {
+  string request_id = 1;
+}
+
+enum LogStream {
+  LOG_STREAM_UNSPECIFIED = 0;
+  LOG_STREAM_STDOUT = 1;
+  LOG_STREAM_STDERR = 2;
+}
+
+enum LogSlot {
+  LOG_SLOT_UNSPECIFIED = 0;
+  LOG_SLOT_BLUE = 1;
+  LOG_SLOT_GREEN = 2;
+  LOG_SLOT_SINGLETON = 3;
+}
+
+enum LogEndReason {
+  LOG_END_REASON_UNSPECIFIED = 0;
+  LOG_END_REASON_COMPLETE = 1;
+  LOG_END_REASON_CANCELLED = 2;
+  LOG_END_REASON_AVAILABILITY_FAILED = 3;
+  LOG_END_REASON_SOURCE_FAILED = 4;
+}
+
+message LogEvent {
+  string request_id = 1;
+  string environment_id = 2;
+  string service_id = 3;
+  string service_name = 4;
+  string release_id = 5;
+  string container_id = 6;
+  string container_name = 7;
+  LogSlot slot = 8;
+  LogStream stream = 9;
+  google.protobuf.Timestamp timestamp = 10;
+  string line = 11;
+  bool truncated = 12;
+}
+
+message LogEnd {
+  string request_id = 1;
+  LogEndReason reason = 2;
 }
 
 // MaterializationTransfer is one ordered transient record for a metadata-only
@@ -227,6 +298,38 @@ message MaterializationTransferEnd {
   uint32 chunk_count = 1;
 }
 
+// ManagedConfigTransfer carries one bounded immutable artifact referenced by
+// a generic ComponentApply step. It never carries a destination, executable,
+// argv, shell text, host path, image, or URL; the compiled Agent catalog owns
+// those choices.
+message ManagedConfigTransfer {
+  string task_id = 1;
+  bytes plan_hash = 2;
+  string step_id = 3;
+  string assignment_id = 4;
+  oneof record {
+    ManagedConfigTransferHeader header = 5;
+    ManagedConfigTransferChunk chunk = 6;
+    ManagedConfigTransferEnd end = 7;
+  }
+}
+
+message ManagedConfigTransferHeader {
+  string artifact_id = 1;
+  string media_type = 2;
+  uint64 length = 3;
+  bytes sha256 = 4;
+}
+
+message ManagedConfigTransferChunk {
+  uint32 sequence = 1;
+  bytes content = 2;
+}
+
+message ManagedConfigTransferEnd {
+  uint32 chunk_count = 1;
+}
+
 message TaskAssignment {
   string task_id = 1;
   string operation_id = 2; // stable across retries
@@ -235,6 +338,103 @@ message TaskAssignment {
   reserved 5;
   google.protobuf.Timestamp deadline = 7; // durable absolute assignment deadline; reconnect never restarts the budget
   string assignment_id = 6;
+  ScriptAssignmentArtifacts script_artifacts = 8;
+  ScriptExecutionCheckpoint script_checkpoint = 9;
+}
+
+enum ScriptExecutionState {
+  SCRIPT_EXECUTION_STATE_UNSPECIFIED = 0;
+  SCRIPT_EXECUTION_STATE_NOT_STARTED = 1;
+  SCRIPT_EXECUTION_STATE_START_AUTHORIZED = 2;
+  SCRIPT_EXECUTION_STATE_BODY_PREPARED = 3;
+  SCRIPT_EXECUTION_STATE_CONTAINER_CREATED = 4;
+  SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED = 5;
+  SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN = 6;
+}
+
+enum ScriptOutcomeReason {
+  SCRIPT_OUTCOME_REASON_UNSPECIFIED = 0;
+  SCRIPT_OUTCOME_REASON_NORMAL_EXIT = 1;
+  SCRIPT_OUTCOME_REASON_START_FAILURE = 2;
+  SCRIPT_OUTCOME_REASON_RUNTIME_FAILURE = 3;
+  SCRIPT_OUTCOME_REASON_TIMEOUT = 4;
+  SCRIPT_OUTCOME_REASON_ABORT = 5;
+  SCRIPT_OUTCOME_REASON_ABORT_BEFORE_START = 6;
+  SCRIPT_OUTCOME_REASON_EXPIRY_BEFORE_START = 7;
+  SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE = 8;
+  SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE = 9;
+}
+
+message ScriptStartAuthorizedCheckpoint {}
+
+message ScriptBodyPreparedCheckpoint {
+  bytes body_sha256 = 1;
+  uint32 uid = 2;
+  uint32 gid = 3;
+  uint64 device = 4;
+  uint64 inode = 5;
+  string leaf = 6;
+}
+
+message ScriptContainerCreatedCheckpoint {
+  string container_id = 1;
+  bytes ownership_labels_sha256 = 2;
+}
+
+message ScriptOutcomeCheckpoint {
+  ScriptOutcomeReason reason = 1;
+  optional int32 exit_code = 2;
+  bool output_truncated = 3;
+  google.protobuf.Timestamp observed_at = 4;
+}
+
+message ScriptCleanupCheckpoint {
+  string container_id = 1;
+  uint64 body_device = 2;
+  uint64 body_inode = 3;
+  string body_leaf = 4;
+  bool container_absent = 5;
+  bool body_absent = 6;
+  bool execution_directory_absent = 7;
+}
+
+message ScriptExecutionCheckpoint {
+  ScriptExecutionState state = 1;
+  bool start_authorized = 2;
+  ScriptBodyPreparedCheckpoint body_prepared = 3;
+  ScriptContainerCreatedCheckpoint container_created = 4;
+  ScriptOutcomeCheckpoint outcome = 5;
+  ScriptCleanupCheckpoint cleanup = 6;
+  bool reconciliation_required = 7;
+}
+
+message ScriptCheckpointRequest {
+  string task_id = 1;
+  string operation_id = 2;
+  string assignment_id = 3;
+  string step_id = 4;
+  string script_execution_id = 5;
+  bytes plan_hash = 6;
+  ScriptExecutionState expected_state = 7;
+  ScriptExecutionState state = 8;
+  bytes control_payload_sha256 = 9;
+  oneof evidence {
+    ScriptStartAuthorizedCheckpoint start_authorized = 10;
+    ScriptBodyPreparedCheckpoint body_prepared = 11;
+    ScriptContainerCreatedCheckpoint container_created = 12;
+    ScriptOutcomeCheckpoint outcome = 13;
+    ScriptCleanupCheckpoint cleanup = 14;
+  }
+}
+
+message ScriptCheckpointAck {
+  string task_id = 1;
+  string operation_id = 2;
+  string assignment_id = 3;
+  string step_id = 4;
+  string script_execution_id = 5;
+  ScriptExecutionState state = 6;
+  bytes control_payload_sha256 = 7;
 }
 
 message ExecutionPlan {
@@ -246,6 +446,9 @@ message ExecutionPlan {
   string target_id = 6;
   repeated ComposeArtifact artifacts = 7;
   repeated ExecutionStep steps = 8;
+  repeated ResolvedRunnerSnapshot script_runner_snapshots = 9;
+  repeated ScriptRunnerProjection script_runner_projections = 10;
+  repeated ScriptBodyArtifactMetadata script_body_artifacts = 11;
 }
 
 enum PlanOperation {
@@ -263,6 +466,7 @@ enum PlanOperation {
   PLAN_OPERATION_DETACH = 11;
   PLAN_OPERATION_BACKUP = 12;
   PLAN_OPERATION_BACKUP_PRUNE = 13;
+  PLAN_OPERATION_SCRIPT = 14;
 }
 
 message ComposeArtifact {
@@ -323,6 +527,7 @@ message LabelPair {
 }
 
 message ExecutionStep {
+  reserved 13;
   string step_id = 1;
   uint32 timeout_seconds = 2;
   oneof payload {
@@ -336,7 +541,6 @@ message ExecutionStep {
     EnvironmentDirectoryRemove environment_directory_remove = 10;
     AdapterProcedure adapter_procedure = 11;
     ManagedNetworkRemove managed_network_remove = 12;
-    CaddyConfigApply caddy_config_apply = 13;
     BackupSourceCapture backup_source_capture = 14;
     BackupArtifactPrune backup_artifact_prune = 15;
     ComposeWorkloadApply compose_workload_apply = 16;
@@ -350,9 +554,242 @@ message ExecutionStep {
     ManagedVolumeRemove managed_volume_remove = 24;
     ManagedVolumeDirectoryRemove managed_volume_directory_remove = 25;
     ComponentApply component_apply = 26;
+    HostResolutionApply host_resolution_apply = 27;
+    HostResolutionRestore host_resolution_restore = 28;
+    RunScript run_script = 29;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;
+}
+
+message RunScript {
+  string script_execution_id = 1;
+  string script_id = 2;
+  uint64 script_generation = 3;
+  string environment_id = 4;
+  string service_id = 5;
+  string release_id = 6;
+  uint64 render_generation = 7;
+  bytes service_definition_sha256 = 8;
+  bytes body_sha256 = 9;
+  string runner_snapshot_id = 10;
+  bytes runner_snapshot_sha256 = 11;
+}
+
+message ResolvedRunnerSnapshot {
+  string snapshot_id = 1;
+  string script_execution_id = 2;
+  string tenant_id = 3;
+  uint64 tenant_mod_revision = 4;
+  string project_id = 5;
+  uint64 project_mod_revision = 6;
+  string environment_id = 7;
+  uint64 environment_mod_revision = 8;
+  string service_id = 9;
+  uint64 service_mod_revision = 10;
+  bytes service_definition_sha256 = 11;
+  string release_id = 12;
+  uint64 release_mod_revision = 13;
+  string image_reference = 14;
+  bytes image_digest = 15;
+  string blueprint_bundle_generation = 16;
+  uint64 render_generation = 17;
+  uint64 network_topology_revision = 18;
+  repeated ScriptRunnerNetwork networks = 19;
+  repeated ScriptRunnerMount mounts = 20;
+  repeated ScriptRunnerEntryBinding entry_bindings = 21;
+  repeated ScriptRunnerSecretValue secret_values = 22;
+  bytes runner_projection_sha256 = 23;
+  string applied_environment_revision_id = 24;
+  uint64 applied_environment_render_generation = 25;
+  uint64 applied_environment_mod_revision = 26;
+}
+
+message ScriptRunnerNetwork {
+  string network_id = 1;
+  uint64 network_mod_revision = 2;
+  ScriptNetworkAttachment rendered_attachment = 3;
+}
+
+message ScriptNetworkAttachment {
+  string docker_network_name = 1;
+  repeated ScriptStringPair driver_options = 2;
+  string interface_name = 3;
+  int64 priority = 4;
+}
+
+message ScriptRunnerMount {
+  string source_id = 1;
+  uint64 source_mod_revision = 2;
+  ScriptMount rendered_mount = 3;
+}
+
+message ScriptMount {
+  string type = 1;
+  string source = 2;
+  string target = 3;
+  bool read_only = 4;
+  string consistency = 5;
+  string bind_selinux = 6;
+  string bind_propagation = 7;
+  bool bind_create_host_path = 8;
+  string bind_recursive = 9;
+  bool volume_no_copy = 10;
+  string volume_subpath = 11;
+  int64 tmpfs_size = 12;
+  uint32 tmpfs_mode = 13;
+  string config_uid = 14;
+  string config_gid = 15;
+  uint32 config_mode = 16;
+}
+
+enum ScriptEntryBindingKind {
+  SCRIPT_ENTRY_BINDING_KIND_UNSPECIFIED = 0;
+  SCRIPT_ENTRY_BINDING_KIND_ENV = 1;
+  SCRIPT_ENTRY_BINDING_KIND_FILE = 2;
+}
+
+message ScriptRunnerEntryBinding {
+  string entry_id = 1;
+  string value_generation_id = 2;
+  bytes sha256 = 3;
+  ScriptEntryBindingKind kind = 4;
+  bool secret = 5;
+  string environment_key = 6;
+  string file_target = 7;
+  uint32 uid = 8;
+  uint32 gid = 9;
+  uint32 mode = 10;
+}
+
+message ScriptRunnerSecretValue {
+  string owner_id = 1;
+  string value_generation_id = 2;
+  bytes digest = 3;
+}
+
+message ScriptRunnerProjection {
+  string snapshot_id = 1;
+  string name = 2;
+  string image = 3;
+  string platform = 4;
+  uint32 uid = 5;
+  uint32 gid = 6;
+  string working_dir = 7;
+  repeated ScriptStringPair environment = 8;
+  repeated string dns = 9;
+  repeated string dns_search = 10;
+  repeated string dns_opt = 11;
+  repeated string extra_hosts = 12;
+  repeated ScriptStringPair sysctls = 13;
+  repeated ScriptUlimit ulimits = 14;
+  bool oom_kill_disable = 15;
+  int64 oom_score_adj = 16;
+  int64 pids_limit = 17;
+  int64 shm_size = 18;
+  optional bool init = 19;
+  string isolation = 20;
+  string runtime = 21;
+  bool read_only = 22;
+  repeated string tmpfs = 23;
+  repeated string cap_drop = 24;
+  repeated string security_opt = 25;
+  repeated string group_add = 26;
+  ScriptBlkio blkio = 27;
+  int64 cpu_count = 28;
+  float cpu_percent = 29;
+  int64 cpu_shares = 30;
+  int64 cpu_period = 31;
+  int64 cpu_quota = 32;
+  int64 cpu_rt_period = 33;
+  int64 cpu_rt_runtime = 34;
+  float cpus = 35;
+  string cpuset = 36;
+  int64 mem_limit = 37;
+  int64 mem_reservation = 38;
+  int64 mem_swappiness = 39;
+  int64 memswap_limit = 40;
+  repeated ScriptStringPair storage_opt = 41;
+  ScriptResource limits = 42;
+  ScriptResource reservations = 43;
+  repeated ScriptRunnerMount mounts = 44;
+  repeated ScriptRunnerNetwork networks = 45;
+  repeated ScriptStringPair labels = 46;
+  repeated string entrypoint = 47;
+  repeated string command = 48;
+  uint32 stop_grace_seconds = 49;
+  repeated ScriptRunnerEntryBinding entry_bindings = 50;
+}
+
+message ScriptStringPair {
+  string key = 1;
+  string value = 2;
+}
+
+message ScriptUlimit {
+  string name = 1;
+  int64 single = 2;
+  int64 soft = 3;
+  int64 hard = 4;
+}
+
+message ScriptBlkio {
+  uint32 weight = 1;
+  repeated ScriptWeightDevice weight_devices = 2;
+  repeated ScriptThrottleDevice device_read_bps = 3;
+  repeated ScriptThrottleDevice device_read_iops = 4;
+  repeated ScriptThrottleDevice device_write_bps = 5;
+  repeated ScriptThrottleDevice device_write_iops = 6;
+}
+
+message ScriptWeightDevice {
+  string path = 1;
+  uint32 weight = 2;
+}
+
+message ScriptThrottleDevice {
+  string path = 1;
+  int64 rate = 2;
+}
+
+message ScriptResource {
+  bool present = 1;
+  float cpus = 2;
+  int64 memory_bytes = 3;
+  int64 pids = 4;
+}
+
+message ScriptBodyArtifactMetadata {
+  string script_execution_id = 1;
+  string script_id = 2;
+  uint64 generation = 3;
+  uint32 size = 4;
+  bytes sha256 = 5;
+  uint32 uid = 6;
+  uint32 gid = 7;
+}
+
+message ScriptAssignmentArtifacts {
+  repeated ScriptBodyArtifact bodies = 1;
+  repeated ScriptSecretArtifact secrets = 2;
+  repeated ScriptEntryArtifact entries = 3;
+}
+
+message ScriptBodyArtifact {
+  ScriptBodyArtifactMetadata metadata = 1;
+  bytes body = 2;
+}
+
+message ScriptSecretArtifact {
+  string owner_id = 1;
+  string value_generation_id = 2;
+  bytes sha256 = 3;
+  bytes value = 4;
+}
+
+message ScriptEntryArtifact {
+  ScriptRunnerEntryBinding binding = 1;
+  bytes value = 2;
 }
 
 enum ExecutionStepPolicy {
@@ -851,65 +1288,41 @@ message ManagedNetworkRemove {
   string docker_name = 3;
 }
 
-// CaddyConfigApply is the closed validate-before-reload procedure for the
-// generated Environment entry router. The file path, executable, arguments,
-// and container identity are derived by the Agent from trusted policy and the
-// referenced Compose artifact; operators cannot supply them.
-message CaddyConfigApply {
-  string artifact_id = 1;
-  string service_id = 2;
-  bytes caddyfile_sha256 = 3;
-}
-
-// ComponentApply is the closed platform-component procedure union. Concrete
-// payloads carry only Controller-authorized identity and proof inputs.
+// ComponentApply is the generic catalog action reference accepted by the Agent.
+// Artifact content travels through the separately validated execution bundle.
 message ComponentApply {
-  oneof component_payload {
-    CoreDNSConfigApply coredns_config_apply = 1;
-  }
-}
-
-message CoreDNSConfigApply {
   string component_id = 1;
-  string service_id = 2;
-  uint64 desired_generation = 3;
-  uint64 render_generation = 4;
-  string agent_id = 5;
-  uint64 agent_generation = 6;
-  string image_index_ref = 7;
-  string image_child_digest = 8;
-  string platform = 9;
-  string candidate_artifact_id = 10;
-  bytes candidate_compose_sha256 = 11;
-  string previous_artifact_id = 12;
-  bytes previous_compose_sha256 = 13;
-  bytes corefile_sha256 = 14;
-  uint32 corefile_length = 15;
-  bytes normalized_input_sha256 = 16;
-  uint64 baseline_generation = 17;
-  uint64 ownership_generation = 18;
-  CoreDNSApplyMode mode = 19;
-  CoreDNSStaticProof static_proof = 20;
-  repeated CoreDNSForwardProof forward_proofs = 21;
+  bytes definition_digest = 2;
+  bytes catalog_digest = 3;
+  string action_id = 4;
+  string artifact_id = 5;
+  bytes artifact_digest = 6;
+  uint64 generation = 7;
+  string compose_artifact_id = 8;
+  string service_id = 9;
 }
 
-message CoreDNSStaticProof {
-  bool present = 1;
-  string hostname = 2;
-  bytes canonical_ipv4 = 3;
+// Host resolution mutations are closed Agent procedures. Paths and file
+// content are fixed by the Agent binary and never supplied by a Task.
+message HostResolutionApply {
+  string component_id = 1;
+  uint64 generation = 2;
 }
 
-message CoreDNSForwardProof {
-  string domain = 1;
-  repeated string resolver_endpoints = 2;
+message HostResolutionRestore {
+  string component_id = 1;
+  uint64 generation = 2;
 }
 
-enum CoreDNSApplyMode {
-  COREDNS_APPLY_MODE_UNSPECIFIED = 0;
-  COREDNS_INITIAL_ENABLE = 1;
-  COREDNS_RECREATE = 2;
-  COREDNS_DISABLE = 3;
-  COREDNS_REPAIR = 4;
+// ManagedConfigHelperRequest is accepted only by the static
+// managed-config-helper Agent-binary mode. relative_path originates in the
+// compiled Component catalog; it is never copied from a Task or operator API.
+message ManagedConfigHelperRequest {
+  uint32 schema = 1; // exactly 1
+  string artifact_id = 2;
+  string relative_path = 3;
+  bytes content = 4;
+  bytes sha256 = 5;
 }
 
 // EnvironmentDirectoryHelperRequest is the single length-framed stdin message
@@ -944,6 +1357,17 @@ message ComposeHelperRequest {
   string step_id = 5;
   uint32 timeout_seconds = 6; // remaining bounded execution time
   string assignment_id = 7;
+  ComponentContainerConfigAction component_container_config_action = 8;
+}
+
+// ComponentContainerConfigAction is derived exclusively from the Agent's
+// compiled Component catalog. Executable arguments and paths never originate
+// in a Controller Task or an operator request.
+message ComponentContainerConfigAction {
+  string relative_path = 1;
+  string container_path = 2;
+  repeated string validate_args = 3;
+  repeated string activate_args = 4;
 }
 
 message ComposeHelperResponse {
@@ -966,8 +1390,8 @@ enum ComposeHelperDiagnostic {
   COMPOSE_HELPER_DIAGNOSTIC_NONE = 1;
   COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED = 2;
   COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED = 3;
-  COMPOSE_HELPER_DIAGNOSTIC_CADDY_CONFIG_REJECTED = 4;
-  COMPOSE_HELPER_DIAGNOSTIC_CADDY_RELOAD_FAILED = 5;
+  COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED = 4;
+  COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED = 5;
 }
 
 message TaskAbort {

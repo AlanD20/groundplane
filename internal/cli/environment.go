@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -162,6 +163,7 @@ func newEnvironmentCmd() *cobra.Command {
 	_ = apply.MarkFlagRequired("root")
 	cmd.AddCommand(apply)
 
+	var tail uint32
 	var follow bool
 	logs := &cobra.Command{
 		Use:   "logs",
@@ -174,9 +176,12 @@ func newEnvironmentCmd() *cobra.Command {
 				return err
 			}
 			path := "/api/v1/environments/" + id + "/logs"
-			q := map[string]string{}
-			if follow {
-				q["follow"] = "true"
+			if tail > 1000 {
+				return errs.New(errs.KindValidationFailed, "--tail must be between 0 and 1000")
+			}
+			q := map[string]string{
+				"tail":   strconv.FormatUint(uint64(tail), 10),
+				"follow": strconv.FormatBool(follow),
 			}
 			return app.Client.Stream(cmd.Context(), path, q, func(line string) error {
 				_, err := fmt.Fprintln(cmd.OutOrStdout(), line)
@@ -184,6 +189,7 @@ func newEnvironmentCmd() *cobra.Command {
 			})
 		},
 	}
+	logs.Flags().Uint32Var(&tail, "tail", 200, "number of existing lines per container (0..1000)")
 	logs.Flags().BoolVarP(&follow, "follow", "f", false, "stream new log lines as they arrive")
 	cmd.AddCommand(logs)
 

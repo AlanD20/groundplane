@@ -43,6 +43,24 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 	}
 }
 
+func TestServiceLifecycleProjectionFenceUsesDesiredBlueprintHead(t *testing.T) {
+	// Rationale: lifecycle render input comes from the desired Blueprint head,
+	// whose revision cannot be compared with the independently written applied projection.
+	t.Parallel()
+	environmentID := ids.NewAt(
+		ids.KindEnvironment,
+		time.Date(2026, time.August, 29, 1, 15, 0, 0, time.UTC),
+		1,
+	)
+	got := serviceLifecycleProjectionFenceKey(environmentID)
+	if want := environmentBlueprintHeadKey(environmentID); got != want {
+		t.Fatalf("serviceLifecycleProjectionFenceKey() = %q, want %q", got, want)
+	}
+	if got == environmentComposeProjectionKey(environmentID) {
+		t.Fatalf("Service lifecycle fence still selects the applied projection: %q", got)
+	}
+}
+
 func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	// Rationale: every terminal path must release the per-Service serializer or
 	// a failed/no-op lifecycle action would permanently block later recovery.

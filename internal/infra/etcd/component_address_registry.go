@@ -68,7 +68,7 @@ func (registry componentAddressRegistry) reserve(
 	if err != nil {
 		return componentAddressRegistry{}, "", err
 	}
-	address, err := ipam.FirstAvailableUsableIPv4(prefix, reserved)
+	address, err := ipam.LastAvailableUsableIPv4(prefix, reserved)
 	if err != nil {
 		return componentAddressRegistry{}, "", err
 	}

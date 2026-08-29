@@ -53,7 +53,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			scriptOwnerKey(current.Record.EnvironmentID, scriptID),
-			scriptNameKey(current.Record.EnvironmentID, current.Record.Desired.Name),
+			scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -100,7 +100,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: scriptKey(scriptID), ModRevision: current.Revision},
 		{Key: scriptOwnerKey(current.Record.EnvironmentID, scriptID), ModRevision: indexes.Values[0].ModRevision},
 		{
-			Key:         scriptNameKey(current.Record.EnvironmentID, current.Record.Desired.Name),
+			Key:         scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug),
 			ModRevision: indexes.Values[1].ModRevision,
 		},
 		{Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID)},

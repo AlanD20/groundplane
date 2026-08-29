@@ -25,7 +25,11 @@ func TestEnvironmentDirectoryAcknowledgementUsesAtomicProvisioningPath(t *testin
 	store := &environmentAcknowledgementStore{task: etcd.TaskRecord{
 		ID: taskID, Type: etcd.TaskCreate, Target: environmentID, PlanHash: hex.EncodeToString(planHash),
 	}}
-	server := &Server{tasks: store, now: func() time.Time {
+	server := &Server{tasks: store, plans: &fakePlanResolver{plan: &agentpb.ExecutionPlan{
+		Steps: []*agentpb.ExecutionStep{{Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
+			EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{},
+		}}},
+	}}, now: func() time.Time {
 		return time.Date(2026, 8, 22, 17, 0, 0, 0, time.UTC)
 	}}
 	acknowledgement := &agentpb.TaskAck{

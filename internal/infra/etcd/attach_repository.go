@@ -23,6 +23,7 @@ type AttachCreateScope struct {
 	BackingProject     Versioned[ProjectRecord]
 	BackingEnvironment Versioned[EnvironmentRecord]
 	BackingService     Versioned[ServiceRecord]
+	CredentialOwner    *Versioned[AttachRecord]
 	Grants             []Versioned[AttachRecord]
 }
 
@@ -164,7 +165,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 			ModRevision: scope.BlueprintRevision.Revision,
 		},
 		{
-			Key:         environmentComposeProjectionKey(record.EnvironmentID),
+			Key:         environmentBlueprintHeadKey(record.EnvironmentID),
 			ModRevision: scope.ComposeProjection.Revision,
 		},
 	}
@@ -214,6 +215,24 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		mutations = append(mutations,
 			Mutation{Type: MutationPut, Key: attachGrantedByKey(grantID, record.ID), Value: []byte(record.ID)},
 			Mutation{Type: MutationPut, Key: attachKey(grantID), Value: grantValue},
+		)
+	}
+	var credentialOwnerValue []byte
+	if !record.OwnsCredential() {
+		owner := *scope.CredentialOwner
+		credentialOwnerValue, err = encodeAttachRecord(owner.Record)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clear(credentialOwnerValue)
+		conditions = append(conditions,
+			Condition{Key: attachKey(owner.Record.ID), ModRevision: owner.Revision},
+			Condition{Key: attachCredentialByKey(owner.Record.ID, record.ID)},
+			Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
+		)
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: attachCredentialByKey(owner.Record.ID, record.ID), Value: []byte(record.ID)},
+			Mutation{Type: MutationPut, Key: attachKey(owner.Record.ID), Value: credentialOwnerValue},
 		)
 	}
 	if len(record.GrantAttachIDs) != 0 {
@@ -374,6 +393,40 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			"Attach is referenced by another Attach grant",
 		)
 	}
+	credentialDependents, err := repository.store.Range(ctx, RangeRequest{
+		Prefix: attachCredentialByPrefix(current.Record.ID), Limit: 1, Revision: revision,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if credentialDependents == nil || credentialDependents.ReadRevision != revision {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Attach credential reference index read returned an invalid revision",
+		)
+	}
+	if len(credentialDependents.Values) != 0 {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindResourceInUse,
+			"Attach credential is used by another Service",
+		)
+	}
+	defer clearRangeValues(credentialDependents.Values)
+	var credentialReferenceCondition *Condition
+	if !current.Record.OwnsCredential() {
+		key := attachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID)
+		read, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+		if readErr != nil {
+			return IdempotencyTransactionResult{}, readErr
+		}
+		if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil ||
+			string(read.Values[0].Value) != current.Record.ID {
+			return IdempotencyTransactionResult{}, corruptAttachRecord()
+		}
+		defer clearKeyValues(read.Values)
+		condition := Condition{Key: key, ModRevision: read.Values[0].ModRevision}
+		credentialReferenceCondition = &condition
+	}
 
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
@@ -424,6 +477,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
 		exclusionCondition,
+		{Key: attachCredentialByPrefix(current.Record.ID), Prefix: true},
 		{Key: environmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
 		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
 		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
@@ -444,7 +498,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			ModRevision: scope.BlueprintRevision.Revision,
 		},
 		{
-			Key:         environmentComposeProjectionKey(current.Record.EnvironmentID),
+			Key:         environmentBlueprintHeadKey(current.Record.EnvironmentID),
 			ModRevision: scope.ComposeProjection.Revision,
 		},
 	}
@@ -469,6 +523,14 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		conditions = append(conditions,
 			Condition{Key: attachKey(grant.Record.ID), ModRevision: grant.Revision},
 			Condition{Key: deletionTombstoneKey("attach", grant.Record.ID)},
+		)
+	}
+	if !current.Record.OwnsCredential() {
+		owner := *scope.CredentialOwner
+		conditions = append(conditions,
+			Condition{Key: attachKey(owner.Record.ID), ModRevision: owner.Revision},
+			*credentialReferenceCondition,
+			Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
 		)
 	}
 	initiation := TaskInitiation{}
@@ -925,6 +987,19 @@ func prepareAttachRemoval(
 	if dependents != nil {
 		defer clearRangeValues(dependents.Values)
 	}
+	credentialDependents, err := store.Range(ctx, RangeRequest{
+		Prefix: attachCredentialByPrefix(current.Record.ID), Limit: 1, Revision: revision,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if credentialDependents == nil || credentialDependents.ReadRevision != revision {
+		return nil, nil, nil, errs.New(errs.KindInternal, "Attach credential index read returned an invalid revision")
+	}
+	if len(credentialDependents.Values) != 0 {
+		return nil, nil, nil, errs.New(errs.KindResourceInUse, "Attach credential is used by another Service")
+	}
+	defer clearRangeValues(credentialDependents.Values)
 	dependentGrants, err := store.Range(ctx, RangeRequest{
 		Prefix: attachDependentGrantPrefix(current.Record.ID),
 		Limit:  2, Revision: revision,
@@ -952,6 +1027,7 @@ func prepareAttachRemoval(
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
 		exclusionCondition,
 		{Key: attachGrantedByPrefix(current.Record.ID), Prefix: true},
+		{Key: attachCredentialByPrefix(current.Record.ID), Prefix: true},
 	}
 	mutations := []Mutation{
 		{Type: MutationDelete, Key: attachKey(current.Record.ID)},
@@ -961,11 +1037,9 @@ func prepareAttachRemoval(
 		{Type: MutationDelete, Key: attachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID)},
 		{Type: MutationDelete, Key: attachFactsKey(current.Record.ID)},
 	}
-	for _, serviceID := range current.Record.ServiceIDs {
-		mutations = append(mutations, Mutation{
-			Type: MutationDelete, Key: attachServiceKey(serviceID, current.Record.ID),
-		})
-	}
+	mutations = append(mutations, Mutation{
+		Type: MutationDelete, Key: attachServiceKey(current.Record.ServiceID, current.Record.ID),
+	})
 	if len(current.Record.GrantAttachIDs) != 0 {
 		dependent := dependentGrants.Values[0]
 		conditions = append(conditions, Condition{
@@ -975,7 +1049,40 @@ func prepareAttachRemoval(
 			Type: MutationDelete, Key: attachDependentGrantKey(current.Record.ID),
 		})
 	}
-	values := make([][]byte, 0, len(current.Record.GrantAttachIDs))
+	values := make([][]byte, 0, len(current.Record.GrantAttachIDs)+1)
+	if !current.Record.OwnsCredential() {
+		keys := []string{
+			attachKey(current.Record.CredentialAttachID),
+			attachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID),
+		}
+		result, readErr := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+		if readErr != nil {
+			return nil, nil, values, readErr
+		}
+		if result == nil || result.ReadRevision != revision || len(result.Values) != 2 ||
+			result.Values[0] == nil || result.Values[1] == nil ||
+			string(result.Values[1].Value) != current.Record.ID {
+			return nil, nil, values, corruptAttachRecord()
+		}
+		owner, decodeErr := decodeAttachRecord(result.Values[0].Value)
+		if decodeErr != nil || owner.ID != current.Record.CredentialAttachID || !owner.OwnsCredential() {
+			return nil, nil, values, corruptAttachRecord()
+		}
+		ownerValue, encodeErr := encodeAttachRecord(owner)
+		if encodeErr != nil {
+			return nil, nil, values, encodeErr
+		}
+		values = append(values, ownerValue)
+		conditions = append(conditions,
+			Condition{Key: attachKey(owner.ID), ModRevision: result.Values[0].ModRevision},
+			Condition{Key: keys[1], ModRevision: result.Values[1].ModRevision},
+		)
+		mutations = append(mutations,
+			Mutation{Type: MutationDelete, Key: keys[1]},
+			Mutation{Type: MutationPut, Key: attachKey(owner.ID), Value: ownerValue},
+		)
+		clearKeyValues(result.Values)
+	}
 	if len(current.Record.GrantAttachIDs) == 0 {
 		return conditions, mutations, values, nil
 	}
@@ -1100,8 +1207,8 @@ func validateAttachCreateScope(
 		serviceIDs = append(serviceIDs, service.Record.Desired.ID)
 	}
 	slices.Sort(serviceIDs)
-	if !slices.Equal(serviceIDs, record.ServiceIDs) {
-		return errs.New(errs.KindValidationFailed, "Attach service_ids do not match the resolved Services")
+	if len(serviceIDs) != 1 || serviceIDs[0] != record.ServiceID {
+		return errs.New(errs.KindValidationFailed, "Attach service_id does not match the resolved Service")
 	}
 	grantIDs := make([]string, 0, len(scope.Grants))
 	for _, grant := range scope.Grants {
@@ -1119,6 +1226,21 @@ func validateAttachCreateScope(
 	if !slices.Equal(grantIDs, record.GrantAttachIDs) {
 		return errs.New(errs.KindValidationFailed, "Attach grant ids do not match the resolved grant records")
 	}
+	if record.OwnsCredential() {
+		if scope.CredentialOwner != nil {
+			return errs.New(errs.KindValidationFailed, "Credential-owning Attach cannot reference another owner")
+		}
+	} else {
+		owner := scope.CredentialOwner
+		if owner == nil || owner.Revision <= 0 || owner.Record.ID != record.CredentialAttachID ||
+			!owner.Record.OwnsCredential() || owner.Record.Status != core.AttachReady ||
+			owner.Record.EnvironmentID != record.EnvironmentID ||
+			owner.Record.BackingServiceID != record.BackingServiceID ||
+			owner.Record.BackingNetworkID != record.BackingNetworkID || facts != nil ||
+			len(record.GrantAttachIDs) != 0 || !attachFactSetsEqual(record.FactSets, owner.Record.FactSets) {
+			return errs.New(errs.KindScopeUnauthorized, "Attach existing credential owner is invalid")
+		}
+	}
 	manual := scope.BackingService.Record.Desired.Adapter == "manual"
 	if manual {
 		if facts != nil || len(record.FactSets) != 0 || len(record.GrantAttachIDs) != 0 {
@@ -1127,6 +1249,9 @@ func validateAttachCreateScope(
 				"Manual Attach is network-only and cannot publish facts or grants",
 			)
 		}
+		return nil
+	}
+	if !record.OwnsCredential() {
 		return nil
 	}
 	if scope.BackingService.Record.Desired.Adapter == "" {
@@ -1206,7 +1331,7 @@ func validateAttachDetachScope(
 		serviceIDs = append(serviceIDs, service.Record.Desired.ID)
 	}
 	slices.Sort(serviceIDs)
-	if !slices.Equal(serviceIDs, record.ServiceIDs) {
+	if len(serviceIDs) != 1 || serviceIDs[0] != record.ServiceID {
 		return errs.New(errs.KindValidationFailed, "Attach detach Services do not match the durable record")
 	}
 	grantIDs := make([]string, 0, len(scope.Grants))
@@ -1224,6 +1349,19 @@ func validateAttachDetachScope(
 	slices.Sort(grantIDs)
 	if !slices.Equal(grantIDs, record.GrantAttachIDs) {
 		return errs.New(errs.KindValidationFailed, "Attach detach grants do not match the durable record")
+	}
+	if record.OwnsCredential() {
+		if scope.CredentialOwner != nil {
+			return errs.New(errs.KindValidationFailed, "Credential-owning Attach detach has another owner")
+		}
+	} else {
+		owner := scope.CredentialOwner
+		if owner == nil || owner.Revision <= 0 || owner.Record.ID != record.CredentialAttachID ||
+			!owner.Record.OwnsCredential() || owner.Record.Status != core.AttachReady ||
+			owner.Record.EnvironmentID != record.EnvironmentID ||
+			owner.Record.BackingServiceID != record.BackingServiceID {
+			return errs.New(errs.KindScopeUnauthorized, "Attach detach credential owner is invalid")
+		}
 	}
 	return nil
 }
@@ -1253,20 +1391,26 @@ func validateAttachDetachTask(
 }
 
 func attachCreateWithTaskOperationCount(record AttachRecord, hasFacts bool) int {
-	operations := 48 + (4 * len(record.ServiceIDs)) + (5 * len(record.GrantAttachIDs))
+	operations := 52 + (5 * len(record.GrantAttachIDs))
 	if len(record.GrantAttachIDs) != 0 {
 		operations += 2
 	}
 	if hasFacts {
 		operations++
 	}
+	if !record.OwnsCredential() {
+		operations += 5
+	}
 	return operations
 }
 
 func attachDetachWithTaskOperationCount(record AttachRecord) int {
-	operations := 42 + (2 * len(record.ServiceIDs)) + (2 * len(record.GrantAttachIDs))
+	operations := 45 + (2 * len(record.GrantAttachIDs))
 	if len(record.GrantAttachIDs) != 0 {
 		operations += 2
+	}
+	if !record.OwnsCredential() {
+		operations += 3
 	}
 	return operations
 }
@@ -1303,8 +1447,9 @@ func attachImmutableEqual(left AttachRecord, right AttachRecord) bool {
 	if left.ID != right.ID || left.EnvironmentID != right.EnvironmentID || left.Name != right.Name ||
 		left.BackingProjectID != right.BackingProjectID || left.BackingEnvironmentID != right.BackingEnvironmentID ||
 		left.BackingServiceID != right.BackingServiceID || left.BackingNetworkID != right.BackingNetworkID ||
+		left.ServiceID != right.ServiceID || left.CredentialAttachID != right.CredentialAttachID ||
 		!left.CreatedAt.Equal(right.CreatedAt) ||
-		!slices.Equal(left.ServiceIDs, right.ServiceIDs) || !slices.Equal(left.GrantAttachIDs, right.GrantAttachIDs) ||
+		!slices.Equal(left.GrantAttachIDs, right.GrantAttachIDs) ||
 		len(left.FactSets) != len(right.FactSets) {
 		return false
 	}
@@ -1449,6 +1594,27 @@ func attachBackingProjectKey(projectID string, attachID string) string {
 
 func attachGrantedByPrefix(attachID string) string {
 	return "/v1/indexes/attaches/by-granted-attach/attach/" + attachID + "/"
+}
+
+func attachCredentialByPrefix(attachID string) string {
+	return "/v1/indexes/attaches/by-credential-attach/attach/" + attachID + "/"
+}
+
+func attachCredentialByKey(credentialAttachID string, attachID string) string {
+	return attachCredentialByPrefix(credentialAttachID) + attachID
+}
+
+func attachFactSetsEqual(left, right []AttachFactSetMetadata) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].GrantAttachID != right[index].GrantAttachID ||
+			!slices.Equal(left[index].Facts, right[index].Facts) {
+			return false
+		}
+	}
+	return true
 }
 
 func attachGrantedByKey(grantAttachID string, attachID string) string {

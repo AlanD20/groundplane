@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,25 @@ func TestExecuteCleanupFailureTakesPrecedence(t *testing.T) {
 	}
 }
 
+func TestExecuteReportsBoundedHelperFailure(t *testing.T) {
+	engine := newFakeEngine(t, successfulResponse())
+	engine.reader = multiplexedReader(stdcopy.Stderr, []byte("docker compose: network is missing\n"))
+	engine.exitStatus = 17
+	executor, err := NewWithEngine(engine, helperImage)
+	if err != nil {
+		t.Fatalf("NewWithEngine() error = %v", err)
+	}
+	response, err := executor.Execute(context.Background(), helperRequest(t))
+	if response != nil || !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("response=%#v error=%v, want internal helper failure", response, err)
+	}
+	for _, want := range []string{"exit code 17", "docker compose: network is missing"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Execute() error = %q, want %q", err, want)
+		}
+	}
+}
+
 // Rationale: the helper image is executable authority and must never resolve
 // through a mutable tag.
 func TestNewWithEngineRejectsUnpinnedImage(t *testing.T) {
@@ -110,7 +130,8 @@ func assertCreatePolicy(t *testing.T, options client.ContainerCreateOptions) {
 	if host.NetworkMode != container.NetworkMode("none") || !host.ReadonlyRootfs || host.AutoRemove ||
 		host.RestartPolicy.Name != container.RestartPolicyDisabled ||
 		!reflect.DeepEqual([]string(host.CapDrop), []string{"ALL"}) ||
-		!reflect.DeepEqual(host.SecurityOpt, []string{"no-new-privileges"}) {
+		!reflect.DeepEqual(host.SecurityOpt, []string{"no-new-privileges"}) ||
+		!reflect.DeepEqual(host.Tmpfs, map[string]string{composehelper.WorkDirectory: helperWorkTmpfs}) {
 		t.Fatalf("host config = %#v", host)
 	}
 	wantMounts := []mount.Mount{{
@@ -174,6 +195,16 @@ func successfulResponse() *agentpb.ComposeHelperResponse {
 	}
 }
 
+func multiplexedReader(stream stdcopy.StdType, value []byte) *bufio.Reader {
+	var multiplexed bytes.Buffer
+	header := make([]byte, 8)
+	header[0] = byte(stream)
+	binary.BigEndian.PutUint32(header[4:], uint32(len(value)))
+	multiplexed.Write(header)
+	multiplexed.Write(value)
+	return bufio.NewReader(bytes.NewReader(multiplexed.Bytes()))
+}
+
 type fakeEngine struct {
 	connection  *memoryConn
 	reader      *bufio.Reader
@@ -184,6 +215,7 @@ type fakeEngine struct {
 	removeIDs   []string
 	waitResult  chan container.WaitResponse
 	waitError   chan error
+	exitStatus  int64
 	removeErr   error
 }
 
@@ -238,7 +270,7 @@ func (engine *fakeEngine) ContainerStart(
 	_ client.ContainerStartOptions,
 ) (client.ContainerStartResult, error) {
 	engine.startIDs = append(engine.startIDs, id)
-	engine.waitResult <- container.WaitResponse{StatusCode: 0}
+	engine.waitResult <- container.WaitResponse{StatusCode: engine.exitStatus}
 	return client.ContainerStartResult{}, nil
 }
 

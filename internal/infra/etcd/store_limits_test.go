@@ -16,9 +16,10 @@ import (
 func TestStoreTransactEnforcesExactRequestCeilings(t *testing.T) {
 	t.Parallel()
 
-	conditions := make([]Condition, 48)
-	mutations := make([]Mutation, 48)
-	for index := range 48 {
+	half := maximumTransactionOperations / 2
+	conditions := make([]Condition, half)
+	mutations := make([]Mutation, half)
+	for index := range half {
 		conditions[index] = Condition{Key: fmt.Sprintf("/conditions/%02d", index), ModRevision: int64(index + 1)}
 		mutations[index] = Mutation{Type: MutationDelete, Key: fmt.Sprintf("/records/%02d", index)}
 	}
@@ -30,19 +31,19 @@ func TestStoreTransactEnforcesExactRequestCeilings(t *testing.T) {
 		t.Fatalf("newStore() error = %v", err)
 	}
 	if _, err := store.Transact(context.Background(), conditions, mutations); err != nil {
-		t.Fatalf("Transact(96 operations) error = %v", err)
+		t.Fatalf("Transact(%d operations) error = %v", maximumTransactionOperations, err)
 	}
 	if len(backend.transaction.otherwise) != len(conditions) {
 		t.Fatalf("failure reads = %d, want %d", len(backend.transaction.otherwise), len(conditions))
 	}
 
 	backend.transaction = nil
-	conditions = append(conditions, Condition{Key: "/conditions/48", ModRevision: 49})
+	conditions = append(conditions, Condition{Key: fmt.Sprintf("/conditions/%02d", half), ModRevision: int64(half + 1)})
 	if _, err := store.Transact(context.Background(), conditions, mutations); !isKind(err, errs.KindValidationFailed) {
-		t.Fatalf("Transact(97 operations) error = %v, want validation", err)
+		t.Fatalf("Transact(%d operations) error = %v, want validation", maximumTransactionOperations+1, err)
 	}
 	if backend.transaction != nil {
-		t.Fatal("Transact(97 operations) reached etcd")
+		t.Fatalf("Transact(%d operations) reached etcd", maximumTransactionOperations+1)
 	}
 
 	backend.transaction = nil

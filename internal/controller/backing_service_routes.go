@@ -75,6 +75,7 @@ func (s *Server) registerBackingServices() {
 			},
 		},
 	}, s.createBackingService)
+	s.setRoutePolicy("POST /api/v1/backing-services", routePolicy{body: jsonBody})
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.show", Method: http.MethodGet, Path: "/backing-services/{project_id}",
 		Summary: "Show a backing service", Tags: []string{"Backing service"},
@@ -112,6 +113,9 @@ func (s *Server) createBackingService(
 	}
 	response, err := s.backingServiceMutations.CreateBackingService(ctx, request.Body, request.IdempotencyKey)
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error("controller: create backing service", slog.Any("error", err))
+		}
 		return nil, normalizeProjectError(err)
 	}
 	return &backingServiceMutationOutput{

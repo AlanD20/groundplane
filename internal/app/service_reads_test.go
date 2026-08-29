@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,47 +10,24 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type fakeServiceReadRepository struct {
 	serviceReadRepository
 	environment etcd.Versioned[etcd.EnvironmentRecord]
-	project     etcd.Versioned[etcd.ProjectRecord]
-	tenant      etcd.Versioned[etcd.TenantRecord]
-	head        etcd.Versioned[etcd.EnvironmentBlueprintHead]
-	revision    etcd.Versioned[etcd.EnvironmentBlueprintRevision]
+	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
 	page        etcd.Page[etcd.ServiceRecord]
 	wantRequest etcd.PageRequest
 	listed      bool
 }
 
-func (fake *fakeServiceReadRepository) GetProject(
+func (fake *fakeServiceReadRepository) GetEnvironmentComposeProjection(
 	context.Context,
 	string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
-	return fake.project, nil
-}
-
-func (fake *fakeServiceReadRepository) GetTenant(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.TenantRecord], error) {
-	return fake.tenant, nil
-}
-
-func (fake *fakeServiceReadRepository) GetEnvironmentBlueprintHead(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
-	return fake.head, fake.head.Record.RevisionID != "", nil
-}
-
-func (fake *fakeServiceReadRepository) GetEnvironmentBlueprintRevision(
-	context.Context,
-	string,
-	string,
-) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error) {
-	return fake.revision, fake.revision.Record.RevisionID != "", nil
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return fake.projection, fake.projection.Record.RevisionID != "", nil
 }
 
 func (fake *fakeServiceReadRepository) GetEnvironment(
@@ -101,34 +79,39 @@ func TestServiceDetailProjectsCanonicalNativeComposeFromDesiredHead(t *testing.T
 	// native Compose fields never depend on the intentionally smaller flat record.
 	t.Parallel()
 	at := time.Date(2026, time.August, 28, 10, 0, 0, 0, time.UTC)
-	tenantID := ids.NewAt(ids.KindTenant, at, 1)
 	projectID := ids.NewAt(ids.KindProject, at, 2)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
 	revisionID := ids.NewAt(ids.KindTask, at, 4)
-	repository := &fakeServiceReadRepository{
-		tenant: etcd.Versioned[etcd.TenantRecord]{Record: etcd.TenantRecord{ID: tenantID, Slug: "acme"}},
-		project: etcd.Versioned[etcd.ProjectRecord]{Record: etcd.ProjectRecord{
-			ID: projectID, TenantID: tenantID, Slug: "shop", Kind: etcd.ProjectKindTenant,
-		}},
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{
-			ID: environmentID, ProjectID: projectID, Name: "production",
-		}},
-		head: etcd.Versioned[etcd.EnvironmentBlueprintHead]{Record: etcd.EnvironmentBlueprintHead{
-			EnvironmentID: environmentID, RevisionID: revisionID,
-		}},
-		revision: etcd.Versioned[etcd.EnvironmentBlueprintRevision]{Record: etcd.EnvironmentBlueprintRevision{
-			EnvironmentID: environmentID, RevisionID: revisionID, RootPath: "blueprint.yaml",
-			ComposeSources: []string{"blueprint.yaml"},
-			Files: []etcd.EnvironmentBlueprintFile{{Path: "blueprint.yaml", Content: []byte(`kind: environment
-schema: 1
-metadata: {tenant: acme, project: shop, environment: production}
-services:
+	canonical := []byte(`services:
   api:
     image: example/api:1
     command: [serve, --http]
     environment: {APP_ENV: production}
-    labels: {example.role: api}
-`)}},
+    labels:
+      example.role: api
+      com.groundplane.managed: "true"
+    annotations:
+      example.note: retained
+      com.groundplane.render-generation: "1"
+    x-gp-resource: {kind: service, id: svc_generated}
+`)
+	digest := sha256.Sum256(canonical)
+	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId: ids.NewAt(ids.KindConfig, at, 5),
+		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:    environmentID, ProjectName: "gp-" + strings.ToLower(environmentID),
+		CanonicalYaml: canonical, YamlSha256: digest[:],
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &fakeServiceReadRepository{
+		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{
+			ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.40.0.0/16",
+		}},
+		projection: etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: etcd.EnvironmentComposeProjection{
+			EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+			ComposeArtifact: artifact,
 		}},
 	}
 	service, err := newServiceReadService(repository)
@@ -139,9 +122,16 @@ services:
 	if err != nil {
 		t.Fatalf("GetServiceNativeCompose() error = %v", err)
 	}
-	for _, fragment := range []string{"services:", "api:", "image: example/api:1", "APP_ENV: production", "example.role: api"} {
+	for _, fragment := range []string{
+		"services:", "api:", "image: example/api:1", "APP_ENV: production", "example.role: api", "example.note: retained",
+	} {
 		if !strings.Contains(native, fragment) {
 			t.Fatalf("native Compose = %q, missing %q", native, fragment)
+		}
+	}
+	for _, fragment := range []string{"com.groundplane.", "x-gp-resource"} {
+		if strings.Contains(native, fragment) {
+			t.Fatalf("native Compose = %q, contains Controller-owned %q", native, fragment)
 		}
 	}
 }

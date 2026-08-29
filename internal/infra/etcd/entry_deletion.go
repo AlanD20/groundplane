@@ -2,10 +2,8 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,7 +14,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	ctx context.Context, environment Versioned[EnvironmentRecord], project Versioned[ProjectRecord],
 	entry Versioned[EntryRecord],
 	projection *Versioned[EnvironmentComposeProjection],
-	cloudflare *Versioned[ComponentRecord],
 	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
@@ -32,9 +29,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateEntryDeletionProjection(projection, intent); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := validateEntryDeletionCloudflareComponent(cloudflare, intent, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateEntryRemovalTaskOwner(task, intent); err != nil {
@@ -115,14 +109,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			componentTaskActiveEnvironmentKey(environment.Record.ID),
 		)
 	}
-	if cloudflare == nil {
-		domainKeys = append(
-			domainKeys,
-			componentEnvironmentKindKey(environment.Record.ID, core.ComponentKindEdgeCloudflare),
-		)
-	} else {
-		domainKeys = append(domainKeys, componentKey(cloudflare.Record.Desired.ID))
-	}
 	fence, ownerRevision, err := repository.loadEntryMutationFence(
 		ctx,
 		environment,
@@ -154,15 +140,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			Condition{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: projection.Revision},
 			Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 		)
-	}
-	if cloudflare == nil {
-		conditions = append(conditions, Condition{
-			Key: componentEnvironmentKindKey(environment.Record.ID, core.ComponentKindEdgeCloudflare),
-		})
-	} else {
-		conditions = append(conditions, Condition{
-			Key: componentKey(cloudflare.Record.Desired.ID), ModRevision: cloudflare.Revision,
-		})
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations := []Mutation{
@@ -200,7 +177,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		classifyEntryDeletionStartConflict(
 			entry,
 			projection,
-			cloudflare,
 			ownerRevision,
 			task.OperationID,
 			fence,
@@ -214,40 +190,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
-}
-
-func validateEntryDeletionCloudflareComponent(
-	component *Versioned[ComponentRecord], intent EntryRemovalIntent, task TaskRecord,
-) error {
-	expectedID, expectedRevision, err := entryRemovalCloudflareFence(task)
-	if err != nil {
-		return err
-	}
-	if component == nil {
-		if expectedID != "" || expectedRevision != 0 {
-			return errs.New(errs.KindValidationFailed, "entry deletion Cloudflare fence is invalid")
-		}
-		return nil
-	}
-	record := component.Record
-	if component.Revision <= 0 || component.ReadRevision < component.Revision ||
-		validateComponentRecord(record) != nil || record.Desired.Owner != core.ComponentOwnerEnvironment ||
-		record.Desired.OwnerID != intent.EnvironmentID || record.Desired.Kind != core.ComponentKindEdgeCloudflare ||
-		record.Desired.ID != expectedID || component.Revision != expectedRevision {
-		return errs.New(errs.KindValidationFailed, "entry deletion Cloudflare Component is invalid")
-	}
-	if !record.Desired.Enabled {
-		return nil
-	}
-	raw, exists := record.Desired.Config["token_entry_id"]
-	var entryID string
-	if !exists || json.Unmarshal(raw, &entryID) != nil || ids.Validate(ids.KindEnvEntry, entryID) != nil {
-		return errs.New(errs.KindInternal, "enabled Cloudflare Component token reference is invalid")
-	}
-	if entryID == intent.EntryID {
-		return errs.New(errs.KindResourceInUse, "entry is the enabled Cloudflare Tunnel token")
-	}
-	return nil
 }
 
 func validateEntryDeletionProjection(
@@ -269,7 +211,7 @@ func validateEntryDeletionProjection(
 
 func classifyEntryDeletionStartConflict(
 	entry Versioned[EntryRecord], projection *Versioned[EnvironmentComposeProjection],
-	cloudflare *Versioned[ComponentRecord], ownerRevision int64, operationID string,
+	ownerRevision int64, operationID string,
 	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
@@ -277,7 +219,6 @@ func classifyEntryDeletionStartConflict(
 		if projection != nil {
 			domainCount += 2
 		}
-		domainCount++
 		expected := domainCount + len(fence.conditions)
 		if len(values) != expected {
 			return errs.New(errs.KindInternal, "entry deletion compare evidence is incomplete")
@@ -324,13 +265,6 @@ func classifyEntryDeletionStartConflict(
 				return errs.New(errs.KindResourceInUse, "environment reconciliation is in progress")
 			}
 			position++
-		}
-		if cloudflare == nil {
-			if values[position] != nil {
-				return stateConflict("cloudflare Component", entry.Record.EnvironmentID)
-			}
-		} else if values[position] == nil || values[position].ModRevision != cloudflare.Revision {
-			return stateConflict("cloudflare Component", cloudflare.Record.Desired.ID)
 		}
 		if conflict := fence.classifyCAS(values[domainCount:]); conflict != nil {
 			return conflict
