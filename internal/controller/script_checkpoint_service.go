@@ -93,43 +93,57 @@ func scriptExecutionState(state agentpb.ScriptExecutionState) (etcd.ScriptExecut
 func scriptCheckpointEvidence(request *agentpb.ScriptCheckpointRequest) (etcd.ScriptCheckpointEvidence, error) {
 	switch evidence := request.GetEvidence().(type) {
 	case *agentpb.ScriptCheckpointRequest_StartAuthorized:
-		return etcd.ScriptStartAuthorizedEvidence{}, nil
+		return etcd.ScriptCheckpointEvidence{
+			Kind: etcd.ScriptCheckpointEvidenceStartAuthorized, StartAuthorized: &etcd.ScriptStartAuthorizedEvidence{},
+		}, nil
 	case *agentpb.ScriptCheckpointRequest_BodyPrepared:
 		value := evidence.BodyPrepared
-		return etcd.ScriptBodyPreparedEvidence{
-			BodySHA256: hex.EncodeToString(value.GetBodySha256()), UID: value.GetUid(), GID: value.GetGid(),
-			Device: value.GetDevice(), Inode: value.GetInode(), Leaf: value.GetLeaf(),
+		return etcd.ScriptCheckpointEvidence{
+			Kind: etcd.ScriptCheckpointEvidenceBodyPrepared,
+			BodyPrepared: &etcd.ScriptBodyPreparedEvidence{
+				BodySHA256: hex.EncodeToString(value.GetBodySha256()), UID: value.GetUid(), GID: value.GetGid(),
+				Device: value.GetDevice(), Inode: value.GetInode(), Leaf: value.GetLeaf(),
+			},
 		}, nil
 	case *agentpb.ScriptCheckpointRequest_ContainerCreated:
 		value := evidence.ContainerCreated
-		return etcd.ScriptContainerCreatedEvidence{
-			ContainerID:           value.GetContainerId(),
-			OwnershipLabelsSHA256: hex.EncodeToString(value.GetOwnershipLabelsSha256()),
+		return etcd.ScriptCheckpointEvidence{
+			Kind: etcd.ScriptCheckpointEvidenceContainerCreated,
+			ContainerCreated: &etcd.ScriptContainerCreatedEvidence{
+				ContainerID:           value.GetContainerId(),
+				OwnershipLabelsSHA256: hex.EncodeToString(value.GetOwnershipLabelsSha256()),
+			},
 		}, nil
 	case *agentpb.ScriptCheckpointRequest_Outcome:
 		value := evidence.Outcome
 		reason, ok := scriptOutcomeReason(value.GetReason())
 		if !ok {
-			return nil, errs.New(errs.KindValidationFailed, "Script outcome reason is invalid")
+			return etcd.ScriptCheckpointEvidence{}, errs.New(errs.KindValidationFailed, "Script outcome reason is invalid")
 		}
 		var exitCode *int32
 		if value.ExitCode != nil {
 			owned := value.GetExitCode()
 			exitCode = &owned
 		}
-		return etcd.ScriptOutcomeEvidence{
-			Reason: reason, ExitCode: exitCode, OutputTruncated: value.GetOutputTruncated(),
-			ObservedAt: value.GetObservedAt().AsTime().UTC(),
+		return etcd.ScriptCheckpointEvidence{
+			Kind: etcd.ScriptCheckpointEvidenceOutcome,
+			Outcome: &etcd.ScriptOutcomeEvidence{
+				Reason: reason, ExitCode: exitCode, OutputTruncated: value.GetOutputTruncated(),
+				ObservedAt: value.GetObservedAt().AsTime().UTC(),
+			},
 		}, nil
 	case *agentpb.ScriptCheckpointRequest_Cleanup:
 		value := evidence.Cleanup
-		return etcd.ScriptCleanupEvidence{
-			ContainerID: value.GetContainerId(), BodyDevice: value.GetBodyDevice(), BodyInode: value.GetBodyInode(),
-			BodyLeaf: value.GetBodyLeaf(), ContainerAbsent: value.GetContainerAbsent(), BodyAbsent: value.GetBodyAbsent(),
-			ExecutionDirectoryAbsent: value.GetExecutionDirectoryAbsent(),
+		return etcd.ScriptCheckpointEvidence{
+			Kind: etcd.ScriptCheckpointEvidenceCleanup,
+			Cleanup: &etcd.ScriptCleanupEvidence{
+				ContainerID: value.GetContainerId(), BodyDevice: value.GetBodyDevice(), BodyInode: value.GetBodyInode(),
+				BodyLeaf: value.GetBodyLeaf(), ContainerAbsent: value.GetContainerAbsent(), BodyAbsent: value.GetBodyAbsent(),
+				ExecutionDirectoryAbsent: value.GetExecutionDirectoryAbsent(),
+			},
 		}, nil
 	default:
-		return nil, errs.New(errs.KindValidationFailed, "Script checkpoint evidence is invalid")
+		return etcd.ScriptCheckpointEvidence{}, errs.New(errs.KindValidationFailed, "Script checkpoint evidence is invalid")
 	}
 }
 

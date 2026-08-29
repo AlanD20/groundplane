@@ -58,13 +58,33 @@ type ScriptCleanupEvidence struct {
 	ExecutionDirectoryAbsent bool   `json:"execution_directory_absent"`
 }
 
-type ScriptCheckpointEvidence interface{ scriptCheckpointEvidence() }
+// ScriptCheckpointEvidenceKind is the stable discriminator for one typed
+// Script checkpoint payload. It is deliberately separate from
+// ScriptExecutionState: a checkpoint carries one evidence member, while the
+// durable record carries the accumulated state after applying it.
+type ScriptCheckpointEvidenceKind string
 
-func (ScriptStartAuthorizedEvidence) scriptCheckpointEvidence()  {}
-func (ScriptBodyPreparedEvidence) scriptCheckpointEvidence()     {}
-func (ScriptContainerCreatedEvidence) scriptCheckpointEvidence() {}
-func (ScriptOutcomeEvidence) scriptCheckpointEvidence()          {}
-func (ScriptCleanupEvidence) scriptCheckpointEvidence()          {}
+const (
+	ScriptCheckpointEvidenceStartAuthorized  ScriptCheckpointEvidenceKind = "start_authorized"
+	ScriptCheckpointEvidenceBodyPrepared     ScriptCheckpointEvidenceKind = "body_prepared"
+	ScriptCheckpointEvidenceContainerCreated ScriptCheckpointEvidenceKind = "container_created"
+	ScriptCheckpointEvidenceOutcome          ScriptCheckpointEvidenceKind = "outcome"
+	ScriptCheckpointEvidenceCleanup          ScriptCheckpointEvidenceKind = "cleanup"
+)
+
+// ScriptCheckpointEvidence is the concrete, typed checkpoint codec boundary.
+// Exactly one member must be non-nil and it must match Kind. The members are
+// pointers so an empty start-authorized evidence value remains distinguishable
+// from an absent payload without introducing a local interface or dynamic
+// recovery path.
+type ScriptCheckpointEvidence struct {
+	Kind             ScriptCheckpointEvidenceKind
+	StartAuthorized  *ScriptStartAuthorizedEvidence
+	BodyPrepared     *ScriptBodyPreparedEvidence
+	ContainerCreated *ScriptContainerCreatedEvidence
+	Outcome          *ScriptOutcomeEvidence
+	Cleanup          *ScriptCleanupEvidence
+}
 
 type ScriptCheckpointInput struct {
 	TaskID          string
@@ -236,32 +256,53 @@ func advanceScriptExecutionRecord(
 	if next.AssignmentID == "" {
 		next.AssignmentID = input.AssignmentID
 	}
-	switch evidence := input.Evidence.(type) {
-	case ScriptStartAuthorizedEvidence:
-		if input.State != ScriptExecutionStartAuthorized || current.State != ScriptExecutionNotStarted {
+	switch input.Evidence.Kind {
+	case ScriptCheckpointEvidenceStartAuthorized:
+		if input.Evidence.StartAuthorized == nil || input.State != ScriptExecutionStartAuthorized ||
+			current.State != ScriptExecutionNotStarted {
 			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
 		}
 		next.StartAuthorized = true
-	case ScriptBodyPreparedEvidence:
+	case ScriptCheckpointEvidenceBodyPrepared:
+		if input.Evidence.BodyPrepared == nil {
+			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
+		}
 		if input.State != ScriptExecutionBodyPrepared || current.State != ScriptExecutionStartAuthorized {
 			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
 		}
+		evidence := *input.Evidence.BodyPrepared
 		next.BodyPrepared = &evidence
-	case ScriptContainerCreatedEvidence:
+	case ScriptCheckpointEvidenceContainerCreated:
+		if input.Evidence.ContainerCreated == nil {
+			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
+		}
 		if input.State != ScriptExecutionContainerCreated || current.State != ScriptExecutionBodyPrepared {
 			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
 		}
+		evidence := *input.Evidence.ContainerCreated
 		next.ContainerCreated = &evidence
-	case ScriptOutcomeEvidence:
+	case ScriptCheckpointEvidenceOutcome:
+		if input.Evidence.Outcome == nil {
+			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
+		}
+		evidence := *input.Evidence.Outcome
+		if evidence.ExitCode != nil {
+			exitCode := *evidence.ExitCode
+			evidence.ExitCode = &exitCode
+		}
 		if input.State != ScriptExecutionOutcomeRecorded || !validScriptOutcomeTransition(current.State, evidence) {
 			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
 		}
 		next.Outcome = &evidence
 		next.ReconciliationRequired = evidence.Reason == ScriptOutcomeRecoveryInvariantFailure
-	case ScriptCleanupEvidence:
+	case ScriptCheckpointEvidenceCleanup:
+		if input.Evidence.Cleanup == nil {
+			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
+		}
 		if input.State != ScriptExecutionCleanupProven || current.State != ScriptExecutionOutcomeRecorded {
 			return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
 		}
+		evidence := *input.Evidence.Cleanup
 		next.Cleanup = &evidence
 	default:
 		return ScriptExecutionRecord{}, invalidScriptCheckpointTransition()
@@ -284,10 +325,32 @@ func validateScriptCheckpointInput(input ScriptCheckpointInput) error {
 		input.AgentGeneration == 0 || ids.Validate(ids.KindStep, input.StepID) != nil ||
 		!validRawScriptExecutionID(input.ExecutionID) || !validLowerSHA256(input.PlanHash) ||
 		!validLowerSHA256(input.PayloadSHA256) || !validScriptExecutionState(input.ExpectedState) ||
-		!validScriptExecutionState(input.State) || input.Evidence == nil || input.At.IsZero() {
+		!validScriptExecutionState(input.State) || !validScriptCheckpointEvidenceShape(input.Evidence) || input.At.IsZero() {
 		return errs.New(errs.KindValidationFailed, "Script checkpoint input is invalid")
 	}
 	return nil
+}
+
+func validScriptCheckpointEvidenceShape(evidence ScriptCheckpointEvidence) bool {
+	switch evidence.Kind {
+	case ScriptCheckpointEvidenceStartAuthorized:
+		return evidence.StartAuthorized != nil && evidence.BodyPrepared == nil && evidence.ContainerCreated == nil &&
+			evidence.Outcome == nil && evidence.Cleanup == nil
+	case ScriptCheckpointEvidenceBodyPrepared:
+		return evidence.StartAuthorized == nil && evidence.BodyPrepared != nil && evidence.ContainerCreated == nil &&
+			evidence.Outcome == nil && evidence.Cleanup == nil
+	case ScriptCheckpointEvidenceContainerCreated:
+		return evidence.StartAuthorized == nil && evidence.BodyPrepared == nil && evidence.ContainerCreated != nil &&
+			evidence.Outcome == nil && evidence.Cleanup == nil
+	case ScriptCheckpointEvidenceOutcome:
+		return evidence.StartAuthorized == nil && evidence.BodyPrepared == nil && evidence.ContainerCreated == nil &&
+			evidence.Outcome != nil && evidence.Cleanup == nil
+	case ScriptCheckpointEvidenceCleanup:
+		return evidence.StartAuthorized == nil && evidence.BodyPrepared == nil && evidence.ContainerCreated == nil &&
+			evidence.Outcome == nil && evidence.Cleanup != nil
+	default:
+		return false
+	}
 }
 
 func validateScriptExecutionCheckpointShape(record ScriptExecutionRecord) error {

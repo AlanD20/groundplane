@@ -15,22 +15,30 @@ func TestAdvanceScriptExecutionRecordFullCheckpointSequence(t *testing.T) {
 	input := scriptCheckpointTestInput(record, at.Add(time.Second))
 
 	input.State = ScriptExecutionStartAuthorized
-	input.Evidence = ScriptStartAuthorizedEvidence{}
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceStartAuthorized, StartAuthorized: &ScriptStartAuthorizedEvidence{},
+	}
 	record = advanceScriptCheckpointTest(t, record, input)
 
 	input.ExpectedState = record.State
 	input.State = ScriptExecutionBodyPrepared
 	input.PayloadSHA256 = strings.Repeat("2", 64)
-	input.Evidence = ScriptBodyPreparedEvidence{
-		BodySHA256: record.BodySHA256, UID: 65534, GID: 65534, Device: 10, Inode: 20, Leaf: "body",
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceBodyPrepared,
+		BodyPrepared: &ScriptBodyPreparedEvidence{
+			BodySHA256: record.BodySHA256, UID: 65534, GID: 65534, Device: 10, Inode: 20, Leaf: "body",
+		},
 	}
 	record = advanceScriptCheckpointTest(t, record, input)
 
 	input.ExpectedState = record.State
 	input.State = ScriptExecutionContainerCreated
 	input.PayloadSHA256 = strings.Repeat("3", 64)
-	input.Evidence = ScriptContainerCreatedEvidence{
-		ContainerID: strings.Repeat("a", 64), OwnershipLabelsSHA256: strings.Repeat("b", 64),
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceContainerCreated,
+		ContainerCreated: &ScriptContainerCreatedEvidence{
+			ContainerID: strings.Repeat("a", 64), OwnershipLabelsSHA256: strings.Repeat("b", 64),
+		},
 	}
 	record = advanceScriptCheckpointTest(t, record, input)
 
@@ -38,17 +46,23 @@ func TestAdvanceScriptExecutionRecordFullCheckpointSequence(t *testing.T) {
 	input.ExpectedState = record.State
 	input.State = ScriptExecutionOutcomeRecorded
 	input.PayloadSHA256 = strings.Repeat("4", 64)
-	input.Evidence = ScriptOutcomeEvidence{
-		Reason: ScriptOutcomeNormalExit, ExitCode: &exitCode, ObservedAt: at.Add(2 * time.Second),
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceOutcome,
+		Outcome: &ScriptOutcomeEvidence{
+			Reason: ScriptOutcomeNormalExit, ExitCode: &exitCode, ObservedAt: at.Add(2 * time.Second),
+		},
 	}
 	record = advanceScriptCheckpointTest(t, record, input)
 
 	input.ExpectedState = record.State
 	input.State = ScriptExecutionCleanupProven
 	input.PayloadSHA256 = strings.Repeat("5", 64)
-	input.Evidence = ScriptCleanupEvidence{
-		ContainerID: strings.Repeat("a", 64), BodyDevice: 10, BodyInode: 20, BodyLeaf: "body",
-		ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true,
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceCleanup,
+		Cleanup: &ScriptCleanupEvidence{
+			ContainerID: strings.Repeat("a", 64), BodyDevice: 10, BodyInode: 20, BodyLeaf: "body",
+			ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true,
+		},
 	}
 	record = advanceScriptCheckpointTest(t, record, input)
 	if record.State != ScriptExecutionCleanupProven || record.Cleanup == nil || !record.ActiveReference {
@@ -57,7 +71,9 @@ func TestAdvanceScriptExecutionRecordFullCheckpointSequence(t *testing.T) {
 
 	input.ExpectedState = ScriptExecutionNotStarted
 	input.State = ScriptExecutionStartAuthorized
-	input.Evidence = ScriptStartAuthorizedEvidence{}
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceStartAuthorized, StartAuthorized: &ScriptStartAuthorizedEvidence{},
+	}
 	if _, err := advanceScriptExecutionRecord(record, input); err == nil {
 		t.Fatal("stale Script checkpoint transition error = nil")
 	}
