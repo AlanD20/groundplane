@@ -4,10 +4,18 @@ import (
 	"crypto/sha256"
 	"net/netip"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// EnvironmentPlanner is the consumer-owned port for a registered Component
+// planner. The controller depends only on typed DNS input and a generic
+// immutable EnvironmentPlan result.
+type EnvironmentPlanner interface {
+	Plan(componentsdk.ImplementationKey, string, componentdns.RenderInput) (componentsdk.EnvironmentPlan, error)
+}
 
 func ValidateComponent(renderer componentdns.Renderer, component core.Component) error {
 	if renderer == nil {
@@ -17,40 +25,79 @@ func ValidateComponent(renderer componentdns.Renderer, component core.Component)
 		return invalid("coredns: component must be the singleton platform CoreDNS component")
 	}
 	config, err := DecodeConfig(component.Config)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	input, err := buildRenderInput(nil, config, validationResolvers(config))
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if _, err := renderer.Digest(input); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
 	}
 	return nil
 }
 
-func BuildTaskPlan(renderer componentdns.Renderer, component core.Component, hosts []componentdns.Host, baseline []componentdns.ResolverEndpoint) (componentdns.TaskPlan, error) {
+func BuildIntent(
+	renderer componentdns.Renderer,
+	environmentPlanner EnvironmentPlanner,
+	component core.Component,
+	hosts []componentdns.Host,
+	baseline []componentdns.ResolverEndpoint,
+) (componentdns.Intent, error) {
 	if err := ValidateComponent(renderer, component); err != nil {
-		return componentdns.TaskPlan{}, err
+		return componentdns.Intent{}, err
+	}
+	if environmentPlanner == nil {
+		return componentdns.Intent{}, invalid("coredns: environment planner is required")
 	}
 	if !component.Enabled {
-		return componentdns.TaskPlan{}, invalid("coredns: disabled component cannot receive an update plan")
+		return componentdns.Intent{}, invalid("coredns: disabled component cannot receive an update intent")
 	}
 	if len(component.GeneratedServices) != 1 || component.GeneratedServices[0] == "" {
-		return componentdns.TaskPlan{}, invalid("coredns: exactly one generated service is required")
+		return componentdns.Intent{}, invalid("coredns: exactly one generated service is required")
 	}
 	config, err := DecodeConfig(component.Config)
-	if err != nil { return componentdns.TaskPlan{}, err }
-	input, err := buildRenderInput(hosts, config, baseline)
-	if err != nil { return componentdns.TaskPlan{}, err }
-	corefile, err := renderer.Render(input)
-	if err != nil { return componentdns.TaskPlan{}, errs.Wrap(errs.KindValidationFailed, err) }
-	inputDigest, err := renderer.Digest(input)
-	if err != nil { return componentdns.TaskPlan{}, errs.Wrap(errs.KindValidationFailed, err) }
-	plan := componentdns.TaskPlan{
-		ComponentID: component.ID, ServiceID: component.GeneratedServices[0],
-		Corefile: append([]byte(nil), corefile...), CorefileSHA256: sha256.Sum256(corefile), InputSHA256: inputDigest,
-		Steps: []componentdns.TaskStep{componentdns.TaskStepValidateConfig, componentdns.TaskStepRender, componentdns.TaskStepApply, componentdns.TaskStepObserve},
+	if err != nil {
+		return componentdns.Intent{}, err
 	}
-	if err := plan.Validate(); err != nil { return componentdns.TaskPlan{}, errs.Wrap(errs.KindValidationFailed, err) }
-	return plan, nil
+	input, err := buildRenderInput(hosts, config, baseline)
+	if err != nil {
+		return componentdns.Intent{}, err
+	}
+	inputDigest, err := renderer.Digest(input)
+	if err != nil {
+		return componentdns.Intent{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	plan, err := environmentPlanner.Plan(
+		componentsdk.ImplementationKey(component.Kind), component.GeneratedServices[0], input,
+	)
+	if err != nil {
+		return componentdns.Intent{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	if len(plan.Files) != 1 || len(plan.Files[0].Content) == 0 {
+		clearEnvironmentPlan(plan)
+		return componentdns.Intent{}, invalid("coredns: environment planner must return one managed artifact")
+	}
+	artifactDigest := sha256.Sum256(plan.Files[0].Content)
+	artifactLength := uint64(len(plan.Files[0].Content))
+	planDigest := componentsdk.DigestEnvironmentPlan(plan)
+	clearEnvironmentPlan(plan)
+	intent := componentdns.Intent{
+		ComponentID: component.ID, ServiceID: component.GeneratedServices[0],
+		ArtifactSHA256: artifactDigest, ArtifactLength: artifactLength,
+		InputSHA256: inputDigest, PlanSHA256: planDigest,
+	}
+	if err := intent.Validate(); err != nil {
+		return componentdns.Intent{}, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	return intent, nil
+}
+
+func clearEnvironmentPlan(plan componentsdk.EnvironmentPlan) {
+	for index := range plan.Files {
+		clear(plan.Files[index].Content)
+	}
 }
 
 func buildRenderInput(hosts []componentdns.Host, config Config, baseline []componentdns.ResolverEndpoint) (componentdns.RenderInput, error) {

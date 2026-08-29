@@ -7,6 +7,7 @@ import (
 )
 
 type ComponentActionPlanInput struct {
+	VolumeRoot       string
 	Envelope         componentsdk.ActionEnvelope
 	PlanID           string
 	StepIDs          []string
@@ -27,13 +28,13 @@ func BuildComponentActionExecutionPlan(input ComponentActionPlanInput) (*Executi
 	steps := []*agentpb.ExecutionStep{{
 		StepId: input.StepIDs[0], TimeoutSeconds: 300,
 		Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
-			ComponentId: componentID,
+			ComponentId:      componentID,
 			DefinitionDigest: append([]byte(nil), definitionDigest[:]...),
-			CatalogDigest: append([]byte(nil), catalogDigest[:]...),
-			ActionId: string(input.Envelope.ActionID()),
-			ArtifactId: artifact.ID().String(),
-			ArtifactDigest: append([]byte(nil), artifactDigest[:]...),
-			Generation: input.Envelope.Generation(),
+			CatalogDigest:    append([]byte(nil), catalogDigest[:]...),
+			ActionId:         string(input.Envelope.ActionID()),
+			ArtifactId:       artifact.ID().String(),
+			ArtifactDigest:   append([]byte(nil), artifactDigest[:]...),
+			Generation:       input.Envelope.Generation(),
 		}},
 	}}
 	var artifacts []*agentpb.ComposeArtifact
@@ -64,7 +65,7 @@ func BuildComponentActionExecutionPlan(input ComponentActionPlanInput) (*Executi
 				Payload: &agentpb.ExecutionStep_HostResolutionApply{
 					HostResolutionApply: &agentpb.HostResolutionApply{
 						ComponentId: componentID,
-						Generation: input.Envelope.Generation(),
+						Generation:  input.Envelope.Generation(),
 					},
 				},
 			},
@@ -74,13 +75,15 @@ func BuildComponentActionExecutionPlan(input ComponentActionPlanInput) (*Executi
 		return nil, errs.New(errs.KindInternal, "Component reload carries an unused Compose artifact")
 	}
 	return BuildPlan(PlanBuildInput{
-		PlanID: input.PlanID, RenderGeneration: input.RenderGeneration,
+		VolumeRoot: input.VolumeRoot,
+		PlanID:     input.PlanID, RenderGeneration: input.RenderGeneration,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY,
-		TargetID: componentID, Artifacts: artifacts, Steps: steps,
+		TargetID:  componentID, Artifacts: artifacts, Steps: steps,
 	})
 }
 
 func BuildComponentDisableExecutionPlan(
+	volumeRoot string,
 	componentID string,
 	planID string,
 	stepIDs []string,
@@ -93,9 +96,10 @@ func BuildComponentDisableExecutionPlan(
 	serviceID := composeArtifact.GetServices()[0].GetServiceId()
 	artifactID := composeArtifact.GetArtifactId()
 	return BuildPlan(PlanBuildInput{
-		PlanID: planID, RenderGeneration: renderGeneration,
+		VolumeRoot: volumeRoot,
+		PlanID:     planID, RenderGeneration: renderGeneration,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY,
-		TargetID: componentID,
+		TargetID:  componentID,
 		Artifacts: []*agentpb.ComposeArtifact{composeArtifact},
 		Steps: []*agentpb.ExecutionStep{
 			{

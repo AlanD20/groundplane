@@ -43,6 +43,7 @@ type PlatformComponentTaskRenderInput struct {
 	ComposeArtifactID  string                      `json:"compose_artifact_id"`
 	ArtifactSHA256     string                      `json:"artifact_sha256"`
 	ArtifactLength     uint64                      `json:"artifact_length"`
+	PlanSHA256         string                      `json:"plan_sha256"`
 }
 
 func platformComponentTaskRenderInputKey(planID string) string {
@@ -108,6 +109,7 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		!validSHA256(input.DesiredSHA256) || !validSHA256(input.BaselineSHA256) ||
 		!validSHA256(input.DefinitionSHA256) || !validSHA256(input.CatalogSHA256) ||
 		!validSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
+		!validSHA256(input.PlanSHA256) ||
 		input.ArtifactLength > managedconfig.MaximumArtifactBytes || !validComponentActionToken(input.ActionID) ||
 		input.EnsureService && input.DisableService {
 		return errs.New(errs.KindValidationFailed, "platform Component render-input identity is invalid")

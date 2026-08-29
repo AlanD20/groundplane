@@ -29,27 +29,14 @@ func componentCandidateSecretReferenceKey(secretID string, taskID string, compon
 	return componentSecretReferencePrefix(secretID) + "candidates/" + taskID + "/" + componentID
 }
 
-func componentCloudflareSecretID(record ComponentRecord) (string, bool, error) {
-	if record.Desired.Kind != core.ComponentKindEdgeCloudflare {
-		return "", false, nil
-	}
-	if record.Desired.Config.CloudflareTunnel == nil {
-		if record.Desired.Enabled {
-			return "", false, errs.New(
-				errs.KindValidationFailed,
-				"enabled Cloudflare Tunnel Component requires secret_id",
-			)
+func componentSecretReferences(record ComponentRecord) ([]string, error) {
+	references := record.Desired.Config.SecretReferences()
+	for _, reference := range references {
+		if ids.Validate(ids.KindSecret, reference) != nil {
+			return nil, errs.New(errs.KindValidationFailed, "Component Secret reference is invalid")
 		}
-		return "", false, nil
 	}
-	secretID := record.Desired.Config.CloudflareTunnel.SecretID
-	if ids.Validate(ids.KindSecret, secretID) != nil {
-		return "", false, errs.New(
-			errs.KindValidationFailed,
-			"Cloudflare Tunnel Component secret_id is invalid",
-		)
-	}
-	return secretID, true, nil
+	return references, nil
 }
 
 func prepareComponentTaskSecretReferences(
@@ -60,13 +47,13 @@ func prepareComponentTaskSecretReferences(
 	candidates []ComponentTaskCandidate,
 	revision int64,
 ) ([]componentTaskSecretReference, []Condition, []Mutation, error) {
-	references := make([]componentTaskSecretReference, 0, 1)
+	references := make([]componentTaskSecretReference, 0, len(candidates))
 	for _, candidate := range candidates {
-		secretID, present, err := componentCloudflareSecretID(candidate.Candidate)
+		secretIDs, err := componentSecretReferences(candidate.Candidate)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if present {
+		for _, secretID := range secretIDs {
 			references = append(references, componentTaskSecretReference{
 				secretID: secretID, componentID: candidate.Candidate.Desired.ID,
 			})
@@ -143,30 +130,30 @@ func componentTaskTerminalSecretMutations(
 ) ([]Mutation, error) {
 	mutations := make([]Mutation, 0, len(intent.Candidates)*3)
 	for _, candidate := range intent.Candidates {
-		currentID, currentPresent, err := componentCloudflareSecretID(candidate.Current)
+		currentIDs, err := componentSecretReferences(candidate.Current)
 		if err != nil {
 			return nil, err
 		}
-		nextID, nextPresent, err := componentCloudflareSecretID(candidate.Candidate)
+		nextIDs, err := componentSecretReferences(candidate.Candidate)
 		if err != nil {
 			return nil, err
 		}
-		if nextPresent {
+		for _, nextID := range nextIDs {
 			mutations = append(mutations, Mutation{
 				Type: MutationDelete,
 				Key:  componentCandidateSecretReferenceKey(nextID, taskID, candidate.Candidate.Desired.ID),
 			})
 		}
-		if terminalStatus != TaskStatusCompleted || currentPresent == nextPresent && currentID == nextID {
+		if terminalStatus != TaskStatusCompleted || equalSecretReferences(currentIDs, nextIDs) {
 			continue
 		}
-		if currentPresent {
+		for _, currentID := range currentIDs {
 			mutations = append(mutations, Mutation{
 				Type: MutationDelete,
 				Key:  componentActiveSecretReferenceKey(currentID, candidate.Current.Desired.ID),
 			})
 		}
-		if nextPresent {
+		for _, nextID := range nextIDs {
 			mutations = append(mutations, Mutation{
 				Type:  MutationPut,
 				Key:   componentActiveSecretReferenceKey(nextID, candidate.Candidate.Desired.ID),
@@ -175,4 +162,16 @@ func componentTaskTerminalSecretMutations(
 		}
 	}
 	return mutations, nil
+}
+
+func equalSecretReferences(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }

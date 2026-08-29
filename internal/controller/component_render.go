@@ -20,13 +20,21 @@ type EnvironmentComponentPlanFunc func(
 	core.Component,
 ) (componentsdk.EnvironmentPlan, error)
 
+// EnvironmentManagedConfigurationRegistration binds a registered Component's
+// generic managed-config action to the immutable file it activates.
+type EnvironmentManagedConfigurationRegistration struct {
+	SourcePath string
+	ActionID   componentsdk.ActionID
+}
+
 // EnvironmentComponentRegistration is the composition-root seam between one
 // build-time registered implementation and Controller-owned plan validation.
 type EnvironmentComponentRegistration struct {
-	Kind          core.ComponentKind
-	Definition    componentsdk.Definition
-	CatalogDigest [sha256.Size]byte
-	Plan          EnvironmentComponentPlanFunc
+	Kind                 core.ComponentKind
+	Definition           componentsdk.Definition
+	CatalogDigest        [sha256.Size]byte
+	Plan                 EnvironmentComponentPlanFunc
+	ManagedConfiguration *EnvironmentManagedConfigurationRegistration
 }
 
 type GeneratedEnvironmentService struct {
@@ -54,6 +62,14 @@ func ValidateEnvironmentComponentCatalog(catalog []EnvironmentComponentRegistrat
 			registration.Definition.Implementation() != componentsdk.ImplementationKey(registration.Kind) ||
 			zeroComponentDigest(registration.CatalogDigest) {
 			return errs.New(errs.KindInternal, "Environment Component registration is invalid")
+		}
+		if managed := registration.ManagedConfiguration; managed != nil {
+			action, found := registration.Definition.FindAction(managed.ActionID)
+			if managed.SourcePath == "" || path.IsAbs(managed.SourcePath) || path.Clean(managed.SourcePath) != managed.SourcePath ||
+				!found || action.Capability() != componentsdk.CapabilityManagedConfig ||
+				action.Operation() != componentsdk.OperationActivate {
+				return errs.New(errs.KindInternal, "Environment Component managed configuration is invalid")
+			}
 		}
 		if _, duplicate := seen[registration.Kind]; duplicate {
 			return errs.New(errs.KindInternal, "Environment Component catalog repeats a kind")

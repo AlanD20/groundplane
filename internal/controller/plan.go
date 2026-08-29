@@ -364,7 +364,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	caddyApply, hasCaddyApply, err := ResolveEnvironmentCaddyApply(EnvironmentCaddyApplyInput{
+	managedConfigApply, hasManagedConfigApply, err := ResolveEnvironmentManagedConfigApply(EnvironmentManagedConfigApplyInput{
 		RevisionID: revisionID, RenderGeneration: uint64(task.RenderGeneration), Components: pinned.components,
 		ComponentCatalog: resolver.componentCatalog,
 		Materializations: task.Materializations, Artifact: pinned.artifact,
@@ -383,7 +383,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if hasHealthStep {
 		expectedSteps += 2
 	}
-	if hasCaddyApply {
+	if hasManagedConfigApply {
 		expectedSteps++
 	}
 	expectedSteps += attachStepCount
@@ -457,23 +457,15 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		}},
 	})
 	stepIndex++
-	if hasCaddyApply {
-		materializationStepID := ""
-		for _, candidate := range steps {
-			if materialization := candidate.GetMaterializeFile(); materialization != nil &&
-				materialization.GetMaterializationId() == caddyApply.action.GetArtifactId() {
-				materializationStepID = candidate.GetStepId()
-			}
-		}
-		caddyStep, stepErr := caddyApply.ExecutionStep(
+	if hasManagedConfigApply {
+		managedConfigStep, stepErr := managedConfigApply.ExecutionStep(
 			task.Steps[stepIndex].ID,
 			uint32(task.TimeoutSeconds),
-			materializationStepID,
 		)
 		if stepErr != nil {
 			return nil, stepErr
 		}
-		steps = append(steps, caddyStep)
+		steps = append(steps, managedConfigStep)
 		stepIndex++
 	}
 	if hasHealthStep {

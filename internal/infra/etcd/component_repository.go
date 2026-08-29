@@ -34,12 +34,12 @@ func (repository *ComponentRepository) CreateEnvironmentComponent(
 	if err := validateEnvironmentComponentHierarchy(ctx, environment, project, record); err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
-	if _, configured, err := componentCloudflareSecretID(record); err != nil {
+	if references, err := componentSecretReferences(record); err != nil {
 		return Versioned[ComponentRecord]{}, err
-	} else if configured {
+	} else if len(references) > 0 {
 		return Versioned[ComponentRecord]{}, errs.New(
 			errs.KindStateConflict,
-			"configured Cloudflare Tunnel Components must be published through reconciliation",
+			"configured Components with Secret references must be published through reconciliation",
 		)
 	}
 	value, err := encodeComponentRecord(record)
@@ -170,18 +170,18 @@ func (repository *ComponentRepository) replace(
 	if current.Record.Desired.ID != replacement.Desired.ID {
 		return Versioned[ComponentRecord]{}, errs.New(errs.KindValidationFailed, "Component replacement changed id")
 	}
-	currentSecretID, currentConfigured, err := componentCloudflareSecretID(current.Record)
+	currentSecretIDs, err := componentSecretReferences(current.Record)
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
-	nextSecretID, nextConfigured, err := componentCloudflareSecretID(replacement)
+	nextSecretIDs, err := componentSecretReferences(replacement)
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
-	if currentConfigured != nextConfigured || currentSecretID != nextSecretID {
+	if !equalSecretReferences(currentSecretIDs, nextSecretIDs) {
 		return Versioned[ComponentRecord]{}, errs.New(
 			errs.KindStateConflict,
-			"Cloudflare Tunnel credential changes require Component reconciliation",
+			"Component Secret reference changes require Component reconciliation",
 		)
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{

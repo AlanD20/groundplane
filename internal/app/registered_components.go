@@ -2,6 +2,7 @@ package app
 
 import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
 	registeredcatalog "github.com/AlanD20/groundplane-registered-components/catalog"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
@@ -10,9 +11,14 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+const managedConfigActivateAction = componentsdk.ActionID("activate-config")
+
 type registeredActionCatalog struct {
-	catalog registeredcatalog.Catalog
+	catalog  registeredcatalog.Catalog
+	planners map[componentsdk.ImplementationKey]registeredComponentPlanner
 }
+
+type registeredComponentPlanner func(string, componentdns.RenderInput) (componentsdk.EnvironmentPlan, error)
 
 func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 	caddy, err := registeredcaddy.Definition()
@@ -28,7 +34,7 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	coreDNSActivate, err := registeredcatalog.NewManagedConfigActionRecipe(
-		coreDNSActivateConfigAction,
+		managedConfigActivateAction,
 		registeredcoredns.CorefileSource,
 	)
 	if err != nil {
@@ -59,10 +65,41 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 	if err != nil {
 		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return registeredActionCatalog{catalog: compiled}, nil
+	return registeredActionCatalog{
+		catalog: compiled,
+		planners: map[componentsdk.ImplementationKey]registeredComponentPlanner{
+			coreDNS.Implementation(): func(serviceID string, input componentdns.RenderInput) (componentsdk.EnvironmentPlan, error) {
+				return registeredcoredns.Plan(registeredcoredns.PlanInput{
+					GeneratedServiceID: serviceID, Render: input,
+				})
+			},
+		},
+	}, nil
 }
 
 func (catalog registeredActionCatalog) Digest() [32]byte { return catalog.catalog.Digest() }
+
+func (catalog registeredActionCatalog) FindAction(
+	implementation componentsdk.ImplementationKey,
+	action componentsdk.ActionID,
+) (componentsdk.Definition, componentsdk.ActionDefinition, bool) {
+	return catalog.catalog.FindAction(implementation, action)
+}
+
+func (catalog registeredActionCatalog) Plan(
+	implementation componentsdk.ImplementationKey,
+	serviceID string,
+	input componentdns.RenderInput,
+) (componentsdk.EnvironmentPlan, error) {
+	planner := catalog.planners[implementation]
+	if planner == nil {
+		return componentsdk.EnvironmentPlan{}, errs.New(
+			errs.KindStateConflict,
+			"registered Component implementation is not compiled into the catalog",
+		)
+	}
+	return planner(serviceID, input)
+}
 
 func (catalog registeredActionCatalog) ResolveManagedConfigActionEnvelope(
 	envelope componentsdk.ActionEnvelope,

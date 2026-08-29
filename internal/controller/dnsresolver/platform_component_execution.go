@@ -1,4 +1,4 @@
-package app
+package dnsresolver
 
 import (
 	"bytes"
@@ -11,22 +11,31 @@ import (
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
-	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
-	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type platformComponentExecutionPlanner struct {
-	components *etcd.ComponentRepository
-	catalog    registeredActionCatalog
-	renderer   componentdns.Renderer
+type ExecutionCatalog interface {
+	ResolveActionEnvelope(componentsdk.ActionEnvelope) (componentsdk.Definition, componentsdk.ActionDefinition, error)
+	Plan(componentsdk.ImplementationKey, string, componentdns.RenderInput) (componentsdk.EnvironmentPlan, error)
+}
+
+type ComponentExecutionRepository interface {
+	GetPlatformComponentTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error)
+	GetComponent(context.Context, string) (etcd.Versioned[etcd.ComponentRecord], error)
+	GetHostResolverBaseline(context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
+}
+
+type PlatformExecutionPlanner struct {
+	volumeRoot string
+	components ComponentExecutionRepository
+	catalog    ExecutionCatalog
 }
 
 type resolvedPlatformComponent struct {
@@ -35,18 +44,18 @@ type resolvedPlatformComponent struct {
 	envelope componentsdk.ActionEnvelope
 }
 
-func newPlatformComponentExecutionPlanner(
-	components *etcd.ComponentRepository,
-	catalog registeredActionCatalog,
-	renderer componentdns.Renderer,
-) (*platformComponentExecutionPlanner, error) {
-	if components == nil || renderer == nil {
+func NewPlatformComponentExecutionPlanner(
+	volumeRoot string,
+	components ComponentExecutionRepository,
+	catalog ExecutionCatalog,
+) (*PlatformExecutionPlanner, error) {
+	if volumeRoot == "" || components == nil || catalog == nil {
 		return nil, errs.New(errs.KindInternal, "Platform Component execution planner dependencies are required")
 	}
-	return &platformComponentExecutionPlanner{components: components, catalog: catalog, renderer: renderer}, nil
+	return &PlatformExecutionPlanner{volumeRoot: volumeRoot, components: components, catalog: catalog}, nil
 }
 
-func (planner *platformComponentExecutionPlanner) ResolveComponentExecutionPlan(
+func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
@@ -65,7 +74,7 @@ func (planner *platformComponentExecutionPlanner) ResolveComponentExecutionPlan(
 			controllerpkg.PlatformComponentComposeInput{
 				ComponentID: task.Target, PlanID: task.PlanID,
 				RenderGeneration: uint64(task.RenderGeneration),
-				ArtifactID: resolved.input.ComposeArtifactID, Plan: resolved.plan,
+				ArtifactID:       resolved.input.ComposeArtifactID, Plan: resolved.plan,
 			},
 		)
 		if err != nil {
@@ -74,17 +83,18 @@ func (planner *platformComponentExecutionPlanner) ResolveComponentExecutionPlan(
 	}
 	if resolved.input.DisableService {
 		return controllerpkg.BuildComponentDisableExecutionPlan(
-			task.Target, task.PlanID, stepIDs, uint64(task.RenderGeneration), composeArtifact,
+			planner.volumeRoot, task.Target, task.PlanID, stepIDs, uint64(task.RenderGeneration), composeArtifact,
 		)
 	}
 	return controllerpkg.BuildComponentActionExecutionPlan(controllerpkg.ComponentActionPlanInput{
-		Envelope: resolved.envelope, PlanID: task.PlanID, StepIDs: stepIDs,
+		VolumeRoot: planner.volumeRoot,
+		Envelope:   resolved.envelope, PlanID: task.PlanID, StepIDs: stepIDs,
 		RenderGeneration: uint64(task.RenderGeneration),
-		ComposeArtifact: composeArtifact, EnsureService: resolved.input.EnsureService,
+		ComposeArtifact:  composeArtifact, EnsureService: resolved.input.EnsureService,
 	})
 }
 
-func (planner *platformComponentExecutionPlanner) ResolveManagedConfig(
+func (planner *PlatformExecutionPlanner) ResolveManagedConfig(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	plan *agentpb.ExecutionPlan,
@@ -118,11 +128,11 @@ func (planner *platformComponentExecutionPlanner) ResolveManagedConfig(
 	clearPlatformComponentPlan(resolved.plan)
 	return agentchannel.ManagedConfigSource{
 		MediaType: managedconfig.MediaTypeTextUTF8,
-		Length: uint64(len(content)), Content: newOwnedComponentArtifact(content),
+		Length:    uint64(len(content)), Content: newOwnedComponentArtifact(content),
 	}, nil
 }
 
-func (planner *platformComponentExecutionPlanner) resolve(
+func (planner *PlatformExecutionPlanner) resolve(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (resolvedPlatformComponent, error) {
@@ -177,53 +187,36 @@ func (planner *platformComponentExecutionPlanner) resolve(
 		}
 		hosts[index] = componentdns.Host{Address: address, Hostnames: append([]string(nil), host.Hostnames...)}
 	}
-	config, err := controllerdns.DecodeConfig(core.ComponentConfig{CoreDNS: &input.Config})
+	config, err := DecodeConfig(core.ComponentConfig{CoreDNS: &input.Config})
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}
-	renderInput, err := controllerdns.BuildRenderInput(hosts, config, baselineResolvers)
+	renderInput, err := BuildRenderInput(hosts, config, baselineResolvers)
 	if err != nil {
 		return resolvedPlatformComponent{}, err
-	}
-	registeredPlan, err := registeredcoredns.Plan(registeredcoredns.PlanInput{
-		GeneratedServiceID: input.GeneratedServiceID, Render: renderInput,
-	})
-	if err != nil {
-		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
-	}
-	if len(registeredPlan.Files) != 1 || uint64(len(registeredPlan.Files[0].Content)) != input.ArtifactLength {
-		clearPlatformComponentPlan(registeredPlan)
-		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "registered Component artifact length changed")
-	}
-	artifactDigest := sha256.Sum256(registeredPlan.Files[0].Content)
-	expectedArtifactDigest, err := componentDigest(input.ArtifactSHA256)
-	if err != nil || subtle.ConstantTimeCompare(artifactDigest[:], expectedArtifactDigest[:]) != 1 {
-		clearPlatformComponentPlan(registeredPlan)
-		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "registered Component artifact digest changed")
 	}
 	definitionDigest, err := componentDigest(input.DefinitionSHA256)
 	if err != nil {
-		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, err
 	}
 	catalogDigest, err := componentDigest(input.CatalogSHA256)
 	if err != nil {
-		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, err
 	}
 	componentID, err := componentsdk.NewComponentID(input.ComponentID)
 	if err != nil {
-		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
 	}
 	artifactID, err := componentsdk.NewArtifactID(input.ArtifactID)
 	if err != nil {
-		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
+	}
+	expectedArtifactDigest, err := componentDigest(input.ArtifactSHA256)
+	if err != nil {
+		return resolvedPlatformComponent{}, err
 	}
 	artifact, err := componentsdk.NewArtifactReference(artifactID, expectedArtifactDigest)
 	if err != nil {
-		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
 	}
 	envelope, err := componentsdk.NewActionEnvelope(componentsdk.ActionEnvelopeInput{
@@ -232,14 +225,30 @@ func (planner *platformComponentExecutionPlanner) resolve(
 		Generation: uint64(task.RenderGeneration),
 	})
 	if err != nil {
-		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
 	}
-	definition, action, err := planner.catalog.ResolveActionEnvelope(envelope)
-	if err != nil || definition.Implementation() != componentsdk.ImplementationKey(core.ComponentKindCoreDNS) ||
-		action.ID() != coreDNSActivateConfigAction {
-		clearPlatformComponentPlan(registeredPlan)
+	definition, _, err := planner.catalog.ResolveActionEnvelope(envelope)
+	if err != nil {
 		return resolvedPlatformComponent{}, errs.New(errs.KindStateConflict, "Component action is not present in the compiled catalog")
+	}
+	registeredPlan, err := planner.catalog.Plan(definition.Implementation(), input.GeneratedServiceID, renderInput)
+	if err != nil {
+		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
+	}
+	planDigest := componentsdk.DigestEnvironmentPlan(registeredPlan)
+	expectedPlanDigest, err := componentDigest(input.PlanSHA256)
+	if err != nil || subtle.ConstantTimeCompare(planDigest[:], expectedPlanDigest[:]) != 1 {
+		clearPlatformComponentPlan(registeredPlan)
+		return resolvedPlatformComponent{}, errs.New(errs.KindStateConflict, "registered Component plan changed")
+	}
+	if len(registeredPlan.Files) != 1 || uint64(len(registeredPlan.Files[0].Content)) != input.ArtifactLength {
+		clearPlatformComponentPlan(registeredPlan)
+		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "registered Component artifact length changed")
+	}
+	artifactDigest := sha256.Sum256(registeredPlan.Files[0].Content)
+	if subtle.ConstantTimeCompare(artifactDigest[:], expectedArtifactDigest[:]) != 1 {
+		clearPlatformComponentPlan(registeredPlan)
+		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "registered Component artifact digest changed")
 	}
 	return resolvedPlatformComponent{input: input, plan: registeredPlan, envelope: envelope}, nil
 }

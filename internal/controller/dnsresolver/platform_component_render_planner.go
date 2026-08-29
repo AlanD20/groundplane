@@ -1,4 +1,4 @@
-package app
+package dnsresolver
 
 import (
 	"context"
@@ -10,51 +10,68 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const coreDNSActivateConfigAction = componentsdk.ActionID("activate-config")
-
-type platformComponentProjectionReader interface {
+type PlatformProjectionReader interface {
 	ListEnvironmentAppliedComposeProjections(
 		context.Context,
 	) ([]etcd.Versioned[etcd.EnvironmentComposeProjection], error)
 }
 
-type coreDNSPlatformRenderPlanner struct {
-	projections platformComponentProjectionReader
-	components  *etcd.ComponentRepository
-	renderer    componentdns.Renderer
-	catalog     registeredActionCatalog
+type BaselineRepository interface {
+	GetHostResolverBaseline(context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
+	EnsureHostResolverBaseline(context.Context, []byte, time.Time) (etcd.Versioned[etcd.HostResolverBaselineRecord], error)
 }
 
-func newCoreDNSPlatformRenderPlanner(
-	projections platformComponentProjectionReader,
-	components *etcd.ComponentRepository,
+type BaselineCapture func(context.Context) ([]byte, error)
+
+type ActionCatalog interface {
+	Digest() [32]byte
+	FindAction(componentsdk.ImplementationKey, componentsdk.ActionID) (componentsdk.Definition, componentsdk.ActionDefinition, bool)
+}
+
+type PlatformRenderPlanner struct {
+	projections         PlatformProjectionReader
+	baselines           BaselineRepository
+	capture             BaselineCapture
+	renderer            componentdns.Renderer
+	environmentPlanner  EnvironmentPlanner
+	catalog             ActionCatalog
+	managedConfigAction componentsdk.ActionID
+}
+
+func NewPlatformRenderPlanner(
+	projections PlatformProjectionReader,
+	baselines BaselineRepository,
+	capture BaselineCapture,
 	renderer componentdns.Renderer,
-	catalog registeredActionCatalog,
-) (*coreDNSPlatformRenderPlanner, error) {
-	if projections == nil || components == nil || renderer == nil {
-		return nil, errs.New(errs.KindInternal, "CoreDNS platform render planner dependencies are required")
+	environmentPlanner EnvironmentPlanner,
+	catalog ActionCatalog,
+	managedConfigAction componentsdk.ActionID,
+) (*PlatformRenderPlanner, error) {
+	if projections == nil || baselines == nil || capture == nil || renderer == nil || environmentPlanner == nil || catalog == nil {
+		return nil, errs.New(errs.KindInternal, "platform Component render planner dependencies are required")
 	}
-	return &coreDNSPlatformRenderPlanner{
-		projections: projections, components: components, renderer: renderer, catalog: catalog,
+	return &PlatformRenderPlanner{
+		projections: projections, baselines: baselines, capture: capture,
+		renderer: renderer, environmentPlanner: environmentPlanner, catalog: catalog,
+		managedConfigAction: managedConfigAction,
 	}, nil
 }
 
-func (planner *coreDNSPlatformRenderPlanner) PrepareConfigTask(
+func (planner *PlatformRenderPlanner) PrepareConfigTask(
 	ctx context.Context,
 	current etcd.Versioned[etcd.ComponentRecord],
 	desired core.Component,
 	task etcd.TaskRecord,
 ) (etcd.PlatformComponentTaskRenderInput, error) {
-	if err := ensureHostResolverBaseline(ctx, planner.components, time.Now().UTC()); err != nil {
+	if err := ensureHostResolverBaseline(ctx, planner.baselines, planner.capture, time.Now().UTC()); err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
-	baseline, found, err := planner.components.GetHostResolverBaseline(ctx)
+	baseline, found, err := planner.baselines.GetHostResolverBaseline(ctx)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
@@ -86,11 +103,12 @@ func (planner *coreDNSPlatformRenderPlanner) PrepareConfigTask(
 	}
 	renderComponent := desired
 	renderComponent.GeneratedServices = []string{generatedServiceID}
-	plan, err := controllerdns.BuildTaskPlan(planner.renderer, renderComponent, hosts, resolvers)
+	intent, err := BuildIntent(
+		planner.renderer, planner.environmentPlanner, renderComponent, hosts, resolvers,
+	)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
-	defer clear(plan.Corefile)
 	replacement, err := etcd.ReplaceComponentDesired(current.Record, desired)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
@@ -99,9 +117,9 @@ func (planner *coreDNSPlatformRenderPlanner) PrepareConfigTask(
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
-	definition, action, found := planner.catalog.catalog.FindAction(
+	definition, action, found := planner.catalog.FindAction(
 		componentsdk.ImplementationKey(core.ComponentKindCoreDNS),
-		coreDNSActivateConfigAction,
+		planner.managedConfigAction,
 	)
 	if !found {
 		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
@@ -117,7 +135,7 @@ func (planner *coreDNSPlatformRenderPlanner) PrepareConfigTask(
 		)
 	}
 	definitionDigest := definition.Digest()
-	catalogDigest := planner.catalog.catalog.Digest()
+	catalogDigest := planner.catalog.Digest()
 	return etcd.PlatformComponentTaskRenderInput{
 		PlanID: task.PlanID, TaskID: task.ID, ComponentID: desired.ID,
 		DesiredSHA256:      desiredSHA256,
@@ -127,12 +145,13 @@ func (planner *coreDNSPlatformRenderPlanner) PrepareConfigTask(
 		DefinitionSHA256: hex.EncodeToString(definitionDigest[:]),
 		CatalogSHA256:    hex.EncodeToString(catalogDigest[:]), ActionID: string(action.ID()),
 		ArtifactID: ids.New(ids.KindConfig), ComposeArtifactID: ids.New(ids.KindConfig),
-		ArtifactSHA256: hex.EncodeToString(plan.CorefileSHA256[:]),
-		ArtifactLength: uint64(len(plan.Corefile)),
+		ArtifactSHA256: hex.EncodeToString(intent.ArtifactSHA256[:]),
+		ArtifactLength: intent.ArtifactLength,
+		PlanSHA256:     hex.EncodeToString(intent.PlanSHA256[:]),
 	}, nil
 }
 
-func (planner *coreDNSPlatformRenderPlanner) PrepareDisableTask(
+func (planner *PlatformRenderPlanner) PrepareDisableTask(
 	ctx context.Context,
 	current etcd.Versioned[etcd.ComponentRecord],
 	desired core.Component,
@@ -166,7 +185,7 @@ func (planner *coreDNSPlatformRenderPlanner) PrepareDisableTask(
 	return input, nil
 }
 
-func (planner *coreDNSPlatformRenderPlanner) appliedHosts(
+func (planner *PlatformRenderPlanner) appliedHosts(
 	ctx context.Context,
 ) ([]componentdns.Host, []etcd.PlatformDNSHost, error) {
 	projections, err := planner.projections.ListEnvironmentAppliedComposeProjections(ctx)
@@ -218,4 +237,22 @@ func (planner *coreDNSPlatformRenderPlanner) appliedHosts(
 		hosts[index] = componentdns.Host{Address: address, Hostnames: append([]string(nil), host.Hostnames...)}
 	}
 	return hosts, durable, nil
+}
+
+func ensureHostResolverBaseline(
+	ctx context.Context,
+	repository BaselineRepository,
+	capture BaselineCapture,
+	now time.Time,
+) error {
+	if _, found, err := repository.GetHostResolverBaseline(ctx); err != nil || found {
+		return err
+	}
+	content, err := capture(ctx)
+	if err != nil {
+		return err
+	}
+	defer clear(content)
+	_, err = repository.EnsureHostResolverBaseline(ctx, content, now)
+	return err
 }

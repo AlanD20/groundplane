@@ -367,6 +367,15 @@ func (config ComponentConfig) Empty() bool {
 	return config.Caddy == nil && config.CloudflareTunnel == nil && config.CoreDNS == nil
 }
 
+// SecretReferences returns opaque references required by the selected
+// Component configuration. Secret values never cross this model boundary.
+func (config ComponentConfig) SecretReferences() []string {
+	if config.CloudflareTunnel == nil {
+		return nil
+	}
+	return []string{config.CloudflareTunnel.SecretID}
+}
+
 func CloneComponentConfig(config ComponentConfig) ComponentConfig {
 	clone := ComponentConfig{}
 	if config.Caddy != nil {
@@ -383,7 +392,7 @@ func CloneComponentConfig(config ComponentConfig) ComponentConfig {
 		value.Forwarders = make([]DNSForwarder, len(config.CoreDNS.Forwarders))
 		for index, forwarder := range config.CoreDNS.Forwarders {
 			value.Forwarders[index] = DNSForwarder{
-				Domain: forwarder.Domain,
+				Domain:    forwarder.Domain,
 				Resolvers: append([]DNSResolverEndpoint(nil), forwarder.Resolvers...),
 			}
 		}
@@ -396,15 +405,15 @@ func CloneComponentConfig(config ComponentConfig) ComponentConfig {
 // platform-owned kinds. OwnerID is the environment id for environment owners
 // and empty for the singleton platform owner.
 type Component struct {
-	ID                string         `yaml:"id"                           json:"id"` // cmp_<ulid>
-	Owner             ComponentOwner `yaml:"owner"                        json:"owner"`
-	OwnerID           string         `yaml:"owner_id,omitempty"           json:"owner_id,omitempty"`
-	Kind              ComponentKind  `yaml:"kind"                         json:"kind"`
-	Enabled           bool           `yaml:"enabled"                      json:"enabled"`
+	ID                string          `yaml:"id"                           json:"id"` // cmp_<ulid>
+	Owner             ComponentOwner  `yaml:"owner"                        json:"owner"`
+	OwnerID           string          `yaml:"owner_id,omitempty"           json:"owner_id,omitempty"`
+	Kind              ComponentKind   `yaml:"kind"                         json:"kind"`
+	Enabled           bool            `yaml:"enabled"                      json:"enabled"`
 	Config            ComponentConfig `yaml:"config,omitempty"             json:"config,omitempty"`
-	GeneratedServices []string       `yaml:"generated_services,omitempty" json:"generated_services,omitempty"` // stable Service ids allocated for this component
-	PinnedIPv4        string         `yaml:"pinned_ipv4,omitempty"        json:"pinned_ipv4,omitempty"`        // Caddy only; derived durable state, never authored
-	Healthy           bool           `yaml:"healthy"                      json:"healthy"`
+	GeneratedServices []string        `yaml:"generated_services,omitempty" json:"generated_services,omitempty"` // stable Service ids allocated for this component
+	PinnedIPv4        string          `yaml:"pinned_ipv4,omitempty"        json:"pinned_ipv4,omitempty"`        // Caddy only; derived durable state, never authored
+	Healthy           bool            `yaml:"healthy"                      json:"healthy"`
 }
 
 // Route is a domain or path routed to a Service. Public routes require

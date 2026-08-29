@@ -41,13 +41,13 @@ type backingServiceCreationRepository interface {
 }
 
 type backingServiceCreationService struct {
-	volumeRoot      string
-	environmentPool netip.Prefix
-	repository      backingServiceCreationRepository
-	idempotency     *desiredrevision.Idempotency
-	protector       *secretvalue.Protector
+	volumeRoot       string
+	environmentPool  netip.Prefix
+	repository       backingServiceCreationRepository
+	idempotency      *desiredrevision.Idempotency
+	protector        *secretvalue.Protector
 	componentCatalog []controller.EnvironmentComponentRegistration
-	now             func() time.Time
+	now              func() time.Time
 }
 
 func newBackingServiceCreationService(
@@ -68,7 +68,7 @@ func newBackingServiceCreationService(
 		volumeRoot: volumeRoot, environmentPool: environmentPool,
 		repository: repository, idempotency: idempotency, protector: protector,
 		componentCatalog: controller.CloneEnvironmentComponentCatalog(componentCatalog),
-		now: time.Now,
+		now:              time.Now,
 	}, nil
 }
 
@@ -196,7 +196,11 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	componentRecords, componentValues, err := backingCreationComponents(environment.ID, allocator)
+	componentRecords, componentValues, err := backingCreationComponents(
+		environment.ID,
+		allocator,
+		service.componentCatalog,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -394,10 +398,17 @@ func isUnknownBackingServiceCreationOutcome(err error) bool {
 func backingCreationComponents(
 	environmentID string,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
+	catalog []controller.EnvironmentComponentRegistration,
 ) ([]etcd.ComponentRecord, []core.Component, error) {
-	values := []core.Component{
-		{ID: allocator.New(ids.KindComponent), Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy},
-		{ID: allocator.New(ids.KindComponent), Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare},
+	if err := controller.ValidateEnvironmentComponentCatalog(catalog); err != nil {
+		return nil, nil, err
+	}
+	values := make([]core.Component, len(catalog))
+	for index, registration := range catalog {
+		values[index] = core.Component{
+			ID: allocator.New(ids.KindComponent), Owner: core.ComponentOwnerEnvironment,
+			OwnerID: environmentID, Kind: registration.Kind,
+		}
 	}
 	records := make([]etcd.ComponentRecord, len(values))
 	for index := range values {

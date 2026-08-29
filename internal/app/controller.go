@@ -22,6 +22,7 @@ import (
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -38,6 +39,7 @@ import (
 	environmentetcd "github.com/AlanD20/groundplane/internal/infra/etcd/environment"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
+	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/internal/volume"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -494,15 +496,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
 	}
-	coreDNSRenderPlanner, err := newCoreDNSPlatformRenderPlanner(
-		hierarchyRecords, componentRecords, coreDNSRenderer, actionCatalog,
+	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
+		hierarchyRecords, componentRecords, controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
+		coreDNSRenderer, actionCatalog, actionCatalog, managedConfigActivateAction,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize CoreDNS render planner: %w", err)
+		return nil, fmt.Errorf("controller: initialize platform Component render planner: %w", err)
 	}
-	platformComponentExecution, err := newPlatformComponentExecutionPlanner(
-		componentRecords, actionCatalog, coreDNSRenderer,
+	platformComponentExecution, err := controllerdns.NewPlatformComponentExecutionPlanner(
+		cfg.Storage.VolumeRoot, componentRecords, actionCatalog,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -957,13 +960,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing-service creation: %w", err)
 	}
-	componentCredentials, err := newComponentCloudflareCredentialResolver(hierarchyRecords, secretReads, secretMutations)
+	componentCredentials, err := componentcapability.NewCredentialReferenceResolver(hierarchyRecords, secretReads, secretMutations)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component credentials: %w", err)
 	}
-	platformComponentMutations, err := newPlatformComponentMutationService(
-		componentRecords, tasks, idempotency, intentCoordinator, coreDNSRenderer, coreDNSRenderPlanner,
+	platformComponentMutations, err := controllerdns.NewPlatformMutationService(
+		componentRecords, tasks, idempotency, intentCoordinator, coreDNSRenderer, platformRenderPlanner,
 	)
 	if err != nil {
 		_ = store.Close()

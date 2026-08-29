@@ -26,20 +26,15 @@ type blueprintApplier interface {
 	ApplyComponentBlueprint(context.Context, string, string, core.BlueprintBundle, string) (etcd.IdempotencyResponse, error)
 }
 
-type cloudflareCredentialResolver interface {
-	ResolveCloudflareTunnelCredential(
-		context.Context,
-		string,
-		apiTypes.CloudflareTunnelCredentialInput,
-		string,
-	) (string, error)
+type credentialReferenceResolver interface {
+	ResolveCredentialReference(context.Context, string, OpaqueSecretReferenceInput, string) (string, error)
 }
 
 type platformConfigMutator interface {
-	EnableCoreDNS(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	DisableCoreDNS(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	UpdateCoreDNS(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	ReplaceCoreDNSConfig(
+	EnablePlatformComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DisablePlatformComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	UpdatePlatformComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	ReplacePlatformComponentConfig(
 		context.Context,
 		string,
 		apiTypes.ComponentConfigMutationRequest,
@@ -51,7 +46,7 @@ type MutationService struct {
 	components  mutationRepository
 	blueprints  mutationBlueprintRepository
 	applier     blueprintApplier
-	credentials cloudflareCredentialResolver
+	credentials credentialReferenceResolver
 	platform    platformConfigMutator
 }
 
@@ -59,7 +54,7 @@ func NewMutationService(
 	components mutationRepository,
 	blueprints mutationBlueprintRepository,
 	applier blueprintApplier,
-	credentials cloudflareCredentialResolver,
+	credentials credentialReferenceResolver,
 	platform platformConfigMutator,
 ) (*MutationService, error) {
 	if components == nil || blueprints == nil || applier == nil || credentials == nil || platform == nil {
@@ -84,7 +79,7 @@ func (service *MutationService) EnableComponent(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
-		return service.platform.EnableCoreDNS(ctx, componentID, idempotencyKey)
+		return service.platform.EnablePlatformComponent(ctx, componentID, idempotencyKey)
 	}
 	return service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
 		return replaceYAMLMappingValue(spec, "enabled", scalarNode("!!bool", strconv.FormatBool(true)))
@@ -101,7 +96,7 @@ func (service *MutationService) DisableComponent(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
-		return service.platform.DisableCoreDNS(ctx, componentID, idempotencyKey)
+		return service.platform.DisablePlatformComponent(ctx, componentID, idempotencyKey)
 	}
 	return service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
 		return replaceYAMLMappingValue(spec, "enabled", scalarNode("!!bool", strconv.FormatBool(false)))
@@ -118,7 +113,7 @@ func (service *MutationService) UpdateComponent(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
-		return service.platform.UpdateCoreDNS(ctx, componentID, idempotencyKey)
+		return service.platform.UpdatePlatformComponent(ctx, componentID, idempotencyKey)
 	}
 	return service.mutateComponent(ctx, componentID, idempotencyKey, func(*yaml.Node) error { return nil })
 }
@@ -137,7 +132,7 @@ func (service *MutationService) SetComponentConfig(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
-		return service.platform.ReplaceCoreDNSConfig(ctx, componentID, request, idempotencyKey)
+		return service.platform.ReplacePlatformComponentConfig(ctx, componentID, request, idempotencyKey)
 	}
 	var publicConfig apiTypes.ComponentConfig
 	var mutate func(*yaml.Node) error
@@ -148,8 +143,15 @@ func (service *MutationService) SetComponentConfig(
 				"Cloudflare Tunnel config accepts only credential",
 			)
 		}
-		secretID, err := service.credentials.ResolveCloudflareTunnelCredential(
-			ctx, current.Record.Desired.OwnerID, request.Config.CloudflareTunnel.Credential, idempotencyKey,
+		credential := request.Config.CloudflareTunnel.Credential
+		secretID, err := service.credentials.ResolveCredentialReference(
+			ctx,
+			current.Record.Desired.OwnerID,
+			OpaqueSecretReferenceInput{
+				Mode: credential.Mode, SecretID: credential.SecretID,
+				Name: credential.SecretName, Value: credential.Token,
+			},
+			idempotencyKey,
 		)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err

@@ -200,6 +200,12 @@ func TestComponentModuleImportBoundary(t *testing.T) {
 	writeFixtureAt(
 		t,
 		root,
+		"registered-components/caddy/stdlib.go",
+		"package caddy\nimport (\n\t\"bufio\"\n\t\"encoding/json\"\n\t\"path\"\n)\nvar _ = bufio.ErrInvalidUnreadByte\nvar _ = json.Valid\nvar _ = path.Base\n",
+	)
+	writeFixtureAt(
+		t,
+		root,
 		"registered-components/caddy/bad.go",
 		"package caddy\nimport _ \"example.com/project/internal/core\"\nimport _ \"os\"\n",
 	)

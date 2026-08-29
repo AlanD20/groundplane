@@ -691,11 +691,17 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	caddyApply, hasCaddyApply, err := controller.ResolveEnvironmentCaddyApply(
-		controller.EnvironmentCaddyApplyInput{
-			RevisionID: taskID, RenderGeneration: generation, Components: pinnedComponents,
-			ComponentCatalog: service.componentCatalog,
-			Materializations: materializations, Artifact: artifact,
+	componentSteps, componentStepRecords, err := controller.BuildEnvironmentComponentTaskContribution(
+		controller.EnvironmentComponentTaskContributionInput{
+			Apply: controller.EnvironmentManagedConfigApplyInput{
+				RevisionID: taskID, RenderGeneration: generation, Components: pinnedComponents,
+				ComponentCatalog: service.componentCatalog,
+				Materializations: materializations, Artifact: artifact,
+			},
+			AllocateStep: func() string {
+				return allocator.Named(ids.KindStep, "http-router-config-activate")
+			},
+			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
 		},
 	)
 	if err != nil {
@@ -743,25 +749,14 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		}},
 	})
 	stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: applyStepID})
-	if hasCaddyApply {
-		caddyStepID := allocator.Named(ids.KindStep, "http-router-config-activate")
-		caddyMaterializationStepID := ""
-		for _, candidate := range steps {
-			if materialization := candidate.GetMaterializeFile(); materialization != nil &&
-				materialization.GetDestination() == controller.RouteRemovalCaddyfilePath {
-				caddyMaterializationStepID = candidate.GetStepId()
-			}
-		}
-		caddyStep, stepErr := caddyApply.ExecutionStep(
-			caddyStepID,
-			uint32(environmentBlueprintTimeoutSeconds),
-			caddyMaterializationStepID,
-		)
-		if stepErr != nil {
-			return etcd.IdempotencyResponse{}, stepErr
-		}
-		steps = append(steps, caddyStep)
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: caddyStepID})
+	steps, stepRecords, err = controller.AppendEnvironmentComponentTaskContribution(
+		steps,
+		stepRecords,
+		componentSteps,
+		componentStepRecords,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
 	}
 	plan, err := controller.BuildPlan(controller.PlanBuildInput{
 		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: generation,

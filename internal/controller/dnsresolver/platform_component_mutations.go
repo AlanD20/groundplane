@@ -1,4 +1,4 @@
-package app
+package dnsresolver
 
 import (
 	"context"
@@ -9,9 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/AlanD20/groundplane-component-sdk/dnsresolver"
+	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -27,41 +26,41 @@ const (
 	platformComponentTaskTimeoutSeconds = int64(300)
 )
 
-type platformComponentMutationService struct {
+type PlatformMutationService struct {
 	components  *etcd.ComponentRepository
 	tasks       *etcd.TaskRepository
 	idempotency *etcd.IdempotencyRepository
 	coordinator *idempotentintent.Coordinator
-	renderer    dnsresolver.Renderer
-	planner     *coreDNSPlatformRenderPlanner
+	renderer    componentdns.Renderer
+	planner     *PlatformRenderPlanner
 	now         func() time.Time
 }
 
-func (service *platformComponentMutationService) EnableCoreDNS(
+func (service *PlatformMutationService) EnablePlatformComponent(
 	ctx context.Context,
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.mutateCoreDNSLifecycle(ctx, componentID, idempotencyKey, "enable", platformComponentEnableRoute)
+	return service.mutatePlatformComponentLifecycle(ctx, componentID, idempotencyKey, "enable", platformComponentEnableRoute)
 }
 
-func (service *platformComponentMutationService) DisableCoreDNS(
+func (service *PlatformMutationService) DisablePlatformComponent(
 	ctx context.Context,
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.mutateCoreDNSLifecycle(ctx, componentID, idempotencyKey, "disable", platformComponentDisableRoute)
+	return service.mutatePlatformComponentLifecycle(ctx, componentID, idempotencyKey, "disable", platformComponentDisableRoute)
 }
 
-func (service *platformComponentMutationService) UpdateCoreDNS(
+func (service *PlatformMutationService) UpdatePlatformComponent(
 	ctx context.Context,
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.mutateCoreDNSLifecycle(ctx, componentID, idempotencyKey, "update", platformComponentUpdateRoute)
+	return service.mutatePlatformComponentLifecycle(ctx, componentID, idempotencyKey, "update", platformComponentUpdateRoute)
 }
 
-func (service *platformComponentMutationService) mutateCoreDNSLifecycle(
+func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	ctx context.Context,
 	componentID string,
 	idempotencyKey string,
@@ -123,7 +122,7 @@ func (service *platformComponentMutationService) mutateCoreDNSLifecycle(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "CoreDNS lifecycle action is invalid")
 	}
 	desired.Healthy = false
-	if err := controllerdns.ValidateComponent(service.renderer, desired); err != nil {
+	if err := ValidateComponent(service.renderer, desired); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
@@ -207,24 +206,24 @@ func platformComponentLifecycleIntent(
 	return platformComponentProtectedIntent{protected: protected, durable: durable}, nil
 }
 
-func newPlatformComponentMutationService(
+func NewPlatformMutationService(
 	components *etcd.ComponentRepository,
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
 	coordinator *idempotentintent.Coordinator,
-	renderer dnsresolver.Renderer,
-	planner *coreDNSPlatformRenderPlanner,
-) (*platformComponentMutationService, error) {
+	renderer componentdns.Renderer,
+	planner *PlatformRenderPlanner,
+) (*PlatformMutationService, error) {
 	if components == nil || tasks == nil || idempotency == nil || coordinator == nil || renderer == nil || planner == nil {
 		return nil, errs.New(errs.KindInternal, "Platform Component mutation dependencies are not configured")
 	}
-	return &platformComponentMutationService{
+	return &PlatformMutationService{
 		components: components, tasks: tasks, idempotency: idempotency,
 		coordinator: coordinator, renderer: renderer, planner: planner, now: time.Now,
 	}, nil
 }
 
-func (service *platformComponentMutationService) ReplaceCoreDNSConfig(
+func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 	ctx context.Context,
 	componentID string,
 	request apiTypes.ComponentConfigMutationRequest,
@@ -277,7 +276,7 @@ func (service *platformComponentMutationService) ReplaceCoreDNSConfig(
 	}
 	desired.Config = core.ComponentConfig{CoreDNS: &config}
 	desired.Healthy = false
-	if err := controllerdns.ValidateComponent(service.renderer, desired); err != nil {
+	if err := ValidateComponent(service.renderer, desired); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 
@@ -529,4 +528,9 @@ func unknownPlatformComponentMutationOutcome(err error) bool {
 	}
 	kind, ok := errs.KindOf(err)
 	return ok && kind == errs.KindStorageUnavailable
+}
+
+func cloneIdempotencyResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+	response.Body = append([]byte(nil), response.Body...)
+	return response
 }

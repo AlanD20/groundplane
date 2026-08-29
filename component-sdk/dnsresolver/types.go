@@ -44,13 +44,13 @@ func CloneRenderInput(input RenderInput) RenderInput {
 	}
 	for index, host := range input.Hosts {
 		cloned.Hosts[index] = Host{
-			Address: host.Address,
+			Address:   host.Address,
 			Hostnames: append([]string(nil), host.Hostnames...),
 		}
 	}
 	for index, forwarder := range input.Forwarders {
 		cloned.Forwarders[index] = Forwarder{
-			Domain: forwarder.Domain,
+			Domain:    forwarder.Domain,
 			Resolvers: append([]ResolverEndpoint(nil), forwarder.Resolvers...),
 		}
 	}
@@ -108,63 +108,25 @@ func ParseResolverBaseline(content []byte) ([]ResolverEndpoint, error) {
 	return resolvers, nil
 }
 
-type TaskStep string
-
-const (
-	TaskStepValidateConfig TaskStep = "validate_config"
-	TaskStepRender         TaskStep = "render_corefile"
-	TaskStepApply          TaskStep = "validate_before_reload"
-	TaskStepObserve        TaskStep = "observe"
-)
-
-type TaskPlan struct {
+// Intent is the immutable, provider-neutral output of DNS capability
+// planning. Artifact content is rendered by the registered Component and is
+// represented here only by its digest and length.
+type Intent struct {
 	ComponentID    string
 	ServiceID      string
-	Corefile       []byte
-	CorefileSHA256 [sha256.Size]byte
+	ArtifactSHA256 [sha256.Size]byte
+	ArtifactLength uint64
 	InputSHA256    [sha256.Size]byte
-	Steps          []TaskStep
+	PlanSHA256     [sha256.Size]byte
 }
 
-func (plan TaskPlan) Validate() error {
-	if plan.ComponentID == "" || plan.ServiceID == "" || len(plan.Corefile) == 0 || len(plan.Steps) != 4 {
-		return fmt.Errorf("dns resolver: task plan is incomplete")
+func (intent Intent) Validate() error {
+	if intent.ComponentID == "" || intent.ServiceID == "" || intent.ArtifactLength == 0 {
+		return fmt.Errorf("dns resolver: intent is incomplete")
 	}
-	if plan.Steps[0] != TaskStepValidateConfig || plan.Steps[1] != TaskStepRender ||
-		plan.Steps[2] != TaskStepApply || plan.Steps[3] != TaskStepObserve {
-		return fmt.Errorf("dns resolver: task steps are not in deterministic order")
-	}
-	if sha256.Sum256(plan.Corefile) != plan.CorefileSHA256 {
-		return fmt.Errorf("dns resolver: task Corefile digest does not match bytes")
+	var zero [sha256.Size]byte
+	if intent.ArtifactSHA256 == zero || intent.InputSHA256 == zero || intent.PlanSHA256 == zero {
+		return fmt.Errorf("dns resolver: intent digests are required")
 	}
 	return nil
-}
-
-type ObservedState struct {
-	ComponentID         string
-	ServiceID           string
-	Enabled             bool
-	Healthy             bool
-	CorefileSHA256      [sha256.Size]byte
-	InputSHA256         [sha256.Size]byte
-	DesiredGeneration   uint64
-	RenderGeneration    uint64
-	AgentID             string
-	AgentGeneration     uint64
-	BaselineGeneration  uint64
-	OwnershipGeneration uint64
-}
-
-func Observe(plan TaskPlan, healthy bool) (ObservedState, error) {
-	if err := plan.Validate(); err != nil {
-		return ObservedState{}, err
-	}
-	return ObservedState{
-		ComponentID: plan.ComponentID,
-		ServiceID: plan.ServiceID,
-		Enabled: true,
-		Healthy: healthy,
-		CorefileSHA256: plan.CorefileSHA256,
-		InputSHA256: plan.InputSHA256,
-	}, nil
 }

@@ -20,6 +20,10 @@ func registeredCaddyEnvironmentComponent(catalogDigest [sha256.Size]byte) (contr
 	}
 	return controller.EnvironmentComponentRegistration{
 		Kind: core.ComponentKindIngressCaddy, Definition: definition, CatalogDigest: catalogDigest,
+		ManagedConfiguration: &controller.EnvironmentManagedConfigurationRegistration{
+			SourcePath: registeredcaddy.CaddyfileSource,
+			ActionID:   registeredcaddy.ActivateConfigAction,
+		},
 		Plan: func(environment core.Environment, instance core.Component) (componentsdk.EnvironmentPlan, error) {
 			input, config, err := projectRegisteredCaddyInput(environment, instance)
 			if err != nil {

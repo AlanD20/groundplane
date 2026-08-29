@@ -1,6 +1,8 @@
 package component
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"net/netip"
 	"sort"
@@ -25,13 +27,13 @@ type HTTPRoute struct {
 }
 
 type HTTPRouterInput struct {
-	ComponentID       string
-	Enabled           bool
+	ComponentID        string
+	Enabled            bool
 	GeneratedServiceID string
-	ZoneID            string
-	ZoneName          string
-	PinnedIPv4        string
-	Routes            []HTTPRoute
+	ZoneID             string
+	ZoneName           string
+	PinnedIPv4         string
+	Routes             []HTTPRoute
 }
 
 func ValidateHTTPRouterInput(input HTTPRouterInput) error {
@@ -130,6 +132,97 @@ type ManagedFile struct {
 type EnvironmentPlan struct {
 	Services []ManagedService
 	Files    []ManagedFile
+}
+
+// DigestEnvironmentPlan returns a stable digest of every normalized plan
+// field. It includes service behavior and file metadata/content so replay
+// cannot silently accept a plan whose managed file bytes happen to match.
+func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
+	normalized := CloneEnvironmentPlan(plan)
+	sort.SliceStable(normalized.Services, func(left, right int) bool {
+		if normalized.Services[left].ID != normalized.Services[right].ID {
+			return normalized.Services[left].ID < normalized.Services[right].ID
+		}
+		return normalized.Services[left].Name < normalized.Services[right].Name
+	})
+	sort.SliceStable(normalized.Files, func(left, right int) bool {
+		return normalized.Files[left].Path < normalized.Files[right].Path
+	})
+	encoded := make([]byte, 0, 1024)
+	encoded = appendPlanString(encoded, "environment-plan-v1")
+	encoded = appendPlanCount(encoded, len(normalized.Services))
+	for _, service := range normalized.Services {
+		encoded = appendPlanString(encoded, service.ID)
+		encoded = appendPlanString(encoded, service.Name)
+		encoded = appendPlanString(encoded, service.Image)
+		encoded = appendPlanString(encoded, string(service.NetworkMode))
+		encoded = appendPlanStrings(encoded, service.Command)
+		encoded = appendPlanCount(encoded, len(service.Networks))
+		for _, network := range service.Networks {
+			encoded = appendPlanString(encoded, network.Name)
+			encoded = appendPlanStrings(encoded, network.Aliases)
+			encoded = appendPlanString(encoded, network.StaticIPv4)
+		}
+		encoded = appendPlanStrings(encoded, service.Expose)
+		encoded = appendPlanString(encoded, service.Restart)
+		encoded = appendPlanUint64(encoded, service.Replicas)
+		encoded = appendPlanCount(encoded, len(service.Mounts))
+		for _, mount := range service.Mounts {
+			encoded = appendPlanString(encoded, mount.Source)
+			encoded = appendPlanString(encoded, mount.Target)
+			encoded = appendPlanBool(encoded, mount.ReadOnly)
+		}
+		encoded = appendPlanCount(encoded, len(service.Dependencies))
+		for _, dependency := range service.Dependencies {
+			encoded = appendPlanString(encoded, dependency.ServiceName)
+			encoded = appendPlanString(encoded, dependency.Condition)
+		}
+		encoded = appendPlanCount(encoded, len(service.SecretEnvironment))
+		for _, secret := range service.SecretEnvironment {
+			encoded = appendPlanString(encoded, secret.Name)
+			encoded = appendPlanString(encoded, secret.SecretID)
+		}
+	}
+	encoded = appendPlanCount(encoded, len(normalized.Files))
+	for _, file := range normalized.Files {
+		encoded = appendPlanString(encoded, file.Path)
+		encoded = appendPlanBytes(encoded, file.Content)
+	}
+	return sha256.Sum256(encoded)
+}
+
+func appendPlanString(target []byte, value string) []byte {
+	target = appendPlanCount(target, len(value))
+	return append(target, value...)
+}
+
+func appendPlanBytes(target, value []byte) []byte {
+	target = appendPlanCount(target, len(value))
+	return append(target, value...)
+}
+
+func appendPlanStrings(target []byte, values []string) []byte {
+	target = appendPlanCount(target, len(values))
+	for _, value := range values {
+		target = appendPlanString(target, value)
+	}
+	return target
+}
+
+func appendPlanCount(target []byte, value int) []byte {
+	return appendPlanUint64(target, uint64(value))
+}
+
+func appendPlanUint64(target []byte, value uint64) []byte {
+	var encoded [binary.MaxVarintLen64]byte
+	return append(target, encoded[:binary.PutUvarint(encoded[:], value)]...)
+}
+
+func appendPlanBool(target []byte, value bool) []byte {
+	if value {
+		return append(target, 1)
+	}
+	return append(target, 0)
 }
 
 func CloneEnvironmentPlan(plan EnvironmentPlan) EnvironmentPlan {

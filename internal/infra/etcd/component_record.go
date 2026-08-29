@@ -19,12 +19,12 @@ type ComponentRecord struct {
 }
 
 type ComponentDesiredRecord struct {
-	ID      string                     `json:"id"`
-	Owner   core.ComponentOwner        `json:"owner"`
-	OwnerID string                     `json:"owner_id,omitempty"`
-	Kind    core.ComponentKind         `json:"kind"`
-	Enabled bool                       `json:"enabled"`
-	Config  core.ComponentConfig       `json:"config,omitempty"`
+	ID      string               `json:"id"`
+	Owner   core.ComponentOwner  `json:"owner"`
+	OwnerID string               `json:"owner_id,omitempty"`
+	Kind    core.ComponentKind   `json:"kind"`
+	Enabled bool                 `json:"enabled"`
+	Config  core.ComponentConfig `json:"config,omitempty"`
 }
 
 type ComponentRuntimeRecord struct {
@@ -117,7 +117,7 @@ func ProjectComponentRecord(record ComponentRecord) (core.Component, error) {
 	return core.Component{
 		ID: record.Desired.ID, Owner: record.Desired.Owner, OwnerID: record.Desired.OwnerID,
 		Kind: record.Desired.Kind, Enabled: record.Desired.Enabled,
-		Config: core.CloneComponentConfig(record.Desired.Config),
+		Config:            core.CloneComponentConfig(record.Desired.Config),
 		GeneratedServices: append([]string(nil), record.Runtime.GeneratedServices...),
 		PinnedIPv4:        record.Runtime.PinnedIPv4,
 		Healthy:           record.Runtime.Healthy,
@@ -153,7 +153,7 @@ func validateComponentRecord(record ComponentRecord) error {
 	projected := core.Component{
 		ID: record.Desired.ID, Owner: record.Desired.Owner, OwnerID: record.Desired.OwnerID,
 		Kind: record.Desired.Kind, Enabled: record.Desired.Enabled,
-		Config: core.CloneComponentConfig(record.Desired.Config),
+		Config:            core.CloneComponentConfig(record.Desired.Config),
 		GeneratedServices: record.Runtime.GeneratedServices,
 		PinnedIPv4:        record.Runtime.PinnedIPv4,
 		Healthy:           record.Runtime.Healthy,
@@ -166,7 +166,7 @@ func validateComponentRecord(record ComponentRecord) error {
 			return err
 		}
 	}
-	if _, _, err := componentCloudflareSecretID(record); err != nil {
+	if _, err := componentSecretReferences(record); err != nil {
 		return err
 	}
 	seenServices := make(map[string]struct{}, len(record.Runtime.GeneratedServices))

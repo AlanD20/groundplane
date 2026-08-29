@@ -524,13 +524,14 @@ func forbiddenLayerImport(source, importPath, module string) (string, string) {
 }
 
 const (
-	componentSDKModule          = "github.com/AlanD20/groundplane-component-sdk"
+	componentSDKModule         = "github.com/AlanD20/groundplane-component-sdk"
 	registeredComponentsModule = "github.com/AlanD20/groundplane-registered-components"
 )
 
 var componentStandardLibrary = map[string]struct{}{
-	"bytes": {}, "crypto/sha256": {}, "encoding/binary": {}, "encoding/hex": {},
-	"errors": {}, "fmt": {}, "math": {}, "net/netip": {}, "net/url": {},
+	"bufio": {}, "bytes": {}, "crypto/sha256": {}, "encoding/binary": {}, "encoding/hex": {},
+	"encoding/json": {}, "errors": {}, "fmt": {}, "math": {}, "net/netip": {}, "net/url": {},
+	"path":   {},
 	"slices": {}, "sort": {}, "strconv": {}, "strings": {}, "testing": {},
 	"time": {}, "unicode/utf8": {},
 }
