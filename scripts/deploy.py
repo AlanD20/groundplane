@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import ipaddress
 import json
@@ -89,12 +90,27 @@ fi
 
 systemctl reset-failed docker.service || true
 systemctl enable docker.service >/dev/null
-systemctl start docker.service
+if ! systemctl is-active --quiet docker.service; then
+    systemctl start docker.service
+fi
 docker version >/dev/null
 docker compose version >/dev/null
+registry_container_exists=0
+if docker container inspect groundplane-registry >/dev/null 2>&1; then
+    registry_container_exists=1
+    registry_container_image=$(docker container inspect \
+        --format '{{.Config.Image}}' groundplane-registry)
+    if test "$registry_container_image" != "{REGISTRY_IMAGE}"; then
+        echo "groundplane-registry exists with an unexpected image; refusing replacement" >&2
+        exit 1
+    fi
+fi
 if ! curl -fsS http://127.0.0.1:5000/v2/ >/dev/null 2>&1; then
-    if docker container inspect groundplane-registry >/dev/null 2>&1; then
-        docker start groundplane-registry >/dev/null
+    if test "$registry_container_exists" -eq 1; then
+        if ! docker container inspect --format '{{.State.Running}}' groundplane-registry |
+            grep -qx true; then
+            docker start groundplane-registry >/dev/null
+        fi
     else
         docker run \
             --detach \
@@ -203,7 +219,12 @@ receive_finish() {
 }
 trap receive_finish EXIT HUP INT TERM
 
-install -d -m 0700 "$deploy_dir"
+umask 077
+if test -e "$deploy_dir"; then
+    echo "refusing to reuse deployment directory: $deploy_dir" >&2
+    exit 1
+fi
+mkdir -- "$deploy_dir"
 tar -xf - -C "$deploy_dir"
 trap - EXIT HUP INT TERM
 exec sh "$deploy_dir/remote-deploy.sh" \
@@ -325,35 +346,53 @@ command -v flock >/dev/null
 systemctl is-active --quiet docker.service
 curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
 
-target_image="localhost:5000/groundplane-agent:$version"
-docker tag "$source_agent_image" "$target_image"
-push_output=$(docker push "$target_image")
-printf '%s\n' "$push_output"
-agent_digest=$(printf '%s\n' "$push_output" |
-    sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\) size:.*$/\1/p' |
-    tail -n 1)
-if ! printf '%s\n' "$agent_digest" |
-    grep -Eq '^sha256:[0-9a-f]{64}$'; then
-    echo "target registry did not report the pushed Agent digest" >&2
-    exit 1
-fi
-agent_ref="localhost:5000/groundplane-agent@$agent_digest"
-docker pull "$agent_ref" >/dev/null
+resolve_repo_digest() {
+    image=$1
+    repository=$2
+    repo_digest=$(docker image inspect "$image" \
+        --format '{{range .RepoDigests}}{{println .}}{{end}}' |
+        sed -n "s#^${repository}@\(sha256:[0-9a-f]\{64\}\)$#\1#p" |
+        tail -n 1)
+    if ! printf '%s\n' "$repo_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+        echo "image has no immutable RepoDigest for $repository: $image" >&2
+        return 1
+    fi
+    printf '%s@%s\n' "$repository" "$repo_digest"
+}
 
-target_image="localhost:5000/groundplane-runner:$version"
-docker tag "$source_runner_image" "$target_image"
-push_output=$(docker push "$target_image")
-printf '%s\n' "$push_output"
-runner_digest=$(printf '%s\n' "$push_output" |
-    sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\) size:.*$/\1/p' |
-    tail -n 1)
-if ! printf '%s\n' "$runner_digest" |
-    grep -Eq '^sha256:[0-9a-f]{64}$'; then
-    echo "target registry did not report the pushed Runner digest" >&2
-    exit 1
-fi
-runner_ref="localhost:5000/groundplane-runner@$runner_digest"
-docker pull "$runner_ref" >/dev/null
+publish_image() {
+    repository_name=$1
+    source_image=$2
+    role=$3
+    repository="localhost:5000/$repository_name"
+    target_image="$repository:$version"
+    source_id=$(docker image inspect "$source_image" --format '{{.Id}}')
+    target_id=""
+    target_ref=""
+    if docker pull "$target_image" >/dev/null 2>&1; then
+        target_id=$(docker image inspect "$target_image" --format '{{.Id}}')
+        if target_ref=$(resolve_repo_digest "$target_image" "$repository" 2>/dev/null); then
+            :
+        else
+            target_ref=""
+        fi
+    fi
+
+    if test "$source_id" = "$target_id" && test -n "$target_ref"; then
+        printf 'Reusing target %s image %s\n' "$role" "$target_ref" >&2
+        printf '%s\n' "$target_ref"
+        return 0
+    fi
+
+    docker tag "$source_image" "$target_image"
+    push_output=$(docker push "$target_image")
+    printf '%s\n' "$push_output" >&2
+    docker pull "$target_image" >/dev/null
+    resolve_repo_digest "$target_image" "$repository"
+}
+
+agent_ref=$(publish_image groundplane-agent "$source_agent_image" Agent)
+runner_ref=$(publish_image groundplane-runner "$source_runner_image" Runner)
 
 if systemctl is-active --quiet groundplane-controller.service; then
     service_was_active=1
@@ -369,6 +408,15 @@ backup_path /usr/lib/tmpfiles.d/groundplane.conf tmpfiles
 backup_path /etc/groundplane/controller.yaml controller-config
 backup_path /etc/groundplane/controller.age controller-age
 rollback=1
+
+runtime_changed=0
+if ! cmp -s "$deploy_dir/controller" /usr/local/libexec/groundplane/controller ||
+    ! cmp -s "$deploy_dir/groundplane" /usr/local/bin/groundplane ||
+    ! cmp -s "$deploy_dir/groundplane-controller.service" \
+        /etc/systemd/system/groundplane-controller.service ||
+    ! cmp -s "$deploy_dir/groundplane.conf" /usr/lib/tmpfiles.d/groundplane.conf; then
+    runtime_changed=1
+fi
 
 install -d -m 0755 /usr/local/libexec/groundplane
 install -d -m 0700 /etc/groundplane /var/log/groundplane
@@ -442,7 +490,6 @@ END {
     }
 }
 ' /etc/groundplane/controller.yaml > "$rendered_config"
-install -m 0600 -o root -g root "$rendered_config" /etc/groundplane/controller.yaml
 
 rendered_runner_config="$deploy_dir/controller.runner.yaml.rendered"
 awk -v image="$runner_ref" '
@@ -481,13 +528,20 @@ END {
         print "  image: " image
     }
 }
-' /etc/groundplane/controller.yaml > "$rendered_runner_config"
+' "$rendered_config" > "$rendered_runner_config"
+if ! cmp -s "$rendered_runner_config" /etc/groundplane/controller.yaml; then
+    runtime_changed=1
+fi
 install -m 0600 -o root -g root "$rendered_runner_config" /etc/groundplane/controller.yaml
 
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/groundplane.conf
-systemctl daemon-reload
+if test "$runtime_changed" -eq 1; then
+    systemctl daemon-reload
+fi
 systemctl enable groundplane-controller.service >/dev/null
-systemctl restart groundplane-controller.service
+if test "$runtime_changed" -eq 1 || test "$service_was_active" -ne 1; then
+    systemctl restart groundplane-controller.service
+fi
 
 healthy=0
 attempt=0
@@ -955,31 +1009,105 @@ def build_environment() -> dict[str, str]:
     )
 
 
+def image_input_digest(kind: str, version: str) -> str:
+    if kind == "agent":
+        fixed_paths = [
+            REPOSITORY_ROOT / ".dockerignore",
+            REPOSITORY_ROOT / "Dockerfile.agent",
+            REPOSITORY_ROOT / "Makefile",
+            REPOSITORY_ROOT / "go.mod",
+            REPOSITORY_ROOT / "go.sum",
+            REPOSITORY_ROOT / "go.work",
+            REPOSITORY_ROOT / "go.work.sum",
+            REPOSITORY_ROOT / "component-sdk" / "go.mod",
+            REPOSITORY_ROOT / "component-sdk" / "go.sum",
+            REPOSITORY_ROOT / "registered-components" / "go.mod",
+            REPOSITORY_ROOT / "registered-components" / "go.sum",
+        ]
+        source_paths = []
+        for source_root in (
+            "cmd",
+            "component-sdk",
+            "internal",
+            "pkg",
+            "proto",
+            "registered-components",
+        ):
+            root = REPOSITORY_ROOT / source_root
+            source_paths.extend(root.rglob("*.go"))
+            source_paths.extend(root.rglob("*.proto"))
+    elif kind == "runner":
+        fixed_paths = [
+            REPOSITORY_ROOT / ".dockerignore",
+            REPOSITORY_ROOT / "Dockerfile.runner",
+            REPOSITORY_ROOT / "Makefile",
+            REPOSITORY_ROOT / ".runner-version",
+            REPOSITORY_ROOT / "release" / "runner" / "entrypoint.sh",
+        ]
+        source_paths = []
+    else:
+        raise ValueError(f"unsupported image kind: {kind}")
+
+    digest = hashlib.sha256()
+    digest.update(f"{kind}\0{version}\0".encode("utf-8"))
+    paths = {path for path in (*fixed_paths, *source_paths) if path.is_file()}
+    for path in sorted(paths, key=lambda item: str(item.relative_to(REPOSITORY_ROOT))):
+        relative = path.relative_to(REPOSITORY_ROOT).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def local_image_id(image: str) -> str | None:
+    result = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    image_id = result.stdout.strip()
+    return image_id or None
+
+
 def build_artifacts(deployment: Deployment, invocation_id: str) -> tuple[str, str]:
     source_agent_image = f"groundplane-agent:deploy-{invocation_id}"
     source_runner_image = f"groundplane-runner:deploy-{invocation_id}"
+    agent_cache_image = f"groundplane-agent:cache-{image_input_digest('agent', deployment.version)}"
+    runner_cache_image = f"groundplane-runner:cache-{image_input_digest('runner', deployment.version)}"
     run(
         ["make", "controller", "cli"],
         cwd=REPOSITORY_ROOT,
         environment=build_environment(),
     )
-    run(
-        [
-            "make",
-            "agent-image",
-            f"AGENT_VERSION={deployment.version}",
-            f"AGENT_IMAGE={source_agent_image}",
-        ],
-        cwd=REPOSITORY_ROOT,
-    )
-    run(
-        [
-            "make",
-            "runner-image",
-            f"RUNNER_IMAGE={source_runner_image}",
-        ],
-        cwd=REPOSITORY_ROOT,
-    )
+    if local_image_id(agent_cache_image) is None:
+        run(
+            [
+                "make",
+                "agent-image",
+                f"AGENT_VERSION={deployment.version}",
+                f"AGENT_IMAGE={agent_cache_image}",
+            ],
+            cwd=REPOSITORY_ROOT,
+        )
+    else:
+        print(f"Reusing cached Agent image: {agent_cache_image}", flush=True)
+    if local_image_id(runner_cache_image) is None:
+        run(
+            [
+                "make",
+                "runner-image",
+                f"RUNNER_IMAGE={runner_cache_image}",
+            ],
+            cwd=REPOSITORY_ROOT,
+        )
+    else:
+        print(f"Reusing cached Runner image: {runner_cache_image}", flush=True)
+    run(["docker", "tag", agent_cache_image, source_agent_image])
+    run(["docker", "tag", runner_cache_image, source_runner_image])
     return source_agent_image, source_runner_image
 
 
@@ -1065,6 +1193,21 @@ def stream_images(
         raise subprocess.CalledProcessError(load.returncode, load_command)
 
 
+def cleanup_temporary_images(images: tuple[str, ...]) -> None:
+    temporary_pattern = re.compile(r"^groundplane-(?:agent|runner):deploy-[0-9a-f]{32}$")
+    for image in images:
+        if temporary_pattern.fullmatch(image) is None:
+            raise RuntimeError(f"refusing to remove non-temporary image: {image}")
+        result = subprocess.run(
+            ["docker", "image", "rm", image],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print(f"Removed temporary image: {image}", flush=True)
+
+
 def deploy(deployment: Deployment) -> None:
     require_local_tools()
     verify_architecture(deployment)
@@ -1072,28 +1215,35 @@ def deploy(deployment: Deployment) -> None:
 
     invocation_id = secrets.token_hex(16)
     remote_directory = f"/tmp/groundplane-deploy-{invocation_id}"
-    with tempfile.TemporaryDirectory(prefix="groundplane-deploy-") as temporary_directory:
-        transfer_archive = Path(temporary_directory) / "deployment.tar"
-        source_agent_image, source_runner_image = build_artifacts(
-            deployment,
-            invocation_id,
-        )
-        stream_images(deployment, source_agent_image, source_runner_image)
-        create_transfer_archive(transfer_archive)
-        transfer_and_deploy(
-            Deployment(
-                key=deployment.key,
-                ip=deployment.ip,
-                version=deployment.version,
-                setup=False,
-                expose_port=deployment.expose_port,
-                known_hosts=deployment.known_hosts,
-            ),
-            remote_directory,
-            source_agent_image,
-            source_runner_image,
-            transfer_archive,
-        )
+    source_images = (
+        f"groundplane-agent:deploy-{invocation_id}",
+        f"groundplane-runner:deploy-{invocation_id}",
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="groundplane-deploy-") as temporary_directory:
+            transfer_archive = Path(temporary_directory) / "deployment.tar"
+            source_agent_image, source_runner_image = build_artifacts(
+                deployment,
+                invocation_id,
+            )
+            stream_images(deployment, source_agent_image, source_runner_image)
+            create_transfer_archive(transfer_archive)
+            transfer_and_deploy(
+                Deployment(
+                    key=deployment.key,
+                    ip=deployment.ip,
+                    version=deployment.version,
+                    setup=False,
+                    expose_port=deployment.expose_port,
+                    known_hosts=deployment.known_hosts,
+                ),
+                remote_directory,
+                source_agent_image,
+                source_runner_image,
+                transfer_archive,
+            )
+    finally:
+        cleanup_temporary_images(source_images)
 
 
 def console_tunnel_command(deployment: Deployment, local_port: int) -> list[str]:
