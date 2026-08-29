@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify swarm-check clean test tidy ci
+.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify clean test tidy ci
 
 BIN_DIR := bin
 NODE_VERSION := 24.19.0
@@ -169,14 +169,6 @@ s3compatible-minio-acceptance:
 architecture-check:
 	go test ./internal/architecturecheck -count=1
 	go run ./cmd/architecture-check -root . -baseline architecture-baseline.json
-
-swarm-check:
-	test -n "$(SWARM_MANIFEST)"
-	@if test -n "$(SWARM_LANE)"; then \
-		go run ./cmd/swarm-check -root . -manifest "$(SWARM_MANIFEST)" -lane "$(SWARM_LANE)"; \
-	else \
-		go run ./cmd/swarm-check -root . -manifest "$(SWARM_MANIFEST)"; \
-	fi
 
 ci: console | $(BIN_DIR)
 	$(MAKE) generate
