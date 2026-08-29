@@ -292,9 +292,9 @@ func TestEnvironmentEditPatchesNetworkPoolAndReturnsEnvironment(t *testing.T) {
 	)
 }
 
+// Rationale: every component detail, action, and config operation must use
+// the component's stable id rather than its mutable kind label.
 func TestComponentActionsAndConfigUseStableID(t *testing.T) {
-	// Rationale: every component detail, action, and config operation must use
-	// the component's stable id rather than its mutable kind label.
 	t.Parallel()
 
 	tests := []struct {
@@ -342,7 +342,7 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 			method:   http.MethodGet,
 			path:     "/api/v1/components/cmp_1/config",
 			status:   http.StatusOK,
-			response: `{}`,
+			response: `{"config":null}`,
 			args:     []string{"config", "show", "cmp_1"},
 		},
 		{
@@ -351,14 +351,14 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 			path:     "/api/v1/components/cmp_1/config",
 			status:   http.StatusOK,
 			response: `{}`,
-			args:     []string{"config", "set", "cmp_1"},
+			args:     []string{"config", "set", "cmp_1", "--upstream-auto", "--upstream", "1.1.1.1", "--forward", "example.com=9.9.9.9", "--tailnet-delegation"},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			body := ""
 			if test.name == "config set" {
-				body = `{"config":{}}`
+				body = `{"config":{"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}}`
 			}
 			server := exactRequestServer(t, test.method, test.path, body, test.status, test.response)
 			defer server.Close()

@@ -656,7 +656,14 @@
             "type": "string"
           },
           "config": {
-            "$ref": "#/components/schemas/ComponentConfig"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComponentConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "enabled": {
             "type": "boolean"
@@ -719,52 +726,89 @@
         "type": "object"
       },
       "ComponentConfig": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "/api/v1/ComponentConfig.json"
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "maxProperties": 2,
+            "minProperties": 1,
+            "properties": {
+              "caddyfile_template": {
+                "type": "string"
+              },
+              "zone_id": {
+                "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "zone_id"
             ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
+            "type": "object"
           },
-          "caddyfile_template": {
-            "type": "string"
-          },
-          "forwarders": {
-            "items": {
-              "$ref": "#/components/schemas/ComponentDNSForwarder"
+          {
+            "additionalProperties": false,
+            "maxProperties": 1,
+            "minProperties": 1,
+            "properties": {
+              "secret_id": {
+                "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
+                "type": "string"
+              }
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "required": [
+              "secret_id"
+            ],
+            "type": "object"
           },
-          "secret_id": {
-            "type": "string"
-          },
-          "tailnet_delegation": {
-            "type": "boolean"
-          },
-          "upstream_auto": {
-            "type": "boolean"
-          },
-          "upstream_resolvers": {
-            "items": {
-              "type": "string"
+          {
+            "additionalProperties": false,
+            "maxProperties": 4,
+            "minProperties": 4,
+            "properties": {
+              "forwarders": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "resolvers": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "resolvers"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "tailnet_delegation": {
+                "type": "boolean"
+              },
+              "upstream_auto": {
+                "type": "boolean"
+              },
+              "upstream_resolvers": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
             },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "zone_id": {
-            "type": "string"
+            "required": [
+              "upstream_auto",
+              "upstream_resolvers",
+              "forwarders",
+              "tailnet_delegation"
+            ],
+            "type": "object"
           }
-        },
-        "type": "object"
+        ]
       },
       "ComponentConfigMutationRequest": {
         "additionalProperties": false,
@@ -844,6 +888,7 @@
                             "type": "string"
                           },
                           "token": {
+                            "minLength": 1,
                             "type": "string",
                             "writeOnly": true
                           }
@@ -947,25 +992,31 @@
         ],
         "type": "object"
       },
-      "ComponentDNSForwarder": {
+      "ComponentConfigResponse": {
         "additionalProperties": false,
         "properties": {
-          "domain": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ComponentConfigResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
             "type": "string"
           },
-          "resolvers": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
+          "config": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComponentConfig"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         },
         "required": [
-          "domain",
-          "resolvers"
+          "config"
         ],
         "type": "object"
       },
@@ -6338,7 +6389,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ComponentConfig"
+                  "$ref": "#/components/schemas/ComponentConfigResponse"
                 }
               }
             },

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/spf13/cobra"
@@ -92,21 +93,25 @@ func newComponentCmd() *cobra.Command {
 				return fmt.Errorf("component config file must contain one JSON object: %w", err)
 			}
 		}
+		if body.CoreDNS == nil && flagConfig {
+			body.CoreDNS = &apiTypes.CoreDNSComponentConfigMutationInput{}
+		}
 		if cmd.Flags().Changed("upstream-auto") {
-			body.UpstreamAuto = &upstreamAuto
+			body.CoreDNS.UpstreamAuto = &upstreamAuto
 		}
 		if cmd.Flags().Changed("upstream") {
-			body.UpstreamResolvers = append([]string(nil), upstreamResolvers...)
+			values := append([]string(nil), upstreamResolvers...)
+			body.CoreDNS.UpstreamResolvers = &values
 		}
 		if cmd.Flags().Changed("forward") {
 			parsed, err := parseCoreDNSForwardFlags(forwarders)
 			if err != nil {
 				return err
 			}
-			body.Forwarders = parsed
+			body.CoreDNS.Forwarders = &parsed
 		}
 		if cmd.Flags().Changed("tailnet-delegation") {
-			body.TailnetDelegation = &tailnetDelegation
+			body.CoreDNS.TailnetDelegation = &tailnetDelegation
 		}
 		app := fromContext(cmd)
 		result, err := app.Client.SetComponentConfig(
@@ -156,18 +161,17 @@ func parseCoreDNSForwardFlags(values []string) ([]apiTypes.ComponentDNSForwarder
 	result := make([]apiTypes.ComponentDNSForwarder, 0, len(values))
 	for _, value := range values {
 		domain, resolvers, ok := strings.Cut(value, "=")
-		if !ok || strings.TrimSpace(domain) == "" || strings.TrimSpace(resolvers) == "" {
+		if !ok || domain == "" || resolvers == "" || strings.IndexFunc(value, unicode.IsSpace) >= 0 {
 			return nil, fmt.Errorf("--forward must use DOMAIN=RESOLVER[,RESOLVER...]")
 		}
 		parts := strings.Split(resolvers, ",")
 		for index := range parts {
-			parts[index] = strings.TrimSpace(parts[index])
 			if parts[index] == "" {
 				return nil, fmt.Errorf("--forward contains an empty resolver")
 			}
 		}
 		result = append(result, apiTypes.ComponentDNSForwarder{
-			Domain: strings.TrimSpace(domain), Resolvers: parts,
+			Domain: domain, Resolvers: parts,
 		})
 	}
 	return result, nil

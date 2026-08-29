@@ -48,9 +48,9 @@ type platformConfigMutator interface {
 }
 
 type MutationService struct {
-	components mutationRepository
-	blueprints mutationBlueprintRepository
-	applier    blueprintApplier
+	components  mutationRepository
+	blueprints  mutationBlueprintRepository
+	applier     blueprintApplier
 	credentials cloudflareCredentialResolver
 	platform    platformConfigMutator
 }
@@ -129,6 +129,9 @@ func (service *MutationService) SetComponentConfig(
 	request apiTypes.ComponentConfigMutationRequest,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	if err := request.Config.Validate(); err != nil {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, err.Error())
+	}
 	current, err := service.components.GetComponent(ctx, componentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -139,20 +142,19 @@ func (service *MutationService) SetComponentConfig(
 	var publicConfig apiTypes.ComponentConfig
 	var mutate func(*yaml.Node) error
 	if current.Record.Desired.Kind == core.ComponentKindEdgeCloudflare {
-		if request.Config.Credential == nil || request.Config.ZoneID != "" ||
-			request.Config.CaddyfileTemplate != "" || componentMutationHasCoreDNSConfig(request.Config) {
+		if request.Config.CloudflareTunnel == nil {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindValidationFailed,
 				"Cloudflare Tunnel config accepts only credential",
 			)
 		}
 		secretID, err := service.credentials.ResolveCloudflareTunnelCredential(
-			ctx, current.Record.Desired.OwnerID, *request.Config.Credential, idempotencyKey,
+			ctx, current.Record.Desired.OwnerID, request.Config.CloudflareTunnel.Credential, idempotencyKey,
 		)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}
-		publicConfig = apiTypes.ComponentConfig{SecretID: secretID}
+		publicConfig = apiTypes.ComponentConfig{CloudflareTunnel: &apiTypes.CloudflareTunnelComponentConfig{SecretID: secretID}}
 		mutate = func(spec *yaml.Node) error {
 			var settings yaml.Node
 			if err := settings.Encode(map[string]string{"secret_id": secretID}); err != nil {
@@ -161,32 +163,31 @@ func (service *MutationService) SetComponentConfig(
 			return replaceYAMLMappingValue(spec, "settings", &settings)
 		}
 	} else {
-		if current.Record.Desired.Kind != core.ComponentKindIngressCaddy || request.Config.Credential != nil ||
-			request.Config.ZoneID == "" || componentMutationHasCoreDNSConfig(request.Config) {
+		if current.Record.Desired.Kind != core.ComponentKindIngressCaddy || request.Config.Caddy == nil ||
+			request.Config.Caddy.ZoneID == "" {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindValidationFailed,
 				"Caddy config requires zone_id and accepts only Caddy fields",
 			)
 		}
-		publicConfig = apiTypes.ComponentConfig{
-			ZoneID: request.Config.ZoneID,
-			CaddyfileTemplate: request.Config.CaddyfileTemplate,
-		}
+		publicConfig = apiTypes.ComponentConfig{Caddy: &apiTypes.CaddyComponentConfig{
+			ZoneID: request.Config.Caddy.ZoneID, CaddyfileTemplate: request.Config.Caddy.CaddyfileTemplate,
+		}}
 		mutate = func(spec *yaml.Node) error {
 			var settings yaml.Node
-			if err := settings.Encode(map[string]string{"zone_id": request.Config.ZoneID}); err != nil {
+			if err := settings.Encode(map[string]string{"zone_id": request.Config.Caddy.ZoneID}); err != nil {
 				return errs.New(errs.KindValidationFailed, "Component config is invalid")
 			}
 			if err := replaceYAMLMappingValue(spec, "settings", &settings); err != nil {
 				return err
 			}
-			if request.Config.CaddyfileTemplate == "" {
+			if request.Config.Caddy.CaddyfileTemplate == "" {
 				removeYAMLMappingValue(spec, "implementation_config")
 				return nil
 			}
 			var implementation yaml.Node
 			if err := implementation.Encode(map[string]string{
-				"caddyfile_template": request.Config.CaddyfileTemplate,
+				"caddyfile_template": request.Config.Caddy.CaddyfileTemplate,
 			}); err != nil {
 				return errs.New(errs.KindValidationFailed, "Component config is invalid")
 			}
@@ -208,11 +209,6 @@ func (service *MutationService) SetComponentConfig(
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return etcd.IdempotencyResponse{Status: http.StatusOK, ContentKind: "application/json", Body: body}, nil
-}
-
-func componentMutationHasCoreDNSConfig(config apiTypes.ComponentConfigMutationInput) bool {
-	return config.UpstreamAuto != nil || config.UpstreamResolvers != nil ||
-		config.Forwarders != nil || config.TailnetDelegation != nil
 }
 
 func (service *MutationService) mutateComponent(

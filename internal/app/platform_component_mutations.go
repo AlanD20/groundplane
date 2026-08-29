@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	platformComponentConfigRoute          = "/components/{id}/config"
-	platformComponentEnableRoute          = "/components/{id}/enable"
-	platformComponentDisableRoute         = "/components/{id}/disable"
-	platformComponentUpdateRoute          = "/components/{id}/update"
+	platformComponentConfigRoute        = "/components/{id}/config"
+	platformComponentEnableRoute        = "/components/{id}/enable"
+	platformComponentDisableRoute       = "/components/{id}/disable"
+	platformComponentUpdateRoute        = "/components/{id}/update"
 	platformComponentTaskTimeoutSeconds = int64(300)
 )
 
@@ -186,7 +186,7 @@ func platformComponentLifecycleIntent(
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: http.MethodPost, Route: route,
 		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
-		Path: []idempotentintent.PathBinding{{Name: "id", Value: componentID}},
+		Path:  []idempotentintent.PathBinding{{Name: "id", Value: componentID}},
 		Query: idempotentintent.Object(),
 		Body: idempotentintent.JSONBody(idempotentintent.Object(
 			idempotentintent.Field{Name: "action", Value: idempotentintent.String(action)},
@@ -366,7 +366,7 @@ func platformComponentConfigIntent(
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: http.MethodPut, Route: platformComponentConfigRoute,
 		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
-		Path: []idempotentintent.PathBinding{{Name: "id", Value: componentID}},
+		Path:  []idempotentintent.PathBinding{{Name: "id", Value: componentID}},
 		Query: idempotentintent.Object(),
 		Body: idempotentintent.JSONBody(idempotentintent.Object(
 			idempotentintent.Field{Name: "config", Value: idempotentintent.Object(
@@ -393,20 +393,19 @@ func platformComponentConfigIntent(
 }
 
 func coreDNSConfigMutation(input apiTypes.ComponentConfigMutationInput) (core.CoreDNSComponentConfig, error) {
-	if input.Credential != nil || input.ZoneID != "" || input.CaddyfileTemplate != "" ||
-		input.UpstreamAuto == nil || input.UpstreamResolvers == nil || input.Forwarders == nil ||
-		input.TailnetDelegation == nil {
+	if input.CoreDNS == nil || input.CoreDNS.UpstreamAuto == nil || input.CoreDNS.UpstreamResolvers == nil ||
+		input.CoreDNS.Forwarders == nil || input.CoreDNS.TailnetDelegation == nil {
 		return core.CoreDNSComponentConfig{}, errs.New(
 			errs.KindValidationFailed,
 			"CoreDNS config requires every CoreDNS field and accepts no Environment Component fields",
 		)
 	}
-	resolvers, err := parseCoreDNSResolvers(input.UpstreamResolvers)
+	resolvers, err := parseCoreDNSResolvers(*input.CoreDNS.UpstreamResolvers)
 	if err != nil {
 		return core.CoreDNSComponentConfig{}, err
 	}
-	forwarders := make([]core.DNSForwarder, len(input.Forwarders))
-	for index, forwarder := range input.Forwarders {
+	forwarders := make([]core.DNSForwarder, len(*input.CoreDNS.Forwarders))
+	for index, forwarder := range *input.CoreDNS.Forwarders {
 		parsed, parseErr := parseCoreDNSResolvers(forwarder.Resolvers)
 		if parseErr != nil {
 			return core.CoreDNSComponentConfig{}, parseErr
@@ -415,8 +414,8 @@ func coreDNSConfigMutation(input apiTypes.ComponentConfigMutationInput) (core.Co
 	}
 	sort.Slice(forwarders, func(left int, right int) bool { return forwarders[left].Domain < forwarders[right].Domain })
 	return core.CoreDNSComponentConfig{
-		UpstreamAuto: *input.UpstreamAuto, UpstreamResolvers: resolvers,
-		Forwarders: forwarders, TailnetDelegation: *input.TailnetDelegation,
+		UpstreamAuto: *input.CoreDNS.UpstreamAuto, UpstreamResolvers: resolvers,
+		Forwarders: forwarders, TailnetDelegation: *input.CoreDNS.TailnetDelegation,
 	}, nil
 }
 
@@ -474,8 +473,10 @@ func publicCoreDNSConfig(config core.CoreDNSComponentConfig) apiTypes.ComponentC
 		resolvers[index] = formatCoreDNSResolver(resolver)
 	}
 	return apiTypes.ComponentConfig{
-		UpstreamAuto: &upstreamAuto, UpstreamResolvers: resolvers,
-		Forwarders: forwarders, TailnetDelegation: &tailnetDelegation,
+		CoreDNS: &apiTypes.CoreDNSComponentConfig{
+			UpstreamAuto: upstreamAuto, UpstreamResolvers: resolvers,
+			Forwarders: forwarders, TailnetDelegation: tailnetDelegation,
+		},
 	}
 }
 
@@ -499,10 +500,10 @@ func newPlatformComponentConfigTask(
 		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: etcd.TaskUpdate, Target: componentID,
-		Params: map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceComponent},
-		Steps: steps,
+		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceComponent},
+		Steps:          steps,
 		TimeoutSeconds: platformComponentTaskTimeoutSeconds,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1,
+		Status:         etcd.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 }

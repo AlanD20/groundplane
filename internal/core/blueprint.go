@@ -436,7 +436,8 @@ func (c Component) Validate() error {
 			return fmt.Errorf("component %s: Cloudflare Tunnel ownership or config is invalid", c.ID)
 		}
 	case ComponentKindCoreDNS:
-		if c.Owner != ComponentOwnerPlatform || c.Config.Caddy != nil || c.Config.CloudflareTunnel != nil {
+		if c.Owner != ComponentOwnerPlatform || c.Config.Caddy != nil || c.Config.CloudflareTunnel != nil ||
+			(c.Enabled && c.Config.CoreDNS == nil) {
 			return fmt.Errorf("component %s: CoreDNS ownership or config is invalid", c.ID)
 		}
 	default:

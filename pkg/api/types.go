@@ -442,17 +442,17 @@ type ScriptEdit struct {
 // Tunnel are component KINDS ("caddy", "cloudflare-tunnel"),
 // not bespoke resources — see blueprint.md, "x-gp-components".
 type Component struct {
-	ID                string         `json:"id"`
-	Owner             string         `json:"owner" enum:"environment,platform"`
-	OwnerID           string         `json:"owner_id,omitempty"`
-	EnvironmentID     string         `json:"environment_id"`
-	Kind              string         `json:"kind"`
-	Enabled           bool           `json:"enabled"`
-	Config            ComponentConfig `json:"config"`
-	GeneratedServices []string       `json:"generated_services,omitempty"`
-	PinnedIPv4        string         `json:"pinned_ipv4,omitempty"`
-	Healthy           bool           `json:"healthy"`
-	Status            string         `json:"status" enum:"disabled,pending,healthy,degraded,unknown"`
+	ID                string           `json:"id"`
+	Owner             string           `json:"owner" enum:"environment,platform"`
+	OwnerID           string           `json:"owner_id,omitempty"`
+	EnvironmentID     string           `json:"environment_id"`
+	Kind              string           `json:"kind"`
+	Enabled           bool             `json:"enabled"`
+	Config            *ComponentConfig `json:"config"`
+	GeneratedServices []string         `json:"generated_services,omitempty"`
+	PinnedIPv4        string           `json:"pinned_ipv4,omitempty"`
+	Healthy           bool             `json:"healthy"`
+	Status            string           `json:"status" enum:"disabled,pending,healthy,degraded,unknown"`
 }
 
 // Router is the READ-ONLY projection grouping ingress components — GET
@@ -472,13 +472,31 @@ type ComponentProjection struct {
 // ComponentConfig is the complete desired configuration singleton for one
 // Component. Runtime and secret material are deliberately absent.
 type ComponentConfig struct {
-	ZoneID            string                  `json:"zone_id,omitempty"`
-	CaddyfileTemplate string                  `json:"caddyfile_template,omitempty"`
-	SecretID          string                  `json:"secret_id,omitempty"`
-	UpstreamAuto      *bool                   `json:"upstream_auto,omitempty"`
-	UpstreamResolvers []string                `json:"upstream_resolvers,omitempty"`
-	Forwarders        []ComponentDNSForwarder `json:"forwarders,omitempty"`
-	TailnetDelegation *bool                   `json:"tailnet_delegation,omitempty"`
+	Caddy            *CaddyComponentConfig            `json:"-"`
+	CloudflareTunnel *CloudflareTunnelComponentConfig `json:"-"`
+	CoreDNS          *CoreDNSComponentConfig          `json:"-"`
+}
+
+// ComponentConfigResponse is the generator-safe response envelope for the
+// config singleton. Its nested config is null while disabled or unconfigured.
+type ComponentConfigResponse struct {
+	Config *ComponentConfig `json:"config"`
+}
+
+type CaddyComponentConfig struct {
+	ZoneID            string `json:"zone_id"`
+	CaddyfileTemplate string `json:"caddyfile_template,omitempty"`
+}
+
+type CloudflareTunnelComponentConfig struct {
+	SecretID string `json:"secret_id"`
+}
+
+type CoreDNSComponentConfig struct {
+	UpstreamAuto      bool                    `json:"upstream_auto"`
+	UpstreamResolvers []string                `json:"upstream_resolvers"`
+	Forwarders        []ComponentDNSForwarder `json:"forwarders"`
+	TailnetDelegation bool                    `json:"tailnet_delegation"`
 }
 
 type ComponentDNSForwarder struct {
@@ -491,13 +509,25 @@ type ComponentConfigMutationRequest struct {
 }
 
 type ComponentConfigMutationInput struct {
-	ZoneID            string                            `json:"zone_id,omitempty"`
-	CaddyfileTemplate string                            `json:"caddyfile_template,omitempty"`
-	Credential        *CloudflareTunnelCredentialInput `json:"credential,omitempty"`
-	UpstreamAuto      *bool                             `json:"upstream_auto,omitempty"`
-	UpstreamResolvers []string                          `json:"upstream_resolvers,omitempty"`
-	Forwarders        []ComponentDNSForwarder           `json:"forwarders,omitempty"`
-	TailnetDelegation *bool                             `json:"tailnet_delegation,omitempty"`
+	Caddy            *CaddyComponentConfigMutationInput            `json:"-"`
+	CloudflareTunnel *CloudflareTunnelComponentConfigMutationInput `json:"-"`
+	CoreDNS          *CoreDNSComponentConfigMutationInput          `json:"-"`
+}
+
+type CaddyComponentConfigMutationInput struct {
+	ZoneID            string `json:"zone_id"`
+	CaddyfileTemplate string `json:"caddyfile_template,omitempty"`
+}
+
+type CloudflareTunnelComponentConfigMutationInput struct {
+	Credential CloudflareTunnelCredentialInput `json:"credential"`
+}
+
+type CoreDNSComponentConfigMutationInput struct {
+	UpstreamAuto      *bool                    `json:"upstream_auto"`
+	UpstreamResolvers *[]string                `json:"upstream_resolvers"`
+	Forwarders        *[]ComponentDNSForwarder `json:"forwarders"`
+	TailnetDelegation *bool                    `json:"tailnet_delegation"`
 }
 
 type CloudflareTunnelCredentialInput struct {

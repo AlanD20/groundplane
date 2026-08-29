@@ -18,7 +18,7 @@ const maximumComponentPageSize = 200
 type ComponentReader interface {
 	ListComponents(context.Context, string, bool, string) ([]apiTypes.Component, error)
 	GetComponent(context.Context, string) (apiTypes.Component, error)
-	GetComponentConfig(context.Context, string) (apiTypes.ComponentConfig, error)
+	GetComponentConfig(context.Context, string) (*apiTypes.ComponentConfig, error)
 	GetRouter(context.Context, string) (apiTypes.Router, error)
 }
 
@@ -46,7 +46,9 @@ type componentListOutput struct {
 	Body apiTypes.Page[apiTypes.Component]
 }
 type componentOutput struct{ Body apiTypes.Component }
-type componentConfigOutput struct{ Body apiTypes.ComponentConfig }
+type componentConfigOutput struct {
+	Body apiTypes.ComponentConfigResponse
+}
 
 type componentIDInput struct {
 	ID string `path:"id" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
@@ -70,6 +72,8 @@ type componentRouterInput struct {
 type componentRouterOutput struct{ Body apiTypes.Router }
 
 func (s *Server) registerComponents() {
+	componentConfigSchema(s.API.OpenAPI().Components.Schemas)
+	componentConfigResponseSchema(s.API.OpenAPI().Components.Schemas)
 	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	configResultSchema := openAPISchema[apiTypes.ComponentConfigMutationResult](s.API.OpenAPI().Components.Schemas, "ComponentConfigMutationResult")
 	huma.Register(s.API, huma.Operation{
@@ -168,7 +172,7 @@ func (s *Server) showComponentConfig(ctx context.Context, request *componentIDIn
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &componentConfigOutput{Body: config}, nil
+	return &componentConfigOutput{Body: apiTypes.ComponentConfigResponse{Config: config}}, nil
 }
 
 func (s *Server) setComponentConfig(ctx context.Context, request *componentConfigInput) (*componentMutationOutput, error) {

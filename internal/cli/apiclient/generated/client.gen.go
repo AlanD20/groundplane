@@ -742,18 +742,18 @@ type Component struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Component.json
-	Schema            *string         `json:"$schema,omitempty"`
-	Config            ComponentConfig `json:"config"`
-	Enabled           bool            `json:"enabled"`
-	EnvironmentId     string          `json:"environment_id"`
-	GeneratedServices *[]string       `json:"generated_services,omitempty"`
-	Healthy           bool            `json:"healthy"`
-	Id                string          `json:"id"`
-	Kind              string          `json:"kind"`
-	Owner             ComponentOwner  `json:"owner"`
-	OwnerId           *string         `json:"owner_id,omitempty"`
-	PinnedIpv4        *string         `json:"pinned_ipv4,omitempty"`
-	Status            ComponentStatus `json:"status"`
+	Schema            *string          `json:"$schema,omitempty"`
+	Config            *ComponentConfig `json:"config"`
+	Enabled           bool             `json:"enabled"`
+	EnvironmentId     string           `json:"environment_id"`
+	GeneratedServices *[]string        `json:"generated_services,omitempty"`
+	Healthy           bool             `json:"healthy"`
+	Id                string           `json:"id"`
+	Kind              string           `json:"kind"`
+	Owner             ComponentOwner   `json:"owner"`
+	OwnerId           *string          `json:"owner_id,omitempty"`
+	PinnedIpv4        *string          `json:"pinned_ipv4,omitempty"`
+	Status            ComponentStatus  `json:"status"`
 }
 
 // ComponentOwner defines model for Component.Owner.
@@ -764,17 +764,29 @@ type ComponentStatus string
 
 // ComponentConfig defines model for ComponentConfig.
 type ComponentConfig struct {
-	// Schema A URL to the JSON Schema for this object.
-	//
-	// Examples: /api/v1/ComponentConfig.json
-	Schema            *string                  `json:"$schema,omitempty"`
-	CaddyfileTemplate *string                  `json:"caddyfile_template,omitempty"`
-	Forwarders        *[]ComponentDNSForwarder `json:"forwarders,omitempty"`
-	SecretId          *string                  `json:"secret_id,omitempty"`
-	TailnetDelegation *bool                    `json:"tailnet_delegation,omitempty"`
-	UpstreamAuto      *bool                    `json:"upstream_auto,omitempty"`
-	UpstreamResolvers *[]string                `json:"upstream_resolvers,omitempty"`
-	ZoneId            *string                  `json:"zone_id,omitempty"`
+	union json.RawMessage
+}
+
+// ComponentConfig0 defines model for ComponentConfig.0.
+type ComponentConfig0 struct {
+	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
+	ZoneId            string  `json:"zone_id"`
+}
+
+// ComponentConfig1 defines model for ComponentConfig.1.
+type ComponentConfig1 struct {
+	SecretId string `json:"secret_id"`
+}
+
+// ComponentConfig2 defines model for ComponentConfig.2.
+type ComponentConfig2 struct {
+	Forwarders []struct {
+		Domain    string   `json:"domain"`
+		Resolvers []string `json:"resolvers"`
+	} `json:"forwarders"`
+	TailnetDelegation bool     `json:"tailnet_delegation"`
+	UpstreamAuto      bool     `json:"upstream_auto"`
+	UpstreamResolvers []string `json:"upstream_resolvers"`
 }
 
 // ComponentConfigMutationRequest defines model for ComponentConfigMutationRequest.
@@ -847,10 +859,13 @@ type ComponentConfigMutationResult struct {
 	Resource        ComponentConfig `json:"resource"`
 }
 
-// ComponentDNSForwarder defines model for ComponentDNSForwarder.
-type ComponentDNSForwarder struct {
-	Domain    string    `json:"domain"`
-	Resolvers *[]string `json:"resolvers"`
+// ComponentConfigResponse defines model for ComponentConfigResponse.
+type ComponentConfigResponse struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ComponentConfigResponse.json
+	Schema *string          `json:"$schema,omitempty"`
+	Config *ComponentConfig `json:"config"`
 }
 
 // ComponentProjection defines model for ComponentProjection.
@@ -2856,6 +2871,94 @@ type VolumeEditJSONRequestBody = VolumeEdit
 
 // ZoneCreateJSONRequestBody defines body for ZoneCreate for application/json ContentType.
 type ZoneCreateJSONRequestBody = ZoneCreate
+
+// AsComponentConfig0 returns the union data inside the ComponentConfig as a ComponentConfig0
+func (t ComponentConfig) AsComponentConfig0() (ComponentConfig0, error) {
+	var body ComponentConfig0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig0 overwrites any union data inside the ComponentConfig as the provided ComponentConfig0
+func (t *ComponentConfig) FromComponentConfig0(v ComponentConfig0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig0 performs a merge with any union data inside the ComponentConfig, using the provided ComponentConfig0
+func (t *ComponentConfig) MergeComponentConfig0(v ComponentConfig0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfig1 returns the union data inside the ComponentConfig as a ComponentConfig1
+func (t ComponentConfig) AsComponentConfig1() (ComponentConfig1, error) {
+	var body ComponentConfig1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig1 overwrites any union data inside the ComponentConfig as the provided ComponentConfig1
+func (t *ComponentConfig) FromComponentConfig1(v ComponentConfig1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig1 performs a merge with any union data inside the ComponentConfig, using the provided ComponentConfig1
+func (t *ComponentConfig) MergeComponentConfig1(v ComponentConfig1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfig2 returns the union data inside the ComponentConfig as a ComponentConfig2
+func (t ComponentConfig) AsComponentConfig2() (ComponentConfig2, error) {
+	var body ComponentConfig2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig2 overwrites any union data inside the ComponentConfig as the provided ComponentConfig2
+func (t *ComponentConfig) FromComponentConfig2(v ComponentConfig2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig2 performs a merge with any union data inside the ComponentConfig, using the provided ComponentConfig2
+func (t *ComponentConfig) MergeComponentConfig2(v ComponentConfig2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentConfig) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ComponentConfig) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // AsComponentConfigMutationRequestConfig1Credential0 returns the union data inside the ComponentConfigMutationRequest_Config_1_Credential as a ComponentConfigMutationRequestConfig1Credential0
 func (t ComponentConfigMutationRequest_Config_1_Credential) AsComponentConfigMutationRequestConfig1Credential0() (ComponentConfigMutationRequestConfig1Credential0, error) {
@@ -15583,13 +15686,13 @@ type ComponentConfigShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ComponentConfig
+	JSON200 *ComponentConfigResponse
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ComponentConfigShowResponse) GetJSON200() *ComponentConfig {
+func (r ComponentConfigShowResponse) GetJSON200() *ComponentConfigResponse {
 	return r.JSON200
 }
 
@@ -23786,7 +23889,7 @@ func ParseComponentConfigShowResponse(rsp *http.Response) (*ComponentConfigShowR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ComponentConfig
+		var dest ComponentConfigResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

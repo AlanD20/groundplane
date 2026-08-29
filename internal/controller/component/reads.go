@@ -70,10 +70,10 @@ func (service *ReadService) GetComponent(ctx context.Context, id string) (apiTyp
 	return projectComponent(record.Record)
 }
 
-func (service *ReadService) GetComponentConfig(ctx context.Context, id string) (apiTypes.ComponentConfig, error) {
+func (service *ReadService) GetComponentConfig(ctx context.Context, id string) (*apiTypes.ComponentConfig, error) {
 	component, err := service.GetComponent(ctx, id)
 	if err != nil {
-		return apiTypes.ComponentConfig{}, err
+		return nil, err
 	}
 	return component.Config, nil
 }
@@ -112,7 +112,7 @@ func projectComponent(record etcd.ComponentRecord) (apiTypes.Component, error) {
 	return apiTypes.Component{
 		ID: component.ID, Owner: string(component.Owner), OwnerID: component.OwnerID,
 		EnvironmentID: environmentID, Kind: string(component.Kind), Enabled: component.Enabled,
-		Config: projectComponentConfig(component.Config), GeneratedServices: append([]string(nil), component.GeneratedServices...),
+		Config: projectComponentConfig(component), GeneratedServices: append([]string(nil), component.GeneratedServices...),
 		PinnedIPv4: component.PinnedIPv4, Healthy: component.Healthy, Status: componentStatus(component),
 	}, nil
 }
@@ -127,29 +127,39 @@ func componentStatus(component core.Component) string {
 	return "unknown"
 }
 
-func projectComponentConfig(config core.ComponentConfig) apiTypes.ComponentConfig {
+func projectComponentConfig(component core.Component) *apiTypes.ComponentConfig {
+	if !component.Enabled {
+		return nil
+	}
+	config := component.Config
 	if config.Caddy != nil {
-		return apiTypes.ComponentConfig{
-			ZoneID:            config.Caddy.ZoneID,
-			CaddyfileTemplate: config.Caddy.CaddyfileTemplate,
+		result := &apiTypes.ComponentConfig{
+			Caddy: &apiTypes.CaddyComponentConfig{
+				ZoneID: config.Caddy.ZoneID, CaddyfileTemplate: config.Caddy.CaddyfileTemplate,
+			},
 		}
+		return result
 	}
 	if config.CloudflareTunnel != nil {
-		return apiTypes.ComponentConfig{SecretID: config.CloudflareTunnel.SecretID}
+		return &apiTypes.ComponentConfig{CloudflareTunnel: &apiTypes.CloudflareTunnelComponentConfig{
+			SecretID: config.CloudflareTunnel.SecretID,
+		}}
 	}
 	if config.CoreDNS == nil {
-		return apiTypes.ComponentConfig{}
+		return nil
 	}
 	upstreamAuto := config.CoreDNS.UpstreamAuto
 	tailnetDelegation := config.CoreDNS.TailnetDelegation
-	result := apiTypes.ComponentConfig{
-		UpstreamAuto:      &upstreamAuto,
-		UpstreamResolvers: projectResolverEndpoints(config.CoreDNS.UpstreamResolvers),
-		Forwarders:        make([]apiTypes.ComponentDNSForwarder, len(config.CoreDNS.Forwarders)),
-		TailnetDelegation: &tailnetDelegation,
+	result := &apiTypes.ComponentConfig{
+		CoreDNS: &apiTypes.CoreDNSComponentConfig{
+			UpstreamAuto:      upstreamAuto,
+			UpstreamResolvers: projectResolverEndpoints(config.CoreDNS.UpstreamResolvers),
+			Forwarders:        make([]apiTypes.ComponentDNSForwarder, len(config.CoreDNS.Forwarders)),
+			TailnetDelegation: tailnetDelegation,
+		},
 	}
 	for index, forwarder := range config.CoreDNS.Forwarders {
-		result.Forwarders[index] = apiTypes.ComponentDNSForwarder{
+		result.CoreDNS.Forwarders[index] = apiTypes.ComponentDNSForwarder{
 			Domain:    forwarder.Domain,
 			Resolvers: projectResolverEndpoints(forwarder.Resolvers),
 		}
