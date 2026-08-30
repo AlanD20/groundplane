@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/backupformat"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -35,7 +36,6 @@ const (
 
 	TarBlockBytes      = 512
 	TransferChunkBytes = 32768
-	ageChunkBytes      = 65536
 )
 
 // ContentAuthority is the complete Config authority sealed before transfer.
@@ -239,24 +239,13 @@ func ComputeLayout(
 	}, nil
 }
 
-// AgeStoredSize returns the exact unarmored age v1.3.1 one-X25519-recipient
-// binary length, including one payload chunk for an empty source.
+// AgeStoredSize applies the Config source bound before delegating universal
+// canonical age geometry to backupformat.
 func AgeStoredSize(sourceSize uint64) (uint64, error) {
 	if sourceSize > MaxSourceBytes {
-		return 0, archiveError("Config source size exceeds its byte limit")
+		return 0, archiveError("config source size exceeds its byte limit")
 	}
-	chunks := sourceSize / ageChunkBytes
-	if sourceSize%ageChunkBytes != 0 {
-		chunks++
-	}
-	if chunks == 0 {
-		chunks = 1
-	}
-	overhead := uint64(184) + 16*chunks
-	if sourceSize > ^uint64(0)-overhead {
-		return 0, archiveError("Config stored size arithmetic overflow")
-	}
-	return sourceSize + overhead, nil
+	return backupformat.AgeStoredSize(sourceSize)
 }
 
 type geometry struct {

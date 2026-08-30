@@ -11,12 +11,13 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/backupformat"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const (
-	MaxObjectSize         uint64 = 5 * 1024 * 1024 * 1024 * 1024
+	MaxObjectSize         uint64 = backupformat.MaxStoredBytes
 	maxDiscriminatorBytes        = 1024
 
 	metadataFormatVersion = "groundplane-format-version"
