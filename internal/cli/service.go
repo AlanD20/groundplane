@@ -309,8 +309,8 @@ func newServiceCmd() *cobra.Command {
 				"tail":   strconv.FormatUint(uint64(tail), 10),
 				"follow": strconv.FormatBool(follow),
 			}
-			return app.Client.Stream(cmd.Context(), path, q, func(line string) error {
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), line)
+			return app.Client.StreamLogs(cmd.Context(), path, q, func(event apiTypes.LogEvent) error {
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), event.Line)
 				return err
 			})
 		},

@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
@@ -15,6 +18,8 @@ import (
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/danielgtaylor/huma/v2"
 )
+
+const maximumPublicLogLine = 32 * 1024
 
 func (s *Server) registerLogOpenAPI() {
 	s.API.OpenAPI().Components.Schemas.Map()["LogEvent"] = logEventOpenAPISchema()
@@ -113,7 +118,13 @@ func (s *Server) serveLogs(w http.ResponseWriter, request *http.Request, kind id
 }
 
 func parseLogQuery(request *http.Request) (uint32, bool, error) {
-	query := request.URL.Query()
+	if !literalLogQuery(request.URL.RawQuery, request.URL.ForceQuery) {
+		return 0, false, errs.New(errs.KindMalformedRequest, "log query parameters are invalid")
+	}
+	query, err := url.ParseQuery(request.URL.RawQuery)
+	if err != nil {
+		return 0, false, errs.New(errs.KindMalformedRequest, "log query parameters are invalid")
+	}
 	for key, values := range query {
 		if (key != "tail" && key != "follow") || len(values) != 1 {
 			return 0, false, errs.New(errs.KindMalformedRequest, "log query parameters are invalid")
@@ -122,10 +133,7 @@ func parseLogQuery(request *http.Request) (uint32, bool, error) {
 	tail := uint64(200)
 	if values, exists := query["tail"]; exists {
 		raw := values[0]
-		if raw == "" {
-			return 0, false, errs.New(errs.KindMalformedRequest, "tail must not be empty")
-		}
-		if raw == "+0" || (len(raw) > 1 && raw[0] == '0') {
+		if !canonicalLogDecimal(raw) {
 			return 0, false, errs.New(errs.KindMalformedRequest, "tail must be canonical decimal")
 		}
 		parsed, err := strconv.ParseUint(raw, 10, 16)
@@ -146,6 +154,40 @@ func parseLogQuery(request *http.Request) (uint32, bool, error) {
 		follow = raw == "true"
 	}
 	return uint32(tail), follow, nil
+}
+
+func literalLogQuery(raw string, force bool) bool {
+	if raw == "" {
+		return !force
+	}
+	if strings.ContainsAny(raw, "%;") {
+		return false
+	}
+	seen := make(map[string]struct{}, 2)
+	for _, segment := range strings.Split(raw, "&") {
+		key, value, found := strings.Cut(segment, "=")
+		if !found || key == "" || value == "" || strings.Contains(value, "=") ||
+			(key != "tail" && key != "follow") {
+			return false
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return false
+		}
+		seen[key] = struct{}{}
+	}
+	return true
+}
+
+func canonicalLogDecimal(value string) bool {
+	if value == "" || (len(value) > 1 && value[0] == '0') {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func encodeLogFrames(ctx context.Context, events <-chan *agentpb.LogEvent, output chan<- []byte) {
@@ -171,7 +213,14 @@ func encodeLogFrames(ctx context.Context, events <-chan *agentpb.LogEvent, outpu
 }
 
 func publicLogEvent(sequence uint64, event *agentpb.LogEvent) (api.LogEvent, bool) {
-	if event == nil || event.GetTimestamp() == nil {
+	if event == nil || event.GetTimestamp() == nil || event.GetTimestamp().CheckValid() != nil ||
+		ids.Validate(ids.KindEnvironment, event.GetEnvironmentId()) != nil ||
+		ids.Validate(ids.KindService, event.GetServiceId()) != nil ||
+		ids.Validate(ids.KindDeployment, event.GetReleaseId()) != nil || event.GetServiceName() == "" ||
+		event.GetContainerId() == "" || event.GetContainerName() == "" ||
+		!utf8.ValidString(event.GetServiceName()) || !utf8.ValidString(event.GetContainerId()) ||
+		!utf8.ValidString(event.GetContainerName()) || !utf8.ValidString(event.GetLine()) ||
+		len(event.GetLine()) > maximumPublicLogLine {
 		return api.LogEvent{}, false
 	}
 	slots := map[agentpb.LogSlot]string{

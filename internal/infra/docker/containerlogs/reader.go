@@ -13,6 +13,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
@@ -38,7 +40,7 @@ type Reader struct {
 func New() (*Reader, error) {
 	docker, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("create Docker log client: %w", err)
+		return nil, errs.Wrap(errs.KindStorageUnavailable, fmt.Errorf("create Docker log client: %w", err))
 	}
 	return NewReader(docker), nil
 }
@@ -65,21 +67,35 @@ type source struct {
 }
 
 type sourceSet struct {
-	sources []source
+	sources   []source
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (agentprotocol.LogSourceSet, error) {
+	if ctx == nil || request == nil || request.GetRequestId() == "" || request.GetTail() > 1000 ||
+		len(request.GetTargets()) > 128 {
+		return nil, fmt.Errorf("invalid log subscription")
+	}
 	targets := make(map[string]*agentpb.LogTarget, len(request.GetTargets()))
+	seenServices := make(map[string]struct{}, len(request.GetTargets()))
 	for _, target := range request.GetTargets() {
-		if target == nil || target.GetEnvironmentId() == "" || target.GetServiceId() == "" || target.GetReleaseId() == "" {
+		if target == nil || ids.Validate(ids.KindEnvironment, target.GetEnvironmentId()) != nil ||
+			ids.Validate(ids.KindService, target.GetServiceId()) != nil ||
+			ids.Validate(ids.KindDeployment, target.GetReleaseId()) != nil || target.GetServiceName() == "" ||
+			!utf8.ValidString(target.GetServiceName()) {
 			return nil, fmt.Errorf("invalid log target")
 		}
+		if _, exists := seenServices[target.GetServiceId()]; exists {
+			return nil, fmt.Errorf("duplicate log target")
+		}
+		seenServices[target.GetServiceId()] = struct{}{}
 		targets[target.GetServiceId()+"\x00"+target.GetReleaseId()] = target
 	}
 
 	containers, err := reader.docker.ContainerList(ctx, client.ContainerListOptions{All: true})
 	if err != nil {
-		return nil, fmt.Errorf("list managed log containers: %w", err)
+		return nil, errs.Wrap(errs.KindStorageUnavailable, fmt.Errorf("list managed log containers: %w", err))
 	}
 	selected := make([]container.Summary, 0)
 	for _, candidate := range containers.Items {
@@ -114,7 +130,10 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 		inspect, inspectErr := reader.docker.ContainerInspect(ctx, candidate.ID, client.ContainerInspectOptions{})
 		if inspectErr != nil {
 			set.Close()
-			return nil, fmt.Errorf("inspect log container %s: %w", candidate.ID, inspectErr)
+			return nil, errs.Wrap(
+				errs.KindStorageUnavailable,
+				fmt.Errorf("inspect log container %s: %w", candidate.ID, inspectErr),
+			)
 		}
 		if inspect.Container.Config == nil {
 			set.Close()
@@ -146,7 +165,10 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 		})
 		if logsErr != nil {
 			set.Close()
-			return nil, fmt.Errorf("open log container %s: %w", candidate.ID, logsErr)
+			return nil, errs.Wrap(
+				errs.KindStorageUnavailable,
+				fmt.Errorf("open log container %s: %w", candidate.ID, logsErr),
+			)
 		}
 		set.sources = append(set.sources, source{
 			requestID:     request.GetRequestId(),
@@ -171,15 +193,15 @@ func (set *sourceSet) Run(ctx context.Context, output chan<- *agentpb.LogEvent) 
 		wait.Add(1)
 		go func(item source) {
 			defer wait.Done()
-				stdout := &lineWriter{ctx: ctx, source: item, stream: agentpb.LogStream_LOG_STREAM_STDOUT, output: output}
-				stderr := &lineWriter{ctx: ctx, source: item, stream: agentpb.LogStream_LOG_STREAM_STDERR, output: output}
-				_, err := stdcopy.StdCopy(stdout, stderr, item.logs)
-				if err == nil {
-					if err = stdout.flush(); err == nil {
-						err = stderr.flush()
-					}
+			stdout := &lineWriter{ctx: ctx, source: item, stream: agentpb.LogStream_LOG_STREAM_STDOUT, output: output}
+			stderr := &lineWriter{ctx: ctx, source: item, stream: agentpb.LogStream_LOG_STREAM_STDERR, output: output}
+			_, err := stdcopy.StdCopy(stdout, stderr, item.logs)
+			if err == nil {
+				if err = stdout.flush(); err == nil {
+					err = stderr.flush()
 				}
-				if err != nil && ctx.Err() == nil {
+			}
+			if err != nil && ctx.Err() == nil {
 				errorsOut <- fmt.Errorf("read log container %s: %w", item.containerID, err)
 			}
 		}(set.sources[index])
@@ -209,13 +231,14 @@ func (set *sourceSet) Run(ctx context.Context, output chan<- *agentpb.LogEvent) 
 }
 
 func (set *sourceSet) Close() error {
-	var first error
-	for index := range set.sources {
-		if err := set.sources[index].logs.Close(); err != nil && first == nil {
-			first = err
+	set.closeOnce.Do(func() {
+		for index := range set.sources {
+			if err := set.sources[index].logs.Close(); err != nil && set.closeErr == nil {
+				set.closeErr = err
+			}
 		}
-	}
-	return first
+	})
+	return set.closeErr
 }
 
 type lineWriter struct {

@@ -401,6 +401,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					}}); err != nil {
 						return err
 					}
+					if err := session.RecordLogCancelDelivered(event.GetRequestId()); err != nil {
+						return status.Error(codes.Internal, "agent LogCancel delivery state is invalid")
+					}
 				}
 				continue
 			}

@@ -5,10 +5,14 @@ import (
 	"sync"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-const maxLogSubscriptions = 8
+const (
+	maxLogSubscriptions = 8
+	maxQueuedLogEvents  = 128
+)
 
 type logManager struct {
 	reader  agentprotocol.LogReader
@@ -66,50 +70,108 @@ func (manager *logManager) Cancel(requestID string) {
 
 func (manager *logManager) run(ctx context.Context, request *agentpb.LogSubscribe) {
 	requestID := request.GetRequestId()
+	released := false
 	defer func() {
-		manager.mu.Lock()
-		delete(manager.active, requestID)
-		manager.mu.Unlock()
+		if !released {
+			manager.release(requestID)
+		}
 	}()
 
 	sources, err := manager.reader.Open(ctx, request)
 	if err != nil {
-		manager.send(ctx, logEndMessage(requestID, agentpb.LogEndReason_LOG_END_REASON_AVAILABILITY_FAILED))
+		reason := agentpb.LogEndReason_LOG_END_REASON_SOURCE_FAILED
+		if kind, ok := errs.KindOf(err); ok && kind == errs.KindStorageUnavailable {
+			reason = agentpb.LogEndReason_LOG_END_REASON_AVAILABILITY_FAILED
+		}
+		manager.send(ctx, logEndMessage(requestID, reason))
 		return
 	}
-	defer sources.Close()
+	sourcesClosed := false
+	defer func() {
+		if !sourcesClosed {
+			// Best-effort cleanup after pre-ready cancellation; no public stream exists.
+			_ = sources.Close()
+		}
+	}()
 
 	if !manager.send(ctx, &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_LogReady{LogReady: &agentpb.LogReady{RequestId: requestID}}}) {
 		return
 	}
 
-	events := make(chan *agentpb.LogEvent, 128)
-	done := make(chan error, 1)
+	runContext, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	incoming := make(chan *agentpb.LogEvent)
+	events := make(chan *agentpb.LogEvent, maxQueuedLogEvents)
+	slots := make(chan struct{}, maxQueuedLogEvents)
+	sourceDone := make(chan error, 1)
 	go func() {
-		err := sources.Run(ctx, events)
-		close(events)
-		done <- err
+		err := sources.Run(runContext, incoming)
+		close(incoming)
+		sourceDone <- err
 	}()
+	done := make(chan error, 1)
+	go collectLogEvents(cancelRun, incoming, events, slots, sourceDone, done)
 
-	for {
+	for event := range events {
+		if event != nil && !manager.send(runContext, &agentpb.AgentMessage{
+			Payload: &agentpb.AgentMessage_LogEvent{LogEvent: event},
+		}) {
+			<-slots
+			break
+		}
+		<-slots
+	}
+	runErr := <-done
+	cancelRun()
+	closeErr := sources.Close()
+	sourcesClosed = true
+	manager.release(requestID)
+	released = true
+	if ctx.Err() != nil {
+		return
+	}
+	if runErr == nil {
+		runErr = closeErr
+	}
+	reason := agentpb.LogEndReason_LOG_END_REASON_COMPLETE
+	if runErr != nil {
+		reason = agentpb.LogEndReason_LOG_END_REASON_SOURCE_FAILED
+	}
+	manager.send(ctx, logEndMessage(requestID, reason))
+}
+
+func collectLogEvents(
+	cancel context.CancelFunc,
+	incoming <-chan *agentpb.LogEvent,
+	events chan<- *agentpb.LogEvent,
+	slots chan<- struct{},
+	sourceDone <-chan error,
+	done chan<- error,
+) {
+	var result error
+	for event := range incoming {
+		if result != nil {
+			continue
+		}
 		select {
-		case <-ctx.Done():
-			return
-		case event, open := <-events:
-			if !open {
-				err := <-done
-				reason := agentpb.LogEndReason_LOG_END_REASON_COMPLETE
-				if err != nil {
-					reason = agentpb.LogEndReason_LOG_END_REASON_SOURCE_FAILED
-				}
-				manager.send(ctx, logEndMessage(requestID, reason))
-				return
-			}
-			if event != nil && !manager.send(ctx, &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_LogEvent{LogEvent: event}}) {
-				return
-			}
+		case slots <- struct{}{}:
+			events <- event
+		default:
+			result = errs.New(errs.KindInternal, "Agent log event queue overflow")
+			cancel()
 		}
 	}
+	if sourceErr := <-sourceDone; result == nil {
+		result = sourceErr
+	}
+	close(events)
+	done <- result
+}
+
+func (manager *logManager) release(requestID string) {
+	manager.mu.Lock()
+	delete(manager.active, requestID)
+	manager.mu.Unlock()
 }
 
 func (manager *logManager) send(ctx context.Context, message *agentpb.AgentMessage) bool {

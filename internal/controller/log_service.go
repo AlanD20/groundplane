@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"sort"
 
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
@@ -36,36 +35,17 @@ func (service *LogService) OpenEnvironment(
 	if service == nil || service.environments == nil || service.services == nil || service.releases == nil || service.registry == nil {
 		return nil, errs.New(errs.KindInternal, "environment logs are not configured")
 	}
-	if _, err := service.environments.Get(ctx, environmentcapability.GetInput{ID: environmentID}); err != nil {
-		return nil, err
-	}
-	page, err := service.services.ListServices(ctx, environmentID, etcd.PageRequest{Limit: 129})
+	resolved, err := service.releases.ResolveEnvironmentLogTargets(ctx, environmentID, 128)
 	if err != nil {
 		return nil, err
 	}
-	if len(page.Items) > 128 || page.NextCursor != "" {
-		return nil, errs.New(errs.KindStateConflict, "environment exceeds 128 log service targets")
-	}
-	sort.Slice(page.Items, func(left, right int) bool {
-		return page.Items[left].Record.Desired.ID < page.Items[right].Record.Desired.ID
-	})
-	targets := make([]agentchannel.LogTarget, 0, len(page.Items))
-	for _, versioned := range page.Items {
-		record := versioned.Record
-		release, resolveErr := service.releases.ResolveServing(
-			ctx, environmentID, record.Desired.ID, page.Revision,
-		)
-		if errors.Is(resolveErr, errs.New(errs.KindReleaseNotFound, "")) {
-			continue
-		}
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
+	targets := make([]agentchannel.LogTarget, 0, len(resolved))
+	for _, target := range resolved {
 		targets = append(targets, agentchannel.LogTarget{
 			EnvironmentID: environmentID,
-			ServiceID:     record.Desired.ID,
-			ServiceName:   record.Desired.Name,
-			ReleaseID:     release.Intent.ID,
+			ServiceID:     target.ServiceID,
+			ServiceName:   target.ServiceName,
+			ReleaseID:     target.ReleaseID,
 		})
 	}
 	return service.registry.OpenLogs(
