@@ -56,6 +56,31 @@ func TestRouteRecordEnvelopeRoundTripsStrictly(t *testing.T) {
 	}
 }
 
+func TestRouteRecordObservedStateIsClosedAndGenerationBound(t *testing.T) {
+	t.Parallel()
+	record := routeRecordTestRecord(t, 1010)
+	if record.Observed.Status != RouteObservedUnserved || record.DesiredGeneration != 1 {
+		t.Fatalf("new Route observation = %#v generation=%d", record.Observed, record.DesiredGeneration)
+	}
+	served, err := SetRouteObservation(record, RouteObservation{
+		Status: RouteObservedServed, DesiredGeneration: 1,
+		Provider: RouteProviderObservation{
+			ComponentID:      ids.New(ids.KindComponent),
+			DefinitionDigest: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			CatalogDigest:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			InputRevision:    7, InputGeneration: 1,
+		},
+	})
+	if err != nil || served.Observed.Status != RouteObservedServed {
+		t.Fatalf("SetRouteObservation(served) = %#v, %v", served, err)
+	}
+	stale := served.Observed
+	stale.DesiredGeneration = 2
+	if _, err := SetRouteObservation(served, stale); err == nil {
+		t.Fatal("SetRouteObservation() accepted a mismatched desired generation")
+	}
+}
+
 func TestRouteRecordKeysUseStableEnvironmentScope(t *testing.T) {
 	// Rationale: Route membership must key only by stable Environment and Route
 	// ids, never mutable presentation paths.

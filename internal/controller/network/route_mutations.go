@@ -2,6 +2,8 @@ package network
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -26,23 +28,32 @@ type routeMutationRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	GetRoute(context.Context, string) (etcd.Versioned[etcd.RouteRecord], error)
-	CreateRouteIdempotent(
+	BeginRouteMutationWithTask(
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
+		*etcd.Versioned[etcd.RouteRecord],
 		etcd.RouteRecord,
+		etcd.RouteMutationIntent,
+		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	ReplaceDesiredIdempotent(
+}
+
+type routeMutationProjectionRepository interface {
+	GetEnvironmentAppliedComposeProjection(
+		context.Context, string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+}
+
+type routeMutationTaskPlanner interface {
+	PrepareRouteMutationTask(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[etcd.RouteRecord],
-		core.Route,
-		etcd.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
+		etcd.TaskRecord,
+		etcd.RouteMutationIntent,
+		etcd.RouteMutationProcedureIDs,
+	) (etcd.RouteMutationTaskPreparation, error)
 }
 
 type routeMutationEvidence struct {
@@ -151,6 +162,7 @@ func (service *durableRouteMutationIdempotency) ResolveUnknown(
 type routeMutationService struct {
 	repository  routeMutationRepository
 	idempotency routeMutationIdempotency
+	planner     routeMutationTaskPlanner
 	deletions   *routeRemovalService
 	now         func() time.Time
 }
@@ -159,10 +171,20 @@ func newRouteMutationService(
 	repository routeMutationRepository,
 	idempotency routeMutationIdempotency,
 ) (*routeMutationService, error) {
+	return newRouteMutationServiceWithPlanner(repository, idempotency, nil)
+}
+
+func newRouteMutationServiceWithPlanner(
+	repository routeMutationRepository,
+	idempotency routeMutationIdempotency,
+	planner routeMutationTaskPlanner,
+) (*routeMutationService, error) {
 	if repository == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutation service is not configured")
 	}
-	return &routeMutationService{repository: repository, idempotency: idempotency, now: time.Now}, nil
+	return &routeMutationService{
+		repository: repository, idempotency: idempotency, planner: planner, now: time.Now,
+	}, nil
 }
 
 func (service *routeMutationService) RemoveRoute(
@@ -254,14 +276,21 @@ func (service *routeMutationService) createRouteOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	response, marker, err := service.routeResponseMarker(locator, evidence, record, http.StatusCreated)
+	preparation, err := service.prepareRouteMutationTask(
+		ctx, environment, project, record, nil, idempotencyKey,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	record = preparation.Intent.Route
+	response, marker, err := service.routeResponseMarker(locator, evidence, record, preparation.Task.ID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.CreateRouteIdempotent(
-		ctx, environment, project, target, record, marker,
+	result, mutationErr := service.repository.BeginRouteMutationWithTask(
+		ctx, environment, project, target, nil, record, preparation.Intent, preparation.Task, marker,
 	)
 	return service.resolveRouteMutation(ctx, locator, evidence, result, mutationErr, response)
 }
@@ -333,16 +362,102 @@ func (service *routeMutationService) editRouteOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	response, marker, err := service.routeResponseMarker(locator, evidence, replacement, http.StatusOK)
+	preparation, err := service.prepareRouteMutationTask(
+		ctx, environment, project, replacement, &current, idempotencyKey,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	replacement = preparation.Intent.Route
+	response, marker, err := service.routeResponseMarker(locator, evidence, replacement, preparation.Task.ID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.ReplaceDesiredIdempotent(
-		ctx, environment, project, target, current, desired, marker,
+	result, mutationErr := service.repository.BeginRouteMutationWithTask(
+		ctx, environment, project, target, &current, replacement, preparation.Intent, preparation.Task, marker,
 	)
 	return service.resolveRouteMutation(ctx, locator, evidence, result, mutationErr, response)
+}
+
+func (service *routeMutationService) prepareRouteMutationTask(
+	ctx context.Context,
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	record etcd.RouteRecord,
+	previous *etcd.Versioned[etcd.RouteRecord],
+	idempotencyKey string,
+) (etcd.RouteMutationTaskPreparation, error) {
+	var applied *etcd.Versioned[etcd.EnvironmentComposeProjection]
+	if service.planner != nil {
+		projectionRepository, ok := service.repository.(routeMutationProjectionRepository)
+		if !ok {
+			return etcd.RouteMutationTaskPreparation{}, errs.New(
+				errs.KindInternal, "Route applied projection repository is not configured",
+			)
+		}
+		projection, found, err := projectionRepository.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
+		if err != nil {
+			return etcd.RouteMutationTaskPreparation{}, err
+		}
+		if found {
+			applied = &projection
+		}
+	}
+	taskID := ids.New(ids.KindTask)
+	operationID := ids.New(ids.KindOperation)
+	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	if err != nil {
+		return etcd.RouteMutationTaskPreparation{}, err
+	}
+	now := service.now().UTC()
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: operationID, IdempotencyKey: idempotencyKey,
+		Owner: owner, Actor: etcd.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
+		Type: etcd.TaskCreate, Target: record.Desired.ID,
+		Status: etcd.TaskStatusPending, NextEventSequence: 1,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if previous != nil {
+		task.Type = etcd.TaskUpdate
+	}
+	intent, err := etcd.NewRouteMutationIntent(
+		taskID, operationID, environment.Record.ID, record, previous, applied, now,
+	)
+	if err != nil {
+		return etcd.RouteMutationTaskPreparation{}, err
+	}
+	if service.planner == nil || applied == nil {
+		intent.CurrentProjection = nil
+		intent.CurrentProjectionRevision = 0
+		task, err = prepareControllerRouteMutationTask(task, intent)
+		if err != nil {
+			return etcd.RouteMutationTaskPreparation{}, err
+		}
+		return etcd.RouteMutationTaskPreparation{Intent: intent, Task: task}, nil
+	}
+	procedures := etcd.RouteMutationProcedureIDs{
+		ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
+		MaterializeStepID: ids.New(ids.KindStep), ApplyStepID: ids.New(ids.KindStep),
+		ActivateStepID: ids.New(ids.KindStep),
+	}
+	preparation, err := service.planner.PrepareRouteMutationTask(ctx, task, intent, procedures)
+	if err != nil {
+		return etcd.RouteMutationTaskPreparation{}, err
+	}
+	if preparation.Intent.TaskID == "" {
+		preparation.Intent = intent
+	}
+	if preparation.Task.ID == "" {
+		preparation.Task = task
+	}
+	if preparation.Intent.TaskID != taskID || preparation.Task.ID != taskID {
+		return etcd.RouteMutationTaskPreparation{}, errs.New(
+			errs.KindInternal, "Route mutation planner returned mismatched durable identities",
+		)
+	}
+	return preparation, nil
 }
 
 func routeEditMutationIntent(
@@ -391,15 +506,15 @@ func (service *routeMutationService) routeResponseMarker(
 	locator etcd.IdempotencyLocator,
 	evidence routeMutationEvidence,
 	record etcd.RouteRecord,
-	status int,
+	taskID string,
 ) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
-	body, err := json.Marshal(routeAPIResponse(record))
+	body, err := json.Marshal(apiTypes.RouteTaskAccepted{Route: routeAPIResponse(record), TaskID: taskID})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
 	response := etcd.IdempotencyResponse{
-		Status: status, ContentKind: "application/json", Body: append([]byte(nil), body...),
+		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
 	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
 	if err != nil {
@@ -480,7 +595,35 @@ func routeAPIResponse(record etcd.RouteRecord) apiTypes.Route {
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Host: record.Desired.Host,
 		Path: record.Desired.Path, Exposure: string(record.Desired.Exposure),
 		TargetServiceID: record.Desired.TargetServiceID, TargetPort: record.Desired.TargetPort,
+		Status: string(record.Observed.Status),
 	}
+}
+
+func prepareControllerRouteMutationTask(task etcd.TaskRecord, intent etcd.RouteMutationIntent) (etcd.TaskRecord, error) {
+	if intent.Provider != nil || intent.CurrentProjection != nil || intent.CandidateProjection != nil {
+		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "desired-only Route mutation has provider state")
+	}
+	task.Executor = etcd.TaskExecutorController
+	task.TimeoutSeconds = 30
+	task.RenderGeneration = int32(intent.Route.DesiredGeneration)
+	task.Params = map[string]string{
+		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
+		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
+	}
+	task.Steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+	value, err := json.Marshal(struct {
+		Version    int    `json:"version"`
+		TaskID     string `json:"task_id"`
+		RouteID    string `json:"route_id"`
+		Generation uint64 `json:"generation"`
+	}{1, task.ID, intent.RouteID, intent.Route.DesiredGeneration})
+	if err != nil {
+		return etcd.TaskRecord{}, errs.Wrap(errs.KindInternal, err)
+	}
+	digest := sha256.Sum256(value)
+	clear(value)
+	task.PlanHash = hex.EncodeToString(digest[:])
+	return task, nil
 }
 
 func isUnknownRouteMutationOutcome(err error) bool {

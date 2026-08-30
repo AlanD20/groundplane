@@ -191,6 +191,12 @@ type Route struct {
 	Exposure        string `json:"exposure"          enum:"public,internal"`
 	TargetServiceID string `json:"target_service_id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
 	TargetPort      uint16 `json:"target_port"        minimum:"1"`
+	Status          string `json:"status"             enum:"unserved,pending,served,degraded"`
+}
+
+type RouteTaskAccepted struct {
+	Route  Route  `json:"route"`
+	TaskID string `json:"task_id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
 }
 
 type RouteCreate struct {

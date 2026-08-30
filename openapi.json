@@ -3345,6 +3345,15 @@
             "minLength": 1,
             "type": "string"
           },
+          "status": {
+            "enum": [
+              "unserved",
+              "pending",
+              "served",
+              "degraded"
+            ],
+            "type": "string"
+          },
           "target_port": {
             "format": "int32",
             "minimum": 1,
@@ -3361,7 +3370,8 @@
           "path",
           "exposure",
           "target_service_id",
-          "target_port"
+          "target_port",
+          "status"
         ],
         "type": "object"
       },
@@ -3436,6 +3446,32 @@
         },
         "required": [
           "exposure"
+        ],
+        "type": "object"
+      },
+      "RouteTaskAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/RouteTaskAccepted.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "route": {
+            "$ref": "#/components/schemas/Route"
+          },
+          "task_id": {
+            "pattern": "^task_[0-9A-HJKMNP-TV-Z]{26}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "task_id"
         ],
         "type": "object"
       },
@@ -9213,15 +9249,15 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Route"
+                  "$ref": "#/components/schemas/RouteTaskAccepted"
                 }
               }
             },
-            "description": "Created",
+            "description": "Accepted",
             "headers": {
               "Content-Type": {
                 "schema": {
@@ -9381,15 +9417,15 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Route"
+                  "$ref": "#/components/schemas/RouteTaskAccepted"
                 }
               }
             },
-            "description": "OK",
+            "description": "Accepted",
             "headers": {
               "Content-Type": {
                 "schema": {

@@ -113,33 +113,10 @@ func TestC07RealEtcdConcurrentReplayAndRestart(t *testing.T) {
 	)
 	assertOneStateConflict(t, overlapErrors)
 
-	routeRecord, err := etcd.NewRouteRecord(environment.Record.ID, core.Route{
-		ID: ids.New(ids.KindRoute), Host: "app.example.com", Path: "/api/*", Exposure: "public",
-		TargetServiceID: target.Record.Desired.ID, TargetPort: 8080,
-	})
-	if err != nil {
-		cleanup(store)
-		t.Fatalf("construct Route: %v", err)
-	}
-	routeMarker := acceptanceMarker(t,
-		environment.Record.ID, http.MethodPost, "/routes", "c07-route-create-001", routeRecord.Desired.ID,
-	)
-	concurrentExactReplay(t, func() error {
-		result, callErr := repository.CreateRouteIdempotent(
-			ctx, environment, project, target, routeRecord, routeMarker,
-		)
-		return acceptanceIdempotencyOutcome(result, callErr)
-	})
-
 	zones, err := repository.ListZones(ctx, environment.Record.ID, etcd.PageRequest{Limit: 20})
 	if err != nil || len(zones.Items) != 2 {
 		cleanup(store)
 		t.Fatalf("ListZones() items/error = %d/%v, want primary plus one overlap winner", len(zones.Items), err)
-	}
-	routes, err := repository.ListRoutes(ctx, environment.Record.ID, etcd.PageRequest{Limit: 20})
-	if err != nil || len(routes.Items) != 1 || routes.Items[0].Record != routeRecord {
-		cleanup(store)
-		t.Fatalf("ListRoutes() = %#v, %v", routes, err)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("close store before restart proof: %v", err)
@@ -154,10 +131,6 @@ func TestC07RealEtcdConcurrentReplayAndRestart(t *testing.T) {
 	storedZone, err := restartedRepository.GetZone(ctx, zoneRecord.Desired.ID)
 	if err != nil || storedZone.Record != zoneRecord {
 		t.Fatalf("GetZone() after restart = %#v, %v", storedZone, err)
-	}
-	storedRoute, err := restartedRepository.GetRoute(ctx, routeRecord.Desired.ID)
-	if err != nil || storedRoute.Record != routeRecord {
-		t.Fatalf("GetRoute() after restart = %#v, %v", storedRoute, err)
 	}
 	if _, err := restartedHierarchy.GetEnvironment(ctx, environment.Record.ID); err != nil {
 		t.Fatalf("GetEnvironment() after restart: %v", err)

@@ -195,6 +195,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		taskPruneIntentKey(task.ID),
 		componentTaskIntentKey(task.ID),
 		routeRemovalIntentKey(task.ID),
+		routeMutationIntentKey(task.ID),
 		entryRemovalIntentKey(task.ID),
 		blueprintAttachTaskIntentKey(task.ID),
 	}
@@ -293,15 +294,23 @@ func (repository *TaskRepository) beginTaskPrune(
 		}
 	}
 	if companions.Values[6] != nil {
-		entryIntent, decodeErr := decodeEntryRemovalIntent(companions.Values[6].Value)
+		mutationIntent, decodeErr := decodeRouteMutationIntent(companions.Values[6].Value)
+		if decodeErr != nil || validateRouteMutationTaskOwner(task, mutationIntent) != nil ||
+			mutationIntent.Status != task.Status || mutationIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			!mutationIntent.TerminalAt.Equal(*task.FinishedAt) {
+			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		}
+	}
+	if companions.Values[7] != nil {
+		entryIntent, decodeErr := decodeEntryRemovalIntent(companions.Values[7].Value)
 		if decodeErr != nil || validateEntryRemovalTaskOwner(task, entryIntent) != nil ||
 			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!entryIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
-	if companions.Values[7] != nil {
-		attachIntent, decodeErr := decodeBlueprintAttachTaskIntent(companions.Values[7].Value)
+	if companions.Values[8] != nil {
+		attachIntent, decodeErr := decodeBlueprintAttachTaskIntent(companions.Values[8].Value)
 		if decodeErr != nil || validateBlueprintAttachTaskOwner(task, attachIntent) != nil ||
 			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
@@ -434,18 +443,24 @@ func (repository *TaskRepository) beginTaskPrune(
 		)
 	}
 	conditions = append(conditions, routeCondition)
-	entryCondition := Condition{Key: entryRemovalIntentKey(task.ID)}
+	mutationCondition := Condition{Key: routeMutationIntentKey(task.ID)}
 	if companions.Values[6] != nil {
-		entryCondition.ModRevision = companions.Values[6].ModRevision
+		mutationCondition.ModRevision = companions.Values[6].ModRevision
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: routeMutationIntentKey(task.ID)})
+	}
+	conditions = append(conditions, mutationCondition)
+	entryCondition := Condition{Key: entryRemovalIntentKey(task.ID)}
+	if companions.Values[7] != nil {
+		entryCondition.ModRevision = companions.Values[7].ModRevision
 		mutations = append(
 			mutations,
 			Mutation{Type: MutationDelete, Key: entryRemovalIntentKey(task.ID)},
 		)
 	}
 	conditions = append(conditions, entryCondition)
-	if companions.Values[7] != nil {
+	if companions.Values[8] != nil {
 		conditions = append(conditions, Condition{
-			Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[7].ModRevision,
+			Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[8].ModRevision,
 		})
 		mutations = append(mutations, Mutation{
 			Type: MutationDelete, Key: blueprintAttachTaskIntentKey(task.ID),

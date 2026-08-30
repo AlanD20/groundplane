@@ -26,8 +26,9 @@ type Versioned[T any] struct {
 }
 
 type PageRequest struct {
-	Limit  int
-	Cursor string
+	Limit    int
+	Cursor   string
+	Revision int64
 }
 
 type Page[T any] struct {

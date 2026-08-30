@@ -146,7 +146,7 @@ type routeRemovalPlanResolver interface {
 		etcd.TaskRecord,
 		etcd.RouteRemovalIntent,
 		controller.RouteRemovalTaskProcedureIDs,
-	) (etcd.TaskRecord, error)
+	) (etcd.RouteRemovalTaskPreparation, error)
 }
 
 // routeRemovalService owns the complete operator intent for removing a Route,
@@ -275,15 +275,17 @@ func (service *routeRemovalService) removeRouteOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if intent.RequiresCaddy {
-		task.Executor = etcd.TaskExecutorAgent
-		task.TimeoutSeconds = routeRemovalAgentTimeoutSeconds
-		task, err = service.plans.PrepareRouteRemovalTask(ctx, task, intent, controller.RouteRemovalTaskProcedureIDs{
-			ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
-			MaterializeStepID: ids.New(ids.KindStep), ComposeApplyStepID: ids.New(ids.KindStep),
-			ActivateStepID: ids.New(ids.KindStep),
-		})
-	} else {
+	task.TimeoutSeconds = routeRemovalAgentTimeoutSeconds
+	preparation, err := service.plans.PrepareRouteRemovalTask(ctx, task, intent, controller.RouteRemovalTaskProcedureIDs{
+		ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
+		MaterializeStepID: ids.New(ids.KindStep), ComposeApplyStepID: ids.New(ids.KindStep),
+		ActivateStepID: ids.New(ids.KindStep),
+	})
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	intent, task = preparation.Intent, preparation.Task
+	if intent.Provider == nil {
 		task, err = prepareControllerRouteRemovalTask(task, intent)
 	}
 	if err != nil {
@@ -307,7 +309,7 @@ func (service *routeRemovalService) removeRouteOnce(
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
 	phase := etcd.DeletionPhaseFinalizing
-	if intent.RequiresCaddy {
+	if intent.Provider != nil {
 		phase = etcd.DeletionPhaseHostEffects
 	}
 	tombstone := etcd.DeletionTombstoneRecord{

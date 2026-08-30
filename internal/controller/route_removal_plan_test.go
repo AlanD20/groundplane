@@ -19,12 +19,29 @@ import (
 
 type routeRemovalPlanReader struct {
 	*blueprintPlanReader
-	intent etcd.RouteRemovalIntent
+	intent         etcd.RouteRemovalIntent
+	mutationIntent etcd.RouteMutationIntent
 }
 
-type routeRemovalPlanCaddyRenderer struct{}
+func (reader *routeRemovalPlanReader) SnapshotRevision(context.Context) (int64, error) {
+	return 20, nil
+}
 
-func (routeRemovalPlanCaddyRenderer) Plan(
+func (reader *routeRemovalPlanReader) ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error) {
+	return etcd.Page[etcd.RouteRecord]{Revision: 20}, nil
+}
+
+func (reader *routeRemovalPlanReader) ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error) {
+	return etcd.Page[etcd.ServiceRecord]{Revision: 20}, nil
+}
+
+func (reader *routeRemovalPlanReader) ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error) {
+	return etcd.Page[etcd.ZoneRecord]{Revision: 20}, nil
+}
+
+type routeRemovalPlanProviderRenderer struct{}
+
+func (routeRemovalPlanProviderRenderer) Plan(
 	environment core.Environment,
 	component core.Component,
 ) (componentsdk.EnvironmentPlan, error) {
@@ -42,11 +59,41 @@ func (routeRemovalPlanCaddyRenderer) Plan(
 			Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend", StaticIPv4: component.PinnedIPv4}},
 			Restart:     "unless-stopped", Replicas: 1,
 			Mounts: []componentsdk.ManagedMount{{
-				Source: RouteRemovalCaddyfilePath, Target: "/etc/caddy/Caddyfile", ReadOnly: true,
+				Source: "components/router/config", Target: "/etc/router/config", ReadOnly: true,
 			}},
 		}},
-		Files: []componentsdk.ManagedFile{{Path: RouteRemovalCaddyfilePath, Content: content}},
+		Files: []componentsdk.ManagedFile{{Path: "components/router/config", Content: content}},
 	}, nil
+}
+
+func (routeRemovalPlanProviderRenderer) ProjectHTTPRouter(
+	environment core.Environment,
+	component core.Component,
+) (componentsdk.HTTPRouterInput, error) {
+	input := componentsdk.HTTPRouterInput{
+		ComponentID: component.ID, Enabled: true, GeneratedServiceID: component.GeneratedServices[0],
+		ZoneID: ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: component.PinnedIPv4,
+	}
+	for _, route := range environment.Routes {
+		input.Routes = append(input.Routes, componentsdk.HTTPRoute{
+			ID: route.ID, Host: route.Host, Path: route.Path, BackendServiceID: route.TargetServiceID,
+			BackendServiceName: "backend", TargetPort: route.TargetPort,
+			Exposure: componentsdk.HTTPRouteExposure(route.Exposure),
+		})
+	}
+	return input, nil
+}
+
+func (renderer routeRemovalPlanProviderRenderer) PlanHTTPRouter(
+	input componentsdk.HTTPRouterInput,
+	component core.Component,
+) (componentsdk.EnvironmentPlan, error) {
+	environment := core.Environment{Routes: make([]core.Route, len(input.Routes))}
+	for index, route := range input.Routes {
+		environment.Routes[index] = core.Route{ID: route.ID, Host: route.Host, Path: route.Path,
+			TargetServiceID: route.BackendServiceID, TargetPort: route.TargetPort, Exposure: string(route.Exposure)}
+	}
+	return renderer.Plan(environment, component)
 }
 
 func (reader *routeRemovalPlanReader) GetRouteRemovalIntent(
@@ -56,17 +103,41 @@ func (reader *routeRemovalPlanReader) GetRouteRemovalIntent(
 	return etcd.Versioned[etcd.RouteRemovalIntent]{Record: reader.intent}, true, nil
 }
 
+func (reader *routeRemovalPlanReader) GetRouteMutationIntent(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.RouteMutationIntent], bool, error) {
+	return etcd.Versioned[etcd.RouteMutationIntent]{Record: reader.mutationIntent}, true, nil
+}
+
 // Rationale: initial publication and restart-time reconstruction must seal the
-// same candidate Caddyfile metadata, exact generated Service, and closed
+// same candidate managed configuration metadata, exact generated Service, and closed
 // validate/reload procedure without persisting generated file bytes.
-func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
+func TestTaskPlanResolverRebuildsRouteRemovalProviderProcedure(t *testing.T) {
 	t.Parallel()
 	reader, intent, task := routeRemovalPlanTestState(t)
 	_, _, _, _, catalog := componentPlanProjectionInput(t)
-	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
+	definition, err := componentsdk.NewDefinition(componentsdk.DefinitionInput{
+		Implementation: catalog[0].Definition.Implementation(), ConfigVariant: catalog[0].Definition.ConfigVariant(),
+		Provides:    []componentsdk.Capability{componentsdk.CapabilityServices, componentsdk.CapabilityHTTPRouter},
+		OwnerScopes: catalog[0].Definition.OwnerScopes(), Actions: catalog[0].Definition.Actions(),
+	})
+	if err != nil {
+		t.Fatalf("NewDefinition(router provider) error = %v", err)
+	}
+	catalog[0].Definition = definition
+	catalog[0].Plan = routeRemovalPlanProviderRenderer{}.Plan
+	catalog[0].ProjectHTTPRouter = routeRemovalPlanProviderRenderer{}.ProjectHTTPRouter
+	catalog[0].PlanHTTPRouter = routeRemovalPlanProviderRenderer{}.PlanHTTPRouter
+	catalog[0].ManagedConfiguration = &EnvironmentManagedConfigurationRegistration{
+		SourcePath: "components/router/config", ActionID: componentsdk.ActionID("activate-config"),
+	}
 	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, catalog)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+	}
+	if err := resolver.EnableRoutePlans(reader); err != nil {
+		t.Fatalf("EnableRoutePlans() error = %v", err)
 	}
 	prepared, err := resolver.PrepareRouteRemovalTask(
 		context.Background(),
@@ -83,16 +154,16 @@ func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareRouteRemovalTask() error = %v", err)
 	}
-	reader.intent = intent
-	first, err := resolver.ResolveExecutionPlan(context.Background(), prepared)
+	reader.intent = prepared.Intent
+	first, err := resolver.ResolveExecutionPlan(context.Background(), prepared.Task)
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
 	}
-	second, err := resolver.ResolveExecutionPlan(context.Background(), prepared)
+	second, err := resolver.ResolveExecutionPlan(context.Background(), prepared.Task)
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan(replay) error = %v", err)
 	}
-	digest, err := hex.DecodeString(prepared.Materializations[0].SHA256)
+	digest, err := hex.DecodeString(prepared.Task.Materializations[0].SHA256)
 	if err != nil {
 		t.Fatalf("DecodeString(materialization digest) error = %v", err)
 	}
@@ -105,7 +176,7 @@ func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
 			componentServiceOwned = true
 		}
 	}
-	if !bytes.Equal(first.PlanHash, second.PlanHash) || hex.EncodeToString(first.PlanHash) != prepared.PlanHash ||
+	if !bytes.Equal(first.PlanHash, second.PlanHash) || hex.EncodeToString(first.PlanHash) != prepared.Task.PlanHash ||
 		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || first.TargetId != task.Target ||
 		len(first.Artifacts) != 1 || len(first.Steps) != 3 || first.Steps[0].GetMaterializeFile() == nil ||
 		composeApply == nil || len(composeApply.GetServiceIds()) != 1 ||
@@ -120,13 +191,84 @@ func TestTaskPlanResolverRebuildsRouteRemovalCaddyProcedure(t *testing.T) {
 	content, err := resolver.ResolveComponentFile(
 		context.Background(),
 		intent.EnvironmentID,
-		*prepared.Materializations[0].Source.ComponentFile,
+		*prepared.Task.Materializations[0].Source.ComponentFile,
 	)
 	if err != nil {
 		t.Fatalf("ResolveComponentFile(candidate) error = %v", err)
 	}
 	if strings.Contains(string(content), "app.example.com") {
-		t.Fatalf("candidate Caddyfile retained removed Route: %q", content)
+		t.Fatalf("candidate managed configuration retained removed Route: %q", content)
+	}
+}
+
+func TestTaskPlanResolverPinsAndRebuildsRouteMutationProviderProcedure(t *testing.T) {
+	t.Parallel()
+	reader, _, baseTask := routeRemovalPlanTestState(t)
+	_, _, _, _, catalog := componentPlanProjectionInput(t)
+	projection := reader.blueprintPlanReader.projection
+	definition, err := componentsdk.NewDefinition(componentsdk.DefinitionInput{
+		Implementation: catalog[0].Definition.Implementation(), ConfigVariant: catalog[0].Definition.ConfigVariant(),
+		Provides:    []componentsdk.Capability{componentsdk.CapabilityServices, componentsdk.CapabilityHTTPRouter},
+		OwnerScopes: catalog[0].Definition.OwnerScopes(), Actions: catalog[0].Definition.Actions(),
+	})
+	if err != nil {
+		t.Fatalf("NewDefinition(router provider) error = %v", err)
+	}
+	catalog[0].Definition = definition
+	catalog[0].Plan = routeRemovalPlanProviderRenderer{}.Plan
+	catalog[0].ProjectHTTPRouter = routeRemovalPlanProviderRenderer{}.ProjectHTTPRouter
+	catalog[0].PlanHTTPRouter = routeRemovalPlanProviderRenderer{}.PlanHTTPRouter
+	catalog[0].ManagedConfiguration = &EnvironmentManagedConfigurationRegistration{
+		SourcePath: "components/router/config", ActionID: "activate-config",
+	}
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, catalog)
+	if err != nil {
+		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+	}
+	if err := resolver.EnableRoutePlans(reader); err != nil {
+		t.Fatalf("EnableRoutePlans() error = %v", err)
+	}
+	route, err := etcd.NewRouteRecord(projection.EnvironmentID, core.Route{
+		ID: projection.Routes[0].ID, Host: projection.Routes[0].Host, Path: projection.Routes[0].Path,
+		Exposure: "public", TargetServiceID: projection.Services[0].ID, TargetPort: 8080,
+	})
+	if err != nil {
+		t.Fatalf("NewRouteRecord() error = %v", err)
+	}
+	current := etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: projection, Revision: 18, ReadRevision: 18}
+	intent, err := etcd.NewRouteMutationIntent(
+		baseTask.ID, baseTask.OperationID, projection.EnvironmentID, route, nil, &current, baseTask.CreatedAt,
+	)
+	if err != nil {
+		t.Fatalf("NewRouteMutationIntent() error = %v", err)
+	}
+	task := baseTask
+	task.Type = etcd.TaskCreate
+	task.Target = route.Desired.ID
+	prepared, err := resolver.PrepareRouteMutationTask(context.Background(), task, intent, etcd.RouteMutationProcedureIDs{
+		ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
+		MaterializeStepID: ids.New(ids.KindStep), ApplyStepID: ids.New(ids.KindStep),
+		ActivateStepID: ids.New(ids.KindStep),
+	})
+	if err != nil {
+		t.Fatalf("PrepareRouteMutationTask() error = %v", err)
+	}
+	if prepared.Intent.Provider == nil || len(prepared.Intent.Provider.Input.Routes) != 1 ||
+		prepared.Intent.Route.Observed.Status != etcd.RouteObservedPending ||
+		prepared.Task.Executor != etcd.TaskExecutorAgent {
+		t.Fatalf("prepared Route mutation = %#v / %#v", prepared.Intent, prepared.Task)
+	}
+	reader.mutationIntent = prepared.Intent
+	first, err := resolver.ResolveExecutionPlan(context.Background(), prepared.Task)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan() error = %v", err)
+	}
+	second, err := resolver.ResolveExecutionPlan(context.Background(), prepared.Task)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan(replay) error = %v", err)
+	}
+	if !bytes.Equal(first.PlanHash, second.PlanHash) || hex.EncodeToString(first.PlanHash) != prepared.Task.PlanHash {
+		t.Fatal("Route mutation replay hash changed")
 	}
 }
 
@@ -139,7 +281,7 @@ func routeRemovalPlanTestState(
 	identity.TenantSlug = "acme"
 	identity.ProjectSlug = "shop"
 	at := time.Date(2026, 8, 23, 4, 0, 0, 0, time.UTC)
-	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
+	catalog[0].Plan = routeRemovalPlanProviderRenderer{}.Plan
 	componentProjection, err := projectPinnedEnvironmentComponents(
 		project,
 		nil,

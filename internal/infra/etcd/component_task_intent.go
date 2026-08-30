@@ -25,12 +25,13 @@ type ComponentTaskCandidate struct {
 // Environment Component reconciliation. Components remain publicly active at
 // Current until the owning Agent Task completes successfully.
 type ComponentTaskIntent struct {
-	TaskID        string                   `json:"task_id"`
-	EnvironmentID string                   `json:"environment_id"`
-	Status        TaskStatus               `json:"status"`
-	Candidates    []ComponentTaskCandidate `json:"candidates"`
-	CreatedAt     time.Time                `json:"created_at"`
-	TerminalAt    *time.Time               `json:"terminal_at,omitempty"`
+	TaskID          string                        `json:"task_id"`
+	EnvironmentID   string                        `json:"environment_id"`
+	Status          TaskStatus                    `json:"status"`
+	Candidates      []ComponentTaskCandidate      `json:"candidates"`
+	RouteProjection *ComponentTaskRouteProjection `json:"route_projection,omitempty"`
+	CreatedAt       time.Time                     `json:"created_at"`
+	TerminalAt      *time.Time                    `json:"terminal_at,omitempty"`
 }
 
 func NewComponentTaskIntent(
@@ -160,6 +161,9 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 			return err
 		}
 	}
+	if err := validateComponentTaskRouteProjection(intent); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -222,6 +226,7 @@ func componentTaskBindingsEqual(
 func cloneComponentTaskIntent(intent ComponentTaskIntent) ComponentTaskIntent {
 	clone := intent
 	clone.Candidates = cloneComponentTaskCandidates(intent.Candidates)
+	clone.RouteProjection = cloneComponentTaskRouteProjection(intent.RouteProjection)
 	clone.TerminalAt = cloneTimePointer(intent.TerminalAt)
 	return clone
 }

@@ -562,12 +562,18 @@ func normalizePageRequest(
 			"page limit must be between 1 and 200",
 		)
 	}
+	if request.Revision < 0 {
+		return 0, 0, "", "", errs.New(
+			errs.KindValidationFailed,
+			"page revision must not be negative",
+		)
+	}
 	query, err := queryDigest(collection, ownerKind, ownerID, limit)
 	if err != nil {
 		return 0, 0, "", "", err
 	}
 	if request.Cursor == "" {
-		return limit, 0, "", query, nil
+		return limit, request.Revision, "", query, nil
 	}
 	cursor, err := decodeCursor(request.Cursor)
 	if err != nil {
@@ -575,6 +581,9 @@ func normalizePageRequest(
 	}
 	if cursor.Query != query {
 		return 0, 0, "", "", errs.New(errs.KindMalformedRequest, "cursor does not match the list query")
+	}
+	if request.Revision > 0 && request.Revision != cursor.Revision {
+		return 0, 0, "", "", errs.New(errs.KindMalformedRequest, "cursor does not match the fixed revision")
 	}
 	if ids.Validate(idKind, cursor.LastID) != nil {
 		return 0, 0, "", "", errs.New(errs.KindMalformedRequest, "cursor contains an invalid last id")

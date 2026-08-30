@@ -271,6 +271,16 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	)
 	change.conditions = append(change.conditions, secretConditions...)
 	change.mutations = append(change.mutations, secretMutations...)
+	routeRetryChange, err := repository.prepareComponentTaskRouteObservationRetry(
+		ctx, retryIntent, revision,
+	)
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, routeRetryChange.conditions...)
+	change.mutations = append(change.mutations, routeRetryChange.mutations...)
+	change.values = append(change.values, routeRetryChange.values...)
 	return change, nil
 }
 
@@ -491,6 +501,16 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			})
 		}
 	}
+	routeObservationChange, err := repository.prepareComponentTaskRouteObservationAcknowledgement(
+		ctx, intent, terminalStatus, revision,
+	)
+	if err != nil {
+		clearComponentTaskChange(change)
+		return componentTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, routeObservationChange.conditions...)
+	change.mutations = append(change.mutations, routeObservationChange.mutations...)
+	change.values = append(change.values, routeObservationChange.values...)
 	secretMutations, err := componentTaskTerminalSecretMutations(intent, task.ID, terminalStatus)
 	if err != nil {
 		clearComponentTaskChange(change)

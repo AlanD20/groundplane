@@ -82,10 +82,19 @@ type TaskPlanResolver struct {
 	services         attachPlanServiceReader
 	attachIdentities attachPlanIdentityResolver
 	componentCatalog []EnvironmentComponentRegistration
+	routeState       routeProviderStateReader
 	releases         *etcd.ReleaseLedger
 	backupRuns       backupRunPlanReader
 	componentPlans   ComponentTaskPlanResolver
 	scriptPlans      ScriptExecutionPlanReader
+}
+
+func (resolver *TaskPlanResolver) EnableRoutePlans(state routeProviderStateReader) error {
+	if resolver == nil || state == nil {
+		return errs.New(errs.KindInternal, "Route plan state reader is required")
+	}
+	resolver.routeState = state
+	return nil
 }
 
 type ComponentTaskPlanResolver interface {
@@ -201,7 +210,13 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 		}
 	}
 	if task.Type == etcd.TaskUpdate {
+		if ids.Validate(ids.KindRoute, task.Target) == nil {
+			return resolver.resolveRouteMutationPlan(ctx, task)
+		}
 		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
+	}
+	if task.Type == etcd.TaskCreate && ids.Validate(ids.KindRoute, task.Target) == nil {
+		return resolver.resolveRouteMutationPlan(ctx, task)
 	}
 	if task.Type == etcd.TaskRemove {
 		if ids.Validate(ids.KindEnvironment, task.Target) == nil {

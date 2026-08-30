@@ -84,7 +84,10 @@ func NewEtcdService(
 	if err != nil {
 		return nil, err
 	}
-	routeMutations, err := newRouteMutationService(repository, routeMutationIdempotency)
+	if err := plans.EnableRoutePlans(repository); err != nil {
+		return nil, err
+	}
+	routeMutations, err := newRouteMutationServiceWithPlanner(repository, routeMutationIdempotency, plans)
 	if err != nil {
 		return nil, err
 	}
@@ -270,6 +273,7 @@ func projectRoute(record etcd.RouteRecord) corenetwork.Route {
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Host: record.Desired.Host,
 		Path: record.Desired.Path, Exposure: corenetwork.RouteExposure(record.Desired.Exposure),
 		TargetServiceID: record.Desired.TargetServiceID, TargetPort: record.Desired.TargetPort,
+		Status: corenetwork.RouteStatus(record.Observed.Status),
 	}
 }
 

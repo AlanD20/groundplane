@@ -111,9 +111,10 @@ func (handler *controllerTaskHandler) Execute(
 		}
 		return nil
 	case etcd.TaskResourceRoute:
-		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindRoute, task.Target) != nil || len(task.Params) != 2 ||
+		if (task.Type != etcd.TaskCreate && task.Type != etcd.TaskUpdate && task.Type != etcd.TaskRemove) ||
+			ids.Validate(ids.KindRoute, task.Target) != nil || len(task.Params) != 2 ||
 			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskRouteEnvironmentParam]) != nil {
-			return errs.New(errs.KindValidationFailed, "Controller Task Route removal is invalid")
+			return errs.New(errs.KindValidationFailed, "Controller Task Route mutation is invalid")
 		}
 		return nil
 	case etcd.TaskResourceService:

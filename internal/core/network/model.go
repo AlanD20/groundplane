@@ -65,7 +65,17 @@ type Route struct {
 	Exposure        RouteExposure
 	TargetServiceID string
 	TargetPort      uint16
+	Status          RouteStatus
 }
+
+type RouteStatus string
+
+const (
+	RouteStatusUnserved RouteStatus = "unserved"
+	RouteStatusPending  RouteStatus = "pending"
+	RouteStatusServed   RouteStatus = "served"
+	RouteStatusDegraded RouteStatus = "degraded"
+)
 
 // CreateRouteRequest contains the complete immutable Route match and target.
 type CreateRouteRequest struct {

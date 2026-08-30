@@ -321,7 +321,7 @@ func validateEnvironmentManagedConfigMaterialization(
 		reference.Source.EntryValue != nil || reference.Source.GeneratedEnvironment != nil ||
 		componentFile.RevisionID != revisionID ||
 		componentFile.ComponentID != candidate.Desired.ID ||
-		componentFile.Path != managed.SourcePath || componentFile.RouteRemovalTaskID != "" {
+		componentFile.Path != managed.SourcePath || componentFile.RouteTaskID != "" {
 		return [sha256.Size]byte{}, errs.New(
 			errs.KindInternal,
 			"Blueprint managed configuration materialization identity is invalid",

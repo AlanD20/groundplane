@@ -20,6 +20,16 @@ type EnvironmentComponentPlanFunc func(
 	core.Component,
 ) (componentsdk.EnvironmentPlan, error)
 
+type EnvironmentHTTPRouterProjectionFunc func(
+	core.Environment,
+	core.Component,
+) (componentsdk.HTTPRouterInput, error)
+
+type EnvironmentHTTPRouterPlanFunc func(
+	componentsdk.HTTPRouterInput,
+	core.Component,
+) (componentsdk.EnvironmentPlan, error)
+
 // EnvironmentManagedConfigurationRegistration binds a registered Component's
 // generic managed-config action to the immutable file it activates.
 type EnvironmentManagedConfigurationRegistration struct {
@@ -34,6 +44,8 @@ type EnvironmentComponentRegistration struct {
 	Definition           componentsdk.Definition
 	CatalogDigest        [sha256.Size]byte
 	Plan                 EnvironmentComponentPlanFunc
+	ProjectHTTPRouter    EnvironmentHTTPRouterProjectionFunc
+	PlanHTTPRouter       EnvironmentHTTPRouterPlanFunc
 	ManagedConfiguration *EnvironmentManagedConfigurationRegistration
 }
 
@@ -71,12 +83,53 @@ func ValidateEnvironmentComponentCatalog(catalog []EnvironmentComponentRegistrat
 				return errs.New(errs.KindInternal, "Environment Component managed configuration is invalid")
 			}
 		}
+		providesRouter := false
+		for _, capability := range registration.Definition.Provides() {
+			providesRouter = providesRouter || capability == componentsdk.CapabilityHTTPRouter
+		}
+		if registration.ProjectHTTPRouter != nil != (registration.PlanHTTPRouter != nil) ||
+			registration.ProjectHTTPRouter != nil && (!providesRouter || registration.ManagedConfiguration == nil) {
+			return errs.New(errs.KindInternal, "HTTP router Component registration is incomplete")
+		}
 		if _, duplicate := seen[registration.Kind]; duplicate {
 			return errs.New(errs.KindInternal, "Environment Component catalog repeats a kind")
 		}
 		seen[registration.Kind] = struct{}{}
 	}
 	return nil
+}
+
+func BuildPinnedEnvironmentComponentAction(
+	catalog []EnvironmentComponentRegistration,
+	componentID string,
+	definitionDigest [sha256.Size]byte,
+	catalogDigest [sha256.Size]byte,
+	actionID componentsdk.ActionID,
+	artifactID string,
+	artifactDigest [sha256.Size]byte,
+	generation uint64,
+) (*agentpb.ComponentApply, error) {
+	if err := ValidateEnvironmentComponentCatalog(catalog); err != nil {
+		return nil, err
+	}
+	for _, registration := range catalog {
+		if registration.Definition.Digest() != definitionDigest || registration.CatalogDigest != catalogDigest {
+			continue
+		}
+		return BuildEnvironmentComponentAction(
+			catalog, registration.Kind, componentID, actionID, artifactID, artifactDigest, generation,
+		)
+	}
+	return nil, errs.New(errs.KindStateConflict, "pinned Environment Component definition is not registered")
+}
+
+func managedConfigurationIdentity(
+	registration EnvironmentComponentRegistration,
+) (string, componentsdk.ActionID, bool) {
+	if registration.ManagedConfiguration == nil {
+		return "", "", false
+	}
+	return registration.ManagedConfiguration.SourcePath, registration.ManagedConfiguration.ActionID, true
 }
 
 func BuildEnvironmentComponentAction(

@@ -119,6 +119,7 @@ func validateComponentTaskPublicationZones(
 func componentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 	return preparation.Intent.TaskID == "" && preparation.Intent.EnvironmentID == "" &&
 		preparation.Intent.Status == "" && len(preparation.Intent.Candidates) == 0 &&
+		preparation.Intent.RouteProjection == nil &&
 		preparation.Intent.CreatedAt.IsZero() && preparation.Intent.TerminalAt == nil &&
 		len(preparation.addresses) == 0
 }

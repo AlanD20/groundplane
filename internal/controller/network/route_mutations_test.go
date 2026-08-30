@@ -24,6 +24,8 @@ type fakeRouteMutationRepository struct {
 	record      etcd.RouteRecord
 	marker      etcd.IdempotencyMarker
 	createCalls int
+	task        etcd.TaskRecord
+	intent      etcd.RouteMutationIntent
 }
 
 func (fake *fakeRouteMutationRepository) GetEnvironment(
@@ -47,17 +49,19 @@ func (fake *fakeRouteMutationRepository) GetService(
 	return fake.target, nil
 }
 
-func (fake *fakeRouteMutationRepository) CreateRouteIdempotent(
+func (fake *fakeRouteMutationRepository) BeginRouteMutationWithTask(
 	_ context.Context,
 	_ etcd.Versioned[etcd.EnvironmentRecord],
 	_ etcd.Versioned[etcd.ProjectRecord],
 	_ etcd.Versioned[etcd.ServiceRecord],
+	_ *etcd.Versioned[etcd.RouteRecord],
 	record etcd.RouteRecord,
+	intent etcd.RouteMutationIntent,
+	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	fake.createCalls++
-	fake.record = record
-	fake.marker = marker
+	fake.record, fake.intent, fake.task, fake.marker = record, intent, task, marker
 	fake.marker.Intent.Ciphertext = append([]byte(nil), marker.Intent.Ciphertext...)
 	fake.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
 	return etcd.IdempotencyTransactionResult{}, nil
@@ -106,13 +110,14 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 	at := time.Date(2026, time.August, 22, 18, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
 	projectID := ids.NewAt(ids.KindProject, at, 2)
+	tenantID := ids.NewAt(ids.KindTenant, at, 4)
 	targetID := ids.NewAt(ids.KindService, at, 3)
 	repository := &fakeRouteMutationRepository{
 		environment: etcd.Versioned[etcd.EnvironmentRecord]{
 			Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}, Revision: 7, ReadRevision: 7,
 		},
 		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record: etcd.ProjectRecord{ID: projectID, Kind: etcd.ProjectKindTenant}, Revision: 8, ReadRevision: 8,
+			Record: etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant}, Revision: 8, ReadRevision: 8,
 		},
 		target: etcd.Versioned[etcd.ServiceRecord]{
 			Record: etcd.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,
@@ -137,16 +142,19 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 	if err != nil {
 		t.Fatalf("CreateRoute() error = %v", err)
 	}
-	var route apiTypes.Route
-	if err := json.Unmarshal(response.Body, &route); err != nil {
+	var accepted apiTypes.RouteTaskAccepted
+	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatalf("CreateRoute() body = %s, %v", response.Body, err)
 	}
-	if response.Status != http.StatusCreated || route.ID == "" || route.EnvironmentID != environmentID ||
+	route := accepted.Route
+	if response.Status != http.StatusAccepted || accepted.TaskID == "" || route.ID == "" || route.EnvironmentID != environmentID ||
 		route.Host != input.Host || route.Path != input.Path || route.Exposure != input.Exposure ||
 		route.TargetServiceID != targetID || route.TargetPort != input.TargetPort {
 		t.Fatalf("CreateRoute() response = %#v/%#v", response, route)
 	}
 	if repository.record.Desired.ID != route.ID || repository.record.EnvironmentID != environmentID ||
+		repository.record.Observed.Status != etcd.RouteObservedUnserved || repository.task.ID != accepted.TaskID ||
+		repository.task.Executor != etcd.TaskExecutorController || repository.intent.TaskID != accepted.TaskID ||
 		repository.marker.Locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
 		repository.marker.Locator.ScopeID != environmentID || repository.marker.Locator.Method != http.MethodPost ||
 		repository.marker.Locator.Route != routeCreationRoute || repository.marker.Locator.Key != "route-create-key-0001" ||
@@ -181,13 +189,14 @@ func TestRouteCreationRejectsUnexposedTargetPort(t *testing.T) {
 	t.Parallel()
 	environmentID := ids.New(ids.KindEnvironment)
 	projectID := ids.New(ids.KindProject)
+	tenantID := ids.New(ids.KindTenant)
 	targetID := ids.New(ids.KindService)
 	repository := &fakeRouteMutationRepository{
 		environment: etcd.Versioned[etcd.EnvironmentRecord]{
 			Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}, Revision: 7, ReadRevision: 7,
 		},
 		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record: etcd.ProjectRecord{ID: projectID, Kind: etcd.ProjectKindTenant}, Revision: 8, ReadRevision: 8,
+			Record: etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant}, Revision: 8, ReadRevision: 8,
 		},
 		target: etcd.Versioned[etcd.ServiceRecord]{
 			Record: etcd.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,

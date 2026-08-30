@@ -283,6 +283,30 @@ func (e RouteExposure) Valid() bool {
 	}
 }
 
+// Defines values for RouteStatus.
+const (
+	RouteStatusDegraded RouteStatus = "degraded"
+	RouteStatusPending  RouteStatus = "pending"
+	RouteStatusServed   RouteStatus = "served"
+	RouteStatusUnserved RouteStatus = "unserved"
+)
+
+// Valid indicates whether the value is a known member of the RouteStatus enum.
+func (e RouteStatus) Valid() bool {
+	switch e {
+	case RouteStatusDegraded:
+		return true
+	case RouteStatusPending:
+		return true
+	case RouteStatusServed:
+		return true
+	case RouteStatusUnserved:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RouteCreateExposure.
 const (
 	RouteCreateExposureInternal RouteCreateExposure = "internal"
@@ -1637,12 +1661,16 @@ type Route struct {
 	Host            *string       `json:"host,omitempty"`
 	Id              string        `json:"id"`
 	Path            string        `json:"path"`
+	Status          RouteStatus   `json:"status"`
 	TargetPort      int32         `json:"target_port"`
 	TargetServiceId string        `json:"target_service_id"`
 }
 
 // RouteExposure defines model for Route.Exposure.
 type RouteExposure string
+
+// RouteStatus defines model for Route.Status.
+type RouteStatus string
 
 // RouteCreate defines model for RouteCreate.
 type RouteCreate struct {
@@ -1672,6 +1700,16 @@ type RouteEdit struct {
 
 // RouteEditExposure defines model for RouteEdit.Exposure.
 type RouteEditExposure string
+
+// RouteTaskAccepted defines model for RouteTaskAccepted.
+type RouteTaskAccepted struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/RouteTaskAccepted.json
+	Schema *string `json:"$schema,omitempty"`
+	Route  Route   `json:"route"`
+	TaskId string  `json:"task_id"`
+}
 
 // Router defines model for Router.
 type Router struct {
@@ -18149,25 +18187,25 @@ func (r RouteListResponse) ContentType() string {
 	return ""
 }
 
-// RouteCreateResponse201Headers the declared response headers of an HTTP 201 response for RouteCreate
-type RouteCreateResponse201Headers struct {
+// RouteCreateResponse202Headers the declared response headers of an HTTP 202 response for RouteCreate
+type RouteCreateResponse202Headers struct {
 	ContentType *string
 }
 
 type RouteCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Route
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *RouteTaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers201 the parsed response headers for an HTTP 201 response
-	Headers201 *RouteCreateResponse201Headers
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RouteCreateResponse202Headers
 }
 
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r RouteCreateResponse) GetJSON201() *Route {
-	return r.JSON201
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RouteCreateResponse) GetJSON202() *RouteTaskAccepted {
+	return r.JSON202
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -18307,25 +18345,25 @@ func (r RouteShowResponse) ContentType() string {
 	return ""
 }
 
-// RouteEditResponse200Headers the declared response headers of an HTTP 200 response for RouteEdit
-type RouteEditResponse200Headers struct {
+// RouteEditResponse202Headers the declared response headers of an HTTP 202 response for RouteEdit
+type RouteEditResponse202Headers struct {
 	ContentType *string
 }
 
 type RouteEditResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Route
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *RouteTaskAccepted
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers200 the parsed response headers for an HTTP 200 response
-	Headers200 *RouteEditResponse200Headers
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *RouteEditResponse202Headers
 }
 
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r RouteEditResponse) GetJSON200() *Route {
-	return r.JSON200
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RouteEditResponse) GetJSON202() *RouteTaskAccepted {
+	return r.JSON202
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -25797,12 +25835,12 @@ func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) 
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Route
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest RouteTaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON201 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
@@ -25814,8 +25852,8 @@ func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) 
 	}
 
 	switch {
-	case rsp.StatusCode == 201:
-		var headers RouteCreateResponse201Headers
+	case rsp.StatusCode == 202:
+		var headers RouteCreateResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -25823,7 +25861,7 @@ func ParseRouteCreateResponse(rsp *http.Response) (*RouteCreateResponse, error) 
 			}
 			headers.ContentType = &value
 		}
-		response.Headers201 = &headers
+		response.Headers202 = &headers
 	}
 
 	return response, nil
@@ -25922,12 +25960,12 @@ func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Route
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest RouteTaskAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON200 = &dest
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
@@ -25939,8 +25977,8 @@ func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		var headers RouteEditResponse200Headers
+	case rsp.StatusCode == 202:
+		var headers RouteEditResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -25948,7 +25986,7 @@ func ParseRouteEditResponse(rsp *http.Response) (*RouteEditResponse, error) {
 			}
 			headers.ContentType = &value
 		}
-		response.Headers200 = &headers
+		response.Headers202 = &headers
 	}
 
 	return response, nil

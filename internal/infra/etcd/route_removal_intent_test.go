@@ -9,7 +9,7 @@ import (
 )
 
 // Rationale: a Route removal retry must retain the exact current/candidate
-// applied projection without persisting rendered Caddyfile bytes.
+// applied projection without persisting rendered managed configuration bytes.
 func TestRouteRemovalIntentCodecPinsSuppressionCandidate(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 23, 2, 0, 0, 0, time.UTC)
@@ -51,7 +51,7 @@ func TestRouteRemovalIntentCodecPinsSuppressionCandidate(t *testing.T) {
 }
 
 // Rationale: removing a Route that was never applied has no runtime candidate
-// and must not manufacture a Caddy requirement or render generation.
+// and must not manufacture a provider requirement or render generation.
 func TestRouteRemovalIntentWithoutAppliedRouteHasNoProjectionCandidate(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 23, 2, 30, 0, 0, time.UTC)
@@ -71,7 +71,7 @@ func TestRouteRemovalIntentWithoutAppliedRouteHasNoProjectionCandidate(t *testin
 		t.Fatalf("NewRouteRemovalIntent() error = %v", err)
 	}
 	if intent.CurrentProjection != nil || intent.CandidateProjection != nil ||
-		intent.CurrentProjectionRevision != 0 || intent.RequiresCaddy {
+		intent.CurrentProjectionRevision != 0 || intent.Provider != nil {
 		t.Fatalf("NewRouteRemovalIntent() manufactured runtime state = %#v", intent)
 	}
 }

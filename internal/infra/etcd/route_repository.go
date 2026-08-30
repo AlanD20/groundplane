@@ -49,35 +49,6 @@ func (repository *RouteRepository) CreateRoute(
 	}, nil
 }
 
-// CreateRouteIdempotent atomically publishes the Route, ownership and match
-// indexes, and the exact synchronous replay marker.
-func (repository *RouteRepository) CreateRouteIdempotent(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	target Versioned[ServiceRecord],
-	record RouteRecord,
-	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := validateRouteMutationMarker(marker, record.EnvironmentID); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	conditions, mutations, classify, err := repository.prepareRouteCreation(ctx, environment, project, target, record)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clearMutationValues(mutations)
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
-}
-
 func (repository *RouteRepository) prepareRouteCreation(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
@@ -152,6 +123,23 @@ func (repository *RouteRepository) ListRoutes(
 	)
 }
 
+// SnapshotRevision returns one truthful MVCC view for a multi-collection
+// Route planning read. Empty Route collections still produce a store revision.
+func (repository *RouteRepository) SnapshotRevision(ctx context.Context) (int64, error) {
+	if err := validateContext(ctx); err != nil {
+		return 0, err
+	}
+	result, err := repository.store.Range(ctx, RangeRequest{Prefix: routePrefix, Limit: 1})
+	if err != nil {
+		return 0, err
+	}
+	if result == nil || result.ReadRevision <= 0 {
+		return 0, errs.New(errs.KindInternal, "Route planning snapshot revision is unavailable")
+	}
+	defer clearRangeKeyValues(result.Values)
+	return result.ReadRevision, nil
+}
+
 func (repository *RouteRepository) ReplaceDesired(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
@@ -177,38 +165,6 @@ func (repository *RouteRepository) ReplaceDesired(
 	return Versioned[RouteRecord]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
-}
-
-// ReplaceDesiredIdempotent atomically edits Route exposure and commits the
-// exact synchronous replay marker.
-func (repository *RouteRepository) ReplaceDesiredIdempotent(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	target Versioned[ServiceRecord],
-	current Versioned[RouteRecord],
-	desired core.Route,
-	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := validateRouteMutationMarker(marker, current.Record.EnvironmentID); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	_, conditions, mutations, classify, err := repository.prepareRouteReplacement(
-		ctx, environment, project, target, current, desired,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clearMutationValues(mutations)
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
 }
 
 func (repository *RouteRepository) prepareRouteReplacement(
@@ -257,17 +213,6 @@ func (repository *RouteRepository) prepareRouteReplacement(
 		return classifyRouteWriteConflict(values, environment, project, target, current.Record, current.Revision)
 	}
 	return replacement, conditions, mutations, classify, nil
-}
-
-func validateRouteMutationMarker(marker IdempotencyMarker, environmentID string) error {
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
-		return errs.New(
-			errs.KindValidationFailed,
-			"Route mutation marker must be a completed Environment-scoped direct mutation",
-		)
-	}
-	return validateIdempotencyMarker(marker)
 }
 
 func routeWriteConditions(

@@ -67,11 +67,6 @@ type routeMutationOutput struct {
 }
 
 func (s *Server) registerRoutes() {
-	routeSchema := s.API.OpenAPI().Components.Schemas.Schema(
-		reflect.TypeFor[apiTypes.Route](),
-		true,
-		"Route",
-	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "route.list", Method: http.MethodGet, Path: "/routes",
 		Summary: "List routes", Tags: []string{"Route"},
@@ -82,21 +77,25 @@ func (s *Server) registerRoutes() {
 	}, s.showRoute)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "route.create", Method: http.MethodPost, Path: "/routes",
-		Summary: "Create a route", Tags: []string{"Route"}, DefaultStatus: http.StatusCreated,
+		Summary: "Create a route", Tags: []string{"Route"}, DefaultStatus: http.StatusAccepted,
 		Responses: map[string]*huma.Response{
-			"201": {
-				Description: http.StatusText(http.StatusCreated),
-				Content:     map[string]*huma.MediaType{"application/json": {Schema: routeSchema}},
+			"202": {
+				Description: http.StatusText(http.StatusAccepted),
+				Content: map[string]*huma.MediaType{"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
+				)}},
 			},
 		},
 	}, s.createRoute)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "route.edit", Method: http.MethodPatch, Path: "/routes/{id}",
-		Summary: "Edit route exposure", Tags: []string{"Route"}, DefaultStatus: http.StatusOK,
+		Summary: "Edit route exposure", Tags: []string{"Route"}, DefaultStatus: http.StatusAccepted,
 		Responses: map[string]*huma.Response{
-			"200": {
-				Description: http.StatusText(http.StatusOK),
-				Content:     map[string]*huma.MediaType{"application/json": {Schema: routeSchema}},
+			"202": {
+				Description: http.StatusText(http.StatusAccepted),
+				Content: map[string]*huma.MediaType{"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
+					reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
+				)}},
 			},
 		},
 	}, s.editRoute)
@@ -270,5 +269,6 @@ func routeResponse(record corenetwork.Route) apiTypes.Route {
 		ID: record.ID, EnvironmentID: record.EnvironmentID, Host: record.Host,
 		Path: record.Path, Exposure: string(record.Exposure),
 		TargetServiceID: record.TargetServiceID, TargetPort: record.TargetPort,
+		Status: string(record.Status),
 	}
 }

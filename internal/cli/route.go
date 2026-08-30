@@ -62,15 +62,15 @@ func newRouteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			route, err := app.Client.CreateRoute(cmd.Context(), apiTypes.RouteCreate{
+			accepted, err := app.Client.CreateRoute(cmd.Context(), apiTypes.RouteCreate{
 				EnvironmentID: environmentID, Host: hostname, Path: path,
 				TargetServiceID: serviceID, TargetPort: targetPort, Exposure: exposure,
 			})
 			if err != nil {
 				return err
 			}
-			fields, values := fieldsOfVia(routeFields(route))
-			return app.Out.RenderOne(fields, values, route)
+			fields, values := fieldsOfVia(routeAcceptedFields(accepted))
+			return app.Out.RenderOne(fields, values, accepted)
 		},
 	}
 	add.Flags().StringVar(&hostname, "hostname", "", "route hostname")
@@ -94,14 +94,14 @@ func newRouteCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			route, err := app.Client.EditRoute(
+			accepted, err := app.Client.EditRoute(
 				cmd.Context(), target(app, args[0]), apiTypes.RouteEdit{Exposure: editExposure},
 			)
 			if err != nil {
 				return err
 			}
-			fields, values := fieldsOfVia(routeFields(route))
-			return app.Out.RenderOne(fields, values, route)
+			fields, values := fieldsOfVia(routeAcceptedFields(accepted))
+			return app.Out.RenderOne(fields, values, accepted)
 		},
 	}
 	edit.Flags().StringVar(&editExposure, "exposure", "", "public | internal")
@@ -131,6 +131,12 @@ func routeFields(route apiTypes.Route) map[string]any {
 	return map[string]any{
 		"id": route.ID, "environment_id": route.EnvironmentID, "host": route.Host,
 		"path": route.Path, "exposure": route.Exposure,
-		"target_service_id": route.TargetServiceID, "target_port": route.TargetPort,
+		"target_service_id": route.TargetServiceID, "target_port": route.TargetPort, "status": route.Status,
 	}
+}
+
+func routeAcceptedFields(accepted apiTypes.RouteTaskAccepted) map[string]any {
+	fields := routeFields(accepted.Route)
+	fields["task_id"] = accepted.TaskID
+	return fields
 }

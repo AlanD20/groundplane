@@ -19,28 +19,44 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 		ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		ids.Validate(ids.KindTask, reference.RevisionID) != nil ||
 		ids.Validate(ids.KindComponent, reference.ComponentID) != nil ||
-		(reference.RouteRemovalTaskID != "" && ids.Validate(ids.KindTask, reference.RouteRemovalTaskID) != nil) {
+		(reference.RouteTaskID != "" && ids.Validate(ids.KindTask, reference.RouteTaskID) != nil) {
 		return nil, errs.New(errs.KindInternal, "Component file resolver input is invalid")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if reference.RouteRemovalTaskID != "" {
+	if reference.RouteTaskID != "" {
 		reader, ok := resolver.blueprints.(routeRemovalPlanStateReader)
-		if !ok {
-			return nil, errs.New(errs.KindInternal, "Route removal plan state reader is unavailable")
+		if ok {
+			stored, found, err := reader.GetRouteRemovalIntent(ctx, reference.RouteTaskID)
+			if err != nil {
+				return nil, err
+			}
+			intent := stored.Record
+			if found {
+				if intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
+					intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
+					intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
+					return nil, corruptMaterializationSource()
+				}
+				return resolver.routeProviderFile(*intent.Provider, *intent.CandidateProjection)
+			}
 		}
-		stored, found, err := reader.GetRouteRemovalIntent(ctx, reference.RouteRemovalTaskID)
+		mutationReader, ok := resolver.blueprints.(routeMutationPlanStateReader)
+		if !ok {
+			return nil, errs.New(errs.KindInternal, "Route plan state reader is unavailable")
+		}
+		stored, found, err := mutationReader.GetRouteMutationIntent(ctx, reference.RouteTaskID)
 		if err != nil {
 			return nil, err
 		}
 		intent := stored.Record
-		if !found || intent.TaskID != reference.RouteRemovalTaskID || intent.EnvironmentID != environmentID ||
+		if !found || intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
 			intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
-			intent.CandidateProjection.RevisionID != reference.RevisionID {
+			intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
 			return nil, corruptMaterializationSource()
 		}
-		return resolver.resolveComponentFileFromProjection(ctx, environmentID, reference, *intent.CandidateProjection)
+		return resolver.routeProviderFile(*intent.Provider, *intent.CandidateProjection)
 	}
 	projection, found, err := resolver.blueprints.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {

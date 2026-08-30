@@ -465,15 +465,34 @@ func validDirectResponse(method string, response IdempotencyResponse) bool {
 	case http.MethodPost:
 		return (response.Status == http.StatusOK || response.Status == http.StatusCreated) &&
 			response.ContentKind == "application/json" &&
-			json.Valid(response.Body)
+			json.Valid(response.Body) || validRouteMutationAcceptedResponse(method, response)
 	case http.MethodPut, http.MethodPatch:
 		return response.Status == http.StatusOK && response.ContentKind == "application/json" &&
-			json.Valid(response.Body)
+			json.Valid(response.Body) || validRouteMutationAcceptedResponse(method, response)
 	case http.MethodDelete:
 		return response.Status == http.StatusNoContent && response.ContentKind == "none" && len(response.Body) == 0
 	default:
 		return false
 	}
+}
+
+func validRouteMutationAcceptedResponse(method string, response IdempotencyResponse) bool {
+	if response.Status != http.StatusAccepted || response.ContentKind != "application/json" ||
+		method != http.MethodPost && method != http.MethodPatch {
+		return false
+	}
+	var body struct {
+		Route struct {
+			ID string `json:"id"`
+		} `json:"route"`
+		TaskID string `json:"task_id"`
+	}
+	if json.Unmarshal(response.Body, &body) != nil || ids.Validate(ids.KindRoute, body.Route.ID) != nil ||
+		ids.Validate(ids.KindTask, body.TaskID) != nil {
+		return false
+	}
+	var compact bytes.Buffer
+	return json.Compact(&compact, response.Body) == nil && bytes.Equal(response.Body, compact.Bytes())
 }
 
 func validTaskResponse(response IdempotencyResponse, taskID string) bool {

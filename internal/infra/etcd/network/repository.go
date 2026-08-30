@@ -7,7 +7,6 @@ package network
 import (
 	"context"
 
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -151,27 +150,24 @@ func (repository *Repository) ListRoutes(
 	return repository.routes.ListRoutes(ctx, environmentID, request)
 }
 
-func (repository *Repository) CreateRouteIdempotent(
-	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	target etcd.Versioned[etcd.ServiceRecord],
-	record etcd.RouteRecord,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.routes.CreateRouteIdempotent(ctx, environment, project, target, record, marker)
+func (repository *Repository) SnapshotRevision(ctx context.Context) (int64, error) {
+	return repository.routes.SnapshotRevision(ctx)
 }
 
-func (repository *Repository) ReplaceDesiredIdempotent(
+func (repository *Repository) BeginRouteMutationWithTask(
 	ctx context.Context,
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
-	current etcd.Versioned[etcd.RouteRecord],
-	desired core.Route,
+	current *etcd.Versioned[etcd.RouteRecord],
+	record etcd.RouteRecord,
+	intent etcd.RouteMutationIntent,
+	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.routes.ReplaceDesiredIdempotent(ctx, environment, project, target, current, desired, marker)
+	return repository.routes.BeginRouteMutationWithTask(
+		ctx, environment, project, target, current, record, intent, task, marker,
+	)
 }
 
 func (repository *Repository) GetEnvironmentComposeProjection(
@@ -179,6 +175,13 @@ func (repository *Repository) GetEnvironmentComposeProjection(
 	environmentID string,
 ) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+}
+
+func (repository *Repository) GetEnvironmentAppliedComposeProjection(
+	ctx context.Context,
+	environmentID string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 }
 
 func (repository *Repository) BeginRouteDeletionWithTask(

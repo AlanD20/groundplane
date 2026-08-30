@@ -81,13 +81,13 @@ type TaskBlueprintFileValueReference struct {
 // TaskComponentFileValueReference names one deterministic generated file.
 // RevisionID pins the immutable Blueprint input while ComponentID prevents a
 // path collision from authorizing content rendered for another Component.
-// RouteRemovalTaskID selects that Task's immutable candidate projection;
+// RouteTaskID selects that Task's immutable candidate projection;
 // empty selects the active projection used by ordinary reconciliation.
 type TaskComponentFileValueReference struct {
-	RevisionID         string `json:"revision_id"`
-	ComponentID        string `json:"component_id"`
-	Path               string `json:"path"`
-	RouteRemovalTaskID string `json:"route_removal_task_id,omitempty"`
+	RevisionID  string `json:"revision_id"`
+	ComponentID string `json:"component_id"`
+	Path        string `json:"path"`
+	RouteTaskID string `json:"route_task_id,omitempty"`
 }
 
 // TaskEntryValueReference names one immutable value generation. Storage is
@@ -271,8 +271,8 @@ func validateTaskMaterializationSource(source TaskMaterializationSource) error {
 			validateStableID(ids.KindTask, source.ComponentFile.RevisionID) != nil ||
 			validateStableID(ids.KindComponent, source.ComponentFile.ComponentID) != nil ||
 			validateEnvironmentBlueprintPath(source.ComponentFile.Path) != nil ||
-			(source.ComponentFile.RouteRemovalTaskID != "" &&
-				validateStableID(ids.KindTask, source.ComponentFile.RouteRemovalTaskID) != nil) {
+			(source.ComponentFile.RouteTaskID != "" &&
+				validateStableID(ids.KindTask, source.ComponentFile.RouteTaskID) != nil) {
 			return errs.New(errs.KindValidationFailed, "Component file materialization reference is invalid")
 		}
 	case TaskMaterializationSourceEntryValue:

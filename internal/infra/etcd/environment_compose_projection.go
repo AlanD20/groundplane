@@ -386,6 +386,46 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 }
 
 // SuppressEnvironmentRoute removes a Route while pinning its old match and advancing generation.
+func ApplyEnvironmentRoute(
+	current EnvironmentComposeProjection,
+	route RouteRecord,
+) (EnvironmentComposeProjection, error) {
+	if err := validateEnvironmentComposeProjection(current); err != nil {
+		return EnvironmentComposeProjection{}, err
+	}
+	if err := validateRouteRecord(route); err != nil || route.EnvironmentID != current.EnvironmentID {
+		return EnvironmentComposeProjection{}, errs.New(errs.KindValidationFailed, "applied Environment Route is invalid")
+	}
+	next := cloneEnvironmentComposeProjection(current)
+	identity := EnvironmentRouteIdentity{ID: route.Desired.ID, Host: route.Desired.Host, Path: route.Desired.Path}
+	replaced := false
+	for index := range next.Routes {
+		if next.Routes[index].ID == identity.ID {
+			next.Routes[index] = identity
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		next.Routes = append(next.Routes, identity)
+	}
+	for index := 0; index < len(next.SuppressedRoutes); index++ {
+		if next.SuppressedRoutes[index].ID == identity.ID {
+			next.SuppressedRoutes = append(next.SuppressedRoutes[:index], next.SuppressedRoutes[index+1:]...)
+			break
+		}
+	}
+	sort.Slice(next.Routes, func(left, right int) bool {
+		return environmentRouteMatch(next.Routes[left]) < environmentRouteMatch(next.Routes[right])
+	})
+	next.RenderGeneration++
+	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
+		return EnvironmentComposeProjection{}, err
+	}
+	return next, nil
+}
+
+// SuppressEnvironmentRoute removes a Route while pinning its old match and advancing generation.
 func SuppressEnvironmentRoute(
 	current EnvironmentComposeProjection,
 	routeID string,
@@ -508,6 +548,8 @@ func validateEnvironmentRouteIdentities(environmentID string, values []Environme
 		record := RouteRecord{EnvironmentID: environmentID, Desired: core.Route{
 			ID: value.ID, Host: value.Host, Path: value.Path,
 			TargetServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", TargetPort: 1, Exposure: "internal",
+		}, DesiredGeneration: 1, Observed: RouteObservation{
+			Status: RouteObservedUnserved, DesiredGeneration: 1,
 		}}
 		if match <= previousMatch || validateRouteRecord(record) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment Route identities are invalid or unsorted")

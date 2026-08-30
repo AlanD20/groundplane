@@ -91,7 +91,7 @@ func TestRouteHTTPBoundaryPreservesExactReadAndMutationContracts(t *testing.T) {
 		t.Fatalf("marshal Route: %v", err)
 	}
 	mutator := &fakeRouteMutator{response: corenetwork.MutationResponse{
-		Status: http.StatusCreated, ContentKind: "application/json", Body: body,
+		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
 	}}
 	server := &Server{routeReads: reader, routeMutations: mutator}
 	page, err := server.listRoutes(context.Background(), &routeListInput{
@@ -118,16 +118,16 @@ func TestRouteHTTPBoundaryPreservesExactReadAndMutationContracts(t *testing.T) {
 		Exposure:        corenetwork.RouteExposure(createInput.Exposure),
 		TargetServiceID: createInput.TargetServiceID, TargetPort: createInput.TargetPort,
 	}
-	if err != nil || created.Status != http.StatusCreated || !reflect.DeepEqual(mutator.createInput, wantCreate) ||
+	if err != nil || created.Status != http.StatusAccepted || !reflect.DeepEqual(mutator.createInput, wantCreate) ||
 		mutator.key != "route-create-key-0001" {
 		t.Fatalf("createRoute() = %#v, %v, forwarded %#v/%q", created, err, mutator.createInput, mutator.key)
 	}
-	mutator.response.Status = http.StatusOK
+	mutator.response.Status = http.StatusAccepted
 	edited, err := server.editRoute(context.Background(), &routeEditInput{
 		ID: record.ID, IdempotencyKey: "route-edit-key-000001",
 		Body: apiTypes.RouteEdit{Exposure: "internal"},
 	})
-	if err != nil || edited.Status != http.StatusOK || mutator.routeID != record.ID ||
+	if err != nil || edited.Status != http.StatusAccepted || mutator.routeID != record.ID ||
 		mutator.editInput.Exposure != "internal" || mutator.key != "route-edit-key-000001" {
 		t.Fatalf(
 			"editRoute() = %#v, %v, forwarded %q/%#v/%q",

@@ -1,0 +1,284 @@
+package controller
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type routeProviderStateReader interface {
+	SnapshotRevision(context.Context) (int64, error)
+	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
+	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
+}
+
+// ResolveComponentTaskRouteProvider pins the registered HTTP router input for
+// a Component lifecycle Task. The boolean is true only when that Task changes
+// the provider, allowing nil Provider to mean a deliberate disable projection.
+func ResolveComponentTaskRouteProvider(
+	catalog []EnvironmentComponentRegistration,
+	environment core.Environment,
+	components []etcd.ComponentRecord,
+	candidates []etcd.ComponentTaskCandidate,
+	inputRevision int64,
+	inputGeneration uint64,
+) (*etcd.RouteProviderPin, bool, error) {
+	if err := ValidateEnvironmentComponentCatalog(catalog); err != nil {
+		return nil, false, err
+	}
+	changesProvider := false
+	for _, candidate := range candidates {
+		registration, found := environmentComponentRegistration(catalog, candidate.Candidate.Desired.Kind)
+		changesProvider = changesProvider || found && registration.ProjectHTTPRouter != nil
+	}
+	if !changesProvider {
+		return nil, false, nil
+	}
+	var selected *etcd.RouteProviderPin
+	for _, record := range components {
+		if !record.Desired.Enabled {
+			continue
+		}
+		registration, found := environmentComponentRegistration(catalog, record.Desired.Kind)
+		if !found || registration.ProjectHTTPRouter == nil {
+			continue
+		}
+		if selected != nil {
+			return nil, false, errs.New(errs.KindStateConflict, "Environment has multiple enabled HTTP router providers")
+		}
+		component, err := etcd.ProjectComponentRecord(record)
+		if err != nil {
+			return nil, false, err
+		}
+		input, err := registration.ProjectHTTPRouter(environment, component)
+		if err != nil {
+			return nil, false, err
+		}
+		destination, actionID, found := managedConfigurationIdentity(registration)
+		if !found || inputRevision <= 0 || inputGeneration == 0 {
+			return nil, false, errs.New(errs.KindInternal, "HTTP router Component lifecycle pin is incomplete")
+		}
+		definitionDigest := registration.Definition.Digest()
+		pin := etcd.RouteProviderPin{
+			ComponentID:      record.Desired.ID,
+			DefinitionDigest: hex.EncodeToString(definitionDigest[:]),
+			CatalogDigest:    hex.EncodeToString(registration.CatalogDigest[:]),
+			InputRevision:    inputRevision, InputGeneration: inputGeneration,
+			Destination: destination, ActionID: string(actionID),
+			ServiceID: input.GeneratedServiceID, Input: input,
+		}
+		selected = &pin
+	}
+	return selected, true, nil
+}
+
+func (resolver *TaskPlanResolver) pinRouteProvider(
+	ctx context.Context,
+	environmentID string,
+	projectionRevision int64,
+	projection etcd.EnvironmentComposeProjection,
+	desired *etcd.RouteRecord,
+	removedRouteID string,
+	inputGeneration uint64,
+) (*etcd.RouteProviderPin, error) {
+	if resolver == nil || resolver.routeState == nil {
+		return nil, errs.New(errs.KindInternal, "Route plan state reader is unavailable")
+	}
+	registration, component, found, err := resolver.routeProviderRegistration(projection)
+	if err != nil || !found {
+		return nil, err
+	}
+	environment, inputRevision, err := resolver.routeProviderEnvironment(ctx, environmentID, projection, desired, removedRouteID)
+	if err != nil {
+		return nil, err
+	}
+	input, err := registration.ProjectHTTPRouter(environment, component)
+	if err != nil {
+		return nil, err
+	}
+	input = componentsdk.CloneHTTPRouterInput(input)
+	destination, actionID, managed := managedConfigurationIdentity(registration)
+	if componentsdk.ValidateHTTPRouterInput(input) != nil || input.ComponentID != component.ID ||
+		len(component.GeneratedServices) != 1 || !managed {
+		return nil, errs.New(errs.KindStateConflict, "registered HTTP router input is invalid")
+	}
+	if projectionRevision <= 0 || projectionRevision > inputRevision {
+		return nil, errs.New(errs.KindStateConflict, "Route provider projection is newer than its fixed snapshot")
+	}
+	definitionDigest := registration.Definition.Digest()
+	return &etcd.RouteProviderPin{
+		ComponentID:      component.ID,
+		DefinitionDigest: hex.EncodeToString(definitionDigest[:]),
+		CatalogDigest:    hex.EncodeToString(registration.CatalogDigest[:]),
+		InputRevision:    inputRevision, InputGeneration: inputGeneration,
+		Destination: destination,
+		ActionID:    string(actionID),
+		ServiceID:   component.GeneratedServices[0], Input: input,
+	}, nil
+}
+
+func (resolver *TaskPlanResolver) routeProviderRegistration(
+	projection etcd.EnvironmentComposeProjection,
+) (EnvironmentComponentRegistration, core.Component, bool, error) {
+	var selected EnvironmentComponentRegistration
+	var component core.Component
+	found := false
+	for _, record := range projection.Components {
+		candidate, err := etcd.ProjectComponentRecord(record)
+		if err != nil {
+			return EnvironmentComponentRegistration{}, core.Component{}, false, err
+		}
+		if !candidate.Enabled {
+			continue
+		}
+		for _, registration := range resolver.componentCatalog {
+			if registration.Kind != candidate.Kind || registration.ProjectHTTPRouter == nil ||
+				registration.PlanHTTPRouter == nil || !definitionProvides(registration.Definition, componentsdk.CapabilityHTTPRouter) {
+				continue
+			}
+			if found {
+				return EnvironmentComponentRegistration{}, core.Component{}, false, errs.New(errs.KindStateConflict, "Environment has multiple enabled HTTP router providers")
+			}
+			selected, component, found = registration, candidate, true
+		}
+	}
+	return selected, component, found, nil
+}
+
+func definitionProvides(definition componentsdk.Definition, capability componentsdk.Capability) bool {
+	for _, provided := range definition.Provides() {
+		if provided == capability {
+			return true
+		}
+	}
+	return false
+}
+
+func (resolver *TaskPlanResolver) routeProviderEnvironment(
+	ctx context.Context,
+	environmentID string,
+	projection etcd.EnvironmentComposeProjection,
+	desired *etcd.RouteRecord,
+	removedRouteID string,
+) (core.Environment, int64, error) {
+	revision, err := resolver.routeState.SnapshotRevision(ctx)
+	if err != nil {
+		return core.Environment{}, 0, err
+	}
+	if revision <= 0 {
+		return core.Environment{}, 0, errs.New(errs.KindInternal, "Route provider snapshot revision is invalid")
+	}
+	environment := core.Environment{ID: environmentID, Zones: map[string]core.Zone{}, Services: map[string]core.Service{}}
+	for _, record := range projection.Components {
+		component, err := etcd.ProjectComponentRecord(record)
+		if err != nil {
+			return core.Environment{}, 0, err
+		}
+		environment.Components = append(environment.Components, component)
+	}
+	for cursor := ""; ; {
+		page, err := resolver.routeState.ListZones(ctx, environmentID, etcd.PageRequest{
+			Limit: 128, Cursor: cursor, Revision: revision,
+		})
+		if err != nil {
+			return core.Environment{}, 0, err
+		}
+		if page.Revision != revision {
+			return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider Zone snapshot changed revision")
+		}
+		for _, stored := range page.Items {
+			environment.Zones[stored.Record.Desired.Name] = stored.Record.Desired
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	for cursor := ""; ; {
+		page, err := resolver.routeState.ListServices(ctx, environmentID, etcd.PageRequest{
+			Limit: 128, Cursor: cursor, Revision: revision,
+		})
+		if err != nil {
+			return core.Environment{}, 0, err
+		}
+		if page.Revision != revision {
+			return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider Service snapshot changed revision")
+		}
+		for _, stored := range page.Items {
+			environment.Services[stored.Record.Desired.Name] = stored.Record.Desired
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	foundDesired := false
+	for cursor := ""; ; {
+		page, err := resolver.routeState.ListRoutes(ctx, environmentID, etcd.PageRequest{
+			Limit: 128, Cursor: cursor, Revision: revision,
+		})
+		if err != nil {
+			return core.Environment{}, 0, err
+		}
+		if page.Revision != revision {
+			return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider Route snapshot changed revision")
+		}
+		for _, stored := range page.Items {
+			if stored.Record.Desired.ID == removedRouteID {
+				continue
+			}
+			if desired != nil && stored.Record.Desired.ID == desired.Desired.ID {
+				environment.Routes = append(environment.Routes, desired.Desired)
+				foundDesired = true
+			} else {
+				environment.Routes = append(environment.Routes, stored.Record.Desired)
+			}
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	if desired != nil && !foundDesired {
+		environment.Routes = append(environment.Routes, desired.Desired)
+	}
+	return environment, revision, nil
+}
+
+func (resolver *TaskPlanResolver) renderPinnedRouteProvider(pin etcd.RouteProviderPin, projection etcd.EnvironmentComposeProjection) (componentsdk.EnvironmentPlan, core.Component, [sha256.Size]byte, [sha256.Size]byte, error) {
+	definitionBytes, err := hex.DecodeString(pin.DefinitionDigest)
+	if err != nil || len(definitionBytes) != sha256.Size {
+		return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindInternal, "Route provider definition digest is invalid")
+	}
+	catalogBytes, err := hex.DecodeString(pin.CatalogDigest)
+	if err != nil || len(catalogBytes) != sha256.Size {
+		return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindInternal, "Route provider catalog digest is invalid")
+	}
+	var definitionDigest, catalogDigest [sha256.Size]byte
+	copy(definitionDigest[:], definitionBytes)
+	copy(catalogDigest[:], catalogBytes)
+	for _, registration := range resolver.componentCatalog {
+		if registration.Definition.Digest() != definitionDigest || registration.CatalogDigest != catalogDigest {
+			continue
+		}
+		for _, record := range projection.Components {
+			if record.Desired.ID != pin.ComponentID {
+				continue
+			}
+			component, projectErr := etcd.ProjectComponentRecord(record)
+			if projectErr != nil || component.Kind != registration.Kind || !component.Enabled || registration.PlanHTTPRouter == nil {
+				return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindStateConflict, "pinned Route provider is unavailable")
+			}
+			plan, planErr := registration.PlanHTTPRouter(componentsdk.CloneHTTPRouterInput(pin.Input), component)
+			return componentsdk.CloneEnvironmentPlan(plan), component, definitionDigest, catalogDigest, planErr
+		}
+	}
+	return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindStateConflict, "pinned Route provider is not registered")
+}

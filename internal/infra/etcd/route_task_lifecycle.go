@@ -22,6 +22,10 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (routeTaskChange, error) {
+	mutation, err := repository.prepareRouteMutationTaskRetry(ctx, source, retry, revision)
+	if err != nil || mutation.applies {
+		return mutation, err
+	}
 	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{routeRemovalIntentKey(source.ID)}, Revision: revision,
 	})
@@ -130,6 +134,79 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	return change, nil
 }
 
+func (repository *TaskRepository) prepareRouteMutationTaskRetry(
+	ctx context.Context,
+	source TaskRecord,
+	retry TaskRecord,
+	revision int64,
+) (routeTaskChange, error) {
+	read, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{routeMutationIntentKey(source.ID)}, Revision: revision,
+	})
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	if read == nil || len(read.Values) != 1 {
+		return routeTaskChange{}, errs.New(errs.KindInternal, "Route mutation retry read is incomplete")
+	}
+	if read.Values[0] == nil {
+		return routeTaskChange{}, nil
+	}
+	intent, err := decodeRouteMutationIntent(read.Values[0].Value)
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	if err := validateRouteMutationTaskOwner(source, intent); err != nil {
+		return routeTaskChange{}, err
+	}
+	if source.FinishedAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
+		!intent.TerminalAt.Equal(*source.FinishedAt) || retry.RetryOf != source.ID ||
+		retry.Executor != source.Executor || retry.Type != source.Type || retry.Target != source.Target ||
+		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash ||
+		retry.RenderGeneration != source.RenderGeneration || !maps.Equal(retry.Params, source.Params) {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry changed its pinned Task")
+	}
+	stateKeys := []string{routeKey(intent.RouteID), componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
+	if intent.Provider != nil {
+		stateKeys = append(stateKeys, environmentComposeProjectionKey(intent.EnvironmentID))
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	if state == nil || len(state.Values) != 2 || state.Values[0] == nil || state.Values[1] != nil {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry state changed")
+	}
+	record, err := decodeRouteRecord(state.Values[0].Value)
+	if err != nil || !sameRouteDesiredVersion(record, intent.Route) {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry desired state changed")
+	}
+	retryIntent := cloneRouteMutationIntent(intent)
+	retryIntent.TaskID, retryIntent.Status, retryIntent.CreatedAt, retryIntent.TerminalAt =
+		retry.ID, TaskStatusPending, retry.CreatedAt, nil
+	if err := validateRouteMutationIntent(retryIntent); err != nil {
+		return routeTaskChange{}, err
+	}
+	encoded, err := encodeRouteMutationIntent(retryIntent)
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	return routeTaskChange{
+		applies: true,
+		conditions: []Condition{
+			{Key: routeMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
+			{Key: routeMutationIntentKey(retry.ID)},
+			{Key: routeKey(intent.RouteID), ModRevision: state.Values[0].ModRevision},
+			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		},
+		mutations: []Mutation{
+			{Type: MutationPut, Key: routeMutationIntentKey(retry.ID), Value: encoded},
+			{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},
+		},
+		values: [][]byte{encoded},
+	}, nil
+}
+
 func (repository *TaskRepository) readRouteRetryDependencies(
 	ctx context.Context,
 	route RouteRecord,
@@ -225,6 +302,10 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	terminalAt time.Time,
 	revision int64,
 ) (routeTaskChange, error) {
+	mutation, err := repository.prepareRouteMutationTaskAcknowledgement(ctx, task, terminalStatus, terminalAt, revision)
+	if err != nil || mutation.applies {
+		return mutation, err
+	}
 	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
 	})
@@ -362,12 +443,138 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	return change, nil
 }
 
+func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
+	ctx context.Context,
+	task TaskRecord,
+	terminalStatus TaskStatus,
+	terminalAt time.Time,
+	revision int64,
+) (routeTaskChange, error) {
+	read, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
+	})
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	if read == nil || len(read.Values) != 1 {
+		return routeTaskChange{}, errs.New(errs.KindInternal, "Route mutation acknowledgement read is incomplete")
+	}
+	if read.Values[0] == nil {
+		return routeTaskChange{}, nil
+	}
+	intent, err := decodeRouteMutationIntent(read.Values[0].Value)
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	if err := validateRouteMutationTaskOwner(task, intent); err != nil {
+		return routeTaskChange{}, err
+	}
+	if intent.Status != TaskStatusPending {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation intent is not pending")
+	}
+	stateKeys := []string{routeKey(intent.RouteID), componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
+	if intent.Provider != nil {
+		stateKeys = append(stateKeys, environmentComposeProjectionKey(intent.EnvironmentID))
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] == nil || state.Values[1] == nil ||
+		string(state.Values[1].Value) != task.ID {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation ownership changed")
+	}
+	record, err := decodeRouteRecord(state.Values[0].Value)
+	if err != nil || !sameRouteDesiredVersion(record, intent.Route) {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation desired state changed")
+	}
+	if intent.Provider != nil {
+		if state.Values[2] == nil || state.Values[2].ModRevision != intent.CurrentProjectionRevision {
+			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation applied projection changed")
+		}
+		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[2].Value)
+		if decodeErr != nil || intent.CurrentProjection == nil ||
+			!sameRouteRemovalProjection(projection, *intent.CurrentProjection) {
+			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation applied projection changed")
+		}
+	}
+	status := RouteObservedUnserved
+	var provider RouteProviderObservation
+	if intent.Provider != nil {
+		status = RouteObservedDegraded
+		if terminalStatus == TaskStatusCompleted {
+			status = RouteObservedServed
+		}
+		provider = RouteProviderObservation{
+			ComponentID:      intent.Provider.ComponentID,
+			DefinitionDigest: intent.Provider.DefinitionDigest,
+			CatalogDigest:    intent.Provider.CatalogDigest,
+			InputRevision:    intent.Provider.InputRevision,
+			InputGeneration:  intent.Provider.InputGeneration,
+		}
+	}
+	record, err = SetRouteObservation(record, RouteObservation{
+		Status: status, DesiredGeneration: record.DesiredGeneration, Provider: provider,
+	})
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	terminalIntent, err := terminalRouteMutationIntent(intent, terminalStatus, terminalAt)
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	routeValue, err := encodeRouteRecord(record)
+	if err != nil {
+		return routeTaskChange{}, err
+	}
+	intentValue, err := encodeRouteMutationIntent(terminalIntent)
+	if err != nil {
+		clear(routeValue)
+		return routeTaskChange{}, err
+	}
+	change := routeTaskChange{
+		applies: true,
+		conditions: []Condition{
+			{Key: routeMutationIntentKey(task.ID), ModRevision: read.Values[0].ModRevision},
+			{Key: routeKey(intent.RouteID), ModRevision: state.Values[0].ModRevision},
+			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+		},
+		mutations: []Mutation{
+			{Type: MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
+			{Type: MutationPut, Key: routeKey(intent.RouteID), Value: routeValue},
+			{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		},
+		values: [][]byte{routeValue, intentValue},
+	}
+	if intent.Provider != nil {
+		change.conditions = append(change.conditions, Condition{
+			Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision,
+		})
+		if terminalStatus == TaskStatusCompleted {
+			projectionValue, encodeErr := encodeEnvironmentComposeProjection(*intent.CandidateProjection)
+			if encodeErr != nil {
+				clearRouteTaskChange(change)
+				return routeTaskChange{}, encodeErr
+			}
+			change.values = append(change.values, projectionValue)
+			change.mutations = append(change.mutations, Mutation{
+				Type: MutationPut, Key: environmentComposeProjectionKey(intent.EnvironmentID), Value: projectionValue,
+			})
+		}
+	}
+	return change, nil
+}
+
 func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
 	terminalStatus TaskStatus,
 	revision int64,
 ) error {
+	matched, err := repository.validateRouteMutationTaskAcknowledgementReplay(ctx, task, terminalStatus, revision)
+	if err != nil || matched {
+		return err
+	}
 	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
 	})
@@ -420,11 +627,85 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	return nil
 }
 
+func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay(
+	ctx context.Context,
+	task TaskRecord,
+	terminalStatus TaskStatus,
+	revision int64,
+) (bool, error) {
+	read, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
+	})
+	if err != nil {
+		return false, err
+	}
+	if read == nil || len(read.Values) != 1 {
+		return false, errs.New(errs.KindInternal, "Route mutation replay read is incomplete")
+	}
+	if read.Values[0] == nil {
+		return false, nil
+	}
+	intent, err := decodeRouteMutationIntent(read.Values[0].Value)
+	if err != nil || validateRouteMutationTaskOwner(task, intent) != nil || intent.Status != terminalStatus ||
+		intent.TerminalAt == nil || task.FinishedAt == nil || !intent.TerminalAt.Equal(*task.FinishedAt) {
+		return true, errs.New(errs.KindStateConflict, "Route mutation replay evidence changed")
+	}
+	stateKeys := []string{routeKey(intent.RouteID), componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
+	if intent.Provider != nil {
+		stateKeys = append(stateKeys, environmentComposeProjectionKey(intent.EnvironmentID))
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	if err != nil {
+		return true, err
+	}
+	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] == nil {
+		return true, errs.New(errs.KindStateConflict, "Route mutation replay state is incomplete")
+	}
+	record, err := decodeRouteRecord(state.Values[0].Value)
+	if err != nil || !sameRouteDesiredVersion(record, intent.Route) || state.Values[1] != nil && string(state.Values[1].Value) == task.ID {
+		return true, errs.New(errs.KindStateConflict, "Route mutation replay state changed")
+	}
+	if intent.Provider != nil {
+		if state.Values[2] == nil {
+			return true, errs.New(errs.KindStateConflict, "Route mutation terminal projection is missing")
+		}
+		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[2].Value)
+		want := intent.CurrentProjection
+		if terminalStatus == TaskStatusCompleted {
+			want = intent.CandidateProjection
+		}
+		if decodeErr != nil || want == nil || !sameRouteRemovalProjection(projection, *want) {
+			return true, errs.New(errs.KindStateConflict, "Route mutation terminal projection changed")
+		}
+	}
+	return true, nil
+}
+
+func validateRouteMutationTaskOwner(task TaskRecord, intent RouteMutationIntent) error {
+	executor := TaskExecutorController
+	if intent.Provider != nil {
+		executor = TaskExecutorAgent
+	}
+	if task.ID != intent.TaskID || task.OperationID != intent.OperationID || task.Executor != executor ||
+		(task.Type != TaskCreate && task.Type != TaskUpdate) || task.Target != intent.RouteID ||
+		!task.CreatedAt.Equal(intent.CreatedAt) || len(task.Params) < 2 ||
+		task.Params[TaskResourceKindParam] != TaskResourceRoute ||
+		task.Params[TaskRouteEnvironmentParam] != intent.EnvironmentID {
+		return errs.New(errs.KindStateConflict, "Route mutation intent does not belong to its Task")
+	}
+	return nil
+}
+
+func sameRouteDesiredVersion(left RouteRecord, right RouteRecord) bool {
+	return left.EnvironmentID == right.EnvironmentID && left.Desired == right.Desired &&
+		left.DesiredGeneration == right.DesiredGeneration
+}
+
 func validateRouteRemovalTaskOwner(task TaskRecord, intent RouteRemovalIntent) error {
 	expectedExecutor := TaskExecutorController
 	validParams := len(task.Params) == 2 && task.Params[TaskResourceKindParam] == TaskResourceRoute &&
 		task.Params[TaskRouteEnvironmentParam] == intent.EnvironmentID
-	if intent.RequiresCaddy {
+	if intent.Provider != nil {
 		expectedExecutor = TaskExecutorAgent
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 4 &&
 			task.Params[TaskRouteEnvironmentParam] == intent.EnvironmentID &&
@@ -439,7 +720,7 @@ func validateRouteRemovalTaskOwner(task TaskRecord, intent RouteRemovalIntent) e
 }
 
 func routeRemovalTombstonePhase(intent RouteRemovalIntent) DeletionPhase {
-	if intent.RequiresCaddy {
+	if intent.Provider != nil {
 		return DeletionPhaseHostEffects
 	}
 	return DeletionPhaseFinalizing

@@ -55,7 +55,7 @@ func TestTaskPlanResolverRebuildsFileEntryRemoval(t *testing.T) {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	_, _, _, _, catalog := componentPlanProjectionInput(t)
-	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
+	catalog[0].Plan = routeRemovalPlanProviderRenderer{}.Plan
 	resolver.componentCatalog = catalog
 	prepared, err := resolver.prepareEntryRemovalTask(
 		context.Background(), task, intent,
@@ -105,7 +105,7 @@ func TestTaskPlanResolverRebuildsEntryRemovalAfterHierarchyRename(t *testing.T) 
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	_, _, _, _, catalog := componentPlanProjectionInput(t)
-	catalog[0].Plan = routeRemovalPlanCaddyRenderer{}.Plan
+	catalog[0].Plan = routeRemovalPlanProviderRenderer{}.Plan
 	resolver.componentCatalog = catalog
 	identity := entryRemovalIdentityFromReader(reader)
 	prepared, err := resolver.prepareEntryRemovalTask(

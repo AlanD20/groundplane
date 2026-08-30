@@ -35,6 +35,22 @@ func registeredCaddyEnvironmentComponent(catalogDigest [sha256.Size]byte) (contr
 			}
 			return plan, nil
 		},
+		ProjectHTTPRouter: func(environment core.Environment, instance core.Component) (componentsdk.HTTPRouterInput, error) {
+			input, _, err := projectRegisteredCaddyInput(environment, instance)
+			return input, err
+		},
+		PlanHTTPRouter: func(input componentsdk.HTTPRouterInput, instance core.Component) (componentsdk.EnvironmentPlan, error) {
+			if instance.Config.Caddy == nil {
+				return componentsdk.EnvironmentPlan{}, errs.New(errs.KindValidationFailed, "caddy: typed config is required")
+			}
+			plan, err := registeredcaddy.Plan(input, registeredcaddy.Config{
+				CaddyfileTemplate: instance.Config.Caddy.CaddyfileTemplate,
+			})
+			if err != nil {
+				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
+			}
+			return plan, nil
+		},
 	}, nil
 }
 

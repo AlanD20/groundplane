@@ -7,9 +7,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
-// Rationale: a Route finalizer without applied Caddy effects is a closed
-// Controller-local no-op whose durable effect belongs only to Task acknowledgement.
-func TestControllerTaskHandlerAcceptsOnlyExactRouteRemoval(t *testing.T) {
+// Rationale: provider-free Route mutations are closed Controller-local no-ops;
+// durable Route effects belong only to Task acknowledgement.
+func TestControllerTaskHandlerAcceptsExactRouteMutation(t *testing.T) {
 	t.Parallel()
 	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
 	if err != nil {
@@ -27,7 +27,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactRouteRemoval(t *testing.T) {
 		t.Fatalf("Execute(valid Route removal) error = %v", err)
 	}
 	for name, mutate := range map[string]func(*etcd.TaskRecord){
-		"wrong type": func(task *etcd.TaskRecord) { task.Type = etcd.TaskCreate },
+		"wrong type": func(task *etcd.TaskRecord) { task.Type = etcd.TaskDeploy },
 		"wrong target": func(task *etcd.TaskRecord) {
 			task.Target = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		},

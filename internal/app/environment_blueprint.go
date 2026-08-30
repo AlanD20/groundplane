@@ -365,7 +365,7 @@ func (service *environmentBlueprintService) ApplyBlueprint(
 	bundle core.BlueprintBundle,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey)
+	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey, false)
 }
 
 func (service *environmentBlueprintService) ApplyComponentBlueprint(
@@ -378,7 +378,7 @@ func (service *environmentBlueprintService) ApplyComponentBlueprint(
 	if ids.Validate(ids.KindComponent, componentID) != nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Component id is invalid")
 	}
-	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey)
+	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey, true)
 }
 
 func (service *environmentBlueprintService) applyBlueprint(
@@ -387,6 +387,7 @@ func (service *environmentBlueprintService) applyBlueprint(
 	taskTarget string,
 	bundle core.BlueprintBundle,
 	idempotencyKey string,
+	preserveRoutes bool,
 ) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint context is required")
@@ -398,7 +399,7 @@ func (service *environmentBlueprintService) applyBlueprint(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
 	}
 	for attempt := 0; attempt < maximumEnvironmentBlueprintAttempts; attempt++ {
-		response, err := service.applyBlueprintOnce(ctx, environmentID, taskTarget, bundle, idempotencyKey)
+		response, err := service.applyBlueprintOnce(ctx, environmentID, taskTarget, bundle, idempotencyKey, preserveRoutes)
 		if err == nil {
 			return response, nil
 		}
@@ -416,6 +417,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	taskTarget string,
 	bundle core.BlueprintBundle,
 	idempotencyKey string,
+	preserveRoutes bool,
 ) (etcd.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, desiredrevision.IntentAddress{
 		Method: http.MethodPut, Route: environmentBlueprintRoute,
@@ -638,14 +640,22 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			ID: route.Record.Desired.ID, Host: route.Record.Desired.Host, Path: route.Record.Desired.Path,
 		}
 	}
-	reconciledRoutes, err := controller.ReconcileBlueprintRoutes(
-		parsed.Extensions.Routes,
-		desiredServices,
-		previousRoutes,
-		allocator.New,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+	reconciledRoutes := controller.BlueprintRouteChanges{}
+	if preserveRoutes {
+		reconciledRoutes.Current = make([]core.Route, len(currentRoutes))
+		for index, route := range currentRoutes {
+			reconciledRoutes.Current[index] = route.Record.Desired
+		}
+	} else {
+		reconciledRoutes, err = controller.ReconcileBlueprintRoutes(
+			parsed.Extensions.Routes,
+			desiredServices,
+			previousRoutes,
+			allocator.New,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
 	}
 	if len(reconciledRoutes.RemovedRouteIDs) != 0 {
 		return etcd.IdempotencyResponse{}, errs.New(
@@ -702,16 +712,17 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	componentEnvironment := blueprintComponentEnvironment(
+		desiredEnvironment.Record,
+		desiredZones,
+		desiredServices,
+		reconciledRoutes.Current,
+		effectiveComponents,
+		reconciledEntries.Current,
+	)
 	componentProjection, err := controller.ProjectEnvironmentComponents(
 		parsed.Project,
-		blueprintComponentEnvironment(
-			desiredEnvironment.Record,
-			desiredZones,
-			desiredServices,
-			reconciledRoutes.Current,
-			effectiveComponents,
-			reconciledEntries.Current,
-		),
+		componentEnvironment,
 		service.componentCatalog,
 	)
 	if err != nil {
@@ -869,6 +880,49 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
+		service.componentCatalog,
+		componentEnvironment,
+		pinnedComponents,
+		componentPreparation.Intent.Candidates,
+		int64(generation),
+		generation,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if routeProjection {
+		if routeProvider != nil {
+			provider := etcd.RouteProviderObservation{
+				ComponentID:      routeProvider.ComponentID,
+				DefinitionDigest: routeProvider.DefinitionDigest,
+				CatalogDigest:    routeProvider.CatalogDigest,
+				InputRevision:    routeProvider.InputRevision,
+				InputGeneration:  routeProvider.InputGeneration,
+			}
+			for index, change := range routeChanges {
+				change.Record, err = etcd.SetRouteObservation(change.Record, etcd.RouteObservation{
+					Status:            etcd.RouteObservedPending,
+					DesiredGeneration: change.Record.DesiredGeneration,
+					Provider:          provider,
+				})
+				if err != nil {
+					return etcd.IdempotencyResponse{}, err
+				}
+				routeChanges[index] = change
+			}
+		}
+		routeRecords := make([]etcd.RouteRecord, len(routeChanges))
+		for index, change := range routeChanges {
+			routeRecords[index] = change.Record
+		}
+		componentPreparation, err = etcd.WithComponentTaskRouteProjection(
+			componentPreparation, routeRecords, routeProvider,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
 	}
 	params := map[string]string{
 		etcd.EnvironmentDesiredRevisionParam:         taskID,

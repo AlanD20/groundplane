@@ -107,8 +107,8 @@ func TestRouteMutationsUseCanonicalOperations(t *testing.T) {
 			method:   http.MethodPost,
 			path:     "/api/v1/routes",
 			body:     `{"environment_id":"` + c07EnvironmentID + `","exposure":"public","host":"app.example.com","path":"/api/*","target_port":8080,"target_service_id":"` + c07ServiceID + `"}`,
-			status:   http.StatusCreated,
-			response: `{"id":"` + c07RouteID + `","environment_id":"` + c07EnvironmentID + `","host":"app.example.com","path":"/api/*","exposure":"public","target_service_id":"` + c07ServiceID + `","target_port":8080}`,
+			status:   http.StatusAccepted,
+			response: `{"route":{"id":"` + c07RouteID + `","environment_id":"` + c07EnvironmentID + `","host":"app.example.com","path":"/api/*","exposure":"public","target_service_id":"` + c07ServiceID + `","target_port":8080,"status":"pending"},"task_id":"task_c07"}`,
 			args: []string{
 				"add",
 				"--hostname",
@@ -128,8 +128,8 @@ func TestRouteMutationsUseCanonicalOperations(t *testing.T) {
 			method:   http.MethodPatch,
 			path:     "/api/v1/routes/" + c07RouteID,
 			body:     `{"exposure":"internal"}`,
-			status:   http.StatusOK,
-			response: `{"id":"` + c07RouteID + `","environment_id":"` + c07EnvironmentID + `","host":"app.example.com","path":"/api/*","exposure":"internal","target_service_id":"` + c07ServiceID + `","target_port":8080}`,
+			status:   http.StatusAccepted,
+			response: `{"route":{"id":"` + c07RouteID + `","environment_id":"` + c07EnvironmentID + `","host":"app.example.com","path":"/api/*","exposure":"internal","target_service_id":"` + c07ServiceID + `","target_port":8080,"status":"pending"},"task_id":"task_c07"}`,
 			args:     []string{"edit", c07RouteID, "--exposure", "internal"},
 		},
 		{

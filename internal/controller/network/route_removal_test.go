@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -24,7 +26,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Rationale: a Route that never reached an enabled Caddy projection must
+// Rationale: a Route that never reached an enabled provider projection must
 // still use the durable deletion lifecycle without dispatching host work.
 func TestPrepareControllerRouteRemovalTaskBindsExactFinalizer(t *testing.T) {
 	t.Parallel()
@@ -322,14 +324,28 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 	task etcd.TaskRecord,
 	intent etcd.RouteRemovalIntent,
 	procedure controller.RouteRemovalTaskProcedureIDs,
-) (etcd.TaskRecord, error) {
+) (etcd.RouteRemovalTaskPreparation, error) {
 	fake.calls++
 	fake.intent = intent
 	fake.procedure = procedure
 	if fake.err != nil {
-		return etcd.TaskRecord{}, fake.err
+		return etcd.RouteRemovalTaskPreparation{}, fake.err
+	}
+	if intent.CandidateProjection == nil {
+		return etcd.RouteRemovalTaskPreparation{Intent: intent, Task: task}, nil
 	}
 	componentID := intent.CandidateProjection.Components[0].Desired.ID
+	intent.Provider = &etcd.RouteProviderPin{
+		ComponentID: componentID, DefinitionDigest: strings.Repeat("a", 64), CatalogDigest: strings.Repeat("b", 64),
+		InputRevision: 1, InputGeneration: intent.CandidateProjection.RenderGeneration,
+		Destination: "components/router/config", ActionID: "activate-config",
+		ServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
+		Input: componentsdk.HTTPRouterInput{ComponentID: componentID, Enabled: true,
+			GeneratedServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
+			ZoneID:             ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: "10.0.0.2"},
+	}
+	fake.intent = intent
+	task.Executor = etcd.TaskExecutorAgent
 	task.Params = map[string]string{
 		etcd.TaskRouteEnvironmentParam:               intent.EnvironmentID,
 		etcd.TaskMaterializationEnvironmentParam:     intent.EnvironmentID,
@@ -342,7 +358,7 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 	}
 	task.Materializations = []etcd.TaskMaterializationRecord{{
 		StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID,
-		EnvironmentID: intent.EnvironmentID, Destination: controller.RouteRemovalCaddyfilePath,
+		EnvironmentID: intent.EnvironmentID, Destination: "components/router/config",
 		OutputKind: etcd.TaskMaterializationOutputPlainFile,
 		Mode:       uint32(entrymaterialization.ModeReadOnly), Length: 1,
 		SHA256: strings.Repeat("a", 64),
@@ -350,12 +366,12 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 			Kind: etcd.TaskMaterializationSourceComponentFile,
 			ComponentFile: &etcd.TaskComponentFileValueReference{
 				RevisionID: intent.CandidateProjection.RevisionID, ComponentID: componentID,
-				Path: controller.RouteRemovalCaddyfilePath, RouteRemovalTaskID: task.ID,
+				Path: "components/router/config", RouteTaskID: task.ID,
 			},
 		},
 	}}
 	task.PlanHash = strings.Repeat("b", 64)
-	return task, nil
+	return etcd.RouteRemovalTaskPreparation{Intent: intent, Task: task}, nil
 }
 
 func routeRemovalServiceState(
@@ -399,6 +415,8 @@ func routeRemovalServiceState(
 			Record: etcd.RouteRecord{EnvironmentID: environmentID, Desired: core.Route{
 				ID: routeID, Host: "app.example.com", Path: "/", Exposure: "public",
 				TargetServiceID: serviceID, TargetPort: 8080,
+			}, DesiredGeneration: 1, Observed: etcd.RouteObservation{
+				Status: etcd.RouteObservedUnserved, DesiredGeneration: 1,
 			}},
 			Revision: 14, ReadRevision: 14,
 		},
@@ -447,9 +465,9 @@ func TestRouteRemovalPublishesExactDurableIdentity(t *testing.T) {
 	}
 }
 
-// Rationale: removing a Route present in the applied Caddy projection must
+// Rationale: removing a Route present in an applied provider projection must
 // publish host work against the exact suppressed candidate generation.
-func TestRouteRemovalSelectsAgentCaddyPlanForAppliedRoute(t *testing.T) {
+func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 	t.Parallel()
 	repository, _, plans, service := routeRemovalServiceState(t)
 	at := service.now()
@@ -491,7 +509,7 @@ func TestRouteRemovalSelectsAgentCaddyPlanForAppliedRoute(t *testing.T) {
 	); err != nil {
 		t.Fatalf("RemoveRoute() error = %v", err)
 	}
-	if plans.calls != 1 || !plans.intent.RequiresCaddy || plans.intent.CandidateProjection == nil ||
+	if plans.calls != 1 || plans.intent.Provider == nil || plans.intent.CandidateProjection == nil ||
 		plans.intent.CandidateProjection.RenderGeneration != 8 ||
 		repository.task.Executor != etcd.TaskExecutorAgent || repository.task.RenderGeneration != 8 ||
 		repository.tombstone.Phase != etcd.DeletionPhaseHostEffects {
@@ -504,7 +522,7 @@ func TestRouteRemovalSelectsAgentCaddyPlanForAppliedRoute(t *testing.T) {
 
 // Rationale: candidate rendering is part of publication, so planner failure
 // must escape unchanged and leave no durable deletion boundary behind.
-func TestRouteRemovalPropagatesCaddyPlannerError(t *testing.T) {
+func TestRouteRemovalPropagatesProviderPlannerError(t *testing.T) {
 	t.Parallel()
 	repository, _, plans, service := routeRemovalServiceState(t)
 	at := service.now()
@@ -541,7 +559,7 @@ func TestRouteRemovalPropagatesCaddyPlannerError(t *testing.T) {
 	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
 		Record: projection, Revision: 16, ReadRevision: 16,
 	}
-	plans.err = errs.New(errs.KindInternal, "injected Caddy planner failure")
+	plans.err = errs.New(errs.KindInternal, "injected provider planner failure")
 	_, err = service.RemoveRoute(
 		context.Background(), repository.route.Record.Desired.ID, "route-remove-key-0005",
 	)
