@@ -35,6 +35,7 @@ func (repository *ComponentRepository) CreatePlatformComponent(ctx context.Conte
 		{Type: MutationPut, Key: componentKey(record.Desired.ID), Value: value},
 		{Type: MutationPut, Key: platformComponentOwnerKey(record.Desired.ID), Value: []byte(record.Desired.ID)},
 		{Type: MutationPut, Key: platformComponentKindKey(record.Desired.Kind), Value: []byte(record.Desired.ID)},
+		componentWriteFenceMutation(record.Desired.ID),
 	})
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
@@ -98,7 +99,10 @@ func (repository *ComponentRepository) replacePlatform(ctx context.Context, curr
 		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
 		{Key: deletionTombstoneKey("component", current.Record.Desired.ID)},
-	}, []Mutation{{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: value}})
+	}, []Mutation{
+		{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: value},
+		componentWriteFenceMutation(replacement.Desired.ID),
+	})
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}

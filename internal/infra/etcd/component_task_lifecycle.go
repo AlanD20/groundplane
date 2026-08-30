@@ -59,6 +59,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
+	retryIntent.RouteProjection = cloneComponentTaskRouteProjection(intent.RouteProjection)
 
 	zoneSet := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
@@ -500,6 +501,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 				Type: MutationPut, Key: componentKey(candidate.Candidate.Desired.ID), Value: value,
 			})
 		}
+		change.mutations = append(change.mutations, componentWriteFenceMutation(task.ID))
 	}
 	routeObservationChange, err := repository.prepareComponentTaskRouteObservationAcknowledgement(
 		ctx, intent, terminalStatus, revision,

@@ -38,8 +38,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err := validatePlatformComponentRecord(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if replacement.Desired.Kind != core.ComponentKindCoreDNS ||
-		task.Target != replacement.Desired.ID || task.Executor != TaskExecutorAgent ||
+	if task.Target != replacement.Desired.ID || task.Executor != TaskExecutorAgent ||
 		task.Type != TaskUpdate || task.Status != TaskStatusPending ||
 		task.Owner != PlatformTaskOwner() || task.Actor != TaskActorOperator ||
 		task.Params[TaskResourceKindParam] != TaskResourceComponent {
@@ -141,6 +140,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: componentValue},
+		componentWriteFenceMutation(replacement.Desired.ID),
 		{Type: MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},

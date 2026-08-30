@@ -215,6 +215,9 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			Mutation{Type: MutationPut, Key: componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind), Value: []byte(component.Desired.ID)},
 		)
 	}
+	if len(creation.Components) > 0 {
+		mutations = append(mutations, componentWriteFenceMutation(creation.Task.ID))
+	}
 	for index, entry := range creation.Entries {
 		mutations = append(mutations,
 			Mutation{Type: MutationPut, Key: entryRecordKey(entry.Entry.ID), Value: entryValues[index]},

@@ -25,25 +25,27 @@ type PlatformDNSHost struct {
 }
 
 type PlatformComponentTaskRenderInput struct {
-	PlanID             string                      `json:"plan_id"`
-	TaskID             string                      `json:"task_id"`
-	ComponentID        string                      `json:"component_id"`
-	DesiredSHA256      string                      `json:"desired_sha256"`
-	BaselineGeneration uint64                      `json:"baseline_generation"`
-	BaselineSHA256     string                      `json:"baseline_sha256"`
-	Config             core.CoreDNSComponentConfig `json:"config"`
-	Hosts              []PlatformDNSHost           `json:"hosts,omitempty"`
-	GeneratedServiceID string                      `json:"generated_service_id"`
-	EnsureService      bool                        `json:"ensure_service"`
-	DisableService     bool                        `json:"disable_service"`
-	DefinitionSHA256   string                      `json:"definition_sha256"`
-	CatalogSHA256      string                      `json:"catalog_sha256"`
-	ActionID           string                      `json:"action_id"`
-	ArtifactID         string                      `json:"artifact_id"`
-	ComposeArtifactID  string                      `json:"compose_artifact_id"`
-	ArtifactSHA256     string                      `json:"artifact_sha256"`
-	ArtifactLength     uint64                      `json:"artifact_length"`
-	PlanSHA256         string                      `json:"plan_sha256"`
+	PlanID                      string                      `json:"plan_id"`
+	TaskID                      string                      `json:"task_id"`
+	ComponentID                 string                      `json:"component_id"`
+	DesiredSHA256               string                      `json:"desired_sha256"`
+	BaselineGeneration          uint64                      `json:"baseline_generation"`
+	BaselineSHA256              string                      `json:"baseline_sha256"`
+	HostResolutionInputRevision int64                       `json:"host_resolution_input_revision"`
+	HostResolutionSHA256        string                      `json:"host_resolution_sha256"`
+	Config                      core.CoreDNSComponentConfig `json:"config"`
+	Hosts                       []PlatformDNSHost           `json:"hosts,omitempty"`
+	GeneratedServiceID          string                      `json:"generated_service_id"`
+	EnsureService               bool                        `json:"ensure_service"`
+	DisableService              bool                        `json:"disable_service"`
+	DefinitionSHA256            string                      `json:"definition_sha256"`
+	CatalogSHA256               string                      `json:"catalog_sha256"`
+	ActionID                    string                      `json:"action_id"`
+	ArtifactID                  string                      `json:"artifact_id"`
+	ComposeArtifactID           string                      `json:"compose_artifact_id"`
+	ArtifactSHA256              string                      `json:"artifact_sha256"`
+	ArtifactLength              uint64                      `json:"artifact_length"`
+	PlanSHA256                  string                      `json:"plan_sha256"`
 }
 
 func platformComponentTaskRenderInputKey(planID string) string {
@@ -103,10 +105,10 @@ func decodePlatformComponentTaskRenderInput(value []byte) (PlatformComponentTask
 func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInput) error {
 	if ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
 		ids.Validate(ids.KindComponent, input.ComponentID) != nil ||
-		ids.Validate(ids.KindService, input.GeneratedServiceID) != nil ||
+		ids.Validate(ids.KindService, input.GeneratedServiceID) != nil || input.HostResolutionInputRevision <= 0 ||
 		ids.Validate(ids.KindConfig, input.ArtifactID) != nil ||
 		ids.Validate(ids.KindConfig, input.ComposeArtifactID) != nil || input.BaselineGeneration != 1 ||
-		!validSHA256(input.DesiredSHA256) || !validSHA256(input.BaselineSHA256) ||
+		!validSHA256(input.DesiredSHA256) || !validSHA256(input.BaselineSHA256) || !validSHA256(input.HostResolutionSHA256) ||
 		!validSHA256(input.DefinitionSHA256) || !validSHA256(input.CatalogSHA256) ||
 		!validSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
 		!validSHA256(input.PlanSHA256) ||

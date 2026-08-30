@@ -174,12 +174,22 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != 2 || state.Values[0] == nil || state.Values[1] != nil {
+	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] == nil || state.Values[1] != nil {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry state changed")
 	}
 	record, err := decodeRouteRecord(state.Values[0].Value)
 	if err != nil || !sameRouteDesiredVersion(record, intent.Route) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry desired state changed")
+	}
+	if intent.Provider != nil {
+		if intent.CurrentProjection == nil || state.Values[2] == nil ||
+			state.Values[2].ModRevision != intent.CurrentProjectionRevision {
+			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry applied projection changed")
+		}
+		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[2].Value)
+		if decodeErr != nil || !sameRouteRemovalProjection(projection, *intent.CurrentProjection) {
+			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry applied projection changed")
+		}
 	}
 	retryIntent := cloneRouteMutationIntent(intent)
 	retryIntent.TaskID, retryIntent.Status, retryIntent.CreatedAt, retryIntent.TerminalAt =
@@ -191,14 +201,20 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
+	conditions := []Condition{
+		{Key: routeMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
+		{Key: routeMutationIntentKey(retry.ID)},
+		{Key: routeKey(intent.RouteID), ModRevision: state.Values[0].ModRevision},
+		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+	}
+	if intent.Provider != nil {
+		conditions = append(conditions, Condition{
+			Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision,
+		})
+	}
 	return routeTaskChange{
-		applies: true,
-		conditions: []Condition{
-			{Key: routeMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
-			{Key: routeMutationIntentKey(retry.ID)},
-			{Key: routeKey(intent.RouteID), ModRevision: state.Values[0].ModRevision},
-			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
-		},
+		applies:    true,
+		conditions: conditions,
 		mutations: []Mutation{
 			{Type: MutationPut, Key: routeMutationIntentKey(retry.ID), Value: encoded},
 			{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},

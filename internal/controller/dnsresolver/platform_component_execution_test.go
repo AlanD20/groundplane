@@ -79,13 +79,14 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	input := etcd.PlatformComponentTaskRenderInput{
 		PlanID: planID, TaskID: taskID, ComponentID: componentID, DesiredSHA256: desiredDigest,
 		BaselineGeneration: 1, BaselineSHA256: strings.Repeat("2", 64), Config: *component.Config.CoreDNS,
+		HostResolutionInputRevision: 1, HostResolutionSHA256: strings.Repeat("5", 64),
 		GeneratedServiceID: serviceID, DefinitionSHA256: strings.Repeat("3", 64), CatalogSHA256: strings.Repeat("4", 64),
 		ActionID: "activate-config", ArtifactID: ids.NewAt(ids.KindConfig, now, 6), ComposeArtifactID: ids.NewAt(ids.KindConfig, now, 7),
 		ArtifactSHA256: hex.EncodeToString(artifactDigest[:]), ArtifactLength: uint64(len(firstPlan.Files[0].Content)),
 		PlanSHA256: hex.EncodeToString(planDigest[:]),
 	}
 	task := etcd.TaskRecord{
-		ID: taskID, PlanID: planID, RenderGeneration: 1, Executor: etcd.TaskExecutorAgent,
+		ID: taskID, PlanID: planID, PlanHash: input.PlanSHA256, RenderGeneration: 1, Executor: etcd.TaskExecutorAgent,
 		Type: etcd.TaskUpdate, Target: componentID,
 		Params: map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceComponent, etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest},
 		Steps:  []etcd.TaskStepRecord{{ID: stepID}},
@@ -107,6 +108,12 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	}
 	if len(execution.GetSteps()) != 1 {
 		t.Fatalf("execution steps = %d, want 1", len(execution.GetSteps()))
+	}
+	retry := task
+	retry.ID = ids.NewAt(ids.KindTask, now, 8)
+	retry.RetryOf = task.ID
+	if _, err := planner.ResolveComponentExecutionPlan(context.Background(), retry); err != nil {
+		t.Fatalf("ResolveComponentExecutionPlan(retry) error = %v", err)
 	}
 	catalog.plan = secondPlan
 	if _, err := planner.ResolveComponentExecutionPlan(context.Background(), task); err == nil {

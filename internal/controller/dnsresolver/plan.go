@@ -19,10 +19,10 @@ type EnvironmentPlanner interface {
 
 func ValidateComponent(renderer componentdns.Renderer, component core.Component) error {
 	if renderer == nil {
-		return invalid("coredns: renderer is required")
+		return invalid("dns-resolver: renderer is required")
 	}
-	if component.Kind != core.ComponentKindCoreDNS || component.Owner != core.ComponentOwnerPlatform || component.OwnerID != "" {
-		return invalid("coredns: component must be the singleton platform CoreDNS component")
+	if component.Owner != core.ComponentOwnerPlatform || component.OwnerID != "" {
+		return invalid("dns-resolver: component must be platform-owned")
 	}
 	config, err := DecodeConfig(component.Config)
 	if err != nil {
@@ -42,26 +42,36 @@ func BuildIntent(
 	renderer componentdns.Renderer,
 	environmentPlanner EnvironmentPlanner,
 	component core.Component,
-	hosts []componentdns.Host,
-	baseline []componentdns.ResolverEndpoint,
+	resolverInput componentdns.ResolverInput,
+	implementation componentsdk.ImplementationKey,
 ) (componentdns.Intent, error) {
 	if err := ValidateComponent(renderer, component); err != nil {
 		return componentdns.Intent{}, err
 	}
 	if environmentPlanner == nil {
-		return componentdns.Intent{}, invalid("coredns: environment planner is required")
+		return componentdns.Intent{}, invalid("dns-resolver: environment planner is required")
 	}
 	if !component.Enabled {
-		return componentdns.Intent{}, invalid("coredns: disabled component cannot receive an update intent")
+		return componentdns.Intent{}, invalid("dns-resolver: disabled component cannot receive an update intent")
 	}
 	if len(component.GeneratedServices) != 1 || component.GeneratedServices[0] == "" {
-		return componentdns.Intent{}, invalid("coredns: exactly one generated service is required")
+		return componentdns.Intent{}, invalid("dns-resolver: exactly one generated service is required")
+	}
+	if implementation == "" {
+		return componentdns.Intent{}, invalid("dns-resolver: implementation is required")
+	}
+	if err := resolverInput.Validate(); err != nil {
+		return componentdns.Intent{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	config, err := DecodeConfig(component.Config)
 	if err != nil {
 		return componentdns.Intent{}, err
 	}
-	input, err := buildRenderInput(hosts, config, baseline)
+	input, err := buildRenderInput(
+		resolverInput.HostResolution.Hosts,
+		config,
+		resolverInput.Baseline.Resolvers,
+	)
 	if err != nil {
 		return componentdns.Intent{}, err
 	}
@@ -70,14 +80,14 @@ func BuildIntent(
 		return componentdns.Intent{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	plan, err := environmentPlanner.Plan(
-		componentsdk.ImplementationKey(component.Kind), component.GeneratedServices[0], input,
+		implementation, component.GeneratedServices[0], input,
 	)
 	if err != nil {
 		return componentdns.Intent{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	if len(plan.Files) != 1 || len(plan.Files[0].Content) == 0 {
 		clearEnvironmentPlan(plan)
-		return componentdns.Intent{}, invalid("coredns: environment planner must return one managed artifact")
+		return componentdns.Intent{}, invalid("dns-resolver: environment planner must return one managed artifact")
 	}
 	artifactDigest := sha256.Sum256(plan.Files[0].Content)
 	artifactLength := uint64(len(plan.Files[0].Content))

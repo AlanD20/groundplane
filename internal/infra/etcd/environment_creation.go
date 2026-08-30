@@ -182,6 +182,9 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 			},
 		)
 	}
+	if len(components) > 0 {
+		mutations = append(mutations, componentWriteFenceMutation(task.ID))
+	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

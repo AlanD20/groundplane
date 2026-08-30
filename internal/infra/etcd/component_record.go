@@ -9,7 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const componentPrefix = "/v1/records/components/"
+const (
+	componentPrefix        = "/v1/records/components/"
+	componentWriteFenceKey = "/v1/indexes/components/write-fence"
+)
 
 // ComponentRecord separates operator-authored desired state from generated
 // identity, address, and health owned by the Controller runtime.
@@ -133,6 +136,10 @@ func componentDesiredRecord(component core.Component) (ComponentDesiredRecord, e
 }
 
 func componentKey(id string) string { return componentPrefix + id }
+
+func componentWriteFenceMutation(authorityID string) Mutation {
+	return Mutation{Type: MutationPut, Key: componentWriteFenceKey, Value: []byte(authorityID)}
+}
 
 func componentEnvironmentOwnerPrefix(environmentID string) string {
 	return "/v1/indexes/components/by-owner/environment/" + environmentID + "/"

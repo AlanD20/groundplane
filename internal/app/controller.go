@@ -497,12 +497,35 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
 	}
 	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
-		hierarchyRecords, componentRecords, controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
+		componentRecords, componentRecords, controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
 		coreDNSRenderer, actionCatalog, actionCatalog, managedConfigActivateAction,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform Component render planner: %w", err)
+	}
+	if err := tasks.SetPlatformResolverTaskPreparer(func(
+		ctx context.Context,
+		current etcd.Versioned[etcd.ComponentRecord],
+		projection etcd.HostResolutionProjectionRecord,
+		task etcd.TaskRecord,
+	) (etcd.PlatformComponentTaskRenderInput, error) {
+		desired, err := etcd.ProjectComponentRecord(current.Record)
+		if err != nil {
+			return etcd.PlatformComponentTaskRenderInput{}, err
+		}
+		return platformRenderPlanner.PrepareConfigTaskAtProjection(ctx, current, desired, task, projection)
+	}); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: configure platform resolver Task preparer: %w", err)
+	}
+	if err := tasks.SetPlatformResolverComponentSelector(platformRenderPlanner.SelectResolver); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: configure platform resolver Component selector: %w", err)
+	}
+	if err := controllerdns.EnsurePlatformResolverTask(ctx, componentRecords, tasks, platformRenderPlanner); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize platform resolver projection: %w", err)
 	}
 	platformComponentExecution, err := controllerdns.NewPlatformComponentExecutionPlanner(
 		cfg.Storage.VolumeRoot, componentRecords, actionCatalog,

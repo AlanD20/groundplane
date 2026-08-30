@@ -54,12 +54,22 @@ func TestBuildIntentIsDeterministic(t *testing.T) {
 	}
 	hosts := []componentdns.Host{{Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"app.example.com"}}}
 	baseline := []componentdns.ResolverEndpoint{{Address: netip.MustParseAddr("1.1.1.1")}}
+	canonicalBaseline, err := componentdns.NewResolverBaseline(1, baseline)
+	if err != nil {
+		t.Fatalf("NewResolverBaseline() error = %v", err)
+	}
+	resolverInput := componentdns.ResolverInput{
+		Baseline: canonicalBaseline,
+		HostResolution: componentdns.HostResolutionProjection{
+			InputRevision: 1, InputSHA256: [sha256.Size]byte{1}, Hosts: hosts,
+		},
+	}
 	planner := environmentPlannerPin{image: "example/resolver:1"}
-	first, err := BuildIntent(rendererPin{}, planner, component, hosts, baseline)
+	first, err := BuildIntent(rendererPin{}, planner, component, resolverInput, "resolver")
 	if err != nil {
 		t.Fatalf("BuildIntent() error = %v", err)
 	}
-	second, err := BuildIntent(rendererPin{}, planner, component, hosts, baseline)
+	second, err := BuildIntent(rendererPin{}, planner, component, resolverInput, "resolver")
 	if err != nil {
 		t.Fatalf("BuildIntent() second error = %v", err)
 	}
@@ -80,11 +90,21 @@ func TestBuildIntentRejectsChangedServiceReplay(t *testing.T) {
 	}
 	hosts := []componentdns.Host{{Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"app.example.com"}}}
 	baseline := []componentdns.ResolverEndpoint{{Address: netip.MustParseAddr("1.1.1.1")}}
-	first, err := BuildIntent(rendererPin{}, environmentPlannerPin{image: "example/resolver:1"}, component, hosts, baseline)
+	canonicalBaseline, err := componentdns.NewResolverBaseline(1, baseline)
+	if err != nil {
+		t.Fatalf("NewResolverBaseline() error = %v", err)
+	}
+	resolverInput := componentdns.ResolverInput{
+		Baseline: canonicalBaseline,
+		HostResolution: componentdns.HostResolutionProjection{
+			InputRevision: 1, InputSHA256: [sha256.Size]byte{1}, Hosts: hosts,
+		},
+	}
+	first, err := BuildIntent(rendererPin{}, environmentPlannerPin{image: "example/resolver:1"}, component, resolverInput, "resolver")
 	if err != nil {
 		t.Fatalf("BuildIntent() first error = %v", err)
 	}
-	second, err := BuildIntent(rendererPin{}, environmentPlannerPin{image: "example/resolver:2"}, component, hosts, baseline)
+	second, err := BuildIntent(rendererPin{}, environmentPlannerPin{image: "example/resolver:2"}, component, resolverInput, "resolver")
 	if err != nil {
 		t.Fatalf("BuildIntent() second error = %v", err)
 	}
@@ -93,5 +113,34 @@ func TestBuildIntentRejectsChangedServiceReplay(t *testing.T) {
 	}
 	if first.PlanSHA256 == second.PlanSHA256 {
 		t.Fatal("BuildIntent() ignored changed service behavior")
+	}
+}
+
+func TestBuildIntentUsesRegisteredResolverImplementation(t *testing.T) {
+	t.Parallel()
+	component := core.Component{
+		ID: "cmp_alternate", Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKind("alternate-resolver"),
+		Enabled: true, GeneratedServices: []string{"svc_alternate"},
+		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+	}
+	baseline, err := componentdns.NewResolverBaseline(1, []componentdns.ResolverEndpoint{{Address: netip.MustParseAddr("1.1.1.1")}})
+	if err != nil {
+		t.Fatalf("NewResolverBaseline() error = %v", err)
+	}
+	input := componentdns.ResolverInput{
+		Baseline: baseline,
+		HostResolution: componentdns.HostResolutionProjection{
+			InputRevision: 1, InputSHA256: [sha256.Size]byte{1},
+		},
+	}
+	intent, err := BuildIntent(
+		rendererPin{}, environmentPlannerPin{image: "example/alternate:1"}, component, input,
+		componentsdk.ImplementationKey("alternate-resolver"),
+	)
+	if err != nil {
+		t.Fatalf("BuildIntent() error = %v", err)
+	}
+	if intent.ComponentID != component.ID || intent.ServiceID != component.GeneratedServices[0] {
+		t.Fatalf("BuildIntent() identity = %#v", intent)
 	}
 }

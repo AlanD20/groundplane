@@ -456,6 +456,15 @@ func (repository *TaskRepository) retryTask(
 		mutations = append(mutations, componentChange.mutations...)
 	}
 	defer clearComponentTaskChange(componentChange)
+	resolverChange, err := repository.preparePlatformDNSResolverTaskRetry(ctx, source, retry)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if resolverChange.applies {
+		conditions = append(conditions, resolverChange.conditions...)
+		mutations = append(mutations, resolverChange.mutations...)
+	}
+	defer clearHostResolutionReconciliationChange(resolverChange)
 	connectorChange, err := repository.prepareConnectorTaskRetry(
 		ctx, source.Record, retry, source.ReadRevision,
 	)
@@ -494,6 +503,7 @@ func (repository *TaskRepository) retryTask(
 		len(connectorChange.conditions),
 		len(runnerChange.conditions),
 		len(releaseChange.conditions),
+		len(resolverChange.conditions),
 	)
 	environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 		ctx,
@@ -553,11 +563,12 @@ func classifyTaskRetryConflict(
 	connectorConditions int,
 	runnerConditions int,
 	releaseConditions int,
+	resolverConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		expectedValues := 5 + attachConditions + environmentConditions + secretConditions +
 			scriptConditions + routeConditions + serviceConditions + backingZoneConditions + componentConditions +
-			connectorConditions + runnerConditions + releaseConditions
+			connectorConditions + runnerConditions + releaseConditions + resolverConditions
 		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "task retry compare evidence is incomplete")
 		}
@@ -1841,6 +1852,30 @@ func (repository *TaskRepository) acknowledgeTask(
 		if platformComponentChange.applies {
 			conditions = append(conditions, platformComponentChange.conditions...)
 			mutations = append(mutations, platformComponentChange.mutations...)
+		}
+		hostResolutionBaseConditionCount := len(conditions)
+		hostResolutionChange, err := repository.prepareHostResolutionReconciliation(
+			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision, conditions,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		defer clearHostResolutionReconciliationChange(hostResolutionChange)
+		if hostResolutionChange.applies {
+			conditions = append(conditions, hostResolutionChange.conditions[hostResolutionBaseConditionCount:]...)
+			mutations = append(mutations, hostResolutionChange.mutations...)
 		}
 		connectorChange, err := repository.prepareConnectorTaskAcknowledgement(
 			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,

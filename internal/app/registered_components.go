@@ -86,6 +86,26 @@ func (catalog registeredActionCatalog) FindAction(
 	return catalog.catalog.FindAction(implementation, action)
 }
 
+func (catalog registeredActionCatalog) FindActionByCapability(
+	capability componentsdk.Capability,
+	actionID componentsdk.ActionID,
+) (componentsdk.Definition, componentsdk.ActionDefinition, bool) {
+	for _, definition := range catalog.catalog.Definitions() {
+		provides := false
+		for _, provided := range definition.Provides() {
+			provides = provides || provided == capability
+		}
+		if !provides {
+			continue
+		}
+		action, found := definition.FindAction(actionID)
+		if found {
+			return definition, action, true
+		}
+	}
+	return componentsdk.Definition{}, componentsdk.ActionDefinition{}, false
+}
+
 func (catalog registeredActionCatalog) Plan(
 	implementation componentsdk.ImplementationKey,
 	serviceID string,

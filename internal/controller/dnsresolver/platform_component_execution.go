@@ -153,7 +153,8 @@ func (planner *PlatformExecutionPlanner) resolve(
 	} else if input.DisableService {
 		expectedSteps = 2
 	}
-	if input.TaskID != task.ID || input.ComponentID != task.Target || len(task.Steps) != expectedSteps ||
+	if (input.TaskID != task.ID && task.RetryOf == "") || input.ComponentID != task.Target ||
+		input.PlanID != task.PlanID || input.PlanSHA256 != task.PlanHash || len(task.Steps) != expectedSteps ||
 		input.DesiredSHA256 != task.Params[etcd.TaskPlatformComponentDesiredSHA256Param] {
 		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "Platform Component render input does not match its Task")
 	}
@@ -187,11 +188,23 @@ func (planner *PlatformExecutionPlanner) resolve(
 		}
 		hosts[index] = componentdns.Host{Address: address, Hostnames: append([]string(nil), host.Hostnames...)}
 	}
+	baselineInput, err := componentdns.NewResolverBaseline(input.BaselineGeneration, baselineResolvers)
+	if err != nil {
+		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
+	}
+	hostDigest, err := componentDigest(input.HostResolutionSHA256)
+	if err != nil {
+		return resolvedPlatformComponent{}, err
+	}
+	hostInput, err := componentdns.NewHostResolutionProjection(input.HostResolutionInputRevision, hostDigest, hosts)
+	if err != nil {
+		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
+	}
 	config, err := DecodeConfig(core.ComponentConfig{CoreDNS: &input.Config})
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}
-	renderInput, err := BuildRenderInput(hosts, config, baselineResolvers)
+	renderInput, err := BuildRenderInput(hostInput.Hosts, config, baselineInput.Resolvers)
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}

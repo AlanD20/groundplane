@@ -22,6 +22,25 @@ type taskRepositoryStore interface {
 	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
 }
 
+// PlatformResolverTaskPreparer is the private composition-root seam for
+// rendering a generic dns-resolver Task. The repository owns publication and
+// fencing; the Controller owns the registered Component renderer.
+type PlatformResolverTaskPreparer func(
+	context.Context,
+	Versioned[ComponentRecord],
+	HostResolutionProjectionRecord,
+	TaskRecord,
+) (PlatformComponentTaskRenderInput, error)
+
+// PlatformResolverComponentSelector selects the platform Component that
+// provides the registered dns-resolver capability. The repository supplies
+// only the fixed-revision platform Component records; capability selection is
+// kept at the composition root.
+type PlatformResolverComponentSelector func(
+	context.Context,
+	[]Versioned[ComponentRecord],
+) (Versioned[ComponentRecord], error)
+
 // TaskEventAppend reports the durable sequence allocated by the Controller.
 // Duplicate is true only when the same Agent event was already committed.
 type TaskEventAppend struct {
@@ -68,12 +87,39 @@ type taskCASRetryPolicy struct {
 // lifecycle, and event-journal mechanics. Retention metadata is persisted by
 // the journal codec; the daily Task pruning collector remains separate.
 type TaskRepository struct {
-	store       taskRepositoryStore
-	retryPolicy taskCASRetryPolicy
+	store                        taskRepositoryStore
+	retryPolicy                  taskCASRetryPolicy
+	platformResolverTaskPreparer PlatformResolverTaskPreparer
+	platformResolverSelector     PlatformResolverComponentSelector
 }
 
 func NewTaskRepository(store Store) (*TaskRepository, error) {
 	return newTaskRepository(store)
+}
+
+// SetPlatformResolverTaskPreparer installs the private renderer used only by
+// automatic host-resolution reconciliation. It must be configured before the
+// Controller starts accepting lifecycle acknowledgements.
+func (repository *TaskRepository) SetPlatformResolverTaskPreparer(
+	preparer PlatformResolverTaskPreparer,
+) error {
+	if repository == nil || preparer == nil {
+		return errs.New(errs.KindInternal, "platform resolver Task preparer is required")
+	}
+	repository.platformResolverTaskPreparer = preparer
+	return nil
+}
+
+// SetPlatformResolverComponentSelector installs the private capability
+// selector used by automatic host-resolution reconciliation.
+func (repository *TaskRepository) SetPlatformResolverComponentSelector(
+	selector PlatformResolverComponentSelector,
+) error {
+	if repository == nil || selector == nil {
+		return errs.New(errs.KindInternal, "platform resolver Component selector is required")
+	}
+	repository.platformResolverSelector = selector
+	return nil
 }
 
 func newTaskRepository(store taskRepositoryStore) (*TaskRepository, error) {

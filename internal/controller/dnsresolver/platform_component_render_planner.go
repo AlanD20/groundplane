@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"net/netip"
-	"sort"
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -16,9 +15,7 @@ import (
 )
 
 type PlatformProjectionReader interface {
-	ListEnvironmentAppliedComposeProjections(
-		context.Context,
-	) ([]etcd.Versioned[etcd.EnvironmentComposeProjection], error)
+	GetHostResolutionProjection(context.Context) (etcd.Versioned[etcd.HostResolutionProjectionRecord], bool, error)
 }
 
 type BaselineRepository interface {
@@ -31,6 +28,7 @@ type BaselineCapture func(context.Context) ([]byte, error)
 type ActionCatalog interface {
 	Digest() [32]byte
 	FindAction(componentsdk.ImplementationKey, componentsdk.ActionID) (componentsdk.Definition, componentsdk.ActionDefinition, bool)
+	FindActionByCapability(componentsdk.Capability, componentsdk.ActionID) (componentsdk.Definition, componentsdk.ActionDefinition, bool)
 }
 
 type PlatformRenderPlanner struct {
@@ -41,6 +39,31 @@ type PlatformRenderPlanner struct {
 	environmentPlanner  EnvironmentPlanner
 	catalog             ActionCatalog
 	managedConfigAction componentsdk.ActionID
+}
+
+type fixedProjectionReader struct {
+	record etcd.HostResolutionProjectionRecord
+}
+
+func (reader fixedProjectionReader) GetHostResolutionProjection(
+	context.Context,
+) (etcd.Versioned[etcd.HostResolutionProjectionRecord], bool, error) {
+	return etcd.Versioned[etcd.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
+}
+
+// PrepareConfigTaskAtProjection is the startup/recovery seam. It uses the
+// same planner as an ordinary Component reconciliation while pinning the
+// caller's exact projection snapshot instead of reading a second view.
+func (planner *PlatformRenderPlanner) PrepareConfigTaskAtProjection(
+	ctx context.Context,
+	current etcd.Versioned[etcd.ComponentRecord],
+	desired core.Component,
+	task etcd.TaskRecord,
+	projection etcd.HostResolutionProjectionRecord,
+) (etcd.PlatformComponentTaskRenderInput, error) {
+	clone := *planner
+	clone.projections = fixedProjectionReader{record: projection}
+	return clone.PrepareConfigTask(ctx, current, desired, task)
 }
 
 func NewPlatformRenderPlanner(
@@ -85,7 +108,23 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
 	}
-	hosts, durableHosts, err := planner.appliedHosts(ctx)
+	hostResolution, found, err := planner.projections.GetHostResolutionProjection(ctx)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	if !found {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.New(errs.KindStateConflict, "host-resolution projection is not initialized")
+	}
+	definition, action, found := planner.catalog.FindActionByCapability(
+		componentsdk.CapabilityDNSResolver, planner.managedConfigAction,
+	)
+	if !found || !definitionProvidesResolverGrants(definition) {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindInternal,
+			"registered dns-resolver capability is absent from the compiled catalog",
+		)
+	}
+	resolverInput, durableHosts, err := resolverInputFromProjection(hostResolution.Record, baseline.Record.Generation, resolvers)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
@@ -98,13 +137,13 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 	default:
 		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
 			errs.KindStateConflict,
-			"CoreDNS Component has more than one generated Service",
+			"dns-resolver Component has more than one generated Service",
 		)
 	}
 	renderComponent := desired
 	renderComponent.GeneratedServices = []string{generatedServiceID}
 	intent, err := BuildIntent(
-		planner.renderer, planner.environmentPlanner, renderComponent, hosts, resolvers,
+		planner.renderer, planner.environmentPlanner, renderComponent, resolverInput, definition.Implementation(),
 	)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
@@ -116,16 +155,6 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 	desiredSHA256, err := etcd.PlatformComponentDesiredDigest(replacement)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
-	}
-	definition, action, found := planner.catalog.FindAction(
-		componentsdk.ImplementationKey(core.ComponentKindCoreDNS),
-		planner.managedConfigAction,
-	)
-	if !found {
-		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
-			errs.KindInternal,
-			"CoreDNS activate-config action is absent from the compiled catalog",
-		)
 	}
 	config := core.CloneComponentConfig(desired.Config).CoreDNS
 	if config == nil {
@@ -140,7 +169,9 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 		PlanID: task.PlanID, TaskID: task.ID, ComponentID: desired.ID,
 		DesiredSHA256:      desiredSHA256,
 		BaselineGeneration: baseline.Record.Generation, BaselineSHA256: baseline.Record.SHA256,
-		Config: *config, Hosts: durableHosts, GeneratedServiceID: generatedServiceID,
+		HostResolutionInputRevision: hostResolution.Record.InputRevision,
+		HostResolutionSHA256:        hostResolution.Record.InputSHA256,
+		Config:                      *config, Hosts: durableHosts, GeneratedServiceID: generatedServiceID,
 		EnsureService:    len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy,
 		DefinitionSHA256: hex.EncodeToString(definitionDigest[:]),
 		CatalogSHA256:    hex.EncodeToString(catalogDigest[:]), ActionID: string(action.ID()),
@@ -149,6 +180,61 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 		ArtifactLength: intent.ArtifactLength,
 		PlanSHA256:     hex.EncodeToString(intent.PlanSHA256[:]),
 	}, nil
+}
+
+// SelectResolver selects the sole platform-owned Component after proving that
+// the compiled catalog contains a resolver definition with its generic grants.
+func (planner *PlatformRenderPlanner) SelectResolver(
+	ctx context.Context,
+	candidates []etcd.Versioned[etcd.ComponentRecord],
+) (etcd.Versioned[etcd.ComponentRecord], error) {
+	if ctx == nil || planner == nil || planner.catalog == nil {
+		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindInternal, "dns-resolver selector dependencies are required")
+	}
+	definition, _, found := planner.catalog.FindActionByCapability(
+		componentsdk.CapabilityDNSResolver, planner.managedConfigAction,
+	)
+	if !found || !definitionProvidesResolverGrants(definition) {
+		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindInternal, "registered dns-resolver capability is absent from the compiled catalog")
+	}
+	var selected etcd.Versioned[etcd.ComponentRecord]
+	for _, candidate := range candidates {
+		if candidate.Record.Desired.Owner != core.ComponentOwnerPlatform || candidate.Record.Desired.OwnerID != "" {
+			continue
+		}
+		if selected.Revision != 0 {
+			return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindStateConflict, "multiple platform dns-resolver Components are registered")
+		}
+		selected = candidate
+	}
+	if selected.Revision <= 0 || selected.ReadRevision <= 0 {
+		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindComponentNotFound, "platform dns-resolver Component is not registered")
+	}
+	return selected, nil
+}
+
+func definitionProvidesResolverGrants(definition componentsdk.Definition) bool {
+	providesResolver := false
+	for _, capability := range definition.Provides() {
+		providesResolver = providesResolver || capability == componentsdk.CapabilityDNSResolver
+	}
+	grants := func(capability componentsdk.Capability, operation componentsdk.Operation) bool {
+		for _, grant := range definition.Grants() {
+			if grant.Capability() != capability {
+				continue
+			}
+			for _, granted := range grant.Operations() {
+				if granted == operation {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return providesResolver && grants(componentsdk.CapabilityManagedConfig, componentsdk.OperationConfigure) &&
+		grants(componentsdk.CapabilityManagedConfig, componentsdk.OperationActivate) &&
+		grants(componentsdk.CapabilityHostResolution, componentsdk.OperationConfigure) &&
+		grants(componentsdk.CapabilityHostResolution, componentsdk.OperationObserve)
 }
 
 func (planner *PlatformRenderPlanner) PrepareDisableTask(
@@ -185,58 +271,42 @@ func (planner *PlatformRenderPlanner) PrepareDisableTask(
 	return input, nil
 }
 
-func (planner *PlatformRenderPlanner) appliedHosts(
-	ctx context.Context,
-) ([]componentdns.Host, []etcd.PlatformDNSHost, error) {
-	projections, err := planner.projections.ListEnvironmentAppliedComposeProjections(ctx)
+func resolverInputFromProjection(
+	record etcd.HostResolutionProjectionRecord,
+	baselineGeneration uint64,
+	resolvers []componentdns.ResolverEndpoint,
+) (componentdns.ResolverInput, []etcd.PlatformDNSHost, error) {
+	baseline, err := componentdns.NewResolverBaseline(baselineGeneration, resolvers)
 	if err != nil {
-		return nil, nil, err
+		return componentdns.ResolverInput{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	byAddress := make(map[string]map[string]struct{})
-	for _, projection := range projections {
-		for _, record := range projection.Record.Components {
-			if record.Desired.Kind != core.ComponentKindIngressCaddy || !record.Desired.Enabled ||
-				!record.Runtime.Healthy || record.Runtime.PinnedIPv4 == "" {
-				continue
-			}
-			names := byAddress[record.Runtime.PinnedIPv4]
-			if names == nil {
-				names = make(map[string]struct{})
-				byAddress[record.Runtime.PinnedIPv4] = names
-			}
-			for _, route := range projection.Record.Routes {
-				if route.Host != "" {
-					names[route.Host] = struct{}{}
-				}
-			}
+	digestBytes, err := hex.DecodeString(record.InputSHA256)
+	if err != nil || len(digestBytes) != 32 {
+		return componentdns.ResolverInput{}, nil, errs.New(errs.KindInternal, "host-resolution projection digest is corrupt")
+	}
+	var digest [32]byte
+	copy(digest[:], digestBytes)
+	byAddress := make(map[netip.Addr][]string)
+	for _, route := range record.Routes {
+		address, parseErr := netip.ParseAddr(route.IPv4)
+		if parseErr != nil {
+			return componentdns.ResolverInput{}, nil, errs.New(errs.KindInternal, "host-resolution address is corrupt")
 		}
+		byAddress[address] = append(byAddress[address], route.Hostname)
 	}
-	durable := make([]etcd.PlatformDNSHost, 0, len(byAddress))
+	hosts := make([]componentdns.Host, 0, len(byAddress))
 	for address, names := range byAddress {
-		hostnames := make([]string, 0, len(names))
-		for hostname := range names {
-			hostnames = append(hostnames, hostname)
-		}
-		sort.Strings(hostnames)
-		durable = append(durable, etcd.PlatformDNSHost{Address: address, Hostnames: hostnames})
+		hosts = append(hosts, componentdns.Host{Address: address, Hostnames: names})
 	}
-	sort.Slice(durable, func(left, right int) bool {
-		leftAddress, leftErr := netip.ParseAddr(durable[left].Address)
-		rightAddress, rightErr := netip.ParseAddr(durable[right].Address)
-		if leftErr != nil || rightErr != nil {
-			return durable[left].Address < durable[right].Address
-		}
-		return leftAddress.Compare(rightAddress) < 0
-	})
-	hosts := make([]componentdns.Host, len(durable))
-	for index, host := range durable {
-		address, err := netip.ParseAddr(host.Address)
-		if err != nil {
-			return nil, nil, errs.New(errs.KindInternal, "applied Caddy address is invalid")
-		}
-		hosts[index] = componentdns.Host{Address: address, Hostnames: append([]string(nil), host.Hostnames...)}
+	projection, err := componentdns.NewHostResolutionProjection(record.InputRevision, digest, hosts)
+	if err != nil {
+		return componentdns.ResolverInput{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	return hosts, durable, nil
+	durable := make([]etcd.PlatformDNSHost, len(projection.Hosts))
+	for index, host := range projection.Hosts {
+		durable[index] = etcd.PlatformDNSHost{Address: host.Address.String(), Hostnames: append([]string(nil), host.Hostnames...)}
+	}
+	return componentdns.ResolverInput{Baseline: baseline, HostResolution: projection}, durable, nil
 }
 
 func ensureHostResolverBaseline(

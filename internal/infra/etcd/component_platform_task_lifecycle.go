@@ -25,17 +25,16 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return platformComponentTaskChange{}, nil
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{
-			componentKey(task.Target),
-			platformComponentTaskRenderInputKey(task.PlanID),
-		},
-		Revision: revision,
-	})
+	stateKeys := []string{
+		componentKey(task.Target),
+		platformComponentTaskRenderInputKey(task.PlanID),
+		platformComponentTaskActiveKey(task.Target),
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != 2 || state.Values[0] == nil || state.Values[1] == nil {
+	if state == nil || len(state.Values) != 3 || state.Values[0] == nil || state.Values[1] == nil {
 		return platformComponentTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"platform Component Task state is incomplete",
@@ -52,13 +51,18 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		return platformComponentTaskChange{}, err
 	}
 	if component.Desired.Owner != core.ComponentOwnerPlatform || component.Desired.OwnerID != "" ||
-		component.Desired.Kind != core.ComponentKindCoreDNS || input.TaskID != task.ID ||
-		input.PlanID != task.PlanID || input.ComponentID != task.Target ||
+		(input.TaskID != task.ID && task.RetryOf == "") ||
+		input.PlanID != task.PlanID || input.ComponentID != task.Target || task.PlanHash != input.PlanSHA256 ||
 		task.Params[TaskPlatformComponentDesiredSHA256Param] != input.DesiredSHA256 {
 		return platformComponentTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"platform Component Task no longer matches its render input",
 		)
+	}
+	resolverAttempt := task.Actor == TaskActorSystem ||
+		task.RetryOf != "" && state.Values[2] != nil && string(state.Values[2].Value) == task.ID
+	if task.Actor == TaskActorSystem && !resolverAttempt {
+		return platformComponentTaskChange{}, errs.New(errs.KindStateConflict, "platform DNS resolver Task ownership changed")
 	}
 	desiredSHA256, err := PlatformComponentDesiredDigest(component)
 	if err != nil {
@@ -77,6 +81,11 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 			{Key: componentKey(task.Target), ModRevision: componentValue.ModRevision},
 			{Key: platformComponentTaskRenderInputKey(task.PlanID), ModRevision: renderInputValue.ModRevision},
 		},
+	}
+	if resolverAttempt {
+		change.conditions = append(change.conditions, Condition{
+			Key: platformComponentTaskActiveKey(task.Target), ModRevision: state.Values[2].ModRevision,
+		})
 	}
 	if terminalStatus != TaskStatusCompleted {
 		return change, nil
@@ -100,10 +109,10 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	}
 	change.values = append(change.values, value)
 	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut,
-		Key: componentKey(task.Target),
+		Type:  MutationPut,
+		Key:   componentKey(task.Target),
 		Value: value,
-	})
+	}, componentWriteFenceMutation(task.Target))
 	return change, nil
 }
 
@@ -117,7 +126,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 		return nil
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{platformComponentTaskRenderInputKey(task.PlanID)},
+		Keys:     []string{platformComponentTaskRenderInputKey(task.PlanID)},
 		Revision: revision,
 	})
 	if err != nil {
@@ -130,7 +139,8 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 	if err != nil {
 		return err
 	}
-	if input.TaskID != task.ID || input.PlanID != task.PlanID || input.ComponentID != task.Target ||
+	if (input.TaskID != task.ID && task.RetryOf == "") || input.PlanID != task.PlanID ||
+		input.ComponentID != task.Target || task.PlanHash != input.PlanSHA256 ||
 		input.DesiredSHA256 != task.Params[TaskPlatformComponentDesiredSHA256Param] {
 		return errs.New(errs.KindStateConflict, "platform Component Task replay evidence changed")
 	}

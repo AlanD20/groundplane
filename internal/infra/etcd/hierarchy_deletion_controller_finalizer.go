@@ -238,7 +238,12 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponent
 		componentEnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID),
 		componentEnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind),
 	}
-	return repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
+	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
+	if err != nil {
+		return hierarchyDeletionControllerEffects{}, err
+	}
+	effects.mutations = append(effects.mutations, componentWriteFenceMutation(action.TargetID))
+	return effects, nil
 }
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinalizer(

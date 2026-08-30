@@ -62,6 +62,7 @@ func (repository *ComponentRepository) CreateEnvironmentComponent(
 				Key:   componentEnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind),
 				Value: []byte(record.Desired.ID),
 			},
+			componentWriteFenceMutation(record.Desired.ID),
 		},
 	)
 	if err != nil {
@@ -214,7 +215,10 @@ func (repository *ComponentRepository) replace(
 			indexes.Values[0].ModRevision,
 			indexes.Values[1].ModRevision,
 		),
-		[]Mutation{{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: value}},
+		[]Mutation{
+			{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: value},
+			componentWriteFenceMutation(replacement.Desired.ID),
+		},
 	)
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
