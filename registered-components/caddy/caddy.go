@@ -3,6 +3,7 @@ package caddy
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane-component-sdk/component"
 )
@@ -15,6 +16,7 @@ const (
 	ServiceName           = "caddy"
 	defaultTemplateBody   = "{routes}\n"
 	routesMarker          = "{routes}"
+	maxTemplateBytes      = 32 << 10
 	ActivateConfigAction  = component.ActionID("activate-config")
 	CaddyfileSource       = caddyfileName
 	CaddyfileContainer    = "/etc/caddy/Caddyfile"
@@ -125,7 +127,8 @@ func renderCaddyfile(templateBody string, routes []component.HTTPRoute) ([]byte,
 	if templateBody == "" {
 		templateBody = defaultTemplateBody
 	}
-	if strings.Count(templateBody, routesMarker) != 1 || strings.Contains(templateBody, "{host}") ||
+	if len(templateBody) > maxTemplateBytes || !utf8.ValidString(templateBody) ||
+		strings.Count(templateBody, routesMarker) != 1 || strings.Contains(templateBody, "{host}") ||
 		strings.Contains(templateBody, "{slot}") || strings.IndexByte(templateBody, 0) >= 0 {
 		return nil, fmt.Errorf(
 			"caddy: template must contain exactly one {routes} marker and no legacy placeholders",

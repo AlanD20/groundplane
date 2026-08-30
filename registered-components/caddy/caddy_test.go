@@ -51,6 +51,14 @@ func TestPlanRejectsRouteAndTemplateInjection(t *testing.T) {
 	if _, err := Plan(input, Config{CaddyfileTemplate: "{routes}\n{routes}"}); err == nil {
 		t.Fatal("Plan() accepted duplicate template markers")
 	}
+	input = routerInput()
+	if _, err := Plan(input, Config{CaddyfileTemplate: string([]byte{0xff}) + "{routes}"}); err == nil {
+		t.Fatal("Plan() accepted an invalid UTF-8 template")
+	}
+	input = routerInput()
+	if _, err := Plan(input, Config{CaddyfileTemplate: strings.Repeat("x", maxTemplateBytes) + "{routes}"}); err == nil {
+		t.Fatal("Plan() accepted an oversized template")
+	}
 }
 
 func routerInput() component.HTTPRouterInput {

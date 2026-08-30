@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const maxCaddyfileTemplateBytes = 32 << 10
+
 // component: list | show | enable | disable | config show | config set |
 // update. One noun spans environment and platform owners; each kind's
 // registration declares which owner is valid.
@@ -77,20 +79,60 @@ func newComponentCmd() *cobra.Command {
 	var forwarders []string
 	var tailnetDelegation bool
 	var configFile string
+	var zoneID string
 	set := &cobra.Command{Use: "set <id>", Short: "Set a component's config", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		body := apiTypes.ComponentConfigMutationInput{}
 		flagConfig := cmd.Flags().Changed("upstream-auto") || cmd.Flags().Changed("upstream") ||
 			cmd.Flags().Changed("forward") || cmd.Flags().Changed("tailnet-delegation")
-		if cmd.Flags().Changed("file") {
-			if flagConfig {
-				return fmt.Errorf("--file cannot be combined with kind-specific config flags")
-			}
-			value, err := readValueFile(configFile, cmd.InOrStdin(), 64<<10, "component config")
+		app := fromContext(cmd)
+		componentFile := cmd.Flags().Changed("file")
+		componentZone := cmd.Flags().Changed("zone-id")
+		if componentFile || componentZone {
+			component, err := app.Client.ShowComponent(cmd.Context(), target(app, args[0]))
 			if err != nil {
 				return err
 			}
-			if err := json.Unmarshal([]byte(value), &body); err != nil {
-				return fmt.Errorf("component config file must contain one JSON object: %w", err)
+			if component.Kind == "caddy" {
+				if flagConfig {
+					return fmt.Errorf("Caddy config accepts only --file and --zone-id")
+				}
+				current, err := app.Client.ShowComponentConfig(cmd.Context(), target(app, args[0]))
+				if err != nil {
+					return err
+				}
+				caddy := apiTypes.CaddyComponentConfigMutationInput{}
+				if current != nil && current.Caddy != nil {
+					caddy.ZoneID = current.Caddy.ZoneID
+					caddy.CaddyfileTemplate = current.Caddy.CaddyfileTemplate
+				}
+				if componentZone {
+					caddy.ZoneID = zoneID
+				}
+				if componentFile {
+					value, readErr := readValueFile(configFile, cmd.InOrStdin(), maxCaddyfileTemplateBytes, "Caddyfile template")
+					if readErr != nil {
+						return readErr
+					}
+					caddy.CaddyfileTemplate = value
+				}
+				if caddy.ZoneID == "" {
+					return fmt.Errorf("Caddy config requires --zone-id when no current Zone is configured")
+				}
+				body.Caddy = &caddy
+			} else {
+				if componentZone {
+					return fmt.Errorf("--zone-id is valid only for Caddy")
+				}
+				if flagConfig {
+					return fmt.Errorf("--file cannot be combined with kind-specific config flags")
+				}
+				value, readErr := readValueFile(configFile, cmd.InOrStdin(), 64<<10, "component config")
+				if readErr != nil {
+					return readErr
+				}
+				if err := json.Unmarshal([]byte(value), &body); err != nil {
+					return fmt.Errorf("component config file must contain one JSON object: %w", err)
+				}
 			}
 		}
 		if body.CoreDNS == nil && flagConfig {
@@ -113,7 +155,6 @@ func newComponentCmd() *cobra.Command {
 		if cmd.Flags().Changed("tailnet-delegation") {
 			body.CoreDNS.TailnetDelegation = &tailnetDelegation
 		}
-		app := fromContext(cmd)
 		result, err := app.Client.SetComponentConfig(
 			cmd.Context(), target(app, args[0]), body,
 		)
@@ -128,7 +169,8 @@ func newComponentCmd() *cobra.Command {
 	set.Flags().StringArrayVar(&upstreamResolvers, "upstream", nil, "repeatable upstream resolver endpoint")
 	set.Flags().StringArrayVar(&forwarders, "forward", nil, "repeatable DOMAIN=RESOLVER[,RESOLVER...]")
 	set.Flags().BoolVar(&tailnetDelegation, "tailnet-delegation", false, "delegate ts.net to the tailnet resolver")
-	set.Flags().StringVar(&configFile, "file", "", "read the complete kind-specific JSON config object from PATH, or -")
+	set.Flags().StringVar(&configFile, "file", "", "read a Caddyfile template (Caddy) or complete JSON config (other kinds) from PATH, or -")
+	set.Flags().StringVar(&zoneID, "zone-id", "", "set the Caddy router Zone while preserving its current template")
 	config.AddCommand(set)
 	cmd.AddCommand(config)
 	cmd.AddCommand(&cobra.Command{Use: "update <id>", Short: "Update a component", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {

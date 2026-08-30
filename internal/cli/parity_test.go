@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient"
@@ -364,6 +365,58 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 			defer server.Close()
 			executeNoun(t, newComponentCmd(), server.URL, Scope{}, test.args...)
 		})
+	}
+}
+
+func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) {
+	t.Parallel()
+	const zoneID = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	template := "{\n\t{routes}\n}\n"
+	path := t.TempDir() + "/Caddyfile"
+	if err := os.WriteFile(path, []byte(template), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		writer.Header().Set("Content-Type", "application/json")
+		switch requests {
+		case 1:
+			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/components/cmp_1" {
+				t.Fatalf("show request = %s %s", request.Method, request.URL.Path)
+			}
+			_, _ = io.WriteString(writer, `{"kind":"caddy"}`)
+		case 2:
+			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/components/cmp_1/config" {
+				t.Fatalf("config request = %s %s", request.Method, request.URL.Path)
+			}
+			_, _ = io.WriteString(writer, `{"config":{"zone_id":"`+zoneID+`","caddyfile_template":"old {routes}"}}`)
+		case 3:
+			if request.Method != http.MethodPut || request.URL.Path != "/api/v1/components/cmp_1/config" {
+				t.Fatalf("set request = %s %s", request.Method, request.URL.Path)
+			}
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := `{"config":{"zone_id":"` + zoneID + `","caddyfile_template":"{\n\t{routes}\n}\n"}}`
+			if string(body) != want {
+				t.Fatalf("body = %s, want %s", body, want)
+			}
+			_, _ = io.WriteString(
+				writer,
+				`{"resource":{"zone_id":"`+zoneID+`","caddyfile_template":"{\n\t{routes}\n}\n"},"reconcile_task_id":null}`,
+			)
+		default:
+			t.Fatalf("unexpected request %d", requests)
+		}
+	}))
+	defer server.Close()
+
+	executeNoun(t, newComponentCmd(), server.URL, Scope{}, "config", "set", "cmp_1", "--file", path)
+	if requests != 3 {
+		t.Fatalf("requests = %d, want 3", requests)
 	}
 }
 
