@@ -814,7 +814,13 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 		{
 			name: "script",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return scriptOwnerPrefix(fixture.environment.Record.ID) + "retained"
+				active, err := readActiveScriptSet(
+					context.Background(), fixture.store, fixture.environment.Record.ID, 0,
+				)
+				if err != nil {
+					panic(err)
+				}
+				return scriptSetOwnerKey(fixture.environment.Record.ID, active.Record.GenerationID, "retained")
 			},
 		},
 		{

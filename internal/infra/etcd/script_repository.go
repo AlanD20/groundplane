@@ -39,9 +39,11 @@ func (repository *ScriptRepository) CreateScript(
 	if !result.Succeeded {
 		return Versioned[ScriptRecord]{}, classify(result.Revision, result.FailureReads)
 	}
-	return Versioned[ScriptRecord]{
-		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
+	created, err := readActiveScriptStorage(ctx, repository.store, record.Desired.ID, result.Revision)
+	if err != nil {
+		return Versioned[ScriptRecord]{}, err
+	}
+	return repository.hydrateScriptBody(ctx, created.Script)
 }
 
 func (repository *ScriptRepository) CreateScriptIdempotent(
@@ -81,6 +83,20 @@ func (repository *ScriptRepository) prepareScriptCreation(
 	if err := validateScriptHierarchy(ctx, environment, project, target, record); err != nil {
 		return nil, nil, nil, err
 	}
+	active, err := readActiveScriptSet(ctx, repository.store, record.EnvironmentID, environment.ReadRevision)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	record.ScriptSetGeneration = active.Record.GenerationID
+	page, err := repository.store.Range(ctx, RangeRequest{
+		Prefix: scriptSetOwnerPrefix(record.EnvironmentID, active.Record.GenerationID), Limit: 65, Revision: active.ReadRevision,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if page == nil || page.ReadRevision != active.ReadRevision || len(page.Values) >= 64 {
+		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Environment exceeds the 64 Script limit")
+	}
 	value, err := encodeScriptRecord(record)
 	if err != nil {
 		return nil, nil, nil, err
@@ -95,21 +111,39 @@ func (repository *ScriptRepository) prepareScriptCreation(
 		clear(value)
 		return nil, nil, nil, err
 	}
-	conditions := scriptWriteConditions(environment, project, target, record, nil, 0, 0)
-	conditions = append(conditions, Condition{Key: scriptBodyGenerationKey(record.Desired.ID, record.ActiveGeneration)})
+	locatorValue, err := encodeScriptLocator(scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID})
+	if err != nil {
+		clear(value)
+		clear(bodyValue)
+		return nil, nil, nil, err
+	}
+	activeValue, err := encodeScriptSetGeneration(active.Record)
+	if err != nil {
+		clear(value)
+		clear(bodyValue)
+		clear(locatorValue)
+		return nil, nil, nil, err
+	}
+	conditions := scriptWriteConditions(environment, project, target, record, nil, active, 0, 0)
+	conditions = append(conditions, Condition{Key: scriptSetBodyGenerationKey(
+		record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID, record.ActiveGeneration,
+	)})
 	mutations := []Mutation{
-		{Type: MutationPut, Key: scriptKey(record.Desired.ID), Value: value},
-		{Type: MutationPut, Key: scriptBodyGenerationKey(record.Desired.ID, record.ActiveGeneration), Value: bodyValue},
+		{Type: MutationPut, Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID), Value: value},
+		{Type: MutationPut, Key: scriptSetBodyGenerationKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID, record.ActiveGeneration), Value: bodyValue},
 		{
 			Type:  MutationPut,
-			Key:   scriptOwnerKey(record.EnvironmentID, record.Desired.ID),
+			Key:   scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			Value: []byte(record.Desired.ID),
 		},
 		{
 			Type:  MutationPut,
-			Key:   scriptSlugKey(record.EnvironmentID, record.Desired.Slug),
+			Key:   scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 			Value: []byte(record.Desired.ID),
 		},
+		{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locatorValue},
+		{Type: MutationPut, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID), Value: []byte(record.Desired.ID)},
+		{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
 	}
 	classify := func(_ int64, values []*KeyValue) error {
 		return classifyScriptWriteConflict(values, environment, project, target, record, 0, scriptWriteConflictExtras{bodyGeneration: true})
@@ -124,14 +158,38 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 	if err := validateID(ids.KindScript, id); err != nil {
 		return Versioned[ScriptRecord]{}, err
 	}
-	record, err := getRecord(
-		ctx, repository.store, scriptKey(id), id, errs.KindScriptNotFound, decodeScriptRecord,
-		func(record ScriptRecord) string { return record.Desired.ID },
-	)
+	locatorRead, err := repository.store.Get(ctx, scriptLocatorKey(id))
 	if err != nil {
 		return Versioned[ScriptRecord]{}, err
 	}
-	return repository.hydrateScriptBody(ctx, record)
+	if locatorRead == nil || locatorRead.Entry == nil {
+		return Versioned[ScriptRecord]{}, errs.New(errs.KindScriptNotFound, "Script was not found")
+	}
+	locator, err := decodeScriptLocator(locatorRead.Entry.Value)
+	if err != nil || locator.ScriptID != id {
+		return Versioned[ScriptRecord]{}, corruptRecord()
+	}
+	active, err := readActiveScriptSet(ctx, repository.store, locator.EnvironmentID, locatorRead.ReadRevision)
+	if err != nil {
+		return Versioned[ScriptRecord]{}, err
+	}
+	primary, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{scriptSetScriptKey(locator.EnvironmentID, active.Record.GenerationID, id)}, Revision: active.ReadRevision,
+	})
+	if err != nil {
+		return Versioned[ScriptRecord]{}, err
+	}
+	if primary == nil || len(primary.Values) != 1 || primary.Values[0] == nil {
+		return Versioned[ScriptRecord]{}, errs.New(errs.KindScriptNotFound, "Script was not found")
+	}
+	record, err := decodeScriptRecord(primary.Values[0].Value)
+	if err != nil || record.Desired.ID != id || record.EnvironmentID != locator.EnvironmentID ||
+		record.ScriptSetGeneration != active.Record.GenerationID {
+		return Versioned[ScriptRecord]{}, corruptRecord()
+	}
+	return repository.hydrateScriptBody(ctx, Versioned[ScriptRecord]{
+		Record: record, Revision: primary.Values[0].ModRevision, ReadRevision: active.ReadRevision,
+	})
 }
 
 func (repository *ScriptRepository) ListScripts(
@@ -142,11 +200,25 @@ func (repository *ScriptRepository) ListScripts(
 	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[ScriptRecord]{}, err
 	}
-	page, err := listIndexPage(
+	revision := int64(0)
+	if request.Cursor != "" {
+		cursor, cursorErr := decodeCursor(request.Cursor)
+		if cursorErr != nil {
+			return Page[ScriptRecord]{}, cursorErr
+		}
+		revision = cursor.Revision
+	}
+	active, err := readActiveScriptSet(ctx, repository.store, environmentID, revision)
+	if err != nil {
+		return Page[ScriptRecord]{}, err
+	}
+	page, err := listIndexPageAtRevision(
 		ctx, repository.store, "scripts", "environment", environmentID,
-		scriptOwnerPrefix(environmentID), scriptKey, ids.KindScript, request, decodeScriptRecord,
+		scriptSetOwnerPrefix(environmentID, active.Record.GenerationID),
+		func(id string) string { return scriptSetScriptKey(environmentID, active.Record.GenerationID, id) },
+		ids.KindScript, request, decodeScriptRecord,
 		func(record ScriptRecord) string { return record.Desired.ID },
-		func(record ScriptRecord) bool { return record.EnvironmentID == environmentID },
+		func(record ScriptRecord) bool { return record.EnvironmentID == environmentID }, active.ReadRevision,
 	)
 	if err != nil {
 		return Page[ScriptRecord]{}, err
@@ -209,13 +281,21 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	if err := validateScriptVersion(current); err != nil {
 		return ScriptRecord{}, nil, nil, nil, err
 	}
+	active, err := readActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
+	if err != nil {
+		return ScriptRecord{}, nil, nil, nil, err
+	}
+	if current.Record.ScriptSetGeneration != active.Record.GenerationID {
+		return ScriptRecord{}, nil, nil, nil, errs.New(errs.KindStateConflict, "Script-set generation changed")
+	}
+	replacement.ScriptSetGeneration = active.Record.GenerationID
 	indexKeys := []string{
-		scriptOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-		scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug),
+		scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.ID),
+		scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
 	}
 	slugChanged := replacement.Desired.Slug != current.Record.Desired.Slug
 	if slugChanged {
-		indexKeys = append(indexKeys, scriptSlugKey(current.Record.EnvironmentID, replacement.Desired.Slug))
+		indexKeys = append(indexKeys, scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, replacement.Desired.Slug))
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys:     indexKeys,
@@ -237,17 +317,25 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 		return ScriptRecord{}, nil, nil, nil, err
 	}
 	conditions := scriptWriteConditions(
-		environment, project, target, current.Record, &current,
+		environment, project, target, current.Record, &current, active,
 		indexes.Values[0].ModRevision, indexes.Values[1].ModRevision,
 	)
-	mutations := []Mutation{{Type: MutationPut, Key: scriptKey(replacement.Desired.ID), Value: value}}
+	activeValue, err := encodeScriptSetGeneration(active.Record)
+	if err != nil {
+		clear(value)
+		return ScriptRecord{}, nil, nil, nil, err
+	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: scriptSetScriptKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID), Value: value},
+		{Type: MutationPut, Key: scriptSetActiveKey(replacement.EnvironmentID), Value: activeValue},
+	}
 	extras := scriptWriteConflictExtras{}
 	if slugChanged {
 		extras.newSlug = replacement.Desired.Slug
-		conditions = append(conditions, Condition{Key: scriptSlugKey(replacement.EnvironmentID, extras.newSlug)})
+		conditions = append(conditions, Condition{Key: scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug)})
 		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug)},
-			Mutation{Type: MutationPut, Key: scriptSlugKey(replacement.EnvironmentID, extras.newSlug), Value: []byte(replacement.Desired.ID)},
+			Mutation{Type: MutationDelete, Key: scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug)},
+			Mutation{Type: MutationPut, Key: scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug), Value: []byte(replacement.Desired.ID)},
 		)
 	}
 	if replacement.ActiveGeneration != current.Record.ActiveGeneration {
@@ -262,9 +350,11 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 			return ScriptRecord{}, nil, nil, nil, generationErr
 		}
 		extras.bodyGeneration = true
-		conditions = append(conditions, Condition{Key: scriptBodyGenerationKey(replacement.Desired.ID, replacement.ActiveGeneration)})
+		conditions = append(conditions, Condition{Key: scriptSetBodyGenerationKey(
+			replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID, replacement.ActiveGeneration,
+		)})
 		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: scriptBodyGenerationKey(replacement.Desired.ID, replacement.ActiveGeneration),
+			Type: MutationPut, Key: scriptSetBodyGenerationKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID, replacement.ActiveGeneration),
 			Value: generationValue,
 		})
 	}
@@ -291,12 +381,13 @@ func scriptWriteConditions(
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
 	current *Versioned[ScriptRecord],
+	active Versioned[ScriptSetGenerationRecord],
 	ownerRevision int64,
 	slugRevision int64,
 ) []Condition {
-	scriptCondition := Condition{Key: scriptKey(record.Desired.ID)}
-	ownerCondition := Condition{Key: scriptOwnerKey(record.EnvironmentID, record.Desired.ID)}
-	slugCondition := Condition{Key: scriptSlugKey(record.EnvironmentID, record.Desired.Slug)}
+	scriptCondition := Condition{Key: scriptSetScriptKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID)}
+	ownerCondition := Condition{Key: scriptSetOwnerKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID)}
+	slugCondition := Condition{Key: scriptSetSlugKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.Slug)}
 	if current != nil {
 		scriptCondition.ModRevision = current.Revision
 		ownerCondition.ModRevision = ownerRevision
@@ -313,6 +404,13 @@ func scriptWriteConditions(
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: active.Revision},
+	}
+	if current == nil {
+		conditions = append(conditions,
+			Condition{Key: scriptLocatorKey(record.Desired.ID)},
+			Condition{Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID)},
+		)
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
@@ -338,6 +436,9 @@ func validateScriptHierarchy(
 	}
 	if err := validateServiceVersion(target); err != nil {
 		return err
+	}
+	if target.Record.Desired.Replicas != 1 {
+		return errs.New(errs.KindValidationFailed, "Script target Service must have exactly one replica")
 	}
 	if err := validateScriptRecord(record); err != nil {
 		return err
@@ -370,7 +471,10 @@ func classifyScriptWriteConflict(
 	expectedScriptRevision int64,
 	extras scriptWriteConflictExtras,
 ) error {
-	expected := 10
+	expected := 11
+	if expectedScriptRevision == 0 {
+		expected++
+	}
 	hasTenant := project.Record.TenantID != ""
 	if hasTenant {
 		expected++
@@ -427,10 +531,20 @@ func classifyScriptWriteConflict(
 			return errs.New(errs.KindResourceInUse, "Script hierarchy or target deletion is in progress")
 		}
 	}
-	if hasTenant && values[10] != nil {
+	extraIndex := 10
+	if values[extraIndex] == nil {
+		return errs.New(errs.KindInternal, "Environment active Script-set generation is missing")
+	}
+	extraIndex++
+	if expectedScriptRevision == 0 {
+		if values[extraIndex] != nil {
+			return errs.New(errs.KindStateConflict, "Script stable identity is already in use")
+		}
+		extraIndex++
+	}
+	if hasTenant && values[extraIndex] != nil {
 		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 	}
-	extraIndex := 10
 	if hasTenant {
 		extraIndex++
 	}
@@ -456,7 +570,10 @@ func (repository *ScriptRepository) hydrateScriptBody(
 	record Versioned[ScriptRecord],
 ) (Versioned[ScriptRecord], error) {
 	result, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys:     []string{scriptBodyGenerationKey(record.Record.Desired.ID, record.Record.ActiveGeneration)},
+		Keys: []string{scriptSetBodyGenerationKey(
+			record.Record.EnvironmentID, record.Record.ScriptSetGeneration,
+			record.Record.Desired.ID, record.Record.ActiveGeneration,
+		)},
 		Revision: record.ReadRevision,
 	})
 	if err != nil {

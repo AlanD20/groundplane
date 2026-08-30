@@ -40,22 +40,16 @@ func (repository *ScriptRepository) LoadExecutionSources(
 			"Script execution source request is invalid",
 		)
 	}
-	primary, err := repository.store.Get(ctx, scriptKey(scriptID))
+	stored, err := readActiveScriptStorage(ctx, repository.store, scriptID, 0)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	if primary == nil || primary.Entry == nil || primary.ReadRevision <= 0 {
-		return ScriptExecutionSources{}, errs.New(errs.KindScriptNotFound, "Script was not found")
-	}
-	revision := primary.ReadRevision
-	metadata, err := decodeScriptRecord(primary.Entry.Value)
-	if err != nil || metadata.Desired.ID != scriptID || metadata.ActiveGeneration == 0 {
-		return ScriptExecutionSources{}, corruptRecord()
-	}
+	revision := stored.Script.ReadRevision
+	metadata := stored.Script.Record
 	bodyValue, err := scriptExecutionValueAt(
 		ctx,
 		repository.store,
-		scriptBodyGenerationKey(scriptID, metadata.ActiveGeneration),
+		scriptSetBodyGenerationKey(metadata.EnvironmentID, metadata.ScriptSetGeneration, scriptID, metadata.ActiveGeneration),
 		revision,
 	)
 	if err != nil {
@@ -151,7 +145,7 @@ func (repository *ScriptRepository) LoadExecutionSources(
 			Record: environment, Revision: environmentValue.ModRevision, ReadRevision: revision,
 		},
 		Service: Versioned[ServiceRecord]{Record: target, Revision: serviceValue.ModRevision, ReadRevision: revision},
-		Script:  Versioned[ScriptRecord]{Record: metadata, Revision: primary.Entry.ModRevision, ReadRevision: revision},
+		Script:  Versioned[ScriptRecord]{Record: metadata, Revision: stored.Script.Revision, ReadRevision: revision},
 		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{
 			Record: body, Revision: bodyValue.ModRevision, ReadRevision: revision,
 		},

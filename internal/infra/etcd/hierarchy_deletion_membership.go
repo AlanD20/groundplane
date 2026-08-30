@@ -252,6 +252,10 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	environmentRevision int64,
 	environmentDigest string,
 ) ([]HierarchyDeletionMembershipNode, error) {
+	activeScripts, err := readActiveScriptSet(ctx, repository.store, environmentID, operation.Tombstone.SnapshotRevision)
+	if err != nil {
+		return nil, err
+	}
 	descriptors := []hierarchyDeletionIndexedResource{
 		{targetKind: "attach", actionKind: HierarchyDeletionAttachGrantRevoke, ownerPrefix: attachOwnerPrefix, primaryKey: attachKey, stableIDKind: ids.KindAttach, validateOwner: validateHierarchyDeletionAttachOwner},
 		{targetKind: "release-group", actionKind: HierarchyDeletionReleaseGroupRemove, ownerPrefix: func(owner string) string { return releaseGroupOwnerPrefix + owner + "/" }, primaryKey: releaseGroupRecordKey, stableIDKind: ids.KindReleaseGroup, validateOwner: validateHierarchyDeletionReleaseGroupOwner, controller: true},
@@ -259,7 +263,12 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		{targetKind: "entry", actionKind: HierarchyDeletionEntryRemove, ownerPrefix: entryOwnerCollectionPrefix, primaryKey: entryRecordKey, stableIDKind: ids.KindEnvEntry, validateOwner: validateHierarchyDeletionEntryOwner, controller: true},
 		{targetKind: "route", actionKind: HierarchyDeletionRouteRemove, ownerPrefix: routeOwnerPrefix, primaryKey: routeKey, stableIDKind: ids.KindRoute, validateOwner: validateHierarchyDeletionRouteOwner, controller: true},
 		{targetKind: "component", actionKind: HierarchyDeletionComponentRemove, ownerPrefix: componentEnvironmentOwnerPrefix, primaryKey: componentKey, stableIDKind: ids.KindComponent, validateOwner: validateHierarchyDeletionComponentOwner, controller: true},
-		{targetKind: "script", actionKind: HierarchyDeletionScriptRemove, ownerPrefix: scriptOwnerPrefix, primaryKey: scriptKey, stableIDKind: ids.KindScript, validateOwner: validateHierarchyDeletionScriptOwner, controller: true},
+		{targetKind: "script", actionKind: HierarchyDeletionScriptRemove,
+			ownerPrefix: func(owner string) string { return scriptSetOwnerPrefix(owner, activeScripts.Record.GenerationID) },
+			primaryKey: func(id string) string {
+				return scriptSetScriptKey(environmentID, activeScripts.Record.GenerationID, id)
+			},
+			stableIDKind: ids.KindScript, validateOwner: validateHierarchyDeletionScriptOwner, controller: true},
 		{targetKind: "zone", actionKind: HierarchyDeletionZoneRemove, ownerPrefix: zoneOwnerPrefix, primaryKey: zoneKey, stableIDKind: ids.KindNetwork, validateOwner: validateHierarchyDeletionZoneOwner, controller: true},
 		{targetKind: "connector", actionKind: HierarchyDeletionConnectorFinalize, ownerPrefix: connectorEnvironmentPrefix, primaryKey: connectorRecordKey, stableIDKind: ids.KindConnector, validateOwner: validateHierarchyDeletionConnectorOwner, controller: true},
 	}
@@ -402,10 +411,13 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 		}
 		for index, value := range read.Values {
 			id := idsAtRevision[begin+index]
-			if value == nil || value.Key != keys[index] || value.ModRevision <= 0 ||
-				validateOwner(value.Value, id, ownerID) != nil {
+			if value == nil || value.Key != keys[index] || value.ModRevision <= 0 {
 				clearKeyValues(read.Values)
 				return nil, corruptHierarchyDeletion()
+			}
+			if validateErr := validateOwner(value.Value, id, ownerID); validateErr != nil {
+				clearKeyValues(read.Values)
+				return nil, validateErr
 			}
 			targets = append(targets, hierarchyDeletionIndexedTarget{
 				id: id, revision: value.ModRevision, digest: hierarchyDeletionBytesDigest(value.Value),
@@ -503,7 +515,17 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	case "environment", "reservation":
 		key = environmentKey(targetID)
 	case "script":
-		key = scriptKey(targetID)
+		storage, scriptErr := readActiveScriptStorage(ctx, repository.store, targetID, revision)
+		if scriptErr != nil || storage.Script.Revision != targetRevision {
+			return "", corruptHierarchyDeletion()
+		}
+		encoded, encodeErr := encodeScriptRecord(storage.Script.Record)
+		if encodeErr != nil {
+			return "", encodeErr
+		}
+		digest := hierarchyDeletionBytesDigest(encoded)
+		clear(encoded)
+		return digest, nil
 	case "connector":
 		key = connectorRecordKey(targetID)
 	case "runner":

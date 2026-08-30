@@ -133,11 +133,18 @@ func seedBackingService(
 	if err != nil {
 		t.Fatalf("encodeEnvironmentMutationEpochRecord() error = %v", err)
 	}
+	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+		EnvironmentID: environmentID, GenerationID: environmentID,
+	})
+	if err != nil {
+		t.Fatalf("encodeScriptSetGeneration() error = %v", err)
+	}
 	result, err := store.Transact(ctx, nil, []Mutation{
 		{Type: MutationPut, Key: environmentKey(environmentID), Value: environmentValue},
 		{Type: MutationPut, Key: environmentNameKey(projectRecord.ID, "main"), Value: []byte(environmentID)},
 		{Type: MutationPut, Key: environmentOwnerKey(projectRecord.ID, environmentID), Value: []byte(environmentID)},
 		{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: epochValue},
+		{Type: MutationPut, Key: scriptSetActiveKey(environmentID), Value: scriptSetValue},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed backing Environment = %#v, %v", result, err)

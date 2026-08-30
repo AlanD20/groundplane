@@ -120,7 +120,15 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(coordinationValue)
+	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+		EnvironmentID: record.ID, GenerationID: record.ID,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(scriptSetValue)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
+	scriptSetKey := scriptSetActiveKey(record.ID)
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
@@ -137,6 +145,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: environmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
 		{Key: environmentMutationEpochKey(record.ID)},
 		{Key: coordinationKey},
+		{Key: scriptSetKey},
 	}
 	for _, component := range components {
 		conditions = append(conditions,
@@ -156,6 +165,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: MutationPut, Key: environmentMutationEpochKey(record.ID), Value: epochValue},
 		{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
+		{Type: MutationPut, Key: scriptSetKey, Value: scriptSetValue},
 	}
 	for index, component := range components {
 		mutations = append(mutations,

@@ -302,7 +302,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		ctx, netip.Prefix{}, environment.Record.NetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, task, marker,
+		componentPreparation, attachPreparation, BlueprintScriptPublication{}, task, marker,
 	)
 }
 
@@ -332,7 +332,37 @@ func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisio
 		ctx, environmentPool, desiredNetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, task, marker,
+		componentPreparation, attachPreparation, BlueprintScriptPublication{}, task, marker,
+	)
+}
+
+// PublishEnvironmentBlueprintDesiredRevisionWithScripts publishes an authored
+// Blueprint and its prepared Script projection in the same transaction.
+func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+	ctx context.Context,
+	environmentPool netip.Prefix,
+	desiredNetworkPool string,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	expectedHeadRevision int64,
+	claim EnvironmentBlueprintStageClaim,
+	revision EnvironmentDesiredRevisionIdentity,
+	projection EnvironmentComposeProjection,
+	zoneChanges []EnvironmentBlueprintZoneChange,
+	serviceChanges []EnvironmentBlueprintServiceChange,
+	routeChanges []EnvironmentBlueprintRouteChange,
+	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
+	componentPreparation ComponentTaskPreparation,
+	attachPreparation BlueprintAttachTaskPreparation,
+	scriptPublication BlueprintScriptPublication,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	return repository.publishEnvironmentDesiredRevisionWithTask(
+		ctx, environmentPool, desiredNetworkPool,
+		project, environment, expectedHeadRevision, claim, revision, projection,
+		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
+		componentPreparation, attachPreparation, scriptPublication, task, marker,
 	)
 }
 
@@ -352,6 +382,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
+	scriptPublication BlueprintScriptPublication,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -396,6 +427,9 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		)
 	}
 	if err := validateReleaseGroupBlueprintPreparedMutation(releaseGroupPreparation, environment.Record.ID); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := scriptPublication.validate(environment.Record.ID, claim.SourceKind); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	task = cloneTaskRecord(task)
@@ -489,7 +523,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	} else if len(zoneChanges) != 0 || len(serviceChanges) != 0 || len(routeChanges) != 0 ||
 		!releaseGroupPreparation.isZero() ||
 		!componentTaskPreparationIsZero(componentPreparation) ||
-		!blueprintAttachTaskPreparationIsZero(attachPreparation) {
+		!blueprintAttachTaskPreparationIsZero(attachPreparation) ||
+		!scriptPublication.IsZero() {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment desired mutation cannot publish Blueprint domain changes",
@@ -671,6 +706,19 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 				return errs.New(errs.KindInternal, "Blueprint Release Group compare evidence is incomplete")
 			}
 			return previousClassifier(revision, values[:baseConditionCount])
+		}
+		baseConditionCount = len(conditions)
+		conditions = append(conditions, scriptPublication.conditions...)
+		mutations = append(mutations, scriptPublication.mutations...)
+		scriptBaseClassifier := classified
+		classified = func(revision int64, values []*KeyValue) error {
+			if len(values) != baseConditionCount+len(scriptPublication.conditions) {
+				return errs.New(errs.KindInternal, "Blueprint Script compare evidence is incomplete")
+			}
+			if err := scriptBaseClassifier(revision, values[:baseConditionCount]); err != nil {
+				return err
+			}
+			return scriptPublication.classify(values[baseConditionCount:])
 		}
 	}
 	classifier := func(revision int64, values []*KeyValue) error {

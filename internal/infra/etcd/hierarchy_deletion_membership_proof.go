@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -128,6 +129,9 @@ func validateHierarchyDeletionScriptOwner(value []byte, id, owner string) error 
 	record, err := decodeScriptRecord(value)
 	if err != nil || record.Desired.ID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
+	}
+	if record.ActiveReferences != 0 {
+		return errs.New(errs.KindResourceInUse, "active Script executions fence hierarchy deletion")
 	}
 	return nil
 }

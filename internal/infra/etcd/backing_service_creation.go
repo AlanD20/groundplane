@@ -88,6 +88,13 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentCoordinationValue)
+	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+		EnvironmentID: creation.Environment.ID, GenerationID: creation.Environment.ID,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(scriptSetValue)
 	poolRegistryValue, err := encodeEnvelope("environment_pool_registry", creation.PoolRegistry.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -191,6 +198,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: MutationPut, Key: environmentOwnerKey(creation.Project.ID, creation.Environment.ID), Value: []byte(creation.Environment.ID)},
 		{Type: MutationPut, Key: environmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
 		{Type: MutationPut, Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID), Value: environmentCoordinationValue},
+		{Type: MutationPut, Key: scriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: MutationPut, Key: zoneKey(creation.Zone.Desired.ID), Value: zoneValue},
 		{Type: MutationPut, Key: zoneNameKey(creation.Environment.ID, creation.Zone.Desired.Name), Value: []byte(creation.Zone.Desired.ID)},
@@ -424,6 +432,7 @@ func backingServiceCreationConditions(
 		{Key: deletionTombstoneKey("environment", creation.Environment.ID)},
 		{Key: environmentMutationEpochKey(creation.Environment.ID)},
 		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
+		{Key: scriptSetActiveKey(creation.Environment.ID)},
 		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: zoneKey(creation.Zone.Desired.ID)},
 		{Key: zoneNameKey(creation.Environment.ID, creation.Zone.Desired.Name)},

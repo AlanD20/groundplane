@@ -230,6 +230,11 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	terminalStatus TaskStatus,
 	readRevision int64,
 ) ([]Condition, []Mutation, error) {
+	if terminalStatus == TaskStatusCompleted {
+		if err := cleanupTaskEnvironmentDeletionScriptLocators(ctx, repository.store, task.Target, task.ID); err != nil {
+			return nil, nil, err
+		}
+	}
 	stored, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			environmentKey(task.Target),
@@ -452,6 +457,8 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				Key:  environmentOwnerKey(environment.ProjectID, environment.ID),
 			},
 			Mutation{Type: MutationDelete, Key: environmentKey(environment.ID)},
+			Mutation{Type: MutationDelete, Key: scriptSetEnvironmentPrefix(environment.ID), Prefix: true},
+			Mutation{Type: MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
 		)
 	} else {
 		epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
@@ -496,6 +503,22 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 		}
 	}
 	clearKeyValues(direct.Values)
+	active, err := readActiveScriptSet(ctx, store, environmentID, revision)
+	if err != nil {
+		return err
+	}
+	activeScripts, err := store.Range(ctx, RangeRequest{
+		Prefix: scriptSetOwnerPrefix(environmentID, active.Record.GenerationID), Limit: 1, Revision: revision,
+	})
+	if err != nil {
+		return err
+	}
+	if activeScripts == nil || activeScripts.ReadRevision != revision || len(activeScripts.Values) != 0 {
+		if activeScripts != nil {
+			clearRangeValues(activeScripts.Values)
+		}
+		return errs.New(errs.KindStateConflict, "environment retained durable Scripts")
+	}
 	for _, prefix := range environmentDeletionLiveAuthorityPrefixes(environmentID, operationID) {
 		page, err := store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
 		if err != nil {
@@ -525,6 +548,7 @@ func environmentDeletionLiveAuthorityConditions(environmentID string, operationI
 	for _, prefix := range environmentDeletionLiveAuthorityPrefixes(environmentID, operationID) {
 		conditions = append(conditions, Condition{Key: prefix, Prefix: true})
 	}
+	conditions = append(conditions, Condition{Key: scriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true})
 	return conditions
 }
 
@@ -545,7 +569,6 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		serviceOwnerPrefix(environmentID),
 		routeOwnerPrefix(environmentID),
 		entryOwnerCollectionPrefix(environmentID),
-		scriptOwnerPrefix(environmentID),
 		attachOwnerPrefix(environmentID),
 		componentEnvironmentOwnerPrefix(environmentID),
 		connectorEnvironmentPrefix(environmentID),

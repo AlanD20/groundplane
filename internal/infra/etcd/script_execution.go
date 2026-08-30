@@ -49,6 +49,7 @@ type ScriptExecutionRecord struct {
 	StepID                 string                          `json:"step_id"`
 	ScriptID               string                          `json:"script_id"`
 	ScriptGeneration       uint64                          `json:"script_generation"`
+	ScriptSetGeneration    string                          `json:"script_set_generation"`
 	EnvironmentID          string                          `json:"environment_id"`
 	ServiceID              string                          `json:"service_id"`
 	ReleaseID              string                          `json:"release_id"`
@@ -137,6 +138,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	execution.ScriptSetGeneration = sources.Script.Record.ScriptSetGeneration
 	if err := validateScriptExecutionSources(sources, execution); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -205,10 +207,12 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	defer clear(taskReference)
 	bodyReference, err := encodeEnvelope("script-body-reference", struct {
-		ExecutionID string `json:"script_execution_id"`
-		ScriptID    string `json:"script_id"`
-		Generation  uint64 `json:"generation"`
-	}{ExecutionID: execution.ID, ScriptID: execution.ScriptID, Generation: execution.ScriptGeneration})
+		ExecutionID         string `json:"script_execution_id"`
+		ScriptID            string `json:"script_id"`
+		Generation          uint64 `json:"generation"`
+		ScriptSetGeneration string `json:"script_set_generation"`
+	}{ExecutionID: execution.ID, ScriptID: execution.ScriptID, Generation: execution.ScriptGeneration,
+		ScriptSetGeneration: execution.ScriptSetGeneration})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -217,14 +221,15 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	conditions := []Condition{
 		{Key: scriptExecutionKey(execution.ID)},
 		{Key: scriptRunnerSnapshotKey(execution.SnapshotID)},
-		{Key: scriptBodyForwardReferenceKey(execution.ScriptID, execution.ScriptGeneration, execution.ID)},
+		{Key: scriptSetBodyForwardReferenceKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration, execution.ID)},
 		{Key: scriptBodyReverseReferenceKey(execution.ID)},
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: scriptKey(execution.ScriptID), ModRevision: sources.Script.Revision},
-		{Key: scriptBodyGenerationKey(execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
+		{Key: scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID), ModRevision: sources.Script.Revision},
+		{Key: scriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
+		{Key: scriptSetActiveKey(execution.EnvironmentID)},
 		{Key: serviceKey(execution.ServiceID), ModRevision: sources.Service.Revision},
 		{Key: releaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
 		{Key: releaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
@@ -234,16 +239,28 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	for _, network := range sources.Networks {
 		conditions = append(conditions, Condition{Key: zoneKey(network.Record.Desired.ID), ModRevision: network.Revision})
 	}
+	conditions[10].ModRevision = sources.Environment.ReadRevision
+	active, err := readActiveScriptSet(ctx, repository.store, execution.EnvironmentID, sources.Revision)
+	if err != nil || active.Record.GenerationID != execution.ScriptSetGeneration {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Script-set generation changed")
+	}
+	conditions[10].ModRevision = active.Revision
+	activeValue, err := encodeScriptSetGeneration(active.Record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(activeValue)
 	mutations := []Mutation{
-		{Type: MutationPut, Key: scriptKey(execution.ScriptID), Value: scriptValue},
+		{Type: MutationPut, Key: scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID), Value: scriptValue},
 		{Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
 		{Type: MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
-		{Type: MutationPut, Key: scriptBodyForwardReferenceKey(execution.ScriptID, execution.ScriptGeneration, execution.ID), Value: bodyReference},
+		{Type: MutationPut, Key: scriptSetBodyForwardReferenceKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration, execution.ID), Value: bodyReference},
 		{Type: MutationPut, Key: scriptBodyReverseReferenceKey(execution.ID), Value: bodyReference},
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: MutationPut, Key: scriptSetActiveKey(execution.EnvironmentID), Value: activeValue},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task, initiation, conditions, mutations, classifyScriptExecutionPublication(len(conditions)),
@@ -321,7 +338,9 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 		return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
 	}
 	metadata := validated.ScriptBodyArtifacts[0]
-	bodyRead, err := repository.store.Get(ctx, scriptBodyGenerationKey(metadata.ScriptId, metadata.Generation))
+	bodyRead, err := repository.store.Get(ctx, scriptSetBodyGenerationKey(
+		execution.EnvironmentID, execution.ScriptSetGeneration, metadata.ScriptId, metadata.Generation,
+	))
 	if err != nil {
 		return nil, err
 	}
@@ -352,6 +371,7 @@ func validateScriptExecutionSources(sources ScriptExecutionSources, execution Sc
 		sources.BodyGeneration.ReadRevision != sources.Revision || sources.RenderInput.ReadRevision != sources.Revision ||
 		sources.AppliedProjection.ReadRevision != sources.Revision || sources.AppliedProjection.Revision <= 0 ||
 		sources.Release.Revision != sources.Revision || sources.Script.Record.Desired.ID != execution.ScriptID ||
+		sources.Script.Record.ScriptSetGeneration != execution.ScriptSetGeneration ||
 		sources.Script.Record.ActiveGeneration != execution.ScriptGeneration ||
 		sources.BodyGeneration.Record.ScriptID != execution.ScriptID ||
 		sources.BodyGeneration.Record.Generation != execution.ScriptGeneration ||
@@ -424,8 +444,8 @@ func scriptRunnerSnapshotKey(snapshotID string) string {
 	return scriptRunnerSnapshotPrefix + snapshotID
 }
 
-func scriptBodyForwardReferenceKey(scriptID string, generation uint64, executionID string) string {
-	return scriptBodyGenerationKey(scriptID, generation) + scriptBodyForwardRefSegment + executionID
+func scriptSetBodyForwardReferenceKey(environmentID, setGeneration, scriptID string, generation uint64, executionID string) string {
+	return scriptSetBodyGenerationKey(environmentID, setGeneration, scriptID, generation) + scriptBodyForwardRefSegment + executionID
 }
 
 func scriptBodyReverseReferenceKey(executionID string) string {

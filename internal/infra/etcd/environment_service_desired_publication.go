@@ -87,6 +87,18 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	var scriptFence *Condition
+	if input.Change.Current != nil && input.Change.Current.Record.Desired.Replicas == 1 &&
+		input.Change.Record.Desired.Replicas != 1 {
+		condition, fenceErr := prepareScriptScaleFence(
+			ctx, repository.store, input.Environment.Record.ID,
+			input.Change.Record.Desired.ID, fence.readAtRevision(),
+		)
+		if fenceErr != nil {
+			return IdempotencyTransactionResult{}, fenceErr
+		}
+		scriptFence = &condition
+	}
 	publication, err := repository.prepareEnvironmentDirectPublication(
 		ctx, input.Claim, input.Revision, input.Projection, input.Marker, input.ExpectedHeadRevision,
 	)
@@ -123,6 +135,11 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	}
 	conditions = append(conditions, referenceConditions...)
 	referenceOffset := 8
+	scriptFenceOffset := -1
+	if scriptFence != nil {
+		scriptFenceOffset = len(conditions)
+		conditions = append(conditions, *scriptFence)
+	}
 	fenceOffset := len(conditions)
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations := []Mutation{
@@ -164,7 +181,16 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 			return errs.New(errs.KindResourceInUse, "Service removal is in progress")
 		}
 		if err := classifyServiceMutationReferenceConflict(values[referenceOffset:fenceOffset], input.References); err != nil {
-			return err
+			referenceEnd := fenceOffset
+			if scriptFenceOffset >= 0 {
+				referenceEnd = scriptFenceOffset
+			}
+			if err := classifyServiceMutationReferenceConflict(values[referenceOffset:referenceEnd], input.References); err != nil {
+				return err
+			}
+		}
+		if scriptFenceOffset >= 0 && !conditionMatchesRead(conditions[scriptFenceOffset], values[scriptFenceOffset]) {
+			return errs.New(errs.KindStateConflict, "active Script-set generation changed")
 		}
 		if conflict := fence.classifyCAS(values[fenceOffset:]); conflict != nil {
 			return conflict

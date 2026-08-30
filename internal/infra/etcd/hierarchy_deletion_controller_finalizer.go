@@ -367,23 +367,55 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 	ctx context.Context,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, scriptKey(action.TargetID), action)
-	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
-	}
-	defer clear(primary.Value)
-	record, err := decodeScriptRecord(primary.Value)
-	if err != nil || record.Desired.ID != action.TargetID {
+	if action.ControllerProcedure == nil {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
-	keys := []string{scriptOwnerKey(record.EnvironmentID, action.TargetID), scriptSlugKey(record.EnvironmentID, record.Desired.Slug)}
-	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
+	storage, err := readActiveScriptStorage(ctx, repository.store, action.TargetID, action.ControllerProcedure.FixedInputRevision)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	effects.mutations = append(effects.mutations, Mutation{
-		Type: MutationDelete, Key: scriptBodyGenerationPrefix(action.TargetID), Prefix: true,
-	})
+	record := storage.Script.Record
+	if storage.Script.Revision != action.TargetRevision || record.Desired.ID != action.TargetID {
+		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+	}
+	if record.ActiveReferences != 0 {
+		return hierarchyDeletionControllerEffects{}, errs.New(
+			errs.KindResourceInUse, "active Script executions fence hierarchy deletion",
+		)
+	}
+	value, err := encodeScriptRecord(record)
+	if err != nil {
+		return hierarchyDeletionControllerEffects{}, err
+	}
+	defer clear(value)
+	primary := KeyValue{
+		Key:   scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
+		Value: value, ModRevision: storage.Script.Revision,
+	}
+	keys := []string{
+		scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
+		scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+	}
+	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, &primary, keys)
+	if err != nil {
+		return hierarchyDeletionControllerEffects{}, err
+	}
+	activeValue, err := encodeScriptSetGeneration(storage.Active.Record)
+	if err != nil {
+		return hierarchyDeletionControllerEffects{}, err
+	}
+	effects.values = append(effects.values, activeValue)
+	effects.conditions = append(effects.conditions,
+		Condition{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
+		Condition{Key: scriptLocatorKey(action.TargetID), ModRevision: storage.Locator.Revision},
+		Condition{Key: scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID), ModRevision: storage.EnvironmentLocator.Revision},
+	)
+	effects.mutations = append(effects.mutations,
+		Mutation{Type: MutationDelete, Key: scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID), Prefix: true},
+		Mutation{Type: MutationDelete, Key: scriptLocatorKey(action.TargetID)},
+		Mutation{Type: MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID)},
+		Mutation{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+	)
 	return effects, nil
 }
 

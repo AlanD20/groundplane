@@ -784,6 +784,27 @@ func listIndexPage[T any](
 	identity func(T) string,
 	matches func(T) bool,
 ) (Page[T], error) {
+	return listIndexPageAtRevision(
+		ctx, store, collection, ownerKind, ownerID, prefix, primaryKey, idKind,
+		request, decode, identity, matches, 0,
+	)
+}
+
+func listIndexPageAtRevision[T any](
+	ctx context.Context,
+	store hierarchyStore,
+	collection string,
+	ownerKind string,
+	ownerID string,
+	prefix string,
+	primaryKey func(string) string,
+	idKind ids.Kind,
+	request PageRequest,
+	decode func([]byte) (T, error),
+	identity func(T) string,
+	matches func(T) bool,
+	anchorRevision int64,
+) (Page[T], error) {
 	if err := validateContext(ctx); err != nil {
 		return Page[T]{}, err
 	}
@@ -792,6 +813,11 @@ func listIndexPage[T any](
 	)
 	if err != nil {
 		return Page[T]{}, err
+	}
+	if revision == 0 {
+		revision = anchorRevision
+	} else if anchorRevision > 0 && revision != anchorRevision {
+		return Page[T]{}, errs.New(errs.KindStateConflict, "list cursor Script-set generation changed")
 	}
 	rangeResult, err := store.Range(ctx, RangeRequest{
 		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision,

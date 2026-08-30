@@ -486,11 +486,19 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
+	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+		EnvironmentID: record.ID, GenerationID: record.ID,
+	})
+	if err != nil {
+		return Versioned[EnvironmentRecord]{}, err
+	}
+	defer clear(scriptSetValue)
 	primary := environmentKey(record.ID)
 	label := environmentNameKey(record.ProjectID, record.Name)
 	ownerIndex := environmentOwnerKey(record.ProjectID, record.ID)
 	epochKey := environmentMutationEpochKey(record.ID)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
+	scriptSetKey := scriptSetActiveKey(record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]Condition{
 			{Key: primary},
@@ -499,6 +507,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 			{Key: projectKey(record.ProjectID), ModRevision: owner.Revision},
 			{Key: epochKey},
 			{Key: coordinationKey},
+			{Key: scriptSetKey},
 		},
 		[]Mutation{
 			{Type: MutationPut, Key: primary, Value: value},
@@ -506,13 +515,14 @@ func (repository *HierarchyRepository) CreateEnvironment(
 			{Type: MutationPut, Key: ownerIndex, Value: []byte(record.ID)},
 			{Type: MutationPut, Key: epochKey, Value: epochValue},
 			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
+			{Type: MutationPut, Key: scriptSetKey, Value: scriptSetValue},
 		},
 	)
 	if err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	if !result.Succeeded {
-		if len(result.FailureReads) != 6 {
+		if len(result.FailureReads) != 7 {
 			return Versioned[EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation compare evidence is incomplete",

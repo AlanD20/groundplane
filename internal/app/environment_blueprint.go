@@ -98,6 +98,19 @@ type environmentBlueprintRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
+type environmentBlueprintScriptRepository interface {
+	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ScriptRecord], error)
+	PrepareBlueprintScriptPublication(
+		context.Context,
+		string,
+		int64,
+		string,
+		[]etcd.Versioned[etcd.ScriptRecord],
+		[]etcd.ScriptRecord,
+		[]etcd.ScriptBodyGenerationRecord,
+	) (etcd.BlueprintScriptPublication, error)
+}
+
 type environmentBlueprintService struct {
 	volumeRoot       string
 	environmentPool  netip.Prefix
@@ -131,6 +144,7 @@ type durableEnvironmentBlueprintRepository struct {
 	values     *etcd.EntryValueGenerationRepository
 	attaches   *etcd.AttachRepository
 	components *etcd.ComponentRepository
+	scripts    *etcd.ScriptRepository
 }
 
 func newDurableEnvironmentBlueprintRepository(
@@ -143,9 +157,10 @@ func newDurableEnvironmentBlueprintRepository(
 	values *etcd.EntryValueGenerationRepository,
 	attaches *etcd.AttachRepository,
 	components *etcd.ComponentRepository,
+	scripts *etcd.ScriptRepository,
 ) (*durableEnvironmentBlueprintRepository, error) {
 	if hierarchy == nil || desired == nil || zones == nil || services == nil || routes == nil || entries == nil || values == nil ||
-		attaches == nil || components == nil {
+		attaches == nil || components == nil || scripts == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint repositories are not configured")
 	}
 	return &durableEnvironmentBlueprintRepository{
@@ -158,6 +173,7 @@ func newDurableEnvironmentBlueprintRepository(
 		values:              values,
 		attaches:            attaches,
 		components:          components,
+		scripts:             scripts,
 	}, nil
 }
 
@@ -263,6 +279,55 @@ func (repository *durableEnvironmentBlueprintRepository) ListRoutes(
 	request etcd.PageRequest,
 ) (etcd.Page[etcd.RouteRecord], error) {
 	return repository.routes.ListRoutes(ctx, environmentID, request)
+}
+
+func (repository *durableEnvironmentBlueprintRepository) ListScripts(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.ScriptRecord], error) {
+	return repository.scripts.ListScripts(ctx, environmentID, request)
+}
+
+func (repository *durableEnvironmentBlueprintRepository) PrepareBlueprintScriptPublication(
+	ctx context.Context,
+	environmentID string,
+	readRevision int64,
+	nextGenerationID string,
+	current []etcd.Versioned[etcd.ScriptRecord],
+	desired []etcd.ScriptRecord,
+	generations []etcd.ScriptBodyGenerationRecord,
+) (etcd.BlueprintScriptPublication, error) {
+	return repository.scripts.PrepareBlueprintScriptPublication(
+		ctx, environmentID, readRevision, nextGenerationID, current, desired, generations,
+	)
+}
+
+func (repository *durableEnvironmentBlueprintRepository) PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+	ctx context.Context,
+	environmentPool netip.Prefix,
+	desiredNetworkPool string,
+	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	expectedHeadRevision int64,
+	claim etcd.EnvironmentBlueprintStageClaim,
+	revision etcd.EnvironmentDesiredRevisionIdentity,
+	projection etcd.EnvironmentComposeProjection,
+	zoneChanges []etcd.EnvironmentBlueprintZoneChange,
+	serviceChanges []etcd.EnvironmentBlueprintServiceChange,
+	routeChanges []etcd.EnvironmentBlueprintRouteChange,
+	releaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation,
+	componentPreparation etcd.ComponentTaskPreparation,
+	attachPreparation etcd.BlueprintAttachTaskPreparation,
+	scriptPublication etcd.BlueprintScriptPublication,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.HierarchyRepository.PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+		ctx, environmentPool, desiredNetworkPool, project, environment, expectedHeadRevision,
+		claim, revision, projection, zoneChanges, serviceChanges, routeChanges,
+		releaseGroupPreparation, componentPreparation, attachPreparation, scriptPublication, task, marker,
+	)
 }
 
 func newEnvironmentBlueprintService(
@@ -514,6 +579,45 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	scriptRepository, scriptsConfigured := service.repository.(environmentBlueprintScriptRepository)
+	if !scriptsConfigured {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint Script repository is not configured")
+	}
+	currentScripts, scriptsReadRevision, err := service.listBlueprintScripts(ctx, environmentID, scriptRepository)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	scriptServices := make([]etcd.ServiceRecord, len(desiredServices))
+	for index, desiredService := range desiredServices {
+		scriptServices[index] = etcd.ServiceRecord{EnvironmentID: environmentID, Desired: desiredService}
+	}
+	previousScripts := make([]etcd.ScriptRecord, len(currentScripts))
+	for index, currentScript := range currentScripts {
+		previousScripts[index] = currentScript.Record
+	}
+	reconciledScripts, err := desiredrevision.ReconcileBlueprintScripts(
+		environmentID,
+		parsed.Extensions.Scripts,
+		scriptServices,
+		previousScripts,
+		allocator.Named,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	scriptPublication, err := scriptRepository.PrepareBlueprintScriptPublication(
+		ctx,
+		environmentID,
+		scriptsReadRevision,
+		claim.RevisionID,
+		currentScripts,
+		reconciledScripts.Current,
+		reconciledScripts.BodyGenerations,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer scriptPublication.Clear()
 	releaseGroupPreparation, err := service.releaseGroups.Prepare(
 		ctx,
 		environmentID,
@@ -816,6 +920,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		ReleaseGroupPreparation: releaseGroupPreparation,
 		ComponentPreparation:    componentPreparation,
 		AttachPreparation:       preparedAttaches.publication,
+		ScriptPublication:       scriptPublication,
 		Task:                    task,
 	})
 }
@@ -912,6 +1017,36 @@ func (service *environmentBlueprintService) listBlueprintServices(
 		services = append(services, page.Items...)
 		if page.NextCursor == "" {
 			return services, nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func (service *environmentBlueprintService) listBlueprintScripts(
+	ctx context.Context,
+	environmentID string,
+	repository environmentBlueprintScriptRepository,
+) ([]etcd.Versioned[etcd.ScriptRecord], int64, error) {
+	scripts := []etcd.Versioned[etcd.ScriptRecord](nil)
+	cursor := ""
+	readRevision := int64(0)
+	for {
+		page, err := repository.ListScripts(
+			ctx,
+			environmentID,
+			etcd.PageRequest{Limit: 200, Cursor: cursor},
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		if readRevision == 0 {
+			readRevision = page.Revision
+		} else if page.Revision != readRevision {
+			return nil, 0, errs.New(errs.KindStateConflict, "Blueprint Script snapshot changed while listing")
+		}
+		scripts = append(scripts, page.Items...)
+		if page.NextCursor == "" {
+			return scripts, readRevision, nil
 		}
 		cursor = page.NextCursor
 	}

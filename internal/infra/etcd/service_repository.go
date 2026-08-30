@@ -694,6 +694,18 @@ func (repository *ServiceRepository) prepareServiceUpdate(
 		}
 		conditions = append(conditions, referenceConditions...)
 	}
+	scriptFenceIndex := -1
+	if !noOp && current.Record.Desired.Replicas == 1 && replacement.Desired.Replicas != 1 {
+		scriptFence, fenceErr := prepareScriptScaleFence(
+			ctx, repository.store, replacement.EnvironmentID, replacement.Desired.ID, mutationContext.readRevision,
+		)
+		if fenceErr != nil {
+			clear(value)
+			return nil, nil, nil, nil, fenceErr
+		}
+		scriptFenceIndex = len(conditions)
+		conditions = append(conditions, scriptFence)
+	}
 	mutations := []Mutation(nil)
 	if !noOp {
 		mutations = []Mutation{{Type: MutationPut, Key: serviceKey(replacement.Desired.ID), Value: value}}
@@ -701,8 +713,15 @@ func (repository *ServiceRepository) prepareServiceUpdate(
 		clear(value)
 	}
 	classify := func(_ int64, values []*KeyValue) error {
+		if scriptFenceIndex >= 0 && !conditionMatchesRead(conditions[scriptFenceIndex], values[scriptFenceIndex]) {
+			return errs.New(errs.KindStateConflict, "active Script-set generation changed")
+		}
 		if enforceReferences {
-			if err := classifyServiceMutationReferenceConflict(values[baseCount:], references); err != nil {
+			referenceEnd := len(values)
+			if scriptFenceIndex >= 0 {
+				referenceEnd = scriptFenceIndex
+			}
+			if err := classifyServiceMutationReferenceConflict(values[baseCount:referenceEnd], references); err != nil {
 				return err
 			}
 		}

@@ -902,6 +902,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		entryValues,
 		attachRecords,
 		componentRecords,
+		scriptRecords,
 	)
 	if err != nil {
 		_ = store.Close()

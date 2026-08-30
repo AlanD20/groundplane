@@ -2,13 +2,54 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func TestScriptRemovalRejectsActiveExecutionReferences(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, store, environment, project, target := routeRepositoryTestHierarchy(t)
+	repository, err := newScriptRepository(store)
+	if err != nil {
+		t.Fatalf("newScriptRepository(): %v", err)
+	}
+	record, err := NewScriptRecord(environment.Record.ID, target.Record.Desired.ID, core.Script{
+		ID: ids.New(ids.KindScript), Slug: "migrate", ServiceName: target.Record.Desired.Name,
+		Body: "php artisan migrate --force", When: core.ScriptHook("manual"),
+	})
+	if err != nil {
+		t.Fatalf("NewScriptRecord(): %v", err)
+	}
+	current, err := repository.CreateScript(ctx, environment, project, target, record)
+	if err != nil {
+		t.Fatalf("CreateScript(): %v", err)
+	}
+	current.Record.ActiveReferences = 1
+	task, marker, tombstone := scriptDeletionTestRecords(t, project, environment, current)
+	_, err = repository.BeginScriptDeletionWithTask(
+		ctx, environment, project, target, current, tombstone, task, marker,
+	)
+	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("BeginScriptDeletionWithTask(active reference) error = %v, want resource.in_use", err)
+	}
+	value, err := encodeScriptRecord(current.Record)
+	if err != nil {
+		t.Fatalf("encodeScriptRecord(): %v", err)
+	}
+	defer clear(value)
+	if err := validateHierarchyDeletionScriptOwner(
+		value, current.Record.Desired.ID, current.Record.EnvironmentID,
+	); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("validateHierarchyDeletionScriptOwner(active reference) error = %v, want resource.in_use", err)
+	}
+}
 
 func TestScriptRepositoryRemovalFinalizesOnlyAfterSuccessfulTask(t *testing.T) {
 	// Rationale: public Script visibility, the deletion fence, and Task journal
@@ -59,9 +100,9 @@ func TestScriptRepositoryRemovalFinalizesOnlyAfterSuccessfulTask(t *testing.T) {
 		t.Fatalf("AcknowledgeControllerTask(): %v", err)
 	}
 	for _, key := range []string{
-		scriptKey(current.Record.Desired.ID),
-		scriptOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-		scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug),
+		scriptSetScriptKey(current.Record.EnvironmentID, current.Record.ScriptSetGeneration, current.Record.Desired.ID),
+		scriptSetOwnerKey(current.Record.EnvironmentID, current.Record.ScriptSetGeneration, current.Record.Desired.ID),
+		scriptSetSlugKey(current.Record.EnvironmentID, current.Record.ScriptSetGeneration, current.Record.Desired.Slug),
 		deletionTombstoneKey(string(DeletionTargetScript), current.Record.Desired.ID),
 	} {
 		stored, getErr := store.Get(ctx, key)

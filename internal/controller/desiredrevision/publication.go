@@ -42,6 +42,32 @@ type PublicationRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
+// ScriptPublicationRepository is the optional Blueprint-only publication seam
+// used to append the prepared Script CAS fragment without changing direct
+// desired mutation repositories.
+type ScriptPublicationRepository interface {
+	PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+		context.Context,
+		netip.Prefix,
+		string,
+		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[etcd.EnvironmentRecord],
+		int64,
+		etcd.EnvironmentBlueprintStageClaim,
+		etcd.EnvironmentDesiredRevisionIdentity,
+		etcd.EnvironmentComposeProjection,
+		[]etcd.EnvironmentBlueprintZoneChange,
+		[]etcd.EnvironmentBlueprintServiceChange,
+		[]etcd.EnvironmentBlueprintRouteChange,
+		etcd.ReleaseGroupBlueprintPreparedMutation,
+		etcd.ComponentTaskPreparation,
+		etcd.BlueprintAttachTaskPreparation,
+		etcd.BlueprintScriptPublication,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
 // Repository is the aggregate used by mutation services that both stage and
 // publish direct desired revisions. Claim-only and Blueprint publication
 // boundaries use the narrower interfaces above.
@@ -155,6 +181,7 @@ type PublishInput struct {
 	ReleaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation
 	ComponentPreparation    etcd.ComponentTaskPreparation
 	AttachPreparation       etcd.BlueprintAttachTaskPreparation
+	ScriptPublication       etcd.BlueprintScriptPublication
 	Task                    etcd.TaskRecord
 }
 
@@ -214,13 +241,27 @@ func Publish(
 		Locator: input.Locator, Intent: input.Claim.Intent, Response: response,
 		TaskID: input.Task.ID, CreatedAt: input.Claim.CreatedAt, UpdatedAt: input.Claim.CreatedAt,
 	}
-	result, publicationErr := repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
-		ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
-		input.Claim,
-		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.Environment.Record.ID, RevisionID: input.Task.ID},
-		input.Projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
-		input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation, input.Task, marker,
-	)
+	var result etcd.IdempotencyTransactionResult
+	var publicationErr error
+	identity := etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.Environment.Record.ID, RevisionID: input.Task.ID}
+	if input.ScriptPublication.IsZero() {
+		result, publicationErr = repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
+			ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
+			input.Claim, identity, input.Projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
+			input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation, input.Task, marker,
+		)
+	} else {
+		withScripts, ok := repository.(ScriptPublicationRepository)
+		if !ok {
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Blueprint Script publication repository is not configured")
+		}
+		result, publicationErr = withScripts.PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+			ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
+			input.Claim, identity, input.Projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
+			input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation,
+			input.ScriptPublication, input.Task, marker,
+		)
+	}
 	var resolution idempotentintent.Resolution
 	if publicationErr != nil {
 		if !unknownOutcome(publicationErr) {

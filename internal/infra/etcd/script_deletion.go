@@ -25,10 +25,22 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	if err := validateScriptVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if current.Record.ActiveReferences != 0 {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindResourceInUse, "active Script executions fence deletion",
+		)
+	}
 	if err := validateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	scriptID := current.Record.Desired.ID
+	active, err := readActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if active.Record.GenerationID != current.Record.ScriptSetGeneration {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Script-set generation changed")
+	}
 	if tombstone.TargetKind != DeletionTargetScript || tombstone.TargetID != scriptID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
@@ -52,8 +64,8 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
-			scriptOwnerKey(current.Record.EnvironmentID, scriptID),
-			scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug),
+			scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -91,16 +103,21 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
+	activeValue, err := encodeScriptSetGeneration(active.Record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(activeValue)
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: scriptKey(scriptID), ModRevision: current.Revision},
-		{Key: scriptOwnerKey(current.Record.EnvironmentID, scriptID), ModRevision: indexes.Values[0].ModRevision},
+		{Key: scriptSetScriptKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID), ModRevision: current.Revision},
+		{Key: scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID), ModRevision: indexes.Values[0].ModRevision},
 		{
-			Key:         scriptSlugKey(current.Record.EnvironmentID, current.Record.Desired.Slug),
+			Key:         scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
 			ModRevision: indexes.Values[1].ModRevision,
 		},
 		{Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID)},
@@ -110,6 +127,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: scriptSetActiveKey(current.Record.EnvironmentID), ModRevision: active.Revision},
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, Condition{
@@ -125,6 +143,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID),
 			Value: tombstoneValue,
 		},
+		{Type: MutationPut, Key: scriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
@@ -156,7 +175,7 @@ func classifyScriptDeletionStartConflict(
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expected := 14
+		expected := 15
 		if project.Record.TenantID != "" {
 			expected++
 		}
@@ -184,6 +203,13 @@ func classifyScriptDeletionStartConflict(
 			return errs.New(errs.KindScriptNotFound, "Script was not found")
 		}
 		if values[4].ModRevision != current.Revision {
+			changed, err := decodeScriptRecord(values[4].Value)
+			if err != nil {
+				return err
+			}
+			if changed.ActiveReferences != 0 {
+				return errs.New(errs.KindResourceInUse, "active Script executions fence deletion")
+			}
 			return stateConflict("script", current.Record.Desired.ID)
 		}
 		for _, index := range []int{5, 6} {
@@ -212,10 +238,16 @@ func classifyScriptDeletionStartConflict(
 		if values[10].ModRevision != target.Revision {
 			return stateConflict("service", target.Record.Desired.ID)
 		}
-		for index := 11; index < len(values); index++ {
+		for index := 11; index <= 13; index++ {
 			if values[index] != nil {
 				return errs.New(errs.KindResourceInUse, "Script hierarchy deletion is in progress")
 			}
+		}
+		if values[14] == nil {
+			return errs.New(errs.KindInternal, "Environment active Script-set generation is missing")
+		}
+		if project.Record.TenantID != "" && values[15] != nil {
+			return errs.New(errs.KindResourceInUse, "Script hierarchy deletion is in progress")
 		}
 		return errs.New(errs.KindStateConflict, "Script deletion state changed")
 	}

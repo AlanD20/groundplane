@@ -179,6 +179,7 @@ func routeRepositoryTestHierarchy(
 	t.Helper()
 	serviceRepository, store, environment, project := serviceRepositoryTestHierarchy(t)
 	targetRecord := serviceRepositoryTestRecord(t, environment.Record.ID, 1004, "api")
+	targetRecord.Desired.Replicas = 1
 	target, err := serviceRepository.CreateService(context.Background(), environment, project, targetRecord)
 	if err != nil {
 		t.Fatalf("CreateService(target) error = %v", err)

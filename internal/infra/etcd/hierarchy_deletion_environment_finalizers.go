@@ -30,6 +30,14 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	operation HierarchyDeletionOperation,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
+	if err := cleanupEnvironmentDeletionScriptLocators(
+		ctx, repository.store, action.TargetID, Condition{
+			Key:         HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), action.TargetID),
+			ModRevision: operation.TombstoneRevision,
+		},
+	); err != nil {
+		return hierarchyDeletionControllerEffects{}, err
+	}
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, environmentKey(action.TargetID), action)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -82,6 +90,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	}
 	conditions = append(conditions, environmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
 	conditions = append(conditions, Condition{Key: environmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
+	conditions = append(conditions, Condition{Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
 	mutations := []Mutation{
 		{Type: MutationDelete, Key: environmentBlueprintHeadKey(record.ID)},
 		{Type: MutationDelete, Key: environmentComposeProjectionKey(record.ID)},
@@ -89,6 +98,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Type: MutationDelete, Key: environmentNameKey(record.ProjectID, record.Name)},
 		{Type: MutationDelete, Key: environmentOwnerKey(record.ProjectID, record.ID)},
 		{Type: MutationDelete, Key: environmentKey(record.ID)},
+		{Type: MutationDelete, Key: scriptSetEnvironmentPrefix(record.ID), Prefix: true},
+		{Type: MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,

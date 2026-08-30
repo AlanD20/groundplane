@@ -231,7 +231,11 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 	scope ReleasePlanningScope,
 	services map[string]struct{},
 ) error {
-	prefix := scriptOwnerPrefix(scope.Environment.Record.ID)
+	active, err := readActiveScriptSet(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
+	if err != nil {
+		return err
+	}
+	prefix := scriptSetOwnerPrefix(scope.Environment.Record.ID, active.Record.GenerationID)
 	start := ""
 	for {
 		page, err := ledger.store.Range(ctx, RangeRequest{
@@ -251,7 +255,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 					!bytes.Equal(value.Value, []byte(scriptID)) {
 					return corruptReleaseRecord()
 				}
-				keys[index] = scriptKey(scriptID)
+				keys[index] = scriptSetScriptKey(scope.Environment.Record.ID, active.Record.GenerationID, scriptID)
 			}
 			records, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
 			if err != nil {
