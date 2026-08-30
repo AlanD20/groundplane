@@ -325,11 +325,12 @@ func newReleaseGroupPublisherFixture(
 		t.Fatalf("marshal artifact error = %v", err)
 	}
 	projection := EnvironmentComposeProjection{
-		EnvironmentID:    environment.Record.ID,
-		RevisionID:       ids.NewAt(ids.KindTask, now, 701),
-		RenderGeneration: 1,
-		Services:         identities,
-		ComposeArtifact:  artifactValue,
+		EnvironmentID:     environment.Record.ID,
+		RevisionID:        ids.NewAt(ids.KindTask, now, 701),
+		RenderGeneration:  1,
+		Services:          identities,
+		ComposeArtifact:   artifactValue,
+		NormalizedCompose: []byte("services: {}\n"),
 	}
 	projectionValue, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {

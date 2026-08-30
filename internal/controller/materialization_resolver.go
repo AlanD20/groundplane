@@ -19,11 +19,11 @@ import (
 )
 
 type materializationBlueprintReader interface {
-	GetEnvironmentBlueprintRevision(
+	GetEnvironmentComposeProjectionRevision(
 		context.Context,
 		string,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 }
 
 type materializationEntryValueReader interface {
@@ -208,7 +208,7 @@ func (resolver *TaskMaterializationResolver) resolveBlueprintFile(
 	environmentID string,
 	reference etcd.TaskBlueprintFileValueReference,
 ) ([]byte, error) {
-	revision, found, err := resolver.blueprints.GetEnvironmentBlueprintRevision(
+	revision, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
 		ctx,
 		environmentID,
 		reference.RevisionID,
@@ -216,14 +216,14 @@ func (resolver *TaskMaterializationResolver) resolveBlueprintFile(
 	if err != nil {
 		return nil, err
 	}
-	for index := range revision.Record.Files {
-		defer clear(revision.Record.Files[index].Content)
+	for index := range revision.Record.RuntimeFiles {
+		defer clear(revision.Record.RuntimeFiles[index].Content)
 	}
 	if !found || revision.Record.EnvironmentID != environmentID ||
 		revision.Record.RevisionID != reference.RevisionID {
 		return nil, corruptMaterializationSource()
 	}
-	for _, file := range revision.Record.Files {
+	for _, file := range revision.Record.RuntimeFiles {
 		if file.Path == reference.Path {
 			return append([]byte(nil), file.Content...), nil
 		}

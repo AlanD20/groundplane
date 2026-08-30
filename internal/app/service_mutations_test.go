@@ -223,7 +223,7 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 		projection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
 			Record: etcd.EnvironmentComposeProjection{
 				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-				ComposeArtifact: artifact,
+				ComposeArtifact: artifact, NormalizedCompose: canonical,
 			},
 			Revision: 11, ReadRevision: 11,
 		},

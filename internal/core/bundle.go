@@ -32,16 +32,13 @@ type BlueprintBundle struct {
 // native Compose companion file; secret bytes are forbidden by the API
 // contract before this boundary.
 type BlueprintFile struct {
-	Path    string
-	Content []byte
+	Path    string `json:"path"`
+	Content []byte `json:"content"`
 }
 
 func (b BlueprintBundle) Validate() error {
 	if len(b.Files) == 0 {
 		return fmt.Errorf("blueprint bundle: at least one file is required")
-	}
-	if len(b.Files) > BlueprintBundleMaxFiles {
-		return fmt.Errorf("blueprint bundle: file count %d exceeds limit %d", len(b.Files), BlueprintBundleMaxFiles)
 	}
 	if err := validateBundlePath(b.RootPath); err != nil {
 		return fmt.Errorf("blueprint bundle: root path: %w", err)
@@ -50,34 +47,12 @@ func (b BlueprintBundle) Validate() error {
 		return fmt.Errorf("blueprint bundle: Compose sources must begin with root path %q", b.RootPath)
 	}
 
+	if err := ValidateBlueprintFiles(b.Files); err != nil {
+		return fmt.Errorf("blueprint bundle: %w", err)
+	}
 	filePaths := make(map[string]struct{}, len(b.Files))
-	totalBytes := 0
-	previousPath := ""
-	for index, file := range b.Files {
-		if err := validateBundlePath(file.Path); err != nil {
-			return fmt.Errorf("blueprint bundle: file %d path: %w", index, err)
-		}
-		if index > 0 && file.Path <= previousPath {
-			return fmt.Errorf("blueprint bundle: files must be unique and sorted by path")
-		}
-		if len(file.Content) > BlueprintBundleMaxFileBytes {
-			return fmt.Errorf(
-				"blueprint bundle: file %q size %d exceeds limit %d",
-				file.Path,
-				len(file.Content),
-				BlueprintBundleMaxFileBytes,
-			)
-		}
-		totalBytes += len(file.Content)
-		if totalBytes > BlueprintBundleMaxTotalBytes {
-			return fmt.Errorf(
-				"blueprint bundle: total size %d exceeds limit %d",
-				totalBytes,
-				BlueprintBundleMaxTotalBytes,
-			)
-		}
+	for _, file := range b.Files {
 		filePaths[file.Path] = struct{}{}
-		previousPath = file.Path
 	}
 
 	seenSources := make(map[string]struct{}, len(b.ComposeSources))
@@ -107,6 +82,53 @@ func (b BlueprintBundle) Validate() error {
 		if !utf8.ValidString(value) || strings.ContainsRune(value, '\x00') {
 			return fmt.Errorf("blueprint bundle: interpolation value for %q must be valid NUL-free UTF-8", key)
 		}
+	}
+	return nil
+}
+
+// ValidateBlueprintFiles validates one optional immutable file set using the
+// same bounded path and content rules as an authored Blueprint bundle.
+func ValidateBlueprintFiles(files []BlueprintFile) error {
+	return validateBlueprintFiles(files, true)
+}
+
+// ValidateNormalizedBlueprintFiles validates files already admitted through
+// one or more bounded bundles. Their aggregate limit is owned by the encoded
+// normalized projection rather than the single-bundle input ceiling.
+func ValidateNormalizedBlueprintFiles(files []BlueprintFile) error {
+	return validateBlueprintFiles(files, false)
+}
+
+func validateBlueprintFiles(files []BlueprintFile, enforceBundleAggregate bool) error {
+	if enforceBundleAggregate && len(files) > BlueprintBundleMaxFiles {
+		return fmt.Errorf("file count %d exceeds limit %d", len(files), BlueprintBundleMaxFiles)
+	}
+	totalBytes := 0
+	previousPath := ""
+	for index, file := range files {
+		if err := validateBundlePath(file.Path); err != nil {
+			return fmt.Errorf("file %d path: %w", index, err)
+		}
+		if index > 0 && file.Path <= previousPath {
+			return fmt.Errorf("files must be unique and sorted by path")
+		}
+		if len(file.Content) > BlueprintBundleMaxFileBytes {
+			return fmt.Errorf(
+				"file %q size %d exceeds limit %d",
+				file.Path,
+				len(file.Content),
+				BlueprintBundleMaxFileBytes,
+			)
+		}
+		totalBytes += len(file.Content)
+		if enforceBundleAggregate && totalBytes > BlueprintBundleMaxTotalBytes {
+			return fmt.Errorf(
+				"total size %d exceeds limit %d",
+				totalBytes,
+				BlueprintBundleMaxTotalBytes,
+			)
+		}
+		previousPath = file.Path
 	}
 	return nil
 }

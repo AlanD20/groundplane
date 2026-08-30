@@ -497,6 +497,14 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	submittedServiceNames := environmentBlueprintServiceNames(parsed.Project)
+	var priorProject *composetypes.Project
+	if hasProjection {
+		priorProject, err = controller.LoadNormalizedEnvironmentProject(ctx, previousProjection.Record)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+	}
 	desiredEnvironment := environment
 	desiredEnvironment.Record.NetworkPool = parsed.Extensions.NetworkPool
 	claim, err := desiredrevision.Claim(
@@ -518,7 +526,23 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	}
 	taskID := claim.TaskID
 	now := claim.CreatedAt
-	if err := preserveEnvironmentBlueprintVolumes(parsed.Project, previousProjection.Record, hasProjection); err != nil {
+	authoredPreviousProjection := previousProjection.Record
+	authoredPreviousProjection.Services = environmentComposeIdentities(previous.Services)
+	if err := preserveEnvironmentBlueprintResources(
+		parsed.Project, priorProject, authoredPreviousProjection, hasProjection,
+	); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	normalizedCompose, err := controller.MarshalNormalizedEnvironmentProject(parsed.Project)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	runtimeFiles, err := blueprintparser.SelectRuntimeFiles(
+		parsed.Project,
+		bundle.Files,
+		previousProjection.Record.RuntimeFiles,
+	)
+	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	volumeSlugs, err := environmentBlueprintVolumeSlugs(
@@ -563,15 +587,24 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	desiredServices, err := controller.ProjectServiceProjection(
-		parsed.Project,
-		changes.Current,
+	currentServices, err := service.listBlueprintServices(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	serviceExtensions, err := preserveEnvironmentBlueprintServiceExtensions(
 		parsed.ServiceExtensions,
+		submittedServiceNames,
+		previous.Services,
+		previousProjection.Record.ServiceExtensions,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	currentServices, err := service.listBlueprintServices(ctx, environmentID)
+	desiredServices, err := controller.ProjectServiceProjection(
+		parsed.Project,
+		changes.Current,
+		serviceExtensions,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -633,6 +666,14 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	currentRoutes, err := service.listBlueprintRoutes(ctx, environmentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	if !preserveRoutes {
+		parsed.Extensions.Routes, err = preserveEnvironmentBlueprintRoutes(
+			parsed.Extensions.Routes, desiredServices, currentRoutes,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
 	}
 	previousRoutes := make([]controller.RouteIdentity, len(currentRoutes))
 	for index, route := range currentRoutes {
@@ -798,7 +839,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		taskID,
 		artifactID,
 		allocator.Named,
-		parsed.RuntimeFiles,
+		runtimeFiles,
 		componentProjection,
 		entryProjection.Materializations,
 		reconciledEntries.Current,
@@ -943,7 +984,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		Materializations: materializations,
 		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	dependencyPlans, err := buildEnvironmentDependencyPlans(renderIdentities.Services, parsed.ServiceExtensions)
+	dependencyPlans, err := buildEnvironmentDependencyPlans(renderIdentities.Services, serviceExtensions)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -956,6 +997,9 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		volumeSlugs,
 		volumeMounts,
 		artifactValue,
+		normalizedCompose,
+		runtimeFiles,
+		serviceExtensions,
 		reconciledRoutes.Current,
 		pinnedComponents,
 		reconciledEntries.Current,
@@ -1665,32 +1709,173 @@ func authoredComposeIdentitySnapshot(
 	if err != nil {
 		return controller.ComposeIdentitySnapshot{}, err
 	}
-	generatedServiceIDs := make(map[string]struct{})
-	for _, component := range projection.Components {
-		for _, serviceID := range component.Runtime.GeneratedServices {
-			generatedServiceIDs[serviceID] = struct{}{}
+	artifact, err := controller.NormalizedEnvironmentArtifact(projection)
+	if err != nil {
+		return controller.ComposeIdentitySnapshot{}, err
+	}
+	authoredServiceIDs := make(map[string]string, len(artifact.GetServices()))
+	for _, service := range artifact.GetServices() {
+		if ids.Validate(ids.KindService, service.GetServiceId()) != nil || service.GetComposeName() == "" {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment normalized Compose projection has an invalid authored Service identity",
+			)
 		}
+		if name, duplicate := authoredServiceIDs[service.GetServiceId()]; duplicate && name != service.GetComposeName() {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment normalized Compose projection repeats an authored Service identity",
+			)
+		}
+		authoredServiceIDs[service.GetServiceId()] = service.GetComposeName()
 	}
 	services := make([]controller.ComposeResourceIdentity, 0, len(snapshot.Services))
 	for _, service := range snapshot.Services {
-		if _, generated := generatedServiceIDs[service.ID]; !generated {
-			services = append(services, service)
+		authoredName, authored := authoredServiceIDs[service.ID]
+		if !authored {
+			continue
 		}
+		if authoredName != service.Name {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment normalized Compose authored Service identity does not match its projection",
+			)
+		}
+		services = append(services, service)
 	}
 	snapshot.Services = services
 	return snapshot, nil
 }
 
-func preserveEnvironmentBlueprintVolumes(
+func environmentBlueprintServiceNames(project *composetypes.Project) map[string]struct{} {
+	names := make(map[string]struct{}, len(project.Services)+len(project.DisabledServices))
+	for name := range project.Services {
+		names[name] = struct{}{}
+	}
+	for name := range project.DisabledServices {
+		names[name] = struct{}{}
+	}
+	return names
+}
+
+func preserveEnvironmentBlueprintServiceExtensions(
+	submitted map[string]core.ServiceExtensionSpec,
+	submittedServiceNames map[string]struct{},
+	previous []controller.ComposeResourceIdentity,
+	previousExtensions map[string]core.ServiceExtensionSpec,
+) (map[string]core.ServiceExtensionSpec, error) {
+	result := cloneEnvironmentBlueprintServiceExtensions(submitted)
+	for _, identity := range previous {
+		if _, submittedNow := submittedServiceNames[identity.Name]; submittedNow {
+			continue
+		}
+		if extension, exists := previousExtensions[identity.Name]; exists {
+			result[identity.Name] = cloneEnvironmentBlueprintServiceExtension(extension)
+		}
+	}
+	return result, nil
+}
+
+func cloneEnvironmentBlueprintServiceExtensions(
+	source map[string]core.ServiceExtensionSpec,
+) map[string]core.ServiceExtensionSpec {
+	result := make(map[string]core.ServiceExtensionSpec, len(source))
+	for name, extension := range source {
+		result[name] = cloneEnvironmentBlueprintServiceExtension(extension)
+	}
+	return result
+}
+
+func cloneEnvironmentBlueprintServiceExtension(extension core.ServiceExtensionSpec) core.ServiceExtensionSpec {
+	clone := extension
+	if extension.Release != nil {
+		release := *extension.Release
+		clone.Release = &release
+	}
+	if extension.DependsOn != nil {
+		clone.DependsOn = make(map[string]core.ServiceDependency, len(extension.DependsOn))
+		for dependency, decision := range extension.DependsOn {
+			decision.Phases = append([]core.ServiceDependencyPhase(nil), decision.Phases...)
+			clone.DependsOn[dependency] = decision
+		}
+	}
+	return clone
+}
+
+func preserveEnvironmentBlueprintResources(
 	project *composetypes.Project,
+	prior *composetypes.Project,
 	previous etcd.EnvironmentComposeProjection,
 	hasPrevious bool,
 ) error {
-	if project == nil {
+	if project == nil || (hasPrevious && prior == nil) {
 		return errs.New(errs.KindInternal, "Blueprint Compose project is missing")
 	}
 	if !hasPrevious {
 		return nil
+	}
+	if project.Services == nil {
+		project.Services = make(composetypes.Services, len(previous.Services))
+	}
+	for _, identity := range previous.Services {
+		if _, authored := project.Services[identity.Name]; authored {
+			continue
+		}
+		if _, disabled := project.DisabledServices[identity.Name]; disabled {
+			continue
+		}
+		config, active := prior.Services[identity.Name]
+		disabled, profileDisabled := prior.DisabledServices[identity.Name]
+		if active && profileDisabled {
+			return errs.New(errs.KindResourceInUse, "Blueprint cannot unambiguously preserve an omitted Service")
+		}
+		if active {
+			config.Name = identity.Name
+			project.Services[identity.Name] = config
+			continue
+		}
+		if profileDisabled {
+			if project.DisabledServices == nil {
+				project.DisabledServices = make(composetypes.Services, len(previous.Services))
+			}
+			disabled.Name = identity.Name
+			project.DisabledServices[identity.Name] = disabled
+			continue
+		}
+		return errs.New(errs.KindResourceInUse, "Blueprint cannot preserve an omitted Service")
+	}
+	if project.Networks == nil {
+		project.Networks = make(composetypes.Networks, len(previous.Networks))
+	}
+	for _, identity := range previous.Networks {
+		if _, authored := project.Networks[identity.Name]; authored {
+			continue
+		}
+		network, found := prior.Networks[identity.Name]
+		if !found {
+			return errs.New(errs.KindResourceInUse, "Blueprint cannot preserve an omitted Zone")
+		}
+		project.Networks[identity.Name] = network
+	}
+	if len(prior.Configs) != 0 {
+		if project.Configs == nil {
+			project.Configs = make(composetypes.Configs, len(prior.Configs))
+		}
+		for name, config := range prior.Configs {
+			if _, authored := project.Configs[name]; !authored {
+				project.Configs[name] = config
+			}
+		}
+	}
+	if len(prior.Secrets) != 0 {
+		if project.Secrets == nil {
+			project.Secrets = make(composetypes.Secrets, len(prior.Secrets))
+		}
+		for name, secret := range prior.Secrets {
+			if _, authored := project.Secrets[name]; !authored {
+				project.Secrets[name] = secret
+			}
+		}
 	}
 	if project.Volumes == nil {
 		project.Volumes = make(composetypes.Volumes, len(previous.Volumes))
@@ -1699,11 +1884,58 @@ func preserveEnvironmentBlueprintVolumes(
 		if _, authored := project.Volumes[volume.Key]; authored {
 			continue
 		}
-		project.Volumes[volume.Key] = composetypes.VolumeConfig{
-			Extensions: composetypes.Extensions{"x-gp-slug": volume.Slug},
+		config, found := prior.Volumes[volume.Key]
+		if !found {
+			return errs.New(errs.KindResourceInUse, "Blueprint cannot preserve an omitted Volume")
 		}
+		if config.Extensions == nil {
+			config.Extensions = make(composetypes.Extensions)
+		}
+		config.Extensions["x-gp-slug"] = volume.Slug
+		project.Volumes[volume.Key] = config
 	}
 	return nil
+}
+
+func preserveEnvironmentBlueprintRoutes(
+	specs []core.RouteSpec,
+	services []core.Service,
+	current []etcd.Versioned[etcd.RouteRecord],
+) ([]core.RouteSpec, error) {
+	serviceByID := make(map[string]string, len(services))
+	for _, service := range services {
+		serviceByID[service.ID] = service.Name
+	}
+	retained := make(map[string]struct{}, len(specs)+len(current))
+	for _, spec := range specs {
+		path := spec.Path
+		if path == "" {
+			path = "/"
+		}
+		retained[spec.Hostname+"\x00"+path] = struct{}{}
+	}
+	result := append([]core.RouteSpec(nil), specs...)
+	for _, versioned := range current {
+		route := versioned.Record.Desired
+		serviceName, exists := serviceByID[route.TargetServiceID]
+		if !exists {
+			return nil, errs.New(errs.KindInternal, "durable Route target Service is not retained")
+		}
+		path := route.Path
+		if path == "" {
+			path = "/"
+		}
+		match := route.Host + "\x00" + path
+		if _, authored := retained[match]; authored {
+			continue
+		}
+		result = append(result, core.RouteSpec{
+			Hostname: route.Host, Path: path, Target: serviceName,
+			TargetPort: route.TargetPort, Exposure: route.Exposure,
+		})
+		retained[match] = struct{}{}
+	}
+	return result, nil
 }
 
 func managedEnvironmentVolumeIDs(current []controller.ComposeResourceIdentity) []string {

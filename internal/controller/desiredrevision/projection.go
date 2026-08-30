@@ -17,6 +17,9 @@ func ComposeProjection(
 	volumeSlugs map[string]string,
 	volumeMounts []etcd.EnvironmentServiceVolumeMount,
 	artifact []byte,
+	normalizedCompose []byte,
+	runtimeFiles []core.BlueprintFile,
+	serviceExtensions map[string]core.ServiceExtensionSpec,
 	routes []core.Route,
 	components []etcd.ComponentRecord,
 	entries []etcd.EntryRecord,
@@ -46,13 +49,43 @@ func ComposeProjection(
 		rightMatch := routeIdentities[right].Host + "\x00" + routeIdentities[right].Path
 		return leftMatch < rightMatch
 	})
+	files := make([]core.BlueprintFile, len(runtimeFiles))
+	for index, file := range runtimeFiles {
+		files[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+	}
 	return etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: generation,
-		ComposeArtifact: append([]byte(nil), artifact...),
-		Services:        convert(snapshot.Services), Networks: convert(snapshot.Networks), Volumes: convertVolumes(snapshot.Volumes),
+		ComposeArtifact:   append([]byte(nil), artifact...),
+		NormalizedCompose: append([]byte(nil), normalizedCompose...),
+		RuntimeFiles:      files,
+		ServiceExtensions: cloneServiceExtensions(serviceExtensions),
+		Services:          convert(snapshot.Services), Networks: convert(snapshot.Networks), Volumes: convertVolumes(snapshot.Volumes),
 		VolumeMounts: append([]etcd.EnvironmentServiceVolumeMount(nil), volumeMounts...),
 		Routes:       routeIdentities, Components: components, Entries: entries,
 	}
+}
+
+func cloneServiceExtensions(source map[string]core.ServiceExtensionSpec) map[string]core.ServiceExtensionSpec {
+	if source == nil {
+		return nil
+	}
+	result := make(map[string]core.ServiceExtensionSpec, len(source))
+	for name, extension := range source {
+		clone := extension
+		if extension.Release != nil {
+			release := *extension.Release
+			clone.Release = &release
+		}
+		if extension.DependsOn != nil {
+			clone.DependsOn = make(map[string]core.ServiceDependency, len(extension.DependsOn))
+			for dependency, decision := range extension.DependsOn {
+				decision.Phases = append([]core.ServiceDependencyPhase(nil), decision.Phases...)
+				clone.DependsOn[dependency] = decision
+			}
+		}
+		result[name] = clone
+	}
+	return result
 }
 
 func BlueprintRevision(

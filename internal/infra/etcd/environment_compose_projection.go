@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 type EnvironmentComposeIdentity struct {
@@ -41,18 +42,21 @@ type EnvironmentRouteIdentity struct {
 
 // EnvironmentComposeProjection is the sorted durable input for one Environment render.
 type EnvironmentComposeProjection struct {
-	EnvironmentID    string                          `json:"environment_id"`
-	RevisionID       string                          `json:"blueprint_revision_id"`
-	RenderGeneration uint64                          `json:"render_generation"`
-	ComposeArtifact  []byte                          `json:"compose_artifact"`
-	Services         []EnvironmentComposeIdentity    `json:"services,omitempty"`
-	Networks         []EnvironmentComposeIdentity    `json:"networks,omitempty"`
-	Volumes          []EnvironmentVolumeIdentity     `json:"volumes,omitempty"`
-	VolumeMounts     []EnvironmentServiceVolumeMount `json:"volume_mounts,omitempty"`
-	Routes           []EnvironmentRouteIdentity      `json:"routes,omitempty"`
-	SuppressedRoutes []EnvironmentRouteIdentity      `json:"suppressed_routes,omitempty"`
-	Components       []ComponentRecord               `json:"components,omitempty"`
-	Entries          []EntryRecord                   `json:"entries,omitempty"`
+	EnvironmentID     string                               `json:"environment_id"`
+	RevisionID        string                               `json:"blueprint_revision_id"`
+	RenderGeneration  uint64                               `json:"render_generation"`
+	ComposeArtifact   []byte                               `json:"compose_artifact"`
+	NormalizedCompose []byte                               `json:"normalized_compose"`
+	RuntimeFiles      []core.BlueprintFile                 `json:"runtime_files,omitempty"`
+	ServiceExtensions map[string]core.ServiceExtensionSpec `json:"service_extensions,omitempty"`
+	Services          []EnvironmentComposeIdentity         `json:"services,omitempty"`
+	Networks          []EnvironmentComposeIdentity         `json:"networks,omitempty"`
+	Volumes           []EnvironmentVolumeIdentity          `json:"volumes,omitempty"`
+	VolumeMounts      []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
+	Routes            []EnvironmentRouteIdentity           `json:"routes,omitempty"`
+	SuppressedRoutes  []EnvironmentRouteIdentity           `json:"suppressed_routes,omitempty"`
+	Components        []ComponentRecord                    `json:"components,omitempty"`
+	Entries           []EntryRecord                        `json:"entries,omitempty"`
 	core.ServiceDependencyPlans
 }
 
@@ -351,11 +355,20 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentComposeIdentities(ids.KindService, projection.Services); err != nil {
 		return err
 	}
+	if err := validateEnvironmentNormalizedCompose(projection.NormalizedCompose); err != nil {
+		return err
+	}
+	if err := core.ValidateNormalizedBlueprintFiles(projection.RuntimeFiles); err != nil {
+		return errs.Wrap(errs.KindValidationFailed, err)
+	}
 	names := make([]string, len(projection.Services))
 	for index, service := range projection.Services {
 		names[index] = service.Name
 	}
 	if err := projection.ServiceDependencyPlans.Validate(names); err != nil {
+		return err
+	}
+	if err := validateEnvironmentServiceExtensions(names, projection.ServiceExtensions); err != nil {
 		return err
 	}
 	if err := validateEnvironmentComposeIdentities(ids.KindNetwork, projection.Networks); err != nil {
@@ -592,21 +605,107 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	clone := source
 	clone.ServiceDependencyPlans = source.ServiceDependencyPlans.Clone()
 	clone.ComposeArtifact = append([]byte(nil), source.ComposeArtifact...)
+	clone.NormalizedCompose = append([]byte(nil), source.NormalizedCompose...)
+	if source.RuntimeFiles != nil {
+		clone.RuntimeFiles = make([]core.BlueprintFile, len(source.RuntimeFiles))
+		for index, file := range source.RuntimeFiles {
+			clone.RuntimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+		}
+	}
+	clone.ServiceExtensions = cloneEnvironmentServiceExtensions(source.ServiceExtensions)
 	clone.Services = append([]EnvironmentComposeIdentity(nil), source.Services...)
 	clone.Networks = append([]EnvironmentComposeIdentity(nil), source.Networks...)
 	clone.Volumes = append([]EnvironmentVolumeIdentity(nil), source.Volumes...)
 	clone.VolumeMounts = append([]EnvironmentServiceVolumeMount(nil), source.VolumeMounts...)
 	clone.Routes = append([]EnvironmentRouteIdentity(nil), source.Routes...)
 	clone.SuppressedRoutes = append([]EnvironmentRouteIdentity(nil), source.SuppressedRoutes...)
-	clone.Components = make([]ComponentRecord, len(source.Components))
-	for index, component := range source.Components {
-		clone.Components[index] = cloneComponentTaskRecord(component)
+	if source.Components != nil {
+		clone.Components = make([]ComponentRecord, len(source.Components))
+		for index, component := range source.Components {
+			clone.Components[index] = cloneComponentTaskRecord(component)
+		}
 	}
-	clone.Entries = make([]EntryRecord, len(source.Entries))
-	for index, entry := range source.Entries {
-		clone.Entries[index] = cloneEntryRecord(entry)
+	if source.Entries != nil {
+		clone.Entries = make([]EntryRecord, len(source.Entries))
+		for index, entry := range source.Entries {
+			clone.Entries[index] = cloneEntryRecord(entry)
+		}
 	}
 	return clone
+}
+
+func validateEnvironmentNormalizedCompose(value []byte) error {
+	if len(value) == 0 || len(value) > EnvironmentBlueprintProjectionMaxBytes {
+		return errs.New(errs.KindValidationFailed, "Environment normalized authored Compose is missing or oversized")
+	}
+	var document yaml.Node
+	if yaml.Unmarshal(value, &document) != nil || len(document.Content) != 1 ||
+		document.Content[0].Kind != yaml.MappingNode {
+		return errs.New(errs.KindValidationFailed, "Environment normalized authored Compose is invalid")
+	}
+	return nil
+}
+
+func validateEnvironmentServiceExtensions(
+	serviceNames []string,
+	extensions map[string]core.ServiceExtensionSpec,
+) error {
+	services := make(map[string]struct{}, len(serviceNames))
+	for _, name := range serviceNames {
+		services[name] = struct{}{}
+	}
+	for name, extension := range extensions {
+		if _, exists := services[name]; !exists {
+			return errs.New(errs.KindValidationFailed, "Environment Service extension target is absent")
+		}
+		if extension.Release != nil {
+			switch extension.Release.DefaultStrategy {
+			case "", core.StrategyBlueGreen, core.StrategyRecreate:
+			default:
+				return errs.New(errs.KindValidationFailed, "Environment Service release strategy is invalid")
+			}
+			switch extension.Release.OnFailure {
+			case "", core.OnFailureSwitchBack, core.OnFailureLeaveActive:
+			default:
+				return errs.New(errs.KindValidationFailed, "Environment Service release failure policy is invalid")
+			}
+		}
+	}
+	for _, phase := range []core.ServiceLifecyclePhase{
+		core.ServiceLifecycleStart,
+		core.ServiceLifecycleDeploy,
+		core.ServiceLifecycleRollback,
+	} {
+		if _, err := core.BuildServiceDependencyPhasePlan(serviceNames, extensions, phase); err != nil {
+			return errs.Wrap(errs.KindValidationFailed, err)
+		}
+	}
+	return nil
+}
+
+func cloneEnvironmentServiceExtensions(
+	source map[string]core.ServiceExtensionSpec,
+) map[string]core.ServiceExtensionSpec {
+	if source == nil {
+		return nil
+	}
+	result := make(map[string]core.ServiceExtensionSpec, len(source))
+	for name, extension := range source {
+		clone := extension
+		if extension.Release != nil {
+			release := *extension.Release
+			clone.Release = &release
+		}
+		if extension.DependsOn != nil {
+			clone.DependsOn = make(map[string]core.ServiceDependency, len(extension.DependsOn))
+			for dependency, decision := range extension.DependsOn {
+				decision.Phases = append([]core.ServiceDependencyPhase(nil), decision.Phases...)
+				clone.DependsOn[dependency] = decision
+			}
+		}
+		result[name] = clone
+	}
+	return result
 }
 
 func validateEnvironmentDependencyPlans(

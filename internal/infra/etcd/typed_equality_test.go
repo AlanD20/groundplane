@@ -50,6 +50,13 @@ func TestSameBlueprintAttachCandidateRecordChecksAllTypedIdentity(t *testing.T) 
 func TestSameServiceRemovalProjectionChecksTypedComponentConfig(t *testing.T) {
 	left := EnvironmentComposeProjection{
 		EnvironmentID: "environment", RevisionID: "revision", RenderGeneration: 1,
+		NormalizedCompose: []byte("services:\n  api: {image: api}\n"),
+		RuntimeFiles:      []core.BlueprintFile{{Path: "api.env", Content: []byte("MODE=live\n")}},
+		ServiceExtensions: map[string]core.ServiceExtensionSpec{
+			"api": {DependsOn: map[string]core.ServiceDependency{
+				"db": {Phases: []core.ServiceDependencyPhase{"deploy"}},
+			}},
+		},
 		Components: []ComponentRecord{{Desired: ComponentDesiredRecord{
 			ID: "component", Owner: core.ComponentOwnerEnvironment, OwnerID: "environment",
 			Kind: core.ComponentKindIngressCaddy, Config: core.ComponentConfig{
@@ -75,5 +82,34 @@ func TestSameServiceRemovalProjectionChecksTypedComponentConfig(t *testing.T) {
 	changedPresence.Components = []ComponentRecord{}
 	if sameServiceRemovalProjection(left, changedPresence) {
 		t.Fatal("nil and empty Component collections were treated as equal")
+	}
+	changed = cloneEnvironmentComposeProjection(left)
+	changed.NormalizedCompose[0] = 'x'
+	if sameServiceRemovalProjection(left, changed) {
+		t.Fatal("changed normalized Compose was accepted")
+	}
+	changed = cloneEnvironmentComposeProjection(left)
+	changed.RuntimeFiles[0].Content[0] = 'X'
+	if sameServiceRemovalProjection(left, changed) {
+		t.Fatal("changed runtime companion was accepted")
+	}
+	changed = cloneEnvironmentComposeProjection(left)
+	extension := changed.ServiceExtensions["api"]
+	dependency := extension.DependsOn["db"]
+	dependency.Phases[0] = "rollback"
+	extension.DependsOn["db"] = dependency
+	changed.ServiceExtensions["api"] = extension
+	if sameServiceRemovalProjection(left, changed) {
+		t.Fatal("changed Service extension was accepted")
+	}
+}
+
+// Rationale: omitempty restores absent collections as nil after durable
+// decode, so cloning must not manufacture non-nil empties that replay rejects.
+func TestCloneEnvironmentComposeProjectionPreservesAbsentCollections(t *testing.T) {
+	t.Parallel()
+	clone := cloneEnvironmentComposeProjection(EnvironmentComposeProjection{})
+	if clone.RuntimeFiles != nil || clone.Components != nil || clone.Entries != nil {
+		t.Fatalf("clone manufactured optional collections: %#v", clone)
 	}
 }

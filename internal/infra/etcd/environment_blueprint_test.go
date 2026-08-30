@@ -399,6 +399,7 @@ func environmentBlueprintTestProjection(
 		panic(err)
 	}
 	projection.ComposeArtifact = value
+	projection.NormalizedCompose = append([]byte(nil), canonicalYAML...)
 	return projection
 }
 

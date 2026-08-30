@@ -324,9 +324,13 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		NextEventSequence: 1, CreatedAt: stage.Record.CreatedAt, UpdatedAt: stage.Record.CreatedAt,
 	}
 	volumeMounts := []etcd.EnvironmentServiceVolumeMount{{ServiceID: serviceID, VolumeID: volumeID, Target: spec.MountPath}}
+	normalizedCompose, err := controller.MarshalNormalizedEnvironmentProject(baseProject)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	projection := desiredrevision.ComposeProjection(
 		environment.ID, task.ID, 1, identities, map[string]string{volume.Key: volume.Slug},
-		volumeMounts, artifactValue, nil, componentRecords, entries,
+		volumeMounts, artifactValue, normalizedCompose, nil, nil, nil, componentRecords, entries,
 	)
 	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
 	if err != nil {

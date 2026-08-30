@@ -93,6 +93,21 @@ func TestBlueprintBundleValidateEnforcesExactSizeLimits(t *testing.T) {
 	}
 }
 
+func TestValidateNormalizedBlueprintFilesUsesProjectionAggregateLimit(t *testing.T) {
+	t.Parallel()
+	files := make([]BlueprintFile, BlueprintBundleMaxFiles+1)
+	for index := range files {
+		files[index] = BlueprintFile{Path: fmt.Sprintf("%03d", index), Content: []byte("value")}
+	}
+	if err := ValidateNormalizedBlueprintFiles(files); err != nil {
+		t.Fatalf("ValidateNormalizedBlueprintFiles() error = %v", err)
+	}
+	files[0].Content = make([]byte, BlueprintBundleMaxFileBytes+1)
+	if err := ValidateNormalizedBlueprintFiles(files); err == nil {
+		t.Fatal("ValidateNormalizedBlueprintFiles() accepted an oversized member")
+	}
+}
+
 func TestBlueprintBundleValidateRejectsInvalidInterpolation(t *testing.T) {
 	// Rationale: interpolation is reproducible only when every key follows the
 	// Compose variable grammar and every explicit value is safely representable.

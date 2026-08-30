@@ -921,6 +921,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 		},
 	}
 	canonicalYAML := []byte("services:\n  api:\n    image: example/api:1\n")
+	projection.NormalizedCompose = append([]byte(nil), canonicalYAML...)
 	digest := sha256.Sum256(canonicalYAML)
 	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId:          ids.NewAt(ids.KindConfig, testAttachTime, 11),

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -24,20 +25,20 @@ const (
 )
 
 type resolverBlueprintReader struct {
-	revision etcd.EnvironmentBlueprintRevision
+	revision etcd.EnvironmentComposeProjection
 }
 
-func (reader *resolverBlueprintReader) GetEnvironmentBlueprintRevision(
+func (reader *resolverBlueprintReader) GetEnvironmentComposeProjectionRevision(
 	_ context.Context,
 	_ string,
 	_ string,
-) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error) {
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	revision := reader.revision
-	revision.Files = append([]etcd.EnvironmentBlueprintFile(nil), reader.revision.Files...)
-	for index := range revision.Files {
-		revision.Files[index].Content = append([]byte(nil), revision.Files[index].Content...)
+	revision.RuntimeFiles = append([]core.BlueprintFile(nil), reader.revision.RuntimeFiles...)
+	for index := range revision.RuntimeFiles {
+		revision.RuntimeFiles[index].Content = append([]byte(nil), revision.RuntimeFiles[index].Content...)
 	}
-	return etcd.Versioned[etcd.EnvironmentBlueprintRevision]{Record: revision}, true, nil
+	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: revision}, true, nil
 }
 
 type resolverEntryValueReader struct {
@@ -146,10 +147,10 @@ func TestTaskMaterializationResolverResolvesRemovalToEmptySource(t *testing.T) {
 func TestTaskMaterializationResolverReadsPinnedBlueprintFile(t *testing.T) {
 	expected := []byte("server:\n  port: 8080\n")
 	resolver := testTaskMaterializationResolver(t, nil)
-	resolver.blueprints.(*resolverBlueprintReader).revision = etcd.EnvironmentBlueprintRevision{
+	resolver.blueprints.(*resolverBlueprintReader).revision = etcd.EnvironmentComposeProjection{
 		EnvironmentID: resolverEnvironmentID,
 		RevisionID:    "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Files:         []etcd.EnvironmentBlueprintFile{{Path: "config/app.yaml", Content: expected}},
+		RuntimeFiles:  []core.BlueprintFile{{Path: "config/app.yaml", Content: expected}},
 	}
 	source := etcd.TaskMaterializationSource{
 		Kind: etcd.TaskMaterializationSourceBlueprintFile,

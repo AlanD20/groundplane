@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -13,25 +15,118 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// LoadNormalizedEnvironmentProject reconstructs the immutable authored Compose
+// candidate stored at an Environment desired revision. The projection, not its
+// optional Blueprint audit stream, is the desired-state authority.
+func LoadNormalizedEnvironmentProject(
+	ctx context.Context,
+	projection etcd.EnvironmentComposeProjection,
+) (*composetypes.Project, error) {
+	return loadNormalizedEnvironmentProject(ctx, projection)
+}
+
+// MarshalNormalizedEnvironmentProject freezes the complete authored Compose
+// topology before Components, Entries, Attaches, releases, or ownership
+// metadata add execution-only state. Profile-disabled Services are folded back
+// into the document so a later load can classify them deterministically.
+func MarshalNormalizedEnvironmentProject(project *composetypes.Project) ([]byte, error) {
+	if project == nil {
+		return nil, errs.New(errs.KindInternal, "Environment normalized Compose project is missing")
+	}
+	normalized := *project
+	normalized.Services = make(composetypes.Services, len(project.Services)+len(project.DisabledServices))
+	for name, service := range project.Services {
+		normalized.Services[name] = service
+	}
+	for name, service := range project.DisabledServices {
+		if _, duplicate := normalized.Services[name]; duplicate {
+			return nil, errs.New(errs.KindInternal, "Environment normalized Compose Service is duplicated")
+		}
+		normalized.Services[name] = service
+	}
+	normalized.DisabledServices = nil
+	value, err := normalized.MarshalYAML()
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	return value, nil
+}
+
+// NormalizedEnvironmentArtifact adapts the authored normalized Compose stream
+// to the existing deterministic direct-mutation helpers. Runtime-only generated
+// Component and release Service metadata is deliberately excluded.
+func NormalizedEnvironmentArtifact(
+	projection etcd.EnvironmentComposeProjection,
+) (*agentpb.ComposeArtifact, error) {
+	runtime := &agentpb.ComposeArtifact{}
+	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(projection.ComposeArtifact, runtime); err != nil ||
+		runtime.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		runtime.GetOwnerId() != projection.EnvironmentID || ids.Validate(ids.KindConfig, runtime.GetArtifactId()) != nil {
+		return nil, errs.New(errs.KindInternal, "Environment normalized Compose projection is corrupt")
+	}
+	project, err := loadNormalizedEnvironmentProject(context.Background(), projection)
+	if err != nil {
+		return nil, err
+	}
+	authoredNames := make(map[string]struct{}, len(project.Services)+len(project.DisabledServices))
+	for name := range project.Services {
+		authoredNames[name] = struct{}{}
+	}
+	for name := range project.DisabledServices {
+		authoredNames[name] = struct{}{}
+	}
+	services := make([]*agentpb.ComposeService, 0, len(authoredNames))
+	for _, identity := range projection.Services {
+		if _, authored := authoredNames[identity.Name]; !authored {
+			continue
+		}
+		if ids.Validate(ids.KindService, identity.ID) != nil {
+			return nil, errs.New(errs.KindInternal, "Environment normalized Compose Service identity is invalid")
+		}
+		services = append(services, &agentpb.ComposeService{ServiceId: identity.ID, ComposeName: identity.Name})
+		delete(authoredNames, identity.Name)
+	}
+	if len(authoredNames) != 0 {
+		return nil, errs.New(errs.KindInternal, "Environment normalized Compose Service identity is missing")
+	}
+	networks := make([]*agentpb.ComposeNetwork, len(projection.Networks))
+	for index, identity := range projection.Networks {
+		networks[index] = &agentpb.ComposeNetwork{
+			NetworkId: identity.ID, ComposeName: identity.Name, DockerName: "gp_net_" + identity.ID,
+		}
+	}
+	volumes := make([]*agentpb.ComposeVolume, len(projection.Volumes))
+	for index, identity := range projection.Volumes {
+		volumes[index] = &agentpb.ComposeVolume{
+			VolumeId: identity.ID, ComposeName: identity.Key, DockerName: "gp_vol_" + strings.ToLower(identity.ID),
+		}
+	}
+	result := proto.Clone(runtime).(*agentpb.ComposeArtifact)
+	result.CanonicalYaml = append([]byte(nil), projection.NormalizedCompose...)
+	digest := sha256.Sum256(result.CanonicalYaml)
+	result.YamlSha256 = digest[:]
+	result.Services = services
+	result.Networks = networks
+	result.Volumes = volumes
+	return result, nil
+}
+
 func loadNormalizedEnvironmentProject(
 	ctx context.Context,
 	projection etcd.EnvironmentComposeProjection,
 ) (*composetypes.Project, error) {
-	artifact := &agentpb.ComposeArtifact{}
-	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(projection.ComposeArtifact, artifact); err != nil ||
-		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		artifact.GetOwnerId() != projection.EnvironmentID || ids.Validate(ids.KindConfig, artifact.GetArtifactId()) != nil {
-		return nil, errs.New(errs.KindInternal, "Environment normalized Compose artifact is corrupt")
+	if len(projection.NormalizedCompose) == 0 {
+		return nil, errs.New(errs.KindInternal, "Environment normalized authored Compose is missing")
 	}
 	project, err := loader.LoadWithContext(ctx, composetypes.ConfigDetails{
 		WorkingDir: "/",
 		ConfigFiles: []composetypes.ConfigFile{{
-			Filename: "compose.yaml", Content: append([]byte(nil), artifact.GetCanonicalYaml()...),
+			Filename: "compose.yaml", Content: append([]byte(nil), projection.NormalizedCompose...),
 		}},
 	}, func(options *loader.Options) {
 		options.ResolvePaths = false
 		options.SkipResolveEnvironment = true
-		options.SetProjectName(artifact.GetProjectName(), true)
+		options.SetProjectName("gp-"+strings.ToLower(projection.EnvironmentID), true)
 	})
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -46,9 +141,9 @@ func loadNormalizedEnvironmentProject(
 		delete(service.Extensions, composeResourceExtension)
 		project.DisabledServices[name] = service
 	}
-	ownedNetworks := make(map[string]struct{}, len(artifact.GetNetworks()))
-	for _, network := range artifact.GetNetworks() {
-		ownedNetworks[network.GetComposeName()] = struct{}{}
+	ownedNetworks := make(map[string]struct{}, len(projection.Networks))
+	for _, network := range projection.Networks {
+		ownedNetworks[network.Name] = struct{}{}
 	}
 	for name, network := range project.Networks {
 		if _, owned := ownedNetworks[name]; owned {
@@ -58,17 +153,21 @@ func loadNormalizedEnvironmentProject(
 		}
 		project.Networks[name] = network
 	}
-	ownedVolumes := make(map[string]struct{}, len(artifact.GetVolumes()))
-	for _, volume := range artifact.GetVolumes() {
-		ownedVolumes[volume.GetComposeName()] = struct{}{}
+	ownedVolumes := make(map[string]etcd.EnvironmentVolumeIdentity, len(projection.Volumes))
+	for _, volume := range projection.Volumes {
+		ownedVolumes[volume.Key] = volume
 	}
 	for name, volume := range project.Volumes {
-		if _, owned := ownedVolumes[name]; owned {
+		if identity, owned := ownedVolumes[name]; owned {
 			volume.Name = ""
 			volume.Driver = ""
 			volume.DriverOpts = nil
 			stripControllerLabels(volume.Labels)
 			delete(volume.Extensions, composeResourceExtension)
+			if volume.Extensions == nil {
+				volume.Extensions = make(composetypes.Extensions)
+			}
+			volume.Extensions[composeVolumeSlugExtension] = identity.Slug
 		}
 		project.Volumes[name] = volume
 	}

@@ -1,15 +1,23 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: idempotency must compare the verified logical Blueprint rather than unstable multipart framing or map order.
@@ -125,5 +133,350 @@ func TestPrepareEnvironmentBlueprintRouteChangesPreservesImmutableTarget(t *test
 		[]etcd.Versioned[etcd.RouteRecord]{current},
 	); err == nil {
 		t.Fatal("prepareEnvironmentBlueprintRouteChanges() accepted an immutable target change")
+	}
+}
+
+func TestPreserveEnvironmentBlueprintResourcesCarriesForwardOmittedResources(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 21, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 9)
+	serviceID := ids.NewAt(ids.KindService, at, 10)
+	networkID := ids.NewAt(ids.KindNetwork, at, 11)
+	volumeID := ids.NewAt(ids.KindVolume, at, 12)
+	project := &composetypes.Project{}
+	prior := &composetypes.Project{Services: composetypes.Services{
+		"api":       {Name: "api", Image: "example/api:1"},
+		"api__blue": {Name: "api__blue", Image: "caddy:2"},
+	}, Networks: composetypes.Networks{"backend": {}}, Volumes: composetypes.Volumes{"data": {}}}
+	err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
+		Networks:      []etcd.EnvironmentComposeIdentity{{ID: networkID, Name: "backend"}},
+		Volumes:       []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Key: "data", Slug: "data"}},
+	}, true)
+	if err != nil {
+		t.Fatalf("preserveEnvironmentBlueprintResources() error = %v", err)
+	}
+	service, serviceFound := project.Services["api"]
+	if !serviceFound || service.Name != "api" || service.Image != "example/api:1" {
+		t.Fatalf("retained Service = %#v, found = %t", service, serviceFound)
+	}
+	if _, found := project.Networks["backend"]; !found {
+		t.Fatal("retained Zone was omitted from candidate Compose project")
+	}
+	volume, volumeFound := project.Volumes["data"]
+	if !volumeFound || volume.Extensions["x-gp-slug"] != "data" {
+		t.Fatalf("retained Volume = %#v, found = %t", volume, volumeFound)
+	}
+}
+
+func TestPreserveEnvironmentBlueprintResourcesUsesNormalizedProjectionAuthority(t *testing.T) {
+	t.Parallel()
+	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const serviceID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const generatedServiceID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FB0"
+	const componentID = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	canonical := []byte(`services:
+  api:
+    image: example/api:1
+  router:
+    image: example/router:1
+configs:
+  app-config:
+    file: config/app.conf
+secrets:
+  app-secret:
+    file: secrets/app.secret
+volumes:
+  data:
+    labels:
+      com.example.owner: operator
+`)
+	authoredCanonical := []byte(`services:
+  api:
+    image: example/api:1
+configs:
+  app-config:
+    file: config/app.conf
+secrets:
+  app-secret:
+    file: secrets/app.secret
+volumes:
+  data:
+    labels:
+      com.example.owner: operator
+`)
+	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:    environmentID, ProjectName: "groundplane-test", CanonicalYaml: canonical,
+		Services: []*agentpb.ComposeService{
+			{ServiceId: serviceID, ComposeName: "api"},
+			{ServiceId: generatedServiceID, ComposeName: "router", OwnerComponentId: componentID},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal normalized projection: %v", err)
+	}
+	projection := etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID, ComposeArtifact: artifact, NormalizedCompose: authoredCanonical,
+		Services: []etcd.EnvironmentComposeIdentity{
+			{ID: serviceID, Name: "api"},
+			{ID: generatedServiceID, Name: "router"},
+		},
+		Volumes: []etcd.EnvironmentVolumeIdentity{{ID: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", Key: "data", Slug: "data"}},
+	}
+	authored, err := authoredComposeIdentitySnapshot(projection)
+	if err != nil {
+		t.Fatalf("load authored identity snapshot: %v", err)
+	}
+	if !reflect.DeepEqual(authored.Services, []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}}) {
+		t.Fatalf("authored Service identities = %#v", authored.Services)
+	}
+	projection.Services = environmentComposeIdentities(authored.Services)
+	prior, err := controller.LoadNormalizedEnvironmentProject(context.Background(), projection)
+	if err != nil {
+		t.Fatalf("load normalized desired revision: %v", err)
+	}
+	candidate := &composetypes.Project{}
+	if err := preserveEnvironmentBlueprintResources(candidate, prior, projection, true); err != nil {
+		t.Fatalf("preserve normalized desired revision: %v", err)
+	}
+	if candidate.Services["api"].Image != "example/api:1" {
+		t.Fatalf("authored Service was not retained: %#v", candidate.Services)
+	}
+	if _, generated := candidate.Services["router"]; generated {
+		t.Fatal("generated Component Service was adopted into authored desired state")
+	}
+	if candidate.Configs["app-config"].File != "config/app.conf" || candidate.Secrets["app-secret"].File != "secrets/app.secret" {
+		t.Fatalf("native Config/Secret state was not retained: configs=%#v secrets=%#v", candidate.Configs, candidate.Secrets)
+	}
+	if candidate.Volumes["data"].Labels["com.example.owner"] != "operator" {
+		t.Fatalf("native Volume state was not retained: %#v", candidate.Volumes["data"])
+	}
+}
+
+func TestPreserveEnvironmentBlueprintServiceExtensionsUsesPinnedRevisionAuthority(t *testing.T) {
+	t.Parallel()
+	const serviceID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const dependencyID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FB0"
+	extensions, err := preserveEnvironmentBlueprintServiceExtensions(
+		map[string]core.ServiceExtensionSpec{},
+		map[string]struct{}{},
+		[]controller.ComposeResourceIdentity{
+			{ID: serviceID, Name: "api"},
+			{ID: dependencyID, Name: "migrate"},
+		},
+		map[string]core.ServiceExtensionSpec{
+			"api": {
+				Release: &core.ServiceReleaseSpec{
+					DefaultStrategy: core.StrategyBlueGreen,
+					OnFailure:       core.OnFailureSwitchBack,
+				},
+				DependsOn: map[string]core.ServiceDependency{
+					"migrate": {
+						Condition: core.ServiceDependencyCompletedSuccessfully,
+						Phases:    []core.ServiceDependencyPhase{core.ServiceDependencyPhaseDeploy},
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("preserve Environment Blueprint Service extensions: %v", err)
+	}
+	api := extensions["api"]
+	if api.Release == nil || api.Release.DefaultStrategy != core.StrategyBlueGreen ||
+		api.Release.OnFailure != core.OnFailureSwitchBack {
+		t.Fatalf("preserved release decision = %#v", api.Release)
+	}
+	dependency := api.DependsOn["migrate"]
+	if dependency.Condition != core.ServiceDependencyCompletedSuccessfully ||
+		!reflect.DeepEqual(dependency.Phases, []core.ServiceDependencyPhase{core.ServiceDependencyPhaseDeploy}) {
+		t.Fatalf("preserved dependency decision = %#v", dependency)
+	}
+}
+
+func TestSelectRuntimeFilesCarriesOnlyReferencesFromMergedProject(t *testing.T) {
+	t.Parallel()
+	project := &composetypes.Project{
+		Services: composetypes.Services{
+			"api": {
+				EnvFiles:   []composetypes.EnvFile{{Path: "config/app.env", Required: true}},
+				LabelFiles: []string{"config/labels"},
+				Volumes:    []composetypes.ServiceVolumeConfig{{Type: composetypes.VolumeTypeBind, Source: "assets"}},
+			},
+		},
+		Configs: composetypes.Configs{"app": {File: "config/app.yaml"}},
+	}
+	files, err := blueprintparser.SelectRuntimeFiles(
+		project,
+		[]core.BlueprintFile{{Path: "config/app.env", Content: []byte("NEW=1\n")}},
+		[]core.BlueprintFile{
+			{Path: "assets/index.html", Content: []byte("index")},
+			{Path: "config/app.env", Content: []byte("OLD=1\n")},
+			{Path: "config/app.yaml", Content: []byte("server: app\n")},
+			{Path: "config/labels", Content: []byte("owner=platform\n")},
+			{Path: "obsolete.txt", Content: []byte("obsolete")},
+		},
+	)
+	if err != nil {
+		t.Fatalf("select runtime files: %v", err)
+	}
+	want := []core.BlueprintFile{
+		{Path: "assets/index.html", Content: []byte("index")},
+		{Path: "config/app.env", Content: []byte("NEW=1\n")},
+		{Path: "config/app.yaml", Content: []byte("server: app\n")},
+		{Path: "config/labels", Content: []byte("owner=platform\n")},
+	}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("runtime files = %#v, want %#v", files, want)
+	}
+}
+
+func TestPreserveEnvironmentBlueprintResourcesPreservesDisabledServicesWithoutDuplication(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 21, 30, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 16)
+	serviceID := ids.NewAt(ids.KindService, at, 17)
+	prior := &composetypes.Project{DisabledServices: composetypes.Services{
+		"worker": {Name: "worker", Image: "example/worker:1"},
+	}}
+	project := &composetypes.Project{}
+	if err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "worker"}},
+	}, true); err != nil {
+		t.Fatalf("preserveEnvironmentBlueprintResources() error = %v", err)
+	}
+	if _, found := project.Services["worker"]; found {
+		t.Fatal("profile-disabled retained Service was duplicated into Services")
+	}
+	if got, found := project.DisabledServices["worker"]; !found || got.Image != "example/worker:1" {
+		t.Fatalf("retained DisabledService = %#v, found = %t", got, found)
+	}
+
+	project = &composetypes.Project{DisabledServices: composetypes.Services{
+		"worker": {Name: "worker", Image: "example/worker:new"},
+	}}
+	prior = &composetypes.Project{Services: composetypes.Services{
+		"worker": {Name: "worker", Image: "example/worker:old"},
+	}}
+	if err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "worker"}},
+	}, true); err != nil {
+		t.Fatalf("preserveEnvironmentBlueprintResources(existing disabled) error = %v", err)
+	}
+	if _, found := project.Services["worker"]; found || project.DisabledServices["worker"].Image != "example/worker:new" {
+		t.Fatal("existing profile-disabled Service was duplicated or replaced")
+	}
+}
+
+func TestPreserveEnvironmentBlueprintResourcesRejectsAmbiguousServiceCandidates(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 22, 30, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 18)
+	serviceID := ids.NewAt(ids.KindService, at, 19)
+	project := &composetypes.Project{}
+	prior := &composetypes.Project{Services: composetypes.Services{
+		"api__blue":  {Name: "api__blue", Image: "example/api:blue"},
+		"api__green": {Name: "api__green", Image: "example/api:green"},
+	}}
+	err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
+	}, true)
+	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("ambiguous retained Service error = %v, want resource.in_use", err)
+	}
+}
+
+func TestPreserveEnvironmentBlueprintResourcesCarriesNativeConfigAndSecretReferences(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 20)
+	serviceID := ids.NewAt(ids.KindService, at, 21)
+	prior := &composetypes.Project{
+		Services: composetypes.Services{"api": {Name: "api", Image: "example/api:1"}},
+		Configs:  composetypes.Configs{"app-config": {Name: "app-config", File: "config/app.conf"}},
+		Secrets:  composetypes.Secrets{"app-secret": {Name: "app-secret", File: "secrets/app.secret"}},
+	}
+	project := &composetypes.Project{}
+	if err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
+	}, true); err != nil {
+		t.Fatalf("preserveEnvironmentBlueprintResources(configs and secrets) error = %v", err)
+	}
+	if config, found := project.Configs["app-config"]; !found || config.File != "config/app.conf" {
+		t.Fatalf("retained Config = %#v, found = %t", config, found)
+	}
+	if secret, found := project.Secrets["app-secret"]; !found || secret.File != "secrets/app.secret" {
+		t.Fatalf("retained Secret = %#v, found = %t", secret, found)
+	}
+}
+
+func TestPreserveEnvironmentBlueprintResourcesCarriesNativeVolumeConfig(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 23, 30, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 22)
+	volumeID := ids.NewAt(ids.KindVolume, at, 23)
+	priorVolume := composetypes.VolumeConfig{
+		Name:       "authored-data",
+		Driver:     "local",
+		DriverOpts: composetypes.Options{"type": "none", "o": "bind", "device": "./data"},
+		Labels:     composetypes.Labels{"com.example.owner": "operator"},
+		Extensions: composetypes.Extensions{"x-custom": "keep"},
+	}
+	prior := &composetypes.Project{Volumes: composetypes.Volumes{"data": priorVolume}}
+	project := &composetypes.Project{}
+
+	err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		Volumes:       []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Key: "data", Slug: "stable-data"}},
+	}, true)
+	if err != nil {
+		t.Fatalf("preserve omitted volume: %v", err)
+	}
+
+	got, found := project.Volumes["data"]
+	if !found {
+		t.Fatal("preserved volume missing")
+	}
+	if got.Name != priorVolume.Name || got.Driver != priorVolume.Driver {
+		t.Fatalf("preserved volume identity = %#v, want %#v", got, priorVolume)
+	}
+	if !reflect.DeepEqual(got.DriverOpts, priorVolume.DriverOpts) {
+		t.Fatalf("preserved volume driver options = %#v, want %#v", got.DriverOpts, priorVolume.DriverOpts)
+	}
+	if !reflect.DeepEqual(got.Labels, priorVolume.Labels) {
+		t.Fatalf("preserved volume labels = %#v, want %#v", got.Labels, priorVolume.Labels)
+	}
+	if got.Extensions["x-custom"] != "keep" || got.Extensions["x-gp-slug"] != "stable-data" {
+		t.Fatalf("preserved volume extensions = %#v", got.Extensions)
+	}
+}
+
+func TestPreserveEnvironmentBlueprintRoutesCarriesForwardOmittedRoute(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 22, 22, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 13)
+	serviceID := ids.NewAt(ids.KindService, at, 14)
+	routeID := ids.NewAt(ids.KindRoute, at, 15)
+	record, err := etcd.NewRouteRecord(environmentID, core.Route{
+		ID: routeID, Host: "old.example.com", Path: "/legacy/*", TargetServiceID: serviceID,
+		TargetPort: 8080, Exposure: "internal",
+	})
+	if err != nil {
+		t.Fatalf("NewRouteRecord() error = %v", err)
+	}
+	specs, err := preserveEnvironmentBlueprintRoutes(nil, []core.Service{{ID: serviceID, Name: "api"}}, []etcd.Versioned[etcd.RouteRecord]{{Record: record}})
+	if err != nil {
+		t.Fatalf("preserveEnvironmentBlueprintRoutes() error = %v", err)
+	}
+	if len(specs) != 1 || specs[0].Hostname != record.Desired.Host || specs[0].Path != record.Desired.Path ||
+		specs[0].Target != "api" || specs[0].TargetPort != record.Desired.TargetPort || specs[0].Exposure != record.Desired.Exposure {
+		t.Fatalf("retained Route specs = %#v", specs)
 	}
 }

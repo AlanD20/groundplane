@@ -128,6 +128,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	expected.RevisionID = intent.CandidateProjection.RevisionID
 	expected.RenderGeneration = intent.CandidateProjection.RenderGeneration
 	expected.ComposeArtifact = append([]byte(nil), intent.CandidateProjection.ComposeArtifact...)
+	expected.NormalizedCompose = append([]byte(nil), intent.CandidateProjection.NormalizedCompose...)
 	expected.Services = expected.Services[:0]
 	removed := false
 	for _, identity := range intent.CurrentProjection.Services {
@@ -144,6 +145,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		}
 	}
 	expected.ServiceDependencyPlans = expected.ServiceDependencyPlans.WithoutService(intent.ServiceName)
+	delete(expected.ServiceExtensions, intent.ServiceName)
 	if !removed || !sameServiceRemovalProjection(expected, intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Service removal candidate projection changed")
 	}
@@ -153,6 +155,9 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 func sameServiceRemovalProjection(left, right EnvironmentComposeProjection) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.RevisionID == right.RevisionID &&
 		left.RenderGeneration == right.RenderGeneration && sameServiceRemovalBytes(left.ComposeArtifact, right.ComposeArtifact) &&
+		sameServiceRemovalBytes(left.NormalizedCompose, right.NormalizedCompose) &&
+		sameServiceRemovalBlueprintFiles(left.RuntimeFiles, right.RuntimeFiles) &&
+		sameServiceRemovalServiceExtensions(left.ServiceExtensions, right.ServiceExtensions) &&
 		sameServiceRemovalComparableSlices(left.Services, right.Services) &&
 		sameServiceRemovalComparableSlices(left.Networks, right.Networks) &&
 		sameServiceRemovalComparableSlices(left.Volumes, right.Volumes) &&
@@ -162,6 +167,55 @@ func sameServiceRemovalProjection(left, right EnvironmentComposeProjection) bool
 		sameServiceRemovalComponents(left.Components, right.Components) &&
 		sameServiceRemovalEntries(left.Entries, right.Entries) &&
 		sameServiceRemovalDependencyPlans(left.ServiceDependencyPlans, right.ServiceDependencyPlans)
+}
+
+func sameServiceRemovalBlueprintFiles(left, right []core.BlueprintFile) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].Path != right[index].Path || !sameServiceRemovalBytes(left[index].Content, right[index].Content) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalServiceExtensions(
+	left,
+	right map[string]core.ServiceExtensionSpec,
+) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for name, leftExtension := range left {
+		rightExtension, exists := right[name]
+		if !exists || !sameServiceRemovalServiceExtension(leftExtension, rightExtension) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalServiceExtension(left, right core.ServiceExtensionSpec) bool {
+	if left.Release == nil || right.Release == nil {
+		if left.Release != nil || right.Release != nil {
+			return false
+		}
+	} else if *left.Release != *right.Release {
+		return false
+	}
+	if (left.DependsOn == nil) != (right.DependsOn == nil) || len(left.DependsOn) != len(right.DependsOn) {
+		return false
+	}
+	for name, leftDependency := range left.DependsOn {
+		rightDependency, exists := right.DependsOn[name]
+		if !exists || leftDependency.Condition != rightDependency.Condition ||
+			!sameServiceRemovalComparableSlices(leftDependency.Phases, rightDependency.Phases) {
+			return false
+		}
+	}
+	return true
 }
 
 func sameServiceRemovalBytes(left, right []byte) bool {

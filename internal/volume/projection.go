@@ -72,6 +72,14 @@ func buildVolumeMutationProjection(
 			return etcd.EnvironmentComposeProjection{}, nil, nil, errs.New(errs.KindInternal, "Volume baseline artifact is corrupt")
 		}
 	}
+	normalizedArtifact := proto.Clone(oldArtifact).(*agentpb.ComposeArtifact)
+	var err error
+	if hasCurrent {
+		normalizedArtifact, err = controller.NormalizedEnvironmentArtifact(current)
+		if err != nil {
+			return etcd.EnvironmentComposeProjection{}, nil, nil, err
+		}
+	}
 	action := controller.VolumeArtifactAdd
 	switch request.action {
 	case volumeMutationActionAdd:
@@ -113,6 +121,15 @@ func buildVolumeMutationProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, nil, err
 	}
+	normalizedArtifact, err = controller.MutateEnvironmentVolumeArtifact(normalizedArtifact, controller.VolumeArtifactMutation{
+		Action: action, VolumeID: request.volumeID, Key: request.key,
+		ArtifactID: stableIDFromTask(ids.KindConfig, revisionID), PlanID: stableIDFromTask(ids.KindPlan, revisionID),
+		TenantID: tenantID, ProjectID: projectID, RenderGeneration: generation,
+	})
+	if err != nil {
+		return etcd.EnvironmentComposeProjection{}, nil, nil, err
+	}
+	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
 	if request.action == volumeMutationActionRemove {
 		cleanupArtifactID, cleanupErr := controller.StableVolumeCleanupArtifactID(
 			stableIDFromTask(ids.KindConfig, revisionID),

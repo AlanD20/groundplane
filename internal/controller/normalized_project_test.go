@@ -29,8 +29,9 @@ func TestLoadNormalizedEnvironmentProjectDoesNotResolveEnvFiles(t *testing.T) {
 		t.Fatalf("marshal Compose artifact: %v", err)
 	}
 	project, err := loadNormalizedEnvironmentProject(context.Background(), etcd.EnvironmentComposeProjection{
-		EnvironmentID:   "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		ComposeArtifact: artifact,
+		EnvironmentID:     "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		ComposeArtifact:   artifact,
+		NormalizedCompose: canonical,
 	})
 	if err != nil {
 		t.Fatalf("loadNormalizedEnvironmentProject() error = %v", err)
@@ -38,5 +39,44 @@ func TestLoadNormalizedEnvironmentProjectDoesNotResolveEnvFiles(t *testing.T) {
 	service := project.Services["api"]
 	if _, resolved := service.Environment["EXPANDED"]; resolved {
 		t.Fatalf("loadNormalizedEnvironmentProject() resolved env_file contents: %#v", service.Environment)
+	}
+}
+
+// Rationale: execution metadata can be stale independently of the immutable
+// authored stream, so it must never decide which Services direct mutations own.
+func TestNormalizedEnvironmentArtifactUsesNormalizedComposeServiceIdentity(t *testing.T) {
+	t.Parallel()
+	const (
+		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		apiID         = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		generatedID   = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	)
+	canonical := []byte("services:\n  api:\n    image: example/api:1\n")
+	runtime, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId:  "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:     environmentID,
+		ProjectName: "groundplane-test",
+		Services: []*agentpb.ComposeService{
+			{ServiceId: apiID, ComposeName: "api", OwnerComponentId: "cmp_stale"},
+			{ServiceId: generatedID, ComposeName: "router"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal runtime artifact: %v", err)
+	}
+	artifact, err := NormalizedEnvironmentArtifact(etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID, ComposeArtifact: runtime, NormalizedCompose: canonical,
+		Services: []etcd.EnvironmentComposeIdentity{
+			{ID: apiID, Name: "api"},
+			{ID: generatedID, Name: "router"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizedEnvironmentArtifact() error = %v", err)
+	}
+	if len(artifact.Services) != 1 || artifact.Services[0].GetServiceId() != apiID ||
+		artifact.Services[0].GetComposeName() != "api" {
+		t.Fatalf("NormalizedEnvironmentArtifact() Services = %#v", artifact.Services)
 	}
 }

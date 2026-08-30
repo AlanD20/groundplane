@@ -259,7 +259,7 @@ func boundaryProjection(
 	}
 	return etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-		ComposeArtifact: artifact,
+		ComposeArtifact: artifact, NormalizedCompose: []byte("services: {}\n"),
 		Routes: []etcd.EnvironmentRouteIdentity{{
 			ID: ids.NewAt(ids.KindRoute, now, 4), Host: "boundary.example.test",
 			Path: "/" + strings.Repeat("a", pathPadding),

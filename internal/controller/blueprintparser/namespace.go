@@ -516,12 +516,15 @@ func (p *parsePlan) inspectEnvFiles(baseDir string, raw any) error {
 				return validationError("blueprint env_file required flag is invalid")
 			}
 		}
-		_, exists, err := p.requireReference(baseDir, value, false, !required)
+		resolved, exists, err := p.requireReference(baseDir, value, false, !required)
 		if err != nil {
 			return err
 		}
 		if required && !exists {
 			return validationError("blueprint env_file is undeclared")
+		}
+		if exists {
+			p.runtime[resolved] = struct{}{}
 		}
 	}
 	return nil
@@ -536,13 +539,14 @@ func (p *parsePlan) inspectRequiredFiles(baseDir string, raw any) error {
 		return validationError("blueprint file reference is invalid")
 	}
 	for _, value := range values {
-		_, exists, err := p.requireReference(baseDir, value, false, false)
+		resolved, exists, err := p.requireReference(baseDir, value, false, false)
 		if err != nil {
 			return err
 		}
 		if !exists {
 			return validationError("blueprint file reference is undeclared")
 		}
+		p.runtime[resolved] = struct{}{}
 	}
 	return nil
 }
@@ -562,13 +566,14 @@ func (p *parsePlan) inspectConfigs(baseDir string, raw any) error {
 			if !ok {
 				return validationError("blueprint config file is invalid")
 			}
-			_, declared, err := p.requireReference(baseDir, value, false, false)
+			resolved, declared, err := p.requireReference(baseDir, value, false, false)
 			if err != nil {
 				return err
 			}
 			if !declared {
 				return validationError("blueprint config file is undeclared")
 			}
+			p.runtime[resolved] = struct{}{}
 		}
 	}
 	return nil
@@ -780,6 +785,110 @@ func (p *parsePlan) runtimeBlueprintFiles() []core.BlueprintFile {
 	}
 	sort.Slice(files, func(left int, right int) bool { return files[left].Path < files[right].Path })
 	return files
+}
+
+// SelectRuntimeFiles returns the exact immutable companion files referenced by
+// the final normalized Compose project. Submitted bytes replace older bytes at
+// the same path; unreferenced historical files are not carried forward.
+func SelectRuntimeFiles(
+	project *types.Project,
+	submitted []core.BlueprintFile,
+	previous []core.BlueprintFile,
+) ([]core.BlueprintFile, error) {
+	if project == nil {
+		return nil, errs.New(errs.KindInternal, "Blueprint runtime file project is missing")
+	}
+	if err := core.ValidateBlueprintFiles(submitted); err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	if err := core.ValidateNormalizedBlueprintFiles(previous); err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	available := make(map[string]core.BlueprintFile, len(previous)+len(submitted))
+	for _, file := range previous {
+		available[file.Path] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+	}
+	for _, file := range submitted {
+		available[file.Path] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+	}
+	selected := make(map[string]core.BlueprintFile)
+	selectReference := func(reference string, tree bool, optional bool) error {
+		reference = path.Clean(reference)
+		if file, found := available[reference]; found {
+			selected[reference] = file
+			return nil
+		}
+		if tree {
+			prefix := strings.TrimSuffix(reference, "/") + "/"
+			matched := false
+			for filename, file := range available {
+				if strings.HasPrefix(filename, prefix) {
+					selected[filename] = file
+					matched = true
+				}
+			}
+			if matched {
+				return nil
+			}
+		}
+		if optional {
+			return nil
+		}
+		return errs.New(errs.KindInternal, "Blueprint normalized project references unavailable runtime files")
+	}
+	selectService := func(service types.ServiceConfig) error {
+		for _, file := range service.EnvFiles {
+			if err := selectReference(file.Path, false, !bool(file.Required)); err != nil {
+				return err
+			}
+		}
+		for _, file := range service.LabelFiles {
+			if err := selectReference(file, false, false); err != nil {
+				return err
+			}
+		}
+		for _, volume := range service.Volumes {
+			if volume.Type == types.VolumeTypeBind {
+				if err := selectReference(volume.Source, true, false); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	for _, service := range project.Services {
+		if err := selectService(service); err != nil {
+			return nil, err
+		}
+	}
+	for _, service := range project.DisabledServices {
+		if err := selectService(service); err != nil {
+			return nil, err
+		}
+	}
+	for _, config := range project.Configs {
+		if config.File != "" {
+			if err := selectReference(config.File, false, false); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, volume := range project.Volumes {
+		if device := volume.DriverOpts["device"]; device != "" {
+			if err := selectReference(device, true, false); err != nil {
+				return nil, err
+			}
+		}
+	}
+	files := make([]core.BlueprintFile, 0, len(selected))
+	for _, file := range selected {
+		files = append(files, file)
+	}
+	sort.Slice(files, func(left int, right int) bool { return files[left].Path < files[right].Path })
+	if err := core.ValidateNormalizedBlueprintFiles(files); err != nil {
+		return nil, errs.Wrap(errs.KindValidationFailed, err)
+	}
+	return files, nil
 }
 
 func (p *parsePlan) materialize(workspace string) error {

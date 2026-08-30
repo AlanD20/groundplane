@@ -261,6 +261,26 @@ func buildServiceDesiredProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
+	normalizedArtifact := proto.Clone(artifact).(*agentpb.ComposeArtifact)
+	if hasCurrent {
+		normalizedArtifact, err = controller.NormalizedEnvironmentArtifact(current)
+		if err != nil {
+			return etcd.EnvironmentComposeProjection{}, err
+		}
+	}
+	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(normalizedArtifact, controller.ServiceArtifactMutation{
+		Action: action, Desired: record.Desired,
+		Zones:      serviceArtifactZones(references),
+		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
+		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
+		RenderGeneration: generation,
+	})
+	if err != nil {
+		return etcd.EnvironmentComposeProjection{}, err
+	}
+	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
+	candidate.ServiceExtensions = cloneDirectServiceExtensions(current.ServiceExtensions)
+	setDirectServiceExtension(candidate.ServiceExtensions, record.Desired)
 	candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
@@ -350,11 +370,60 @@ func buildServiceRemovalProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
+	normalizedArtifact, err := controller.NormalizedEnvironmentArtifact(current)
+	if err != nil {
+		return etcd.EnvironmentComposeProjection{}, err
+	}
+	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(normalizedArtifact, controller.ServiceArtifactMutation{
+		Action: controller.ServiceArtifactRemove, Desired: record.Desired,
+		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
+		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
+		RenderGeneration: generation,
+	})
+	if err != nil {
+		return etcd.EnvironmentComposeProjection{}, err
+	}
+	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
+	candidate.ServiceExtensions = cloneDirectServiceExtensions(current.ServiceExtensions)
+	delete(candidate.ServiceExtensions, record.Desired.Name)
+	if current.ServiceExtensions == nil {
+		candidate.ServiceExtensions = nil
+	}
 	candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return candidate, nil
+}
+
+func cloneDirectServiceExtensions(source map[string]core.ServiceExtensionSpec) map[string]core.ServiceExtensionSpec {
+	result := make(map[string]core.ServiceExtensionSpec, len(source)+1)
+	for name, extension := range source {
+		result[name] = cloneEnvironmentBlueprintServiceExtension(extension)
+	}
+	return result
+}
+
+func setDirectServiceExtension(extensions map[string]core.ServiceExtensionSpec, service core.Service) {
+	extension := core.ServiceExtensionSpec{}
+	if service.Strategy != "" || service.OnFailure != "" {
+		extension.Release = &core.ServiceReleaseSpec{
+			DefaultStrategy: service.Strategy,
+			OnFailure:       service.OnFailure,
+		}
+	}
+	if len(service.DependsOn) != 0 {
+		extension.DependsOn = make(map[string]core.ServiceDependency, len(service.DependsOn))
+		for dependency, decision := range service.DependsOn {
+			decision.Phases = append([]core.ServiceDependencyPhase(nil), decision.Phases...)
+			extension.DependsOn[dependency] = decision
+		}
+	}
+	if extension.Release == nil && len(extension.DependsOn) == 0 {
+		delete(extensions, service.Name)
+		return
+	}
+	extensions[service.Name] = extension
 }
 
 func serviceStableIDFromRevision(kind ids.Kind, revisionID string) string {
