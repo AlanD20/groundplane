@@ -14,6 +14,7 @@ const (
 	caddyConfigMarkerName = "components/caddy/config/.groundplane-managed"
 	Image                 = "docker.io/library/caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
 	ServiceName           = "caddy"
+	OriginURL             = "http://caddy:80"
 	defaultTemplateBody   = "{routes}\n"
 	routesMarker          = "{routes}"
 	maxTemplateBytes      = 32 << 10
@@ -96,6 +97,9 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 	}
 	if !input.Enabled {
 		return component.EnvironmentPlan{}, nil
+	}
+	if input.Origin.ServiceName != ServiceName || input.Origin.URL != OriginURL {
+		return component.EnvironmentPlan{}, fmt.Errorf("caddy: HTTP router origin does not match the managed Service")
 	}
 	caddyfile, err := renderCaddyfile(config.CaddyfileTemplate, component.SortedHTTPRoutes(input.Routes))
 	if err != nil {

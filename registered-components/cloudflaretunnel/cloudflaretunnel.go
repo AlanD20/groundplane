@@ -14,7 +14,7 @@ const (
 
 type Input struct {
 	GeneratedServiceID string
-	RouterServiceName  string
+	RouterOrigin       component.HTTPRouterOrigin
 	RouterNetworkName  string
 	SecretID           string
 }
@@ -37,16 +37,17 @@ func Definition() (component.Definition, error) {
 }
 
 func Plan(input Input) (component.EnvironmentPlan, error) {
-	if input.GeneratedServiceID == "" || input.RouterServiceName == "" || input.RouterNetworkName == "" || input.SecretID == "" {
+	if input.GeneratedServiceID == "" || component.ValidateHTTPRouterOrigin(input.RouterOrigin) != nil ||
+		input.RouterNetworkName == "" || input.SecretID == "" {
 		return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: planner input is incomplete")
 	}
 	return component.EnvironmentPlan{Services: []component.ManagedService{{
 		ID: input.GeneratedServiceID, Name: ServiceName, Image: image,
 		NetworkMode: component.ManagedNetworkModeZones,
-		Command: []string{"tunnel", "--no-autoupdate", "run"},
+		Command: []string{"tunnel", "--no-autoupdate", "--url", input.RouterOrigin.URL, "run"},
 		Networks: []component.ManagedNetworkAttachment{{Name: input.RouterNetworkName, Aliases: []string{ServiceName}}},
 		Restart: "unless-stopped", Replicas: 1,
-		Dependencies: []component.ManagedDependency{{ServiceName: input.RouterServiceName, Condition: "service_started"}},
+		Dependencies: []component.ManagedDependency{{ServiceName: input.RouterOrigin.ServiceName, Condition: "service_started"}},
 		SecretEnvironment: []component.ManagedSecretEnvironment{{Name: tokenName, SecretID: input.SecretID}},
 	}}}, nil
 }

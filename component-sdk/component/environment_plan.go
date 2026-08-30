@@ -4,8 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"net"
 	"net/netip"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +29,13 @@ type HTTPRoute struct {
 	Exposure           HTTPRouteExposure
 }
 
+// HTTPRouterOrigin is the exact managed Service endpoint exposed by one HTTP
+// router provider to granted edge transports.
+type HTTPRouterOrigin struct {
+	ServiceName string
+	URL         string
+}
+
 type HTTPRouterInput struct {
 	ComponentID        string
 	Enabled            bool
@@ -33,6 +43,7 @@ type HTTPRouterInput struct {
 	ZoneID             string
 	ZoneName           string
 	PinnedIPv4         string
+	Origin             HTTPRouterOrigin
 	Routes             []HTTPRoute
 }
 
@@ -42,7 +53,7 @@ func ValidateHTTPRouterInput(input HTTPRouterInput) error {
 	}
 	if !input.Enabled {
 		if input.GeneratedServiceID != "" || input.ZoneID != "" || input.ZoneName != "" ||
-			input.PinnedIPv4 != "" || len(input.Routes) != 0 {
+			input.PinnedIPv4 != "" || input.Origin != (HTTPRouterOrigin{}) || len(input.Routes) != 0 {
 			return fmt.Errorf("component: disabled HTTP router contains runtime input")
 		}
 		return nil
@@ -51,6 +62,9 @@ func ValidateHTTPRouterInput(input HTTPRouterInput) error {
 	if input.GeneratedServiceID == "" || input.ZoneID == "" || !safeName(input.ZoneName) || err != nil ||
 		!address.Is4() || address.Is4In6() || address.IsUnspecified() || address.IsMulticast() {
 		return fmt.Errorf("component: enabled HTTP router identity is invalid")
+	}
+	if err := ValidateHTTPRouterOrigin(input.Origin); err != nil {
+		return err
 	}
 	seenMatches := make(map[string]struct{}, len(input.Routes))
 	hostExposure := make(map[string]HTTPRouteExposure, len(input.Routes))
@@ -67,6 +81,29 @@ func ValidateHTTPRouterInput(input HTTPRouterInput) error {
 			return fmt.Errorf("component: one HTTP host cannot mix exposure")
 		}
 		hostExposure[route.Host] = route.Exposure
+	}
+	return nil
+}
+
+// ValidateHTTPRouterOrigin accepts only an explicit canonical plain-HTTP
+// endpoint whose host is the managed Service name and whose port is present.
+func ValidateHTTPRouterOrigin(origin HTTPRouterOrigin) error {
+	parsed, err := url.Parse(origin.URL)
+	if err != nil || !safeName(origin.ServiceName) || parsed.Scheme != "http" || parsed.User != nil ||
+		parsed.Opaque != "" || parsed.Path != "" || parsed.RawPath != "" || parsed.RawQuery != "" ||
+		parsed.Fragment != "" || parsed.ForceQuery || parsed.Hostname() != origin.ServiceName {
+		return fmt.Errorf("component: HTTP router origin is invalid")
+	}
+	port, err := strconv.ParseUint(parsed.Port(), 10, 16)
+	if err != nil || port == 0 {
+		return fmt.Errorf("component: HTTP router origin is invalid")
+	}
+	canonical := (&url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort(origin.ServiceName, strconv.FormatUint(port, 10)),
+	}).String()
+	if origin.URL != canonical {
+		return fmt.Errorf("component: HTTP router origin is not canonical")
 	}
 	return nil
 }

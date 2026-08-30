@@ -8,8 +8,46 @@ import (
 	"testing"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 )
+
+// Rationale: a durable provider pin must retain the provider-neutral origin
+// exactly and reject any origin that no longer names its managed Service.
+func TestRouteProviderPinClonePreservesCanonicalOrigin(t *testing.T) {
+	t.Parallel()
+	componentID := ids.New(ids.KindComponent)
+	serviceID := ids.New(ids.KindService)
+	pinned := RouteProviderPin{
+		ComponentID: componentID, DefinitionDigest: strings.Repeat("a", 64),
+		CatalogDigest: strings.Repeat("b", 64), InputRevision: 7, InputGeneration: 9,
+		Destination: "components/router/config", ActionID: "activate-config", ServiceID: serviceID,
+		Input: componentsdk.HTTPRouterInput{
+			ComponentID: componentID, Enabled: true, GeneratedServiceID: serviceID,
+			ZoneID: ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: "10.40.0.2",
+			Origin: componentsdk.HTTPRouterOrigin{ServiceName: "edge-router", URL: "http://edge-router:8080"},
+			Routes: []componentsdk.HTTPRoute{{
+				ID: "rte_one", Host: "app.example.com", Path: "/", BackendServiceID: "svc_backend",
+				BackendServiceName: "backend", TargetPort: 8080,
+				Exposure: componentsdk.HTTPRouteExposurePublic,
+			}},
+		},
+	}
+	if err := validateRouteProviderPin(&pinned); err != nil {
+		t.Fatalf("validateRouteProviderPin() error = %v", err)
+	}
+	cloned := cloneRouteProviderPin(pinned)
+	cloned.Input.Routes[0].Path = "/changed"
+	if pinned.Input.Routes[0].Path != "/" || cloned.Input.Origin != pinned.Input.Origin {
+		t.Fatalf("cloneRouteProviderPin() source/clone = %#v / %#v", pinned, cloned)
+	}
+	changed := pinned
+	changed.Input.Origin.URL = "http://another-router:8080"
+	if err := validateRouteProviderPin(&changed); err == nil {
+		t.Fatal("validateRouteProviderPin() accepted a changed origin host")
+	}
+}
 
 func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) {
 	t.Parallel()

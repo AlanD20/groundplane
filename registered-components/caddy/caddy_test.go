@@ -16,7 +16,7 @@ func TestPlanRendersDeterministicHTTPRoutes(t *testing.T) {
 		t.Fatalf("Plan() error = %v", err)
 	}
 	if len(plan.Services) != 1 || plan.Services[0].ID != "svc_caddy" || plan.Services[0].Image != Image ||
-		len(plan.Files) != 3 {
+		plan.Services[0].Name != routerInput().Origin.ServiceName || len(plan.Files) != 3 {
 		t.Fatalf("Plan() = %#v", plan)
 	}
 	caddyfile := string(plan.Files[0].Content)
@@ -48,6 +48,11 @@ func TestPlanRejectsRouteAndTemplateInjection(t *testing.T) {
 		t.Fatal("Plan() accepted a Route directive injection")
 	}
 	input = routerInput()
+	input.Origin.URL = "http://another-router:80"
+	if _, err := Plan(input, Config{}); err == nil {
+		t.Fatal("Plan() accepted an origin outside the managed Caddy Service")
+	}
+	input = routerInput()
 	if _, err := Plan(input, Config{CaddyfileTemplate: "{routes}\n{routes}"}); err == nil {
 		t.Fatal("Plan() accepted duplicate template markers")
 	}
@@ -65,6 +70,7 @@ func routerInput() component.HTTPRouterInput {
 	return component.HTTPRouterInput{
 		ComponentID: "cmp_caddy", Enabled: true, GeneratedServiceID: "svc_caddy",
 		ZoneID: "net_frontend", ZoneName: "frontend", PinnedIPv4: "10.40.0.2",
+		Origin: component.HTTPRouterOrigin{ServiceName: ServiceName, URL: OriginURL},
 		Routes: []component.HTTPRoute{
 			{
 				ID: "rte_root", Host: "app.example.com", Path: "/",

@@ -236,6 +236,7 @@ func validateRouteProviderPin(provider *RouteProviderPin) error {
 	}) != nil || provider.Destination == "" || provider.ActionID == "" ||
 		validateStableID(ids.KindService, provider.ServiceID) != nil ||
 		provider.Input.ComponentID != provider.ComponentID ||
+		provider.Input.GeneratedServiceID != provider.ServiceID ||
 		componentsdk.ValidateHTTPRouterInput(provider.Input) != nil {
 		return errs.New(errs.KindValidationFailed, "Route provider pin is invalid")
 	}

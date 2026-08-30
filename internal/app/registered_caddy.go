@@ -129,6 +129,10 @@ func projectRegisteredCaddyInput(
 	return componentsdk.HTTPRouterInput{
 		ComponentID: instance.ID, Enabled: true, GeneratedServiceID: instance.GeneratedServices[0],
 		ZoneID: zone.ID, ZoneName: zone.Name, PinnedIPv4: instance.PinnedIPv4, Routes: routes,
+		Origin: componentsdk.HTTPRouterOrigin{
+			ServiceName: registeredcaddy.ServiceName,
+			URL:         registeredcaddy.OriginURL,
+		},
 	}, registeredcaddy.Config{CaddyfileTemplate: template}, nil
 }
 

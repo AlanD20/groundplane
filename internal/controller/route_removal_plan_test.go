@@ -73,6 +73,7 @@ func (routeRemovalPlanProviderRenderer) ProjectHTTPRouter(
 	input := componentsdk.HTTPRouterInput{
 		ComponentID: component.ID, Enabled: true, GeneratedServiceID: component.GeneratedServices[0],
 		ZoneID: ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: component.PinnedIPv4,
+		Origin: componentsdk.HTTPRouterOrigin{ServiceName: "caddy", URL: "http://caddy:80"},
 	}
 	for _, route := range environment.Routes {
 		input.Routes = append(input.Routes, componentsdk.HTTPRoute{

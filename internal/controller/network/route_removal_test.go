@@ -342,7 +342,8 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 		ServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
 		Input: componentsdk.HTTPRouterInput{ComponentID: componentID, Enabled: true,
 			GeneratedServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
-			ZoneID:             ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: "10.0.0.2"},
+			ZoneID:             ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: "10.0.0.2",
+			Origin: componentsdk.HTTPRouterOrigin{ServiceName: "caddy", URL: "http://caddy:80"}},
 	}
 	fake.intent = intent
 	task.Executor = etcd.TaskExecutorAgent

@@ -2,8 +2,8 @@ package app
 
 import (
 	"crypto/sha256"
+
 	"github.com/AlanD20/groundplane-component-sdk/component"
-	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -11,18 +11,28 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func registeredCloudflareTunnelEnvironmentComponent(catalogDigest [sha256.Size]byte) (controller.EnvironmentComponentRegistration, error) {
+func registeredCloudflareTunnelEnvironmentComponent(
+	catalogDigest [sha256.Size]byte,
+	routerCatalog []controller.EnvironmentComponentRegistration,
+) (controller.EnvironmentComponentRegistration, error) {
 	definition, err := registeredtunnel.Definition()
 	if err != nil {
 		return controller.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
 	}
+	routers := append([]controller.EnvironmentComponentRegistration(nil), routerCatalog...)
 	return controller.EnvironmentComponentRegistration{
 		Kind: core.ComponentKindEdgeCloudflare, Definition: definition, CatalogDigest: catalogDigest,
-		Plan: planRegisteredCloudflareTunnel,
+		Plan: func(environment core.Environment, instance core.Component) (component.EnvironmentPlan, error) {
+			return planRegisteredCloudflareTunnel(environment, instance, routers)
+		},
 	}, nil
 }
 
-func planRegisteredCloudflareTunnel(environment core.Environment, instance core.Component) (component.EnvironmentPlan, error) {
+func planRegisteredCloudflareTunnel(
+	environment core.Environment,
+	instance core.Component,
+	routerCatalog []controller.EnvironmentComponentRegistration,
+) (component.EnvironmentPlan, error) {
 	if environment.ID == "" || instance.ID == "" || instance.Owner != core.ComponentOwnerEnvironment ||
 		instance.OwnerID != environment.ID || instance.Kind != core.ComponentKindEdgeCloudflare {
 		return component.EnvironmentPlan{}, errs.New(errs.KindValidationFailed, "cloudflare tunnel: component ownership or kind is invalid")
@@ -36,26 +46,54 @@ func planRegisteredCloudflareTunnel(environment core.Environment, instance core.
 	if len(instance.GeneratedServices) != 1 || ids.Validate(ids.KindService, instance.GeneratedServices[0]) != nil {
 		return component.EnvironmentPlan{}, errs.New(errs.KindValidationFailed, "cloudflare tunnel: one stable generated Service id is required")
 	}
-	zoneName, err := cloudflareTunnelRouterNetwork(environment)
+	router, err := projectCloudflareTunnelHTTPRouter(environment, routerCatalog)
 	if err != nil { return component.EnvironmentPlan{}, err }
 	planned, err := registeredtunnel.Plan(registeredtunnel.Input{
-		GeneratedServiceID: instance.GeneratedServices[0], RouterServiceName: registeredcaddy.ServiceName,
-		RouterNetworkName: zoneName, SecretID: secretID,
+		GeneratedServiceID: instance.GeneratedServices[0], RouterOrigin: router.Origin,
+		RouterNetworkName: router.ZoneName, SecretID: secretID,
 	})
 	if err != nil { return component.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err) }
 	return planned, nil
 }
 
-func cloudflareTunnelRouterNetwork(environment core.Environment) (string, error) {
+func projectCloudflareTunnelHTTPRouter(
+	environment core.Environment,
+	routerCatalog []controller.EnvironmentComponentRegistration,
+) (component.HTTPRouterInput, error) {
+	var selected *component.HTTPRouterInput
 	for _, instance := range environment.Components {
-		if instance.Kind != core.ComponentKindIngressCaddy { continue }
-		if !instance.Enabled { return "", errs.New(errs.KindValidationFailed, "cloudflare tunnel: HTTP router must be enabled") }
-		if instance.Config.Caddy == nil || instance.Config.Caddy.ZoneID == "" { return "", errs.New(errs.KindValidationFailed, "cloudflare tunnel: HTTP router network is invalid") }
-		zoneID := instance.Config.Caddy.ZoneID
-		for _, zone := range environment.Zones {
-			if zone.ID == zoneID { return zone.Name, nil }
+		if !instance.Enabled {
+			continue
 		}
-		return "", errs.New(errs.KindValidationFailed, "cloudflare tunnel: HTTP router network is missing")
+		for _, registration := range routerCatalog {
+			if registration.Kind != instance.Kind || registration.ProjectHTTPRouter == nil {
+				continue
+			}
+			if selected != nil {
+				return component.HTTPRouterInput{}, errs.New(
+					errs.KindValidationFailed,
+					"cloudflare tunnel: Environment has multiple enabled HTTP routers",
+				)
+			}
+			input, err := registration.ProjectHTTPRouter(environment, instance)
+			if err != nil {
+				return component.HTTPRouterInput{}, err
+			}
+			input = component.CloneHTTPRouterInput(input)
+			if !input.Enabled || component.ValidateHTTPRouterInput(input) != nil {
+				return component.HTTPRouterInput{}, errs.New(
+					errs.KindValidationFailed,
+					"cloudflare tunnel: HTTP router projection is invalid",
+				)
+			}
+			selected = &input
+		}
 	}
-	return "", errs.New(errs.KindValidationFailed, "cloudflare tunnel: enabled HTTP router is required")
+	if selected == nil {
+		return component.HTTPRouterInput{}, errs.New(
+			errs.KindValidationFailed,
+			"cloudflare tunnel: enabled HTTP router is required",
+		)
+	}
+	return component.CloneHTTPRouterInput(*selected), nil
 }
