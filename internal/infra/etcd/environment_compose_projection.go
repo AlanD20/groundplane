@@ -66,6 +66,10 @@ func environmentComposeProjectionKey(environmentID string) string {
 	return environmentComposeProjectionPrefix + environmentID
 }
 
+func EnvironmentComposeProjectionStorageKey(environmentID string) string {
+	return environmentComposeProjectionKey(environmentID)
+}
+
 func (repository *HierarchyRepository) ListEnvironmentAppliedComposeProjections(
 	ctx context.Context,
 ) ([]Versioned[EnvironmentComposeProjection], error) {
@@ -336,6 +340,10 @@ func encodeEnvironmentComposeProjection(projection EnvironmentComposeProjection)
 	return value, nil
 }
 
+func EncodeEnvironmentComposeProjectionStorage(projection EnvironmentComposeProjection) ([]byte, error) {
+	return encodeEnvironmentComposeProjection(projection)
+}
+
 func decodeEnvironmentComposeProjection(value []byte) (EnvironmentComposeProjection, error) {
 	projection, err := decodeEnvelope[EnvironmentComposeProjection](value, "environment-compose-projection")
 	if err != nil {
@@ -345,6 +353,10 @@ func decodeEnvironmentComposeProjection(value []byte) (EnvironmentComposeProject
 		return EnvironmentComposeProjection{}, corruptEnvironmentComposeProjection()
 	}
 	return projection, nil
+}
+
+func DecodeEnvironmentComposeProjectionStorage(value []byte) (EnvironmentComposeProjection, error) {
+	return decodeEnvironmentComposeProjection(value)
 }
 
 func validateEnvironmentComposeProjection(projection EnvironmentComposeProjection) error {
@@ -407,7 +419,10 @@ func ApplyEnvironmentRoute(
 		return EnvironmentComposeProjection{}, err
 	}
 	if err := validateRouteRecord(route); err != nil || route.EnvironmentID != current.EnvironmentID {
-		return EnvironmentComposeProjection{}, errs.New(errs.KindValidationFailed, "applied Environment Route is invalid")
+		return EnvironmentComposeProjection{}, errs.New(
+			errs.KindValidationFailed,
+			"applied Environment Route is invalid",
+		)
 	}
 	next := cloneEnvironmentComposeProjection(current)
 	identity := EnvironmentRouteIdentity{ID: route.Desired.ID, Host: route.Desired.Host, Path: route.Desired.Path}
@@ -609,7 +624,10 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	if source.RuntimeFiles != nil {
 		clone.RuntimeFiles = make([]core.BlueprintFile, len(source.RuntimeFiles))
 		for index, file := range source.RuntimeFiles {
-			clone.RuntimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+			clone.RuntimeFiles[index] = core.BlueprintFile{
+				Path:    file.Path,
+				Content: append([]byte(nil), file.Content...),
+			}
 		}
 	}
 	clone.ServiceExtensions = cloneEnvironmentServiceExtensions(source.ServiceExtensions)
@@ -738,7 +756,8 @@ func validateEnvironmentDependencyPlans(
 }
 
 func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjection) error {
-	if len(projection.ComposeArtifact) == 0 || len(projection.ComposeArtifact) > EnvironmentBlueprintProjectionMaxBytes {
+	if len(projection.ComposeArtifact) == 0 ||
+		len(projection.ComposeArtifact) > EnvironmentBlueprintProjectionMaxBytes {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact is missing or oversized")
 	}
 	artifact := &agentpb.ComposeArtifact{}

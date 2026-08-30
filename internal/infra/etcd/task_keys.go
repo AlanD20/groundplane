@@ -37,6 +37,8 @@ func taskKey(taskID string) string {
 	return taskPrefix + taskID
 }
 
+func TaskStorageKey(taskID string) string { return taskKey(taskID) }
+
 func taskOperationIndexKey(operationID string, taskID string) string {
 	return taskOperationIndexPrefix + operationID + "/" + taskID
 }

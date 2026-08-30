@@ -914,6 +914,8 @@ func encodeTaskRecord(record TaskRecord) ([]byte, error) {
 	return value, nil
 }
 
+func EncodeTaskStorageRecord(record TaskRecord) ([]byte, error) { return encodeTaskRecord(record) }
+
 func decodeTaskRecord(value []byte) (TaskRecord, error) {
 	data, err := decodeEnvelope[taskRecordData](value, "task")
 	if err != nil {
@@ -928,6 +930,8 @@ func decodeTaskRecord(value []byte) (TaskRecord, error) {
 	}
 	return record, nil
 }
+
+func DecodeTaskStorageRecord(value []byte) (TaskRecord, error) { return decodeTaskRecord(value) }
 
 func encodeTaskEventRecord(record TaskEventRecord) ([]byte, error) {
 	if err := validateTaskEventRecord(record); err != nil {
