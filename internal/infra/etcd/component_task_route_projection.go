@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"reflect"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -174,7 +173,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 			return componentTaskRouteObservationChange{}, decodeErr
 		}
 		if record.EnvironmentID != intent.EnvironmentID || record.DesiredGeneration != candidate.DesiredGeneration ||
-			!reflect.DeepEqual(record.Desired, candidate.Desired) {
+			!routeDesiredEqual(record.Desired, candidate.Desired) {
 			return componentTaskRouteObservationChange{}, errs.New(errs.KindStateConflict, "Component Route desired state changed during reconciliation")
 		}
 		var provider RouteProviderObservation
@@ -209,4 +208,10 @@ func validateComponentTaskRouteIdentity(route ComponentTaskRouteCandidate) error
 		return errs.New(errs.KindValidationFailed, "Component Route identity is invalid")
 	}
 	return nil
+}
+
+func routeDesiredEqual(left, right core.Route) bool {
+	return left.ID == right.ID && left.Host == right.Host && left.Path == right.Path &&
+		left.TargetServiceID == right.TargetServiceID && left.TargetPort == right.TargetPort &&
+		left.Exposure == right.Exposure
 }

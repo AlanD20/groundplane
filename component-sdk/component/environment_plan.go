@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"net"
 	"net/netip"
 	"net/url"
 	"sort"
@@ -98,10 +97,7 @@ func ValidateHTTPRouterOrigin(origin HTTPRouterOrigin) error {
 	if err != nil || port == 0 {
 		return fmt.Errorf("component: HTTP router origin is invalid")
 	}
-	canonical := (&url.URL{
-		Scheme: "http",
-		Host:   net.JoinHostPort(origin.ServiceName, strconv.FormatUint(port, 10)),
-	}).String()
+	canonical := "http://" + origin.ServiceName + ":" + strconv.FormatUint(port, 10)
 	if origin.URL != canonical {
 		return fmt.Errorf("component: HTTP router origin is not canonical")
 	}

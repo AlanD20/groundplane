@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	"net/netip"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -1219,7 +1218,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 					}
 					if route.EnvironmentID != intent.EnvironmentID ||
 						route.DesiredGeneration != candidate.DesiredGeneration ||
-						!reflect.DeepEqual(route.Desired, candidate.Desired) {
+						!routeDesiredEqual(route.Desired, candidate.Desired) {
 						return "", nil, nil, errs.New(
 							errs.KindStateConflict,
 							"Component Route desired state changed during host reconciliation",

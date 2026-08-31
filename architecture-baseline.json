@@ -7,7 +7,6 @@
   "oversized_files": [
     {"path": "console/src/features/connectors/environment-connector-manager.tsx", "lines": 715},
     {"path": "console/src/features/environment/environment-page.tsx", "lines": 4005},
-    {"path": "console/src/features/platform-component/platform-component-page.tsx", "lines": 684},
     {"path": "console/src/lib/mock-data.ts", "lines": 1316},
     {"path": "console/src/lib/store.tsx", "lines": 3251},
     {"path": "console/src/lib/types.ts", "lines": 608},
