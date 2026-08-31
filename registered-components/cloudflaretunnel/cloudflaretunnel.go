@@ -7,8 +7,10 @@ import (
 )
 
 const (
-	ServiceName = "cloudflare-tunnel"
-	tokenName   = "TUNNEL_TOKEN"
+	ServiceName       = "cloudflare-tunnel"
+	RouterServiceName = "caddy"
+	OriginURL         = "http://caddy:80"
+	tokenName         = "TUNNEL_TOKEN"
 )
 
 var image = component.OCIImage{
@@ -70,7 +72,9 @@ func Definition() (component.Definition, error) {
 }
 
 func Plan(input Input) (component.EnvironmentPlan, error) {
-	if input.GeneratedServiceID == "" || component.ValidateHTTPRouterOrigin(input.RouterOrigin) != nil ||
+	if input.GeneratedServiceID == "" ||
+		input.RouterOrigin.ServiceName != RouterServiceName || input.RouterOrigin.URL != OriginURL ||
+		component.ValidateHTTPRouterOrigin(input.RouterOrigin) != nil ||
 		input.RouterNetworkName == "" || input.SecretID == "" {
 		return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: planner input is incomplete")
 	}
