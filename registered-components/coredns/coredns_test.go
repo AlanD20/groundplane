@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 )
 
@@ -63,6 +64,35 @@ func TestRendererRejectsConflictingHosts(t *testing.T) {
 	if rendered, err := (Renderer{}).Render(input); err == nil || rendered != nil {
 		t.Fatalf("Render() = %q, %v, want nil bytes and an error", rendered, err)
 	}
+}
+
+func TestPlanPinsServingImageValidationAndHealthObservation(t *testing.T) {
+	t.Parallel()
+	plan, err := Plan(PlanInput{
+		GeneratedServiceID: "svc_test",
+		Render:             dnsresolver.RenderInput{CatchAll: []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 53)}},
+	})
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(plan.Services) != 1 || !sameOCIImage(plan.Services[0].Image, Image) ||
+		plan.Services[0].ObservationAction != ObserveServingAction ||
+		!slices.Equal(ValidateConfigCommand(), []string{"-conf", "/dev/stdin", "-dns.port", "0"}) {
+		t.Fatalf("Plan() serving recipe = %#v", plan.Services)
+	}
+}
+
+func sameOCIImage(left, right component.OCIImage) bool {
+	if left.Repository != right.Repository || left.IndexDigest != right.IndexDigest ||
+		len(left.Platforms) != len(right.Platforms) {
+		return false
+	}
+	for index, platform := range left.Platforms {
+		if platform != right.Platforms[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func resolver(address string, port uint16) dnsresolver.ResolverEndpoint {

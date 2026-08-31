@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -114,6 +115,66 @@ func TestSealBindsRemoveComponentActionToSelectedServiceGeneration(t *testing.T)
 	}
 }
 
+// Rationale: a sealed CoreDNS disable must make host resolution safe before
+// stopping the resolver, while preserving a dependency that supports retry.
+func TestSealAcceptsComponentDisableRestoreBeforeRemove(t *testing.T) {
+	if _, err := Seal(validComponentDisablePlan()); err != nil {
+		t.Fatalf("Seal(restore-before-remove Component disable) error = %v", err)
+	}
+}
+
+// Rationale: exact plan validation must reject the crash-unsafe historical
+// order even when both individual steps and their dependency are well formed.
+func TestSealRejectsComponentDisableRemoveBeforeRestore(t *testing.T) {
+	plan := validComponentDisablePlan()
+	remove := plan.Steps[1]
+	restore := plan.Steps[0]
+	remove.PrerequisiteStepId = ""
+	restore.PrerequisiteStepId = remove.GetStepId()
+	plan.Steps = []*agentpb.ExecutionStep{remove, restore}
+
+	if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Seal(remove-before-restore Component disable) error = %v, want validation.failed", err)
+	}
+}
+
+// Rationale: the sealed four-step procedure means the generated Service must
+// be applied, not that the lifecycle is necessarily a first enable. Serving
+// predecessor evidence must select update compensation and remain mandatory.
+func TestSealDistinguishesComponentServiceReapplyFromFirstEnable(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name        string
+		mode        agentpb.ComponentLifecycleMode
+		predecessor bool
+		wantError   bool
+	}{
+		{
+			name: "first enable", mode: agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE,
+		},
+		{
+			name: "serving update", mode: agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UPDATE,
+			predecessor: true,
+		},
+		{
+			name: "enable cannot replace predecessor",
+			mode: agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE, predecessor: true, wantError: true,
+		},
+		{
+			name: "update requires predecessor",
+			mode: agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UPDATE, wantError: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Seal(validComponentServiceEnsurePlan(test.mode, test.predecessor))
+			if (err != nil) != test.wantError {
+				t.Fatalf("Seal() error = %v, wantError = %t", err, test.wantError)
+			}
+		})
+	}
+}
+
 // Rationale: both channel endpoints must derive one immutable digest from the
 // same complete typed plan and must own their returned message.
 func TestSealAndValidateDeterministicPlan(t *testing.T) {
@@ -212,4 +273,100 @@ func validPlan() *agentpb.ExecutionPlan {
 			}},
 		}},
 	}
+}
+
+func validComponentDisablePlan() *agentpb.ExecutionPlan {
+	plan := validPlan()
+	componentID := "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	removeStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
+	plan.TargetId = componentID
+	plan.ComponentLifecycleMode = agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_DISABLE
+	digest := sha256.Sum256([]byte("resolver artifact"))
+	plan.ComponentRollbackObservation = &agentpb.ComponentApply{
+		ComponentId: componentID, DefinitionDigest: digest[:], CatalogDigest: digest[:],
+		ActionId: "observe-serving", ArtifactId: testArtifact, ArtifactDigest: digest[:],
+		Generation: plan.RenderGeneration,
+	}
+	plan.Steps = []*agentpb.ExecutionStep{
+		{
+			StepId: testStepID, TimeoutSeconds: 300,
+			Payload: &agentpb.ExecutionStep_HostResolutionRestore{
+				HostResolutionRestore: &agentpb.HostResolutionRestore{
+					ComponentId: componentID, Generation: plan.RenderGeneration,
+				},
+			},
+		},
+		{
+			StepId: removeStepID, TimeoutSeconds: 300, PrerequisiteStepId: testStepID,
+			Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{
+				ArtifactId: testArtifact, ServiceIds: []string{testServiceID},
+			}},
+		},
+	}
+	return plan
+}
+
+func validComponentServiceEnsurePlan(
+	mode agentpb.ComponentLifecycleMode,
+	predecessor bool,
+) *agentpb.ExecutionPlan {
+	plan := validPlan()
+	componentID := "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	digest := sha256.Sum256([]byte("resolver artifact"))
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
+	plan.TargetId = componentID
+	plan.ComponentLifecycleMode = mode
+	plan.Artifacts[0].Services[0].HasHealthcheck = false
+	managed := &agentpb.ComponentApply{
+		ComponentId: componentID, DefinitionDigest: digest[:], CatalogDigest: digest[:],
+		ActionId: "activate-config", ArtifactId: testArtifact, ArtifactDigest: digest[:],
+		Generation: plan.RenderGeneration, ManagedConfigContent: true,
+	}
+	if predecessor {
+		managed.ExpectedPreviousArtifactDigest = append([]byte(nil), digest[:]...)
+		managed.ExpectedPreviousArtifactId = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		managed.ExpectedPreviousGeneration = 6
+		rollback := proto.Clone(plan.Artifacts[0]).(*agentpb.ComposeArtifact)
+		rollback.ArtifactId = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		for _, label := range rollback.Services[0].ExpectedLabels {
+			switch label.GetKey() {
+			case labelPlanID:
+				label.Value = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+			case labelRenderGen:
+				label.Value = "6"
+			}
+		}
+		plan.Artifacts = append(plan.Artifacts, rollback)
+	}
+	plan.Steps = []*agentpb.ExecutionStep{
+		{
+			StepId: testStepID, TimeoutSeconds: 300,
+			Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: managed},
+		},
+		{
+			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW", TimeoutSeconds: 300,
+			PrerequisiteStepId: testStepID,
+			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+				ArtifactId: testArtifact, ServiceIds: []string{testServiceID},
+			}},
+		},
+		{
+			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAX", TimeoutSeconds: 300,
+			PrerequisiteStepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
+				ComponentId: componentID, DefinitionDigest: digest[:], CatalogDigest: digest[:],
+				ActionId: "observe-serving", ArtifactId: testArtifact, ArtifactDigest: digest[:],
+				Generation: plan.RenderGeneration,
+			}},
+		},
+		{
+			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAY", TimeoutSeconds: 300,
+			PrerequisiteStepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+			Payload: &agentpb.ExecutionStep_HostResolutionApply{HostResolutionApply: &agentpb.HostResolutionApply{
+				ComponentId: componentID, Generation: plan.RenderGeneration,
+			}},
+		},
+	}
+	return plan
 }

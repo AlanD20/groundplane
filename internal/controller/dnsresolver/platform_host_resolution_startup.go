@@ -54,7 +54,7 @@ func EnsurePlatformResolverTask(
 	if err != nil {
 		return err
 	}
-	renderInput, err := planner.PrepareConfigTaskAtProjection(ctx, current, desired, task, empty)
+	renderInput, err := planner.PrepareConfigTaskAtProjection(ctx, current, desired, task, empty, nil)
 	if err != nil {
 		return err
 	}
@@ -63,10 +63,12 @@ func EnsurePlatformResolverTask(
 }
 
 func startupResolverTask(componentID string, createdAt time.Time, ensureService bool) etcd.TaskRecord {
-	steps := []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+	steps := []etcd.TaskStepRecord{
+		{ID: ids.New(ids.KindStep)},
+		{ID: ids.New(ids.KindStep)},
+	}
 	if ensureService {
 		steps = append(steps,
-			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
 			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
 			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
 		)
@@ -76,7 +78,10 @@ func startupResolverTask(componentID string, createdAt time.Time, ensureService 
 		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorSystem,
 		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: etcd.TaskUpdate, Target: componentID,
-		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceComponent},
+		Params: map[string]string{
+			etcd.TaskResourceKindParam:       etcd.TaskResourceComponent,
+			etcd.TaskAutomaticReconcileParam: "true",
+		},
 		Steps:          steps,
 		TimeoutSeconds: 480, Status: etcd.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,

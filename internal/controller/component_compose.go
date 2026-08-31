@@ -3,6 +3,7 @@ package controller
 import (
 	"math"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -163,8 +164,15 @@ func projectEnvironmentComponentService(
 	generated GeneratedEnvironmentService,
 ) (composetypes.ServiceConfig, *EnvironmentComponentEnvironmentFile, error) {
 	definition := generated.Definition
+	imageReference, selected := environmentComponentImageReference(definition.Image)
+	if !selected {
+		return composetypes.ServiceConfig{}, nil, errs.New(
+			errs.KindInternal,
+			"Component generated Service has no image for the Controller platform",
+		)
+	}
 	projected := composetypes.ServiceConfig{
-		Name: definition.Name, Image: definition.Image,
+		Name: definition.Name, Image: imageReference,
 		Command:  composetypes.ShellCommand(append([]string(nil), definition.Command...)),
 		Networks: make(map[string]*composetypes.ServiceNetworkConfig, len(definition.Networks)),
 		Expose:   composetypes.StringOrNumberList(append([]string(nil), definition.Expose...)),
@@ -227,4 +235,13 @@ func projectEnvironmentComponentService(
 		ServiceID:   definition.ID, ServiceName: definition.Name, Destination: destination,
 		Values: values,
 	}, nil
+}
+
+func environmentComponentImageReference(image componentsdk.OCIImage) (string, bool) {
+	variant := ""
+	if runtime.GOARCH == "arm64" {
+		variant = "v8"
+	}
+	_, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH, variant)
+	return reference, selected
 }

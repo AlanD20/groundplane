@@ -28,7 +28,7 @@ func (renderer componentPlanProjectionRenderer) Plan(
 		return componentsdk.EnvironmentPlan{}, nil
 	}
 	services := []componentsdk.ManagedService{{
-		ID: component.GeneratedServices[0], Name: renderer.serviceName, Image: "router:1",
+		ID: component.GeneratedServices[0], Name: renderer.serviceName, Image: controllerTestOCIImage("example/router"),
 		NetworkMode: componentsdk.ManagedNetworkModeZones,
 		Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend", StaticIPv4: component.PinnedIPv4}},
 		Expose:      []string{"80"}, Restart: "unless-stopped", Replicas: 1,
@@ -281,12 +281,17 @@ func componentPlanProjectionInput(
 		}},
 		Components: []etcd.ComponentRecord{caddy, tunnel},
 	}
+	normalized, err := project.MarshalYAML()
+	if err != nil {
+		t.Fatalf("marshal normalized Component projection: %v", err)
+	}
+	projection.NormalizedCompose = normalized
 	projection.ComposeArtifact = normalizedProjectionArtifactFixture(
 		t,
 		ids.NewAt(ids.KindConfig, at, 11),
 		environmentID,
 		identity.AuthorizedVolumeDir,
-		[]byte("services: {}\nnetworks: {}\n"),
+		normalized,
 		[]*agentpb.ComposeService{
 			{ServiceId: apiID, ComposeName: "api"},
 			{ServiceId: caddyServiceID, ComposeName: "caddy"},

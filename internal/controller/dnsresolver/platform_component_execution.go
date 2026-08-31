@@ -19,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type ExecutionCatalog interface {
@@ -27,7 +28,10 @@ type ExecutionCatalog interface {
 }
 
 type ComponentExecutionRepository interface {
-	GetPlatformComponentTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error)
+	GetPlatformComponentTaskRenderInput(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error)
 	GetComponent(context.Context, string) (etcd.Versioned[etcd.ComponentRecord], error)
 	GetHostResolverBaseline(context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
 }
@@ -39,9 +43,10 @@ type PlatformExecutionPlanner struct {
 }
 
 type resolvedPlatformComponent struct {
-	input    etcd.PlatformComponentTaskRenderInput
-	plan     componentsdk.EnvironmentPlan
-	envelope componentsdk.ActionEnvelope
+	input          etcd.PlatformComponentTaskRenderInput
+	plan           componentsdk.EnvironmentPlan
+	envelope       componentsdk.ActionEnvelope
+	implementation componentsdk.ImplementationKey
 }
 
 func NewPlatformComponentExecutionPlanner(
@@ -68,29 +73,58 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 	for index, step := range task.Steps {
 		stepIDs[index] = step.ID
 	}
-	var composeArtifact *agentpb.ComposeArtifact
-	if resolved.input.EnsureService || resolved.input.DisableService {
-		composeArtifact, err = controllerpkg.RenderPlatformComponentCompose(
-			controllerpkg.PlatformComponentComposeInput{
-				ComponentID: task.Target, PlanID: task.PlanID,
-				RenderGeneration: uint64(task.RenderGeneration),
-				ArtifactID:       resolved.input.ComposeArtifactID, Plan: resolved.plan,
-			},
-		)
-		if err != nil {
-			return nil, err
-		}
+	service := resolved.plan.Services[0]
+	ownershipPlanID := task.PlanID
+	ownershipGeneration := uint64(task.RenderGeneration)
+	if !resolved.input.EnsureService && !resolved.input.DisableService {
+		ownershipPlanID = resolved.input.OwnershipPlanID
+		ownershipGeneration = resolved.input.OwnershipGeneration
+	}
+	composeArtifact, err := controllerpkg.RenderPlatformComponentCompose(
+		controllerpkg.PlatformComponentComposeInput{
+			ComponentID: task.Target, PlanID: ownershipPlanID,
+			RenderGeneration: ownershipGeneration,
+			ArtifactID:       resolved.input.ComposeArtifactID, Plan: resolved.plan,
+			ImageRepository: resolved.input.ImageRepository, ImageIndexDigest: resolved.input.ImageIndexDigest,
+			ImageChildDigest: resolved.input.ImageChildDigest, ImageReference: resolved.input.ImageReference,
+			ImageOS: resolved.input.ImageOS, ImageArchitecture: resolved.input.ImageArchitecture,
+			ImageVariant: resolved.input.ImageVariant,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if resolved.input.ComposeArtifact != nil && !proto.Equal(composeArtifact, resolved.input.ComposeArtifact) {
+		return nil, errs.New(errs.KindStateConflict, "platform Component Compose artifact changed after publication")
 	}
 	if resolved.input.DisableService {
-		return controllerpkg.BuildComponentDisableExecutionPlan(
-			planner.volumeRoot, task.Target, task.PlanID, stepIDs, uint64(task.RenderGeneration), composeArtifact,
+		expectedPreviousArtifactDigest, decodeErr := hex.DecodeString(
+			resolved.input.ExpectedPreviousArtifactSHA256,
 		)
+		if decodeErr != nil {
+			return nil, errs.New(errs.KindInternal, "platform Component prior artifact digest is invalid")
+		}
+		return controllerpkg.BuildComponentDisableExecutionPlan(controllerpkg.ComponentDisablePlanInput{
+			VolumeRoot: planner.volumeRoot, Envelope: resolved.envelope, PlanID: task.PlanID,
+			StepIDs: stepIDs, RenderGeneration: uint64(task.RenderGeneration), ComposeArtifact: composeArtifact,
+			ObservationAction:              service.ObservationAction,
+			ExpectedPreviousArtifactDigest: expectedPreviousArtifactDigest,
+		})
+	}
+	expectedPreviousArtifactDigest, err := hex.DecodeString(resolved.input.ExpectedPreviousArtifactSHA256)
+	if err != nil {
+		return nil, errs.New(errs.KindInternal, "platform Component prior artifact digest is invalid")
 	}
 	return controllerpkg.BuildComponentActionExecutionPlan(controllerpkg.ComponentActionPlanInput{
 		VolumeRoot: planner.volumeRoot,
 		Envelope:   resolved.envelope, PlanID: task.PlanID, StepIDs: stepIDs,
 		RenderGeneration: uint64(task.RenderGeneration),
 		ComposeArtifact:  composeArtifact, EnsureService: resolved.input.EnsureService,
+		RollbackComposeArtifact:        resolved.input.RollbackComposeArtifact,
+		ObservationAction:              service.ObservationAction,
+		ExpectedPreviousArtifactDigest: expectedPreviousArtifactDigest,
+		ExpectedPreviousArtifactID:     resolved.input.ExpectedPreviousArtifactID,
+		ExpectedPreviousGeneration:     resolved.input.ExpectedPreviousGeneration,
 	})
 }
 
@@ -109,7 +143,10 @@ func (planner *PlatformExecutionPlanner) ResolveManagedConfig(
 	if plan == nil || step == nil || action == nil || task.PlanID != plan.GetPlanId() ||
 		plan.GetTargetId() != task.Target || action.GetArtifactId() != resolved.input.ArtifactID ||
 		len(action.GetArtifactDigest()) != sha256.Size ||
-		subtle.ConstantTimeCompare(action.GetArtifactDigest(), artifactDigest[:]) != 1 {
+		subtle.ConstantTimeCompare(action.GetArtifactDigest(), artifactDigest[:]) != 1 ||
+		hex.EncodeToString(
+			action.GetExpectedPreviousArtifactDigest(),
+		) != resolved.input.ExpectedPreviousArtifactSHA256 {
 		clearPlatformComponentPlan(resolved.plan)
 		return agentchannel.ManagedConfigSource{}, errs.New(
 			errs.KindInternal,
@@ -139,7 +176,7 @@ func (planner *PlatformExecutionPlanner) resolve(
 	if ctx == nil || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskUpdate ||
 		ids.Validate(ids.KindComponent, task.Target) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
 		task.RenderGeneration <= 0 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceComponent ||
-		len(task.Params) != 2 {
+		!validPlatformComponentTaskParams(task) {
 		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "Platform Component Task shape is invalid")
 	}
 	stored, err := planner.components.GetPlatformComponentTaskRenderInput(ctx, task.PlanID)
@@ -147,7 +184,7 @@ func (planner *PlatformExecutionPlanner) resolve(
 		return resolvedPlatformComponent{}, err
 	}
 	input := stored.Record
-	expectedSteps := 1
+	expectedSteps := 2
 	if input.EnsureService {
 		expectedSteps = 4
 	} else if input.DisableService {
@@ -156,7 +193,10 @@ func (planner *PlatformExecutionPlanner) resolve(
 	if (input.TaskID != task.ID && task.RetryOf == "") || input.ComponentID != task.Target ||
 		input.PlanID != task.PlanID || input.PlanSHA256 != task.PlanHash || len(task.Steps) != expectedSteps ||
 		input.DesiredSHA256 != task.Params[etcd.TaskPlatformComponentDesiredSHA256Param] {
-		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "Platform Component render input does not match its Task")
+		return resolvedPlatformComponent{}, errs.New(
+			errs.KindInternal,
+			"Platform Component render input does not match its Task",
+		)
 	}
 	current, err := planner.components.GetComponent(ctx, task.Target)
 	if err != nil {
@@ -167,14 +207,21 @@ func (planner *PlatformExecutionPlanner) resolve(
 		return resolvedPlatformComponent{}, err
 	}
 	if currentDigest != input.DesiredSHA256 {
-		return resolvedPlatformComponent{}, errs.New(errs.KindStateConflict, "Platform Component Task desired state was superseded")
+		return resolvedPlatformComponent{}, errs.New(
+			errs.KindStateConflict,
+			"Platform Component Task desired state was superseded",
+		)
 	}
 	baseline, found, err := planner.components.GetHostResolverBaseline(ctx)
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}
-	if !found || baseline.Record.Generation != input.BaselineGeneration || baseline.Record.SHA256 != input.BaselineSHA256 {
-		return resolvedPlatformComponent{}, errs.New(errs.KindStateConflict, "host resolver baseline does not match the Component Task")
+	if !found || baseline.Record.Generation != input.BaselineGeneration ||
+		baseline.Record.SHA256 != input.BaselineSHA256 {
+		return resolvedPlatformComponent{}, errs.New(
+			errs.KindStateConflict,
+			"host resolver baseline does not match the Component Task",
+		)
 	}
 	baselineResolvers, err := componentdns.ParseResolverBaseline(baseline.Record.Content)
 	if err != nil {
@@ -242,11 +289,30 @@ func (planner *PlatformExecutionPlanner) resolve(
 	}
 	definition, _, err := planner.catalog.ResolveActionEnvelope(envelope)
 	if err != nil {
-		return resolvedPlatformComponent{}, errs.New(errs.KindStateConflict, "Component action is not present in the compiled catalog")
+		return resolvedPlatformComponent{}, errs.New(
+			errs.KindStateConflict,
+			"Component action is not present in the compiled catalog",
+		)
 	}
 	registeredPlan, err := planner.catalog.Plan(definition.Implementation(), input.GeneratedServiceID, renderInput)
 	if err != nil {
 		return resolvedPlatformComponent{}, errs.Wrap(errs.KindInternal, err)
+	}
+	if len(registeredPlan.Services) != 1 {
+		clearPlatformComponentPlan(registeredPlan)
+		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "registered Component service changed")
+	}
+	platform, reference, found := registeredPlan.Services[0].Image.Select(
+		input.ImageOS, input.ImageArchitecture, input.ImageVariant,
+	)
+	if !found || reference != input.ImageReference || platform.ChildDigest != input.ImageChildDigest ||
+		registeredPlan.Services[0].Image.Repository != input.ImageRepository ||
+		registeredPlan.Services[0].Image.IndexDigest != input.ImageIndexDigest {
+		clearPlatformComponentPlan(registeredPlan)
+		return resolvedPlatformComponent{}, errs.New(
+			errs.KindStateConflict,
+			"registered Component platform image changed",
+		)
 	}
 	planDigest := componentsdk.DigestEnvironmentPlan(registeredPlan)
 	expectedPlanDigest, err := componentDigest(input.PlanSHA256)
@@ -263,7 +329,21 @@ func (planner *PlatformExecutionPlanner) resolve(
 		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "registered Component artifact digest changed")
 	}
-	return resolvedPlatformComponent{input: input, plan: registeredPlan, envelope: envelope}, nil
+	return resolvedPlatformComponent{
+		input: input, plan: registeredPlan, envelope: envelope, implementation: definition.Implementation(),
+	}, nil
+}
+
+func validPlatformComponentTaskParams(task etcd.TaskRecord) bool {
+	automatic, hasAutomatic := task.Params[etcd.TaskAutomaticReconcileParam]
+	if hasAutomatic && automatic != "true" {
+		return false
+	}
+	if hasAutomatic {
+		return len(task.Params) == 3 &&
+			(task.Actor == etcd.TaskActorSystem || task.Actor == etcd.TaskActorOperator && task.RetryOf != "")
+	}
+	return len(task.Params) == 2 && task.Actor == etcd.TaskActorOperator
 }
 
 func componentDigest(value string) ([sha256.Size]byte, error) {

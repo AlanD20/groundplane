@@ -29,19 +29,24 @@ func platformComponentTaskActiveKey(componentID string) string {
 	return platformComponentTaskActivePrefix + componentID
 }
 
-func newPlatformDNSResolverTask(componentID string, createdAt time.Time, retryOf string) TaskRecord {
+func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRecord {
 	return TaskRecord{
-		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), RetryOf: retryOf,
+		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
 		Owner: PlatformTaskOwner(), Actor: TaskActorSystem, Executor: TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: TaskUpdate, Target: componentID,
-		Params: map[string]string{TaskResourceKindParam: TaskResourceComponent},
-		Steps:  []TaskStepRecord{{ID: ids.New(ids.KindStep)}}, TimeoutSeconds: 480,
+		Params: map[string]string{
+			TaskResourceKindParam:       TaskResourceComponent,
+			TaskAutomaticReconcileParam: "true",
+		},
+		Steps: []TaskStepRecord{
+			{ID: ids.New(ids.KindStep)}, {ID: ids.New(ids.KindStep)},
+		}, TimeoutSeconds: 480,
 		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 }
 
 func platformResolverTaskSteps(input PlatformComponentTaskRenderInput) []TaskStepRecord {
-	count := 1
+	count := 2
 	if input.EnsureService {
 		count = 4
 	} else if input.DisableService {
@@ -58,15 +63,18 @@ func isPlatformDNSResolverTask(task TaskRecord) bool {
 	return task.Owner == PlatformTaskOwner() && task.Actor == TaskActorSystem &&
 		task.Executor == TaskExecutorAgent && task.Type == TaskUpdate &&
 		task.Params[TaskResourceKindParam] == TaskResourceComponent &&
+		task.Params[TaskAutomaticReconcileParam] == "true" &&
 		ids.Validate(ids.KindComponent, task.Target) == nil
 }
 
 func isPlatformDNSResolverTaskAttempt(task TaskRecord) bool {
-	return task.Owner == PlatformTaskOwner() &&
-		(task.Actor == TaskActorSystem || task.Actor == TaskActorOperator && task.RetryOf != "") &&
-		task.Executor == TaskExecutorAgent && task.Type == TaskUpdate &&
-		task.Params[TaskResourceKindParam] == TaskResourceComponent &&
-		ids.Validate(ids.KindComponent, task.Target) == nil
+	if task.Owner != PlatformTaskOwner() || task.Executor != TaskExecutorAgent || task.Type != TaskUpdate ||
+		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
+		ids.Validate(ids.KindComponent, task.Target) != nil {
+		return false
+	}
+	return task.Actor == TaskActorOperator ||
+		task.Actor == TaskActorSystem && task.Params[TaskAutomaticReconcileParam] == "true"
 }
 
 // PublishPlatformDNSResolverTask publishes the first Platform-owned resolver
@@ -88,7 +96,8 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	}
 	if task.Owner != PlatformTaskOwner() || task.Actor != TaskActorSystem || task.Executor != TaskExecutorAgent ||
 		task.Type != TaskUpdate || task.Status != TaskStatusPending || task.Target != current.Record.Desired.ID ||
-		task.Params[TaskResourceKindParam] != TaskResourceComponent || len(task.Params) != 1 {
+		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
+		task.Params[TaskAutomaticReconcileParam] != "true" || len(task.Params) != 2 {
 		return errs.New(errs.KindValidationFailed, "platform DNS resolver Task shape is invalid")
 	}
 	if task.PlanID != renderInput.PlanID || task.ID != renderInput.TaskID || task.Target != renderInput.ComponentID ||
@@ -131,7 +140,10 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	}
 	defer clear(reference)
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys:     []string{platformComponentOwnerKey(task.Target), platformComponentKindKey(current.Record.Desired.Kind)},
+		Keys: []string{
+			platformComponentOwnerKey(task.Target),
+			platformComponentKindKey(current.Record.Desired.Kind),
+		},
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -194,6 +206,8 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	projection HostResolutionProjectionRecord,
 	task TaskRecord,
 	active *KeyValue,
+	sealedPredecessor *TaskRecord,
+	priorObservation *ComponentObservationRecord,
 	baseConditions []Condition,
 ) (hostResolutionReconciliationChange, error) {
 	if repository.platformResolverTaskPreparer == nil {
@@ -203,20 +217,97 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	if active != nil && (active.Key != platformComponentTaskActiveKey(current.Record.Desired.ID) ||
 		active.ModRevision <= 0 || string(active.Value) == "") {
-		return hostResolutionReconciliationChange{}, errs.New(errs.KindInternal, "platform resolver active fence is corrupt")
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindInternal,
+			"platform resolver active fence is corrupt",
+		)
 	}
 	desiredSHA256, err := PlatformComponentDesiredDigest(current.Record)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
 	task = cloneTaskRecord(task)
+	if task.RetryOf != "" {
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindValidationFailed,
+			"automatic platform resolver successor cannot be a retry",
+		)
+	}
 	if task.Params == nil {
 		task.Params = make(map[string]string, 2)
 	}
 	task.Params[TaskPlatformComponentDesiredSHA256Param] = desiredSHA256
-	renderInput, err := repository.platformResolverTaskPreparer(ctx, current, projection, task)
+	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
+	task.Steps = platformResolverTaskSteps(PlatformComponentTaskRenderInput{EnsureService: ensureService})
+	renderInput, err := repository.platformResolverTaskPreparer(ctx, current, projection, task, priorObservation)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
+	}
+	if sealedPredecessor != nil {
+		if active == nil || string(active.Value) != sealedPredecessor.ID {
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver predecessor does not own the active fence",
+			)
+		}
+		predecessorRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+			Keys: []string{taskKey(sealedPredecessor.ID)}, Revision: active.ModRevision,
+		})
+		if readErr != nil {
+			return hostResolutionReconciliationChange{}, readErr
+		}
+		if predecessorRead == nil || len(predecessorRead.Values) != 1 || predecessorRead.Values[0] == nil {
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver predecessor Task is missing",
+			)
+		}
+		predecessor, decodeErr := decodeTaskRecord(predecessorRead.Values[0].Value)
+		if decodeErr != nil {
+			return hostResolutionReconciliationChange{}, decodeErr
+		}
+		predecessorInputRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+			Keys: []string{platformComponentTaskRenderInputKey(predecessor.PlanID)}, Revision: active.ModRevision,
+		})
+		if readErr != nil {
+			return hostResolutionReconciliationChange{}, readErr
+		}
+		if predecessorInputRead == nil || len(predecessorInputRead.Values) != 1 ||
+			predecessorInputRead.Values[0] == nil {
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver predecessor render input is missing",
+			)
+		}
+		predecessorInput, decodeErr := decodePlatformComponentTaskRenderInput(predecessorInputRead.Values[0].Value)
+		if decodeErr != nil {
+			return hostResolutionReconciliationChange{}, decodeErr
+		}
+		if sealedPredecessor == nil || predecessor.ID != sealedPredecessor.ID ||
+			!platformResolverTaskInputBelongsToTask(predecessor, predecessorInput) ||
+			predecessorInput.PlanID != predecessor.PlanID || predecessorInput.ComponentID != task.Target {
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver predecessor lineage is corrupt",
+			)
+		}
+		if sealedPredecessor.ID != predecessor.ID ||
+			sealedPredecessor.PlanID != predecessor.PlanID || sealedPredecessor.Target != predecessor.Target {
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver sealed predecessor is missing",
+			)
+		}
+		lineage, proven := platformResolverFinalLiveLineage(*sealedPredecessor, predecessorInput)
+		if !proven {
+			return hostResolutionReconciliationChange{}, nil
+		}
+		renderInput.PriorObservationModRevision = lineage.priorObservationModRevision
+		renderInput.PriorObservationRevision = lineage.priorObservationRevision
+		renderInput.PredecessorTaskID = lineage.predecessorTaskID
+		renderInput.ExpectedPreviousArtifactSHA256 = lineage.expectedPreviousArtifactSHA256
+		renderInput.ExpectedPreviousArtifactID = lineage.expectedPreviousArtifactID
+		renderInput.ExpectedPreviousGeneration = lineage.expectedPreviousGeneration
 	}
 	task.Steps = platformResolverTaskSteps(renderInput)
 	task.PlanHash = renderInput.PlanSHA256
@@ -226,16 +317,25 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	if task.Params[TaskPlatformComponentDesiredSHA256Param] != renderInput.DesiredSHA256 ||
 		renderInput.HostResolutionInputRevision != projection.InputRevision ||
 		renderInput.HostResolutionSHA256 != projection.InputSHA256 {
-		return hostResolutionReconciliationChange{}, errs.New(errs.KindStateConflict, "platform resolver render input is not pinned")
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindStateConflict,
+			"platform resolver render input is not pinned",
+		)
 	}
 	if err := validatePlatformComponentTaskRenderInput(renderInput); err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
 	if renderInput.TaskID != task.ID || renderInput.PlanID != task.PlanID || renderInput.ComponentID != task.Target {
-		return hostResolutionReconciliationChange{}, errs.New(errs.KindStateConflict, "platform resolver render input identity changed")
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindStateConflict,
+			"platform resolver render input identity changed",
+		)
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys:     []string{platformComponentOwnerKey(current.Record.Desired.ID), platformComponentKindKey(current.Record.Desired.Kind)},
+		Keys: []string{
+			platformComponentOwnerKey(current.Record.Desired.ID),
+			platformComponentKindKey(current.Record.Desired.Kind),
+		},
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -243,8 +343,13 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	if indexes == nil || indexes.ReadRevision != current.ReadRevision || len(indexes.Values) != 2 ||
 		indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		string(indexes.Values[0].Value) != current.Record.Desired.ID || string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return hostResolutionReconciliationChange{}, errs.New(errs.KindInternal, "platform resolver Component indexes are missing")
+		string(
+			indexes.Values[0].Value,
+		) != current.Record.Desired.ID || string(indexes.Values[1].Value) != current.Record.Desired.ID {
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindInternal,
+			"platform resolver Component indexes are missing",
+		)
 	}
 	renderValue, err := encodePlatformComponentTaskRenderInput(renderInput)
 	if err != nil {
@@ -291,6 +396,66 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		applies: true, conditions: conditions, mutations: mutations,
 		values: [][]byte{renderValue, taskValue, reference, []byte(task.ID)},
 	}, nil
+}
+
+type platformResolverLiveLineage struct {
+	priorObservationModRevision    int64
+	priorObservationRevision       uint64
+	predecessorTaskID              string
+	expectedPreviousArtifactSHA256 string
+	expectedPreviousArtifactID     string
+	expectedPreviousGeneration     uint64
+}
+
+func platformResolverFinalLiveLineage(
+	predecessor TaskRecord,
+	input PlatformComponentTaskRenderInput,
+) (platformResolverLiveLineage, bool) {
+	if predecessor.Result == nil || predecessor.Result.Kind != TaskResultCompose ||
+		predecessor.Result.ReconciliationRequired {
+		return platformResolverLiveLineage{}, false
+	}
+	result := predecessor.Result
+	switch predecessor.Status {
+	case TaskStatusCompleted:
+		evidence := result.DNSResolverCandidateObservation
+		if input.DisableService || evidence == nil || result.DNSResolverRollbackObservation != nil ||
+			evidence.ComponentID != input.ComponentID || evidence.ServiceID != input.GeneratedServiceID ||
+			evidence.ArtifactID != input.ArtifactID || evidence.ArtifactSHA256 != input.ArtifactSHA256 ||
+			evidence.RenderGeneration != uint64(predecessor.RenderGeneration) {
+			return platformResolverLiveLineage{}, false
+		}
+		return platformResolverLiveLineage{
+			priorObservationRevision:       input.PriorObservationRevision + 1,
+			predecessorTaskID:              predecessor.ID,
+			expectedPreviousArtifactSHA256: evidence.ArtifactSHA256,
+			expectedPreviousArtifactID:     evidence.ArtifactID,
+			expectedPreviousGeneration:     evidence.RenderGeneration,
+		}, true
+	case TaskStatusFailed, TaskStatusTimedOut, TaskStatusAborted:
+		evidence := result.DNSResolverRollbackObservation
+		if input.ExpectedPreviousArtifactSHA256 == "" {
+			if evidence != nil {
+				return platformResolverLiveLineage{}, false
+			}
+		} else if evidence == nil || evidence.ComponentID != input.ComponentID ||
+			evidence.ServiceID != input.GeneratedServiceID ||
+			evidence.ArtifactID != input.ExpectedPreviousArtifactID ||
+			evidence.ArtifactSHA256 != input.ExpectedPreviousArtifactSHA256 ||
+			evidence.RenderGeneration != input.ExpectedPreviousGeneration {
+			return platformResolverLiveLineage{}, false
+		}
+		return platformResolverLiveLineage{
+			priorObservationModRevision:    input.PriorObservationModRevision,
+			priorObservationRevision:       input.PriorObservationRevision,
+			predecessorTaskID:              input.PredecessorTaskID,
+			expectedPreviousArtifactSHA256: input.ExpectedPreviousArtifactSHA256,
+			expectedPreviousArtifactID:     input.ExpectedPreviousArtifactID,
+			expectedPreviousGeneration:     input.ExpectedPreviousGeneration,
+		}, true
+	default:
+		return platformResolverLiveLineage{}, false
+	}
 }
 
 func clearHostResolutionReconciliationChange(change hostResolutionReconciliationChange) {
@@ -368,7 +533,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 			Record: originRecord, Revision: originRead.Values[0].ModRevision, ReadRevision: source.ReadRevision,
 		}
 	}
-	if !isPlatformDNSResolverTask(origin.Record) || origin.Record.ID != input.TaskID ||
+	if !isPlatformDNSResolverTaskAttempt(origin.Record) || origin.Record.ID != input.TaskID ||
 		origin.Record.PlanID != input.PlanID || origin.Record.Target != input.ComponentID {
 		return hostResolutionReconciliationChange{}, nil
 	}
@@ -411,17 +576,26 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			return Versioned[ComponentRecord]{}, err
 		}
 		if page == nil || page.ReadRevision != revision {
-			return Versioned[ComponentRecord]{}, errs.New(errs.KindInternal, "platform Component scan did not preserve its fixed revision")
+			return Versioned[ComponentRecord]{}, errs.New(
+				errs.KindInternal,
+				"platform Component scan did not preserve its fixed revision",
+			)
 		}
 		for _, value := range page.Values {
 			if !strings.HasPrefix(value.Key, platformComponentOwnerPrefix) {
 				clearRangeKeyValues(page.Values)
-				return Versioned[ComponentRecord]{}, errs.New(errs.KindInternal, "platform Component scan contains an invalid key")
+				return Versioned[ComponentRecord]{}, errs.New(
+					errs.KindInternal,
+					"platform Component scan contains an invalid key",
+				)
 			}
 			componentID := strings.TrimPrefix(value.Key, platformComponentOwnerPrefix)
 			if ids.Validate(ids.KindComponent, componentID) != nil || string(value.Value) != componentID {
 				clearRangeKeyValues(page.Values)
-				return Versioned[ComponentRecord]{}, errs.New(errs.KindInternal, "platform Component owner index is corrupt")
+				return Versioned[ComponentRecord]{}, errs.New(
+					errs.KindInternal,
+					"platform Component owner index is corrupt",
+				)
 			}
 			componentIDs = append(componentIDs, componentID)
 		}
@@ -437,7 +611,10 @@ func (repository *TaskRepository) platformResolverAtRevision(
 	}
 	sort.Strings(componentIDs)
 	if len(componentIDs) == 0 {
-		return Versioned[ComponentRecord]{}, errs.New(errs.KindComponentNotFound, "platform dns-resolver Component is missing")
+		return Versioned[ComponentRecord]{}, errs.New(
+			errs.KindComponentNotFound,
+			"platform dns-resolver Component is missing",
+		)
 	}
 	keys := make([]string, len(componentIDs))
 	for index, componentID := range componentIDs {
@@ -453,14 +630,21 @@ func (repository *TaskRepository) platformResolverAtRevision(
 	candidates := make([]Versioned[ComponentRecord], 0, len(componentIDs))
 	for index, componentValue := range state.Values {
 		if componentValue == nil {
-			return Versioned[ComponentRecord]{}, errs.New(errs.KindStateConflict, "platform dns-resolver Component is missing")
+			return Versioned[ComponentRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"platform dns-resolver Component is missing",
+			)
 		}
 		component, decodeErr := decodeComponentRecord(componentValue.Value)
 		if decodeErr != nil {
 			return Versioned[ComponentRecord]{}, decodeErr
 		}
-		if component.Desired.ID != componentIDs[index] || component.Desired.Owner != core.ComponentOwnerPlatform || component.Desired.OwnerID != "" {
-			return Versioned[ComponentRecord]{}, errs.New(errs.KindInternal, "platform Component owner index is corrupt")
+		if component.Desired.ID != componentIDs[index] || component.Desired.Owner != core.ComponentOwnerPlatform ||
+			component.Desired.OwnerID != "" {
+			return Versioned[ComponentRecord]{}, errs.New(
+				errs.KindInternal,
+				"platform Component owner index is corrupt",
+			)
 		}
 		candidates = append(candidates, Versioned[ComponentRecord]{
 			Record: component, Revision: componentValue.ModRevision, ReadRevision: revision,
@@ -472,14 +656,21 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			return Versioned[ComponentRecord]{}, selectErr
 		}
 		for _, candidate := range candidates {
-			if candidate.Record.Desired.ID == selected.Record.Desired.ID && candidate.Revision == selected.Revision && selected.ReadRevision == revision {
+			if candidate.Record.Desired.ID == selected.Record.Desired.ID && candidate.Revision == selected.Revision &&
+				selected.ReadRevision == revision {
 				return selected, nil
 			}
 		}
-		return Versioned[ComponentRecord]{}, errs.New(errs.KindInternal, "platform dns-resolver selector returned an unscanned Component")
+		return Versioned[ComponentRecord]{}, errs.New(
+			errs.KindInternal,
+			"platform dns-resolver selector returned an unscanned Component",
+		)
 	}
 	if len(candidates) != 1 {
-		return Versioned[ComponentRecord]{}, errs.New(errs.KindStateConflict, "multiple platform dns-resolver Components are registered")
+		return Versioned[ComponentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"multiple platform dns-resolver Components are registered",
+		)
 	}
 	return candidates[0], nil
 }
@@ -502,7 +693,8 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 	if active == nil {
 		return nil, nil
 	}
-	if active.Key != platformComponentTaskActiveKey(componentID) || ids.Validate(ids.KindTask, string(active.Value)) != nil {
+	if active.Key != platformComponentTaskActiveKey(componentID) ||
+		ids.Validate(ids.KindTask, string(active.Value)) != nil {
 		return nil, errs.New(errs.KindInternal, "platform resolver active fence is corrupt")
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -534,18 +726,31 @@ func (repository *TaskRepository) platformResolverTaskInputAtRevision(
 		return PlatformComponentTaskRenderInput{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return PlatformComponentTaskRenderInput{}, errs.New(errs.KindStateConflict, "platform resolver render input is missing")
+		return PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindStateConflict,
+			"platform resolver render input is missing",
+		)
 	}
 	input, err := decodePlatformComponentTaskRenderInput(read.Values[0].Value)
 	if err != nil {
 		return PlatformComponentTaskRenderInput{}, err
 	}
 	if input.PlanID != task.PlanID || input.ComponentID != task.Target || task.PlanHash != input.PlanSHA256 ||
-		(input.TaskID != task.ID && task.RetryOf == "") ||
+		!platformResolverTaskInputBelongsToTask(task, input) ||
 		task.Params[TaskPlatformComponentDesiredSHA256Param] != input.DesiredSHA256 {
-		return PlatformComponentTaskRenderInput{}, errs.New(errs.KindStateConflict, "platform resolver render input is not pinned")
+		return PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindStateConflict,
+			"platform resolver render input is not pinned",
+		)
 	}
 	return input, nil
+}
+
+func platformResolverTaskInputBelongsToTask(
+	task TaskRecord,
+	input PlatformComponentTaskRenderInput,
+) bool {
+	return input.TaskID == task.ID || task.RetryOf != ""
 }
 
 // prepareHostResolutionReconciliation scans the complete Route collection at
@@ -558,6 +763,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	terminalStatus TaskStatus,
 	revision int64,
 	baseConditions []Condition,
+	platformChange platformComponentTaskChange,
 ) (hostResolutionReconciliationChange, error) {
 	resource := task.Params[TaskResourceKindParam]
 	if resource != TaskResourceRoute && resource != TaskResourceComponent {
@@ -574,6 +780,9 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		repository.hostResolutionTerminalOverlay(ctx, task, terminalStatus, revision)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
+	}
+	if platformChange.promoted != nil {
+		componentOverride[platformChange.promoted.Desired.ID] = *platformChange.promoted
 	}
 	providerIDs := make(map[string]struct{})
 	for _, scanned := range routes {
@@ -631,7 +840,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		return hostResolutionReconciliationChange{}, err
 	}
 	if currentRead == nil || currentRead.ReadRevision != revision || len(currentRead.Values) != 1 {
-		return hostResolutionReconciliationChange{}, errs.New(errs.KindInternal, "host-resolution projection read is empty")
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindInternal,
+			"host-resolution projection read is empty",
+		)
 	}
 	current := currentRead.Values[0]
 	var stored *HostResolutionProjectionRecord
@@ -650,7 +862,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		return hostResolutionReconciliationChange{}, err
 	}
 	if publication.record.InputRevision == 0 {
-		return hostResolutionReconciliationChange{}, errs.New(errs.KindInternal, "host-resolution projection is invalid")
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindInternal,
+			"host-resolution projection is invalid",
+		)
 	}
 	conditions = appendHostResolutionCondition(conditions, publication.conditions[0])
 	projectionChanged := true
@@ -680,7 +895,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	}
 	if resolverAttempt && resolver.Record.Desired.ID != task.Target {
 		clearHostResolutionReconciliationChange(change)
-		return hostResolutionReconciliationChange{}, errs.New(errs.KindStateConflict, "platform resolver Component changed")
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindStateConflict,
+			"platform resolver Component changed",
+		)
 	}
 	if override, found := componentOverride[resolver.Record.Desired.ID]; found {
 		resolver.Record = override
@@ -690,18 +908,35 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		clearHostResolutionReconciliationChange(change)
 		return hostResolutionReconciliationChange{}, err
 	}
-	resolverTask := isPlatformDNSResolverTask(task) ||
-		resolverAttempt && active != nil && string(active.Value) == task.ID
+	if resolverAttempt && (active == nil || string(active.Value) != task.ID) {
+		clearHostResolutionReconciliationChange(change)
+		return hostResolutionReconciliationChange{}, errs.New(
+			errs.KindStateConflict, "platform resolver active Task ownership changed",
+		)
+	}
+	resolverTask := resolverAttempt
 	if active != nil && !resolverTask {
 		change.conditions = appendHostResolutionCondition(change.conditions, Condition{
 			Key: active.Key, ModRevision: active.ModRevision,
 		})
 		return change, nil
 	}
+	if !resolver.Record.Desired.Enabled {
+		if resolverTask {
+			change.conditions = appendHostResolutionCondition(change.conditions, Condition{
+				Key: active.Key, ModRevision: active.ModRevision,
+			})
+			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: active.Key})
+		}
+		return change, nil
+	}
 	if resolverTask {
 		if active == nil {
 			clearHostResolutionReconciliationChange(change)
-			return hostResolutionReconciliationChange{}, errs.New(errs.KindStateConflict, "platform resolver active Task is missing")
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver active Task is missing",
+			)
 		}
 		input, inputErr := repository.platformResolverTaskInputAtRevision(ctx, task, revision)
 		if inputErr != nil {
@@ -717,13 +952,24 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: active.Key})
 			return change, nil
 		}
-		successor := newPlatformDNSResolverTask(resolver.Record.Desired.ID, task.UpdatedAt.Add(time.Nanosecond), task.ID)
+		successor := newPlatformDNSResolverTask(
+			resolver.Record.Desired.ID,
+			task.UpdatedAt.Add(time.Nanosecond),
+		)
 		contribution, contributionErr := repository.preparePlatformDNSResolverTaskContribution(
-			ctx, resolver, publication.record, successor, active, change.conditions,
+			ctx, resolver, publication.record, successor, active, &task,
+			platformChange.observation, change.conditions,
 		)
 		if contributionErr != nil {
 			clearHostResolutionReconciliationChange(change)
 			return hostResolutionReconciliationChange{}, contributionErr
+		}
+		if !contribution.applies {
+			change.conditions = appendHostResolutionCondition(change.conditions, Condition{
+				Key: active.Key, ModRevision: active.ModRevision,
+			})
+			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: active.Key})
+			return change, nil
 		}
 		change.conditions = contribution.conditions
 		change.mutations = append(change.mutations, contribution.mutations...)
@@ -733,9 +979,9 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	if repository.platformResolverTaskPreparer == nil {
 		return change, nil
 	}
-	successor := newPlatformDNSResolverTask(resolver.Record.Desired.ID, time.Now().UTC(), "")
+	successor := newPlatformDNSResolverTask(resolver.Record.Desired.ID, time.Now().UTC())
 	contribution, contributionErr := repository.preparePlatformDNSResolverTaskContribution(
-		ctx, resolver, publication.record, successor, nil, change.conditions,
+		ctx, resolver, publication.record, successor, nil, nil, nil, change.conditions,
 	)
 	if contributionErr != nil {
 		clearHostResolutionReconciliationChange(change)
@@ -858,7 +1104,9 @@ func (repository *TaskRepository) hostResolutionComponents(
 func validHostResolutionProvider(record ComponentRecord) bool {
 	if record.Desired.Owner != core.ComponentOwnerEnvironment ||
 		record.Desired.Kind != core.ComponentKindIngressCaddy || !record.Desired.Enabled || !record.Runtime.Healthy ||
-		len(record.Runtime.GeneratedServices) != 1 || ids.Validate(ids.KindService, record.Runtime.GeneratedServices[0]) != nil {
+		len(
+			record.Runtime.GeneratedServices,
+		) != 1 || ids.Validate(ids.KindService, record.Runtime.GeneratedServices[0]) != nil {
 		return false
 	}
 	address, err := netip.ParseAddr(record.Runtime.PinnedIPv4)
@@ -904,7 +1152,10 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 				return "", nil, nil, removalErr
 			}
 			if removalRead == nil || removalRead.ReadRevision != revision || len(removalRead.Values) != 1 {
-				return "", nil, nil, errs.New(errs.KindInternal, "host-resolution Route removal intent read is incomplete")
+				return "", nil, nil, errs.New(
+					errs.KindInternal,
+					"host-resolution Route removal intent read is incomplete",
+				)
 			}
 			if removalRead.Values[0] != nil {
 				intent, decodeErr := decodeRouteRemovalIntent(removalRead.Values[0].Value)
@@ -966,9 +1217,13 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 					if routeErr != nil {
 						return "", nil, nil, routeErr
 					}
-					if route.EnvironmentID != intent.EnvironmentID || route.DesiredGeneration != candidate.DesiredGeneration ||
+					if route.EnvironmentID != intent.EnvironmentID ||
+						route.DesiredGeneration != candidate.DesiredGeneration ||
 						!reflect.DeepEqual(route.Desired, candidate.Desired) {
-						return "", nil, nil, errs.New(errs.KindStateConflict, "Component Route desired state changed during host reconciliation")
+						return "", nil, nil, errs.New(
+							errs.KindStateConflict,
+							"Component Route desired state changed during host reconciliation",
+						)
 					}
 					if intent.RouteProjection.Provider == nil && terminalStatus != TaskStatusCompleted {
 						continue
@@ -1001,7 +1256,11 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	return removal, routeOverride, componentOverride, nil
 }
 
-func (repository *TaskRepository) routeAtRevision(ctx context.Context, routeID string, revision int64) (RouteRecord, error) {
+func (repository *TaskRepository) routeAtRevision(
+	ctx context.Context,
+	routeID string,
+	revision int64,
+) (RouteRecord, error) {
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{routeKey(routeID)}, Revision: revision})
 	if err != nil {
 		return RouteRecord{}, err

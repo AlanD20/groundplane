@@ -27,15 +27,27 @@ func (reader *routeRemovalPlanReader) SnapshotRevision(context.Context) (int64, 
 	return 20, nil
 }
 
-func (reader *routeRemovalPlanReader) ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error) {
+func (reader *routeRemovalPlanReader) ListRoutes(
+	context.Context,
+	string,
+	etcd.PageRequest,
+) (etcd.Page[etcd.RouteRecord], error) {
 	return etcd.Page[etcd.RouteRecord]{Revision: 20}, nil
 }
 
-func (reader *routeRemovalPlanReader) ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error) {
+func (reader *routeRemovalPlanReader) ListServices(
+	context.Context,
+	string,
+	etcd.PageRequest,
+) (etcd.Page[etcd.ServiceRecord], error) {
 	return etcd.Page[etcd.ServiceRecord]{Revision: 20}, nil
 }
 
-func (reader *routeRemovalPlanReader) ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error) {
+func (reader *routeRemovalPlanReader) ListZones(
+	context.Context,
+	string,
+	etcd.PageRequest,
+) (etcd.Page[etcd.ZoneRecord], error) {
 	return etcd.Page[etcd.ZoneRecord]{Revision: 20}, nil
 }
 
@@ -54,7 +66,7 @@ func (routeRemovalPlanProviderRenderer) Plan(
 	}
 	return componentsdk.EnvironmentPlan{
 		Services: []componentsdk.ManagedService{{
-			ID: component.GeneratedServices[0], Name: "caddy", Image: "caddy:2",
+			ID: component.GeneratedServices[0], Name: "caddy", Image: controllerTestOCIImage("docker.io/library/caddy"),
 			NetworkMode: componentsdk.ManagedNetworkModeZones,
 			Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend", StaticIPv4: component.PinnedIPv4}},
 			Restart:     "unless-stopped", Replicas: 1,
@@ -246,11 +258,16 @@ func TestTaskPlanResolverPinsAndRebuildsRouteMutationProviderProcedure(t *testin
 	task := baseTask
 	task.Type = etcd.TaskCreate
 	task.Target = route.Desired.ID
-	prepared, err := resolver.PrepareRouteMutationTask(context.Background(), task, intent, etcd.RouteMutationProcedureIDs{
-		ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
-		MaterializeStepID: ids.New(ids.KindStep), ApplyStepID: ids.New(ids.KindStep),
-		ActivateStepID: ids.New(ids.KindStep),
-	})
+	prepared, err := resolver.PrepareRouteMutationTask(
+		context.Background(),
+		task,
+		intent,
+		etcd.RouteMutationProcedureIDs{
+			ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
+			MaterializeStepID: ids.New(ids.KindStep), ApplyStepID: ids.New(ids.KindStep),
+			ActivateStepID: ids.New(ids.KindStep),
+		},
+	)
 	if err != nil {
 		t.Fatalf("PrepareRouteMutationTask() error = %v", err)
 	}
@@ -302,6 +319,11 @@ func routeRemovalPlanTestState(
 	if err != nil {
 		t.Fatalf("project Route removal fixture components: %v", err)
 	}
+	normalized, err := MarshalNormalizedEnvironmentProject(componentProjection.Project)
+	if err != nil {
+		t.Fatalf("marshal Route removal fixture normalized Compose: %v", err)
+	}
+	projection.NormalizedCompose = normalized
 	artifact, err := RenderCompose(ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: ids.NewAt(ids.KindConfig, at, 90),
 		ProjectOwnerKind: ComposeProjectOwnerTenant,

@@ -1,25 +1,39 @@
 package component
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Rationale: replay validation must reject a changed service contract even
 // when the managed file bytes are unchanged.
 func TestDigestEnvironmentPlanIncludesServiceBehavior(t *testing.T) {
 	base := EnvironmentPlan{
 		Services: []ManagedService{{
-			ID: "svc_resolver", Name: "resolver", Image: "example/resolver:1",
+			ID: "svc_resolver", Name: "resolver", Image: environmentPlanTestImage("example/resolver"),
 			Command: []string{"--config", "/etc/resolver/config"}, Restart: "unless-stopped",
 			Replicas: 1, Mounts: []ManagedMount{{Source: "config", Target: "/etc/resolver/config", ReadOnly: true}},
 		}},
 		Files: []ManagedFile{{Path: "config", Content: []byte("same bytes\n")}},
 	}
 	changed := CloneEnvironmentPlan(base)
-	changed.Services[0].Image = "example/resolver:2"
-	if base.Files[0].Path != changed.Files[0].Path || string(base.Files[0].Content) != string(changed.Files[0].Content) {
+	changed.Services[0].Image = environmentPlanTestImage("example/resolver-next")
+	if base.Files[0].Path != changed.Files[0].Path ||
+		string(base.Files[0].Content) != string(changed.Files[0].Content) {
 		t.Fatal("replay fixture must retain identical file metadata and bytes")
 	}
 	if DigestEnvironmentPlan(base) == DigestEnvironmentPlan(changed) {
 		t.Fatal("DigestEnvironmentPlan() ignored changed service behavior")
+	}
+}
+
+func environmentPlanTestImage(repository string) OCIImage {
+	return OCIImage{
+		Repository:  repository,
+		IndexDigest: strings.Repeat("a", 64),
+		Platforms: []OCIPlatform{{
+			OS: "linux", Architecture: "amd64", ChildDigest: strings.Repeat("b", 64),
+		}},
 	}
 }
 

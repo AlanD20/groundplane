@@ -12,6 +12,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -25,27 +27,44 @@ type PlatformDNSHost struct {
 }
 
 type PlatformComponentTaskRenderInput struct {
-	PlanID                      string                      `json:"plan_id"`
-	TaskID                      string                      `json:"task_id"`
-	ComponentID                 string                      `json:"component_id"`
-	DesiredSHA256               string                      `json:"desired_sha256"`
-	BaselineGeneration          uint64                      `json:"baseline_generation"`
-	BaselineSHA256              string                      `json:"baseline_sha256"`
-	HostResolutionInputRevision int64                       `json:"host_resolution_input_revision"`
-	HostResolutionSHA256        string                      `json:"host_resolution_sha256"`
-	Config                      core.CoreDNSComponentConfig `json:"config"`
-	Hosts                       []PlatformDNSHost           `json:"hosts,omitempty"`
-	GeneratedServiceID          string                      `json:"generated_service_id"`
-	EnsureService               bool                        `json:"ensure_service"`
-	DisableService              bool                        `json:"disable_service"`
-	DefinitionSHA256            string                      `json:"definition_sha256"`
-	CatalogSHA256               string                      `json:"catalog_sha256"`
-	ActionID                    string                      `json:"action_id"`
-	ArtifactID                  string                      `json:"artifact_id"`
-	ComposeArtifactID           string                      `json:"compose_artifact_id"`
-	ArtifactSHA256              string                      `json:"artifact_sha256"`
-	ArtifactLength              uint64                      `json:"artifact_length"`
-	PlanSHA256                  string                      `json:"plan_sha256"`
+	PlanID                         string                      `json:"plan_id"`
+	TaskID                         string                      `json:"task_id"`
+	ComponentID                    string                      `json:"component_id"`
+	DesiredSHA256                  string                      `json:"desired_sha256"`
+	BaselineGeneration             uint64                      `json:"baseline_generation"`
+	BaselineSHA256                 string                      `json:"baseline_sha256"`
+	HostResolutionInputRevision    int64                       `json:"host_resolution_input_revision"`
+	HostResolutionSHA256           string                      `json:"host_resolution_sha256"`
+	Config                         core.CoreDNSComponentConfig `json:"config"`
+	Hosts                          []PlatformDNSHost           `json:"hosts,omitempty"`
+	GeneratedServiceID             string                      `json:"generated_service_id"`
+	EnsureService                  bool                        `json:"ensure_service"`
+	DisableService                 bool                        `json:"disable_service"`
+	DefinitionSHA256               string                      `json:"definition_sha256"`
+	CatalogSHA256                  string                      `json:"catalog_sha256"`
+	ActionID                       string                      `json:"action_id"`
+	ArtifactID                     string                      `json:"artifact_id"`
+	ComposeArtifactID              string                      `json:"compose_artifact_id"`
+	ComposeArtifact                *agentpb.ComposeArtifact    `json:"compose_artifact,omitempty"`
+	RollbackComposeArtifact        *agentpb.ComposeArtifact    `json:"rollback_compose_artifact,omitempty"`
+	OwnershipPlanID                string                      `json:"ownership_plan_id"`
+	OwnershipGeneration            uint64                      `json:"ownership_generation"`
+	PriorObservationModRevision    int64                       `json:"prior_observation_mod_revision"`
+	PriorObservationRevision       uint64                      `json:"prior_observation_revision"`
+	PredecessorTaskID              string                      `json:"predecessor_task_id,omitempty"`
+	ExpectedPreviousArtifactSHA256 string                      `json:"expected_previous_artifact_sha256,omitempty"`
+	ExpectedPreviousArtifactID     string                      `json:"expected_previous_artifact_id,omitempty"`
+	ExpectedPreviousGeneration     uint64                      `json:"expected_previous_generation,omitempty"`
+	ImageRepository                string                      `json:"image_repository"`
+	ImageIndexDigest               string                      `json:"image_index_digest"`
+	ImageOS                        string                      `json:"image_os"`
+	ImageArchitecture              string                      `json:"image_architecture"`
+	ImageVariant                   string                      `json:"image_variant,omitempty"`
+	ImageChildDigest               string                      `json:"image_child_digest"`
+	ImageReference                 string                      `json:"image_reference"`
+	ArtifactSHA256                 string                      `json:"artifact_sha256"`
+	ArtifactLength                 uint64                      `json:"artifact_length"`
+	PlanSHA256                     string                      `json:"plan_sha256"`
 }
 
 func platformComponentTaskRenderInputKey(planID string) string {
@@ -108,13 +127,47 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		ids.Validate(ids.KindService, input.GeneratedServiceID) != nil || input.HostResolutionInputRevision <= 0 ||
 		ids.Validate(ids.KindConfig, input.ArtifactID) != nil ||
 		ids.Validate(ids.KindConfig, input.ComposeArtifactID) != nil || input.BaselineGeneration != 1 ||
-		!validSHA256(input.DesiredSHA256) || !validSHA256(input.BaselineSHA256) || !validSHA256(input.HostResolutionSHA256) ||
+		ids.Validate(ids.KindPlan, input.OwnershipPlanID) != nil || input.OwnershipGeneration == 0 ||
+		input.PriorObservationModRevision < 0 ||
+		(input.PriorObservationModRevision > 0 && input.PriorObservationRevision == 0) ||
+		(input.PredecessorTaskID != "" && ids.Validate(ids.KindTask, input.PredecessorTaskID) != nil) ||
+		(input.PriorObservationRevision == 0 && input.PredecessorTaskID != "") ||
+		(input.PriorObservationRevision > 0 && input.PredecessorTaskID == "") ||
+		(input.PriorObservationRevision == 0 && input.ExpectedPreviousArtifactSHA256 != "") ||
+		(input.ExpectedPreviousArtifactSHA256 != "" && !validSHA256(input.ExpectedPreviousArtifactSHA256)) ||
+		(input.ExpectedPreviousArtifactSHA256 == "") != (input.ExpectedPreviousArtifactID == "") ||
+		(input.ExpectedPreviousArtifactSHA256 == "") != (input.ExpectedPreviousGeneration == 0) ||
+		(input.ExpectedPreviousArtifactID != "" && ids.Validate(ids.KindConfig, input.ExpectedPreviousArtifactID) != nil) ||
+		!validSHA256(
+			input.DesiredSHA256,
+		) || !validSHA256(input.BaselineSHA256) || !validSHA256(input.HostResolutionSHA256) ||
 		!validSHA256(input.DefinitionSHA256) || !validSHA256(input.CatalogSHA256) ||
 		!validSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
-		!validSHA256(input.PlanSHA256) ||
+		!validSHA256(input.PlanSHA256) || !validSHA256(input.ImageIndexDigest) ||
+		!validSHA256(input.ImageChildDigest) || !validSelectedPlatform(input) ||
 		input.ArtifactLength > managedconfig.MaximumArtifactBytes || !validComponentActionToken(input.ActionID) ||
 		input.EnsureService && input.DisableService {
 		return errs.New(errs.KindValidationFailed, "platform Component render-input identity is invalid")
+	}
+	if input.ComposeArtifact != nil && !platformComponentArtifactMatches(
+		input.ComposeArtifact,
+		input.ComposeArtifactID,
+		input.GeneratedServiceID,
+	) {
+		return errs.New(errs.KindValidationFailed, "platform Component Compose artifact is invalid")
+	}
+	if input.RollbackComposeArtifact != nil && (!input.EnsureService || input.DisableService ||
+		input.ExpectedPreviousArtifactSHA256 == "" || input.ComposeArtifact == nil ||
+		input.RollbackComposeArtifact.GetArtifactId() == input.ComposeArtifact.GetArtifactId() ||
+		!platformComponentArtifactMatches(
+			input.RollbackComposeArtifact,
+			input.RollbackComposeArtifact.GetArtifactId(),
+			input.GeneratedServiceID,
+		)) {
+		return errs.New(errs.KindValidationFailed, "platform Component rollback Compose artifact is invalid")
+	}
+	if input.EnsureService && input.ExpectedPreviousArtifactSHA256 != "" && input.RollbackComposeArtifact == nil {
+		return errs.New(errs.KindValidationFailed, "platform Component serving predecessor artifact is missing")
 	}
 	if input.Config.UpstreamAuto && len(input.Config.UpstreamResolvers) != 0 ||
 		!input.Config.UpstreamAuto && len(input.Config.UpstreamResolvers) == 0 {
@@ -142,6 +195,15 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		}
 	}
 	return nil
+}
+
+func validSelectedPlatform(input PlatformComponentTaskRenderInput) bool {
+	if input.ImageRepository == "" || strings.ContainsAny(input.ImageRepository, "@ ") ||
+		input.ImageOS != "linux" || input.ImageReference != input.ImageRepository+"@sha256:"+input.ImageChildDigest {
+		return false
+	}
+	return input.ImageArchitecture == "amd64" && input.ImageVariant == "" ||
+		input.ImageArchitecture == "arm64" && input.ImageVariant == "v8"
 }
 
 func validComponentActionToken(value string) bool {
@@ -179,12 +241,25 @@ func clonePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInpu
 	clone := input
 	clone.Config = *core.CloneComponentConfig(core.ComponentConfig{CoreDNS: &input.Config}).CoreDNS
 	clone.Hosts = make([]PlatformDNSHost, len(input.Hosts))
+	if input.ComposeArtifact != nil {
+		clone.ComposeArtifact = proto.Clone(input.ComposeArtifact).(*agentpb.ComposeArtifact)
+	}
+	if input.RollbackComposeArtifact != nil {
+		clone.RollbackComposeArtifact = proto.Clone(input.RollbackComposeArtifact).(*agentpb.ComposeArtifact)
+	}
 	for index, host := range input.Hosts {
 		clone.Hosts[index] = PlatformDNSHost{
 			Address: host.Address, Hostnames: append([]string(nil), host.Hostnames...),
 		}
 	}
 	return clone
+}
+
+func platformComponentArtifactMatches(artifact *agentpb.ComposeArtifact, artifactID string, serviceID string) bool {
+	return artifact != nil && artifact.GetArtifactId() == artifactID &&
+		artifact.GetOwnerKind() == agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM &&
+		artifact.GetOwnerId() == "" && artifact.GetProjectName() == "groundplane-infra" &&
+		len(artifact.GetServices()) == 1 && artifact.GetServices()[0].GetServiceId() == serviceID
 }
 
 func canonicalPlatformDNSHosts(hosts []PlatformDNSHost) []PlatformDNSHost {

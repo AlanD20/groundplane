@@ -41,7 +41,13 @@ func (service *PlatformMutationService) EnablePlatformComponent(
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.mutatePlatformComponentLifecycle(ctx, componentID, idempotencyKey, "enable", platformComponentEnableRoute)
+	return service.mutatePlatformComponentLifecycle(
+		ctx,
+		componentID,
+		idempotencyKey,
+		"enable",
+		platformComponentEnableRoute,
+	)
 }
 
 func (service *PlatformMutationService) DisablePlatformComponent(
@@ -49,7 +55,13 @@ func (service *PlatformMutationService) DisablePlatformComponent(
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.mutatePlatformComponentLifecycle(ctx, componentID, idempotencyKey, "disable", platformComponentDisableRoute)
+	return service.mutatePlatformComponentLifecycle(
+		ctx,
+		componentID,
+		idempotencyKey,
+		"disable",
+		platformComponentDisableRoute,
+	)
 }
 
 func (service *PlatformMutationService) UpdatePlatformComponent(
@@ -57,7 +69,13 @@ func (service *PlatformMutationService) UpdatePlatformComponent(
 	componentID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.mutatePlatformComponentLifecycle(ctx, componentID, idempotencyKey, "update", platformComponentUpdateRoute)
+	return service.mutatePlatformComponentLifecycle(
+		ctx,
+		componentID,
+		idempotencyKey,
+		"update",
+		platformComponentUpdateRoute,
+	)
 }
 
 func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
@@ -92,7 +110,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	}
 	if current.Record.Desired.Owner != core.ComponentOwnerPlatform ||
 		current.Record.Desired.Kind != core.ComponentKindCoreDNS {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Platform lifecycle is supported only for CoreDNS")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Platform lifecycle is supported only for CoreDNS",
+		)
 	}
 	desired, err := etcd.ProjectComponentRecord(current.Record)
 	if err != nil {
@@ -103,7 +124,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	switch action {
 	case "enable":
 		if desired.Config.CoreDNS == nil {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "CoreDNS must be configured before enable")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindStateConflict,
+				"CoreDNS must be configured before enable",
+			)
 		}
 		desired.Enabled = true
 		ensureService = true
@@ -115,7 +139,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 		disableService = true
 	case "update":
 		if !desired.Enabled || desired.Config.CoreDNS == nil {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "CoreDNS must be enabled and configured before update")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindStateConflict,
+				"CoreDNS must be enabled and configured before update",
+			)
 		}
 		ensureService = true
 	default:
@@ -170,7 +197,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
 	if resolution.Kind != idempotentintent.ResolutionApplied {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Platform Component lifecycle resolution is invalid")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Platform Component lifecycle resolution is invalid",
+		)
 	}
 	return cloneIdempotencyResponse(response), nil
 }
@@ -214,7 +244,8 @@ func NewPlatformMutationService(
 	renderer componentdns.Renderer,
 	planner *PlatformRenderPlanner,
 ) (*PlatformMutationService, error) {
-	if components == nil || tasks == nil || idempotency == nil || coordinator == nil || renderer == nil || planner == nil {
+	if components == nil || tasks == nil || idempotency == nil || coordinator == nil || renderer == nil ||
+		planner == nil {
 		return nil, errs.New(errs.KindInternal, "Platform Component mutation dependencies are not configured")
 	}
 	return &PlatformMutationService{
@@ -370,9 +401,15 @@ func platformComponentConfigIntent(
 		Body: idempotentintent.JSONBody(idempotentintent.Object(
 			idempotentintent.Field{Name: "config", Value: idempotentintent.Object(
 				idempotentintent.Field{Name: "forwarders", Value: idempotentintent.List(forwarders...)},
-				idempotentintent.Field{Name: "tailnet_delegation", Value: idempotentintent.Bool(config.TailnetDelegation)},
+				idempotentintent.Field{
+					Name:  "tailnet_delegation",
+					Value: idempotentintent.Bool(config.TailnetDelegation),
+				},
 				idempotentintent.Field{Name: "upstream_auto", Value: idempotentintent.Bool(config.UpstreamAuto)},
-				idempotentintent.Field{Name: "upstream_resolvers", Value: coreDNSResolverIntent(config.UpstreamResolvers)},
+				idempotentintent.Field{
+					Name:  "upstream_resolvers",
+					Value: coreDNSResolverIntent(config.UpstreamResolvers),
+				},
 			)},
 		)),
 	})
@@ -492,6 +529,8 @@ func newPlatformComponentConfigTask(
 			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
 			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
 		)
+	} else {
+		steps = append(steps, etcd.TaskStepRecord{ID: ids.New(ids.KindStep)})
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
@@ -518,6 +557,7 @@ func newPlatformComponentLifecycleTask(
 		return newPlatformComponentConfigTask(componentID, idempotencyKey, createdAt, ensureService)
 	}
 	task := newPlatformComponentConfigTask(componentID, idempotencyKey, createdAt, false)
+	task.Steps = task.Steps[:1]
 	task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: ids.New(ids.KindStep)})
 	return task
 }

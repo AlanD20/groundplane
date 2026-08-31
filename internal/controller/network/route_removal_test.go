@@ -13,6 +13,7 @@ import (
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -501,6 +502,7 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 		}},
 		Components: []etcd.ComponentRecord{component, edge},
 	}
+	projection.NormalizedCompose = routeRemovalTestNormalizedCompose(t)
 	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
 	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
 		Record: projection, Revision: 15, ReadRevision: 15,
@@ -556,6 +558,7 @@ func TestRouteRemovalPropagatesProviderPlannerError(t *testing.T) {
 		}},
 		Components: []etcd.ComponentRecord{component, edge},
 	}
+	projection.NormalizedCompose = routeRemovalTestNormalizedCompose(t)
 	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
 	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
 		Record: projection, Revision: 16, ReadRevision: 16,
@@ -568,6 +571,18 @@ func TestRouteRemovalPropagatesProviderPlannerError(t *testing.T) {
 	if !errors.Is(err, plans.err) || !ok || kind != errs.KindInternal || plans.calls != 1 || repository.begins != 0 {
 		t.Fatalf("RemoveRoute(planner failure) = %v, calls %d, begins %d", err, plans.calls, repository.begins)
 	}
+}
+
+func routeRemovalTestNormalizedCompose(t *testing.T) []byte {
+	t.Helper()
+	project := &composetypes.Project{Services: composetypes.Services{
+		"api": {Name: "api", Image: "api:1"},
+	}}
+	normalized, err := controller.MarshalNormalizedEnvironmentProject(project)
+	if err != nil {
+		t.Fatalf("marshal Route removal fixture normalized Compose: %v", err)
+	}
+	return normalized
 }
 
 func routeRemovalTestComposeArtifact(projection etcd.EnvironmentComposeProjection) []byte {

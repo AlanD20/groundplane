@@ -79,7 +79,11 @@ func TestRepositoryClaimsWinnerAndSealsTypedMutationRevision(t *testing.T) {
 	}
 }
 
-func mutationProjection(t *testing.T, now time.Time, environmentID, taskID, volumeID string) etcd.EnvironmentComposeProjection {
+func mutationProjection(
+	t *testing.T,
+	now time.Time,
+	environmentID, taskID, volumeID string,
+) etcd.EnvironmentComposeProjection {
 	t.Helper()
 	canonicalYAML := []byte("services: {}\nvolumes:\n  application_data: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
@@ -94,9 +98,14 @@ func mutationProjection(t *testing.T, now time.Time, environmentID, taskID, volu
 		t.Fatal(err)
 	}
 	return etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID, RevisionID: taskID, RenderGeneration: 1,
-		ComposeArtifact: artifact,
-		Volumes:         []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Slug: "application-data", Key: "application_data"}},
+		EnvironmentID:     environmentID,
+		RevisionID:        taskID,
+		RenderGeneration:  1,
+		ComposeArtifact:   artifact,
+		NormalizedCompose: canonicalYAML,
+		Volumes: []etcd.EnvironmentVolumeIdentity{
+			{ID: volumeID, Slug: "application-data", Key: "application_data"},
+		},
 	}
 }
 
@@ -128,7 +137,12 @@ func (store *memoryStore) GetMany(_ context.Context, request etcd.GetManyRequest
 func (store *memoryStore) Range(_ context.Context, request etcd.RangeRequest) (*etcd.RangeResult, error) {
 	return &etcd.RangeResult{ReadRevision: store.revision, ResponseRevision: store.revision}, nil
 }
-func (store *memoryStore) Transact(_ context.Context, conditions []etcd.Condition, mutations []etcd.Mutation) (etcd.TransactionResult, error) {
+
+func (store *memoryStore) Transact(
+	_ context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionResult, error) {
 	for _, condition := range conditions {
 		value := store.valueAt(condition.Key, store.revision)
 		actual := int64(0)
@@ -172,7 +186,12 @@ func (store *memoryStore) valueAt(key string, revision int64) *etcd.KeyValue {
 		for previous := index; previous >= 0 && versions[previous].present; previous-- {
 			count++
 		}
-		return &etcd.KeyValue{Key: key, Value: append([]byte(nil), version.value...), Version: count, ModRevision: version.revision}
+		return &etcd.KeyValue{
+			Key:         key,
+			Value:       append([]byte(nil), version.value...),
+			Version:     count,
+			ModRevision: version.revision,
+		}
 	}
 	return nil
 }

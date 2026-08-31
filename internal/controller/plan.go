@@ -47,13 +47,15 @@ type ExecutionPlan = agentpb.ExecutionPlan
 // sequencing. It deliberately contains no persisted rendered-artifact handle:
 // a resolver rebuilds these values from retained desired-state inputs.
 type PlanBuildInput struct {
-	VolumeRoot       string
-	PlanID           string
-	RenderGeneration uint64
-	Operation        agentpb.PlanOperation
-	TargetID         string
-	Artifacts        []*agentpb.ComposeArtifact
-	Steps            []*agentpb.ExecutionStep
+	VolumeRoot                   string
+	PlanID                       string
+	RenderGeneration             uint64
+	Operation                    agentpb.PlanOperation
+	TargetID                     string
+	Artifacts                    []*agentpb.ComposeArtifact
+	Steps                        []*agentpb.ExecutionStep
+	ComponentLifecycleMode       agentpb.ComponentLifecycleMode
+	ComponentRollbackObservation *agentpb.ComponentApply
 }
 
 // BuildPlan owns schema selection, defensive copying, deterministic hashing,
@@ -63,6 +65,8 @@ func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 		Schema: 1, PlanId: input.PlanID, RenderGeneration: input.RenderGeneration,
 		Operation: input.Operation, TargetId: input.TargetID,
 		Artifacts: input.Artifacts, Steps: input.Steps,
+		ComponentLifecycleMode:       input.ComponentLifecycleMode,
+		ComponentRollbackObservation: input.ComponentRollbackObservation,
 	})
 	if err != nil {
 		return nil, err
@@ -379,11 +383,13 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	managedConfigApply, hasManagedConfigApply, err := ResolveEnvironmentManagedConfigApply(EnvironmentManagedConfigApplyInput{
-		RevisionID: revisionID, RenderGeneration: uint64(task.RenderGeneration), Components: pinned.components,
-		ComponentCatalog: resolver.componentCatalog,
-		Materializations: task.Materializations, Artifact: pinned.artifact,
-	})
+	managedConfigApply, hasManagedConfigApply, err := ResolveEnvironmentManagedConfigApply(
+		EnvironmentManagedConfigApplyInput{
+			RevisionID: revisionID, RenderGeneration: uint64(task.RenderGeneration), Components: pinned.components,
+			ComponentCatalog: resolver.componentCatalog,
+			Materializations: task.Materializations, Artifact: pinned.artifact,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

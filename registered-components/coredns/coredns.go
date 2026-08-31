@@ -20,8 +20,31 @@ const (
 	ServiceName          = "coredns"
 	CorefileSource       = "coredns/Corefile"
 	CorefileTarget       = "/etc/groundplane/coredns/Corefile"
-	image                = "docker.io/coredns/coredns:1.11.3@sha256:9caabbf6238b189a65d0d6e6ac138de60d6a1c419e5a341fbbb7c78382559c6e"
+	ConfigDirectory      = "/etc/groundplane/coredns"
+	ObserveServingAction = component.ActionID("observe-serving")
 )
+
+var Image = component.OCIImage{
+	Repository:  "docker.io/coredns/coredns",
+	IndexDigest: "9caabbf6238b189a65d0d6e6ac138de60d6a1c419e5a341fbbb7c78382559c6e",
+	Platforms: []component.OCIPlatform{
+		{
+			OS:           "linux",
+			Architecture: "amd64",
+			ChildDigest:  "f0b8c589314ed010a0c326e987a52b50801f0145ac9b75423af1b5c66dbd6d50",
+		},
+		{
+			OS:           "linux",
+			Architecture: "arm64",
+			Variant:      "v8",
+			ChildDigest:  "31440a2bef59e2f1ffb600113b557103740ff851e27b0aef5b849f6e3ab994a6",
+		},
+	},
+}
+
+func ValidateConfigCommand() []string {
+	return []string{"-conf", "/dev/stdin", "-dns.port", "0"}
+}
 
 type Renderer struct{}
 
@@ -40,11 +63,13 @@ func Plan(input PlanInput) (component.EnvironmentPlan, error) {
 	}
 	return component.CloneEnvironmentPlan(component.EnvironmentPlan{
 		Services: []component.ManagedService{{
-			ID: input.GeneratedServiceID, Name: ServiceName, Image: image,
+			ID: input.GeneratedServiceID, Name: ServiceName, Image: Image,
 			NetworkMode: component.ManagedNetworkModeHost,
-			Command: []string{"-conf", CorefileTarget}, Restart: "unless-stopped", Replicas: 1,
+			Command:     []string{"-conf", CorefileTarget}, Restart: "unless-stopped", Replicas: 1,
+			ObservationAction: ObserveServingAction,
 			Mounts: []component.ManagedMount{{
-				Source: CorefileSource, Target: CorefileTarget, ReadOnly: true,
+				Source: "coredns", Target: ConfigDirectory,
+				Kind: component.ManagedMountKindDirectory, ReadOnly: true,
 			}},
 		}},
 		Files: []component.ManagedFile{{Path: CorefileSource, Content: corefile}},
@@ -92,13 +117,21 @@ func Definition() (component.Definition, error) {
 	if err != nil {
 		return component.Definition{}, err
 	}
+	observe, err := component.NewActionDefinition(
+		ObserveServingAction,
+		component.CapabilityHostResolution,
+		component.OperationObserve,
+	)
+	if err != nil {
+		return component.Definition{}, err
+	}
 	return component.NewDefinition(component.DefinitionInput{
 		Implementation: "coredns",
-		ConfigVariant: "coredns-v1",
-		Provides: []component.Capability{component.CapabilityDNSResolver},
-		Grants: []component.Grant{httpRouter, services, managedConfig, hostResolution},
-		OwnerScopes: []component.OwnerScope{component.OwnerScopePlatform},
-		Actions: []component.ActionDefinition{activate},
+		ConfigVariant:  "coredns-v1",
+		Provides:       []component.Capability{component.CapabilityDNSResolver},
+		Grants:         []component.Grant{httpRouter, services, managedConfig, hostResolution},
+		OwnerScopes:    []component.OwnerScope{component.OwnerScopePlatform},
+		Actions:        []component.ActionDefinition{activate, observe},
 	})
 }
 

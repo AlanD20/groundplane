@@ -2,6 +2,7 @@ package dnsresolver
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/netip"
 	"testing"
@@ -17,15 +18,40 @@ type environmentPlannerPin struct {
 	image string
 }
 
-func (planner environmentPlannerPin) Plan(_ componentsdk.ImplementationKey, serviceID string, input componentdns.RenderInput) (componentsdk.EnvironmentPlan, error) {
+func (planner environmentPlannerPin) Plan(
+	_ componentsdk.ImplementationKey,
+	serviceID string,
+	input componentdns.RenderInput,
+) (componentsdk.EnvironmentPlan, error) {
 	return componentsdk.EnvironmentPlan{
-		Services: []componentsdk.ManagedService{{
-			ID: serviceID, Name: "resolver", Image: planner.image,
-			Command: []string{"--config", "/etc/resolver/config"}, Restart: "unless-stopped",
-			Replicas: 1, Mounts: []componentsdk.ManagedMount{{Source: "config", Target: "/etc/resolver/config", ReadOnly: true}},
-		}},
+		Services: []componentsdk.ManagedService{
+			{
+				ID:       serviceID,
+				Name:     "resolver",
+				Image:    testPlatformImage(planner.image),
+				Command:  []string{"--config", "/etc/resolver/config"},
+				Restart:  "unless-stopped",
+				Replicas: 1,
+				Mounts: []componentsdk.ManagedMount{
+					{Source: "config", Target: "/etc/resolver/config", ReadOnly: true},
+				},
+			},
+		},
 		Files: []componentsdk.ManagedFile{{Path: "config", Content: []byte("same bytes\n")}},
 	}, nil
+}
+
+func testPlatformImage(identity string) componentsdk.OCIImage {
+	index := sha256.Sum256([]byte(identity + "/index"))
+	amd64 := sha256.Sum256([]byte(identity + "/linux/amd64"))
+	arm64 := sha256.Sum256([]byte(identity + "/linux/arm64/v8"))
+	return componentsdk.OCIImage{
+		Repository: identity, IndexDigest: hex.EncodeToString(index[:]),
+		Platforms: []componentsdk.OCIPlatform{
+			{OS: "linux", Architecture: "amd64", ChildDigest: hex.EncodeToString(amd64[:])},
+			{OS: "linux", Architecture: "arm64", Variant: "v8", ChildDigest: hex.EncodeToString(arm64[:])},
+		},
+	}
 }
 
 func (rendererPin) Render(input componentdns.RenderInput) ([]byte, error) {
@@ -100,11 +126,23 @@ func TestBuildIntentRejectsChangedServiceReplay(t *testing.T) {
 			InputRevision: 1, InputSHA256: [sha256.Size]byte{1}, Hosts: hosts,
 		},
 	}
-	first, err := BuildIntent(rendererPin{}, environmentPlannerPin{image: "example/resolver:1"}, component, resolverInput, "resolver")
+	first, err := BuildIntent(
+		rendererPin{},
+		environmentPlannerPin{image: "example/resolver:1"},
+		component,
+		resolverInput,
+		"resolver",
+	)
 	if err != nil {
 		t.Fatalf("BuildIntent() first error = %v", err)
 	}
-	second, err := BuildIntent(rendererPin{}, environmentPlannerPin{image: "example/resolver:2"}, component, resolverInput, "resolver")
+	second, err := BuildIntent(
+		rendererPin{},
+		environmentPlannerPin{image: "example/resolver:2"},
+		component,
+		resolverInput,
+		"resolver",
+	)
 	if err != nil {
 		t.Fatalf("BuildIntent() second error = %v", err)
 	}
@@ -123,7 +161,10 @@ func TestBuildIntentUsesRegisteredResolverImplementation(t *testing.T) {
 		Enabled: true, GeneratedServices: []string{"svc_alternate"},
 		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
 	}
-	baseline, err := componentdns.NewResolverBaseline(1, []componentdns.ResolverEndpoint{{Address: netip.MustParseAddr("1.1.1.1")}})
+	baseline, err := componentdns.NewResolverBaseline(
+		1,
+		[]componentdns.ResolverEndpoint{{Address: netip.MustParseAddr("1.1.1.1")}},
+	)
 	if err != nil {
 		t.Fatalf("NewResolverBaseline() error = %v", err)
 	}

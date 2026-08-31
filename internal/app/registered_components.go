@@ -36,6 +36,20 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 	coreDNSActivate, err := registeredcatalog.NewManagedConfigActionRecipe(
 		managedConfigActivateAction,
 		registeredcoredns.CorefileSource,
+		registeredcoredns.ValidateConfigCommand(),
+		registeredcoredns.Image,
+	)
+	if err != nil {
+		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+	}
+	coreDNSObservation, err := registeredcatalog.NewDNSResolverObservationRecipe(
+		registeredcoredns.ObserveServingAction,
+		registeredcoredns.ServiceName,
+		registeredcoredns.CorefileTarget,
+		registeredcoredns.Image,
+		"127.0.0.1:53",
+		"http://127.0.0.1:9153/metrics",
+		"coredns_reload_version_info",
 	)
 	if err != nil {
 		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
@@ -58,8 +72,9 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 		},
 		registeredcatalog.Registration{Definition: tunnel},
 		registeredcatalog.Registration{
-			Definition:           coreDNS,
-			ManagedConfigActions: []registeredcatalog.ManagedConfigActionRecipe{coreDNSActivate},
+			Definition:              coreDNS,
+			ManagedConfigActions:    []registeredcatalog.ManagedConfigActionRecipe{coreDNSActivate},
+			DNSResolverObservations: []registeredcatalog.DNSResolverObservationRecipe{coreDNSObservation},
 		},
 	)
 	if err != nil {
@@ -159,6 +174,22 @@ func (catalog registeredActionCatalog) ResolveContainerConfigActionEnvelope(
 	if err != nil {
 		return componentsdk.Definition{}, componentsdk.ActionDefinition{},
 			registeredcatalog.ContainerConfigActionRecipe{}, errs.Wrap(errs.KindStateConflict, err)
+	}
+	return definition, action, recipe, nil
+}
+
+func (catalog registeredActionCatalog) ResolveDNSResolverObservationActionEnvelope(
+	envelope componentsdk.ActionEnvelope,
+) (
+	componentsdk.Definition,
+	componentsdk.ActionDefinition,
+	registeredcatalog.DNSResolverObservationRecipe,
+	error,
+) {
+	definition, action, recipe, err := catalog.catalog.ResolveDNSResolverObservationActionEnvelope(envelope)
+	if err != nil {
+		return componentsdk.Definition{}, componentsdk.ActionDefinition{},
+			registeredcatalog.DNSResolverObservationRecipe{}, errs.Wrap(errs.KindStateConflict, err)
 	}
 	return definition, action, recipe, nil
 }

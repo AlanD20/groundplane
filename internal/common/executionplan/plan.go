@@ -3,6 +3,7 @@
 package executionplan
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"fmt"
@@ -38,18 +39,21 @@ const (
 )
 
 const (
-	labelEnvironmentID = "com.groundplane.environment-id"
-	labelComponentID   = "com.groundplane.component-id"
-	labelKind          = "com.groundplane.kind"
-	labelManaged       = "com.groundplane.managed"
-	labelPlanID        = "com.groundplane.plan-id"
-	labelProjectID     = "com.groundplane.project-id"
-	labelReleaseID     = "com.groundplane.release-id"
-	labelRenderGen     = "com.groundplane.render-generation"
-	labelRuntimeRole   = "com.groundplane.runtime-role"
-	labelServiceID     = "com.groundplane.service-id"
-	labelSlot          = "com.groundplane.slot"
-	labelTenantID      = "com.groundplane.tenant-id"
+	labelEnvironmentID    = "com.groundplane.environment-id"
+	labelComponentID      = "com.groundplane.component-id"
+	labelKind             = "com.groundplane.kind"
+	labelManaged          = "com.groundplane.managed"
+	labelPlanID           = "com.groundplane.plan-id"
+	labelProjectID        = "com.groundplane.project-id"
+	labelReleaseID        = "com.groundplane.release-id"
+	labelRenderGen        = "com.groundplane.render-generation"
+	labelRuntimeRole      = "com.groundplane.runtime-role"
+	labelServiceID        = "com.groundplane.service-id"
+	labelSlot             = "com.groundplane.slot"
+	labelTenantID         = "com.groundplane.tenant-id"
+	labelImageChildDigest = "com.groundplane.image-child-digest"
+	labelImageIndexDigest = "com.groundplane.image-index-digest"
+	labelImagePlatform    = "com.groundplane.image-platform"
 )
 
 // Seal validates an unhashed plan, computes its canonical digest, and returns
@@ -139,6 +143,10 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT {
 		return validateManualScriptPlan(plan)
 	}
+	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
+		plan.GetComponentRollbackObservation() != nil {
+		return errs.New(errs.KindValidationFailed, "non-Component plan carries a rollback observation")
+	}
 	if !validOperation(plan.Operation) {
 		return errs.New(errs.KindValidationFailed, "execution plan operation is unsupported")
 	}
@@ -181,7 +189,11 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	}
 	artifacts := make(map[string]*agentpb.ComposeArtifact, len(plan.Artifacts))
 	for _, artifact := range plan.Artifacts {
-		if err := validateArtifact(plan, artifact); err != nil {
+		validationPlan, identityErr := componentArtifactValidationPlan(plan, artifact)
+		if identityErr != nil {
+			return identityErr
+		}
+		if err := validateArtifact(validationPlan, artifact); err != nil {
 			return err
 		}
 		if _, duplicate := artifacts[artifact.ArtifactId]; duplicate {
@@ -223,7 +235,10 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			return errs.New(errs.KindValidationFailed, "managed Volume removal does not identify the plan target")
 		}
 		if remove := step.GetManagedVolumeDirectoryRemove(); remove != nil && remove.VolumeId != plan.TargetId {
-			return errs.New(errs.KindValidationFailed, "managed Volume directory removal does not identify the plan target")
+			return errs.New(
+				errs.KindValidationFailed,
+				"managed Volume directory removal does not identify the plan target",
+			)
 		}
 		if _, duplicate := stepIDs[step.StepId]; duplicate {
 			return errs.New(errs.KindValidationFailed, "execution plan step ids must be unique")
@@ -245,6 +260,47 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		}
 	}
 	return nil
+}
+
+func componentArtifactValidationPlan(
+	plan *agentpb.ExecutionPlan,
+	artifact *agentpb.ComposeArtifact,
+) (*agentpb.ExecutionPlan, error) {
+	if plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY ||
+		plan.GetComponentLifecycleMode() != agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UPDATE ||
+		len(plan.GetArtifacts()) != 2 || artifact == nil {
+		return plan, nil
+	}
+	candidateArtifactID := ""
+	for _, step := range plan.GetSteps() {
+		if apply := step.GetComposeApply(); apply != nil {
+			candidateArtifactID = apply.GetArtifactId()
+			break
+		}
+	}
+	if artifact.GetArtifactId() == candidateArtifactID {
+		return plan, nil
+	}
+	if len(artifact.GetServices()) != 1 {
+		return nil, errs.New(errs.KindValidationFailed, "Component rollback artifact is invalid")
+	}
+	rollbackPlanID := ""
+	rollbackGeneration := uint64(0)
+	for _, label := range artifact.GetServices()[0].GetExpectedLabels() {
+		switch label.GetKey() {
+		case labelPlanID:
+			rollbackPlanID = label.GetValue()
+		case labelRenderGen:
+			rollbackGeneration, _ = strconv.ParseUint(label.GetValue(), 10, 64)
+		}
+	}
+	if validateID(ids.KindPlan, rollbackPlanID) != nil || rollbackGeneration == 0 {
+		return nil, errs.New(errs.KindValidationFailed, "Component rollback artifact ownership is invalid")
+	}
+	validationPlan := *plan
+	validationPlan.PlanId = rollbackPlanID
+	validationPlan.RenderGeneration = rollbackGeneration
+	return &validationPlan, nil
 }
 
 func validateBackupPlan(plan *agentpb.ExecutionPlan) error {
@@ -468,7 +524,10 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		}
 		identity := service.ServiceId + "\x00" + service.ComposeName
 		if previous >= identity {
-			return errs.New(errs.KindValidationFailed, "Compose artifact services must be uniquely sorted by id and name")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Compose artifact services must be uniquely sorted by id and name",
+			)
 		}
 		previous = identity
 		if err := validateComposeName(service.ComposeName); err != nil {
@@ -494,7 +553,8 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 				return errs.New(errs.KindValidationFailed, "ordinary Compose service carries release runtime metadata")
 			}
 		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
-			if service.Slot != "blue" && service.Slot != "green" || len(service.ProxyConfigJson) != 0 || len(service.ProxyConfigSha256) != 0 {
+			if service.Slot != "blue" && service.Slot != "green" || len(service.ProxyConfigJson) != 0 ||
+				len(service.ProxyConfigSha256) != 0 {
 				return errs.New(errs.KindValidationFailed, "workload slot service metadata is invalid")
 			}
 		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON:
@@ -503,7 +563,8 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 			}
 		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
 			digest := sha256.Sum256(service.ProxyConfigJson)
-			if service.Slot != "" || len(service.ProxyConfigJson) == 0 || len(service.ProxyConfigSha256) != sha256.Size ||
+			if service.Slot != "" || len(service.ProxyConfigJson) == 0 ||
+				len(service.ProxyConfigSha256) != sha256.Size ||
 				subtle.ConstantTimeCompare(service.ProxyConfigSha256, digest[:]) != 1 {
 				return errs.New(errs.KindValidationFailed, "stable proxy service metadata is invalid")
 			}
@@ -551,7 +612,12 @@ func validateLabels(
 			return errs.New(errs.KindValidationFailed, "expected ownership labels are invalid or unsorted")
 		}
 		if pair.Key <= previous || !validLabelKey(pair.Key) || !utf8.ValidString(pair.Value) {
-			return errs.Newf(errs.KindValidationFailed, "expected ownership label %q after %q is invalid or unsorted", pair.Key, previous)
+			return errs.Newf(
+				errs.KindValidationFailed,
+				"expected ownership label %q after %q is invalid or unsorted",
+				pair.Key,
+				previous,
+			)
 		}
 		previous = pair.Key
 		values[pair.Key] = pair.Value
@@ -568,8 +634,8 @@ func validateLabels(
 				strconv.FormatUint(generation, 10) != labelGeneration {
 				return errs.New(errs.KindValidationFailed, "expected service labels do not identify a sealed plan")
 			}
-		} else if labelPlan != plan.PlanId ||
-			labelGeneration != strconv.FormatUint(plan.RenderGeneration, 10) {
+		} else if !validPriorComponentOwnership(plan, labelPlan, labelGeneration) &&
+			(labelPlan != plan.PlanId || labelGeneration != strconv.FormatUint(plan.RenderGeneration, 10)) {
 			return errs.New(errs.KindValidationFailed, "expected service labels do not identify the current plan")
 		}
 	} else {
@@ -624,6 +690,16 @@ func validateLabels(
 	return nil
 }
 
+func validPriorComponentOwnership(plan *agentpb.ExecutionPlan, planID, generationValue string) bool {
+	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY || len(plan.Steps) != 2 ||
+		plan.Steps[0].GetComponentApply() == nil || plan.Steps[1].GetComponentApply() == nil ||
+		validateID(ids.KindPlan, planID) != nil {
+		return false
+	}
+	generation, err := strconv.ParseUint(generationValue, 10, 64)
+	return err == nil && generation != 0 && strconv.FormatUint(generation, 10) == generationValue
+}
+
 func validateStep(
 	operation agentpb.PlanOperation,
 	renderGeneration uint64,
@@ -643,7 +719,8 @@ func validateStep(
 		if payload.ComposeApply.FullReconcile == (len(selected) != 0) {
 			return errs.New(errs.KindValidationFailed, "Compose apply selection is inconsistent")
 		}
-		if payload.ComposeApply.FullReconcile && (payload.ComposeApply.ForceRecreate || payload.ComposeApply.NoDependencies) ||
+		if payload.ComposeApply.FullReconcile &&
+			(payload.ComposeApply.ForceRecreate || payload.ComposeApply.NoDependencies) ||
 			payload.ComposeApply.NoDependencies && !payload.ComposeApply.ForceRecreate {
 			return errs.New(errs.KindValidationFailed, "Compose apply replacement options are inconsistent")
 		}
@@ -674,9 +751,21 @@ func validateStep(
 		}
 		return validateSelection(payload.WaitHealthy.ArtifactId, payload.WaitHealthy.ServiceIds, artifacts, true)
 	case *agentpb.ExecutionStep_ComposeWorkloadApply:
-		return validateReleaseWorkloadStep(operation, payload.ComposeWorkloadApply.GetArtifactId(), payload.ComposeWorkloadApply.GetServiceId(), payload.ComposeWorkloadApply.GetTarget(), artifacts)
+		return validateReleaseWorkloadStep(
+			operation,
+			payload.ComposeWorkloadApply.GetArtifactId(),
+			payload.ComposeWorkloadApply.GetServiceId(),
+			payload.ComposeWorkloadApply.GetTarget(),
+			artifacts,
+		)
 	case *agentpb.ExecutionStep_WaitWorkloadHealthy:
-		return validateReleaseWorkloadStep(operation, payload.WaitWorkloadHealthy.GetArtifactId(), payload.WaitWorkloadHealthy.GetServiceId(), payload.WaitWorkloadHealthy.GetTarget(), artifacts)
+		return validateReleaseWorkloadStep(
+			operation,
+			payload.WaitWorkloadHealthy.GetArtifactId(),
+			payload.WaitWorkloadHealthy.GetServiceId(),
+			payload.WaitWorkloadHealthy.GetTarget(),
+			artifacts,
+		)
 	case *agentpb.ExecutionStep_ServiceProxySwitch:
 		return validateServiceProxySwitch(operation, payload.ServiceProxySwitch, artifacts)
 	case *agentpb.ExecutionStep_ServiceProxyProbe:
@@ -812,8 +901,8 @@ func validateStep(
 // one CoreDNS payload is the only step, and an enabled apply must name the
 // exact platform artifact and generated service it was rendered from.
 func validateComponentApplyPlan(plan *agentpb.ExecutionPlan, artifacts map[string]*agentpb.ComposeArtifact) error {
-	if len(plan.Steps) != 1 && len(plan.Steps) != 2 && len(plan.Steps) != 4 {
-		return errs.New(errs.KindValidationFailed, "component apply plan must contain one, two, or four steps")
+	if len(plan.Steps) != 2 && len(plan.Steps) != 4 {
+		return errs.New(errs.KindValidationFailed, "component apply plan must contain two or four steps")
 	}
 	for _, step := range plan.Steps {
 		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts, plan.Steps); err != nil {
@@ -823,10 +912,14 @@ func validateComponentApplyPlan(plan *agentpb.ExecutionPlan, artifacts map[strin
 	step := plan.Steps[0]
 	component := step.GetComponentApply()
 	if component == nil {
-		if len(plan.Steps) == 2 {
+		if len(plan.Steps) == 2 &&
+			plan.GetComponentLifecycleMode() == agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_DISABLE {
 			restore := step.GetHostResolutionRestore()
 			remove := plan.Steps[1].GetComposeRemove()
+			rollback := plan.GetComponentRollbackObservation()
 			if restore == nil || remove == nil || len(artifacts) != 1 ||
+				rollback == nil || rollback.GetManagedConfigContent() || validateComponentAction(rollback) != nil ||
+				rollback.GetComponentId() != plan.TargetId || rollback.GetGeneration() != plan.RenderGeneration ||
 				restore.GetComponentId() != plan.TargetId || restore.GetGeneration() != plan.RenderGeneration ||
 				step.GetPrerequisiteStepId() != "" ||
 				plan.Steps[1].GetPrerequisiteStepId() != step.GetStepId() ||
@@ -837,30 +930,80 @@ func validateComponentApplyPlan(plan *agentpb.ExecutionPlan, artifacts map[strin
 		}
 		return errs.New(errs.KindValidationFailed, "component apply plan must contain a ComponentApply step")
 	}
-	if err := validateComponentAction(component); err != nil {
+	if plan.GetComponentRollbackObservation() != nil {
+		return errs.New(errs.KindValidationFailed, "enabled Component plan carries a rollback observation")
+	}
+	if err := validateComponentAction(component); err != nil || !component.GetManagedConfigContent() {
 		return err
 	}
 	if component.GetComponentId() != plan.TargetId || component.GetGeneration() != plan.RenderGeneration {
 		return errs.New(errs.KindValidationFailed, "component action identity does not match the execution plan")
 	}
-	if len(plan.Steps) == 1 {
-		if len(artifacts) != 0 || step.GetPrerequisiteStepId() != "" {
-			return errs.New(errs.KindValidationFailed, "component reload carries an artifact or prerequisite")
+	if len(plan.Steps) == 2 {
+		observation := plan.Steps[1].GetComponentApply()
+		if plan.GetComponentLifecycleMode() != agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UPDATE ||
+			len(artifacts) != 1 || observation == nil || observation.GetManagedConfigContent() ||
+			plan.Steps[1].GetPrerequisiteStepId() != plan.Steps[0].GetStepId() ||
+			validateComponentAction(observation) != nil || observation.GetComponentId() != component.GetComponentId() ||
+			observation.GetGeneration() != component.GetGeneration() ||
+			!bytes.Equal(observation.GetDefinitionDigest(), component.GetDefinitionDigest()) ||
+			!bytes.Equal(observation.GetCatalogDigest(), component.GetCatalogDigest()) ||
+			observation.GetArtifactId() != component.GetArtifactId() ||
+			!bytes.Equal(observation.GetArtifactDigest(), component.GetArtifactDigest()) ||
+			observation.GetActionId() == component.GetActionId() {
+			return errs.New(errs.KindValidationFailed, "component reload observation procedure is invalid")
+		}
+		artifact := onlyComposeArtifact(artifacts)
+		if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM ||
+			len(artifact.GetServices()) != 1 || artifact.GetServices()[0].GetHasHealthcheck() {
+			return errs.New(errs.KindValidationFailed, "component reload observation artifact is invalid")
 		}
 		return nil
 	}
 	apply := plan.Steps[1].GetComposeApply()
-	wait := plan.Steps[2].GetWaitHealthy()
+	observation := plan.Steps[2].GetComponentApply()
 	hostResolution := plan.Steps[3].GetHostResolutionApply()
-	if len(artifacts) != 1 || apply == nil || wait == nil ||
+	if apply == nil {
+		return errs.New(errs.KindValidationFailed, "component Service ensure procedure is invalid")
+	}
+	lifecycleMode := plan.GetComponentLifecycleMode()
+	candidateArtifact := artifacts[apply.GetArtifactId()]
+	var rollbackArtifact *agentpb.ComposeArtifact
+	for artifactID, artifact := range artifacts {
+		if artifactID != apply.GetArtifactId() {
+			rollbackArtifact = artifact
+		}
+	}
+	validLifecycle := lifecycleMode == agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE &&
+		len(artifacts) == 1 ||
+		lifecycleMode == agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UPDATE &&
+			len(artifacts) == 2 && len(component.GetExpectedPreviousArtifactDigest()) == sha256.Size
+	if !validLifecycle ||
+		candidateArtifact == nil || len(candidateArtifact.GetServices()) != 1 ||
+		apply == nil || observation == nil || observation.GetManagedConfigContent() ||
+		validateComponentAction(observation) != nil ||
 		plan.Steps[1].GetPrerequisiteStepId() != plan.Steps[0].GetStepId() ||
 		plan.Steps[2].GetPrerequisiteStepId() != plan.Steps[1].GetStepId() ||
-		apply.GetArtifactId() != wait.GetArtifactId() || len(apply.GetServiceIds()) != 1 ||
-		len(wait.GetServiceIds()) != 1 || apply.GetServiceIds()[0] != wait.GetServiceIds()[0] ||
+		len(apply.GetServiceIds()) != 1 || observation.GetComponentId() != component.GetComponentId() ||
+		observation.GetGeneration() != component.GetGeneration() || observation.GetActionId() == component.GetActionId() ||
+		observation.GetArtifactId() != component.GetArtifactId() ||
+		!bytes.Equal(observation.GetArtifactDigest(), component.GetArtifactDigest()) ||
 		hostResolution == nil || plan.Steps[3].GetPrerequisiteStepId() != plan.Steps[2].GetStepId() ||
 		hostResolution.GetComponentId() != plan.TargetId ||
-		hostResolution.GetGeneration() != plan.RenderGeneration {
+		hostResolution.GetGeneration() != plan.RenderGeneration ||
+		(rollbackArtifact != nil && (len(rollbackArtifact.GetServices()) != 1 ||
+			rollbackArtifact.GetServices()[0].GetServiceId() != candidateArtifact.GetServices()[0].GetServiceId() ||
+			rollbackArtifact.GetServices()[0].GetComposeName() != candidateArtifact.GetServices()[0].GetComposeName() ||
+			rollbackArtifact.GetServices()[0].GetOwnerComponentId() != candidateArtifact.GetServices()[0].GetOwnerComponentId() ||
+			rollbackArtifact.GetServices()[0].GetHasHealthcheck())) {
 		return errs.New(errs.KindValidationFailed, "component Service ensure procedure is invalid")
+	}
+	return nil
+}
+
+func onlyComposeArtifact(artifacts map[string]*agentpb.ComposeArtifact) *agentpb.ComposeArtifact {
+	for _, artifact := range artifacts {
+		return artifact
 	}
 	return nil
 }
@@ -875,7 +1018,14 @@ func validateComponentAction(action *agentpb.ComponentApply) error {
 		!validComponentActionID(action.GetActionId()) || action.GetGeneration() == 0 ||
 		!validComponentDigest(action.GetDefinitionDigest()) ||
 		!validComponentDigest(action.GetCatalogDigest()) ||
-		!validComponentDigest(action.GetArtifactDigest()) {
+		!validComponentDigest(action.GetArtifactDigest()) ||
+		(len(action.GetExpectedPreviousArtifactDigest()) != 0 &&
+			!validComponentDigest(action.GetExpectedPreviousArtifactDigest())) ||
+		(len(action.GetExpectedPreviousArtifactDigest()) == 0) != (action.GetExpectedPreviousArtifactId() == "") ||
+		(len(action.GetExpectedPreviousArtifactDigest()) == 0) != (action.GetExpectedPreviousGeneration() == 0) ||
+		(action.GetExpectedPreviousArtifactId() != "" &&
+			validateID(ids.KindConfig, action.GetExpectedPreviousArtifactId()) != nil) ||
+		(len(action.GetExpectedPreviousArtifactDigest()) != 0 && !action.GetManagedConfigContent()) {
 		return errs.New(errs.KindValidationFailed, "component action identity, generation, or digest is invalid")
 	}
 	return nil
@@ -1476,7 +1626,8 @@ func validOperation(operation agentpb.PlanOperation) bool {
 
 func validLabelKey(key string) bool {
 	switch key {
-	case labelComponentID, labelEnvironmentID, labelKind, labelManaged, labelPlanID, labelProjectID,
+	case labelComponentID, labelEnvironmentID, labelImageChildDigest, labelImageIndexDigest, labelImagePlatform,
+		labelKind, labelManaged, labelPlanID, labelProjectID,
 		labelReleaseID, labelRenderGen, labelRuntimeRole, labelServiceID, labelSlot, labelTenantID:
 		return true
 	default:

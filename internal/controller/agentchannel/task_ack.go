@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -42,6 +43,9 @@ func (s *Server) acknowledge(
 			return err
 		}
 	} else if err := validateComposeTaskResult(acknowledgement); err != nil {
+		return err
+	}
+	if err := validateDNSResolverResultShape(acknowledgement, plan); err != nil {
 		return err
 	}
 	planHash, err := hex.DecodeString(task.Record.PlanHash)
@@ -100,4 +104,248 @@ func (s *Server) acknowledge(
 		)
 	}
 	return err
+}
+
+func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agentpb.ExecutionPlan) error {
+	result := acknowledgement.GetComposeResult()
+	if result == nil {
+		return nil
+	}
+	candidate := result.GetDnsResolverCandidateObservation()
+	rollback := result.GetDnsResolverRollbackObservation()
+	if plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
+		if candidate != nil || rollback != nil {
+			return errs.New(errs.KindValidationFailed, "non-Component Task returned DNS resolver observation evidence")
+		}
+		return nil
+	}
+	managed, observation, candidateService, rollbackService, planErr := dnsResolverProofPlan(plan)
+	mode := plan.GetComponentLifecycleMode()
+	switch mode {
+	case agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE,
+		agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UPDATE:
+		if planErr != nil {
+			return planErr
+		}
+	case agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_DISABLE:
+		rollbackAction := plan.GetComponentRollbackObservation()
+		if candidate != nil || rollbackAction == nil || len(plan.GetArtifacts()) != 1 ||
+			len(plan.GetArtifacts()[0].GetServices()) != 1 {
+			return errs.New(errs.KindValidationFailed, "disabled Component Task proof plan is invalid")
+		}
+		if acknowledgement.GetTerminal() == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED {
+			if rollback != nil || result.GetReconciliationRequired() {
+				return errs.New(errs.KindValidationFailed, "completed Component disable returned rollback evidence")
+			}
+			return nil
+		}
+		if result.GetReconciliationRequired() {
+			return errs.New(errs.KindValidationFailed, "Component disable compensation is not proven")
+		}
+		failedStepID := result.GetFailedStepId()
+		mutationAttempted := false
+		if failedStepID != "" {
+			for _, step := range plan.GetSteps() {
+				if step.GetStepId() == failedStepID {
+					mutationAttempted = true
+					break
+				}
+			}
+			if !mutationAttempted {
+				return errs.New(errs.KindValidationFailed, "Component disable failed step is not in its sealed plan")
+			}
+		}
+		if mutationAttempted && rollback == nil {
+			return errs.New(errs.KindValidationFailed, "Component disable is missing rollback serving evidence")
+		}
+		if !mutationAttempted && rollback != nil {
+			return errs.New(errs.KindValidationFailed, "pre-mutation Component disable returned rollback evidence")
+		}
+		if rollback != nil && !dnsResolverProofMatches(
+			rollback, rollbackAction, plan.GetArtifacts()[0].GetServices()[0], rollbackAction.GetArtifactDigest(),
+		) {
+			return errs.New(errs.KindValidationFailed, "Component disable rollback observation does not match its sealed plan")
+		}
+		return nil
+	default:
+		return errs.New(errs.KindValidationFailed, "Component Task has an invalid lifecycle mode")
+	}
+	if candidate != nil && !dnsResolverProofMatches(
+		candidate,
+		observation,
+		candidateService,
+		observation.GetArtifactDigest(),
+	) {
+		return errs.New(errs.KindValidationFailed, "Component Task candidate observation does not match its sealed plan")
+	}
+	if acknowledgement.GetTerminal() == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED {
+		if rollback != nil {
+			return errs.New(errs.KindValidationFailed, "completed Component Task returned rollback observation evidence")
+		}
+		if candidate == nil {
+			return errs.New(
+				errs.KindValidationFailed,
+				"completed Component Task is missing candidate observation evidence",
+			)
+		}
+		return nil
+	}
+	if result.GetReconciliationRequired() {
+		return errs.New(
+			errs.KindValidationFailed,
+			"Component Task compensation is not proven",
+		)
+	}
+	failurePosition, err := managedConfigFailurePosition(plan, result.GetFailedStepId())
+	if err != nil {
+		return err
+	}
+	if failurePosition < 0 && (candidate != nil || rollback != nil) {
+		return errs.New(
+			errs.KindValidationFailed,
+			"pre-mutation Component Task returned DNS resolver observation evidence",
+		)
+	}
+	requiresRollback := mode != agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE &&
+		failurePosition > 0 &&
+		len(managed.GetExpectedPreviousArtifactDigest()) == sha256.Size
+	if requiresRollback && rollback == nil {
+		return errs.New(errs.KindValidationFailed, "compensated Component Task is missing rollback observation evidence")
+	}
+	if len(managed.GetExpectedPreviousArtifactDigest()) == 0 && rollback != nil {
+		return errs.New(errs.KindValidationFailed, "Component Task returned rollback evidence without an applied candidate")
+	}
+	if mode == agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE && rollback != nil {
+		return errs.New(errs.KindValidationFailed, "failed Component enable returned serving rollback evidence")
+	}
+	rollbackAction := *observation
+	rollbackAction.ArtifactId = managed.GetExpectedPreviousArtifactId()
+	rollbackAction.ArtifactDigest = append([]byte(nil), managed.GetExpectedPreviousArtifactDigest()...)
+	rollbackAction.Generation = managed.GetExpectedPreviousGeneration()
+	if rollback != nil && !dnsResolverProofMatches(
+		rollback,
+		&rollbackAction,
+		rollbackService,
+		managed.GetExpectedPreviousArtifactDigest(),
+	) {
+		return errs.New(errs.KindValidationFailed, "Component Task rollback observation does not match its sealed plan")
+	}
+	return nil
+}
+
+func dnsResolverProofPlan(
+	plan *agentpb.ExecutionPlan,
+) (*agentpb.ComponentApply, *agentpb.ComponentApply, *agentpb.ComposeService, *agentpb.ComposeService, error) {
+	var managed *agentpb.ComponentApply
+	var observation *agentpb.ComponentApply
+	for _, step := range plan.GetSteps() {
+		action := step.GetComponentApply()
+		if action == nil {
+			continue
+		}
+		if action.GetManagedConfigContent() {
+			if managed != nil {
+				return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task has ambiguous managed-config action")
+			}
+			managed = action
+		} else {
+			if observation != nil {
+				return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task has ambiguous observation action")
+			}
+			observation = action
+		}
+	}
+	if managed == nil || observation == nil || len(plan.GetArtifacts()) < 1 || len(plan.GetArtifacts()) > 2 {
+		return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task DNS resolver proof plan is invalid")
+	}
+	candidateArtifact := componentObservationComposeArtifact(plan)
+	if candidateArtifact == nil || len(candidateArtifact.GetServices()) != 1 {
+		return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task candidate artifact is invalid")
+	}
+	rollbackService := candidateArtifact.GetServices()[0]
+	if rollbackArtifact := componentRollbackComposeArtifact(plan, candidateArtifact.GetArtifactId()); rollbackArtifact != nil {
+		if len(rollbackArtifact.GetServices()) != 1 {
+			return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task rollback artifact is invalid")
+		}
+		rollbackService = rollbackArtifact.GetServices()[0]
+	}
+	return managed, observation, candidateArtifact.GetServices()[0], rollbackService, nil
+}
+
+func componentObservationComposeArtifact(plan *agentpb.ExecutionPlan) *agentpb.ComposeArtifact {
+	if len(plan.GetArtifacts()) == 1 {
+		return plan.GetArtifacts()[0]
+	}
+	for _, step := range plan.GetSteps() {
+		if apply := step.GetComposeApply(); apply != nil {
+			for _, artifact := range plan.GetArtifacts() {
+				if artifact.GetArtifactId() == apply.GetArtifactId() {
+					return artifact
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func componentRollbackComposeArtifact(
+	plan *agentpb.ExecutionPlan,
+	candidateArtifactID string,
+) *agentpb.ComposeArtifact {
+	if len(plan.GetArtifacts()) != 2 {
+		return nil
+	}
+	for _, artifact := range plan.GetArtifacts() {
+		if artifact.GetArtifactId() != candidateArtifactID {
+			return artifact
+		}
+	}
+	return nil
+}
+
+func managedConfigFailurePosition(plan *agentpb.ExecutionPlan, failedStepID string) (int, error) {
+	managedIndex := -1
+	failedIndex := -1
+	for index, step := range plan.GetSteps() {
+		if step.GetComponentApply().GetManagedConfigContent() {
+			managedIndex = index
+		}
+		if step.GetStepId() == failedStepID {
+			failedIndex = index
+		}
+	}
+	if failedStepID == "" {
+		return -1, nil
+	}
+	if managedIndex < 0 || failedIndex < 0 {
+		return 0, errs.New(errs.KindValidationFailed, "Component Task failed step does not match its sealed plan")
+	}
+	switch {
+	case failedIndex < managedIndex:
+		return -1, nil
+	case failedIndex > managedIndex:
+		return 1, nil
+	default:
+		return 0, nil
+	}
+}
+
+func dnsResolverProofMatches(
+	evidence *agentpb.DNSResolverObservationEvidence,
+	action *agentpb.ComponentApply,
+	service *agentpb.ComposeService,
+	digest []byte,
+) bool {
+	return evidence.GetComponentId() == action.GetComponentId() &&
+		evidence.GetServiceId() == service.GetServiceId() &&
+		evidence.GetArtifactId() == action.GetArtifactId() &&
+		bytes.Equal(evidence.GetArtifactSha256(), digest) &&
+		evidence.GetRenderGeneration() == action.GetGeneration() &&
+		evidence.GetImageReference() == service.GetImageReference() &&
+		evidence.GetImageRepository() == service.GetImageRepository() &&
+		bytes.Equal(evidence.GetImageIndexDigest(), service.GetImageIndexDigest()) &&
+		bytes.Equal(evidence.GetVerifiedImageDigest(), service.GetImageChildDigest()) &&
+		evidence.GetImageOs() == service.GetImageOs() &&
+		evidence.GetImageArchitecture() == service.GetImageArchitecture() &&
+		evidence.GetImageVariant() == service.GetImageVariant()
 }

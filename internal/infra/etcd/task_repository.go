@@ -30,6 +30,7 @@ type PlatformResolverTaskPreparer func(
 	Versioned[ComponentRecord],
 	HostResolutionProjectionRecord,
 	TaskRecord,
+	*ComponentObservationRecord,
 ) (PlatformComponentTaskRenderInput, error)
 
 // PlatformResolverComponentSelector selects the platform Component that

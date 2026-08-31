@@ -351,8 +351,18 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 			method:   http.MethodPut,
 			path:     "/api/v1/components/cmp_1/config",
 			status:   http.StatusOK,
-			response: `{}`,
-			args:     []string{"config", "set", "cmp_1", "--upstream-auto", "--upstream", "1.1.1.1", "--forward", "example.com=9.9.9.9", "--tailnet-delegation"},
+			response: `{"resource":{"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true},"reconcile_task_id":null}`,
+			args: []string{
+				"config",
+				"set",
+				"cmp_1",
+				"--upstream-auto",
+				"--upstream",
+				"1.1.1.1",
+				"--forward",
+				"example.com=9.9.9.9",
+				"--tailnet-delegation",
+			},
 		},
 	}
 	for _, test := range tests {

@@ -35,7 +35,7 @@ func main() {
 		return
 	}
 	if len(os.Args) == 2 && os.Args[1] == app.ManagedConfigHelperArgument {
-		if err := app.RunManagedConfigHelper(ctx, os.Stdin); err != nil {
+		if err := app.RunManagedConfigHelper(ctx, os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "agent managed-config helper:", err)
 			os.Exit(1)
 		}

@@ -15,7 +15,7 @@ func TestPlanRendersDeterministicHTTPRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if len(plan.Services) != 1 || plan.Services[0].ID != "svc_caddy" || plan.Services[0].Image != Image ||
+	if len(plan.Services) != 1 || plan.Services[0].ID != "svc_caddy" || !sameOCIImage(plan.Services[0].Image, Image) ||
 		plan.Services[0].Name != routerInput().Origin.ServiceName || len(plan.Files) != 3 {
 		t.Fatalf("Plan() = %#v", plan)
 	}
@@ -61,9 +61,25 @@ func TestPlanRejectsRouteAndTemplateInjection(t *testing.T) {
 		t.Fatal("Plan() accepted an invalid UTF-8 template")
 	}
 	input = routerInput()
-	if _, err := Plan(input, Config{CaddyfileTemplate: strings.Repeat("x", maxTemplateBytes) + "{routes}"}); err == nil {
+	if _, err := Plan(
+		input,
+		Config{CaddyfileTemplate: strings.Repeat("x", maxTemplateBytes) + "{routes}"},
+	); err == nil {
 		t.Fatal("Plan() accepted an oversized template")
 	}
+}
+
+func sameOCIImage(left, right component.OCIImage) bool {
+	if left.Repository != right.Repository || left.IndexDigest != right.IndexDigest ||
+		len(left.Platforms) != len(right.Platforms) {
+		return false
+	}
+	for index, platform := range left.Platforms {
+		if platform != right.Platforms[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func routerInput() component.HTTPRouterInput {

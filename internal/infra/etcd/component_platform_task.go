@@ -11,6 +11,11 @@ import (
 )
 
 const TaskPlatformComponentDesiredSHA256Param = "component_desired_sha256"
+const TaskAutomaticReconcileParam = "automatic_reconcile"
+
+func IsAutomaticReconcileTask(task TaskRecord) bool {
+	return task.Actor == TaskActorSystem && task.Params[TaskAutomaticReconcileParam] == "true"
+}
 
 // ReplacePlatformComponentDesiredWithTask commits one typed desired-state
 // replacement and its Agent Task in the same protected idempotency transaction.
@@ -137,6 +142,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: platformComponentTaskActiveKey(replacement.Desired.ID)},
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: componentValue},
@@ -146,6 +152,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: MutationPut, Key: platformComponentTaskActiveKey(replacement.Desired.ID), Value: []byte(task.ID)},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
@@ -183,7 +190,7 @@ func classifyPlatformComponentTaskConflict(
 ) idempotencyPlanClassifier {
 	taskClassifier := classifyTaskCreateConflict(operationID)
 	return func(revision int64, values []*KeyValue) error {
-		if len(values) != 8 {
+		if len(values) != 9 {
 			return errs.New(errs.KindInternal, "platform Component Task compare evidence is incomplete")
 		}
 		if values[0] == nil {
@@ -198,6 +205,9 @@ func classifyPlatformComponentTaskConflict(
 				return errs.New(errs.KindInternal, "platform Component indexes changed or are corrupt")
 			}
 		}
-		return taskClassifier(revision, values[4:])
+		if values[8] != nil {
+			return errs.New(errs.KindStateConflict, "platform Component already has an active Task")
+		}
+		return taskClassifier(revision, values[4:8])
 	}
 }

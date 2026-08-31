@@ -81,6 +81,12 @@ func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *tes
 		t.Fatalf("marshal inactive normalized Compose artifact: %v", err)
 	}
 	fixture.reader.projection.ComposeArtifact = encoded
+	fixture.reader.projection.NormalizedCompose = bytes.Replace(
+		fixture.reader.projection.NormalizedCompose,
+		[]byte("    image: example/api:latest"),
+		[]byte("    image: example/api:latest\n    profiles: [configured]"),
+		1,
+	)
 	plan, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task)
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
@@ -202,7 +208,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	}
 	resolver, err := NewTaskPlanResolverWithAttachments(
 		"/var/lib/groundplane/vol", reader, state, state, state,
-	nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithAttachments() error = %v", err)

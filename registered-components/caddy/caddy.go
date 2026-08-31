@@ -12,7 +12,6 @@ const (
 	caddyfileName         = "components/caddy/Caddyfile"
 	caddyDataMarkerName   = "components/caddy/data/.groundplane-managed"
 	caddyConfigMarkerName = "components/caddy/config/.groundplane-managed"
-	Image                 = "docker.io/library/caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
 	ServiceName           = "caddy"
 	OriginURL             = "http://caddy:80"
 	defaultTemplateBody   = "{routes}\n"
@@ -22,6 +21,24 @@ const (
 	CaddyfileSource       = caddyfileName
 	CaddyfileContainer    = "/etc/caddy/Caddyfile"
 )
+
+var Image = component.OCIImage{
+	Repository:  "docker.io/library/caddy",
+	IndexDigest: "5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648",
+	Platforms: []component.OCIPlatform{
+		{
+			OS:           "linux",
+			Architecture: "amd64",
+			ChildDigest:  "98eb57d882ccd5213d1688764db10c1ca2c58a1ca3a6717a3411ad798f7a423a",
+		},
+		{
+			OS:           "linux",
+			Architecture: "arm64",
+			Variant:      "v8",
+			ChildDigest:  "1172d4213087d3fc30bafc7ff2c2896180eb0c41ff7f75f315568fb36cabdcba",
+		},
+	},
+}
 
 func ValidateConfigCommand() []string {
 	return []string{"caddy", "validate", "--config", CaddyfileContainer, "--adapter", "caddyfile"}
@@ -114,9 +131,14 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 			}},
 			Expose: []string{"80", "443"}, Restart: "unless-stopped", Replicas: 1,
 			Mounts: []component.ManagedMount{
-				{Source: caddyfileName, Target: "/etc/caddy/Caddyfile", ReadOnly: true},
-				{Source: "components/caddy/data", Target: "/data"},
-				{Source: "components/caddy/config", Target: "/config"},
+				{
+					Source:   caddyfileName,
+					Target:   "/etc/caddy/Caddyfile",
+					Kind:     component.ManagedMountKindFile,
+					ReadOnly: true,
+				},
+				{Source: "components/caddy/data", Target: "/data", Kind: component.ManagedMountKindDirectory},
+				{Source: "components/caddy/config", Target: "/config", Kind: component.ManagedMountKindDirectory},
 			},
 		}},
 		Files: []component.ManagedFile{

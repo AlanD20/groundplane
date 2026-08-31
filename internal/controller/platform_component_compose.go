@@ -2,13 +2,14 @@ package controller
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"math"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -16,15 +17,22 @@ import (
 
 const (
 	PlatformComposeProjectName = "groundplane-infra"
-	PlatformConfigRoot        = "/etc/groundplane"
+	PlatformConfigRoot         = "/etc/groundplane"
 )
 
 type PlatformComponentComposeInput struct {
-	ComponentID     string
-	PlanID          string
-	RenderGeneration uint64
-	ArtifactID      string
-	Plan            componentsdk.EnvironmentPlan
+	ComponentID       string
+	PlanID            string
+	RenderGeneration  uint64
+	ArtifactID        string
+	Plan              componentsdk.EnvironmentPlan
+	ImageRepository   string
+	ImageIndexDigest  string
+	ImageChildDigest  string
+	ImageReference    string
+	ImageOS           string
+	ImageArchitecture string
+	ImageVariant      string
 }
 
 func RenderPlatformComponentCompose(
@@ -38,38 +46,46 @@ func RenderPlatformComponentCompose(
 	service := input.Plan.Services[0]
 	file := input.Plan.Files[0]
 	if ids.Validate(ids.KindService, service.ID) != nil || service.Name == "" ||
-		!imageref.IsDigestPinned(service.Image) || service.NetworkMode != componentsdk.ManagedNetworkModeHost ||
-		len(service.Networks) != 0 || len(service.Mounts) != 1 || service.Mounts[0].Source != file.Path ||
+		input.ImageReference != input.ImageRepository+"@sha256:"+input.ImageChildDigest ||
+		service.Image.Repository != input.ImageRepository || service.Image.IndexDigest != input.ImageIndexDigest ||
+		len(service.Networks) != 0 || len(service.Mounts) != 1 ||
 		!service.Mounts[0].ReadOnly || service.Replicas != 1 || !validGeneratedRelativePath(file.Path) ||
-		len(file.Content) == 0 {
+		len(file.Content) == 0 || service.ObservationAction == "" {
 		return nil, errs.New(errs.KindValidationFailed, "platform Component managed Service is invalid")
 	}
 	mount := service.Mounts[0]
-	if !filepath.IsAbs(mount.Target) || filepath.Clean(mount.Target) != mount.Target || mount.Target == "/" {
+	if mount.Kind != componentsdk.ManagedMountKindDirectory || !filepath.IsAbs(mount.Target) ||
+		filepath.Clean(mount.Target) != mount.Target || mount.Target == "/" ||
+		!strings.HasPrefix(file.Path, strings.TrimSuffix(mount.Source, "/")+"/") {
 		return nil, errs.New(errs.KindValidationFailed, "platform Component managed mount is invalid")
 	}
 	if service.Replicas > math.MaxInt {
 		return nil, errs.New(errs.KindInternal, "platform Component replica count exceeds Compose limits")
 	}
 	labels := map[string]string{
-		composeLabelKind:       "service",
-		composeLabelManaged:    "true",
-		composeLabelPlanID:     input.PlanID,
-		composeLabelRenderGen:  strconv.FormatUint(input.RenderGeneration, 10),
-		composeLabelServiceID:  service.ID,
+		composeLabelKind:                     "service",
+		composeLabelManaged:                  "true",
+		composeLabelPlanID:                   input.PlanID,
+		composeLabelRenderGen:                strconv.FormatUint(input.RenderGeneration, 10),
+		composeLabelServiceID:                service.ID,
+		"com.groundplane.image-index-digest": "sha256:" + input.ImageIndexDigest,
+		"com.groundplane.image-child-digest": "sha256:" + input.ImageChildDigest,
+		"com.groundplane.image-platform": input.ImageOS + "/" + input.ImageArchitecture + platformVariantSuffix(
+			input.ImageVariant,
+		),
 	}
 	replicas := int(service.Replicas)
 	project := &composetypes.Project{
 		Name: PlatformComposeProjectName,
 		Services: composetypes.Services{
 			service.Name: {
-				Name: service.Name, Image: service.Image,
-				Command: composetypes.ShellCommand(append([]string(nil), service.Command...)),
+				Name: service.Name, Image: input.ImageReference,
+				Command:     composetypes.ShellCommand(append([]string(nil), service.Command...)),
 				NetworkMode: "host", Restart: service.Restart, Labels: labels,
 				Deploy: &composetypes.DeployConfig{Replicas: &replicas},
 				Volumes: []composetypes.ServiceVolumeConfig{{
-					Type: composetypes.VolumeTypeBind,
-					Source: filepath.Join(PlatformConfigRoot, filepath.FromSlash(file.Path)),
+					Type:   composetypes.VolumeTypeBind,
+					Source: filepath.Join(PlatformConfigRoot, filepath.FromSlash(mount.Source)),
 					Target: mount.Target, ReadOnly: true,
 					Bind: &composetypes.ServiceVolumeBind{CreateHostPath: false},
 				}},
@@ -82,6 +98,12 @@ func RenderPlatformComponentCompose(
 	}
 	digest := sha256.Sum256(canonical)
 	expectedLabels := []*agentpb.LabelPair{
+		{Key: "com.groundplane.image-child-digest", Value: "sha256:" + input.ImageChildDigest},
+		{Key: "com.groundplane.image-index-digest", Value: "sha256:" + input.ImageIndexDigest},
+		{
+			Key:   "com.groundplane.image-platform",
+			Value: input.ImageOS + "/" + input.ImageArchitecture + platformVariantSuffix(input.ImageVariant),
+		},
 		{Key: composeLabelKind, Value: "service"},
 		{Key: composeLabelManaged, Value: "true"},
 		{Key: composeLabelPlanID, Value: input.PlanID},
@@ -89,13 +111,29 @@ func RenderPlatformComponentCompose(
 		{Key: composeLabelServiceID, Value: service.ID},
 	}
 	return &agentpb.ComposeArtifact{
-		ArtifactId: input.ArtifactID,
-		OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
-		ProjectName: PlatformComposeProjectName,
+		ArtifactId:    input.ArtifactID,
+		OwnerKind:     agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
+		ProjectName:   PlatformComposeProjectName,
 		CanonicalYaml: canonical, YamlSha256: digest[:],
 		Services: []*agentpb.ComposeService{{
 			ServiceId: service.ID, ComposeName: service.Name,
-			ExpectedLabels: expectedLabels, ExpectedReplicas: uint32(service.Replicas),
+			ExpectedLabels: expectedLabels, ExpectedReplicas: uint32(service.Replicas), HasHealthcheck: false,
+			ImageReference: input.ImageReference, ImageRepository: input.ImageRepository,
+			ImageIndexDigest: mustDecodePlatformDigest(input.ImageIndexDigest),
+			ImageChildDigest: mustDecodePlatformDigest(input.ImageChildDigest), ImageOs: input.ImageOS,
+			ImageArchitecture: input.ImageArchitecture, ImageVariant: input.ImageVariant,
 		}},
 	}, nil
+}
+
+func platformVariantSuffix(variant string) string {
+	if variant == "" {
+		return ""
+	}
+	return "/" + variant
+}
+
+func mustDecodePlatformDigest(value string) []byte {
+	decoded, _ := hex.DecodeString(value)
+	return decoded
 }

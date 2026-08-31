@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"path"
 	"sort"
@@ -12,21 +11,25 @@ import (
 )
 
 type Catalog struct {
-	definitions            []component.Definition
-	managedConfigActions   []registeredManagedConfigAction
-	containerConfigActions []registeredContainerConfigAction
-	digest                 [sha256.Size]byte
+	definitions             []component.Definition
+	managedConfigActions    []registeredManagedConfigAction
+	containerConfigActions  []registeredContainerConfigAction
+	dnsResolverObservations []registeredDNSResolverObservation
+	digest                  [sha256.Size]byte
 }
 
 type Registration struct {
-	Definition             component.Definition
-	ManagedConfigActions   []ManagedConfigActionRecipe
-	ContainerConfigActions []ContainerConfigActionRecipe
+	Definition              component.Definition
+	ManagedConfigActions    []ManagedConfigActionRecipe
+	ContainerConfigActions  []ContainerConfigActionRecipe
+	DNSResolverObservations []DNSResolverObservationRecipe
 }
 
 type ManagedConfigActionRecipe struct {
 	actionID     component.ActionID
 	relativePath string
+	validateArgs []string
+	image        component.OCIImage
 }
 
 type registeredManagedConfigAction struct {
@@ -34,13 +37,62 @@ type registeredManagedConfigAction struct {
 	recipe         ManagedConfigActionRecipe
 }
 
-type ContainerConfigActionRecipe struct {
+type DNSResolverObservationRecipe struct {
 	actionID       component.ActionID
-	relativePath   string
-	containerPath  string
-	validateArgs   []string
-	activateArgs   []string
-	imageReference string
+	serviceName    string
+	artifactTarget string
+	image          component.OCIImage
+	listenEndpoint string
+	metricsURL     string
+	reloadMetric   string
+}
+
+type registeredDNSResolverObservation struct {
+	implementation component.ImplementationKey
+	recipe         DNSResolverObservationRecipe
+}
+
+func NewDNSResolverObservationRecipe(
+	actionID component.ActionID,
+	serviceName string,
+	artifactTarget string,
+	image component.OCIImage,
+	listenEndpoint string,
+	metricsURL string,
+	reloadMetric string,
+) (DNSResolverObservationRecipe, error) {
+	if actionID == "" || !safeToken(serviceName) || !path.IsAbs(artifactTarget) ||
+		path.Clean(artifactTarget) != artifactTarget || !validOCIImage(image) ||
+		listenEndpoint != "127.0.0.1:53" || metricsURL != "http://127.0.0.1:9153/metrics" ||
+		!safeToken(reloadMetric) {
+		return DNSResolverObservationRecipe{}, fmt.Errorf(
+			"component catalog: DNS resolver observation recipe is invalid",
+		)
+	}
+	return DNSResolverObservationRecipe{
+		actionID: actionID, serviceName: serviceName, artifactTarget: artifactTarget,
+		image: image, listenEndpoint: listenEndpoint,
+		metricsURL: metricsURL, reloadMetric: reloadMetric,
+	}, nil
+}
+
+func (recipe DNSResolverObservationRecipe) ActionID() component.ActionID { return recipe.actionID }
+func (recipe DNSResolverObservationRecipe) ServiceName() string          { return recipe.serviceName }
+func (recipe DNSResolverObservationRecipe) ArtifactTarget() string       { return recipe.artifactTarget }
+func (recipe DNSResolverObservationRecipe) Image() component.OCIImage {
+	return cloneOCIImage(recipe.image)
+}
+func (recipe DNSResolverObservationRecipe) ListenEndpoint() string { return recipe.listenEndpoint }
+func (recipe DNSResolverObservationRecipe) MetricsURL() string     { return recipe.metricsURL }
+func (recipe DNSResolverObservationRecipe) ReloadMetric() string   { return recipe.reloadMetric }
+
+type ContainerConfigActionRecipe struct {
+	actionID      component.ActionID
+	relativePath  string
+	containerPath string
+	validateArgs  []string
+	activateArgs  []string
+	image         component.OCIImage
 }
 
 type registeredContainerConfigAction struct {
@@ -51,11 +103,17 @@ type registeredContainerConfigAction struct {
 func NewManagedConfigActionRecipe(
 	actionID component.ActionID,
 	relativePath string,
+	validateArgs []string,
+	image component.OCIImage,
 ) (ManagedConfigActionRecipe, error) {
-	if actionID == "" || !validManagedConfigRelativePath(relativePath) {
+	if actionID == "" || !validManagedConfigRelativePath(relativePath) ||
+		!validContainerCommand(validateArgs) || !validOCIImage(image) {
 		return ManagedConfigActionRecipe{}, fmt.Errorf("component catalog: managed-config action recipe is invalid")
 	}
-	return ManagedConfigActionRecipe{actionID: actionID, relativePath: relativePath}, nil
+	return ManagedConfigActionRecipe{
+		actionID: actionID, relativePath: relativePath,
+		validateArgs: append([]string(nil), validateArgs...), image: cloneOCIImage(image),
+	}, nil
 }
 
 func (recipe ManagedConfigActionRecipe) ActionID() component.ActionID {
@@ -66,25 +124,33 @@ func (recipe ManagedConfigActionRecipe) RelativePath() string {
 	return recipe.relativePath
 }
 
+func (recipe ManagedConfigActionRecipe) ValidateArgs() []string {
+	return append([]string(nil), recipe.validateArgs...)
+}
+
+func (recipe ManagedConfigActionRecipe) Image() component.OCIImage {
+	return cloneOCIImage(recipe.image)
+}
+
 func NewContainerConfigActionRecipe(
 	actionID component.ActionID,
 	relativePath string,
 	containerPath string,
 	validateArgs []string,
 	activateArgs []string,
-	imageReference string,
+	image component.OCIImage,
 ) (ContainerConfigActionRecipe, error) {
 	if actionID == "" || !validManagedConfigRelativePath(relativePath) ||
 		!path.IsAbs(containerPath) || path.Clean(containerPath) != containerPath ||
 		!validContainerCommand(validateArgs) || !validContainerCommand(activateArgs) ||
-		!validImmutableImageReference(imageReference) {
+		!validOCIImage(image) {
 		return ContainerConfigActionRecipe{}, fmt.Errorf("component catalog: container-config action recipe is invalid")
 	}
 	return ContainerConfigActionRecipe{
 		actionID: actionID, relativePath: relativePath, containerPath: containerPath,
-		validateArgs:   append([]string(nil), validateArgs...),
-		activateArgs:   append([]string(nil), activateArgs...),
-		imageReference: imageReference,
+		validateArgs: append([]string(nil), validateArgs...),
+		activateArgs: append([]string(nil), activateArgs...),
+		image:        cloneOCIImage(image),
 	}, nil
 }
 
@@ -97,7 +163,9 @@ func (recipe ContainerConfigActionRecipe) ValidateArgs() []string {
 func (recipe ContainerConfigActionRecipe) ActivateArgs() []string {
 	return append([]string(nil), recipe.activateArgs...)
 }
-func (recipe ContainerConfigActionRecipe) ImageReference() string { return recipe.imageReference }
+func (recipe ContainerConfigActionRecipe) Image() component.OCIImage {
+	return cloneOCIImage(recipe.image)
+}
 
 func New(definitions ...component.Definition) (Catalog, error) {
 	registrations := make([]Registration, len(definitions))
@@ -114,6 +182,7 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 	canonical := make([]component.Definition, len(registrations))
 	actions := make([]registeredManagedConfigAction, 0)
 	containerActions := make([]registeredContainerConfigAction, 0)
+	observations := make([]registeredDNSResolverObservation, 0)
 	for index, registration := range registrations {
 		definition := registration.Definition
 		if err := definition.Validate(); err != nil {
@@ -124,7 +193,8 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 			action, found := definition.FindAction(recipe.actionID)
 			if !found || action.Capability() != component.CapabilityManagedConfig ||
 				action.Operation() != component.OperationActivate ||
-				!validManagedConfigRelativePath(recipe.relativePath) {
+				!validManagedConfigRelativePath(recipe.relativePath) ||
+				!validContainerCommand(recipe.validateArgs) || !validOCIImage(recipe.image) {
 				return Catalog{}, fmt.Errorf(
 					"component catalog: invalid managed-config recipe for %q",
 					definition.Implementation(),
@@ -141,13 +211,29 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 				!validManagedConfigRelativePath(recipe.relativePath) ||
 				!path.IsAbs(recipe.containerPath) || path.Clean(recipe.containerPath) != recipe.containerPath ||
 				!validContainerCommand(recipe.validateArgs) || !validContainerCommand(recipe.activateArgs) ||
-				!validImmutableImageReference(recipe.imageReference) {
+				!validOCIImage(recipe.image) {
 				return Catalog{}, fmt.Errorf(
 					"component catalog: invalid container-config recipe for %q",
 					definition.Implementation(),
 				)
 			}
 			containerActions = append(containerActions, registeredContainerConfigAction{
+				implementation: definition.Implementation(), recipe: recipe,
+			})
+		}
+		for _, recipe := range registration.DNSResolverObservations {
+			action, found := definition.FindAction(recipe.actionID)
+			if !found || action.Capability() != component.CapabilityHostResolution ||
+				action.Operation() != component.OperationObserve || !safeToken(recipe.serviceName) ||
+				!path.IsAbs(recipe.artifactTarget) || path.Clean(recipe.artifactTarget) != recipe.artifactTarget ||
+				!validOCIImage(recipe.image) || recipe.listenEndpoint != "127.0.0.1:53" ||
+				recipe.metricsURL != "http://127.0.0.1:9153/metrics" || !safeToken(recipe.reloadMetric) {
+				return Catalog{}, fmt.Errorf(
+					"component catalog: invalid DNS resolver observation recipe for %q",
+					definition.Implementation(),
+				)
+			}
+			observations = append(observations, registeredDNSResolverObservation{
 				implementation: definition.Implementation(), recipe: recipe,
 			})
 		}
@@ -195,12 +281,29 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 			)
 		}
 	}
-	catalog := Catalog{
-		definitions:            canonical,
-		managedConfigActions:   actions,
-		containerConfigActions: containerActions,
+	sort.Slice(observations, func(left, right int) bool {
+		if observations[left].implementation != observations[right].implementation {
+			return observations[left].implementation < observations[right].implementation
+		}
+		return observations[left].recipe.actionID < observations[right].recipe.actionID
+	})
+	for index := 1; index < len(observations); index++ {
+		if observations[index].implementation == observations[index-1].implementation &&
+			observations[index].recipe.actionID == observations[index-1].recipe.actionID {
+			return Catalog{}, fmt.Errorf(
+				"component catalog: repeated DNS resolver observation recipe %q for %q",
+				observations[index].recipe.actionID,
+				observations[index].implementation,
+			)
+		}
 	}
-	catalog.digest = catalogDigest(canonical, actions, containerActions)
+	catalog := Catalog{
+		definitions:             canonical,
+		managedConfigActions:    actions,
+		containerConfigActions:  containerActions,
+		dnsResolverObservations: observations,
+	}
+	catalog.digest = catalogDigest(canonical, actions, containerActions, observations)
 	return catalog, nil
 }
 
@@ -308,6 +411,39 @@ func (c Catalog) ResolveContainerConfigActionEnvelope(
 	return definition, action, c.containerConfigActions[index].recipe, nil
 }
 
+func (c Catalog) ResolveDNSResolverObservation(
+	implementation component.ImplementationKey,
+	actionID component.ActionID,
+) (DNSResolverObservationRecipe, bool) {
+	index := sort.Search(len(c.dnsResolverObservations), func(index int) bool {
+		candidate := c.dnsResolverObservations[index]
+		return candidate.implementation > implementation ||
+			candidate.implementation == implementation && candidate.recipe.actionID >= actionID
+	})
+	if index == len(c.dnsResolverObservations) ||
+		c.dnsResolverObservations[index].implementation != implementation ||
+		c.dnsResolverObservations[index].recipe.actionID != actionID {
+		return DNSResolverObservationRecipe{}, false
+	}
+	return c.dnsResolverObservations[index].recipe, true
+}
+
+func (c Catalog) ResolveDNSResolverObservationActionEnvelope(
+	envelope component.ActionEnvelope,
+) (component.Definition, component.ActionDefinition, DNSResolverObservationRecipe, error) {
+	definition, action, err := c.ResolveActionEnvelope(envelope)
+	if err != nil {
+		return component.Definition{}, component.ActionDefinition{}, DNSResolverObservationRecipe{}, err
+	}
+	recipe, found := c.ResolveDNSResolverObservation(definition.Implementation(), action.ID())
+	if !found {
+		return component.Definition{}, component.ActionDefinition{}, DNSResolverObservationRecipe{}, fmt.Errorf(
+			"component catalog: DNS resolver observation recipe is not registered for action %q", action.ID(),
+		)
+	}
+	return definition, action, recipe, nil
+}
+
 func (c Catalog) findDefinitionByDigest(digest [sha256.Size]byte) (component.Definition, bool) {
 	for _, definition := range c.definitions {
 		if definition.Digest() == digest {
@@ -317,53 +453,32 @@ func (c Catalog) findDefinitionByDigest(digest [sha256.Size]byte) (component.Def
 	return component.Definition{}, false
 }
 
-func catalogDigest(
-	definitions []component.Definition,
-	actions []registeredManagedConfigAction,
-	containerActions []registeredContainerConfigAction,
-) [sha256.Size]byte {
-	encoded := appendLength(nil, len("groundplane-component-catalog-v4"))
-	encoded = append(encoded, "groundplane-component-catalog-v4"...)
-	encoded = appendLength(encoded, len(definitions))
-	for _, definition := range definitions {
-		implementation := string(definition.Implementation())
-		encoded = appendLength(encoded, len(implementation))
-		encoded = append(encoded, implementation...)
-		digest := definition.Digest()
-		encoded = append(encoded, digest[:]...)
+func cloneOCIImage(image component.OCIImage) component.OCIImage {
+	image.Platforms = append([]component.OCIPlatform(nil), image.Platforms...)
+	return image
+}
+
+func validOCIImage(image component.OCIImage) bool {
+	if image.Repository == "" || strings.ContainsAny(image.Repository, "@ ") ||
+		!validSHA256Hex(image.IndexDigest) || len(image.Platforms) != 2 {
+		return false
 	}
-	encoded = appendLength(encoded, len(actions))
-	for _, action := range actions {
-		implementation := string(action.implementation)
-		encoded = appendLength(encoded, len(implementation))
-		encoded = append(encoded, implementation...)
-		actionID := string(action.recipe.actionID)
-		encoded = appendLength(encoded, len(actionID))
-		encoded = append(encoded, actionID...)
-		encoded = appendLength(encoded, len(action.recipe.relativePath))
-		encoded = append(encoded, action.recipe.relativePath...)
+	amd64, arm64 := image.Platforms[0], image.Platforms[1]
+	return amd64.OS == "linux" && amd64.Architecture == "amd64" && amd64.Variant == "" &&
+		validSHA256Hex(amd64.ChildDigest) && arm64.OS == "linux" && arm64.Architecture == "arm64" &&
+		arm64.Variant == "v8" && validSHA256Hex(arm64.ChildDigest)
+}
+
+func validSHA256Hex(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
 	}
-	encoded = appendLength(encoded, len(containerActions))
-	for _, action := range containerActions {
-		implementation := string(action.implementation)
-		encoded = appendLength(encoded, len(implementation))
-		encoded = append(encoded, implementation...)
-		actionID := string(action.recipe.actionID)
-		encoded = appendLength(encoded, len(actionID))
-		encoded = append(encoded, actionID...)
-		for _, value := range []string{action.recipe.relativePath, action.recipe.containerPath, action.recipe.imageReference} {
-			encoded = appendLength(encoded, len(value))
-			encoded = append(encoded, value...)
-		}
-		for _, command := range [][]string{action.recipe.validateArgs, action.recipe.activateArgs} {
-			encoded = appendLength(encoded, len(command))
-			for _, argument := range command {
-				encoded = appendLength(encoded, len(argument))
-				encoded = append(encoded, argument...)
-			}
+	for _, character := range value {
+		if !(character >= '0' && character <= '9' || character >= 'a' && character <= 'f') {
+			return false
 		}
 	}
-	return sha256.Sum256(encoded)
+	return true
 }
 
 func validImmutableImageReference(value string) bool {
@@ -396,8 +511,15 @@ func validContainerCommand(arguments []string) bool {
 	return true
 }
 
-func appendLength(target []byte, value int) []byte {
-	var encoded [4]byte
-	binary.BigEndian.PutUint32(encoded[:], uint32(value))
-	return append(target, encoded[:]...)
+func safeToken(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for _, character := range value {
+		if character != '-' && character != '_' && character != '.' &&
+			(character < 'a' || character > 'z') && (character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
 }

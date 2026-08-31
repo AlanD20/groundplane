@@ -68,6 +68,63 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 	}
 }
 
+// Rationale: CoreDNS terminal replay must distinguish every persisted proof
+// field, including exact byte content and nilness.
+func TestTaskResultsEqualComparesDNSResolverEvidenceExactly(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC)
+	evidence := &TaskDNSResolverObservationEvidence{
+		ComponentID:             "component",
+		ServiceID:               "service",
+		ArtifactID:              "artifact",
+		ArtifactSHA256:          "artifact-sha",
+		RenderGeneration:        1,
+		ImageReference:          "coredns/coredns@sha256:image",
+		VerifiedImageDigest:     "image-digest",
+		ListenEndpoint:          "127.0.0.1:53",
+		ReloadSHA512:            "reload-sha",
+		ObservedAt:              observedAt,
+		StaticQueryPresent:      true,
+		StaticQueryName:         "static.example.",
+		StaticQueryIPv4:         "192.0.2.1",
+		StaticQuerySucceeded:    true,
+		RecursiveQuerySucceeded: true,
+		ForwarderQueryCount:     2,
+		ForwarderSuccessCount:   2,
+		ProofSHA256:             "proof-sha",
+		CanonicalEvidence:       []byte("canonical-proof"),
+	}
+	left := TaskResultRecord{Kind: TaskResultCompose, DNSResolverCandidateObservation: evidence}
+	equivalent := cloneTaskResult(&left)
+	changedBytes := cloneTaskResult(&left)
+	changedBytes.DNSResolverCandidateObservation.CanonicalEvidence = []byte("different-proof")
+	changedTimestamp := cloneTaskResult(&left)
+	changedTimestamp.DNSResolverCandidateObservation.ObservedAt = observedAt.Add(time.Second)
+	emptyBytes := cloneTaskResult(&left)
+	emptyBytes.DNSResolverCandidateObservation.CanonicalEvidence = []byte{}
+	nilEvidence := TaskResultRecord{Kind: TaskResultCompose}
+
+	tests := []struct {
+		name  string
+		right TaskResultRecord
+		want  bool
+	}{
+		{name: "equivalent evidence", right: *equivalent, want: true},
+		{name: "changed proof bytes", right: *changedBytes, want: false},
+		{name: "changed observed timestamp", right: *changedTimestamp, want: false},
+		{name: "empty proof bytes", right: *emptyBytes, want: false},
+		{name: "missing evidence", right: nilEvidence, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := taskResultsEqual(left, test.right); got != test.want {
+				t.Fatalf("taskResultsEqual() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func TestTaskRepositoryCreatesAndReplaysAtomicTask(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()

@@ -113,9 +113,47 @@ func CloneHTTPRouterInput(input HTTPRouterInput) HTTPRouterInput {
 	return input
 }
 
+// OCIPlatform is one closed serving child of a compiled OCI index. Digests are
+// lowercase SHA-256 hex without the algorithm prefix.
+type OCIPlatform struct {
+	OS           string
+	Architecture string
+	Variant      string
+	ChildDigest  string
+}
+
+// OCIImage is the complete compiled image authority. Runtime code selects one
+// of Platforms and serves repository@sha256:<child>, never the index reference.
+type OCIImage struct {
+	Repository  string
+	IndexDigest string
+	Platforms   []OCIPlatform
+}
+
+func (image OCIImage) IndexReference() string {
+	return image.Repository + "@sha256:" + image.IndexDigest
+}
+
+func (image OCIImage) Select(osName, architecture, variant string) (OCIPlatform, string, bool) {
+	for _, platform := range image.Platforms {
+		if platform.OS == osName && platform.Architecture == architecture && platform.Variant == variant {
+			return platform, image.Repository + "@sha256:" + platform.ChildDigest, true
+		}
+	}
+	return OCIPlatform{}, "", false
+}
+
+type ManagedMountKind string
+
+const (
+	ManagedMountKindFile      ManagedMountKind = "file"
+	ManagedMountKindDirectory ManagedMountKind = "directory"
+)
+
 type ManagedMount struct {
 	Source   string
 	Target   string
+	Kind     ManagedMountKind
 	ReadOnly bool
 }
 
@@ -138,7 +176,7 @@ type ManagedSecretEnvironment struct {
 type ManagedService struct {
 	ID                string
 	Name              string
-	Image             string
+	Image             OCIImage
 	NetworkMode       ManagedNetworkMode
 	Command           []string
 	Networks          []ManagedNetworkAttachment
@@ -148,6 +186,7 @@ type ManagedService struct {
 	Mounts            []ManagedMount
 	Dependencies      []ManagedDependency
 	SecretEnvironment []ManagedSecretEnvironment
+	ObservationAction ActionID
 }
 
 type ManagedNetworkMode string
@@ -186,12 +225,12 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		return normalized.Files[left].Path < normalized.Files[right].Path
 	})
 	encoded := make([]byte, 0, 1024)
-	encoded = appendPlanString(encoded, "environment-plan-v1")
+	encoded = appendPlanString(encoded, "environment-plan-v4")
 	encoded = appendPlanCount(encoded, len(normalized.Services))
 	for _, service := range normalized.Services {
 		encoded = appendPlanString(encoded, service.ID)
 		encoded = appendPlanString(encoded, service.Name)
-		encoded = appendPlanString(encoded, service.Image)
+		encoded = appendOCIImage(encoded, service.Image)
 		encoded = appendPlanString(encoded, string(service.NetworkMode))
 		encoded = appendPlanStrings(encoded, service.Command)
 		encoded = appendPlanCount(encoded, len(service.Networks))
@@ -207,6 +246,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		for _, mount := range service.Mounts {
 			encoded = appendPlanString(encoded, mount.Source)
 			encoded = appendPlanString(encoded, mount.Target)
+			encoded = appendPlanString(encoded, string(mount.Kind))
 			encoded = appendPlanBool(encoded, mount.ReadOnly)
 		}
 		encoded = appendPlanCount(encoded, len(service.Dependencies))
@@ -219,6 +259,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 			encoded = appendPlanString(encoded, secret.Name)
 			encoded = appendPlanString(encoded, secret.SecretID)
 		}
+		encoded = appendPlanString(encoded, string(service.ObservationAction))
 	}
 	encoded = appendPlanCount(encoded, len(normalized.Files))
 	for _, file := range normalized.Files {
@@ -226,6 +267,19 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		encoded = appendPlanBytes(encoded, file.Content)
 	}
 	return sha256.Sum256(encoded)
+}
+
+func appendOCIImage(encoded []byte, image OCIImage) []byte {
+	encoded = appendPlanString(encoded, image.Repository)
+	encoded = appendPlanString(encoded, image.IndexDigest)
+	encoded = appendPlanCount(encoded, len(image.Platforms))
+	for _, platform := range image.Platforms {
+		encoded = appendPlanString(encoded, platform.OS)
+		encoded = appendPlanString(encoded, platform.Architecture)
+		encoded = appendPlanString(encoded, platform.Variant)
+		encoded = appendPlanString(encoded, platform.ChildDigest)
+	}
+	return encoded
 }
 
 func appendPlanString(target []byte, value string) []byte {
@@ -268,6 +322,7 @@ func CloneEnvironmentPlan(plan EnvironmentPlan) EnvironmentPlan {
 		Files:    make([]ManagedFile, len(plan.Files)),
 	}
 	for index, service := range plan.Services {
+		service.Image.Platforms = append([]OCIPlatform(nil), service.Image.Platforms...)
 		service.Command = append([]string(nil), service.Command...)
 		service.Expose = append([]string(nil), service.Expose...)
 		service.Mounts = append([]ManagedMount(nil), service.Mounts...)

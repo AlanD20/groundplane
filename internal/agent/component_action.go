@@ -10,7 +10,33 @@ import (
 )
 
 type ComponentActionRuntime interface {
-	ExecuteComponentAction(context.Context, Assignment, *agentpb.ExecutionStep, ManagedConfigPayload) error
+	ExecuteComponentAction(
+		context.Context,
+		Assignment,
+		*agentpb.ExecutionStep,
+		ManagedConfigPayload,
+	) (*ComponentActionResult, error)
+	FinalizeManagedConfig(
+		context.Context,
+		Assignment,
+		*agentpb.ExecutionStep,
+		bool,
+	) (ManagedConfigTransactionState, error)
+}
+
+type ComponentActionResult struct {
+	DNSResolverObservation *agentpb.DNSResolverObservationEvidence
+	ManagedConfig          *ManagedConfigTransactionState
+}
+
+type ManagedConfigFileState struct {
+	Present bool
+	SHA256  [sha256.Size]byte
+}
+
+type ManagedConfigTransactionState struct {
+	Live     ManagedConfigFileState
+	Previous ManagedConfigFileState
 }
 
 func DecodeComponentAction(payload *agentpb.ComponentApply) (componentsdk.ActionEnvelope, error) {
@@ -37,10 +63,10 @@ func DecodeComponentAction(payload *agentpb.ComponentApply) (componentsdk.Action
 		return componentsdk.ActionEnvelope{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	envelope, err := componentsdk.NewActionEnvelope(componentsdk.ActionEnvelopeInput{
-		ComponentID: componentID,
+		ComponentID:      componentID,
 		DefinitionDigest: bytesToComponentDigest(payload.DefinitionDigest),
-		CatalogDigest: bytesToComponentDigest(payload.CatalogDigest),
-		ActionID: componentsdk.ActionID(payload.ActionId), Artifact: artifact,
+		CatalogDigest:    bytesToComponentDigest(payload.CatalogDigest),
+		ActionID:         componentsdk.ActionID(payload.ActionId), Artifact: artifact,
 		Generation: payload.Generation,
 	})
 	if err != nil {

@@ -497,8 +497,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
 	}
 	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
-		componentRecords, componentRecords, controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
-		coreDNSRenderer, actionCatalog, actionCatalog, managedConfigActivateAction,
+		componentRecords,
+		componentRecords,
+		componentRecords,
+		controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
+		coreDNSRenderer,
+		actionCatalog,
+		actionCatalog,
+		managedConfigActivateAction,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -509,12 +515,15 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		current etcd.Versioned[etcd.ComponentRecord],
 		projection etcd.HostResolutionProjectionRecord,
 		task etcd.TaskRecord,
+		priorObservation *etcd.ComponentObservationRecord,
 	) (etcd.PlatformComponentTaskRenderInput, error) {
 		desired, err := etcd.ProjectComponentRecord(current.Record)
 		if err != nil {
 			return etcd.PlatformComponentTaskRenderInput{}, err
 		}
-		return platformRenderPlanner.PrepareConfigTaskAtProjection(ctx, current, desired, task, projection)
+		return platformRenderPlanner.PrepareConfigTaskAtProjection(
+			ctx, current, desired, task, projection, priorObservation,
+		)
 	}); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: configure platform resolver Task preparer: %w", err)
@@ -523,7 +532,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: configure platform resolver Component selector: %w", err)
 	}
-	if err := controllerdns.EnsurePlatformResolverTask(ctx, componentRecords, tasks, platformRenderPlanner); err != nil {
+	if err := controllerdns.EnsurePlatformResolverTask(
+		ctx,
+		componentRecords,
+		tasks,
+		platformRenderPlanner,
+	); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform resolver projection: %w", err)
 	}
@@ -617,7 +631,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	backupPolicies, err := controller.NewBackupPolicyService(backupPolicyRepository, backupPolicyKeys, backupPolicyIdempotency)
+	backupPolicies, err := controller.NewBackupPolicyService(
+		backupPolicyRepository,
+		backupPolicyKeys,
+		backupPolicyIdempotency,
+	)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -637,7 +655,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	backupRunRepository, err := controller.NewDurableBackupRunRepository(backupRuntimeRecords, attachFactValues.ResolveBackupIdentity)
+	backupRunRepository, err := controller.NewDurableBackupRunRepository(
+		backupRuntimeRecords,
+		attachFactValues.ResolveBackupIdentity,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup run repository: %w", err)
@@ -984,7 +1005,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing-service creation: %w", err)
 	}
-	componentCredentials, err := componentcapability.NewCredentialReferenceResolver(hierarchyRecords, secretReads, secretMutations)
+	componentCredentials, err := componentcapability.NewCredentialReferenceResolver(
+		hierarchyRecords,
+		secretReads,
+		secretMutations,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component credentials: %w", err)
@@ -1004,7 +1029,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component mutations: %w", err)
 	}
-	backingServiceMutations, err := newBackingServiceMutationService(backingServiceReads, serviceMutations, backingServiceCreations)
+	backingServiceMutations, err := newBackingServiceMutationService(
+		backingServiceReads,
+		serviceMutations,
+		backingServiceCreations,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing-service mutations: %w", err)
@@ -1060,7 +1089,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Project change service: %w", err)
 	}
-	environmentChangeIdempotency, err := environmentcapability.NewDurableChangeIdempotency(intentCoordinator, idempotency)
+	environmentChangeIdempotency, err := environmentcapability.NewDurableChangeIdempotency(
+		intentCoordinator,
+		idempotency,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment change idempotency: %w", err)
@@ -1075,7 +1107,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment change service: %w", err)
 	}
-	environmentCreationIdempotency, err := environmentcapability.NewDurableCreationIdempotency(intentCoordinator, idempotency)
+	environmentCreationIdempotency, err := environmentcapability.NewDurableCreationIdempotency(
+		intentCoordinator,
+		idempotency,
+	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment creation idempotency: %w", err)

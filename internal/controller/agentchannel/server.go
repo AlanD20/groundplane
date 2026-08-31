@@ -4,18 +4,22 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
+	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -801,7 +805,7 @@ func (s *Server) sendResolvedTaskAssignment(
 				return err
 			}
 		}
-		if action := step.GetComponentApply(); action != nil &&
+		if action := step.GetComponentApply(); action != nil && action.GetManagedConfigContent() &&
 			assignment.GetPlan().GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 			if err := s.sendManagedConfig(
 				stream, claim.Task.Record, assignment.GetAssignmentId(), assignment.GetPlan(), step,
@@ -1089,11 +1093,17 @@ func (s *Server) taskAssignmentMessage(
 	targetMatches := plan.TargetId == task.Target
 	operationMatches := operationMatchesTask(plan.Operation, task)
 	stepsMatch := stepSummariesMatch(plan.Steps, task.Steps)
-	if !planIDMatches || !planHashMatches || !renderGenerationMatches || !targetMatches || !operationMatches || !stepsMatch {
+	if !planIDMatches || !planHashMatches || !renderGenerationMatches || !targetMatches || !operationMatches ||
+		!stepsMatch {
 		return nil, errs.Newf(
 			errs.KindInternal,
 			"resolved execution plan does not match its durable Task: plan_id=%t plan_hash=%t render_generation=%t target=%t operation=%t steps=%t",
-			planIDMatches, planHashMatches, renderGenerationMatches, targetMatches, operationMatches, stepsMatch,
+			planIDMatches,
+			planHashMatches,
+			renderGenerationMatches,
+			targetMatches,
+			operationMatches,
+			stepsMatch,
 		)
 	}
 	var scriptArtifacts *agentpb.ScriptAssignmentArtifacts
@@ -1116,7 +1126,8 @@ func (s *Server) taskAssignmentMessage(
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
 		Plan: plan, ScriptArtifacts: scriptArtifacts, ScriptCheckpoint: scriptCheckpoint,
-		Deadline: timestamppb.New(record.Deadline.UTC()),
+		AutomaticReconcile: etcd.IsAutomaticReconcileTask(task),
+		Deadline:           timestamppb.New(record.Deadline.UTC()),
 	}, nil
 }
 
@@ -1183,6 +1194,9 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 	case etcd.TaskUpdate:
 		if operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE {
 			return true
+		}
+		if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceComponent {
+			return operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
 		}
 		_, backingCreation := task.Params[etcd.TaskBackingServiceHealthParam]
 		return backingCreation && operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
@@ -1254,20 +1268,63 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 	}
 	for index, evidence := range result.GetProxyEvidence() {
 		durable.ProxyEvidence[index] = etcd.TaskProxyEvidence{
-			ServiceID: evidence.GetServiceId(), Target: evidence.GetTarget(),
-			ProxyGeneration: evidence.GetProxyGeneration(), ConfigSHA256: hex.EncodeToString(evidence.GetConfigSha256()),
-			ReleaseID: evidence.GetReleaseId(), Compensated: evidence.GetCompensated(),
+			ServiceID:       evidence.GetServiceId(),
+			Target:          evidence.GetTarget(),
+			ProxyGeneration: evidence.GetProxyGeneration(),
+			ConfigSHA256:    hex.EncodeToString(evidence.GetConfigSha256()),
+			ReleaseID:       evidence.GetReleaseId(),
+			Compensated:     evidence.GetCompensated(),
 		}
 	}
 	for index, evidence := range result.GetRecreateEvidence() {
-		durable.RecreateEvidence[index] = etcd.TaskRecreateEvidence{ServiceID: evidence.GetServiceId(), ReleaseID: evidence.GetReleaseId(), ArtifactID: evidence.GetArtifactId(), Compensated: evidence.GetCompensated(), Target: evidence.GetTarget()}
+		durable.RecreateEvidence[index] = etcd.TaskRecreateEvidence{
+			ServiceID:   evidence.GetServiceId(),
+			ReleaseID:   evidence.GetReleaseId(),
+			ArtifactID:  evidence.GetArtifactId(),
+			Compensated: evidence.GetCompensated(),
+			Target:      evidence.GetTarget(),
+		}
+	}
+	if evidence := result.GetDnsResolverCandidateObservation(); evidence != nil {
+		durable.DNSResolverCandidateObservation = durableDNSResolverObservation(evidence)
+	}
+	if evidence := result.GetDnsResolverRollbackObservation(); evidence != nil {
+		durable.DNSResolverRollbackObservation = durableDNSResolverObservation(evidence)
 	}
 	return durable
 }
 
+func durableDNSResolverObservation(
+	evidence *agentpb.DNSResolverObservationEvidence,
+) *etcd.TaskDNSResolverObservationEvidence {
+	canonicalEvidence, _ := dnsproof.Marshal(evidence)
+	static := evidence.GetStaticQuery()
+	staticIPv4 := ""
+	for _, answer := range static.GetAnswers() {
+		if len(answer.GetIpv4()) == 4 {
+			staticIPv4 = netip.AddrFrom4([4]byte(answer.GetIpv4())).String()
+			break
+		}
+	}
+	return &etcd.TaskDNSResolverObservationEvidence{
+		ComponentID: evidence.GetComponentId(), ServiceID: evidence.GetServiceId(),
+		ArtifactID: evidence.GetArtifactId(), ArtifactSHA256: hex.EncodeToString(evidence.GetArtifactSha256()),
+		RenderGeneration: evidence.GetRenderGeneration(), ImageReference: evidence.GetImageReference(),
+		VerifiedImageDigest: hex.EncodeToString(evidence.GetVerifiedImageDigest()),
+		ListenEndpoint:      evidence.GetListenEndpoint(), ReloadSHA512: hex.EncodeToString(evidence.GetReloadSha512()),
+		ObservedAt: evidence.GetObservedAt().AsTime().UTC(), StaticQueryPresent: static != nil,
+		StaticQueryName: static.GetName(), StaticQueryIPv4: staticIPv4, StaticQuerySucceeded: static != nil,
+		RecursiveQuerySucceeded: evidence.GetCatchAllQuery() != nil,
+		ForwarderQueryCount:     uint32(len(evidence.GetForwarderQueries())),
+		ForwarderSuccessCount:   uint32(len(evidence.GetForwarderQueries())),
+		ProofSHA256:             hex.EncodeToString(evidence.GetProofSha256()), CanonicalEvidence: canonicalEvidence,
+	}
+}
+
 func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 	result := acknowledgement.GetComposeResult()
-	if result == nil || len(result.GetProjects()) > 64 || len(result.GetProxyEvidence()) > 32 || len(result.GetRecreateEvidence()) > 32 {
+	if result == nil || len(result.GetProjects()) > 64 || len(result.GetProxyEvidence()) > 32 ||
+		len(result.GetRecreateEvidence()) > 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Compose Task result is invalid")
 	}
 	switch result.GetDiagnostic() {
@@ -1318,10 +1375,39 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 	for _, evidence := range result.GetRecreateEvidence() {
 		if evidence == nil || ids.Validate(ids.KindService, evidence.GetServiceId()) != nil ||
 			(evidence.GetReleaseId() != "baseline" && ids.Validate(ids.KindDeployment, evidence.GetReleaseId()) != nil) ||
-			ids.Validate(ids.KindConfig, evidence.GetArtifactId()) != nil || !validAgentReleaseTarget(evidence.GetTarget()) || evidence.GetServiceId() <= previousServiceID {
+			ids.Validate(
+				ids.KindConfig,
+				evidence.GetArtifactId(),
+			) != nil || !validAgentReleaseTarget(evidence.GetTarget()) || evidence.GetServiceId() <= previousServiceID {
 			return errs.New(errs.KindValidationFailed, "Agent Compose Task recreate evidence is invalid or unsorted")
 		}
 		previousServiceID = evidence.GetServiceId()
+	}
+	for _, evidence := range []*agentpb.DNSResolverObservationEvidence{
+		result.GetDnsResolverCandidateObservation(),
+		result.GetDnsResolverRollbackObservation(),
+	} {
+		if evidence == nil {
+			continue
+		}
+		staticValid := evidence.GetStaticQuery() == nil
+		if static := evidence.GetStaticQuery(); static != nil {
+			staticValid = static.GetName() != "" && static.GetType() == agentpb.DNSQueryType_DNS_QUERY_TYPE_A &&
+				len(static.GetAnswers()) != 0
+		}
+		if dnsproof.Verify(evidence) != nil || ids.Validate(ids.KindComponent, evidence.GetComponentId()) != nil ||
+			ids.Validate(ids.KindService, evidence.GetServiceId()) != nil ||
+			ids.Validate(ids.KindConfig, evidence.GetArtifactId()) != nil ||
+			len(evidence.GetArtifactSha256()) != sha256.Size || evidence.GetRenderGeneration() == 0 ||
+			!imageref.IsDigestPinned(
+				evidence.GetImageReference(),
+			) || len(evidence.GetVerifiedImageDigest()) != sha256.Size ||
+			evidence.GetListenEndpoint() != "127.0.0.1:53" || len(evidence.GetReloadSha512()) != sha512.Size ||
+			evidence.GetObservedAt() == nil || evidence.GetObservedAt().CheckValid() != nil || !staticValid ||
+			evidence.GetCatchAllQuery() == nil || len(evidence.GetForwarderQueries()) > 8 ||
+			len(evidence.GetProofSha256()) != sha256.Size {
+			return errs.New(errs.KindValidationFailed, "Agent DNS resolver observation evidence is invalid")
+		}
 	}
 	return nil
 }

@@ -78,7 +78,8 @@ func ValidateEnvironmentComponentCatalog(catalog []EnvironmentComponentRegistrat
 		if managed := registration.ManagedConfiguration; managed != nil {
 			action, found := registration.Definition.FindAction(managed.ActionID)
 			if managed.SourcePath == "" || path.IsAbs(managed.SourcePath) || path.Clean(managed.SourcePath) != managed.SourcePath ||
-				!found || action.Capability() != componentsdk.CapabilityManagedConfig ||
+				!found ||
+				action.Capability() != componentsdk.CapabilityManagedConfig ||
 				action.Operation() != componentsdk.OperationActivate {
 				return errs.New(errs.KindInternal, "Environment Component managed configuration is invalid")
 			}
@@ -345,7 +346,8 @@ func validateGeneratedEnvironmentService(
 	instance core.Component,
 	service componentsdk.ManagedService,
 ) error {
-	if ids.Validate(ids.KindService, service.ID) != nil || service.Name == "" || service.Image == "" ||
+	_, imageSelected := environmentComponentImageReference(service.Image)
+	if ids.Validate(ids.KindService, service.ID) != nil || service.Name == "" || !imageSelected ||
 		service.Replicas == 0 || service.NetworkMode != componentsdk.ManagedNetworkModeZones {
 		return errs.New(errs.KindInternal, "Component planner emitted an invalid Service")
 	}

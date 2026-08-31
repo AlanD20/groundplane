@@ -4,14 +4,18 @@ import (
 	"context"
 	"encoding/hex"
 	"net/netip"
+	"runtime"
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type PlatformProjectionReader interface {
@@ -20,20 +24,38 @@ type PlatformProjectionReader interface {
 
 type BaselineRepository interface {
 	GetHostResolverBaseline(context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
-	EnsureHostResolverBaseline(context.Context, []byte, time.Time) (etcd.Versioned[etcd.HostResolverBaselineRecord], error)
+	EnsureHostResolverBaseline(
+		context.Context,
+		[]byte,
+		time.Time,
+	) (etcd.Versioned[etcd.HostResolverBaselineRecord], error)
 }
 
 type BaselineCapture func(context.Context) ([]byte, error)
 
+type ObservationRepository interface {
+	GetPlatformComponentObservation(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.ComponentObservationRecord], bool, error)
+}
+
 type ActionCatalog interface {
 	Digest() [32]byte
-	FindAction(componentsdk.ImplementationKey, componentsdk.ActionID) (componentsdk.Definition, componentsdk.ActionDefinition, bool)
-	FindActionByCapability(componentsdk.Capability, componentsdk.ActionID) (componentsdk.Definition, componentsdk.ActionDefinition, bool)
+	FindAction(
+		componentsdk.ImplementationKey,
+		componentsdk.ActionID,
+	) (componentsdk.Definition, componentsdk.ActionDefinition, bool)
+	FindActionByCapability(
+		componentsdk.Capability,
+		componentsdk.ActionID,
+	) (componentsdk.Definition, componentsdk.ActionDefinition, bool)
 }
 
 type PlatformRenderPlanner struct {
 	projections         PlatformProjectionReader
 	baselines           BaselineRepository
+	observations        ObservationRepository
 	capture             BaselineCapture
 	renderer            componentdns.Renderer
 	environmentPlanner  EnvironmentPlanner
@@ -45,10 +67,25 @@ type fixedProjectionReader struct {
 	record etcd.HostResolutionProjectionRecord
 }
 
+type fixedObservationReader struct {
+	componentID string
+	record      etcd.ComponentObservationRecord
+}
+
 func (reader fixedProjectionReader) GetHostResolutionProjection(
 	context.Context,
 ) (etcd.Versioned[etcd.HostResolutionProjectionRecord], bool, error) {
 	return etcd.Versioned[etcd.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
+}
+
+func (reader fixedObservationReader) GetPlatformComponentObservation(
+	_ context.Context,
+	componentID string,
+) (etcd.Versioned[etcd.ComponentObservationRecord], bool, error) {
+	if componentID != reader.componentID {
+		return etcd.Versioned[etcd.ComponentObservationRecord]{}, false, nil
+	}
+	return etcd.Versioned[etcd.ComponentObservationRecord]{Record: reader.record}, true, nil
 }
 
 // PrepareConfigTaskAtProjection is the startup/recovery seam. It uses the
@@ -60,26 +97,33 @@ func (planner *PlatformRenderPlanner) PrepareConfigTaskAtProjection(
 	desired core.Component,
 	task etcd.TaskRecord,
 	projection etcd.HostResolutionProjectionRecord,
+	priorObservation *etcd.ComponentObservationRecord,
 ) (etcd.PlatformComponentTaskRenderInput, error) {
 	clone := *planner
 	clone.projections = fixedProjectionReader{record: projection}
+	if priorObservation != nil {
+		clone.observations = fixedObservationReader{componentID: desired.ID, record: *priorObservation}
+	}
 	return clone.PrepareConfigTask(ctx, current, desired, task)
 }
 
 func NewPlatformRenderPlanner(
 	projections PlatformProjectionReader,
 	baselines BaselineRepository,
+	observations ObservationRepository,
 	capture BaselineCapture,
 	renderer componentdns.Renderer,
 	environmentPlanner EnvironmentPlanner,
 	catalog ActionCatalog,
 	managedConfigAction componentsdk.ActionID,
 ) (*PlatformRenderPlanner, error) {
-	if projections == nil || baselines == nil || capture == nil || renderer == nil || environmentPlanner == nil || catalog == nil {
+	if projections == nil || baselines == nil || observations == nil || capture == nil || renderer == nil ||
+		environmentPlanner == nil ||
+		catalog == nil {
 		return nil, errs.New(errs.KindInternal, "platform Component render planner dependencies are required")
 	}
 	return &PlatformRenderPlanner{
-		projections: projections, baselines: baselines, capture: capture,
+		projections: projections, baselines: baselines, observations: observations, capture: capture,
 		renderer: renderer, environmentPlanner: environmentPlanner, catalog: catalog,
 		managedConfigAction: managedConfigAction,
 	}, nil
@@ -113,7 +157,10 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
 	if !found {
-		return etcd.PlatformComponentTaskRenderInput{}, errs.New(errs.KindStateConflict, "host-resolution projection is not initialized")
+		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindStateConflict,
+			"host-resolution projection is not initialized",
+		)
 	}
 	definition, action, found := planner.catalog.FindActionByCapability(
 		componentsdk.CapabilityDNSResolver, planner.managedConfigAction,
@@ -124,7 +171,11 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 			"registered dns-resolver capability is absent from the compiled catalog",
 		)
 	}
-	resolverInput, durableHosts, err := resolverInputFromProjection(hostResolution.Record, baseline.Record.Generation, resolvers)
+	resolverInput, durableHosts, err := resolverInputFromProjection(
+		hostResolution.Record,
+		baseline.Record.Generation,
+		resolvers,
+	)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
@@ -163,8 +214,109 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 			"CoreDNS typed config disappeared during planning",
 		)
 	}
+	decodedConfig, err := DecodeConfig(desired.Config)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	selectedRenderInput, err := BuildRenderInput(
+		resolverInput.HostResolution.Hosts, decodedConfig, resolverInput.Baseline.Resolvers,
+	)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	selectedPlan, err := planner.environmentPlanner.Plan(
+		definition.Implementation(), generatedServiceID, selectedRenderInput,
+	)
+	if err != nil || len(selectedPlan.Services) != 1 {
+		clearEnvironmentPlan(selectedPlan)
+		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindInternal,
+			"registered resolver image is unavailable",
+		)
+	}
+	image := selectedPlan.Services[0].Image
+	selectedOS, selectedArch, selectedVariant := runtime.GOOS, runtime.GOARCH, ""
+	if selectedArch == "arm64" {
+		selectedVariant = "v8"
+	}
+	selectedPlatform, selectedReference, selected := image.Select(selectedOS, selectedArch, selectedVariant)
+	defer clearEnvironmentPlan(selectedPlan)
+	if !selected || selectedOS != "linux" {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindValidationFailed,
+			"component platform is unsupported",
+		)
+	}
 	definitionDigest := definition.Digest()
 	catalogDigest := planner.catalog.Digest()
+	ensureService, err := componentTaskEnsureService(task)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	observation, observationFound, err := planner.observations.GetPlatformComponentObservation(ctx, desired.ID)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	priorObservationModRevision := int64(0)
+	priorObservationRevision := uint64(0)
+	predecessorTaskID := ""
+	expectedPreviousArtifactSHA256 := ""
+	expectedPreviousArtifactID := ""
+	expectedPreviousGeneration := uint64(0)
+	ownershipPlanID := task.PlanID
+	ownershipGeneration := uint64(task.RenderGeneration)
+	composeArtifactID := ids.New(ids.KindConfig)
+	if observationFound {
+		priorObservationModRevision = observation.Revision
+		priorObservationRevision = observation.Record.Revision
+		predecessorTaskID = observation.Record.TaskID
+		expectedPreviousArtifactSHA256 = observation.Record.CorefileSHA256
+		if observation.Record.Enabled {
+			expectedPreviousArtifactID = observation.Record.DNSResolverProof.ArtifactID
+			expectedPreviousGeneration = observation.Record.DNSResolverProof.RenderGeneration
+		}
+	}
+	if ensureService && current.Record.Desired.Enabled && !observationFound {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindStateConflict,
+			"platform Component serving predecessor observation is unavailable",
+		)
+	}
+	if !ensureService {
+		if !observationFound || !observation.Record.Enabled || !observation.Record.Healthy ||
+			observation.Record.ServiceID != generatedServiceID {
+			return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+				errs.KindStateConflict,
+				"platform Component runtime observation is unavailable",
+			)
+		}
+		ownershipPlanID = observation.Record.PlanID
+		ownershipGeneration = observation.Record.OwnershipGeneration
+		composeArtifactID = observation.Record.ComposeArtifactID
+	}
+	composeArtifact, err := controllerpkg.RenderPlatformComponentCompose(
+		controllerpkg.PlatformComponentComposeInput{
+			ComponentID: desired.ID, PlanID: ownershipPlanID, RenderGeneration: ownershipGeneration,
+			ArtifactID: composeArtifactID, Plan: selectedPlan,
+			ImageRepository: image.Repository, ImageIndexDigest: image.IndexDigest,
+			ImageChildDigest: selectedPlatform.ChildDigest, ImageReference: selectedReference,
+			ImageOS: selectedPlatform.OS, ImageArchitecture: selectedPlatform.Architecture,
+			ImageVariant: selectedPlatform.Variant,
+		},
+	)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	var rollbackComposeArtifact *agentpb.ComposeArtifact
+	if ensureService && observationFound && observation.Record.Enabled {
+		if observation.Record.ComposeArtifact == nil {
+			return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+				errs.KindStateConflict,
+				"platform Component serving predecessor artifact is unavailable",
+			)
+		}
+		rollbackComposeArtifact = proto.Clone(observation.Record.ComposeArtifact).(*agentpb.ComposeArtifact)
+	}
 	return etcd.PlatformComponentTaskRenderInput{
 		PlanID: task.PlanID, TaskID: task.ID, ComponentID: desired.ID,
 		DesiredSHA256:      desiredSHA256,
@@ -172,14 +324,37 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 		HostResolutionInputRevision: hostResolution.Record.InputRevision,
 		HostResolutionSHA256:        hostResolution.Record.InputSHA256,
 		Config:                      *config, Hosts: durableHosts, GeneratedServiceID: generatedServiceID,
-		EnsureService:    len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy,
+		EnsureService:    ensureService,
 		DefinitionSHA256: hex.EncodeToString(definitionDigest[:]),
 		CatalogSHA256:    hex.EncodeToString(catalogDigest[:]), ActionID: string(action.ID()),
-		ArtifactID: ids.New(ids.KindConfig), ComposeArtifactID: ids.New(ids.KindConfig),
+		ArtifactID: ids.New(ids.KindConfig), ComposeArtifactID: composeArtifactID,
+		ComposeArtifact: composeArtifact, RollbackComposeArtifact: rollbackComposeArtifact,
+		OwnershipPlanID: ownershipPlanID, OwnershipGeneration: ownershipGeneration,
+		PriorObservationModRevision:    priorObservationModRevision,
+		PriorObservationRevision:       priorObservationRevision,
+		PredecessorTaskID:              predecessorTaskID,
+		ExpectedPreviousArtifactSHA256: expectedPreviousArtifactSHA256,
+		ExpectedPreviousArtifactID:     expectedPreviousArtifactID,
+		ExpectedPreviousGeneration:     expectedPreviousGeneration,
+		ImageRepository:                image.Repository, ImageIndexDigest: image.IndexDigest,
+		ImageOS: selectedPlatform.OS, ImageArchitecture: selectedPlatform.Architecture,
+		ImageVariant: selectedPlatform.Variant, ImageChildDigest: selectedPlatform.ChildDigest,
+		ImageReference: selectedReference,
 		ArtifactSHA256: hex.EncodeToString(intent.ArtifactSHA256[:]),
 		ArtifactLength: intent.ArtifactLength,
 		PlanSHA256:     hex.EncodeToString(intent.PlanSHA256[:]),
 	}, nil
+}
+
+func componentTaskEnsureService(task etcd.TaskRecord) (bool, error) {
+	switch len(task.Steps) {
+	case 2:
+		return false, nil
+	case 4:
+		return true, nil
+	default:
+		return false, errs.New(errs.KindInternal, "platform Component Task procedure is invalid")
+	}
 }
 
 // SelectResolver selects the sole platform-owned Component after proving that
@@ -189,13 +364,19 @@ func (planner *PlatformRenderPlanner) SelectResolver(
 	candidates []etcd.Versioned[etcd.ComponentRecord],
 ) (etcd.Versioned[etcd.ComponentRecord], error) {
 	if ctx == nil || planner == nil || planner.catalog == nil {
-		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindInternal, "dns-resolver selector dependencies are required")
+		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(
+			errs.KindInternal,
+			"dns-resolver selector dependencies are required",
+		)
 	}
 	definition, _, found := planner.catalog.FindActionByCapability(
 		componentsdk.CapabilityDNSResolver, planner.managedConfigAction,
 	)
 	if !found || !definitionProvidesResolverGrants(definition) {
-		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindInternal, "registered dns-resolver capability is absent from the compiled catalog")
+		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(
+			errs.KindInternal,
+			"registered dns-resolver capability is absent from the compiled catalog",
+		)
 	}
 	var selected etcd.Versioned[etcd.ComponentRecord]
 	for _, candidate := range candidates {
@@ -203,12 +384,18 @@ func (planner *PlatformRenderPlanner) SelectResolver(
 			continue
 		}
 		if selected.Revision != 0 {
-			return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindStateConflict, "multiple platform dns-resolver Components are registered")
+			return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"multiple platform dns-resolver Components are registered",
+			)
 		}
 		selected = candidate
 	}
 	if selected.Revision <= 0 || selected.ReadRevision <= 0 {
-		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(errs.KindComponentNotFound, "platform dns-resolver Component is not registered")
+		return etcd.Versioned[etcd.ComponentRecord]{}, errs.New(
+			errs.KindComponentNotFound,
+			"platform dns-resolver Component is not registered",
+		)
 	}
 	return selected, nil
 }
@@ -282,7 +469,10 @@ func resolverInputFromProjection(
 	}
 	digestBytes, err := hex.DecodeString(record.InputSHA256)
 	if err != nil || len(digestBytes) != 32 {
-		return componentdns.ResolverInput{}, nil, errs.New(errs.KindInternal, "host-resolution projection digest is corrupt")
+		return componentdns.ResolverInput{}, nil, errs.New(
+			errs.KindInternal,
+			"host-resolution projection digest is corrupt",
+		)
 	}
 	var digest [32]byte
 	copy(digest[:], digestBytes)
@@ -304,7 +494,10 @@ func resolverInputFromProjection(
 	}
 	durable := make([]etcd.PlatformDNSHost, len(projection.Hosts))
 	for index, host := range projection.Hosts {
-		durable[index] = etcd.PlatformDNSHost{Address: host.Address.String(), Hostnames: append([]string(nil), host.Hostnames...)}
+		durable[index] = etcd.PlatformDNSHost{
+			Address:   host.Address.String(),
+			Hostnames: append([]string(nil), host.Hostnames...),
+		}
 	}
 	return componentdns.ResolverInput{Baseline: baseline, HostResolution: projection}, durable, nil
 }

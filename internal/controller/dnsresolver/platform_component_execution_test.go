@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -21,15 +22,23 @@ type executionRepositoryStub struct {
 	baseline etcd.Versioned[etcd.HostResolverBaselineRecord]
 }
 
-func (repository executionRepositoryStub) GetPlatformComponentTaskRenderInput(_ context.Context, _ string) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error) {
+func (repository executionRepositoryStub) GetPlatformComponentTaskRenderInput(
+	_ context.Context,
+	_ string,
+) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error) {
 	return etcd.Versioned[etcd.PlatformComponentTaskRenderInput]{Record: repository.input}, nil
 }
 
-func (repository executionRepositoryStub) GetComponent(_ context.Context, _ string) (etcd.Versioned[etcd.ComponentRecord], error) {
+func (repository executionRepositoryStub) GetComponent(
+	_ context.Context,
+	_ string,
+) (etcd.Versioned[etcd.ComponentRecord], error) {
 	return repository.current, nil
 }
 
-func (repository executionRepositoryStub) GetHostResolverBaseline(_ context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error) {
+func (repository executionRepositoryStub) GetHostResolverBaseline(
+	_ context.Context,
+) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error) {
 	return repository.baseline, true, nil
 }
 
@@ -37,11 +46,17 @@ type executionCatalogStub struct {
 	plan componentsdk.EnvironmentPlan
 }
 
-func (catalog *executionCatalogStub) ResolveActionEnvelope(componentsdk.ActionEnvelope) (componentsdk.Definition, componentsdk.ActionDefinition, error) {
+func (catalog *executionCatalogStub) ResolveActionEnvelope(
+	componentsdk.ActionEnvelope,
+) (componentsdk.Definition, componentsdk.ActionDefinition, error) {
 	return componentsdk.Definition{}, componentsdk.ActionDefinition{}, nil
 }
 
-func (catalog *executionCatalogStub) Plan(_ componentsdk.ImplementationKey, _ string, _ componentdns.RenderInput) (componentsdk.EnvironmentPlan, error) {
+func (catalog *executionCatalogStub) Plan(
+	_ componentsdk.ImplementationKey,
+	_ string,
+	_ componentdns.RenderInput,
+) (componentsdk.EnvironmentPlan, error) {
 	plan := catalog.plan
 	plan.Files = make([]componentsdk.ManagedFile, len(catalog.plan.Files))
 	for index, file := range catalog.plan.Files {
@@ -51,6 +66,8 @@ func (catalog *executionCatalogStub) Plan(_ componentsdk.ImplementationKey, _ st
 	return plan, nil
 }
 
+// Rationale: the Controller must carry a generic action reference for
+// observation rather than resolving runtime argv or Compose health authority.
 func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -59,6 +76,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	planID := ids.NewAt(ids.KindPlan, now, 3)
 	taskID := ids.NewAt(ids.KindTask, now, 4)
 	stepID := ids.NewAt(ids.KindStep, now, 5)
+	waitStepID := ids.NewAt(ids.KindStep, now, 9)
 	component := core.Component{
 		ID: componentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
 		Enabled: true, GeneratedServices: []string{serviceID}, Healthy: true,
@@ -74,22 +92,69 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	}
 	firstPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("1", 64))
 	secondPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("2", 64))
+	variant := ""
+	if runtime.GOARCH == "arm64" {
+		variant = "v8"
+	}
+	selectedPlatform, selectedReference, selected := firstPlan.Services[0].Image.Select(
+		runtime.GOOS,
+		runtime.GOARCH,
+		variant,
+	)
+	if !selected {
+		t.Fatalf("execution fixture does not support %s/%s/%s", runtime.GOOS, runtime.GOARCH, variant)
+	}
 	planDigest := componentsdk.DigestEnvironmentPlan(firstPlan)
 	artifactDigest := sha256.Sum256(firstPlan.Files[0].Content)
 	input := etcd.PlatformComponentTaskRenderInput{
-		PlanID: planID, TaskID: taskID, ComponentID: componentID, DesiredSHA256: desiredDigest,
-		BaselineGeneration: 1, BaselineSHA256: strings.Repeat("2", 64), Config: *component.Config.CoreDNS,
-		HostResolutionInputRevision: 1, HostResolutionSHA256: strings.Repeat("5", 64),
-		GeneratedServiceID: serviceID, DefinitionSHA256: strings.Repeat("3", 64), CatalogSHA256: strings.Repeat("4", 64),
-		ActionID: "activate-config", ArtifactID: ids.NewAt(ids.KindConfig, now, 6), ComposeArtifactID: ids.NewAt(ids.KindConfig, now, 7),
-		ArtifactSHA256: hex.EncodeToString(artifactDigest[:]), ArtifactLength: uint64(len(firstPlan.Files[0].Content)),
-		PlanSHA256: hex.EncodeToString(planDigest[:]),
+		PlanID:                         planID,
+		TaskID:                         taskID,
+		ComponentID:                    componentID,
+		DesiredSHA256:                  desiredDigest,
+		BaselineGeneration:             1,
+		BaselineSHA256:                 strings.Repeat("2", 64),
+		Config:                         *component.Config.CoreDNS,
+		HostResolutionInputRevision:    1,
+		HostResolutionSHA256:           strings.Repeat("5", 64),
+		GeneratedServiceID:             serviceID,
+		DefinitionSHA256:               strings.Repeat("3", 64),
+		CatalogSHA256:                  strings.Repeat("4", 64),
+		ActionID:                       "activate-config",
+		ArtifactID:                     ids.NewAt(ids.KindConfig, now, 6),
+		ComposeArtifactID:              ids.NewAt(ids.KindConfig, now, 7),
+		OwnershipPlanID:                ids.NewAt(ids.KindPlan, now, 10),
+		OwnershipGeneration:            7,
+		PriorObservationModRevision:    11,
+		PriorObservationRevision:       11,
+		PredecessorTaskID:              ids.NewAt(ids.KindTask, now, 11),
+		ExpectedPreviousArtifactSHA256: strings.Repeat("6", 64),
+		ExpectedPreviousArtifactID:     ids.NewAt(ids.KindConfig, now, 12),
+		ExpectedPreviousGeneration:     6,
+		ImageRepository:                firstPlan.Services[0].Image.Repository,
+		ImageIndexDigest:               firstPlan.Services[0].Image.IndexDigest,
+		ImageOS:                        selectedPlatform.OS,
+		ImageArchitecture:              selectedPlatform.Architecture,
+		ImageVariant:                   selectedPlatform.Variant,
+		ImageChildDigest:               selectedPlatform.ChildDigest,
+		ImageReference:                 selectedReference,
+		ArtifactSHA256:                 hex.EncodeToString(artifactDigest[:]),
+		ArtifactLength:                 uint64(len(firstPlan.Files[0].Content)),
+		PlanSHA256:                     hex.EncodeToString(planDigest[:]),
 	}
 	task := etcd.TaskRecord{
-		ID: taskID, PlanID: planID, PlanHash: input.PlanSHA256, RenderGeneration: 1, Executor: etcd.TaskExecutorAgent,
-		Type: etcd.TaskUpdate, Target: componentID,
-		Params: map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceComponent, etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest},
-		Steps:  []etcd.TaskStepRecord{{ID: stepID}},
+		ID:               taskID,
+		PlanID:           planID,
+		PlanHash:         input.PlanSHA256,
+		RenderGeneration: 1,
+		Executor:         etcd.TaskExecutorAgent,
+		Type:             etcd.TaskUpdate,
+		Target:           componentID,
+		Actor:            etcd.TaskActorOperator,
+		Params: map[string]string{
+			etcd.TaskResourceKindParam:                   etcd.TaskResourceComponent,
+			etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest,
+		},
+		Steps: []etcd.TaskStepRecord{{ID: stepID}, {ID: waitStepID}},
 	}
 	baseline := etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: etcd.HostResolverBaselineRecord{
 		Generation: 1, Content: []byte("nameserver 1.1.1.1\n"), SHA256: input.BaselineSHA256,
@@ -97,7 +162,12 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	catalog := &executionCatalogStub{plan: firstPlan}
 	planner, err := NewPlatformComponentExecutionPlanner(
 		"/var/lib/groundplane",
-		executionRepositoryStub{input: input, current: etcd.Versioned[etcd.ComponentRecord]{Record: record}, baseline: baseline}, catalog,
+		executionRepositoryStub{
+			input:    input,
+			current:  etcd.Versioned[etcd.ComponentRecord]{Record: record},
+			baseline: baseline,
+		},
+		catalog,
 	)
 	if err != nil {
 		t.Fatalf("NewPlatformComponentExecutionPlanner() error = %v", err)
@@ -106,20 +176,48 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	if err != nil {
 		t.Fatalf("ResolveComponentExecutionPlan() error = %v", err)
 	}
-	if len(execution.GetSteps()) != 1 {
-		t.Fatalf("execution steps = %d, want 1", len(execution.GetSteps()))
+	activation := execution.GetSteps()[0].GetComponentApply()
+	observation := execution.GetSteps()[1].GetComponentApply()
+	if len(execution.GetSteps()) != 2 || activation == nil || observation == nil ||
+		observation.GetActionId() != "observe-serving" ||
+		observation.GetArtifactId() != activation.GetArtifactId() ||
+		!strings.EqualFold(
+			hex.EncodeToString(observation.GetArtifactDigest()),
+			hex.EncodeToString(activation.GetArtifactDigest()),
+		) ||
+		len(execution.GetArtifacts()) != 1 || execution.GetArtifacts()[0].GetServices()[0].GetHasHealthcheck() {
+		t.Fatalf("execution procedure = %#v", execution)
+	}
+	labels := execution.GetArtifacts()[0].GetServices()[0].GetExpectedLabels()
+	foundOwnership := false
+	for _, label := range labels {
+		foundOwnership = foundOwnership ||
+			label.GetKey() == "com.groundplane.plan-id" && label.GetValue() == input.OwnershipPlanID
+	}
+	if !foundOwnership || execution.GetArtifacts()[0].GetArtifactId() != input.ComposeArtifactID {
+		t.Fatal("reload observation did not reuse sealed baseline ownership")
 	}
 	retry := task
 	retry.ID = ids.NewAt(ids.KindTask, now, 8)
 	retry.RetryOf = task.ID
-	if _, err := planner.ResolveComponentExecutionPlan(context.Background(), retry); err != nil {
+	replayed, err := planner.ResolveComponentExecutionPlan(context.Background(), retry)
+	if err != nil {
 		t.Fatalf("ResolveComponentExecutionPlan(retry) error = %v", err)
+	}
+	if replayed.GetPlanId() != execution.GetPlanId() ||
+		!strings.EqualFold(hex.EncodeToString(replayed.GetPlanHash()), hex.EncodeToString(execution.GetPlanHash())) {
+		t.Fatal("retry changed the sealed plan identity")
 	}
 	catalog.plan = secondPlan
 	if _, err := planner.ResolveComponentExecutionPlan(context.Background(), task); err == nil {
 		t.Fatal("ResolveComponentExecutionPlan() accepted changed service behavior")
 	}
-	if _, err := planner.ResolveManagedConfig(context.Background(), task, execution, execution.GetSteps()[0]); err == nil {
+	if _, err := planner.ResolveManagedConfig(
+		context.Background(),
+		task,
+		execution,
+		execution.GetSteps()[0],
+	); err == nil {
 		t.Fatal("ResolveManagedConfig() accepted changed service behavior")
 	}
 }
@@ -127,10 +225,14 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 func executionPlanFixture(serviceID, image string) componentsdk.EnvironmentPlan {
 	return componentsdk.EnvironmentPlan{
 		Services: []componentsdk.ManagedService{{
-			ID: serviceID, Name: "resolver", Image: image,
-			Command: []string{"--config", "/etc/resolver/config"}, Restart: "unless-stopped", Replicas: 1,
-			Mounts: []componentsdk.ManagedMount{{Source: "config", Target: "/etc/resolver/config", ReadOnly: true}},
+			ID: serviceID, Name: "resolver", Image: testPlatformImage(image),
+			NetworkMode: componentsdk.ManagedNetworkModeHost,
+			Command:     []string{"--config", "/etc/resolver/config"}, Restart: "unless-stopped", Replicas: 1,
+			Mounts: []componentsdk.ManagedMount{{
+				Kind: componentsdk.ManagedMountKindDirectory, Source: "config", Target: "/etc/resolver", ReadOnly: true,
+			}},
+			ObservationAction: "observe-serving",
 		}},
-		Files: []componentsdk.ManagedFile{{Path: "config", Content: []byte("same bytes\n")}},
+		Files: []componentsdk.ManagedFile{{Path: "config/config", Content: []byte("same bytes\n")}},
 	}
 }

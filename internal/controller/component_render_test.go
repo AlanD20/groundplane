@@ -23,12 +23,17 @@ func (renderer componentRenderTestRenderer) Plan(
 	component core.Component,
 ) (componentsdk.EnvironmentPlan, error) {
 	return componentsdk.EnvironmentPlan{
-		Services: []componentsdk.ManagedService{{
-			ID: component.GeneratedServices[0], Name: renderer.serviceName, Image: "example/component:1",
-			NetworkMode: componentsdk.ManagedNetworkModeZones,
-			Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend"}},
-			Restart:     "unless-stopped", Replicas: 1,
-		}},
+		Services: []componentsdk.ManagedService{
+			{
+				ID:          component.GeneratedServices[0],
+				Name:        renderer.serviceName,
+				Image:       controllerTestOCIImage("example/component"),
+				NetworkMode: componentsdk.ManagedNetworkModeZones,
+				Networks:    []componentsdk.ManagedNetworkAttachment{{Name: "frontend"}},
+				Restart:     "unless-stopped",
+				Replicas:    1,
+			},
+		},
 		Files: []componentsdk.ManagedFile{{Path: renderer.filePath, Content: []byte(renderer.serviceName)}},
 	}, nil
 }

@@ -3,13 +3,17 @@ package etcd
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"net/netip"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -141,15 +145,39 @@ type TaskRecreateEvidence struct {
 	Target      string `json:"target"`
 }
 
+type TaskDNSResolverObservationEvidence struct {
+	ComponentID             string    `json:"component_id"`
+	ServiceID               string    `json:"service_id"`
+	ArtifactID              string    `json:"artifact_id"`
+	ArtifactSHA256          string    `json:"artifact_sha256"`
+	RenderGeneration        uint64    `json:"render_generation"`
+	ImageReference          string    `json:"image_reference"`
+	VerifiedImageDigest     string    `json:"verified_image_digest"`
+	ListenEndpoint          string    `json:"listen_endpoint"`
+	ReloadSHA512            string    `json:"reload_sha512"`
+	ObservedAt              time.Time `json:"observed_at"`
+	StaticQueryPresent      bool      `json:"static_query_present"`
+	StaticQueryName         string    `json:"static_query_name,omitempty"`
+	StaticQueryIPv4         string    `json:"static_query_ipv4,omitempty"`
+	StaticQuerySucceeded    bool      `json:"static_query_succeeded"`
+	RecursiveQuerySucceeded bool      `json:"recursive_query_succeeded"`
+	ForwarderQueryCount     uint32    `json:"forwarder_query_count"`
+	ForwarderSuccessCount   uint32    `json:"forwarder_success_count"`
+	ProofSHA256             string    `json:"proof_sha256"`
+	CanonicalEvidence       []byte    `json:"canonical_evidence"`
+}
+
 type TaskResultRecord struct {
-	Kind                   TaskResultKind               `json:"kind"`
-	ExitCode               int32                        `json:"exit_code"`
-	FailedStepID           string                       `json:"failed_step_id,omitempty"`
-	Diagnostic             TaskResultDiagnostic         `json:"diagnostic"`
-	ReconciliationRequired bool                         `json:"reconciliation_required"`
-	Projects               []TaskObservedProjectSummary `json:"projects,omitempty"`
-	ProxyEvidence          []TaskProxyEvidence          `json:"proxy_evidence,omitempty"`
-	RecreateEvidence       []TaskRecreateEvidence       `json:"recreate_evidence,omitempty"`
+	Kind                            TaskResultKind                      `json:"kind"`
+	ExitCode                        int32                               `json:"exit_code"`
+	FailedStepID                    string                              `json:"failed_step_id,omitempty"`
+	Diagnostic                      TaskResultDiagnostic                `json:"diagnostic"`
+	ReconciliationRequired          bool                                `json:"reconciliation_required"`
+	Projects                        []TaskObservedProjectSummary        `json:"projects,omitempty"`
+	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
+	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
+	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
+	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 }
 
 type TaskTerminalAssignmentRecord struct {
@@ -271,14 +299,16 @@ type taskRecordData struct {
 }
 
 type taskResultData struct {
-	Kind                   TaskResultKind                   `json:"kind"`
-	ExitCode               int32                            `json:"exit_code"`
-	FailedStepID           string                           `json:"failed_step_id,omitempty"`
-	Diagnostic             TaskResultDiagnostic             `json:"diagnostic"`
-	ReconciliationRequired bool                             `json:"reconciliation_required"`
-	Projects               []taskObservedProjectSummaryData `json:"projects,omitempty"`
-	ProxyEvidence          []TaskProxyEvidence              `json:"proxy_evidence,omitempty"`
-	RecreateEvidence       []TaskRecreateEvidence           `json:"recreate_evidence,omitempty"`
+	Kind                            TaskResultKind                      `json:"kind"`
+	ExitCode                        int32                               `json:"exit_code"`
+	FailedStepID                    string                              `json:"failed_step_id,omitempty"`
+	Diagnostic                      TaskResultDiagnostic                `json:"diagnostic"`
+	ReconciliationRequired          bool                                `json:"reconciliation_required"`
+	Projects                        []taskObservedProjectSummaryData    `json:"projects,omitempty"`
+	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
+	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
+	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
+	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 }
 
 type taskObservedProjectSummaryData struct {
@@ -701,7 +731,59 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			return errs.New(errs.KindValidationFailed, "task result recreate evidence is invalid or unsorted")
 		}
 	}
+	for _, candidate := range []*TaskDNSResolverObservationEvidence{
+		result.DNSResolverCandidateObservation,
+		result.DNSResolverRollbackObservation,
+	} {
+		if candidate == nil {
+			continue
+		}
+		evidence := *candidate
+		canonical, canonicalErr := dnsproof.Unmarshal(evidence.CanonicalEvidence)
+		address, addressErr := netip.ParseAddr(evidence.StaticQueryIPv4)
+		staticValid := !evidence.StaticQueryPresent && evidence.StaticQueryName == "" &&
+			evidence.StaticQueryIPv4 == "" &&
+			!evidence.StaticQuerySucceeded
+		if evidence.StaticQueryPresent {
+			staticValid = validPlatformDNSName(evidence.StaticQueryName) && addressErr == nil && address.Is4() &&
+				!address.Is4In6() && evidence.StaticQuerySucceeded
+		}
+		if canonicalErr != nil || hex.EncodeToString(canonical.GetProofSha256()) != evidence.ProofSHA256 ||
+			canonical.GetComponentId() != evidence.ComponentID || canonical.GetServiceId() != evidence.ServiceID ||
+			canonical.GetArtifactId() != evidence.ArtifactID || result.Kind != TaskResultCompose || ids.Validate(ids.KindComponent, evidence.ComponentID) != nil ||
+			ids.Validate(
+				ids.KindService,
+				evidence.ServiceID,
+			) != nil || ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil ||
+			evidence.RenderGeneration == 0 || !validSHA256(evidence.ArtifactSHA256) ||
+			!imageref.IsDigestPinned(evidence.ImageReference) || !validSHA256(evidence.VerifiedImageDigest) ||
+			evidence.ListenEndpoint != "127.0.0.1:53" || !validSHA512(evidence.ReloadSHA512) ||
+			validateTimestamp("DNS resolver observation observed_at", evidence.ObservedAt) != nil || !staticValid ||
+			!evidence.RecursiveQuerySucceeded || evidence.ForwarderSuccessCount != evidence.ForwarderQueryCount ||
+			evidence.ForwarderQueryCount > 8 || !validSHA256(evidence.ProofSHA256) {
+			return errs.New(errs.KindValidationFailed, "task DNS resolver observation evidence is invalid")
+		}
+	}
 	return nil
+}
+
+func cloneTaskDNSResolverObservationEvidence(
+	evidence *TaskDNSResolverObservationEvidence,
+) *TaskDNSResolverObservationEvidence {
+	if evidence == nil {
+		return nil
+	}
+	cloned := *evidence
+	cloned.CanonicalEvidence = append([]byte(nil), evidence.CanonicalEvidence...)
+	return &cloned
+}
+
+func validSHA512(value string) bool {
+	if len(value) != sha512.Size*2 {
+		return false
+	}
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == sha512.Size
 }
 
 func validReleaseEvidenceTarget(value string) bool {
@@ -1068,6 +1150,10 @@ func taskResultToData(result *TaskResultRecord) *taskResultData {
 		ProxyEvidence:    append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
 		RecreateEvidence: append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
 	}
+	data.DNSResolverCandidateObservation = cloneTaskDNSResolverObservationEvidence(
+		result.DNSResolverCandidateObservation,
+	)
+	data.DNSResolverRollbackObservation = cloneTaskDNSResolverObservationEvidence(result.DNSResolverRollbackObservation)
 	for index, project := range result.Projects {
 		data.Projects[index] = taskObservedProjectSummaryData{
 			ProjectName: project.ProjectName, ObservedAt: project.ObservedAt.UTC().Format(time.RFC3339Nano),
@@ -1088,6 +1174,20 @@ func taskResultFromData(data *taskResultData) (*TaskResultRecord, error) {
 		Projects:         make([]TaskObservedProjectSummary, len(data.Projects)),
 		ProxyEvidence:    append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
 		RecreateEvidence: append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
+	}
+	if data.DNSResolverCandidateObservation != nil {
+		evidence := *data.DNSResolverCandidateObservation
+		if _, err := dnsproof.Unmarshal(evidence.CanonicalEvidence); err != nil {
+			return nil, errs.New(errs.KindInternal, "task DNS resolver observation proof is corrupt")
+		}
+		result.DNSResolverCandidateObservation = cloneTaskDNSResolverObservationEvidence(&evidence)
+	}
+	if data.DNSResolverRollbackObservation != nil {
+		evidence := *data.DNSResolverRollbackObservation
+		if _, err := dnsproof.Unmarshal(evidence.CanonicalEvidence); err != nil {
+			return nil, errs.New(errs.KindInternal, "task DNS resolver rollback proof is corrupt")
+		}
+		result.DNSResolverRollbackObservation = cloneTaskDNSResolverObservationEvidence(&evidence)
 	}
 	for index, project := range data.Projects {
 		observedAt, err := parseCanonicalTimestamp(project.ObservedAt)
@@ -1160,6 +1260,12 @@ func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	cloned.Projects = append([]TaskObservedProjectSummary(nil), result.Projects...)
 	cloned.ProxyEvidence = append([]TaskProxyEvidence(nil), result.ProxyEvidence...)
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
+	cloned.DNSResolverCandidateObservation = cloneTaskDNSResolverObservationEvidence(
+		result.DNSResolverCandidateObservation,
+	)
+	cloned.DNSResolverRollbackObservation = cloneTaskDNSResolverObservationEvidence(
+		result.DNSResolverRollbackObservation,
+	)
 	return &cloned
 }
 

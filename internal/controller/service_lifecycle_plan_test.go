@@ -94,6 +94,11 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		},
 		Networks: composetypes.Networks{"frontend": {}},
 	}
+	normalized, err := project.MarshalYAML()
+	if err != nil {
+		t.Fatalf("marshal normalized lifecycle Compose fixture: %v", err)
+	}
+	reader.projection.NormalizedCompose = normalized
 	artifact, err := RenderCompose(ComposeRenderInput{
 		Project: project, ArtifactID: input.ArtifactID,
 		ProjectOwnerKind: ComposeProjectOwnerTenant,

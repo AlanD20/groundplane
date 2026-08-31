@@ -22,7 +22,7 @@ func (catalog composeHelperComponentCatalog) ResolveContainerConfigAction(
 		return composehelper.ComponentActionRecipe{}, err
 	}
 	return composehelper.NewComponentActionRecipe(
-		recipe.RelativePath(), recipe.ContainerPath(), recipe.ImageReference(),
+		recipe.RelativePath(), recipe.ContainerPath(), selectedImageReference(recipe.Image()),
 		recipe.ValidateArgs(), recipe.ActivateArgs(),
 	)
 }

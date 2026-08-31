@@ -1272,7 +1272,10 @@ func (repository *TaskRepository) acknowledgeTask(
 				)
 			}
 			if result == nil {
-				return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion Agent Task requires a result")
+				return Versioned[TaskRecord]{}, errs.New(
+					errs.KindStateConflict,
+					"hierarchy deletion Agent Task requires a result",
+				)
 			}
 			return repository.acknowledgeHierarchyDeletionAgentTask(
 				ctx, agentID, agentGeneration, taskID, assignmentID,
@@ -1392,12 +1395,18 @@ func (repository *TaskRepository) acknowledgeTask(
 				}
 				if task.Params[TaskReleasePublicationParam] != "" {
 					headRead, err := repository.store.GetMany(ctx, GetManyRequest{
-						Keys: []string{releaseOperationKey(task.OperationID)}, Revision: primaryAndAssignment.ReadRevision,
+						Keys: []string{
+							releaseOperationKey(task.OperationID),
+						},
+						Revision: primaryAndAssignment.ReadRevision,
 					})
 					if err != nil || headRead == nil || len(headRead.Values) != 1 || headRead.Values[0] == nil {
 						return Versioned[TaskRecord]{}, corruptReleaseRecord()
 					}
-					head, err := decodeReleaseRecord[ReleaseOperationHead](headRead.Values[0].Value, "release-operation")
+					head, err := decodeReleaseRecord[ReleaseOperationHead](
+						headRead.Values[0].Value,
+						"release-operation",
+					)
 					if err != nil || repository.validateReleaseTerminalMembers(
 						ctx, task, head, terminalStatus, primaryAndAssignment.ReadRevision,
 					) != nil {
@@ -1832,8 +1841,9 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		platformComponentChange, err := repository.preparePlatformComponentTaskAcknowledgement(
 			ctx,
-			task,
+			terminal,
 			terminalStatus,
+			result,
 			primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {
@@ -1855,7 +1865,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		hostResolutionBaseConditionCount := len(conditions)
 		hostResolutionChange, err := repository.prepareHostResolutionReconciliation(
-			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision, conditions,
+			ctx, terminal, terminalStatus, primaryAndAssignment.ReadRevision, conditions, platformComponentChange,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -2494,7 +2504,9 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 func taskResultsEqual(left, right TaskResultRecord) bool {
 	if left.Kind != right.Kind || left.ExitCode != right.ExitCode ||
 		left.FailedStepID != right.FailedStepID || left.Diagnostic != right.Diagnostic ||
-		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) {
+		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) ||
+		len(left.ProxyEvidence) != len(right.ProxyEvidence) ||
+		len(left.RecreateEvidence) != len(right.RecreateEvidence) {
 		return false
 	}
 	for index := range left.Projects {
@@ -2502,7 +2514,42 @@ func taskResultsEqual(left, right TaskResultRecord) bool {
 			return false
 		}
 	}
-	return true
+	for index := range left.ProxyEvidence {
+		if left.ProxyEvidence[index] != right.ProxyEvidence[index] {
+			return false
+		}
+	}
+	for index := range left.RecreateEvidence {
+		if left.RecreateEvidence[index] != right.RecreateEvidence[index] {
+			return false
+		}
+	}
+	return taskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
+		taskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
+}
+
+func taskDNSResolverEvidenceEqual(
+	left *TaskDNSResolverObservationEvidence,
+	right *TaskDNSResolverObservationEvidence,
+) bool {
+	if (left == nil) != (right == nil) {
+		return false
+	}
+	if left == nil {
+		return true
+	}
+	return left.ComponentID == right.ComponentID && left.ServiceID == right.ServiceID &&
+		left.ArtifactID == right.ArtifactID && left.ArtifactSHA256 == right.ArtifactSHA256 &&
+		left.RenderGeneration == right.RenderGeneration && left.ImageReference == right.ImageReference &&
+		left.VerifiedImageDigest == right.VerifiedImageDigest && left.ListenEndpoint == right.ListenEndpoint &&
+		left.ReloadSHA512 == right.ReloadSHA512 && left.ObservedAt == right.ObservedAt &&
+		left.StaticQueryPresent == right.StaticQueryPresent && left.StaticQueryName == right.StaticQueryName &&
+		left.StaticQueryIPv4 == right.StaticQueryIPv4 && left.StaticQuerySucceeded == right.StaticQuerySucceeded &&
+		left.RecursiveQuerySucceeded == right.RecursiveQuerySucceeded &&
+		left.ForwarderQueryCount == right.ForwarderQueryCount &&
+		left.ForwarderSuccessCount == right.ForwarderSuccessCount && left.ProofSHA256 == right.ProofSHA256 &&
+		(left.CanonicalEvidence == nil) == (right.CanonicalEvidence == nil) &&
+		bytes.Equal(left.CanonicalEvidence, right.CanonicalEvidence)
 }
 
 // AbortPendingTask wins only while the Task is still queued. If assignment
@@ -2607,6 +2654,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			}
 			if err := repository.validateComponentTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+			if err := repository.validatePlatformComponentTaskAcknowledgementReplay(
+				ctx, current.Record, current.ReadRevision,
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
@@ -2936,6 +2988,53 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, componentChange.conditions...)
 			mutations = append(mutations, componentChange.mutations...)
 		}
+		platformComponentChange, err := repository.preparePlatformComponentTaskAcknowledgement(
+			ctx, terminal, TaskStatusAborted, nil, current.ReadRevision,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		if platformComponentChange.applies {
+			conditions = append(conditions, platformComponentChange.conditions...)
+			mutations = append(mutations, platformComponentChange.mutations...)
+		}
+		hostResolutionBaseConditionCount := len(conditions)
+		hostResolutionChange, err := repository.prepareHostResolutionReconciliation(
+			ctx, terminal, TaskStatusAborted, current.ReadRevision, conditions, platformComponentChange,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
+			return Versioned[TaskRecord]{}, err
+		}
+		defer clearHostResolutionReconciliationChange(hostResolutionChange)
+		if hostResolutionChange.applies {
+			conditions = append(conditions, hostResolutionChange.conditions[hostResolutionBaseConditionCount:]...)
+			mutations = append(mutations, hostResolutionChange.mutations...)
+		}
 		connectorChange, err := repository.prepareConnectorTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 		)
@@ -2952,6 +3051,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
 			return Versioned[TaskRecord]{}, err
 		}
 		if connectorChange.applies {
@@ -2975,6 +3075,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearConnectorTaskChange(connectorChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
 			return Versioned[TaskRecord]{}, err
 		}
 		if runnerChange.applies {
@@ -2985,6 +3086,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {
+			clearPlatformComponentTaskChange(platformComponentChange)
 			return Versioned[TaskRecord]{}, err
 		}
 		defer rotationChange.clear()
@@ -3017,6 +3119,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearComponentTaskChange(componentChange)
 			clearConnectorTaskChange(connectorChange)
 			clearRunnerTaskChange(runnerChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
 			return Versioned[TaskRecord]{}, err
 		}
 		var environmentEpochValue []byte
@@ -3038,6 +3141,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		clearServiceTaskChange(serviceChange)
 		clearBackingZoneTaskChange(backingZoneChange)
 		clearComponentTaskChange(componentChange)
+		clearPlatformComponentTaskChange(platformComponentChange)
 		clearConnectorTaskChange(connectorChange)
 		clearRunnerTaskChange(runnerChange)
 		clear(environmentEpochValue)

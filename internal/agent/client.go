@@ -9,12 +9,14 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
@@ -511,8 +513,16 @@ func (c *Client) takeToken() ([agentprotocol.RawTokenBytes]byte, error) {
 }
 
 func (c *Client) sendReady(stream agentStream) error {
+	variant := ""
+	if runtime.GOARCH == "arm64" {
+		variant = "v8"
+	}
 	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_Ready{
-		Ready: &agentpb.Ready{Capacity: int32(c.pool.Capacity()), Version: version.Value},
+		Ready: &agentpb.Ready{
+			Capacity: int32(c.pool.Capacity()), Version: version.Value,
+			OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH,
+			ArchitectureVariant: variant,
+		},
 	}})
 }
 
@@ -534,8 +544,9 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
-			ScriptCheckpoint: assignment.ScriptCheckpoint,
-			Deadline:         assignment.Deadline.AsTime(),
+			ScriptCheckpoint:   assignment.ScriptCheckpoint,
+			AutomaticReconcile: assignment.GetAutomaticReconcile(),
+			Deadline:           assignment.Deadline.AsTime(),
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {
@@ -586,6 +597,16 @@ func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
 		ExitCode: result.ExitCode,
 	}
 	if result.Compose != nil {
+		for _, evidence := range []*agentpb.DNSResolverObservationEvidence{
+			result.Compose.GetDnsResolverCandidateObservation(),
+			result.Compose.GetDnsResolverRollbackObservation(),
+		} {
+			if evidence != nil {
+				if err := dnsproof.Verify(evidence); err != nil {
+					return errs.New(errs.KindInternal, "agent: worker returned a corrupt DNS resolver proof")
+				}
+			}
+		}
 		acknowledgement.Result = &agentpb.TaskAck_ComposeResult{
 			ComposeResult: proto.Clone(result.Compose).(*agentpb.ComposeTaskResult),
 		}

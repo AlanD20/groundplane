@@ -23,7 +23,7 @@ func (renderer componentComposeTestRenderer) Plan(
 	component core.Component,
 ) (componentsdk.EnvironmentPlan, error) {
 	service := componentsdk.ManagedService{
-		ID: component.GeneratedServices[0], Name: "router", Image: "router:1",
+		ID: component.GeneratedServices[0], Name: "router", Image: controllerTestOCIImage("example/router"),
 		NetworkMode: componentsdk.ManagedNetworkModeZones,
 		Networks: []componentsdk.ManagedNetworkAttachment{{
 			Name: "frontend", Aliases: []string{"router"}, StaticIPv4: "10.60.0.2",
@@ -39,7 +39,7 @@ func (renderer componentComposeTestRenderer) Plan(
 		}},
 	}
 	if renderer.unsupported {
-		service.Image = ""
+		service.Image = componentsdk.OCIImage{}
 	}
 	return componentsdk.EnvironmentPlan{
 		Services: []componentsdk.ManagedService{service},
@@ -64,8 +64,11 @@ func TestProjectEnvironmentComponentsBuildsComposeAndMaterializationInputs(t *te
 		t.Fatalf("input project Services = %#v, want unchanged", project.Services)
 	}
 	generated, exists := projection.Project.Services["router"]
-	if !exists || generated.Image != "router:1" || len(generated.Command) != 1 || generated.Command[0] != "serve" ||
-		generated.Restart != "unless-stopped" || generated.Deploy == nil || generated.Deploy.Replicas == nil ||
+	if !exists ||
+		generated.Image != controllerTestOCIImageReference("example/router") ||
+		len(generated.Command) != 1 || generated.Command[0] != "serve" ||
+		generated.Restart != "unless-stopped" || generated.Deploy == nil ||
+		generated.Deploy.Replicas == nil ||
 		*generated.Deploy.Replicas != 1 {
 		t.Fatalf("generated Compose Service = %#v", generated)
 	}

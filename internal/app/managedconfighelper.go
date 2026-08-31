@@ -9,11 +9,15 @@ import (
 
 const ManagedConfigHelperArgument = "managed-config-helper"
 
-func RunManagedConfigHelper(ctx context.Context, input io.Reader) error {
+func RunManagedConfigHelper(ctx context.Context, input io.Reader, output io.Writer) error {
 	request, err := managedconfighelper.ReadRequest(ctx, input)
 	if err != nil {
 		return err
 	}
 	defer clear(request.Content)
-	return managedconfighelper.Apply(ctx, request)
+	response, err := managedconfighelper.Apply(ctx, request)
+	if err != nil {
+		return err
+	}
+	return managedconfighelper.WriteResponse(output, response)
 }

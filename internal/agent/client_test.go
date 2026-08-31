@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -108,6 +109,45 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 	cancel()
 	if err := <-result; err != nil {
 		t.Fatalf("Run() error = %v", err)
+	}
+}
+
+// Rationale: the client must clone and transmit the complete typed proof so
+// later mutation of worker-owned memory cannot change the acknowledgement.
+func TestClientSendsOwnedDNSResolverObservationEvidence(t *testing.T) {
+	stream := newFakeStream()
+	client := &Client{}
+	evidence := &agentpb.DNSResolverObservationEvidence{
+		ComponentId: "cmp_exact", RenderGeneration: 11,
+		CatchAllQuery: &agentpb.DNSQueryProof{
+			Name: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS, RecursionAvailable: true,
+			SelectedUpstream: "1.1.1.1:53", Attempts: 1,
+			Answers: []*agentpb.DNSAnswerRecord{{
+				OwnerName: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS,
+				NameServer: "a.root-servers.net.",
+			}},
+			Counters: []*agentpb.DNSForwardCounter{{
+				Upstream: "1.1.1.1:53", Before: 1, After: 2,
+			}},
+		},
+	}
+	if err := dnsproof.Seal(evidence); err != nil {
+		t.Fatal(err)
+	}
+	result := TaskResult{
+		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
+		Terminal: TaskTerminalCompleted,
+		Compose:  &agentpb.ComposeTaskResult{DnsResolverCandidateObservation: evidence},
+	}
+	if err := client.sendTaskAck(stream, result); err != nil {
+		t.Fatalf("sendTaskAck() error = %v", err)
+	}
+	evidence.ComponentId = "changed"
+	acks := stream.taskAcknowledgements()
+	if len(acks) != 1 ||
+		acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetComponentId() != "cmp_exact" ||
+		acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetRenderGeneration() != 11 {
+		t.Fatalf("TaskAck evidence = %#v", acks)
 	}
 }
 

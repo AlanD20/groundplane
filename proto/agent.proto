@@ -52,6 +52,9 @@ message AgentMessage {
 message Ready {
   int32 capacity = 1; // free worker-pool slots
   string version = 2; // exact Agent binary build version
+  string operating_system = 3;
+  string architecture = 4;
+  string architecture_variant = 5;
 }
 
 message TaskEvent {
@@ -159,6 +162,67 @@ message ComposeTaskResult {
   bool reconciliation_required = 4;
   repeated ServiceProxyEvidence proxy_evidence = 5;
   repeated ServiceRecreateEvidence recreate_evidence = 6;
+  DNSResolverObservationEvidence dns_resolver_candidate_observation = 7;
+  DNSResolverObservationEvidence dns_resolver_rollback_observation = 8;
+}
+
+// DNSResolverObservationEvidence is the bounded full proof returned by a
+// catalog-resolved DNS-resolution observation action. Every executable and
+// endpoint used to produce it is fixed in the Agent's compiled catalog.
+message DNSResolverObservationEvidence {
+  string component_id = 1;
+  string service_id = 2;
+  string artifact_id = 3;
+  bytes artifact_sha256 = 4;
+  uint64 render_generation = 5;
+  string image_reference = 6; // tagless repository@child-digest reference
+  bytes verified_image_digest = 7; // exact selected child digest
+  string listen_endpoint = 8;
+  bytes reload_sha512 = 9;
+  google.protobuf.Timestamp observed_at = 10;
+  DNSQueryProof static_query = 11; // absent when the render has no static record
+  DNSQueryProof catch_all_query = 12;
+  repeated DNSQueryProof forwarder_queries = 13;
+  string image_repository = 14;
+  bytes image_index_digest = 15;
+  string image_os = 16;
+  string image_architecture = 17;
+  bytes proof_sha256 = 18;
+  string image_variant = 19;
+}
+
+enum DNSQueryType {
+  DNS_QUERY_TYPE_UNSPECIFIED = 0;
+  DNS_QUERY_TYPE_A = 1;
+  DNS_QUERY_TYPE_NS = 2;
+}
+
+message DNSAnswerRecord {
+  string owner_name = 1;
+  DNSQueryType type = 2;
+  bytes ipv4 = 3; // exactly four bytes for A, empty for NS
+  string name_server = 4; // canonical absolute name for NS, empty for A
+}
+
+message DNSForwardCounter {
+  string upstream = 1; // normalized host:port selected from the rendered group
+  uint32 rcode = 2;
+  uint64 before = 3;
+  uint64 after = 4;
+}
+
+message DNSQueryProof {
+  string name = 1; // canonical absolute DNS name
+  DNSQueryType type = 2;
+  uint32 local_rcode = 3;
+  bool recursion_available = 4;
+  repeated DNSAnswerRecord answers = 5;
+  string selected_upstream = 6; // empty only for a static query
+  uint32 direct_rcode = 7; // meaningful iff selected_upstream is non-empty
+  repeated DNSForwardCounter counters = 8; // every configured group endpoint/rcode series
+  bool local_used_tcp = 9;
+  bool direct_used_tcp = 10;
+  uint32 attempts = 11;
 }
 
 message EnvironmentDirectoryTaskResult {
@@ -340,6 +404,7 @@ message TaskAssignment {
   string assignment_id = 6;
   ScriptAssignmentArtifacts script_artifacts = 8;
   ScriptExecutionCheckpoint script_checkpoint = 9;
+  bool automatic_reconcile = 10;
 }
 
 enum ScriptExecutionState {
@@ -449,6 +514,15 @@ message ExecutionPlan {
   repeated ResolvedRunnerSnapshot script_runner_snapshots = 9;
   repeated ScriptRunnerProjection script_runner_projections = 10;
   repeated ScriptBodyArtifactMetadata script_body_artifacts = 11;
+  ComponentLifecycleMode component_lifecycle_mode = 12;
+  ComponentApply component_rollback_observation = 13;
+}
+
+enum ComponentLifecycleMode {
+  COMPONENT_LIFECYCLE_MODE_UNSPECIFIED = 0;
+  COMPONENT_LIFECYCLE_MODE_UPDATE = 1;
+  COMPONENT_LIFECYCLE_MODE_ENABLE = 2;
+  COMPONENT_LIFECYCLE_MODE_DISABLE = 3;
 }
 
 enum PlanOperation {
@@ -499,6 +573,13 @@ message ComposeService {
   bytes proxy_config_json = 8;
   bytes proxy_config_sha256 = 9;
   string owner_component_id = 10;
+  string image_reference = 11;
+  string image_repository = 12;
+  bytes image_index_digest = 13;
+  bytes image_child_digest = 14;
+  string image_os = 15;
+  string image_architecture = 16;
+  string image_variant = 17;
 }
 
 enum ComposeServiceRole {
@@ -1299,7 +1380,10 @@ message ComponentApply {
   string artifact_id = 5;
   bytes artifact_digest = 6;
   uint64 generation = 7;
-  reserved 8, 9;
+  bool managed_config_content = 8;
+  bytes expected_previous_artifact_digest = 9;
+  string expected_previous_artifact_id = 10;
+  uint64 expected_previous_generation = 11;
 }
 
 // Host resolution mutations are closed Agent procedures. Paths and file
@@ -1323,6 +1407,35 @@ message ManagedConfigHelperRequest {
   string relative_path = 3;
   bytes content = 4;
   bytes sha256 = 5;
+  ManagedConfigOperation operation = 6;
+  string transaction_id = 7;
+  bytes expected_previous_sha256 = 8; // empty means the live target must be absent
+  uint64 generation = 9;
+}
+
+enum ManagedConfigOperation {
+  MANAGED_CONFIG_OPERATION_UNSPECIFIED = 0;
+  MANAGED_CONFIG_OPERATION_PUBLISH = 1;
+  MANAGED_CONFIG_OPERATION_COMMIT = 2;
+  MANAGED_CONFIG_OPERATION_ROLLBACK = 3;
+}
+
+enum ManagedConfigReplayDisposition {
+  MANAGED_CONFIG_REPLAY_DISPOSITION_UNSPECIFIED = 0;
+  MANAGED_CONFIG_REPLAY_DISPOSITION_APPLIED = 1;
+  MANAGED_CONFIG_REPLAY_DISPOSITION_EXACT_REPLAY = 2;
+  MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED = 3;
+}
+
+message ManagedConfigHelperResponse {
+  uint32 schema = 1;
+  string transaction_id = 2;
+  ManagedConfigOperation operation = 3;
+  ManagedConfigReplayDisposition disposition = 4;
+  bytes live_sha256 = 5;
+  bytes previous_sha256 = 6;
+  uint64 live_device = 7;
+  uint64 live_inode = 8;
 }
 
 // EnvironmentDirectoryHelperRequest is the single length-framed stdin message

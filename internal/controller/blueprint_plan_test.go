@@ -188,6 +188,11 @@ volumes:
 		Networks: composetypes.Networks{"frontend": {}},
 		Volumes:  composetypes.Volumes{"app-data": {}},
 	}
+	normalized, err := project.MarshalYAML()
+	if err != nil {
+		t.Fatalf("marshal normalized Blueprint Compose fixture: %v", err)
+	}
+	reader.projection.NormalizedCompose = normalized
 	artifact, err := RenderCompose(ComposeRenderInput{
 		Project: project, ArtifactID: artifactID,
 		ProjectOwnerKind: ComposeProjectOwnerTenant,
