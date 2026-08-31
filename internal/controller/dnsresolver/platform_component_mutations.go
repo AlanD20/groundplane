@@ -163,6 +163,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	task, err = finalizePlatformComponentTask(task, renderInput)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -315,6 +319,10 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
 	task := newPlatformComponentConfigTask(componentID, idempotencyKey, now, ensureService)
 	renderInput, err := service.planner.PrepareConfigTask(ctx, current, desired, task)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	task, err = finalizePlatformComponentTask(task, renderInput)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

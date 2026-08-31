@@ -65,6 +65,7 @@ type PlatformComponentTaskRenderInput struct {
 	ArtifactSHA256                 string                      `json:"artifact_sha256"`
 	ArtifactLength                 uint64                      `json:"artifact_length"`
 	PlanSHA256                     string                      `json:"plan_sha256"`
+	ExecutionPlanSHA256            string                      `json:"execution_plan_sha256"`
 }
 
 func platformComponentTaskRenderInputKey(planID string) string {
@@ -143,7 +144,8 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		) || !validSHA256(input.BaselineSHA256) || !validSHA256(input.HostResolutionSHA256) ||
 		!validSHA256(input.DefinitionSHA256) || !validSHA256(input.CatalogSHA256) ||
 		!validSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
-		!validSHA256(input.PlanSHA256) || !validSHA256(input.ImageIndexDigest) ||
+		!validSHA256(input.PlanSHA256) || !validSHA256(input.ExecutionPlanSHA256) ||
+		!validSHA256(input.ImageIndexDigest) ||
 		!validSHA256(input.ImageChildDigest) || !validSelectedPlatform(input) ||
 		input.ArtifactLength > managedconfig.MaximumArtifactBytes || !validComponentActionToken(input.ActionID) ||
 		input.EnsureService && input.DisableService {

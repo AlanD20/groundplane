@@ -133,7 +133,7 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 	if err != nil {
 		return nil, err
 	}
-	if hex.EncodeToString(execution.GetPlanHash()) != task.PlanHash {
+	if hex.EncodeToString(execution.GetPlanHash()) != resolved.input.ExecutionPlanSHA256 {
 		return nil, errs.New(errs.KindStateConflict, "registered Component execution plan changed")
 	}
 	return execution, nil
@@ -202,7 +202,7 @@ func (planner *PlatformExecutionPlanner) resolve(
 		expectedSteps = 2
 	}
 	if (input.TaskID != task.ID && task.RetryOf == "") || input.ComponentID != task.Target ||
-		input.PlanID != task.PlanID || input.PlanSHA256 != task.PlanHash || len(task.Steps) != expectedSteps ||
+		input.PlanID != task.PlanID || input.ExecutionPlanSHA256 != task.PlanHash || len(task.Steps) != expectedSteps ||
 		input.DesiredSHA256 != task.Params[etcd.TaskPlatformComponentDesiredSHA256Param] {
 		return resolvedPlatformComponent{}, errs.New(
 			errs.KindInternal,
@@ -324,6 +324,12 @@ func (planner *PlatformExecutionPlanner) resolve(
 			errs.KindStateConflict,
 			"registered Component platform image changed",
 		)
+	}
+	planDigest := componentsdk.DigestEnvironmentPlan(registeredPlan)
+	expectedPlanDigest, err := componentDigest(input.PlanSHA256)
+	if err != nil || subtle.ConstantTimeCompare(planDigest[:], expectedPlanDigest[:]) != 1 {
+		clearPlatformComponentPlan(registeredPlan)
+		return resolvedPlatformComponent{}, errs.New(errs.KindStateConflict, "registered Component plan changed")
 	}
 	if len(registeredPlan.Files) != 1 || uint64(len(registeredPlan.Files[0].Content)) != input.ArtifactLength {
 		clearPlatformComponentPlan(registeredPlan)

@@ -101,6 +101,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		return errs.New(errs.KindValidationFailed, "platform DNS resolver Task shape is invalid")
 	}
 	if task.PlanID != renderInput.PlanID || task.ID != renderInput.TaskID || task.Target != renderInput.ComponentID ||
+		task.PlanHash != renderInput.ExecutionPlanSHA256 ||
 		renderInput.HostResolutionInputRevision != projection.InputRevision {
 		return errs.New(errs.KindValidationFailed, "platform DNS resolver render input is not pinned")
 	}
@@ -245,10 +246,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	task.Params[TaskPlatformComponentDesiredSHA256Param] = desiredSHA256
 	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
 	task.Steps = platformResolverTaskSteps(PlatformComponentTaskRenderInput{EnsureService: ensureService})
-	renderInput, err := repository.platformResolverTaskPreparer(ctx, current, projection, task, priorObservation)
-	if err != nil {
-		return hostResolutionReconciliationChange{}, err
-	}
+	var finalLineage *platformResolverLiveLineage
 	if sealedPredecessor != nil {
 		if active == nil || string(active.Value) != sealedPredecessor.ID {
 			return hostResolutionReconciliationChange{}, errs.New(
@@ -308,15 +306,27 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		if !proven {
 			return hostResolutionReconciliationChange{}, nil
 		}
-		renderInput.PriorObservationModRevision = lineage.priorObservationModRevision
-		renderInput.PriorObservationRevision = lineage.priorObservationRevision
-		renderInput.PredecessorTaskID = lineage.predecessorTaskID
-		renderInput.ExpectedPreviousArtifactSHA256 = lineage.expectedPreviousArtifactSHA256
-		renderInput.ExpectedPreviousArtifactID = lineage.expectedPreviousArtifactID
-		renderInput.ExpectedPreviousGeneration = lineage.expectedPreviousGeneration
+		finalLineage = &lineage
+		priorObservation = platformResolverObservationForLineage(predecessorInput, lineage, priorObservation)
 	}
-	task.Steps = platformResolverTaskSteps(renderInput)
-	task.PlanHash = renderInput.PlanSHA256
+	renderInput, err := repository.platformResolverTaskPreparer(ctx, current, projection, task, priorObservation)
+	if err != nil {
+		return hostResolutionReconciliationChange{}, err
+	}
+	if finalLineage != nil {
+		renderInput.PriorObservationModRevision = finalLineage.priorObservationModRevision
+		if renderInput.PriorObservationRevision != finalLineage.priorObservationRevision ||
+			renderInput.PredecessorTaskID != finalLineage.predecessorTaskID ||
+			renderInput.ExpectedPreviousArtifactSHA256 != finalLineage.expectedPreviousArtifactSHA256 ||
+			renderInput.ExpectedPreviousArtifactID != finalLineage.expectedPreviousArtifactID ||
+			renderInput.ExpectedPreviousGeneration != finalLineage.expectedPreviousGeneration {
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver successor predecessor authority changed during planning",
+			)
+		}
+	}
+	task.PlanHash = renderInput.ExecutionPlanSHA256
 	if err := validateTaskRecord(task); err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
@@ -411,6 +421,44 @@ type platformResolverLiveLineage struct {
 	expectedPreviousArtifactSHA256 string
 	expectedPreviousArtifactID     string
 	expectedPreviousGeneration     uint64
+}
+
+func platformResolverObservationForLineage(
+	input PlatformComponentTaskRenderInput,
+	lineage platformResolverLiveLineage,
+	observation *ComponentObservationRecord,
+) *ComponentObservationRecord {
+	if observation != nil && observation.Revision == lineage.priorObservationRevision &&
+		observation.TaskID == lineage.predecessorTaskID &&
+		observation.CorefileSHA256 == lineage.expectedPreviousArtifactSHA256 &&
+		(lineage.expectedPreviousArtifactSHA256 == "" || observation.DNSResolverProof != nil &&
+			observation.DNSResolverProof.ArtifactID == lineage.expectedPreviousArtifactID &&
+			observation.DNSResolverProof.RenderGeneration == lineage.expectedPreviousGeneration) {
+		return observation
+	}
+	if lineage.expectedPreviousArtifactSHA256 == "" {
+		return &ComponentObservationRecord{}
+	}
+	composeArtifact := input.ComposeArtifact
+	if input.RollbackComposeArtifact != nil &&
+		lineage.expectedPreviousArtifactID == input.ExpectedPreviousArtifactID {
+		composeArtifact = input.RollbackComposeArtifact
+	}
+	return &ComponentObservationRecord{
+		ComponentID: input.ComponentID, ServiceID: input.GeneratedServiceID,
+		PlanID: input.OwnershipPlanID, ComposeArtifactID: input.ComposeArtifactID,
+		Enabled: true, Healthy: true, RenderGeneration: lineage.expectedPreviousGeneration,
+		OwnershipGeneration: input.OwnershipGeneration,
+		CorefileSHA256:      lineage.expectedPreviousArtifactSHA256,
+		TaskID:              lineage.predecessorTaskID, Revision: lineage.priorObservationRevision,
+		DNSResolverProof: &TaskDNSResolverObservationEvidence{
+			ComponentID: input.ComponentID, ServiceID: input.GeneratedServiceID,
+			ArtifactID:       lineage.expectedPreviousArtifactID,
+			ArtifactSHA256:   lineage.expectedPreviousArtifactSHA256,
+			RenderGeneration: lineage.expectedPreviousGeneration,
+		},
+		ComposeArtifact: composeArtifact,
+	}
 }
 
 func platformResolverFinalLiveLineage(
@@ -509,7 +557,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		return hostResolutionReconciliationChange{}, err
 	}
 	if input.PlanID != source.Record.PlanID || input.ComponentID != source.Record.Target ||
-		input.PlanSHA256 != source.Record.PlanHash || input.PlanSHA256 != retry.PlanHash ||
+		input.ExecutionPlanSHA256 != source.Record.PlanHash || input.ExecutionPlanSHA256 != retry.PlanHash ||
 		input.DesiredSHA256 != source.Record.Params[TaskPlatformComponentDesiredSHA256Param] {
 		return hostResolutionReconciliationChange{}, errs.New(
 			errs.KindStateConflict,
@@ -741,7 +789,7 @@ func (repository *TaskRepository) platformResolverTaskInputAtRevision(
 	if err != nil {
 		return PlatformComponentTaskRenderInput{}, err
 	}
-	if input.PlanID != task.PlanID || input.ComponentID != task.Target || task.PlanHash != input.PlanSHA256 ||
+	if input.PlanID != task.PlanID || input.ComponentID != task.Target || task.PlanHash != input.ExecutionPlanSHA256 ||
 		!platformResolverTaskInputBelongsToTask(task, input) ||
 		task.Params[TaskPlatformComponentDesiredSHA256Param] != input.DesiredSHA256 {
 		return PlatformComponentTaskRenderInput{}, errs.New(

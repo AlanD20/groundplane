@@ -59,7 +59,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	}
 	if component.Desired.Owner != core.ComponentOwnerPlatform || component.Desired.OwnerID != "" ||
 		(input.TaskID != task.ID && task.RetryOf == "") ||
-		input.PlanID != task.PlanID || input.ComponentID != task.Target || task.PlanHash != input.PlanSHA256 ||
+		input.PlanID != task.PlanID || input.ComponentID != task.Target || task.PlanHash != input.ExecutionPlanSHA256 ||
 		task.Params[TaskPlatformComponentDesiredSHA256Param] != input.DesiredSHA256 {
 		return platformComponentTaskChange{}, errs.New(
 			errs.KindStateConflict,
@@ -278,7 +278,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 		return err
 	}
 	if (input.TaskID != task.ID && task.RetryOf == "") || input.PlanID != task.PlanID ||
-		input.ComponentID != task.Target || task.PlanHash != input.PlanSHA256 ||
+		input.ComponentID != task.Target || task.PlanHash != input.ExecutionPlanSHA256 ||
 		input.DesiredSHA256 != task.Params[TaskPlatformComponentDesiredSHA256Param] {
 		return errs.New(errs.KindStateConflict, "platform Component Task replay evidence changed")
 	}

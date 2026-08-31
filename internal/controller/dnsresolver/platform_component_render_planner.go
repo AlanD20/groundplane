@@ -369,6 +369,7 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		ImageReference: selectedReference,
 		ArtifactSHA256: hex.EncodeToString(intent.ArtifactSHA256[:]),
 		ArtifactLength: intent.ArtifactLength,
+		PlanSHA256:     hex.EncodeToString(intent.PlanSHA256[:]),
 	}
 	return sealPlatformComponentTaskPlanHash(task, input, selectedPlan.Services[0].ObservationAction)
 }
@@ -443,7 +444,7 @@ func sealPlatformComponentTaskPlanHash(
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
-	input.PlanSHA256 = hex.EncodeToString(execution.GetPlanHash())
+	input.ExecutionPlanSHA256 = hex.EncodeToString(execution.GetPlanHash())
 	return input, nil
 }
 

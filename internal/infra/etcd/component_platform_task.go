@@ -65,7 +65,8 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	}
 	task.Params[TaskPlatformComponentDesiredSHA256Param] = desiredDigest
 	if renderInput.PlanID != task.PlanID || renderInput.TaskID != task.ID ||
-		renderInput.ComponentID != replacement.Desired.ID || renderInput.DesiredSHA256 != desiredDigest {
+		renderInput.ComponentID != replacement.Desired.ID || renderInput.DesiredSHA256 != desiredDigest ||
+		renderInput.ExecutionPlanSHA256 != task.PlanHash {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"platform Component Task render input does not match its Task",

@@ -106,6 +106,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		t.Fatalf("execution fixture does not support %s/%s/%s", runtime.GOOS, runtime.GOARCH, variant)
 	}
 	artifactDigest := sha256.Sum256(firstPlan.Files[0].Content)
+	registeredPlanDigest := componentsdk.DigestEnvironmentPlan(firstPlan)
 	input := etcd.PlatformComponentTaskRenderInput{
 		PlanID:                         planID,
 		TaskID:                         taskID,
@@ -139,6 +140,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		ImageReference:                 selectedReference,
 		ArtifactSHA256:                 hex.EncodeToString(artifactDigest[:]),
 		ArtifactLength:                 uint64(len(firstPlan.Files[0].Content)),
+		PlanSHA256:                     hex.EncodeToString(registeredPlanDigest[:]),
 	}
 	task := etcd.TaskRecord{
 		ID:               taskID,
@@ -171,7 +173,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	if err != nil {
 		t.Fatalf("sealPlatformComponentTaskPlanHash() error = %v", err)
 	}
-	task.PlanHash = input.PlanSHA256
+	task.PlanHash = input.ExecutionPlanSHA256
 	baseline := etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: etcd.HostResolverBaselineRecord{
 		Generation: 1, Content: []byte("nameserver 1.1.1.1\n"), SHA256: input.BaselineSHA256,
 	}}
@@ -213,6 +215,26 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	if !foundOwnership || execution.GetArtifacts()[0].GetArtifactId() != input.ComposeArtifactID {
 		t.Fatal("reload observation did not reuse sealed baseline ownership")
 	}
+	customRootPlanner, err := NewPlatformComponentExecutionPlanner(
+		"/srv/groundplane/vol",
+		executionRepositoryStub{
+			input: input, current: etcd.Versioned[etcd.ComponentRecord]{Record: record}, baseline: baseline,
+		},
+		catalog,
+	)
+	if err != nil {
+		t.Fatalf("NewPlatformComponentExecutionPlanner(custom root) error = %v", err)
+	}
+	customRootExecution, err := customRootPlanner.ResolveComponentExecutionPlan(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ResolveComponentExecutionPlan(custom root) error = %v", err)
+	}
+	if !strings.EqualFold(
+		hex.EncodeToString(customRootExecution.GetPlanHash()),
+		hex.EncodeToString(execution.GetPlanHash()),
+	) {
+		t.Fatal("configured volume root changed platform Component execution bytes")
+	}
 	retry := task
 	retry.ID = ids.NewAt(ids.KindTask, now, 8)
 	retry.RetryOf = task.ID
@@ -223,6 +245,13 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	if replayed.GetPlanId() != execution.GetPlanId() ||
 		!strings.EqualFold(hex.EncodeToString(replayed.GetPlanHash()), hex.EncodeToString(execution.GetPlanHash())) {
 		t.Fatal("retry changed the sealed plan identity")
+	}
+	registeredPlanOnlyDrift := firstPlan
+	registeredPlanOnlyDrift.Files = append([]componentsdk.ManagedFile(nil), firstPlan.Files...)
+	registeredPlanOnlyDrift.Files[0].Path = "config/renamed-Corefile"
+	catalog.plan = registeredPlanOnlyDrift
+	if _, err := planner.ResolveComponentExecutionPlan(context.Background(), task); err == nil {
+		t.Fatal("ResolveComponentExecutionPlan() accepted registered plan-only drift")
 	}
 	catalog.plan = secondPlan
 	if _, err := planner.ResolveComponentExecutionPlan(context.Background(), task); err == nil {

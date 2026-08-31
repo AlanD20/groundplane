@@ -99,7 +99,10 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareBootstrapConfigTaskAtProjection() error = %v", err)
 	}
-	task.PlanHash = input.PlanSHA256
+	if input.PlanSHA256 == input.ExecutionPlanSHA256 {
+		t.Fatal("registered EnvironmentPlan and generic ExecutionPlan digests were conflated")
+	}
+	task.PlanHash = input.ExecutionPlanSHA256
 	task.Params[etcd.TaskPlatformComponentDesiredSHA256Param] = input.DesiredSHA256
 	registeredPlan, err := environmentPlanner.Plan(
 		definition.Implementation(), input.GeneratedServiceID, componentdns.RenderInput{},

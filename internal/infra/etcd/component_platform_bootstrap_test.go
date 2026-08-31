@@ -59,9 +59,9 @@ func TestPlatformResolverBootstrapTaskIsClaimable(t *testing.T) {
 		ImageRepository: "coredns/coredns", ImageIndexDigest: strings.Repeat("7", 64),
 		ImageChildDigest: strings.Repeat("8", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("8", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64", ArtifactLength: 1,
-		PlanSHA256: strings.Repeat("e", 64),
+		PlanSHA256: strings.Repeat("e", 64), ExecutionPlanSHA256: strings.Repeat("f", 64),
 	}
-	task.PlanHash = input.PlanSHA256
+	task.PlanHash = input.ExecutionPlanSHA256
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeKind = IdempotencyScopePlatform
 	marker.Locator.ScopeID = "-"

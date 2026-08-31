@@ -101,8 +101,10 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil {
 		t.Fatalf("PlatformComponentDesiredDigest() error = %v", err)
 	}
-	tasks.platformResolverTaskPreparer = func(_ context.Context, component Versioned[ComponentRecord], input HostResolutionProjectionRecord, task TaskRecord, _ *ComponentObservationRecord) (PlatformComponentTaskRenderInput, error) {
-		return PlatformComponentTaskRenderInput{
+	preparedTasks := make(map[string]TaskRecord)
+	preparedInputs := make(map[string]PlatformComponentTaskRenderInput)
+	tasks.platformResolverTaskPreparer = func(_ context.Context, component Versioned[ComponentRecord], input HostResolutionProjectionRecord, task TaskRecord, observation *ComponentObservationRecord) (PlatformComponentTaskRenderInput, error) {
+		prepared := PlatformComponentTaskRenderInput{
 			PlanID:                      task.PlanID,
 			TaskID:                      task.ID,
 			ComponentID:                 component.Record.Desired.ID,
@@ -131,12 +133,30 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 				"8",
 				64,
 			),
-			ImageReference:    "coredns/coredns@sha256:" + strings.Repeat("8", 64),
-			ImageOS:           "linux",
-			ImageArchitecture: "amd64",
-			ArtifactLength:    1,
-			PlanSHA256:        strings.Repeat("e", 64),
-		}, nil
+			ImageReference:      "coredns/coredns@sha256:" + strings.Repeat("8", 64),
+			ImageOS:             "linux",
+			ImageArchitecture:   "amd64",
+			ArtifactLength:      1,
+			PlanSHA256:          strings.Repeat("e", 64),
+			ExecutionPlanSHA256: strings.Repeat("f", 64),
+		}
+		prepared.EnsureService = len(component.Record.Runtime.GeneratedServices) == 0 ||
+			!component.Record.Runtime.Healthy
+		if observation != nil {
+			prepared.PriorObservationRevision = observation.Revision
+			prepared.PredecessorTaskID = observation.TaskID
+			prepared.ExpectedPreviousArtifactSHA256 = observation.CorefileSHA256
+			if observation.DNSResolverProof != nil {
+				prepared.ExpectedPreviousArtifactID = observation.DNSResolverProof.ArtifactID
+				prepared.ExpectedPreviousGeneration = observation.DNSResolverProof.RenderGeneration
+			}
+			if prepared.EnsureService && observation.Enabled {
+				prepared.RollbackComposeArtifact = observation.ComposeArtifact
+			}
+		}
+		preparedTasks[task.ID] = cloneTaskRecord(task)
+		preparedInputs[task.ID] = clonePlatformComponentTaskRenderInput(prepared)
+		return prepared, nil
 	}
 	operatorTask := newPlatformDNSResolverTask(current.Record.Desired.ID, now.Add(-time.Second))
 	operatorTask.Actor = TaskActorOperator
@@ -148,7 +168,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil {
 		t.Fatalf("prepare operator resolver Task = %v", err)
 	}
-	operatorTask.PlanHash = operatorInput.PlanSHA256
+	operatorTask.PlanHash = operatorInput.ExecutionPlanSHA256
 	operatorDesired, err := ProjectComponentRecord(current.Record)
 	if err != nil {
 		t.Fatalf("ProjectComponentRecord(operator resolver) = %v", err)
@@ -268,6 +288,22 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if secondInput.PriorObservationModRevision != 0 || secondInput.PriorObservationRevision != 1 ||
 		secondInput.PredecessorTaskID != first.ID || secondInput.ExpectedPreviousArtifactSHA256 != firstInput.ArtifactSHA256 {
 		t.Fatalf("same-transaction successor prior fence = %#v", secondInput)
+	}
+	preparedTask := preparedTasks[second.ID]
+	preparedInput := preparedInputs[second.ID]
+	if len(preparedTask.Steps) != len(secondRecord.Steps) {
+		t.Fatalf("successor prepared/persisted step counts = %d/%d", len(preparedTask.Steps), len(secondRecord.Steps))
+	}
+	for index := range secondRecord.Steps {
+		if preparedTask.Steps[index].ID != secondRecord.Steps[index].ID {
+			t.Fatalf("successor prepared/persisted step %d = %s/%s",
+				index, preparedTask.Steps[index].ID, secondRecord.Steps[index].ID)
+		}
+	}
+	if preparedInput.ExpectedPreviousArtifactSHA256 != secondInput.ExpectedPreviousArtifactSHA256 ||
+		preparedInput.ExpectedPreviousArtifactID != secondInput.ExpectedPreviousArtifactID ||
+		preparedInput.ExpectedPreviousGeneration != secondInput.ExpectedPreviousGeneration {
+		t.Fatalf("successor prepared/persisted predecessor authority = %#v/%#v", preparedInput, secondInput)
 	}
 
 	// Rationale: the predecessor observation is published in the same terminal

@@ -106,6 +106,7 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 		ImageChildDigest: strings.Repeat("8", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("8", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64",
 		ArtifactSHA256: strings.Repeat("5", 64), ArtifactLength: 1, PlanSHA256: strings.Repeat("6", 64),
+		ExecutionPlanSHA256: strings.Repeat("7", 64),
 	}
 	input.ComposeArtifact = testPlatformComponentComposeArtifact(input.ComposeArtifactID, input.GeneratedServiceID)
 	renderValue, err := encodePlatformComponentTaskRenderInput(input)
@@ -125,7 +126,7 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 	finishedAt := now.Add(time.Minute)
 	task := TaskRecord{
 		ID: taskID, Actor: TaskActorOperator, Executor: TaskExecutorAgent, PlanID: planID,
-		PlanHash: input.PlanSHA256, RenderGeneration: 1, Type: TaskUpdate, Target: input.ComponentID,
+		PlanHash: input.ExecutionPlanSHA256, RenderGeneration: 1, Type: TaskUpdate, Target: input.ComponentID,
 		Params: map[string]string{
 			TaskResourceKindParam:                   TaskResourceComponent,
 			TaskPlatformComponentDesiredSHA256Param: desiredSHA256,
@@ -221,7 +222,8 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 		ArtifactID: ids.NewAt(ids.KindConfig, now, 6), ComposeArtifactID: ids.NewAt(ids.KindConfig, now, 7),
 		OwnershipPlanID: planID, OwnershipGeneration: 1, ArtifactSHA256: strings.Repeat("6", 64),
 		ArtifactLength: 1, DisableService: true, PlanSHA256: strings.Repeat("7", 64),
-		ImageRepository: "coredns/coredns", ImageIndexDigest: strings.Repeat("8", 64),
+		ExecutionPlanSHA256: strings.Repeat("a", 64),
+		ImageRepository:     "coredns/coredns", ImageIndexDigest: strings.Repeat("8", 64),
 		ImageChildDigest: strings.Repeat("9", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("9", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64",
 	}
@@ -231,7 +233,7 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 	}
 	task := TaskRecord{
 		ID: taskID, Actor: TaskActorOperator, Executor: TaskExecutorAgent,
-		Status: TaskStatusCompleted, PlanID: planID, PlanHash: input.PlanSHA256,
+		Status: TaskStatusCompleted, PlanID: planID, PlanHash: input.ExecutionPlanSHA256,
 		RenderGeneration: 1, Type: TaskUpdate, Target: componentID,
 		Params: map[string]string{
 			TaskResourceKindParam:                   TaskResourceComponent,

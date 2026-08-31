@@ -70,7 +70,10 @@ func EnsurePlatformResolverTask(
 	if err != nil {
 		return err
 	}
-	task.PlanHash = renderInput.PlanSHA256
+	task, err = finalizePlatformComponentTask(task, renderInput)
+	if err != nil {
+		return err
+	}
 	task.IdempotencyKey = task.OperationID
 	intent, err := platformComponentLifecycleIntent(
 		ctx, coordinator, task.Target, "update", platformComponentUpdateRoute,
@@ -97,6 +100,20 @@ func EnsurePlatformResolverTask(
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
 	return tasks.PublishPlatformDNSResolverTask(ctx, current, empty, task, renderInput, marker)
+}
+
+func finalizePlatformComponentTask(
+	task etcd.TaskRecord,
+	input etcd.PlatformComponentTaskRenderInput,
+) (etcd.TaskRecord, error) {
+	if input.TaskID != task.ID || input.PlanID != task.PlanID || input.ComponentID != task.Target {
+		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "platform Component plan identity changed")
+	}
+	if _, err := componentDigest(input.ExecutionPlanSHA256); err != nil {
+		return etcd.TaskRecord{}, err
+	}
+	task.PlanHash = input.ExecutionPlanSHA256
+	return task, nil
 }
 
 func startupResolverTask(componentID string, createdAt time.Time, ensureService bool) etcd.TaskRecord {
