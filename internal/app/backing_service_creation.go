@@ -196,14 +196,6 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	componentRecords, componentValues, err := backingCreationComponents(
-		environment.ID,
-		allocator,
-		service.componentCatalog,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	entries, generations, secrets, secretValues, resolved, err := service.backingCreationEntries(
 		ctx, project.ID, environment.ID, spec, allocator, stage.Record.CreatedAt,
 	)
@@ -238,7 +230,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		NetworkPool: environment.NetworkPool, VolumeDir: environment.VolumeDir,
 		Zones:      map[string]core.Zone{zone.Desired.Name: zone.Desired},
 		Services:   map[string]core.Service{desiredService.Name: desiredService},
-		Components: componentValues, Volumes: map[string]core.Volume{volume.Key: volume},
+		Components: nil, Volumes: map[string]core.Volume{volume.Key: volume},
 		Entries: entryDesired, CreatedAt: environment.CreatedAt,
 	}
 	baseProject := backingComposeProject(spec, adapter.DefaultImage(), zone.Desired, volume, environment)
@@ -330,7 +322,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	}
 	projection := desiredrevision.ComposeProjection(
 		environment.ID, task.ID, 1, identities, map[string]string{volume.Key: volume.Slug},
-		volumeMounts, artifactValue, normalizedCompose, nil, nil, nil, componentRecords, entries,
+		volumeMounts, artifactValue, normalizedCompose, nil, nil, nil, nil, entries,
 	)
 	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
 	if err != nil {
@@ -361,7 +353,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	}
 	result, publishErr := service.repository.PublishBackingServiceWithTask(ctx, etcd.BackingServiceCreation{
 		VolumeRoot: service.volumeRoot, Stage: stage, PoolRegistry: poolRegistry,
-		Project: project, Environment: environment, Components: componentRecords,
+		Project: project, Environment: environment, Components: nil,
 		Zone: zone, Service: serviceRecord, Secrets: secrets, SecretValues: secretValues,
 		Entries: entries, EntryValues: generations, Claim: claim,
 		Revision:   etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: environment.ID, RevisionID: task.ID},
@@ -397,32 +389,6 @@ func isUnknownBackingServiceCreationOutcome(err error) bool {
 	}
 	kind, ok := errs.KindOf(err)
 	return ok && kind == errs.KindStorageUnavailable
-}
-
-func backingCreationComponents(
-	environmentID string,
-	allocator *desiredrevision.BlueprintIdentityAllocator,
-	catalog []controller.EnvironmentComponentRegistration,
-) ([]etcd.ComponentRecord, []core.Component, error) {
-	if err := controller.ValidateEnvironmentComponentCatalog(catalog); err != nil {
-		return nil, nil, err
-	}
-	values := make([]core.Component, len(catalog))
-	for index, registration := range catalog {
-		values[index] = core.Component{
-			ID: allocator.New(ids.KindComponent), Owner: core.ComponentOwnerEnvironment,
-			OwnerID: environmentID, Kind: registration.Kind,
-		}
-	}
-	records := make([]etcd.ComponentRecord, len(values))
-	for index := range values {
-		record, err := etcd.NewComponentRecord(values[index])
-		if err != nil {
-			return nil, nil, err
-		}
-		records[index] = record
-	}
-	return records, values, nil
 }
 
 func (service *backingServiceCreationService) backingCreationEntries(

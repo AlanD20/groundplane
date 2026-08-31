@@ -283,7 +283,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err := ValidateEnvironmentVolumeDir(creation.VolumeRoot, creation.Project, creation.Environment); err != nil {
 		return err
 	}
-	if err := validateInitialEnvironmentComponents(creation.Environment.ID, creation.Components); err != nil {
+	if err := validateBackingServiceComponents(creation.Components); err != nil {
 		return err
 	}
 	if creation.PoolRegistry.Revision < 0 ||
@@ -379,6 +379,13 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	}
 	if err := validateIdempotencyMarker(creation.Marker); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateBackingServiceComponents(components []ComponentRecord) error {
+	if len(components) != 0 {
+		return errs.New(errs.KindValidationFailed, "Backing-service creation requires zero Environment Components")
 	}
 	return nil
 }
