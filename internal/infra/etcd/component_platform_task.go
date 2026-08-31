@@ -56,7 +56,10 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	task = cloneTaskRecord(task)
+	task, err = bindPlatformComponentTaskMarker(task, marker)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	if task.Params == nil {
 		task.Params = make(map[string]string, 2)
 	}
@@ -73,18 +76,6 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(renderInputValue)
-	if task.IdempotencyKey == "" {
-		task.IdempotencyKey = marker.Locator.Key
-	}
-	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"platform Component Task marker does not match its Task",
-		)
-	}
 	initiation, err := newPlatformTaskInitiation(TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -95,10 +86,6 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			platformComponentOwnerKey(current.Record.Desired.ID),
@@ -169,6 +156,42 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
+}
+
+func bindPlatformComponentTaskMarker(task TaskRecord, marker IdempotencyMarker) (TaskRecord, error) {
+	task = cloneTaskRecord(task)
+	if task.IdempotencyKey == "" {
+		task.IdempotencyKey = marker.Locator.Key
+	}
+	if task.IdempotencyKey != marker.Locator.Key || marker.Kind != IdempotencyMarkerTask ||
+		marker.State != IdempotencyMarkerPending || marker.TaskID != task.ID ||
+		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
+		return TaskRecord{}, errs.New(
+			errs.KindValidationFailed,
+			"platform Component Task marker does not match its Task",
+		)
+	}
+	if err := validateIdempotencyMarker(marker); err != nil {
+		return TaskRecord{}, err
+	}
+	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	return task, nil
+}
+
+func requireAppliedPlatformComponentTask(result IdempotencyTransactionResult) error {
+	outcome, existing, conflict, err := result.Classify()
+	defer clear(existing.Intent.Ciphertext)
+	defer clear(existing.Response.Body)
+	if err != nil {
+		return err
+	}
+	if conflict != nil {
+		return conflict
+	}
+	if outcome != IdempotencyKnownApplied {
+		return errs.New(errs.KindStateConflict, "platform Component Task publication already exists")
+	}
+	return nil
 }
 
 func PlatformComponentDesiredDigest(record ComponentRecord) (string, error) {

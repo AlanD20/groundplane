@@ -2,10 +2,14 @@ package dnsresolver
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,8 +21,9 @@ func EnsurePlatformResolverTask(
 	components *etcd.ComponentRepository,
 	tasks *etcd.TaskRepository,
 	planner *PlatformRenderPlanner,
+	coordinator *idempotentintent.Coordinator,
 ) error {
-	if ctx == nil || components == nil || tasks == nil || planner == nil {
+	if ctx == nil || components == nil || tasks == nil || planner == nil || coordinator == nil {
 		return errs.New(errs.KindInternal, "platform resolver startup dependencies are required")
 	}
 	_, found, err := components.GetHostResolutionProjection(ctx)
@@ -66,7 +71,32 @@ func EnsurePlatformResolverTask(
 		return err
 	}
 	task.PlanHash = renderInput.PlanSHA256
-	return tasks.PublishPlatformDNSResolverTask(ctx, current, empty, task, renderInput)
+	task.IdempotencyKey = task.OperationID
+	intent, err := platformComponentLifecycleIntent(
+		ctx, coordinator, task.Target, "update", platformComponentUpdateRoute,
+	)
+	if err != nil {
+		return err
+	}
+	defer clear(intent.durable.Ciphertext)
+	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
+	if err != nil {
+		return errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(responseBody)
+	marker := etcd.IdempotencyMarker{
+		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+		Locator: etcd.IdempotencyLocator{
+			ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
+			Route: platformComponentUpdateRoute, Key: task.IdempotencyKey,
+		},
+		Intent: intent.durable,
+		Response: etcd.IdempotencyResponse{
+			Status: http.StatusAccepted, ContentKind: "application/json", Body: responseBody,
+		},
+		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
+	}
+	return tasks.PublishPlatformDNSResolverTask(ctx, current, empty, task, renderInput, marker)
 }
 
 func startupResolverTask(componentID string, createdAt time.Time, ensureService bool) etcd.TaskRecord {

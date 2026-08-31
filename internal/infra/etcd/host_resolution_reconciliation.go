@@ -86,6 +86,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	projection HostResolutionProjectionRecord,
 	task TaskRecord,
 	renderInput PlatformComponentTaskRenderInput,
+	marker IdempotencyMarker,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
@@ -110,7 +111,10 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if renderInput.DesiredSHA256 != desiredDigest {
 		return errs.New(errs.KindValidationFailed, "platform DNS resolver desired state is not pinned")
 	}
-	task.Params = cloneStringMap(task.Params)
+	task, err = bindPlatformComponentTaskMarker(task, marker)
+	if err != nil {
+		return err
+	}
 	task.Params[TaskPlatformComponentDesiredSHA256Param] = desiredDigest
 	if err := validateTaskRecord(task); err != nil {
 		return err
@@ -188,19 +192,15 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if err != nil {
 		return err
 	}
-	conditions, mutations, _, err = plan.consume()
+	idempotency, err := newIdempotencyRepository(repository.store)
 	if err != nil {
 		return err
 	}
-	defer clearMutationValues(mutations)
-	result, err := repository.store.Transact(ctx, conditions, mutations)
+	result, err := idempotency.Apply(ctx, marker, plan)
 	if err != nil {
 		return err
 	}
-	if !result.Succeeded {
-		return errs.New(errs.KindStateConflict, "platform DNS resolver Task publication conflicted")
-	}
-	return nil
+	return requireAppliedPlatformComponentTask(result)
 }
 
 // preparePlatformDNSResolverTaskContribution seals one automatic Task into

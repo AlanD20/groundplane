@@ -240,6 +240,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent protector: %w", err)
 	}
+	intentCoordinator, err := idempotentintent.NewCoordinator(intentProtector)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+	}
 	entryValues, err := etcd.NewEntryValueGenerationRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -533,10 +538,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: configure platform resolver Component selector: %w", err)
 	}
 	if err := controllerdns.EnsurePlatformResolverTask(
-		ctx,
-		componentRecords,
-		tasks,
-		platformRenderPlanner,
+		ctx, componentRecords, tasks, platformRenderPlanner, intentCoordinator,
 	); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform resolver projection: %w", err)
@@ -560,11 +562,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
-	}
-	intentCoordinator, err := idempotentintent.NewCoordinator(intentProtector)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
 	}
 	runnerPools, err := cfg.AllocationPools()
 	if err != nil {
