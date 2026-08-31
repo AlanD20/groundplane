@@ -141,7 +141,7 @@ func (Renderer) Render(input dnsresolver.RenderInput) ([]byte, error) {
 		return nil, err
 	}
 	var output strings.Builder
-	output.WriteString(".:53 {\n")
+	output.WriteString(". {\n")
 	output.WriteString("    bind 127.0.0.1\n")
 	if len(normalized.Hosts) > 0 {
 		output.WriteString("    hosts {\n")

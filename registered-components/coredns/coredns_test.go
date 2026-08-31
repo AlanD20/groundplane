@@ -1,6 +1,7 @@
 package coredns
 
 import (
+	"bytes"
 	"net/netip"
 	"slices"
 	"testing"
@@ -66,6 +67,33 @@ func TestRendererRejectsConflictingHosts(t *testing.T) {
 	}
 }
 
+// Rationale: the immutable CoreDNS validation action appends -dns.port 0 to
+// the image entrypoint, but CoreDNS cannot override an explicit Corefile port.
+// The serving artifact must therefore use the default-port form so validation
+// can bind an ephemeral port while the ordinary service still defaults to 53.
+func TestRendererKeepsValidationPortOverridable(t *testing.T) {
+	t.Parallel()
+	plan, err := Plan(PlanInput{
+		GeneratedServiceID: "svc_test",
+		Render: dnsresolver.RenderInput{
+			CatchAll: []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 53)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(plan.Files) != 1 || !bytes.HasPrefix(plan.Files[0].Content, []byte(". {\n")) {
+		t.Fatalf("Plan() Corefile = %q, want an overridable default-port server block", plan.Files)
+	}
+	if !slices.Equal(ValidateConfigCommand(), []string{"-conf", "/dev/stdin", "-dns.port", "0"}) ||
+		len(plan.Services) != 1 ||
+		!slices.Equal(plan.Services[0].Command, []string{"-conf", CorefileTarget}) {
+		t.Fatalf("Plan() validation/serving argv = %q / %#v", ValidateConfigCommand(), plan.Services)
+	}
+}
+
+// Rationale: the registered action and serving Service must use the same
+// immutable CoreDNS image, validation argv, and serving observation authority.
 func TestPlanPinsServingImageValidationAndHealthObservation(t *testing.T) {
 	t.Parallel()
 	plan, err := Plan(PlanInput{
