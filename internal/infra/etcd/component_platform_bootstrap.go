@@ -8,19 +8,24 @@ import (
 )
 
 const (
-	platformCoreDNSComponentID    = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+	platformCoreDNSComponentID       = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+	platformComponentBootstrapPrefix = "/v1/records/platform-component-bootstrap/"
 )
+
+func platformComponentBootstrapKey(componentID string) string {
+	return platformComponentBootstrapPrefix + componentID
+}
 
 // DefaultPlatformComponents returns the stable platform singleton catalog.
 func DefaultPlatformComponents(tailnetDelegation bool) ([]ComponentRecord, error) {
 	components := []core.Component{
 		{
-			ID: platformCoreDNSComponentID,
-			Owner: core.ComponentOwnerPlatform,
-			Kind: core.ComponentKindCoreDNS,
+			ID:      platformCoreDNSComponentID,
+			Owner:   core.ComponentOwnerPlatform,
+			Kind:    core.ComponentKindCoreDNS,
 			Enabled: true,
 			Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
-				UpstreamAuto: true,
+				UpstreamAuto:      true,
 				TailnetDelegation: tailnetDelegation,
 			}},
 		},
@@ -59,11 +64,45 @@ func (repository *ComponentRepository) EnsurePlatformComponents(
 		if kind, ok := errs.KindOf(err); !ok || kind != errs.KindComponentNotFound {
 			return nil, err
 		}
-		created, err := repository.CreatePlatformComponent(ctx, record)
+		created, err := repository.createPlatformComponent(ctx, record, true)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, created)
 	}
 	return result, nil
+}
+
+// HasPlatformComponentBootstrapProvenance proves that the current record is
+// still the exact singleton created by the bootstrap repository transaction.
+func (repository *ComponentRepository) HasPlatformComponentBootstrapProvenance(
+	ctx context.Context,
+	current Versioned[ComponentRecord],
+) (bool, error) {
+	if err := validateContext(ctx); err != nil {
+		return false, err
+	}
+	if err := validatePlatformComponentRecord(current.Record); err != nil {
+		return false, err
+	}
+	if current.Revision <= 0 || current.ReadRevision < current.Revision {
+		return false, errs.New(errs.KindValidationFailed, "platform Component version metadata is invalid")
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{platformComponentBootstrapKey(current.Record.Desired.ID)}, Revision: current.ReadRevision,
+	})
+	if err != nil {
+		return false, err
+	}
+	if state == nil || len(state.Values) != 1 || state.ReadRevision != current.ReadRevision {
+		return false, errs.New(errs.KindInternal, "platform Component bootstrap provenance read is invalid")
+	}
+	if state.Values[0] == nil {
+		return false, nil
+	}
+	if state.Values[0].ModRevision != current.Revision ||
+		string(state.Values[0].Value) != current.Record.Desired.ID {
+		return false, errs.New(errs.KindStateConflict, "platform Component bootstrap provenance is stale")
+	}
+	return true, nil
 }

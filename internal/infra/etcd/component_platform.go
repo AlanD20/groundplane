@@ -24,27 +24,52 @@ func (repository *ComponentRepository) CreatePlatformComponent(
 	ctx context.Context,
 	record ComponentRecord,
 ) (Versioned[ComponentRecord], error) {
+	return repository.createPlatformComponent(ctx, record, false)
+}
+
+func (repository *ComponentRepository) createPlatformComponent(
+	ctx context.Context,
+	record ComponentRecord,
+	bootstrap bool,
+) (Versioned[ComponentRecord], error) {
 	if err := validatePlatformComponentRecord(record); err != nil {
 		return Versioned[ComponentRecord]{}, err
+	}
+	if bootstrap && (record.Desired.ID != platformCoreDNSComponentID ||
+		record.Desired.Kind != core.ComponentKindCoreDNS || !record.Desired.Enabled ||
+		len(record.Runtime.GeneratedServices) != 0 || record.Runtime.PinnedIPv4 != "" || record.Runtime.Healthy) {
+		return Versioned[ComponentRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"platform Component bootstrap record is invalid",
+		)
 	}
 	value, err := encodeComponentRecord(record)
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
 	defer clear(value)
-	result, err := repository.store.Transact(ctx, []Condition{
+	conditions := []Condition{
 		{Key: componentKey(record.Desired.ID)},
 		{Key: platformComponentOwnerKey(record.Desired.ID)},
 		{
 			Key: platformComponentKindKey(record.Desired.Kind),
 		},
 		{Key: deletionTombstoneKey("component", record.Desired.ID)},
-	}, []Mutation{
+	}
+	mutations := []Mutation{
 		{Type: MutationPut, Key: componentKey(record.Desired.ID), Value: value},
 		{Type: MutationPut, Key: platformComponentOwnerKey(record.Desired.ID), Value: []byte(record.Desired.ID)},
 		{Type: MutationPut, Key: platformComponentKindKey(record.Desired.Kind), Value: []byte(record.Desired.ID)},
 		componentWriteFenceMutation(record.Desired.ID),
-	})
+	}
+	if bootstrap {
+		conditions = append(conditions, Condition{Key: platformComponentBootstrapKey(record.Desired.ID)})
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: platformComponentBootstrapKey(record.Desired.ID),
+			Value: []byte(record.Desired.ID),
+		})
+	}
+	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}

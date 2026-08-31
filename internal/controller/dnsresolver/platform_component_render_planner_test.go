@@ -96,17 +96,27 @@ func (renderPlannerEnvironmentPlanner) Plan(
 	}, nil
 }
 
-// Rationale: an already-desired-enabled CoreDNS Component must not be treated
-// as a first enable when its durable serving observation is absent, while a
-// genuine disabled-to-enabled transition remains preparable.
-func TestPrepareConfigTaskRequiresObservationForAlreadyEnabledComponent(t *testing.T) {
+// Rationale: only repository-proven clean bootstrap may lack both generated
+// Service and observation; every ambiguous or real predecessor stays closed.
+func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
-		name           string
-		currentEnabled bool
-		wantConflict   bool
+		name                string
+		currentEnabled      bool
+		hasGeneratedService bool
+		bootstrapProvenance bool
+		wantConflict        bool
 	}{
-		{name: "already enabled without observation", currentEnabled: true, wantConflict: true},
+		{name: "clean enabled bootstrap", currentEnabled: true, bootstrapProvenance: true},
+		{name: "ambiguous enabled empty runtime", currentEnabled: true, wantConflict: true},
+		{
+			name: "serving predecessor without observation", currentEnabled: true,
+			hasGeneratedService: true, wantConflict: true,
+		},
+		{
+			name:                "disabled serving predecessor without observation",
+			hasGeneratedService: true, wantConflict: true,
+		},
 		{name: "disabled first enable", currentEnabled: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -116,7 +126,10 @@ func TestPrepareConfigTaskRequiresObservationForAlreadyEnabledComponent(t *testi
 			component := core.Component{
 				ID: componentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
 				Enabled: test.currentEnabled,
-				Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+				Config:  core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+			}
+			if test.hasGeneratedService {
+				component.GeneratedServices = []string{ids.NewAt(ids.KindService, now, 8)}
 			}
 			record, err := etcd.NewComponentRecord(component)
 			if err != nil {
@@ -157,9 +170,14 @@ func TestPrepareConfigTaskRequiresObservationForAlreadyEnabledComponent(t *testi
 					{ID: ids.NewAt(ids.KindStep, now, 6)}, {ID: ids.NewAt(ids.KindStep, now, 7)},
 				},
 			}
-			_, err = planner.PrepareConfigTask(
-				context.Background(), etcd.Versioned[etcd.ComponentRecord]{Record: record}, desired, task,
-			)
+			current := etcd.Versioned[etcd.ComponentRecord]{Record: record}
+			if test.bootstrapProvenance {
+				_, err = planner.PrepareBootstrapConfigTaskAtProjection(
+					context.Background(), current, desired, task, projection,
+				)
+			} else {
+				_, err = planner.PrepareConfigTask(context.Background(), current, desired, task)
+			}
 			if test.wantConflict {
 				if err == nil {
 					t.Fatalf("PrepareConfigTask() error = %v, want missing-observation state conflict", err)

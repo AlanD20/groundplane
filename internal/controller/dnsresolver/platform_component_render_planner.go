@@ -61,6 +61,7 @@ type PlatformRenderPlanner struct {
 	environmentPlanner  EnvironmentPlanner
 	catalog             ActionCatalog
 	managedConfigAction componentsdk.ActionID
+	bootstrapProvenance bool
 }
 
 type fixedProjectionReader struct {
@@ -105,6 +106,20 @@ func (planner *PlatformRenderPlanner) PrepareConfigTaskAtProjection(
 		clone.observations = fixedObservationReader{componentID: desired.ID, record: *priorObservation}
 	}
 	return clone.PrepareConfigTask(ctx, current, desired, task)
+}
+
+// PrepareBootstrapConfigTaskAtProjection is reserved for the clean-start seam,
+// whose repository caller has proved same-revision singleton provenance.
+func (planner *PlatformRenderPlanner) PrepareBootstrapConfigTaskAtProjection(
+	ctx context.Context,
+	current etcd.Versioned[etcd.ComponentRecord],
+	desired core.Component,
+	task etcd.TaskRecord,
+	projection etcd.HostResolutionProjectionRecord,
+) (etcd.PlatformComponentTaskRenderInput, error) {
+	clone := *planner
+	clone.bootstrapProvenance = true
+	return clone.PrepareConfigTaskAtProjection(ctx, current, desired, task, projection, nil)
 }
 
 func NewPlatformRenderPlanner(
@@ -276,7 +291,8 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 			expectedPreviousGeneration = observation.Record.DNSResolverProof.RenderGeneration
 		}
 	}
-	if ensureService && current.Record.Desired.Enabled && !observationFound {
+	if ensureService && !observationFound && (len(current.Record.Runtime.GeneratedServices) != 0 ||
+		current.Record.Desired.Enabled && !planner.bootstrapProvenance) {
 		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
 			errs.KindStateConflict,
 			"platform Component serving predecessor observation is unavailable",

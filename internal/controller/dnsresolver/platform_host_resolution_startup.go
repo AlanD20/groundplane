@@ -54,7 +54,14 @@ func EnsurePlatformResolverTask(
 	if err != nil {
 		return err
 	}
-	renderInput, err := planner.PrepareConfigTaskAtProjection(ctx, current, desired, task, empty, nil)
+	bootstrapProvenance, err := components.HasPlatformComponentBootstrapProvenance(ctx, current)
+	if err != nil {
+		return err
+	}
+	if !bootstrapProvenance {
+		return errs.New(errs.KindStateConflict, "platform resolver bootstrap provenance is unavailable")
+	}
+	renderInput, err := planner.PrepareBootstrapConfigTaskAtProjection(ctx, current, desired, task, empty)
 	if err != nil {
 		return err
 	}

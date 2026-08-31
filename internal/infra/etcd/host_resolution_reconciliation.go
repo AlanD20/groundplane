@@ -142,19 +142,25 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		Keys: []string{
 			platformComponentOwnerKey(task.Target),
 			platformComponentKindKey(current.Record.Desired.Kind),
+			platformComponentBootstrapKey(task.Target),
 		},
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
 		return err
 	}
-	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil {
+	if indexes == nil || len(indexes.Values) != 3 || indexes.Values[0] == nil || indexes.Values[1] == nil {
 		return errs.New(errs.KindInternal, "platform Component indexes are missing")
+	}
+	if indexes.Values[2] == nil || indexes.Values[2].ModRevision != current.Revision ||
+		string(indexes.Values[2].Value) != task.Target {
+		return errs.New(errs.KindStateConflict, "platform Component bootstrap provenance is unavailable")
 	}
 	conditions := []Condition{
 		{Key: componentKey(task.Target), ModRevision: current.Revision},
 		{Key: platformComponentOwnerKey(task.Target), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
+		{Key: platformComponentBootstrapKey(task.Target), ModRevision: indexes.Values[2].ModRevision},
 		{Key: hostResolutionProjectionKey},
 		{Key: platformComponentTaskActiveKey(task.Target)},
 		{Key: platformComponentTaskRenderInputKey(task.PlanID)},
@@ -169,6 +175,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: MutationPut, Key: platformComponentTaskActiveKey(task.Target), Value: []byte(task.ID)},
+		{Type: MutationDelete, Key: platformComponentBootstrapKey(task.Target)},
 	}
 	initiation, err := newPlatformTaskInitiation(TaskActorSystem)
 	if err != nil {
