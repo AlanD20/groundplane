@@ -75,7 +75,7 @@ func TestReconcileBlueprintScriptsBodyChangeAppendsExactGeneration(t *testing.T)
 	reconciled, err := ReconcileBlueprintScripts(
 		environmentID,
 		map[string]core.ScriptSpec{
-			"migration-hook": {Slug: "migrate", Service: "api", When: core.ScriptPreDeploy, Script: body},
+			"migration-hook": {Slug: "migrate-renamed", Service: "api", When: core.ScriptPostDeploy, Script: body},
 		},
 		[]etcd.ServiceRecord{service},
 		[]etcd.ScriptRecord{previous},
@@ -90,7 +90,8 @@ func TestReconcileBlueprintScriptsBodyChangeAppendsExactGeneration(t *testing.T)
 	digest := sha256.Sum256([]byte(body))
 	wantDigest := hex.EncodeToString(digest[:])
 	if len(reconciled.Current) != 1 || reconciled.Current[0].Desired.ID != previous.Desired.ID ||
-		reconciled.Current[0].ActiveGeneration != 2 || reconciled.Current[0].Desired.Body != body ||
+		reconciled.Current[0].ActiveGeneration != 2 || reconciled.Current[0].Desired.Slug != "migrate-renamed" ||
+		reconciled.Current[0].Desired.When != core.ScriptPostDeploy || reconciled.Current[0].Desired.Body != body ||
 		len(reconciled.BodyGenerations) != 1 {
 		t.Fatalf("body reconciliation = %#v", reconciled)
 	}
