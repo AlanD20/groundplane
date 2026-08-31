@@ -461,10 +461,10 @@ func (p *WorkerPool) compensateComponentLifecycle(
 				)
 			case step.GetComposeApply() != nil && attempted[step.GetStepId()]:
 				apply := step.GetComposeApply()
-				compensationErr = errors.Join(
-					compensationErr,
-					p.executeLifecycleCompensation(ctx, assignment, &agentpb.ExecutionStep{
-						StepId:         step.GetStepId(),
+				compensationAssignment, compensationStep, deriveErr := componentLifecycleComposeAssignment(
+					assignment,
+					&agentpb.ExecutionStep{
+						StepId:         ids.New(ids.KindStep),
 						TimeoutSeconds: 30,
 						Payload: &agentpb.ExecutionStep_ComposeRemove{
 							ComposeRemove: &agentpb.ComposeRemove{
@@ -472,7 +472,14 @@ func (p *WorkerPool) compensateComponentLifecycle(
 								ServiceIds: append([]string(nil), apply.GetServiceIds()...),
 							},
 						},
-					}),
+					},
+				)
+				if deriveErr == nil {
+					deriveErr = p.executeLifecycleCompensation(ctx, compensationAssignment, compensationStep)
+				}
+				compensationErr = errors.Join(
+					compensationErr,
+					deriveErr,
 				)
 			}
 		}
@@ -526,19 +533,26 @@ func (p *WorkerPool) compensateComponentLifecycle(
 		for _, step := range assignment.Plan.Steps {
 			if remove := step.GetComposeRemove(); remove != nil && attempted[step.GetStepId()] {
 				mutationAttempted = true
-				if err := p.executeLifecycleCompensation(ctx, assignment, &agentpb.ExecutionStep{
-					StepId:         step.GetStepId(),
-					TimeoutSeconds: 30,
-					Payload: &agentpb.ExecutionStep_ComposeApply{
-						ComposeApply: &agentpb.ComposeApply{
-							ArtifactId:     remove.GetArtifactId(),
-							ServiceIds:     append([]string(nil), remove.GetServiceIds()...),
-							ForceRecreate:  true,
-							NoDependencies: true,
+				compensationAssignment, compensationStep, deriveErr := componentLifecycleComposeAssignment(
+					assignment,
+					&agentpb.ExecutionStep{
+						StepId:         ids.New(ids.KindStep),
+						TimeoutSeconds: 30,
+						Payload: &agentpb.ExecutionStep_ComposeApply{
+							ComposeApply: &agentpb.ComposeApply{
+								ArtifactId:     remove.GetArtifactId(),
+								ServiceIds:     append([]string(nil), remove.GetServiceIds()...),
+								ForceRecreate:  true,
+								NoDependencies: true,
+							},
 						},
 					},
-				}); err != nil {
-					return nil, errors.Join(compensationErr, err)
+				)
+				if deriveErr == nil {
+					deriveErr = p.executeLifecycleCompensation(ctx, compensationAssignment, compensationStep)
+				}
+				if deriveErr != nil {
+					return nil, errors.Join(compensationErr, deriveErr)
 				}
 			}
 		}
@@ -573,6 +587,67 @@ func (p *WorkerPool) compensateComponentLifecycle(
 		return rollbackObservation, compensationErr
 	}
 	return nil, compensationErr
+}
+
+func componentLifecycleComposeAssignment(
+	assignment Assignment,
+	compensationStep *agentpb.ExecutionStep,
+) (Assignment, *agentpb.ExecutionStep, error) {
+	if assignment.Plan == nil || compensationStep == nil {
+		return Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component lifecycle Compose compensation is invalid")
+	}
+	artifactID := ""
+	switch payload := compensationStep.GetPayload().(type) {
+	case *agentpb.ExecutionStep_ComposeApply:
+		artifactID = payload.ComposeApply.GetArtifactId()
+	case *agentpb.ExecutionStep_ComposeRemove:
+		artifactID = payload.ComposeRemove.GetArtifactId()
+	default:
+		return Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component lifecycle Compose compensation is invalid")
+	}
+	artifact := composeArtifact(assignment.Plan, artifactID)
+	planID, renderGeneration, authorityErr := componentComposeArtifactAuthority(artifact)
+	if authorityErr != nil {
+		return Assignment{}, nil, authorityErr
+	}
+	derived := proto.Clone(assignment.Plan).(*agentpb.ExecutionPlan)
+	derived.PlanId = planID
+	derived.RenderGeneration = renderGeneration
+	derived.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	derived.ComponentLifecycleMode = agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UNSPECIFIED
+	derived.ComponentRollbackObservation = nil
+	derived.Artifacts = []*agentpb.ComposeArtifact{proto.Clone(artifact).(*agentpb.ComposeArtifact)}
+	derived.Steps = []*agentpb.ExecutionStep{proto.Clone(compensationStep).(*agentpb.ExecutionStep)}
+	derived.ScriptRunnerSnapshots = nil
+	derived.ScriptRunnerProjections = nil
+	derived.ScriptBodyArtifacts = nil
+	derived.PlanHash = nil
+	sealed, err := executionplan.Seal(derived)
+	if err != nil {
+		return Assignment{}, nil, errs.Wrap(errs.KindInternal, err)
+	}
+	assignment.Plan = sealed
+	return assignment, sealed.GetSteps()[0], nil
+}
+
+func componentComposeArtifactAuthority(artifact *agentpb.ComposeArtifact) (string, uint64, error) {
+	if artifact == nil || len(artifact.GetServices()) != 1 {
+		return "", 0, errs.New(errs.KindInternal, "agent: Component lifecycle Compose artifact is invalid")
+	}
+	planID := ""
+	renderGeneration := uint64(0)
+	for _, label := range artifact.GetServices()[0].GetExpectedLabels() {
+		switch label.GetKey() {
+		case "com.groundplane.plan-id":
+			planID = label.GetValue()
+		case "com.groundplane.render-generation":
+			renderGeneration, _ = strconv.ParseUint(label.GetValue(), 10, 64)
+		}
+	}
+	if ids.Validate(ids.KindPlan, planID) != nil || renderGeneration == 0 {
+		return "", 0, errs.New(errs.KindInternal, "agent: Component lifecycle Compose artifact authority is invalid")
+	}
+	return planID, renderGeneration, nil
 }
 
 func attemptedComponentComposeApply(
@@ -788,11 +863,11 @@ func (p *WorkerPool) executeLifecycleCompensation(
 		}
 		return p.hostResolution.ExecuteHostResolution(ctx, assignment, step)
 	}
-	if p.compose != nil {
-		_, err := p.compose.executeStep(ctx, assignment, step)
-		return err
+	if p.compose == nil {
+		return errs.New(errs.KindInternal, "agent: Compose compensation runtime is not configured")
 	}
-	return p.executeStep(ctx, step)
+	_, err := p.compose.executeStep(ctx, assignment, step)
+	return err
 }
 
 func composeTaskResult(
