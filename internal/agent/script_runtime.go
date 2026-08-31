@@ -141,19 +141,38 @@ func scriptExecutionRequest(
 	checkpoint func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 ) (scriptexecution.Request, *agentpb.ScriptExecutionCheckpoint, error) {
 	if ctx == nil || checkpoint == nil || step == nil || step.GetRunScript() == nil || assignment.Plan == nil ||
-		assignment.ScriptArtifacts == nil || assignment.ScriptCheckpoint == nil ||
-		len(assignment.Plan.ScriptRunnerProjections) != 1 || len(assignment.ScriptArtifacts.Bodies) != 1 {
+		assignment.ScriptArtifacts == nil {
 		return scriptexecution.Request{}, nil, errs.New(errs.KindInternal, "agent: Script execution request is incomplete")
 	}
 	run := step.GetRunScript()
-	projection := assignment.Plan.ScriptRunnerProjections[0]
-	body := assignment.ScriptArtifacts.Bodies[0]
+	var projection *agentpb.ScriptRunnerProjection
+	for _, candidate := range assignment.Plan.ScriptRunnerProjections {
+		if candidate != nil && candidate.SnapshotId == run.RunnerSnapshotId {
+			projection = candidate
+			break
+		}
+	}
+	var body *agentpb.ScriptBodyArtifact
+	for _, candidate := range assignment.ScriptArtifacts.Bodies {
+		if candidate != nil && candidate.Metadata != nil &&
+			candidate.Metadata.ScriptExecutionId == run.ScriptExecutionId {
+			body = candidate
+			break
+		}
+	}
 	if projection == nil || body == nil || body.Metadata == nil || projection.SnapshotId != run.RunnerSnapshotId ||
 		body.Metadata.ScriptExecutionId != run.ScriptExecutionId || body.Metadata.ScriptId != run.ScriptId ||
 		body.Metadata.Generation != run.ScriptGeneration {
 		return scriptexecution.Request{}, nil, errs.New(errs.KindInternal, "agent: Script execution artifacts do not match RunScript")
 	}
-	durable, err := executionplan.ValidateScriptExecutionCheckpoint(assignment.ScriptCheckpoint)
+	var durable *agentpb.ScriptExecutionCheckpoint
+	for _, candidate := range assignment.ScriptCheckpoints {
+		if candidate != nil && candidate.ScriptExecutionId == run.ScriptExecutionId {
+			durable = candidate
+			break
+		}
+	}
+	durable, err := executionplan.ValidateScriptExecutionCheckpoint(durable)
 	if err != nil {
 		return scriptexecution.Request{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
@@ -163,8 +182,36 @@ func scriptExecutionRequest(
 		PlanHash:     append([]byte(nil), assignment.Plan.PlanHash...),
 		Projection:   proto.Clone(projection).(*agentpb.ScriptRunnerProjection),
 		BodyMetadata: proto.Clone(body.Metadata).(*agentpb.ScriptBodyArtifactMetadata),
-		Body:         append([]byte(nil), body.Body...), Entries: cloneScriptEntries(assignment.ScriptArtifacts.Entries),
+		Body:         append([]byte(nil), body.Body...),
+		Entries:      cloneScriptEntriesForSnapshot(assignment.ScriptArtifacts.Entries, assignment.Plan, run.RunnerSnapshotId),
 	}, durable, nil
+}
+
+func cloneScriptEntriesForSnapshot(
+	entries []*agentpb.ScriptEntryArtifact,
+	plan *agentpb.ExecutionPlan,
+	snapshotID string,
+) []*agentpb.ScriptEntryArtifact {
+	wanted := make(map[string]struct{})
+	for _, snapshot := range plan.ScriptRunnerSnapshots {
+		if snapshot == nil || snapshot.SnapshotId != snapshotID {
+			continue
+		}
+		for _, binding := range snapshot.EntryBindings {
+			wanted[binding.EntryId+"\x00"+binding.ValueGenerationId] = struct{}{}
+		}
+	}
+	selected := make([]*agentpb.ScriptEntryArtifact, 0, len(wanted))
+	for _, entry := range entries {
+		if entry == nil || entry.Binding == nil {
+			continue
+		}
+		key := entry.Binding.EntryId + "\x00" + entry.Binding.ValueGenerationId
+		if _, exists := wanted[key]; exists {
+			selected = append(selected, entry)
+		}
+	}
+	return cloneScriptEntries(selected)
 }
 
 func checkpointStart(

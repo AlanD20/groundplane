@@ -940,6 +940,9 @@ const (
 	ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE          ExecutionStepPolicy = 2
 	ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE      ExecutionStepPolicy = 3
 	ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_COMPENSATE ExecutionStepPolicy = 4
+	ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK            ExecutionStepPolicy = 5
+	ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK           ExecutionStepPolicy = 6
+	ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK        ExecutionStepPolicy = 7
 )
 
 // Enum value maps for ExecutionStepPolicy.
@@ -950,6 +953,9 @@ var (
 		2: "EXECUTION_STEP_POLICY_RELEASE_COMPENSATE",
 		3: "EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE",
 		4: "EXECUTION_STEP_POLICY_RELEASE_RECOVERY_COMPENSATE",
+		5: "EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK",
+		6: "EXECUTION_STEP_POLICY_RELEASE_POST_HOOK",
+		7: "EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK",
 	}
 	ExecutionStepPolicy_value = map[string]int32{
 		"EXECUTION_STEP_POLICY_UNSPECIFIED":                 0,
@@ -957,6 +963,9 @@ var (
 		"EXECUTION_STEP_POLICY_RELEASE_COMPENSATE":          2,
 		"EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE":      3,
 		"EXECUTION_STEP_POLICY_RELEASE_RECOVERY_COMPENSATE": 4,
+		"EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK":            5,
+		"EXECUTION_STEP_POLICY_RELEASE_POST_HOOK":           6,
+		"EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK":        7,
 	}
 )
 
@@ -4607,16 +4616,16 @@ func (x *ManagedConfigTransferEnd) GetChunkCount() uint32 {
 }
 
 type TaskAssignment struct {
-	state              protoimpl.MessageState     `protogen:"open.v1"`
-	TaskId             string                     `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	OperationId        string                     `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"` // stable across retries
-	RetryOf            string                     `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
-	Plan               *ExecutionPlan             `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`                                  // complete authoritative procedure
-	Deadline           *timestamppb.Timestamp     `protobuf:"bytes,7,opt,name=deadline,proto3" json:"deadline,omitempty"`                          // durable absolute assignment deadline; reconnect never restarts the budget
-	AssignmentId       string                     `protobuf:"bytes,6,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
-	ScriptArtifacts    *ScriptAssignmentArtifacts `protobuf:"bytes,8,opt,name=script_artifacts,json=scriptArtifacts,proto3" json:"script_artifacts,omitempty"`
-	ScriptCheckpoint   *ScriptExecutionCheckpoint `protobuf:"bytes,9,opt,name=script_checkpoint,json=scriptCheckpoint,proto3" json:"script_checkpoint,omitempty"`
-	AutomaticReconcile bool                       `protobuf:"varint,10,opt,name=automatic_reconcile,json=automaticReconcile,proto3" json:"automatic_reconcile,omitempty"`
+	state              protoimpl.MessageState       `protogen:"open.v1"`
+	TaskId             string                       `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	OperationId        string                       `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"` // stable across retries
+	RetryOf            string                       `protobuf:"bytes,3,opt,name=retry_of,json=retryOf,proto3" json:"retry_of,omitempty"`             // set iff this is a retry of a prior task_id
+	Plan               *ExecutionPlan               `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`                                  // complete authoritative procedure
+	Deadline           *timestamppb.Timestamp       `protobuf:"bytes,7,opt,name=deadline,proto3" json:"deadline,omitempty"`                          // durable absolute assignment deadline; reconnect never restarts the budget
+	AssignmentId       string                       `protobuf:"bytes,6,opt,name=assignment_id,json=assignmentId,proto3" json:"assignment_id,omitempty"`
+	ScriptArtifacts    *ScriptAssignmentArtifacts   `protobuf:"bytes,8,opt,name=script_artifacts,json=scriptArtifacts,proto3" json:"script_artifacts,omitempty"`
+	ScriptCheckpoints  []*ScriptExecutionCheckpoint `protobuf:"bytes,9,rep,name=script_checkpoints,json=scriptCheckpoints,proto3" json:"script_checkpoints,omitempty"`
+	AutomaticReconcile bool                         `protobuf:"varint,10,opt,name=automatic_reconcile,json=automaticReconcile,proto3" json:"automatic_reconcile,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -4700,9 +4709,9 @@ func (x *TaskAssignment) GetScriptArtifacts() *ScriptAssignmentArtifacts {
 	return nil
 }
 
-func (x *TaskAssignment) GetScriptCheckpoint() *ScriptExecutionCheckpoint {
+func (x *TaskAssignment) GetScriptCheckpoints() []*ScriptExecutionCheckpoint {
 	if x != nil {
-		return x.ScriptCheckpoint
+		return x.ScriptCheckpoints
 	}
 	return nil
 }
@@ -5055,6 +5064,7 @@ type ScriptExecutionCheckpoint struct {
 	Outcome                *ScriptOutcomeCheckpoint          `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"`
 	Cleanup                *ScriptCleanupCheckpoint          `protobuf:"bytes,6,opt,name=cleanup,proto3" json:"cleanup,omitempty"`
 	ReconciliationRequired bool                              `protobuf:"varint,7,opt,name=reconciliation_required,json=reconciliationRequired,proto3" json:"reconciliation_required,omitempty"`
+	ScriptExecutionId      string                            `protobuf:"bytes,8,opt,name=script_execution_id,json=scriptExecutionId,proto3" json:"script_execution_id,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -5136,6 +5146,13 @@ func (x *ScriptExecutionCheckpoint) GetReconciliationRequired() bool {
 		return x.ReconciliationRequired
 	}
 	return false
+}
+
+func (x *ScriptExecutionCheckpoint) GetScriptExecutionId() string {
+	if x != nil {
+		return x.ScriptExecutionId
+	}
+	return ""
 }
 
 type ScriptCheckpointRequest struct {
@@ -13605,7 +13622,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\acontent\x18\x02 \x01(\fR\acontent\";\n" +
 	"\x18ManagedConfigTransferEnd\x12\x1f\n" +
 	"\vchunk_count\x18\x01 \x01(\rR\n" +
-	"chunkCount\"\xee\x03\n" +
+	"chunkCount\"\xf0\x03\n" +
 	"\x0eTaskAssignment\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
@@ -13613,8 +13630,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x04plan\x18\x04 \x01(\v2#.groundplane.agent.v1.ExecutionPlanR\x04plan\x126\n" +
 	"\bdeadline\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\x12#\n" +
 	"\rassignment_id\x18\x06 \x01(\tR\fassignmentId\x12Z\n" +
-	"\x10script_artifacts\x18\b \x01(\v2/.groundplane.agent.v1.ScriptAssignmentArtifactsR\x0fscriptArtifacts\x12\\\n" +
-	"\x11script_checkpoint\x18\t \x01(\v2/.groundplane.agent.v1.ScriptExecutionCheckpointR\x10scriptCheckpoint\x12/\n" +
+	"\x10script_artifacts\x18\b \x01(\v2/.groundplane.agent.v1.ScriptAssignmentArtifactsR\x0fscriptArtifacts\x12^\n" +
+	"\x12script_checkpoints\x18\t \x03(\v2/.groundplane.agent.v1.ScriptExecutionCheckpointR\x11scriptCheckpoints\x12/\n" +
 	"\x13automatic_reconcile\x18\n" +
 	" \x01(\bR\x12automaticReconcileJ\x04\b\x05\x10\x06\"!\n" +
 	"\x1fScriptStartAuthorizedCheckpoint\"\xa5\x01\n" +
@@ -13647,7 +13664,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x10container_absent\x18\x05 \x01(\bR\x0fcontainerAbsent\x12\x1f\n" +
 	"\vbody_absent\x18\x06 \x01(\bR\n" +
 	"bodyAbsent\x12<\n" +
-	"\x1aexecution_directory_absent\x18\a \x01(\bR\x18executionDirectoryAbsent\"\x91\x04\n" +
+	"\x1aexecution_directory_absent\x18\a \x01(\bR\x18executionDirectoryAbsent\"\xc1\x04\n" +
 	"\x19ScriptExecutionCheckpoint\x12@\n" +
 	"\x05state\x18\x01 \x01(\x0e2*.groundplane.agent.v1.ScriptExecutionStateR\x05state\x12)\n" +
 	"\x10start_authorized\x18\x02 \x01(\bR\x0fstartAuthorized\x12W\n" +
@@ -13655,7 +13672,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x11container_created\x18\x04 \x01(\v26.groundplane.agent.v1.ScriptContainerCreatedCheckpointR\x10containerCreated\x12G\n" +
 	"\aoutcome\x18\x05 \x01(\v2-.groundplane.agent.v1.ScriptOutcomeCheckpointR\aoutcome\x12G\n" +
 	"\acleanup\x18\x06 \x01(\v2-.groundplane.agent.v1.ScriptCleanupCheckpointR\acleanup\x127\n" +
-	"\x17reconciliation_required\x18\a \x01(\bR\x16reconciliationRequired\"\xf3\x06\n" +
+	"\x17reconciliation_required\x18\a \x01(\bR\x16reconciliationRequired\x12.\n" +
+	"\x13script_execution_id\x18\b \x01(\tR\x11scriptExecutionId\"\xf3\x06\n" +
 	"\x17ScriptCheckpointRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12#\n" +
@@ -14540,13 +14558,16 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x16ScriptEntryBindingKind\x12)\n" +
 	"%SCRIPT_ENTRY_BINDING_KIND_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dSCRIPT_ENTRY_BINDING_KIND_ENV\x10\x01\x12\"\n" +
-	"\x1eSCRIPT_ENTRY_BINDING_KIND_FILE\x10\x02*\xfe\x01\n" +
+	"\x1eSCRIPT_ENTRY_BINDING_KIND_FILE\x10\x02*\x87\x03\n" +
 	"\x13ExecutionStepPolicy\x12%\n" +
 	"!EXECUTION_STEP_POLICY_UNSPECIFIED\x10\x00\x12)\n" +
 	"%EXECUTION_STEP_POLICY_RELEASE_FORWARD\x10\x01\x12,\n" +
 	"(EXECUTION_STEP_POLICY_RELEASE_COMPENSATE\x10\x02\x120\n" +
 	",EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE\x10\x03\x125\n" +
-	"1EXECUTION_STEP_POLICY_RELEASE_RECOVERY_COMPENSATE\x10\x04*\x8e\x01\n" +
+	"1EXECUTION_STEP_POLICY_RELEASE_RECOVERY_COMPENSATE\x10\x04\x12*\n" +
+	"&EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK\x10\x05\x12+\n" +
+	"'EXECUTION_STEP_POLICY_RELEASE_POST_HOOK\x10\x06\x12.\n" +
+	"*EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK\x10\a*\x8e\x01\n" +
 	"\x12BackupS3Addressing\x12$\n" +
 	" BACKUP_S3_ADDRESSING_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fBACKUP_S3_ADDRESSING_PATH_STYLE\x10\x01\x12-\n" +
@@ -14867,7 +14888,7 @@ var file_proto_agent_proto_depIdxs = []int32{
 	71,  // 64: groundplane.agent.v1.TaskAssignment.plan:type_name -> groundplane.agent.v1.ExecutionPlan
 	158, // 65: groundplane.agent.v1.TaskAssignment.deadline:type_name -> google.protobuf.Timestamp
 	94,  // 66: groundplane.agent.v1.TaskAssignment.script_artifacts:type_name -> groundplane.agent.v1.ScriptAssignmentArtifacts
-	68,  // 67: groundplane.agent.v1.TaskAssignment.script_checkpoint:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
+	68,  // 67: groundplane.agent.v1.TaskAssignment.script_checkpoints:type_name -> groundplane.agent.v1.ScriptExecutionCheckpoint
 	10,  // 68: groundplane.agent.v1.ScriptOutcomeCheckpoint.reason:type_name -> groundplane.agent.v1.ScriptOutcomeReason
 	158, // 69: groundplane.agent.v1.ScriptOutcomeCheckpoint.observed_at:type_name -> google.protobuf.Timestamp
 	9,   // 70: groundplane.agent.v1.ScriptExecutionCheckpoint.state:type_name -> groundplane.agent.v1.ScriptExecutionState

@@ -41,9 +41,10 @@ func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 				Body: append([]byte(nil), body...),
 			}},
 		},
-		ScriptCheckpoint: &agentpb.ScriptExecutionCheckpoint{
-			State: agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
-		},
+		ScriptCheckpoints: []*agentpb.ScriptExecutionCheckpoint{{
+			ScriptExecutionId: executionID,
+			State:             agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
+		}},
 		Deadline: time.Now().Add(time.Minute),
 	}
 	step := &agentpb.ExecutionStep{

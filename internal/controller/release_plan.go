@@ -28,23 +28,23 @@ func (resolver *TaskPlanResolver) PrepareReleaseTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	input etcd.ReleaseTaskRenderInput,
-) (etcd.TaskRecord, error) {
+) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
 	if resolver == nil || ctx == nil || len(input.Members) == 0 || len(input.Members) > 32 ||
 		task.Executor != etcd.TaskExecutorAgent || task.OperationID != input.Operation.OperationID ||
 		task.Params[etcd.TaskReleasePublicationParam] != input.PublicationID {
-		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "release Task preparation is invalid")
+		return etcd.TaskRecord{}, nil, errs.New(errs.KindValidationFailed, "release Task preparation is invalid")
 	}
 	prepared := task
 	prepared.RenderGeneration = int32(input.Members[0].Render.Projection.RenderGeneration)
-	if prepared.RenderGeneration <= 0 || len(prepared.Steps) != len(input.Members)*5 {
-		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "release Task procedure is invalid")
+	if prepared.RenderGeneration <= 0 || len(prepared.Steps) < len(input.Members)*5 {
+		return etcd.TaskRecord{}, nil, errs.New(errs.KindValidationFailed, "release Task procedure is invalid")
 	}
 	plan, err := resolver.buildReleasePlan(ctx, prepared, input)
 	if err != nil {
-		return etcd.TaskRecord{}, err
+		return etcd.TaskRecord{}, nil, err
 	}
 	prepared.PlanHash = hex.EncodeToString(plan.PlanHash)
-	return prepared, nil
+	return prepared, plan, nil
 }
 
 func (resolver *TaskPlanResolver) resolveReleasePlan(
@@ -53,6 +53,15 @@ func (resolver *TaskPlanResolver) resolveReleasePlan(
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver == nil || resolver.releases == nil {
 		return nil, errs.New(errs.KindInternal, "release plan resolver is not configured")
+	}
+	if resolver.scriptPlans != nil {
+		plan, found, err := resolver.scriptPlans.GetReleaseScriptExecutionPlan(ctx, task)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			return plan, nil
+		}
 	}
 	input, err := resolver.releases.GetTaskRenderInput(ctx, task)
 	if err != nil {
@@ -67,7 +76,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	input etcd.ReleaseTaskRenderInput,
 ) (*agentpb.ExecutionPlan, error) {
 	if task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(input.Members) == 0 ||
-		len(task.Steps) != len(input.Members)*5 {
+		len(task.Steps) < len(input.Members)*5 {
 		return nil, errs.New(errs.KindInternal, "durable release Task shape is invalid")
 	}
 	first := input.Members[0].Render
@@ -220,7 +229,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	if task.Type == etcd.TaskRollback {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
 	}
-	steps := make([]*agentpb.ExecutionStep, 0, len(input.Members)*5)
+	steps := make([]*agentpb.ExecutionStep, 0, len(task.Steps))
 	for index, member := range input.Members {
 		base := index * 5
 		applyID, healthID, switchID := task.Steps[base].ID, task.Steps[base+1].ID, task.Steps[base+2].ID
@@ -321,10 +330,77 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
 		}
 	}
+	totalPre, totalPost, totalFailure := 0, 0, 0
+	for _, member := range input.Members {
+		for _, hook := range member.Render.Hooks {
+			switch hook.When {
+			case core.ScriptPreDeploy, core.ScriptPreRollback:
+				totalPre++
+			case core.ScriptPostDeploy, core.ScriptPostRollback:
+				totalPost++
+			case core.ScriptOnFailure:
+				totalFailure++
+			}
+		}
+	}
+	baseCount := len(input.Members) * 5
+	if len(task.Steps) != baseCount+totalPre+totalPost+totalFailure {
+		return nil, errs.New(errs.KindInternal, "release hook Task steps do not match selection")
+	}
+	preCursor, postCursor, failureCursor := baseCount, baseCount+totalPre, baseCount+totalPre+totalPost
+	preSteps, postSteps, failureSteps := []*agentpb.ExecutionStep{}, []*agentpb.ExecutionStep{}, []*agentpb.ExecutionStep{}
+	snapshots := []*agentpb.ResolvedRunnerSnapshot{}
+	projections := []*agentpb.ScriptRunnerProjection{}
+	bodies := []*agentpb.ScriptBodyArtifactMetadata{}
+	for memberIndex, member := range input.Members {
+		preCount, postCount, failureCount := 0, 0, 0
+		for _, hook := range member.Render.Hooks {
+			switch hook.When {
+			case core.ScriptPreDeploy, core.ScriptPreRollback:
+				preCount++
+			case core.ScriptPostDeploy, core.ScriptPostRollback:
+				postCount++
+			case core.ScriptOnFailure:
+				failureCount++
+			}
+		}
+		preIDs, postIDs, failureIDs := make([]string, preCount), make([]string, postCount), make([]string, failureCount)
+		for index := range preIDs {
+			preIDs[index] = task.Steps[preCursor+index].ID
+		}
+		for index := range postIDs {
+			postIDs[index] = task.Steps[postCursor+index].ID
+		}
+		for index := range failureIDs {
+			failureIDs[index] = task.Steps[failureCursor+index].ID
+		}
+		preCursor, postCursor, failureCursor = preCursor+preCount, postCursor+postCount, failureCursor+failureCount
+		hookOperation := domain.OperationDeploy
+		if task.Type == etcd.TaskRollback {
+			hookOperation = domain.OperationRollback
+		}
+		hooks, err := BuildReleaseHookPlan(ReleaseHookPlanInput{
+			Operation: hookOperation, ReleaseID: member.Intent.ID,
+			ServingStepID:      task.Steps[memberIndex*5+2].ID,
+			CompensationStepID: task.Steps[memberIndex*5+4].ID,
+			PreStepIDs:         preIDs, PostStepIDs: postIDs, FailureStepIDs: failureIDs,
+			Hooks: member.Render.Hooks,
+		})
+		if err != nil {
+			return nil, err
+		}
+		preSteps, postSteps, failureSteps = append(preSteps, hooks.PreSteps...), append(postSteps, hooks.PostSteps...), append(failureSteps, hooks.FailureSteps...)
+		snapshots, projections, bodies = append(snapshots, hooks.Snapshots...), append(projections, hooks.Projections...), append(bodies, hooks.Bodies...)
+	}
+	steps = append(steps, preSteps...)
+	steps = append(steps, postSteps...)
+	steps = append(steps, failureSteps...)
 	return BuildPlan(PlanBuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
-		TargetID: task.Target, Artifacts: artifacts, Steps: steps,
+		TargetID: task.Target, Artifacts: artifacts,
+		ScriptRunnerSnapshots: snapshots, ScriptRunnerProjections: projections,
+		ScriptBodyArtifacts: bodies, Steps: steps,
 	})
 }
 

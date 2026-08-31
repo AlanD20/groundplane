@@ -192,9 +192,6 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 		}
 		result[index] = planning
 	}
-	if err := ledger.rejectSelectedHooks(ctx, scope, seen); err != nil {
-		return nil, err
-	}
 	return result, nil
 }
 

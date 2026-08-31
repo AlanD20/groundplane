@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -36,6 +37,8 @@ type releaseOperationService struct {
 	idempotency *etcd.IdempotencyRepository
 	coordinator *idempotentintent.Coordinator
 	plans       *controllerpkg.TaskPlanResolver
+	scripts     *etcd.ScriptRepository
+	artifacts   *controllerpkg.ScriptArtifactService
 	timeout     time.Duration
 	now         func() time.Time
 }
@@ -61,9 +64,12 @@ func newReleaseOperationService(
 	idempotency *etcd.IdempotencyRepository,
 	coordinator *idempotentintent.Coordinator,
 	plans *controllerpkg.TaskPlanResolver,
+	scripts *etcd.ScriptRepository,
+	artifacts *controllerpkg.ScriptArtifactService,
 	timeout time.Duration,
 ) (*releaseOperationService, error) {
-	if ledger == nil || services == nil || groups == nil || idempotency == nil || coordinator == nil || plans == nil {
+	if ledger == nil || services == nil || groups == nil || idempotency == nil || coordinator == nil ||
+		plans == nil || scripts == nil || artifacts == nil {
 		return nil, errs.New(errs.KindInternal, "release operation dependencies are not configured")
 	}
 	if timeout == 0 {
@@ -74,7 +80,8 @@ func newReleaseOperationService(
 	}
 	return &releaseOperationService{
 		ledger: ledger, services: services, groups: groups, idempotency: idempotency,
-		coordinator: coordinator, plans: plans, timeout: timeout, now: time.Now,
+		coordinator: coordinator, plans: plans, scripts: scripts, artifacts: artifacts,
+		timeout: timeout, now: time.Now,
 	}, nil
 }
 
@@ -420,9 +427,6 @@ func (service *releaseOperationService) publish(
 	if policy == domain.OnFailureSwitchBack {
 		budget += int64(time.Duration(len(candidates)) * 10 * time.Minute / time.Second)
 	}
-	if configured < budget {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindReleaseDeadlineTooShort, "configured release deadline is below the computed attempt budget")
-	}
 	publicationID := ids.NewULID()
 	operationID := ids.New(ids.KindOperation)
 	taskID := ids.New(ids.KindTask)
@@ -547,6 +551,19 @@ func (service *releaseOperationService) publish(
 			ServiceID: render.ServiceID, CandidateReleaseID: releaseID, RenderInputDigest: digest,
 		}
 	}
+	manifest, err := service.ledger.Stage(ctx, stage)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	hooks, err := service.prepareReleaseHooks(ctx, scope, manifest.ReadRevision, operationKind, task, renderMembers)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	task, renderMembers = hooks.task, hooks.members
+	budget += int64(hooks.executions) * int64(executionplan.ScriptExecutionTimeoutSeconds)
+	if configured < budget {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindReleaseDeadlineTooShort, "configured release deadline is below the computed attempt budget")
+	}
 	head := etcd.ReleaseOperationHead{
 		OperationID: operationID, PublicationID: publicationID, EnvironmentID: scope.Environment.Record.ID,
 		ReleaseGroupID: groupID, FailurePolicy: policy, State: domain.StatePending,
@@ -569,16 +586,27 @@ func (service *releaseOperationService) publish(
 		}
 		head.Progress = &progress
 	}
-	preparedTask, err := service.plans.PrepareReleaseTask(ctx, task, etcd.ReleaseTaskRenderInput{
+	preparedTask, plan, err := service.plans.PrepareReleaseTask(ctx, task, etcd.ReleaseTaskRenderInput{
 		PublicationID: publicationID, Operation: head, Members: renderMembers,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	task = preparedTask
-	manifest, err := service.ledger.Stage(ctx, stage)
+	executions, err := etcd.NewScriptExecutionRecords(task, plan, now)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	if len(executions) != hooks.executions {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution authority is incomplete")
+	}
+	hookPublications := make([]etcd.ReleaseHookExecutionPublication, len(executions))
+	for index, execution := range executions {
+		sources, exists := hooks.sources[execution.ID]
+		if !exists {
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution source is missing")
+		}
+		hookPublications[index] = etcd.ReleaseHookExecutionPublication{Sources: sources, Execution: execution}
 	}
 	response, responseBody, err := releaseAcceptedResponse(groupID, taskID, operationID, groupMembers)
 	if err != nil {
@@ -599,7 +627,7 @@ func (service *releaseOperationService) publish(
 		Fence: etcd.ReleaseFenceSet{
 			EnvironmentID: scope.Environment.Record.ID, Generation: 1, OperationID: operationID,
 			AttemptTaskID: taskID, Group: groupID != "", Members: fenceMembers,
-		}, Operation: head, PublishedAt: now,
+		}, Operation: head, Hooks: hookPublications, PublishedAt: now,
 	})
 	if err != nil {
 		if !releaseGroupUnknownOutcome(err) {

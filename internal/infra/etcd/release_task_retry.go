@@ -113,6 +113,10 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 			Condition{Key: memberKeys[index*2+1], ModRevision: renderValue.ModRevision},
 		)
 	}
+	hookTransfer, err := repository.prepareReleaseHookExecutionRetryTransfer(ctx, source, retry, revision)
+	if err != nil {
+		return releaseTaskRetryChange{}, err
+	}
 	head.State = domain.StateRecovering
 	head.LatestTaskID = retry.ID
 	head.Attempts = append(slices.Clone(head.Attempts), domain.Attempt{ID: retry.ID, TaskID: retry.ID, RetryOf: source.ID, StartedAt: retry.CreatedAt})
@@ -127,20 +131,26 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 	fence.AttemptTaskID = retry.ID
 	headValue, err := encodeReleaseRecord("release-operation", head)
 	if err != nil {
+		hookTransfer.clear()
 		return releaseTaskRetryChange{}, err
 	}
 	fenceValue, err := encodeReleaseRecord("release-fence-set", fence)
 	if err != nil {
 		clear(headValue)
+		hookTransfer.clear()
 		return releaseTaskRetryChange{}, err
 	}
 	epochValue := slices.Clone(base.Values[4].Value)
+	conditions = append(conditions, hookTransfer.conditions...)
+	mutations := []Mutation{
+		{Type: MutationPut, Key: baseKeys[2], Value: headValue},
+		{Type: MutationPut, Key: baseKeys[3], Value: fenceValue},
+		{Type: MutationPut, Key: baseKeys[4], Value: epochValue},
+	}
+	mutations = append(mutations, hookTransfer.mutations...)
+	hookTransfer.mutations = nil
 	return releaseTaskRetryChange{
 		applies: true, conditions: conditions,
-		mutations: []Mutation{
-			{Type: MutationPut, Key: baseKeys[2], Value: headValue},
-			{Type: MutationPut, Key: baseKeys[3], Value: fenceValue},
-			{Type: MutationPut, Key: baseKeys[4], Value: epochValue},
-		},
+		mutations: mutations,
 	}, nil
 }

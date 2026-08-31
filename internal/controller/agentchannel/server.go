@@ -93,7 +93,11 @@ type ScriptArtifactResolver interface {
 		etcd.TaskRecord,
 		*agentpb.ExecutionPlan,
 	) (*agentpb.ScriptAssignmentArtifacts, error)
-	ResolveScriptExecutionCheckpoint(context.Context, etcd.TaskRecord) (*agentpb.ScriptExecutionCheckpoint, error)
+	ResolveScriptExecutionCheckpoints(
+		context.Context,
+		etcd.TaskRecord,
+		*agentpb.ExecutionPlan,
+	) ([]*agentpb.ScriptExecutionCheckpoint, error)
 }
 
 // MaterializationResolver returns one task-owned transient plaintext source.
@@ -1107,8 +1111,8 @@ func (s *Server) taskAssignmentMessage(
 		)
 	}
 	var scriptArtifacts *agentpb.ScriptAssignmentArtifacts
-	var scriptCheckpoint *agentpb.ScriptExecutionCheckpoint
-	if task.Type == etcd.TaskScript {
+	var scriptCheckpoints []*agentpb.ScriptExecutionCheckpoint
+	if len(plan.ScriptBodyArtifacts) != 0 {
 		if s.scriptArtifacts == nil {
 			return nil, errs.New(errs.KindInternal, "Script artifact resolver is not configured")
 		}
@@ -1116,7 +1120,7 @@ func (s *Server) taskAssignmentMessage(
 		if err != nil {
 			return nil, err
 		}
-		scriptCheckpoint, err = s.scriptArtifacts.ResolveScriptExecutionCheckpoint(ctx, task)
+		scriptCheckpoints, err = s.scriptArtifacts.ResolveScriptExecutionCheckpoints(ctx, task, plan)
 		if err != nil {
 			clearScriptAssignmentArtifacts(scriptArtifacts)
 			return nil, err
@@ -1125,7 +1129,7 @@ func (s *Server) taskAssignmentMessage(
 	return &agentpb.TaskAssignment{
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
-		Plan: plan, ScriptArtifacts: scriptArtifacts, ScriptCheckpoint: scriptCheckpoint,
+		Plan: plan, ScriptArtifacts: scriptArtifacts, ScriptCheckpoints: scriptCheckpoints,
 		AutomaticReconcile: etcd.IsAutomaticReconcileTask(task),
 		Deadline:           timestamppb.New(record.Deadline.UTC()),
 	}, nil

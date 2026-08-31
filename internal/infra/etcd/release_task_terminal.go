@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"slices"
+	"strconv"
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -70,6 +71,12 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	if err != nil || fence.OperationID != task.OperationID || fence.AttemptTaskID != task.ID ||
 		fence.EnvironmentID != task.Owner.EnvironmentID || len(fence.Members) != len(head.Members) {
 		return false, corruptReleaseRecord()
+	}
+	if !result.ReconciliationRequired {
+		processed, terminalErr := repository.finalizeReleaseHookExecutionBatch(ctx, task, terminalAt, readRevision)
+		if terminalErr != nil || processed {
+			return processed, terminalErr
+		}
 	}
 
 	terminalKeys := make([]string, len(head.Members))
@@ -407,6 +414,16 @@ func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus TaskStatus, resu
 func releaseFailedOrdinalFromResult(task TaskRecord, result TaskResultRecord) uint32 {
 	for index, step := range task.Steps {
 		if step.ID == result.FailedStepID {
+			if value := task.Params[ReleaseHookStepMemberParam(step.ID)]; value != "" {
+				ordinal, err := strconv.ParseUint(value, 10, 32)
+				if err != nil || ordinal == 0 {
+					return 0
+				}
+				return uint32(ordinal)
+			}
+			if task.Params[ReleaseHookStepExecutionParam(step.ID)] != "" {
+				return 0
+			}
 			return uint32(index/5 + 1)
 		}
 	}

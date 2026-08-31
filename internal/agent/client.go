@@ -544,7 +544,7 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
-			ScriptCheckpoint:   assignment.ScriptCheckpoint,
+			ScriptCheckpoints:  assignment.ScriptCheckpoints,
 			AutomaticReconcile: assignment.GetAutomaticReconcile(),
 			Deadline:           assignment.Deadline.AsTime(),
 		})

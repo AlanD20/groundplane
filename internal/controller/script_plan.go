@@ -10,6 +10,7 @@ import (
 
 type ScriptExecutionPlanReader interface {
 	GetScriptExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
+	GetReleaseScriptExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, bool, error)
 }
 
 func (resolver *TaskPlanResolver) EnableScriptPlans(reader ScriptExecutionPlanReader) error {

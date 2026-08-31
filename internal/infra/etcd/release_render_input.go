@@ -46,6 +46,7 @@ type ReleaseRenderInput struct {
 	EnvironmentName     string                       `json:"environment_name"`
 	AuthorizedVolumeDir string                       `json:"authorized_volume_dir"`
 	Projection          EnvironmentComposeProjection `json:"projection"`
+	Hooks               []ReleaseHookRenderInput     `json:"hooks,omitempty"`
 }
 
 type ReleaseTaskRenderInput struct {
@@ -163,6 +164,9 @@ func validateReleaseRenderInput(input ReleaseRenderInput) error {
 	if !found {
 		return errs.New(errs.KindValidationFailed, "release render projection does not contain the selected service")
 	}
+	if err := validateReleaseHookRenderInputs(input.Hooks, input.ServiceID); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -170,6 +174,7 @@ func cloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {
 	input.Projection = cloneEnvironmentComposeProjection(input.Projection)
 	input.ProxyPorts = slices.Clone(input.ProxyPorts)
 	input.ServiceDependencyPlans = input.ServiceDependencyPlans.Clone()
+	input.Hooks = cloneReleaseHookRenderInputs(input.Hooks)
 	return input
 }
 

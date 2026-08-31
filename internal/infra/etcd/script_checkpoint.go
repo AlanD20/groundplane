@@ -206,10 +206,9 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	if execution.ID != input.ExecutionID || execution.CurrentTaskID != input.TaskID ||
 		execution.OperationID != input.OperationID || execution.StepID != input.StepID || execution.PlanHash != input.PlanHash ||
 		(execution.AssignmentID != "" && execution.AssignmentID != input.AssignmentID) ||
-		task.ID != input.TaskID || task.OperationID != input.OperationID || task.Type != TaskScript ||
+		task.ID != input.TaskID || task.OperationID != input.OperationID ||
 		task.Status != TaskStatusRunning || task.Executor != TaskExecutorAgent || task.PlanHash != input.PlanHash ||
-		len(task.Steps) != 1 || task.Steps[0].ID != input.StepID ||
-		task.Params[ScriptExecutionIDParam] != input.ExecutionID || assignment.TaskID != input.TaskID ||
+		!taskOwnsScriptExecution(task, execution) || assignment.TaskID != input.TaskID ||
 		assignment.AssignmentID != input.AssignmentID || assignment.Executor != TaskExecutorAgent ||
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint does not own the running assignment")
@@ -243,6 +242,26 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 			{Key: timeoutKey, ModRevision: claim.Values[1].ModRevision},
 		},
 	}, nil
+}
+
+func taskOwnsScriptExecution(task TaskRecord, execution ScriptExecutionRecord) bool {
+	switch task.Type {
+	case TaskScript:
+		return task.Target == execution.ScriptID && len(task.Steps) == 1 &&
+			task.Steps[0].ID == execution.StepID &&
+			task.Params[ScriptExecutionIDParam] == execution.ID
+	case TaskDeploy, TaskRollback:
+		if task.Owner.EnvironmentID != execution.EnvironmentID ||
+			task.Params[TaskReleasePublicationParam] == "" {
+			return false
+		}
+		for _, step := range task.Steps {
+			if step.ID == execution.StepID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func advanceScriptExecutionRecord(

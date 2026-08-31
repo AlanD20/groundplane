@@ -52,6 +52,7 @@ type ReleasePublicationEvidence struct {
 	Marker                   IdempotencyMarker
 	Fence                    ReleaseFenceSet
 	Operation                ReleaseOperationHead
+	Hooks                    []ReleaseHookExecutionPublication
 	PublishedAt              time.Time
 }
 
@@ -169,6 +170,11 @@ func (ledger *ReleaseLedger) Publish(
 		return ReleasePublicationResult{}, err
 	}
 	defer clearReleaseTaskPublicationFragment(fragment)
+	hookFragment, err := prepareReleaseHookPublicationFragment(evidence)
+	if err != nil {
+		return ReleasePublicationResult{}, err
+	}
+	defer clearReleaseHookPublicationFragment(hookFragment)
 	markerKey, err := idempotencyMarkerKey(evidence.Marker.Locator)
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -213,6 +219,7 @@ func (ledger *ReleaseLedger) Publish(
 		{Key: releaseOperationKey(evidence.Manifest.Record.OperationID)},
 		fragment.condition,
 	}
+	conditions = append(conditions, hookFragment.conditions...)
 	mutations := make([]Mutation, 0, len(evidence.Manifest.Record.Members)*2+11)
 	for _, member := range evidence.Manifest.Record.Members {
 		environmentValue, encodeErr := json.Marshal(releaseEnvironmentIndexValue{
@@ -240,11 +247,13 @@ func (ledger *ReleaseLedger) Publish(
 		Mutation{Type: MutationPut, Key: releaseOperationKey(evidence.Manifest.Record.OperationID), Value: operationValue},
 	)
 	mutations = append(mutations, cloneReleaseTaskMutations(fragment)...)
+	mutations = append(mutations, hookFragment.mutations...)
 	mutations = append(mutations,
 		Mutation{Type: MutationPut, Key: markerKey, Value: markerValue},
 		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(evidence.EnvironmentID), Value: slices.Clone(evidence.EnvironmentEpochValue)},
 	)
-	if len(conditions) != 11 || len(mutations) != len(evidence.Manifest.Record.Members)*2+11 ||
+	if len(conditions) != 11+len(hookFragment.conditions) ||
+		len(mutations) != len(evidence.Manifest.Record.Members)*2+11+len(hookFragment.mutations) ||
 		len(conditions)+len(mutations) > maximumTransactionOperations {
 		return ReleasePublicationResult{}, errs.New(errs.KindInternal, "release publication operation budget is invalid")
 	}
@@ -280,7 +289,7 @@ func (ledger *ReleaseLedger) Publish(
 		Revision: result.Revision, Task: evidence.Task,
 		Idempotency: IdempotencyTransactionResult{
 			kind: idempotencyTransactionConflict, revision: result.Revision,
-			conflict: classifyReleasePublicationConflict(result.FailureReads),
+			conflict: classifyReleasePublicationConflict(result.FailureReads[:11]),
 		},
 	}, nil
 }

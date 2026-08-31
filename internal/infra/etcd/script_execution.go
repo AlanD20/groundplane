@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -25,6 +26,7 @@ const (
 	scriptRunnerSnapshotPrefix  = "/v1/script-runner-snapshots/"
 	scriptBodyForwardRefSegment = "/references/"
 	scriptBodyReverseRefSegment = "/body-reference"
+	maximumReleaseHookTerminalBatch = 8
 )
 
 type ScriptExecutionState string
@@ -73,57 +75,382 @@ type ScriptExecutionRecord struct {
 	UpdatedAt              time.Time                       `json:"updated_at"`
 }
 
+type releaseHookExecutionStep struct {
+	stepID      string
+	executionID string
+}
+
+type releaseHookExecutionRetryTransfer struct {
+	conditions []Condition
+	mutations  []Mutation
+}
+
+func (transfer *releaseHookExecutionRetryTransfer) clear() {
+	if transfer == nil {
+		return
+	}
+	clearMutations(transfer.mutations)
+	transfer.conditions = nil
+	transfer.mutations = nil
+}
+
+// finalizeReleaseHookExecutionBatch releases up to eight hook execution
+// references after a non-recoverable parent release terminal result. A skipped
+// hook retains its not-started checkpoint as audit evidence but no longer pins
+// its Script generation. A run hook is released only after cleanup is proven.
+func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
+	ctx context.Context,
+	task TaskRecord,
+	terminalAt time.Time,
+	revision int64,
+) (bool, error) {
+	steps, err := releaseHookExecutionSteps(task)
+	if err != nil || len(steps) == 0 {
+		return false, err
+	}
+	keys := make([]string, len(steps))
+	for index, step := range steps {
+		keys[index] = scriptExecutionKey(step.executionID)
+	}
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return false, err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(steps) {
+		return false, corruptReleaseRecord()
+	}
+	type activeHook struct {
+		step   releaseHookExecutionStep
+		record ScriptExecutionRecord
+		value  *KeyValue
+	}
+	active := make([]activeHook, 0, maximumReleaseHookTerminalBatch)
+	seenScripts := make(map[string]struct{}, len(steps))
+	for index, step := range steps {
+		value := read.Values[index]
+		if value == nil {
+			return false, corruptReleaseRecord()
+		}
+		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
+			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
+			record.StepID != step.stepID || record.PlanHash != task.PlanHash {
+			return false, corruptReleaseRecord()
+		}
+		if _, duplicate := seenScripts[record.ScriptID]; duplicate {
+			return false, corruptReleaseRecord()
+		}
+		seenScripts[record.ScriptID] = struct{}{}
+		if !record.ActiveReference {
+			continue
+		}
+		if record.State != ScriptExecutionNotStarted && record.State != ScriptExecutionCleanupProven {
+			return false, errs.New(errs.KindStateConflict, "release hook execution has not reached a releasable checkpoint")
+		}
+		if !terminalAt.After(record.UpdatedAt) {
+			return false, errs.New(errs.KindStateConflict, "release hook terminal timestamp is not monotonic")
+		}
+		if len(active) < maximumReleaseHookTerminalBatch {
+			active = append(active, activeHook{step: step, record: record, value: value})
+		}
+	}
+	if len(active) == 0 {
+		return false, nil
+	}
+	detailKeys := make([]string, 0, len(active)*3)
+	for _, hook := range active {
+		detailKeys = append(detailKeys,
+			scriptSetScriptKey(hook.record.EnvironmentID, hook.record.ScriptSetGeneration, hook.record.ScriptID),
+			scriptSetBodyForwardReferenceKey(
+				hook.record.EnvironmentID,
+				hook.record.ScriptSetGeneration,
+				hook.record.ScriptID,
+				hook.record.ScriptGeneration,
+				hook.record.ID,
+			),
+			scriptBodyReverseReferenceKey(hook.record.ID),
+		)
+	}
+	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: revision})
+	if err != nil {
+		return false, err
+	}
+	if details == nil || details.ReadRevision != revision || len(details.Values) != len(detailKeys) {
+		return false, corruptReleaseRecord()
+	}
+	conditions := make([]Condition, 0, len(active)*4)
+	mutations := make([]Mutation, 0, len(active)*4)
+	defer clearMutations(mutations)
+	for index, hook := range active {
+		values := details.Values[index*3 : index*3+3]
+		if values[0] == nil || values[1] == nil || values[2] == nil {
+			return false, corruptReleaseRecord()
+		}
+		script, decodeErr := decodeScriptRecord(values[0].Value)
+		if decodeErr != nil || script.Desired.ID != hook.record.ScriptID ||
+			script.EnvironmentID != hook.record.EnvironmentID ||
+			script.ScriptSetGeneration != hook.record.ScriptSetGeneration || script.ActiveReferences == 0 {
+			return false, corruptReleaseRecord()
+		}
+		if err := validateScriptBodyReference(values[1].Value, hook.record); err != nil ||
+			validateScriptBodyReference(values[2].Value, hook.record) != nil {
+			return false, corruptReleaseRecord()
+		}
+		next := hook.record
+		next.ActiveReference = false
+		next.AssignmentID = ""
+		next.UpdatedAt = terminalAt.UTC()
+		executionValue, encodeErr := encodeEnvelope("script-execution", next)
+		if encodeErr != nil {
+			return false, encodeErr
+		}
+		scriptValue, encodeErr := decrementStoredScriptActiveReferences(values[0].Value, hook.record.ScriptID)
+		if encodeErr != nil {
+			clear(executionValue)
+			return false, encodeErr
+		}
+		conditions = append(conditions,
+			Condition{Key: hook.value.Key, ModRevision: hook.value.ModRevision},
+			Condition{Key: values[0].Key, ModRevision: values[0].ModRevision},
+			Condition{Key: values[1].Key, ModRevision: values[1].ModRevision},
+			Condition{Key: values[2].Key, ModRevision: values[2].ModRevision},
+		)
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: hook.value.Key, Value: executionValue},
+			Mutation{Type: MutationPut, Key: values[0].Key, Value: scriptValue},
+			Mutation{Type: MutationDelete, Key: values[1].Key},
+			Mutation{Type: MutationDelete, Key: values[2].Key},
+		)
+	}
+	if len(conditions)+len(mutations) > maximumTransactionOperations {
+		return false, errs.New(errs.KindInternal, "release hook terminal batch exceeds the transaction ceiling")
+	}
+	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	if err != nil {
+		return false, err
+	}
+	clearKeyValues(transaction.FailureReads)
+	if !transaction.Succeeded {
+		return false, errs.New(errs.KindStateConflict, "release hook terminal evidence changed")
+	}
+	return true, nil
+}
+
+func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
+	ctx context.Context,
+	source TaskRecord,
+	retry TaskRecord,
+	revision int64,
+) (releaseHookExecutionRetryTransfer, error) {
+	steps, err := releaseHookExecutionSteps(source)
+	if err != nil || len(steps) == 0 {
+		return releaseHookExecutionRetryTransfer{}, err
+	}
+	if retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash || len(retry.Steps) != len(source.Steps) {
+		return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+	}
+	for index, step := range source.Steps {
+		if retry.Steps[index].ID != step.ID ||
+			retry.Params[ReleaseHookStepExecutionParam(step.ID)] != source.Params[ReleaseHookStepExecutionParam(step.ID)] {
+			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+		}
+	}
+	keys := make([]string, len(steps))
+	for index, step := range steps {
+		keys[index] = scriptExecutionKey(step.executionID)
+	}
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return releaseHookExecutionRetryTransfer{}, err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(steps) {
+		return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+	}
+	transfer := releaseHookExecutionRetryTransfer{
+		conditions: make([]Condition, 0, len(steps)), mutations: make([]Mutation, 0, len(steps)),
+	}
+	seenExecutions := make(map[string]struct{}, len(steps))
+	for index, step := range steps {
+		value := read.Values[index]
+		if value == nil {
+			transfer.clear()
+			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+		}
+		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
+			record.CurrentTaskID != source.ID || record.OperationID != source.OperationID ||
+			record.StepID != step.stepID || record.PlanHash != source.PlanHash || !record.ActiveReference ||
+			!retry.CreatedAt.After(record.UpdatedAt) {
+			transfer.clear()
+			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+		}
+		if _, duplicate := seenExecutions[record.ID]; duplicate {
+			transfer.clear()
+			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+		}
+		seenExecutions[record.ID] = struct{}{}
+		next := record
+		next.CurrentTaskID = retry.ID
+		next.AssignmentID = ""
+		next.UpdatedAt = retry.CreatedAt.UTC()
+		encoded, encodeErr := encodeEnvelope("script-execution", next)
+		if encodeErr != nil {
+			transfer.clear()
+			return releaseHookExecutionRetryTransfer{}, encodeErr
+		}
+		transfer.conditions = append(transfer.conditions, Condition{Key: value.Key, ModRevision: value.ModRevision})
+		transfer.mutations = append(transfer.mutations, Mutation{Type: MutationPut, Key: value.Key, Value: encoded})
+	}
+	return transfer, nil
+}
+
+func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, error) {
+	if task.Type != TaskDeploy && task.Type != TaskRollback {
+		return nil, errs.New(errs.KindValidationFailed, "release hook execution Task is invalid")
+	}
+	steps := make([]releaseHookExecutionStep, 0)
+	seen := make(map[string]struct{})
+	for _, step := range task.Steps {
+		executionID := task.Params[ReleaseHookStepExecutionParam(step.ID)]
+		if executionID == "" {
+			continue
+		}
+		if !validRawScriptExecutionID(executionID) {
+			return nil, corruptReleaseRecord()
+		}
+		if _, duplicate := seen[executionID]; duplicate {
+			return nil, corruptReleaseRecord()
+		}
+		seen[executionID] = struct{}{}
+		steps = append(steps, releaseHookExecutionStep{stepID: step.ID, executionID: executionID})
+	}
+	return steps, nil
+}
+
+func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) error {
+	reference, err := decodeEnvelope[struct {
+		ExecutionID         string `json:"script_execution_id"`
+		ScriptID            string `json:"script_id"`
+		Generation          uint64 `json:"generation"`
+		ScriptSetGeneration string `json:"script_set_generation"`
+	}](value, "script-body-reference")
+	if err != nil || reference.ExecutionID != execution.ID || reference.ScriptID != execution.ScriptID ||
+		reference.Generation != execution.ScriptGeneration ||
+		reference.ScriptSetGeneration != execution.ScriptSetGeneration {
+		return corruptReleaseRecord()
+	}
+	return nil
+}
+
+func decrementStoredScriptActiveReferences(value []byte, scriptID string) ([]byte, error) {
+	stored, err := decodeEnvelope[storedScriptRecord](value, "script")
+	if err != nil || stored.Desired.ID != scriptID || stored.ActiveReferences == 0 {
+		return nil, corruptReleaseRecord()
+	}
+	stored.ActiveReferences--
+	encoded, err := encodeEnvelope("script", stored)
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
+}
+
 func NewScriptExecutionRecord(
 	task TaskRecord,
 	plan *agentpb.ExecutionPlan,
 	at time.Time,
 ) (ScriptExecutionRecord, error) {
-	validated, err := executionplan.Validate(plan)
+	records, err := NewScriptExecutionRecords(task, plan, at)
 	if err != nil {
 		return ScriptExecutionRecord{}, err
 	}
-	if task.Type != TaskScript || task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending ||
-		len(validated.Steps) != 1 || len(validated.ScriptRunnerSnapshots) != 1 ||
-		len(validated.ScriptRunnerProjections) != 1 || len(validated.ScriptBodyArtifacts) != 1 ||
-		validated.RenderGeneration > math.MaxInt32 {
-		return ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Script Task and execution plan shape do not match")
+	if task.Type != TaskScript || len(records) != 1 {
+		for index := range records {
+			clear(records[index].Plan)
+			clear(records[index].Snapshot)
+		}
+		return ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "manual Script Task must own one execution")
 	}
-	run := validated.Steps[0].GetRunScript()
-	snapshot := validated.ScriptRunnerSnapshots[0]
-	if run == nil || task.Target != run.ScriptId || task.PlanID != validated.PlanId ||
-		task.RenderGeneration != int32(validated.RenderGeneration) || len(task.Steps) != 1 ||
-		task.Steps[0].ID != validated.Steps[0].StepId || task.TimeoutSeconds != executionplan.ScriptExecutionTimeoutSeconds ||
-		task.PlanHash != hex.EncodeToString(validated.PlanHash) || task.Params[ScriptExecutionIDParam] != run.ScriptExecutionId ||
-		task.Params[ScriptGenerationParam] != strconv.FormatUint(run.ScriptGeneration, 10) {
-		return ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "Script Task does not bind its sealed execution plan")
+	return records[0], nil
+}
+
+// NewScriptExecutionRecords binds every RunScript step to one durable
+// Controller-owned checkpoint record. Release hooks share their parent Task
+// and sealed plan; they never create secondary Tasks.
+func NewScriptExecutionRecords(
+	task TaskRecord,
+	plan *agentpb.ExecutionPlan,
+	at time.Time,
+) ([]ScriptExecutionRecord, error) {
+	validated, err := executionplan.Validate(plan)
+	if err != nil {
+		return nil, err
+	}
+	releaseTask := task.Type == TaskDeploy || task.Type == TaskRollback
+	if task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending ||
+		(!releaseTask && task.Type != TaskScript) || len(validated.ScriptRunnerSnapshots) == 0 ||
+		len(validated.ScriptRunnerSnapshots) != len(validated.ScriptBodyArtifacts) ||
+		validated.RenderGeneration > math.MaxInt32 || task.PlanID != validated.PlanId ||
+		task.RenderGeneration != int32(validated.RenderGeneration) ||
+		task.PlanHash != hex.EncodeToString(validated.PlanHash) || len(task.Steps) != len(validated.Steps) {
+		return nil, errs.New(errs.KindValidationFailed, "Script Task and execution plan shape do not match")
+	}
+	for index := range task.Steps {
+		if task.Steps[index].ID != validated.Steps[index].StepId {
+			return nil, errs.New(errs.KindValidationFailed, "Script Task steps do not bind their sealed plan")
+		}
 	}
 	planBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(validated)
 	if err != nil {
-		return ScriptExecutionRecord{}, errs.Wrap(errs.KindInternal, err)
+		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	snapshotBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(snapshot)
-	if err != nil {
-		clear(planBytes)
-		return ScriptExecutionRecord{}, errs.Wrap(errs.KindInternal, err)
+	defer clear(planBytes)
+	snapshots := make(map[string]*agentpb.ResolvedRunnerSnapshot, len(validated.ScriptRunnerSnapshots))
+	for _, snapshot := range validated.ScriptRunnerSnapshots {
+		snapshots[snapshot.ScriptExecutionId] = snapshot
 	}
-	record := ScriptExecutionRecord{
-		ID: run.ScriptExecutionId, SnapshotID: run.RunnerSnapshotId,
-		OperationID: task.OperationID, CurrentTaskID: task.ID, StepID: task.Steps[0].ID,
-		ScriptID: run.ScriptId, ScriptGeneration: run.ScriptGeneration,
-		EnvironmentID: run.EnvironmentId, ServiceID: run.ServiceId, ReleaseID: run.ReleaseId,
-		RenderGeneration: run.RenderGeneration, PlanHash: hex.EncodeToString(validated.PlanHash),
-		SnapshotSHA256:         hex.EncodeToString(run.RunnerSnapshotSha256),
-		BodySHA256:             hex.EncodeToString(run.BodySha256),
-		RunnerProjectionSHA256: hex.EncodeToString(snapshot.RunnerProjectionSha256),
-		Plan:                   planBytes, Snapshot: snapshotBytes,
-		State: ScriptExecutionNotStarted, ActiveReference: true, CreatedAt: at.UTC(), UpdatedAt: at.UTC(),
+	records := make([]ScriptExecutionRecord, 0, len(snapshots))
+	for _, step := range validated.Steps {
+		run := step.GetRunScript()
+		if run == nil {
+			continue
+		}
+		snapshot := snapshots[run.ScriptExecutionId]
+		if snapshot == nil || snapshot.SnapshotId != run.RunnerSnapshotId {
+			return nil, errs.New(errs.KindValidationFailed, "RunScript snapshot is missing")
+		}
+		if task.Type == TaskScript && (task.Target != run.ScriptId || len(validated.Steps) != 1 ||
+			task.TimeoutSeconds != executionplan.ScriptExecutionTimeoutSeconds ||
+			task.Params[ScriptExecutionIDParam] != run.ScriptExecutionId ||
+			task.Params[ScriptGenerationParam] != strconv.FormatUint(run.ScriptGeneration, 10)) {
+			return nil, errs.New(errs.KindValidationFailed, "Script Task does not bind its sealed execution plan")
+		}
+		snapshotBytes, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(snapshot)
+		if marshalErr != nil {
+			return nil, errs.Wrap(errs.KindInternal, marshalErr)
+		}
+		record := ScriptExecutionRecord{
+			ID: run.ScriptExecutionId, SnapshotID: run.RunnerSnapshotId,
+			OperationID: task.OperationID, CurrentTaskID: task.ID, StepID: step.StepId,
+			ScriptID: run.ScriptId, ScriptGeneration: run.ScriptGeneration,
+			EnvironmentID: run.EnvironmentId, ServiceID: run.ServiceId, ReleaseID: run.ReleaseId,
+			RenderGeneration: run.RenderGeneration, PlanHash: hex.EncodeToString(validated.PlanHash),
+			SnapshotSHA256: hex.EncodeToString(run.RunnerSnapshotSha256), BodySHA256: hex.EncodeToString(run.BodySha256),
+			RunnerProjectionSHA256: hex.EncodeToString(snapshot.RunnerProjectionSha256),
+			Plan:                   append([]byte(nil), planBytes...), Snapshot: snapshotBytes,
+			State: ScriptExecutionNotStarted, ActiveReference: true, CreatedAt: at.UTC(), UpdatedAt: at.UTC(),
+		}
+		if err := validateScriptExecutionRecord(record); err != nil {
+			clear(record.Plan)
+			clear(record.Snapshot)
+			return nil, err
+		}
+		records = append(records, record)
 	}
-	if err := validateScriptExecutionRecord(record); err != nil {
-		clear(record.Plan)
-		clear(record.Snapshot)
-		return ScriptExecutionRecord{}, err
+	if len(records) != len(snapshots) {
+		return nil, errs.New(errs.KindValidationFailed, "Script execution set does not match its plan")
 	}
-	return record, nil
+	return records, nil
 }
 
 // PublishExecutionWithTask atomically claims the body generation, source
@@ -307,6 +634,65 @@ func (repository *ScriptRepository) GetScriptExecutionPlan(
 	return validated, nil
 }
 
+func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
+	ctx context.Context,
+	task TaskRecord,
+) (*agentpb.ExecutionPlan, bool, error) {
+	if ctx == nil || repository == nil || repository.store == nil ||
+		(task.Type != TaskDeploy && task.Type != TaskRollback) {
+		return nil, false, errs.New(errs.KindValidationFailed, "release Script execution plan request is invalid")
+	}
+	executionIDs := make(map[string]string)
+	for _, step := range task.Steps {
+		if executionID := task.Params[ReleaseHookStepExecutionParam(step.ID)]; executionID != "" {
+			if !validRawScriptExecutionID(executionID) {
+				return nil, false, errs.New(errs.KindInternal, "release Script execution identity is corrupt")
+			}
+			executionIDs[step.ID] = executionID
+		}
+	}
+	if len(executionIDs) == 0 {
+		return nil, false, nil
+	}
+	var sealed *agentpb.ExecutionPlan
+	var sealedBytes []byte
+	for stepID, executionID := range executionIDs {
+		read, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
+		if err != nil {
+			return nil, false, err
+		}
+		if read == nil || read.Entry == nil {
+			return nil, false, errs.New(errs.KindStateConflict, "release Script execution record is missing")
+		}
+		record, err := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
+		if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != executionID ||
+			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.StepID != stepID ||
+			record.PlanHash != task.PlanHash {
+			return nil, false, errs.New(errs.KindInternal, "release Script execution record is corrupt")
+		}
+		if sealed == nil {
+			sealed = &agentpb.ExecutionPlan{}
+			if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(record.Plan, sealed); err != nil {
+				return nil, false, errs.New(errs.KindInternal, "release Script execution plan is corrupt")
+			}
+			validated, err := executionplan.Validate(sealed)
+			if err != nil || hex.EncodeToString(validated.PlanHash) != task.PlanHash {
+				return nil, false, errs.New(errs.KindInternal, "release Script execution plan is corrupt")
+			}
+			sealed = validated
+			sealedBytes = append([]byte(nil), record.Plan...)
+		} else if !bytes.Equal(record.Plan, sealedBytes) {
+			return nil, false, errs.New(errs.KindInternal, "release Script execution plans disagree")
+		}
+	}
+	for _, step := range sealed.Steps {
+		if step.GetRunScript() != nil && executionIDs[step.StepId] != step.GetRunScript().ScriptExecutionId {
+			return nil, false, errs.New(errs.KindInternal, "release Script execution plan authority is incomplete")
+		}
+	}
+	return sealed, true, nil
+}
+
 // ResolveScriptAssignmentArtifacts returns the private body bytes only after
 // the durable execution, sealed plan, and immutable generation agree.
 func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
@@ -318,59 +704,70 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 	if err != nil {
 		return nil, err
 	}
-	if repository == nil || repository.store == nil || task.Type != TaskScript ||
-		len(validated.ScriptBodyArtifacts) != 1 || len(validated.Steps) != 1 ||
+	if repository == nil || repository.store == nil || len(validated.ScriptBodyArtifacts) == 0 ||
+		(task.Type != TaskScript && task.Type != TaskDeploy && task.Type != TaskRollback) ||
 		hex.EncodeToString(validated.PlanHash) != task.PlanHash {
 		return nil, errs.New(errs.KindValidationFailed, "Script assignment artifact request is invalid")
 	}
-	executionID := task.Params[ScriptExecutionIDParam]
-	executionRead, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
-	if err != nil {
-		return nil, err
+	steps := make(map[string]string, len(validated.ScriptBodyArtifacts))
+	for _, step := range validated.Steps {
+		if run := step.GetRunScript(); run != nil {
+			steps[run.ScriptExecutionId] = step.StepId
+		}
 	}
-	if executionRead == nil || executionRead.Entry == nil {
-		return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
+	artifacts := &agentpb.ScriptAssignmentArtifacts{}
+	for _, metadata := range validated.ScriptBodyArtifacts {
+		executionRead, readErr := repository.store.Get(ctx, scriptExecutionKey(metadata.ScriptExecutionId))
+		if readErr != nil {
+			return nil, readErr
+		}
+		if executionRead == nil || executionRead.Entry == nil {
+			return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
+		}
+		execution, decodeErr := decodeEnvelope[ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
+		if decodeErr != nil || validateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
+			execution.OperationID != task.OperationID || execution.StepID != steps[metadata.ScriptExecutionId] ||
+			execution.PlanHash != task.PlanHash || !execution.ActiveReference {
+			return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
+		}
+		bodyRead, readErr := repository.store.Get(ctx, scriptSetBodyGenerationKey(
+			execution.EnvironmentID, execution.ScriptSetGeneration, metadata.ScriptId, metadata.Generation,
+		))
+		if readErr != nil {
+			return nil, readErr
+		}
+		if bodyRead == nil || bodyRead.Entry == nil {
+			return nil, errs.New(errs.KindInternal, "Script body generation is missing")
+		}
+		body, decodeErr := decodeScriptBodyGeneration(bodyRead.Entry.Value)
+		if decodeErr != nil || body.ScriptID != metadata.ScriptId || body.Generation != metadata.Generation ||
+			body.BodySize != metadata.Size || body.BodySHA256 != hex.EncodeToString(metadata.Sha256) ||
+			execution.BodySHA256 != body.BodySHA256 {
+			return nil, errs.New(errs.KindInternal, "Script body generation does not match its execution")
+		}
+		ownedBody := []byte(body.Body)
+		digest := sha256.Sum256(ownedBody)
+		if len(ownedBody) != int(metadata.Size) || hex.EncodeToString(digest[:]) != body.BodySHA256 {
+			clear(ownedBody)
+			return nil, errs.New(errs.KindInternal, "Script body generation content is corrupt")
+		}
+		artifacts.Bodies = append(artifacts.Bodies, &agentpb.ScriptBodyArtifact{
+			Metadata: proto.Clone(metadata).(*agentpb.ScriptBodyArtifactMetadata), Body: ownedBody,
+		})
 	}
-	execution, err := decodeEnvelope[ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
-	if err != nil || validateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
-		execution.OperationID != task.OperationID || execution.StepID != task.Steps[0].ID ||
-		execution.PlanHash != task.PlanHash || !execution.ActiveReference {
-		return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
-	}
-	metadata := validated.ScriptBodyArtifacts[0]
-	bodyRead, err := repository.store.Get(ctx, scriptSetBodyGenerationKey(
-		execution.EnvironmentID, execution.ScriptSetGeneration, metadata.ScriptId, metadata.Generation,
-	))
-	if err != nil {
-		return nil, err
-	}
-	if bodyRead == nil || bodyRead.Entry == nil {
-		return nil, errs.New(errs.KindInternal, "Script body generation is missing")
-	}
-	body, err := decodeScriptBodyGeneration(bodyRead.Entry.Value)
-	if err != nil || body.ScriptID != metadata.ScriptId || body.Generation != metadata.Generation ||
-		body.BodySize != metadata.Size || body.BodySHA256 != hex.EncodeToString(metadata.Sha256) ||
-		execution.BodySHA256 != body.BodySHA256 {
-		return nil, errs.New(errs.KindInternal, "Script body generation does not match its execution")
-	}
-	ownedBody := []byte(body.Body)
-	digest := sha256.Sum256(ownedBody)
-	if len(ownedBody) != int(metadata.Size) || hex.EncodeToString(digest[:]) != body.BodySHA256 {
-		clear(ownedBody)
-		return nil, errs.New(errs.KindInternal, "Script body generation content is corrupt")
-	}
-	return &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{{
-		Metadata: proto.Clone(metadata).(*agentpb.ScriptBodyArtifactMetadata), Body: ownedBody,
-	}}}, nil
+	return artifacts, nil
 }
 
 func validateScriptExecutionSources(sources ScriptExecutionSources, execution ScriptExecutionRecord) error {
 	if sources.Revision <= 0 || sources.Tenant.ReadRevision != sources.Revision ||
 		sources.Project.ReadRevision != sources.Revision || sources.Environment.ReadRevision != sources.Revision ||
-		sources.Service.ReadRevision != sources.Revision || sources.Script.ReadRevision != sources.Revision ||
+		sources.Service.ReadRevision != sources.Revision || sources.ScriptSet.ReadRevision != sources.Revision ||
+		sources.Script.ReadRevision != sources.Revision ||
 		sources.BodyGeneration.ReadRevision != sources.Revision || sources.RenderInput.ReadRevision != sources.Revision ||
 		sources.AppliedProjection.ReadRevision != sources.Revision || sources.AppliedProjection.Revision <= 0 ||
 		sources.Release.Revision != sources.Revision || sources.Script.Record.Desired.ID != execution.ScriptID ||
+		sources.ScriptSet.Revision <= 0 || sources.ScriptSet.Record.EnvironmentID != execution.EnvironmentID ||
+		sources.ScriptSet.Record.GenerationID != execution.ScriptSetGeneration ||
 		sources.Script.Record.ScriptSetGeneration != execution.ScriptSetGeneration ||
 		sources.Script.Record.ActiveGeneration != execution.ScriptGeneration ||
 		sources.BodyGeneration.Record.ScriptID != execution.ScriptID ||

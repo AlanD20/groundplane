@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,6 +18,7 @@ type ScriptExecutionSources struct {
 	Project           Versioned[ProjectRecord]
 	Environment       Versioned[EnvironmentRecord]
 	Service           Versioned[ServiceRecord]
+	ScriptSet         Versioned[ScriptSetGenerationRecord]
 	Script            Versioned[ScriptRecord]
 	BodyGeneration    Versioned[ScriptBodyGenerationRecord]
 	Release           CurrentSuccessfulRelease
@@ -33,6 +35,32 @@ func (repository *ScriptRepository) LoadExecutionSources(
 	ledger *ReleaseLedger,
 	scriptID string,
 ) (ScriptExecutionSources, error) {
+	return repository.loadExecutionSources(ctx, ledger, scriptID, "", 0)
+}
+
+// LoadReleaseHookExecutionSources binds a Script to the staged candidate
+// Release at one exact revision. It never substitutes the currently serving
+// Release for an automatic hook.
+func (repository *ScriptRepository) LoadReleaseHookExecutionSources(
+	ctx context.Context,
+	ledger *ReleaseLedger,
+	scriptID string,
+	releaseID string,
+	revision int64,
+) (ScriptExecutionSources, error) {
+	if ids.Validate(ids.KindDeployment, releaseID) != nil || revision <= 0 {
+		return ScriptExecutionSources{}, errs.New(errs.KindValidationFailed, "release hook source request is invalid")
+	}
+	return repository.loadExecutionSources(ctx, ledger, scriptID, releaseID, revision)
+}
+
+func (repository *ScriptRepository) loadExecutionSources(
+	ctx context.Context,
+	ledger *ReleaseLedger,
+	scriptID string,
+	releaseID string,
+	revision int64,
+) (ScriptExecutionSources, error) {
 	if ctx == nil || repository == nil || repository.store == nil || ledger == nil ||
 		ids.Validate(ids.KindScript, scriptID) != nil {
 		return ScriptExecutionSources{}, errs.New(
@@ -40,11 +68,11 @@ func (repository *ScriptRepository) LoadExecutionSources(
 			"Script execution source request is invalid",
 		)
 	}
-	stored, err := readActiveScriptStorage(ctx, repository.store, scriptID, 0)
+	stored, err := readActiveScriptStorage(ctx, repository.store, scriptID, revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	revision := stored.Script.ReadRevision
+	revision = stored.Script.ReadRevision
 	metadata := stored.Script.Record
 	bodyValue, err := scriptExecutionValueAt(
 		ctx,
@@ -98,9 +126,27 @@ func (repository *ScriptRepository) LoadExecutionSources(
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script target Service is not runnable")
 	}
 
-	release, err := ledger.ResolveCurrentSuccessful(ctx, environment.ID, target.Desired.ID, revision)
-	if err != nil {
-		return ScriptExecutionSources{}, err
+	var release CurrentSuccessfulRelease
+	if releaseID == "" {
+		release, err = ledger.ResolveCurrentSuccessful(ctx, environment.ID, target.Desired.ID, revision)
+		if err != nil {
+			return ScriptExecutionSources{}, err
+		}
+	} else {
+		intentValue, readErr := scriptExecutionValueAt(
+			ctx, repository.store, releaseIntentStagingKey("", releaseID), revision,
+		)
+		if readErr != nil {
+			return ScriptExecutionSources{}, readErr
+		}
+		intent, decodeErr := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
+		if decodeErr != nil || domain.ValidateIntent(intent) != nil || intent.ID != releaseID ||
+			intent.EnvironmentID != environment.ID || intent.ServiceID != target.Desired.ID {
+			return ScriptExecutionSources{}, corruptReleaseRecord()
+		}
+		release = CurrentSuccessfulRelease{
+			Intent: intent, IntentRevision: intentValue.ModRevision, Revision: revision,
+		}
 	}
 	renderInput, err := ledger.GetReleaseRenderInputAt(ctx, release.Intent.ID, revision)
 	if err != nil {
@@ -144,8 +190,9 @@ func (repository *ScriptRepository) LoadExecutionSources(
 		Environment: Versioned[EnvironmentRecord]{
 			Record: environment, Revision: environmentValue.ModRevision, ReadRevision: revision,
 		},
-		Service: Versioned[ServiceRecord]{Record: target, Revision: serviceValue.ModRevision, ReadRevision: revision},
-		Script:  Versioned[ScriptRecord]{Record: metadata, Revision: stored.Script.Revision, ReadRevision: revision},
+		Service:   Versioned[ServiceRecord]{Record: target, Revision: serviceValue.ModRevision, ReadRevision: revision},
+		ScriptSet: stored.Active,
+		Script:    Versioned[ScriptRecord]{Record: metadata, Revision: stored.Script.Revision, ReadRevision: revision},
 		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{
 			Record: body, Revision: bodyValue.ModRevision, ReadRevision: revision,
 		},

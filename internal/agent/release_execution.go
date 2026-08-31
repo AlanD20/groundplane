@@ -64,17 +64,19 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 			state.reconciliation = !compensated
 		}
 	} else {
-		for _, step := range reservation.assignment.Plan.Steps {
-			if step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD {
-				continue
-			}
-			p.runReleaseStep(runCtx, reservation, step, state)
-			if state.err != nil {
-				break
-			}
+		p.runReleasePhase(runCtx, reservation, state,
+			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK)
+		if state.err == nil {
+			p.runReleasePhase(runCtx, reservation, state,
+				agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD)
+		}
+		if state.err == nil {
+			p.runReleasePhase(runCtx, reservation, state,
+				agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK)
 		}
 		if state.err != nil {
 			original, originalStep := state.err, state.failedStepID
+			originalExitCode, originalDiagnostic := state.exitCode, state.diagnostic
 			compensated := true
 			for index := len(reservation.assignment.Plan.Steps) - 1; index >= 0; index-- {
 				step := reservation.assignment.Plan.Steps[index]
@@ -93,7 +95,12 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 			}
 			if compensated {
 				state.reconciliation = false
+			}
+			state.err, state.failedStepID = original, originalStep
+			if reservation.ctx.Err() == nil && !errors.Is(original, context.DeadlineExceeded) {
+				p.runReleaseFailureHooks(runCtx, reservation, state)
 				state.err, state.failedStepID = original, originalStep
+				state.exitCode, state.diagnostic = originalExitCode, originalDiagnostic
 			}
 		}
 	}
@@ -112,11 +119,57 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	p.complete(runCtx, reservation, result)
 }
 
+func (p *WorkerPool) runReleasePhase(
+	runCtx context.Context,
+	reservation *taskReservation,
+	state *releaseExecutionState,
+	policy agentpb.ExecutionStepPolicy,
+) {
+	for _, step := range reservation.assignment.Plan.Steps {
+		if step.Policy != policy {
+			continue
+		}
+		p.runReleaseStep(runCtx, reservation, step, state)
+		if state.err != nil {
+			return
+		}
+	}
+}
+
+func (p *WorkerPool) runReleaseFailureHooks(
+	runCtx context.Context,
+	reservation *taskReservation,
+	state *releaseExecutionState,
+) {
+	for _, step := range reservation.assignment.Plan.Steps {
+		if step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK {
+			continue
+		}
+		state.err = nil
+		p.runReleaseStep(runCtx, reservation, step, state)
+		if state.err != nil {
+			return
+		}
+	}
+}
+
 func (p *WorkerPool) runReleaseStep(runCtx context.Context, reservation *taskReservation, step *agentpb.ExecutionStep, state *releaseExecutionState) {
 	planHash := hashForPlan(reservation.assignment.Plan)
 	p.emitProgress(runCtx, TaskProgress{AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId, Attempt: 1, Ordinal: 1, State: TaskProgressRunning})
 	stepCtx, cancel := context.WithTimeout(reservation.ctx, time.Duration(step.TimeoutSeconds)*time.Second)
-	result, err := p.compose.executeStep(stepCtx, reservation.assignment, step)
+	var result composeStepResult
+	var err error
+	if step.GetRunScript() != nil {
+		if p.scriptRuntime == nil {
+			err = errs.New(errs.KindInternal, "agent: Script runtime is not configured")
+		} else {
+			result.ExitCode, err = p.scriptRuntime.ExecuteScript(
+				stepCtx, reservation.assignment, step, p.CheckpointScript,
+			)
+		}
+	} else {
+		result, err = p.compose.executeStep(stepCtx, reservation.assignment, step)
+	}
 	progress := progressStateFor(reservation.ctx, errors.Join(err, stepCtx.Err()))
 	cancel()
 	if result.ExitCode != 0 {

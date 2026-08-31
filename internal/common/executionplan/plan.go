@@ -150,6 +150,12 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if !validOperation(plan.Operation) {
 		return errs.New(errs.KindValidationFailed, "execution plan operation is unsupported")
 	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK {
+		if err := validateReleaseScriptPlan(plan); err != nil {
+			return err
+		}
+	}
 	if err := validateAnyStableID(plan.TargetId); err != nil {
 		return errs.New(errs.KindValidationFailed, "execution plan target id is invalid")
 	}
@@ -885,6 +891,12 @@ func validateStep(
 			!validHostResolutionAction(payload.HostResolutionRestore.GetComponentId(),
 				payload.HostResolutionRestore.GetGeneration(), renderGeneration) {
 			return errs.New(errs.KindValidationFailed, "host resolution restore payload is invalid")
+		}
+		return nil
+	case *agentpb.ExecutionStep_RunScript:
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_DEPLOY &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK {
+			return errs.New(errs.KindValidationFailed, "release Script step requires a release operation")
 		}
 		return nil
 	case *agentpb.ExecutionStep_BackupArtifactPrune:

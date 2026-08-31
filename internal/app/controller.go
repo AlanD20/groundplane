@@ -604,7 +604,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	releaseOperations, err := newReleaseOperationService(
 		releaseLedger, serviceRecords, releaseGroups, idempotency, intentCoordinator,
-		planResolver, releaseExecutionTimeout,
+		planResolver, scriptRecords, scriptArtifacts, releaseExecutionTimeout,
 	)
 	if err != nil {
 		_ = store.Close()

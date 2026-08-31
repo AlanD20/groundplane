@@ -111,73 +111,102 @@ func (service *ScriptArtifactService) ResolveScriptAssignmentArtifacts(
 	if err != nil {
 		return nil, err
 	}
-	if len(validated.ScriptRunnerSnapshots) != 1 {
+	if len(validated.ScriptRunnerSnapshots) == 0 ||
+		len(validated.ScriptRunnerSnapshots) != len(validated.ScriptBodyArtifacts) {
 		return nil, errs.New(errs.KindInternal, "Script runner snapshot is missing")
 	}
 	artifacts, err := service.repository.ResolveScriptAssignmentArtifacts(ctx, task, validated)
 	if err != nil {
 		return nil, err
 	}
-	if artifacts == nil || len(artifacts.Entries) != 0 {
+	if artifacts == nil || len(artifacts.Entries) != 0 ||
+		len(artifacts.Bodies) != len(validated.ScriptBodyArtifacts) {
 		clearScriptArtifactValues(artifacts)
 		return nil, errs.New(errs.KindInternal, "Script body artifact response is invalid")
 	}
-	snapshot := validated.ScriptRunnerSnapshots[0]
-	for _, binding := range snapshot.EntryBindings {
-		reference := etcd.TaskEntryValueReference{
-			EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
-			Storage: etcd.TaskEntryValueStoragePlain,
+	seenBindings := make(map[string]*agentpb.ScriptRunnerEntryBinding)
+	for _, snapshot := range validated.ScriptRunnerSnapshots {
+		for _, binding := range snapshot.EntryBindings {
+			identity := binding.EntryId + "\x00" + binding.ValueGenerationId
+			if previous, exists := seenBindings[identity]; exists {
+				if !proto.Equal(previous, binding) {
+					clearScriptArtifactValues(artifacts)
+					return nil, errs.New(errs.KindInternal, "Script Entry artifact bindings disagree")
+				}
+				continue
+			}
+			seenBindings[identity] = binding
+			reference := etcd.TaskEntryValueReference{
+				EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
+				Storage: etcd.TaskEntryValueStoragePlain,
+			}
+			if binding.Secret {
+				reference.Storage = etcd.TaskEntryValueStorageSecret
+			}
+			value, resolveErr := service.values.ResolveTaskMaterializationSource(
+				ctx, snapshot.EnvironmentId, etcd.TaskMaterializationSource{
+					Kind: etcd.TaskMaterializationSourceEntryValue, EntryValue: &reference,
+				},
+			)
+			if resolveErr != nil {
+				clear(value)
+				clearScriptArtifactValues(artifacts)
+				return nil, resolveErr
+			}
+			digest := sha256.Sum256(value)
+			if !bytes.Equal(digest[:], binding.Sha256) ||
+				(binding.Kind == agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV &&
+					(!utf8.Valid(value) || bytes.IndexByte(value, 0) >= 0)) {
+				clear(value)
+				clearScriptArtifactValues(artifacts)
+				return nil, errs.New(errs.KindInternal, "Script Entry artifact does not match its sealed binding")
+			}
+			artifacts.Entries = append(artifacts.Entries, &agentpb.ScriptEntryArtifact{
+				Binding: proto.Clone(binding).(*agentpb.ScriptRunnerEntryBinding), Value: value,
+			})
 		}
-		if binding.Secret {
-			reference.Storage = etcd.TaskEntryValueStorageSecret
-		}
-		value, resolveErr := service.values.ResolveTaskMaterializationSource(
-			ctx, snapshot.EnvironmentId, etcd.TaskMaterializationSource{
-				Kind: etcd.TaskMaterializationSourceEntryValue, EntryValue: &reference,
-			},
-		)
-		if resolveErr != nil {
-			clear(value)
-			clearScriptArtifactValues(artifacts)
-			return nil, resolveErr
-		}
-		digest := sha256.Sum256(value)
-		if !bytes.Equal(digest[:], binding.Sha256) ||
-			(binding.Kind == agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV &&
-				(!utf8.Valid(value) || bytes.IndexByte(value, 0) >= 0)) {
-			clear(value)
-			clearScriptArtifactValues(artifacts)
-			return nil, errs.New(errs.KindInternal, "Script Entry artifact does not match its sealed binding")
-		}
-		artifacts.Entries = append(artifacts.Entries, &agentpb.ScriptEntryArtifact{
-			Binding: proto.Clone(binding).(*agentpb.ScriptRunnerEntryBinding), Value: value,
-		})
 	}
 	return artifacts, nil
 }
 
-func (service *ScriptArtifactService) ResolveScriptExecutionCheckpoint(
+func (service *ScriptArtifactService) ResolveScriptExecutionCheckpoints(
 	ctx context.Context,
 	task etcd.TaskRecord,
-) (*agentpb.ScriptExecutionCheckpoint, error) {
-	if ctx == nil || service == nil || service.repository == nil || task.Type != etcd.TaskScript {
+	plan *agentpb.ExecutionPlan,
+) ([]*agentpb.ScriptExecutionCheckpoint, error) {
+	if ctx == nil || service == nil || service.repository == nil {
 		return nil, errs.New(errs.KindInternal, "Script checkpoint resolver is not configured")
 	}
-	executionID := task.Params[etcd.ScriptExecutionIDParam]
-	versioned, err := service.repository.GetScriptExecution(ctx, executionID)
+	validated, err := executionplan.Validate(plan)
 	if err != nil {
 		return nil, err
 	}
-	record := versioned.Record
-	if record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
-		record.StepID == "" {
-		return nil, errs.New(errs.KindInternal, "Script execution checkpoint does not match its Task")
+	checkpoints := make([]*agentpb.ScriptExecutionCheckpoint, 0, len(validated.ScriptBodyArtifacts))
+	for _, step := range validated.Steps {
+		run := step.GetRunScript()
+		if run == nil {
+			continue
+		}
+		versioned, readErr := service.repository.GetScriptExecution(ctx, run.ScriptExecutionId)
+		if readErr != nil {
+			return nil, readErr
+		}
+		record := versioned.Record
+		if record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
+			record.PlanHash != task.PlanHash || record.StepID != step.StepId {
+			return nil, errs.New(errs.KindInternal, "Script execution checkpoint does not match its Task")
+		}
+		checkpoint, checkpointErr := scriptExecutionCheckpointMessage(record)
+		if checkpointErr != nil {
+			return nil, checkpointErr
+		}
+		validatedCheckpoint, checkpointErr := executionplan.ValidateScriptExecutionCheckpoint(checkpoint)
+		if checkpointErr != nil {
+			return nil, checkpointErr
+		}
+		checkpoints = append(checkpoints, validatedCheckpoint)
 	}
-	checkpoint, err := scriptExecutionCheckpointMessage(record)
-	if err != nil {
-		return nil, err
-	}
-	return executionplan.ValidateScriptExecutionCheckpoint(checkpoint)
+	return checkpoints, nil
 }
 
 func scriptExecutionCheckpointMessage(record etcd.ScriptExecutionRecord) (*agentpb.ScriptExecutionCheckpoint, error) {
@@ -186,7 +215,7 @@ func scriptExecutionCheckpointMessage(record etcd.ScriptExecutionRecord) (*agent
 		return nil, errs.New(errs.KindInternal, "Script execution state is invalid")
 	}
 	checkpoint := &agentpb.ScriptExecutionCheckpoint{
-		State: state, StartAuthorized: record.StartAuthorized,
+		ScriptExecutionId: record.ID, State: state, StartAuthorized: record.StartAuthorized,
 		ReconciliationRequired: record.ReconciliationRequired,
 	}
 	if record.BodyPrepared != nil {

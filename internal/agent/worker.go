@@ -28,7 +28,7 @@ type Assignment struct {
 	RetryOf            string
 	Plan               *agentpb.ExecutionPlan
 	ScriptArtifacts    *agentpb.ScriptAssignmentArtifacts
-	ScriptCheckpoint   *agentpb.ScriptExecutionCheckpoint
+	ScriptCheckpoints  []*agentpb.ScriptExecutionCheckpoint
 	AutomaticReconcile bool
 	Deadline           time.Time
 }
@@ -828,7 +828,10 @@ func isReleaseExecution(plan *agentpb.ExecutionPlan) bool {
 		switch step.Policy {
 		case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
 			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE:
+			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK,
+			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK,
+			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK:
 			return true
 		}
 	}
@@ -1121,22 +1124,41 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if err != nil {
 		return Assignment{}, err
 	}
-	var scriptCheckpoint *agentpb.ScriptExecutionCheckpoint
-	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT {
-		scriptCheckpoint, err = executionplan.ValidateScriptExecutionCheckpoint(assignment.ScriptCheckpoint)
+	scriptCheckpoints := make([]*agentpb.ScriptExecutionCheckpoint, len(assignment.ScriptCheckpoints))
+	if len(assignment.ScriptCheckpoints) != len(plan.ScriptBodyArtifacts) {
+		clearScriptArtifacts(scriptArtifacts)
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint set is incomplete")
+	}
+	expectedCheckpoints := make(map[string]struct{}, len(plan.ScriptBodyArtifacts))
+	for _, metadata := range plan.ScriptBodyArtifacts {
+		if metadata == nil || metadata.ScriptExecutionId == "" {
+			clearScriptArtifacts(scriptArtifacts)
+			return Assignment{}, errs.New(errs.KindInternal, "agent: Script execution metadata is invalid")
+		}
+		expectedCheckpoints[metadata.ScriptExecutionId] = struct{}{}
+	}
+	seenCheckpoints := make(map[string]struct{}, len(assignment.ScriptCheckpoints))
+	for index, checkpoint := range assignment.ScriptCheckpoints {
+		scriptCheckpoints[index], err = executionplan.ValidateScriptExecutionCheckpoint(checkpoint)
 		if err != nil {
 			clearScriptArtifacts(scriptArtifacts)
 			return Assignment{}, errs.Wrap(errs.KindInternal, err)
 		}
-	} else if assignment.ScriptCheckpoint != nil {
-		clearScriptArtifacts(scriptArtifacts)
-		return Assignment{}, errs.New(errs.KindInternal, "agent: non-Script assignment contains a Script checkpoint")
+		if _, expected := expectedCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; !expected {
+			clearScriptArtifacts(scriptArtifacts)
+			return Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint does not belong to the execution plan")
+		}
+		if _, duplicate := seenCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; duplicate {
+			clearScriptArtifacts(scriptArtifacts)
+			return Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint set contains a duplicate execution")
+		}
+		seenCheckpoints[scriptCheckpoints[index].ScriptExecutionId] = struct{}{}
 	}
 	return Assignment{
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
 		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,
-		ScriptCheckpoint: scriptCheckpoint, Deadline: assignment.Deadline,
+		ScriptCheckpoints: scriptCheckpoints, Deadline: assignment.Deadline,
 		AutomaticReconcile: assignment.AutomaticReconcile,
 	}, nil
 }

@@ -127,7 +127,7 @@ func ValidateScriptExecutionCheckpoint(
 	if err := RejectUnknown(owned); err != nil {
 		return nil, err
 	}
-	if !validScriptCheckpointState(owned.State) ||
+	if !validScriptCheckpointExecutionID(owned.ScriptExecutionId) || !validScriptCheckpointState(owned.State) ||
 		(owned.BodyPrepared != nil && !owned.StartAuthorized) ||
 		(owned.ContainerCreated != nil && owned.BodyPrepared == nil) ||
 		(owned.Cleanup != nil && owned.Outcome == nil) {

@@ -53,6 +53,9 @@ type PlanBuildInput struct {
 	Operation                    agentpb.PlanOperation
 	TargetID                     string
 	Artifacts                    []*agentpb.ComposeArtifact
+	ScriptRunnerSnapshots        []*agentpb.ResolvedRunnerSnapshot
+	ScriptRunnerProjections      []*agentpb.ScriptRunnerProjection
+	ScriptBodyArtifacts          []*agentpb.ScriptBodyArtifactMetadata
 	Steps                        []*agentpb.ExecutionStep
 	ComponentLifecycleMode       agentpb.ComponentLifecycleMode
 	ComponentRollbackObservation *agentpb.ComponentApply
@@ -63,8 +66,13 @@ type PlanBuildInput struct {
 func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: 1, PlanId: input.PlanID, RenderGeneration: input.RenderGeneration,
-		Operation: input.Operation, TargetId: input.TargetID,
-		Artifacts: input.Artifacts, Steps: input.Steps,
+		Operation:                    input.Operation,
+		TargetId:                     input.TargetID,
+		Artifacts:                    input.Artifacts,
+		ScriptRunnerSnapshots:        input.ScriptRunnerSnapshots,
+		ScriptRunnerProjections:      input.ScriptRunnerProjections,
+		ScriptBodyArtifacts:          input.ScriptBodyArtifacts,
+		Steps:                        input.Steps,
 		ComponentLifecycleMode:       input.ComponentLifecycleMode,
 		ComponentRollbackObservation: input.ComponentRollbackObservation,
 	})

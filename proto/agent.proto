@@ -403,7 +403,7 @@ message TaskAssignment {
   google.protobuf.Timestamp deadline = 7; // durable absolute assignment deadline; reconnect never restarts the budget
   string assignment_id = 6;
   ScriptAssignmentArtifacts script_artifacts = 8;
-  ScriptExecutionCheckpoint script_checkpoint = 9;
+  repeated ScriptExecutionCheckpoint script_checkpoints = 9;
   bool automatic_reconcile = 10;
 }
 
@@ -471,6 +471,7 @@ message ScriptExecutionCheckpoint {
   ScriptOutcomeCheckpoint outcome = 5;
   ScriptCleanupCheckpoint cleanup = 6;
   bool reconciliation_required = 7;
+  string script_execution_id = 8;
 }
 
 message ScriptCheckpointRequest {
@@ -880,6 +881,9 @@ enum ExecutionStepPolicy {
   EXECUTION_STEP_POLICY_RELEASE_COMPENSATE = 2;
   EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE = 3;
   EXECUTION_STEP_POLICY_RELEASE_RECOVERY_COMPENSATE = 4;
+  EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK = 5;
+  EXECUTION_STEP_POLICY_RELEASE_POST_HOOK = 6;
+  EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK = 7;
 }
 
 // BackupSourceCapture is one immutable source attempt in policy order. It
