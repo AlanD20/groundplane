@@ -2,6 +2,8 @@ package dnsresolverobserver
 
 import (
 	"bytes"
+	"crypto/sha512"
+	"encoding/hex"
 	"net/netip"
 	"sort"
 	"strconv"
@@ -11,18 +13,56 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func metricContainsDigest(metrics []byte, metricName string, digest string) bool {
+func reloadMetricSHA512(metrics []byte, metricName string) ([sha512.Size]byte, bool, error) {
 	if len(metrics) == 0 || len(metrics) > maximumMetricsBytes {
-		return false
+		return [sha512.Size]byte{}, false, errs.New(errs.KindRequestFailed, "DNS resolver metrics response is invalid")
 	}
 	prefix := metricName + "{"
+	found := false
+	result := [sha512.Size]byte{}
 	for _, line := range strings.Split(string(metrics), "\n") {
-		if strings.HasPrefix(line, prefix) && strings.Contains(line, `hash="`+digest+`"`) &&
-			strings.HasSuffix(line, " 1") {
-			return true
+		if !strings.HasPrefix(line, metricName) {
+			continue
 		}
+		if found || !strings.HasPrefix(line, prefix) || strings.Count(line, "{") != 1 ||
+			strings.Count(line, "}") != 1 {
+			return [sha512.Size]byte{}, false, errs.New(errs.KindStateConflict, "DNS resolver reload metric is invalid")
+		}
+		brace := strings.IndexByte(line, '}')
+		labels, ok := exactMetricLabels(line[len(prefix):brace])
+		if !ok || len(labels) != 2 || labels["hash"] != "sha512" || strings.TrimSpace(line[brace+1:]) != "1" {
+			return [sha512.Size]byte{}, false, errs.New(errs.KindStateConflict, "DNS resolver reload metric is invalid")
+		}
+		decoded, err := hex.DecodeString(labels["value"])
+		if err != nil || len(decoded) != sha512.Size || hex.EncodeToString(decoded) != labels["value"] {
+			return [sha512.Size]byte{}, false, errs.New(errs.KindStateConflict, "DNS resolver reload metric is invalid")
+		}
+		copy(result[:], decoded)
+		clear(decoded)
+		found = true
 	}
-	return false
+	return result, found, nil
+}
+
+func exactMetricLabels(value string) (map[string]string, bool) {
+	result := make(map[string]string)
+	for _, field := range strings.Split(value, ",") {
+		parts := strings.SplitN(field, "=", 2)
+		if len(parts) != 2 {
+			return nil, false
+		}
+		key := strings.TrimSpace(parts[0])
+		quoted := strings.TrimSpace(parts[1])
+		if key == "" || len(quoted) < 2 || quoted[0] != '"' || quoted[len(quoted)-1] != '"' ||
+			strings.Contains(quoted[1:len(quoted)-1], `"`) {
+			return nil, false
+		}
+		if _, duplicate := result[key]; duplicate {
+			return nil, false
+		}
+		result[key] = quoted[1 : len(quoted)-1]
+	}
+	return result, true
 }
 
 type counterKey struct {

@@ -1,10 +1,12 @@
 package dnsresolverobserver
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"github.com/coredns/caddy/caddyfile"
 )
 
 type observerRuntimeStub struct{ evidence runtimeEvidence }
@@ -78,19 +81,22 @@ func (dns *observerDNSStub) Query(
 }
 
 // Rationale: observation must bind the mounted Agent-local candidate to the
-// CoreDNS SHA-512 reload metric and bounded static/recursive/forward serving.
+// CoreDNS effective parsed-configuration SHA-512 reported at startup and
+// bounded static/recursive/forward serving, even before the reload metric exists.
 func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
-	artifact := []byte("hosts {\n  10.200.0.2 app.internal\n}\nforward corp.internal 10.30.0.1\nforward . 1.1.1.1\n")
+	artifact := []byte(". {\n  reload\n  prometheus 127.0.0.1:9153\n  hosts {\n" +
+		"    10.200.0.2 app.internal\n  }\n  forward corp.internal 10.30.0.1\n  forward . 1.1.1.1\n}\n")
 	artifactSHA256 := sha256.Sum256(artifact)
-	reloadSHA512 := sha512.Sum512(artifact)
+	reloadSHA512 := testEffectiveConfigSHA512(t, "/etc/coredns/Corefile", artifact)
 	imageDigest := sha256.Sum256([]byte("verified child image"))
 	dns := &observerDNSStub{}
-	baseCounters := forwardMetrics(reloadSHA512, 4, 9)
-	catchCounters := forwardMetrics(reloadSHA512, 4, 10)
-	forwardCounters := forwardMetrics(reloadSHA512, 5, 10)
+	baseCounters := forwardMetrics(nil, 4, 9)
+	catchCounters := forwardMetrics(nil, 4, 10)
+	forwardCounters := forwardMetrics(nil, 5, 10)
 	executor := &Executor{
 		runtime: observerRuntimeStub{evidence: runtimeEvidence{
-			artifact: append([]byte(nil), artifact...), verifiedImageDigest: imageDigest,
+			artifact: append([]byte(nil), artifact...), logs: reloadLog(reloadSHA512),
+			verifiedImageDigest: imageDigest,
 		}},
 		metrics: &observerMetricsStub{values: [][]byte{
 			baseCounters, baseCounters, baseCounters,
@@ -132,17 +138,15 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	}
 }
 
-// Rationale: generic process liveness or a metric for another generation must
-// never terminalize the candidate as serving.
-func TestObserveRejectsReloadMetricForAnotherGeneration(t *testing.T) {
-	artifact := []byte("forward . 1.1.1.1\n")
+// Rationale: raw-byte hashes, stale latest logs, malformed or ambiguous log
+// evidence, and a present mismatched reload metric must never prove a generation.
+func TestObserveRejectsInvalidEffectiveConfigurationEvidence(t *testing.T) {
+	artifact := []byte(". {\n  reload\n  prometheus 127.0.0.1:9153\n  forward . 1.1.1.1\n}\n")
 	digest := sha256.Sum256(artifact)
-	executor := &Executor{
-		runtime: observerRuntimeStub{evidence: runtimeEvidence{artifact: artifact}},
-		metrics: &observerMetricsStub{values: [][]byte{[]byte(`coredns_reload_version_info{hash="wrong"} 1`)}},
-		dns:     &observerDNSStub{}, now: time.Now,
-	}
-	_, err := executor.Observe(context.Background(), Request{
+	effective := testEffectiveConfigSHA512(t, "/etc/coredns/Corefile", artifact)
+	raw := sha512.Sum512(artifact)
+	wrong := sha512.Sum512([]byte("another parsed configuration"))
+	request := Request{
 		ComponentID: "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ArtifactID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV", ArtifactSHA256: digest, RenderGeneration: 1,
 		ProjectName: "gp-platform", ServiceName: "coredns", ArtifactTarget: "/etc/coredns/Corefile",
@@ -151,9 +155,40 @@ func TestObserveRejectsReloadMetricForAnotherGeneration(t *testing.T) {
 		ImageOS: "linux", ImageArchitecture: "amd64",
 		ListenEndpoint: "127.0.0.1:53", MetricsURL: "http://127.0.0.1:9153/metrics",
 		ReloadMetric: "coredns_reload_version_info", ExpectedLabels: map[string]string{"owned": "true"},
-	})
-	if err == nil {
-		t.Fatal("Observe() accepted a reload metric for another candidate")
+	}
+	tests := map[string]struct {
+		logs    []byte
+		metrics []byte
+	}{
+		"raw artifact hash": {logs: reloadLog(raw), metrics: forwardMetrics(nil, 0, 0)},
+		"stale matching log": {
+			logs: append(reloadLog(effective), reloadLog(wrong)...), metrics: forwardMetrics(nil, 0, 0),
+		},
+		"malformed log": {
+			logs:    []byte("[INFO] plugin/reload: Running configuration SHA512 = malformed\n"),
+			metrics: forwardMetrics(nil, 0, 0),
+		},
+		"oversized logs": {
+			logs: bytes.Repeat([]byte("x"), maximumLogBytes+1), metrics: forwardMetrics(nil, 0, 0),
+		},
+		"ambiguous log line": {
+			logs:    append(bytes.TrimSuffix(reloadLog(effective), []byte("\n")), reloadLog(wrong)...),
+			metrics: forwardMetrics(nil, 0, 0),
+		},
+		"present mismatched metric": {
+			logs: reloadLog(effective), metrics: forwardMetrics(&wrong, 0, 0),
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			executor := &Executor{
+				runtime: observerRuntimeStub{evidence: runtimeEvidence{artifact: artifact, logs: test.logs}},
+				metrics: &observerMetricsStub{values: [][]byte{test.metrics}}, dns: &observerDNSStub{}, now: time.Now,
+			}
+			if _, err := executor.Observe(context.Background(), request); err == nil {
+				t.Fatal("Observe() accepted invalid effective configuration evidence")
+			}
+		})
 	}
 }
 
@@ -172,8 +207,8 @@ func TestObserveForwardRequiresSuccessfulRootNSResolution(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			before := forwardMetrics([sha512.Size]byte{}, 0, 9)
-			after := forwardMetrics([sha512.Size]byte{}, 0, 10)
+			before := forwardMetrics(nil, 0, 9)
+			after := forwardMetrics(nil, 0, 10)
 			executor := &Executor{
 				metrics: &observerMetricsStub{values: [][]byte{before, after}},
 				dns: observerDNSFunc(func(
@@ -208,9 +243,30 @@ func TestObserveForwardRequiresSuccessfulRootNSResolution(t *testing.T) {
 	}
 }
 
-func forwardMetrics(reload [sha512.Size]byte, corp, catch uint64) []byte {
+func testEffectiveConfigSHA512(t *testing.T, path string, artifact []byte) [sha512.Size]byte {
+	t.Helper()
+	blocks, err := caddyfile.Parse(path, bytes.NewReader(artifact), nil)
+	if err != nil {
+		t.Fatalf("parse Corefile fixture: %v", err)
+	}
+	parsed, err := json.Marshal(blocks)
+	if err != nil {
+		t.Fatalf("marshal Corefile fixture: %v", err)
+	}
+	return sha512.Sum512(parsed)
+}
+
+func reloadLog(digest [sha512.Size]byte) []byte {
+	return []byte("[INFO] plugin/reload: Running configuration SHA512 = " + hex.EncodeToString(digest[:]) + "\n")
+}
+
+func forwardMetrics(reload *[sha512.Size]byte, corp, catch uint64) []byte {
+	version := ""
+	if reload != nil {
+		version = `coredns_reload_version_info{hash="sha512",value="` + hex.EncodeToString(reload[:]) + `"} 1` + "\n"
+	}
 	return []byte(
-		`coredns_reload_version_info{hash="` + hex.EncodeToString(reload[:]) + `"} 1` + "\n" +
+		version +
 			`coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="10.30.0.1:53",rcode="NOERROR"} ` + strconv.FormatUint(corp, 10) + "\n" +
 			`coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="1.1.1.1:53",rcode="NOERROR"} ` + strconv.FormatUint(catch, 10) + "\n",
 	)

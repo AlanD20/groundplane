@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.43.7
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.3
 	github.com/containerd/errdefs v1.0.0
+	github.com/coredns/caddy v1.1.1
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/distribution/reference v0.6.0
 	github.com/gowebpki/jcs v1.0.1

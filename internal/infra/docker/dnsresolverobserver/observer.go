@@ -5,8 +5,6 @@ package dnsresolverobserver
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/sha512"
-	"encoding/hex"
 	"net/http"
 	"strings"
 	"time"
@@ -22,6 +20,8 @@ import (
 const (
 	maximumArtifactBytes = 96 * 1024
 	maximumMetricsBytes  = 256 * 1024
+	maximumLogBytes      = 256 * 1024
+	maximumLogLines      = 256
 	probeDeadline        = 60 * time.Second
 	maximumProofAttempts = 3
 	dockerSocketPath     = "/var/run/docker.sock"
@@ -50,6 +50,7 @@ type Request struct {
 
 type runtimeEvidence struct {
 	artifact            []byte
+	logs                []byte
 	verifiedImageDigest [sha256.Size]byte
 }
 
@@ -106,6 +107,7 @@ func (executor *Executor) Observe(
 		return nil, err
 	}
 	defer clear(runtime.artifact)
+	defer clear(runtime.logs)
 	artifactDigest := sha256.Sum256(runtime.artifact)
 	if artifactDigest != request.ArtifactSHA256 {
 		return nil, errs.New(errs.KindStateConflict, "DNS resolver mounted artifact digest changed")
@@ -114,13 +116,24 @@ func (executor *Executor) Observe(
 	if err != nil {
 		return nil, err
 	}
+	effectiveDigest, err := effectiveConfigSHA512(request.ArtifactTarget, runtime.artifact)
+	if err != nil {
+		return nil, err
+	}
+	reportedDigest, err := latestReportedConfigSHA512(runtime.logs)
+	if err != nil || reportedDigest != effectiveDigest {
+		return nil, errs.New(errs.KindStateConflict, "DNS resolver reported configuration does not match the mounted artifact")
+	}
 	metrics, err := executor.metrics.Read(proofCtx, request.MetricsURL)
 	if err != nil {
 		return nil, err
 	}
 	defer clear(metrics)
-	reloadDigest := sha512.Sum512(runtime.artifact)
-	if !metricContainsDigest(metrics, request.ReloadMetric, hex.EncodeToString(reloadDigest[:])) {
+	metricDigest, metricPresent, err := reloadMetricSHA512(metrics, request.ReloadMetric)
+	if err != nil {
+		return nil, err
+	}
+	if metricPresent && metricDigest != effectiveDigest {
 		return nil, errs.New(errs.KindStateConflict, "DNS resolver reload metric does not match the mounted artifact")
 	}
 	evidence := &agentpb.DNSResolverObservationEvidence{
@@ -128,7 +141,7 @@ func (executor *Executor) Observe(
 		ArtifactSha256: append([]byte(nil), artifactDigest[:]...), RenderGeneration: request.RenderGeneration,
 		ImageReference:      request.ImageReference,
 		VerifiedImageDigest: append([]byte(nil), runtime.verifiedImageDigest[:]...),
-		ListenEndpoint:      request.ListenEndpoint, ReloadSha512: append([]byte(nil), reloadDigest[:]...),
+		ListenEndpoint:      request.ListenEndpoint, ReloadSha512: append([]byte(nil), effectiveDigest[:]...),
 		ObservedAt: timestamppb.New(executor.now().UTC()), ImageRepository: request.ImageRepository,
 		ImageIndexDigest: append([]byte(nil), request.ImageIndexDigest[:]...), ImageOs: request.ImageOS,
 		ImageArchitecture: request.ImageArchitecture, ImageVariant: request.ImageVariant,
