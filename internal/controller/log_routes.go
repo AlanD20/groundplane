@@ -17,47 +17,90 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 )
 
 const maximumPublicLogLine = 32 * 1024
 
+type environmentLogStreamInput struct {
+	ID     string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Tail   int32  `query:"tail" required:"false" minimum:"0" maximum:"1000" default:"200"`
+	Follow bool   `query:"follow" required:"false" default:"false"`
+}
+
+type serviceLogStreamInput struct {
+	ID     string `path:"id" pattern:"^svc_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Tail   int32  `query:"tail" required:"false" minimum:"0" maximum:"1000" default:"200"`
+	Follow bool   `query:"follow" required:"false" default:"false"`
+}
+
 func (s *Server) registerLogOpenAPI() {
 	s.API.OpenAPI().Components.Schemas.Map()["LogEvent"] = logEventOpenAPISchema()
-	for _, operation := range []struct {
-		id      string
-		path    string
-		tag     string
-		pattern string
-	}{
-		{id: "environment.logs", path: "/environments/{id}/logs", tag: "Environments", pattern: "^env_[0-9A-HJKMNP-TV-Z]{26}$"},
-		{id: "service.logs", path: "/services/{id}/logs", tag: "Services", pattern: "^svc_[0-9A-HJKMNP-TV-Z]{26}$"},
-	} {
-		s.API.OpenAPI().AddOperation(&huma.Operation{
-			OperationID: operation.id,
-			Method:      http.MethodGet,
-			Path:        operation.path,
-			Tags:        []string{operation.tag},
-			Parameters: []*huma.Param{
-				{Name: "id", In: "path", Required: true, Schema: &huma.Schema{Type: huma.TypeString, Pattern: operation.pattern}},
-				{Name: "tail", In: "query", Schema: &huma.Schema{Type: huma.TypeInteger, Format: "int32", Minimum: logFloat(0), Maximum: logFloat(1000), Default: 200}},
-				{Name: "follow", In: "query", Schema: &huma.Schema{Type: huma.TypeBoolean, Default: false}},
+	huma.Register(s.API, huma.Operation{
+		OperationID: "environment.logs", Method: http.MethodGet, Path: "/environments/{id}/logs",
+		Summary: "Stream environment logs", Tags: []string{"Environments"}, DefaultStatus: http.StatusOK,
+		SkipValidateParams: true, Middlewares: huma.Middlewares{s.validateLogStreamRequest}, Responses: logStreamResponses(),
+	}, s.environmentLogStream)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "service.logs", Method: http.MethodGet, Path: "/services/{id}/logs",
+		Summary: "Stream service logs", Tags: []string{"Services"}, DefaultStatus: http.StatusOK,
+		SkipValidateParams: true, Middlewares: huma.Middlewares{s.validateLogStreamRequest}, Responses: logStreamResponses(),
+	}, s.serviceLogStream)
+	s.setRoutePolicy("GET /api/v1/environments/{id}/logs", routePolicy{streaming: true})
+	s.setRoutePolicy("GET /api/v1/services/{id}/logs", routePolicy{streaming: true})
+}
+
+func logStreamResponses() map[string]*huma.Response {
+	return map[string]*huma.Response{
+		"200": {
+			Description: "Transient non-resumable log stream",
+			Content: map[string]*huma.MediaType{
+				"text/event-stream": {Schema: logEventStreamOpenAPISchema()},
 			},
-			Responses: map[string]*huma.Response{
-				"200": {
-					Description: "Transient non-resumable log stream",
-					Content: map[string]*huma.MediaType{
-						"text/event-stream": {Schema: logEventStreamOpenAPISchema()},
-					},
-				},
-				"default": {
-					Description: "Error",
-					Content: map[string]*huma.MediaType{
-						"application/problem+json": {Schema: &huma.Schema{Ref: "#/components/schemas/Error"}},
-					},
-				},
+		},
+		"default": {
+			Description: "Error",
+			Content: map[string]*huma.MediaType{
+				"application/problem+json": {Schema: &huma.Schema{Ref: "#/components/schemas/Error"}},
 			},
-		})
+		},
 	}
+}
+
+func (s *Server) validateLogStreamRequest(ctx huma.Context, next func(huma.Context)) {
+	request, writer := humago.Unwrap(ctx)
+	if !acceptsEventStream(request) {
+		s.writeTaskProblem(writer, errs.New(errs.KindRequestNotAcceptable, "logs require text/event-stream"))
+		return
+	}
+	if len(request.Header.Values("Last-Event-ID")) != 0 {
+		s.writeTaskProblem(writer, errs.New(errs.KindMalformedRequest, "Last-Event-ID is not supported for logs"))
+		return
+	}
+	if requestHasBody(request) {
+		s.writeTaskProblem(writer, errs.New(errs.KindMalformedRequest, "log requests must not include a body"))
+		return
+	}
+	if _, _, err := parseLogQuery(request); err != nil {
+		s.writeTaskProblem(writer, err)
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) environmentLogStream(_ context.Context, _ *environmentLogStreamInput) (*huma.StreamResponse, error) {
+	return s.logStreamResponse(ids.KindEnvironment), nil
+}
+
+func (s *Server) serviceLogStream(_ context.Context, _ *serviceLogStreamInput) (*huma.StreamResponse, error) {
+	return s.logStreamResponse(ids.KindService), nil
+}
+
+func (s *Server) logStreamResponse(kind ids.Kind) *huma.StreamResponse {
+	return &huma.StreamResponse{Body: func(ctx huma.Context) {
+		request, writer := humago.Unwrap(ctx)
+		s.serveLogs(writer, request, kind)
+	}}
 }
 
 func (s *Server) environmentLogs(w http.ResponseWriter, request *http.Request) {

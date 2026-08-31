@@ -280,16 +280,12 @@ func (s *Server) routes() {
 
 	// environment (?project=). Typed list/show/create/rename operations are
 	// registered through Huma after the legacy mux surface is assembled.
-	s.streamRoute("GET /api/v1/environments/{id}/logs", s.environmentLogs)
-
 	// environment singleton sub-resources
 	s.jsonRoute("POST /api/v1/environments/{id}/restore", s.acceptTask)
 	// router: READ-ONLY projection grouping ingress components — GET only,
 	// never PUT (api-cli.md, section 4). Managed entirely through /components.
 
 	// service (?environment=) — deploy/rollback/start/stop/destroy return a task
-	s.streamRoute("GET /api/v1/services/{id}/logs", s.serviceLogs)
-
 	// Release Group metadata is registered as typed Huma operations.
 
 	// Zone reads and synchronous creation are typed Huma operations. Task-backed

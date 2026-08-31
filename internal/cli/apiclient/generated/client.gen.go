@@ -3677,7 +3677,9 @@ type ClientInterface interface {
 	// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
 	BackupKeyExport(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// EnvironmentLogs performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+	// EnvironmentLogs Stream environment logs
+	//
+	// Corresponds with GET /environments/{id}/logs (the `EnvironmentLogs` operationId).
 	EnvironmentLogs(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackupPointsList List verified Recovery Points
@@ -4087,7 +4089,9 @@ type ClientInterface interface {
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroy(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ServiceLogs performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+	// ServiceLogs Stream service logs
+	//
+	// Corresponds with GET /services/{id}/logs (the `ServiceLogs` operationId).
 	ServiceLogs(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ServiceRollbackWithBody Roll back a service
@@ -5216,7 +5220,9 @@ func (c *Client) BackupKeyExport(ctx context.Context, id string, reqEditors ...R
 	return c.Client.Do(req)
 }
 
-// EnvironmentLogs performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+// EnvironmentLogs Stream environment logs
+//
+// Corresponds with GET /environments/{id}/logs (the `EnvironmentLogs` operationId).
 func (c *Client) EnvironmentLogs(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnvironmentLogsRequest(c.Server, id, params)
 	if err != nil {
@@ -6306,7 +6312,9 @@ func (c *Client) ServiceDestroy(ctx context.Context, id string, params *ServiceD
 	return c.Client.Do(req)
 }
 
-// ServiceLogs performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+// ServiceLogs Stream service logs
+//
+// Corresponds with GET /services/{id}/logs (the `ServiceLogs` operationId).
 func (c *Client) ServiceLogs(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewServiceLogsRequest(c.Server, id, params)
 	if err != nil {
@@ -9341,7 +9349,7 @@ func NewEnvironmentLogsRequest(server string, id string, params *EnvironmentLogs
 
 		if params.Tail != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tail", *params.Tail, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int32"}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "tail", *params.Tail, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int32"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -9353,7 +9361,7 @@ func NewEnvironmentLogsRequest(server string, id string, params *EnvironmentLogs
 
 		if params.Follow != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "follow", *params.Follow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "follow", *params.Follow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -12042,7 +12050,7 @@ func NewServiceLogsRequest(server string, id string, params *ServiceLogsParams) 
 
 		if params.Tail != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "tail", *params.Tail, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int32"}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "tail", *params.Tail, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int32"}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -12054,7 +12062,7 @@ func NewServiceLogsRequest(server string, id string, params *ServiceLogsParams) 
 
 		if params.Follow != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "follow", *params.Follow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "follow", *params.Follow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -13929,9 +13937,11 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /environments/{id}/export-key (the `BackupKeyExport` operationId).
 	BackupKeyExportWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BackupKeyExportResponse, error)
 
-	// EnvironmentLogsWithResponse performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+	// EnvironmentLogsWithResponse Stream environment logs
 	//
 	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments/{id}/logs (the `EnvironmentLogs` operationId).
 	EnvironmentLogsWithResponse(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*EnvironmentLogsResponse, error)
 
 	// BackupPointsListWithResponse List verified Recovery Points
@@ -14403,9 +14413,11 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /services/{id}/destroy (the `ServiceDestroy` operationId).
 	ServiceDestroyWithResponse(ctx context.Context, id string, params *ServiceDestroyParams, reqEditors ...RequestEditorFn) (*ServiceDestroyResponse, error)
 
-	// ServiceLogsWithResponse performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+	// ServiceLogsWithResponse Stream service logs
 	//
 	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /services/{id}/logs (the `ServiceLogs` operationId).
 	ServiceLogsWithResponse(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*ServiceLogsResponse, error)
 
 	// ServiceRollbackWithBodyWithResponse Roll back a service
@@ -21765,9 +21777,11 @@ func (c *ClientWithResponses) BackupKeyExportWithResponse(ctx context.Context, i
 	return ParseBackupKeyExportResponse(rsp)
 }
 
-// EnvironmentLogsWithResponse performs a GET /environments/{id}/logs (the `EnvironmentLogs` operationId) request.
+// EnvironmentLogsWithResponse Stream environment logs
 //
 // Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /environments/{id}/logs (the `EnvironmentLogs` operationId).
 func (c *ClientWithResponses) EnvironmentLogsWithResponse(ctx context.Context, id string, params *EnvironmentLogsParams, reqEditors ...RequestEditorFn) (*EnvironmentLogsResponse, error) {
 	rsp, err := c.EnvironmentLogs(ctx, id, params, reqEditors...)
 	if err != nil {
@@ -22647,9 +22661,11 @@ func (c *ClientWithResponses) ServiceDestroyWithResponse(ctx context.Context, id
 	return ParseServiceDestroyResponse(rsp)
 }
 
-// ServiceLogsWithResponse performs a GET /services/{id}/logs (the `ServiceLogs` operationId) request.
+// ServiceLogsWithResponse Stream service logs
 //
 // Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /services/{id}/logs (the `ServiceLogs` operationId).
 func (c *ClientWithResponses) ServiceLogsWithResponse(ctx context.Context, id string, params *ServiceLogsParams, reqEditors ...RequestEditorFn) (*ServiceLogsResponse, error) {
 	rsp, err := c.ServiceLogs(ctx, id, params, reqEditors...)
 	if err != nil {

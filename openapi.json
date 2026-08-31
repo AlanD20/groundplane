@@ -7934,6 +7934,7 @@
             }
           },
           {
+            "explode": false,
             "in": "query",
             "name": "tail",
             "schema": {
@@ -7945,6 +7946,7 @@
             }
           },
           {
+            "explode": false,
             "in": "query",
             "name": "follow",
             "schema": {
@@ -7994,6 +7996,7 @@
             "description": "Error"
           }
         },
+        "summary": "Stream environment logs",
         "tags": [
           "Environments"
         ]
@@ -10878,6 +10881,7 @@
             }
           },
           {
+            "explode": false,
             "in": "query",
             "name": "tail",
             "schema": {
@@ -10889,6 +10893,7 @@
             }
           },
           {
+            "explode": false,
             "in": "query",
             "name": "follow",
             "schema": {
@@ -10938,6 +10943,7 @@
             "description": "Error"
           }
         },
+        "summary": "Stream service logs",
         "tags": [
           "Services"
         ]
@@ -11330,6 +11336,7 @@
             "in": "header",
             "name": "Last-Event-ID",
             "schema": {
+              "description": "Canonical decimal Task-event sequence; absent or 0 replays the complete journal.",
               "pattern": "^(0|[1-9][0-9]{0,19})$",
               "type": "string"
             }

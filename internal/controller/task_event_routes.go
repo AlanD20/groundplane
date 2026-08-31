@@ -13,6 +13,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 )
 
 const (
@@ -29,6 +30,11 @@ type taskEventStreamOpener interface {
 	OpenTaskEventStream(context.Context, string, uint64) (taskEventRunner, error)
 }
 
+type taskEventStreamInput struct {
+	ID          string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
+	LastEventID string `header:"Last-Event-ID" required:"false" pattern:"^(0|[1-9][0-9]{0,19})$" doc:"Canonical decimal Task-event sequence; absent or 0 replays the complete journal."`
+}
+
 type repositoryTaskEventStreamOpener struct {
 	repository *etcd.TaskRepository
 }
@@ -43,24 +49,12 @@ func (opener repositoryTaskEventStreamOpener) OpenTaskEventStream(
 
 func (s *Server) registerTaskEventStream() {
 	s.API.OpenAPI().Components.Schemas.Map()["TaskEvent"] = taskEventOpenAPISchema()
-	s.API.OpenAPI().AddOperation(&huma.Operation{
-		OperationID: "task.events",
-		Method:      http.MethodGet,
-		Path:        "/tasks/{id}/events",
+	huma.Register(s.API, huma.Operation{
+		OperationID: "task.events", Method: http.MethodGet, Path: "/tasks/{id}/events",
 		Summary:     "Stream durable Task events",
 		Description: "Replays and follows Task events using sequence-based Last-Event-ID resume.",
-		Tags:        []string{"Task"},
-		Parameters: []*huma.Param{
-			{
-				Name: "id", In: "path", Required: true,
-				Schema: &huma.Schema{Type: huma.TypeString, Pattern: taskIDPattern},
-			},
-			{
-				Name: "Last-Event-ID", In: "header", Required: false,
-				Description: "Canonical decimal Task-event sequence; absent or 0 replays the complete journal.",
-				Schema:      &huma.Schema{Type: huma.TypeString, Pattern: lastEventIDPattern},
-			},
-		},
+		Tags:        []string{"Task"}, DefaultStatus: http.StatusOK, SkipValidateParams: true,
+		Middlewares: huma.Middlewares{s.validateTaskEventStreamRequest},
 		Responses: map[string]*huma.Response{
 			"200": {
 				Description: "Durable Task event stream",
@@ -75,8 +69,40 @@ func (s *Server) registerTaskEventStream() {
 				},
 			},
 		},
-	})
-	s.streamRoute("GET /api/v1/tasks/{id}/events", s.streamTaskEvents)
+	}, s.taskEventStream)
+	s.setRoutePolicy("GET /api/v1/tasks/{id}/events", routePolicy{streaming: true})
+}
+
+func (s *Server) validateTaskEventStreamRequest(ctx huma.Context, next func(huma.Context)) {
+	request, writer := humago.Unwrap(ctx)
+	if !acceptsEventStream(request) {
+		s.writeTaskProblem(writer, errs.New(errs.KindRequestNotAcceptable, "task events require text/event-stream"))
+		return
+	}
+	if requestHasBody(request) {
+		s.writeTaskProblem(writer, errs.New(errs.KindMalformedRequest, "task event request body is not allowed"))
+		return
+	}
+	if len(request.URL.Query()) != 0 {
+		s.writeTaskProblem(writer, errs.New(errs.KindMalformedRequest, "task event query is invalid"))
+		return
+	}
+	if ids.Validate(ids.KindTask, request.PathValue("id")) != nil {
+		s.writeTaskProblem(writer, errs.New(errs.KindMalformedRequest, "task id is invalid"))
+		return
+	}
+	if _, err := parseLastTaskEventID(request.Header); err != nil {
+		s.writeTaskProblem(writer, err)
+		return
+	}
+	next(ctx)
+}
+
+func (s *Server) taskEventStream(_ context.Context, _ *taskEventStreamInput) (*huma.StreamResponse, error) {
+	return &huma.StreamResponse{Body: func(ctx huma.Context) {
+		request, writer := humago.Unwrap(ctx)
+		s.streamTaskEvents(writer, request)
+	}}, nil
 }
 
 func (s *Server) streamTaskEvents(w http.ResponseWriter, r *http.Request) {
