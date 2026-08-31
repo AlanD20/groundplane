@@ -349,10 +349,21 @@ curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
 resolve_repo_digest() {
     image=$1
     repository=$2
-    repo_digest=$(docker image inspect "$image" \
-        --format '{{range .RepoDigests}}{{println .}}{{end}}' |
-        sed -n "s#^${repository}@\(sha256:[0-9a-f]\{64\}\)$#\1#p" |
-        tail -n 1)
+    repo_digest=$(
+        docker image inspect "$image" \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' |
+            while IFS= read -r reference; do
+                case "$reference" in
+                    "$repository"@sha256:*)
+                        digest=${reference#"$repository"@}
+                        if printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+                            printf '%s\n' "$digest"
+                        fi
+                        ;;
+                esac
+            done |
+            tail -n 1
+    )
     if ! printf '%s\n' "$repo_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
         echo "image has no immutable RepoDigest for $repository: $image" >&2
         return 1
