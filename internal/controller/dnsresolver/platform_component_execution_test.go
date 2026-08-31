@@ -12,6 +12,7 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
@@ -104,7 +105,6 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	if !selected {
 		t.Fatalf("execution fixture does not support %s/%s/%s", runtime.GOOS, runtime.GOARCH, variant)
 	}
-	planDigest := componentsdk.DigestEnvironmentPlan(firstPlan)
 	artifactDigest := sha256.Sum256(firstPlan.Files[0].Content)
 	input := etcd.PlatformComponentTaskRenderInput{
 		PlanID:                         planID,
@@ -139,12 +139,10 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		ImageReference:                 selectedReference,
 		ArtifactSHA256:                 hex.EncodeToString(artifactDigest[:]),
 		ArtifactLength:                 uint64(len(firstPlan.Files[0].Content)),
-		PlanSHA256:                     hex.EncodeToString(planDigest[:]),
 	}
 	task := etcd.TaskRecord{
 		ID:               taskID,
 		PlanID:           planID,
-		PlanHash:         input.PlanSHA256,
 		RenderGeneration: 1,
 		Executor:         etcd.TaskExecutorAgent,
 		Type:             etcd.TaskUpdate,
@@ -156,6 +154,24 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		},
 		Steps: []etcd.TaskStepRecord{{ID: stepID}, {ID: waitStepID}},
 	}
+	input.ComposeArtifact, err = controllerpkg.RenderPlatformComponentCompose(
+		controllerpkg.PlatformComponentComposeInput{
+			ComponentID: componentID, PlanID: input.OwnershipPlanID,
+			RenderGeneration: input.OwnershipGeneration,
+			ArtifactID:       input.ComposeArtifactID, Plan: firstPlan,
+			ImageRepository: input.ImageRepository, ImageIndexDigest: input.ImageIndexDigest,
+			ImageChildDigest: input.ImageChildDigest, ImageReference: input.ImageReference,
+			ImageOS: input.ImageOS, ImageArchitecture: input.ImageArchitecture, ImageVariant: input.ImageVariant,
+		},
+	)
+	if err != nil {
+		t.Fatalf("RenderPlatformComponentCompose() error = %v", err)
+	}
+	input, err = sealPlatformComponentTaskPlanHash(task, input, firstPlan.Services[0].ObservationAction)
+	if err != nil {
+		t.Fatalf("sealPlatformComponentTaskPlanHash() error = %v", err)
+	}
+	task.PlanHash = input.PlanSHA256
 	baseline := etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: etcd.HostResolverBaselineRecord{
 		Generation: 1, Content: []byte("nameserver 1.1.1.1\n"), SHA256: input.BaselineSHA256,
 	}}

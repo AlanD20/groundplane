@@ -97,6 +97,7 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 	if resolved.input.ComposeArtifact != nil && !proto.Equal(composeArtifact, resolved.input.ComposeArtifact) {
 		return nil, errs.New(errs.KindStateConflict, "platform Component Compose artifact changed after publication")
 	}
+	var execution *agentpb.ExecutionPlan
 	if resolved.input.DisableService {
 		expectedPreviousArtifactDigest, decodeErr := hex.DecodeString(
 			resolved.input.ExpectedPreviousArtifactSHA256,
@@ -104,28 +105,38 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 		if decodeErr != nil {
 			return nil, errs.New(errs.KindInternal, "platform Component prior artifact digest is invalid")
 		}
-		return controllerpkg.BuildComponentDisableExecutionPlan(controllerpkg.ComponentDisablePlanInput{
+		execution, err = controllerpkg.BuildComponentDisableExecutionPlan(controllerpkg.ComponentDisablePlanInput{
 			VolumeRoot: planner.volumeRoot, Envelope: resolved.envelope, PlanID: task.PlanID,
 			StepIDs: stepIDs, RenderGeneration: uint64(task.RenderGeneration), ComposeArtifact: composeArtifact,
 			ObservationAction:              service.ObservationAction,
 			ExpectedPreviousArtifactDigest: expectedPreviousArtifactDigest,
 		})
+	} else {
+		expectedPreviousArtifactDigest, decodeErr := hex.DecodeString(
+			resolved.input.ExpectedPreviousArtifactSHA256,
+		)
+		if decodeErr != nil {
+			return nil, errs.New(errs.KindInternal, "platform Component prior artifact digest is invalid")
+		}
+		execution, err = controllerpkg.BuildComponentActionExecutionPlan(controllerpkg.ComponentActionPlanInput{
+			VolumeRoot: planner.volumeRoot,
+			Envelope:   resolved.envelope, PlanID: task.PlanID, StepIDs: stepIDs,
+			RenderGeneration: uint64(task.RenderGeneration),
+			ComposeArtifact:  composeArtifact, EnsureService: resolved.input.EnsureService,
+			RollbackComposeArtifact:        resolved.input.RollbackComposeArtifact,
+			ObservationAction:              service.ObservationAction,
+			ExpectedPreviousArtifactDigest: expectedPreviousArtifactDigest,
+			ExpectedPreviousArtifactID:     resolved.input.ExpectedPreviousArtifactID,
+			ExpectedPreviousGeneration:     resolved.input.ExpectedPreviousGeneration,
+		})
 	}
-	expectedPreviousArtifactDigest, err := hex.DecodeString(resolved.input.ExpectedPreviousArtifactSHA256)
 	if err != nil {
-		return nil, errs.New(errs.KindInternal, "platform Component prior artifact digest is invalid")
+		return nil, err
 	}
-	return controllerpkg.BuildComponentActionExecutionPlan(controllerpkg.ComponentActionPlanInput{
-		VolumeRoot: planner.volumeRoot,
-		Envelope:   resolved.envelope, PlanID: task.PlanID, StepIDs: stepIDs,
-		RenderGeneration: uint64(task.RenderGeneration),
-		ComposeArtifact:  composeArtifact, EnsureService: resolved.input.EnsureService,
-		RollbackComposeArtifact:        resolved.input.RollbackComposeArtifact,
-		ObservationAction:              service.ObservationAction,
-		ExpectedPreviousArtifactDigest: expectedPreviousArtifactDigest,
-		ExpectedPreviousArtifactID:     resolved.input.ExpectedPreviousArtifactID,
-		ExpectedPreviousGeneration:     resolved.input.ExpectedPreviousGeneration,
-	})
+	if hex.EncodeToString(execution.GetPlanHash()) != task.PlanHash {
+		return nil, errs.New(errs.KindStateConflict, "registered Component execution plan changed")
+	}
+	return execution, nil
 }
 
 func (planner *PlatformExecutionPlanner) ResolveManagedConfig(
@@ -313,12 +324,6 @@ func (planner *PlatformExecutionPlanner) resolve(
 			errs.KindStateConflict,
 			"registered Component platform image changed",
 		)
-	}
-	planDigest := componentsdk.DigestEnvironmentPlan(registeredPlan)
-	expectedPlanDigest, err := componentDigest(input.PlanSHA256)
-	if err != nil || subtle.ConstantTimeCompare(planDigest[:], expectedPlanDigest[:]) != 1 {
-		clearPlatformComponentPlan(registeredPlan)
-		return resolvedPlatformComponent{}, errs.New(errs.KindStateConflict, "registered Component plan changed")
 	}
 	if len(registeredPlan.Files) != 1 || uint64(len(registeredPlan.Files[0].Content)) != input.ArtifactLength {
 		clearPlatformComponentPlan(registeredPlan)

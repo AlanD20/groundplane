@@ -9,6 +9,7 @@ import (
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
+	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -149,6 +150,16 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 	current etcd.Versioned[etcd.ComponentRecord],
 	desired core.Component,
 	task etcd.TaskRecord,
+) (etcd.PlatformComponentTaskRenderInput, error) {
+	return planner.prepareConfigTask(ctx, current, desired, task, false)
+}
+
+func (planner *PlatformRenderPlanner) prepareConfigTask(
+	ctx context.Context,
+	current etcd.Versioned[etcd.ComponentRecord],
+	desired core.Component,
+	task etcd.TaskRecord,
+	disableService bool,
 ) (etcd.PlatformComponentTaskRenderInput, error) {
 	if err := ensureHostResolverBaseline(ctx, planner.baselines, planner.capture, time.Now().UTC()); err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
@@ -333,14 +344,14 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 		}
 		rollbackComposeArtifact = proto.Clone(observation.Record.ComposeArtifact).(*agentpb.ComposeArtifact)
 	}
-	return etcd.PlatformComponentTaskRenderInput{
+	input := etcd.PlatformComponentTaskRenderInput{
 		PlanID: task.PlanID, TaskID: task.ID, ComponentID: desired.ID,
 		DesiredSHA256:      desiredSHA256,
 		BaselineGeneration: baseline.Record.Generation, BaselineSHA256: baseline.Record.SHA256,
 		HostResolutionInputRevision: hostResolution.Record.InputRevision,
 		HostResolutionSHA256:        hostResolution.Record.InputSHA256,
 		Config:                      *config, Hosts: durableHosts, GeneratedServiceID: generatedServiceID,
-		EnsureService:    ensureService,
+		EnsureService: ensureService, DisableService: disableService,
 		DefinitionSHA256: hex.EncodeToString(definitionDigest[:]),
 		CatalogSHA256:    hex.EncodeToString(catalogDigest[:]), ActionID: string(action.ID()),
 		ArtifactID: ids.New(ids.KindConfig), ComposeArtifactID: composeArtifactID,
@@ -358,8 +369,82 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 		ImageReference: selectedReference,
 		ArtifactSHA256: hex.EncodeToString(intent.ArtifactSHA256[:]),
 		ArtifactLength: intent.ArtifactLength,
-		PlanSHA256:     hex.EncodeToString(intent.PlanSHA256[:]),
-	}, nil
+	}
+	return sealPlatformComponentTaskPlanHash(task, input, selectedPlan.Services[0].ObservationAction)
+}
+
+func sealPlatformComponentTaskPlanHash(
+	task etcd.TaskRecord,
+	input etcd.PlatformComponentTaskRenderInput,
+	observationAction componentsdk.ActionID,
+) (etcd.PlatformComponentTaskRenderInput, error) {
+	definitionDigest, err := componentDigest(input.DefinitionSHA256)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	catalogDigest, err := componentDigest(input.CatalogSHA256)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	artifactDigest, err := componentDigest(input.ArtifactSHA256)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	componentID, err := componentsdk.NewComponentID(input.ComponentID)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+	}
+	artifactID, err := componentsdk.NewArtifactID(input.ArtifactID)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+	}
+	artifact, err := componentsdk.NewArtifactReference(artifactID, artifactDigest)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+	}
+	envelope, err := componentsdk.NewActionEnvelope(componentsdk.ActionEnvelopeInput{
+		ComponentID: componentID, DefinitionDigest: definitionDigest, CatalogDigest: catalogDigest,
+		ActionID: componentsdk.ActionID(input.ActionID), Artifact: artifact,
+		Generation: uint64(task.RenderGeneration),
+	})
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+	}
+	previousArtifactDigest, err := hex.DecodeString(input.ExpectedPreviousArtifactSHA256)
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+			errs.KindInternal,
+			"platform Component prior artifact digest is invalid",
+		)
+	}
+	stepIDs := make([]string, len(task.Steps))
+	for index, step := range task.Steps {
+		stepIDs[index] = step.ID
+	}
+	var execution *agentpb.ExecutionPlan
+	if input.DisableService {
+		execution, err = controllerpkg.BuildComponentDisableExecutionPlan(controllerpkg.ComponentDisablePlanInput{
+			VolumeRoot: environmentpath.DefaultVolumeRoot, Envelope: envelope, PlanID: task.PlanID,
+			StepIDs: stepIDs, RenderGeneration: uint64(task.RenderGeneration),
+			ComposeArtifact: input.ComposeArtifact, ObservationAction: observationAction,
+			ExpectedPreviousArtifactDigest: previousArtifactDigest,
+		})
+	} else {
+		execution, err = controllerpkg.BuildComponentActionExecutionPlan(controllerpkg.ComponentActionPlanInput{
+			VolumeRoot: environmentpath.DefaultVolumeRoot, Envelope: envelope, PlanID: task.PlanID,
+			StepIDs: stepIDs, RenderGeneration: uint64(task.RenderGeneration),
+			ComposeArtifact: input.ComposeArtifact, RollbackComposeArtifact: input.RollbackComposeArtifact,
+			EnsureService: input.EnsureService, ObservationAction: observationAction,
+			ExpectedPreviousArtifactDigest: previousArtifactDigest,
+			ExpectedPreviousArtifactID:     input.ExpectedPreviousArtifactID,
+			ExpectedPreviousGeneration:     input.ExpectedPreviousGeneration,
+		})
+	}
+	if err != nil {
+		return etcd.PlatformComponentTaskRenderInput{}, err
+	}
+	input.PlanSHA256 = hex.EncodeToString(execution.GetPlanHash())
+	return input, nil
 }
 
 func componentTaskEnsureService(task etcd.TaskRecord) (bool, error) {
@@ -457,7 +542,7 @@ func (planner *PlatformRenderPlanner) PrepareDisableTask(
 			"CoreDNS must be applied before it can be disabled",
 		)
 	}
-	input, err := planner.PrepareConfigTask(ctx, current, currentComponent, task)
+	input, err := planner.prepareConfigTask(ctx, current, currentComponent, task, true)
 	if err != nil {
 		return etcd.PlatformComponentTaskRenderInput{}, err
 	}
