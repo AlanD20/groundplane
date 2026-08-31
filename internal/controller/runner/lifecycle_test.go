@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: recovery from an issued mutation must observe its result and must
@@ -47,6 +48,45 @@ func TestCreateResolvesIssuedEffectWithoutRedispatch(t *testing.T) {
 		journal.progress.NextStep != len(corerunner.CreationSteps()) ||
 		journal.progress.Evidence == nil {
 		t.Fatalf("progress = %#v", journal.progress)
+	}
+}
+
+// Rationale: Controller restart or broker corruption must expose the stable
+// retry reason before a journal entry or host effect can occur.
+func TestCreateWithoutUsableTokenRequiresFreshRegistrationToken(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		token *RegistrationToken
+	}{
+		{name: "missing", token: nil},
+		{name: "non-nil empty", token: &RegistrationToken{}},
+		{name: "invalid byte", token: &RegistrationToken{value: []byte("invalid token")}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			journal := newMemoryJournal()
+			runtime := &recordingRuntime{}
+			lifecycle, err := NewLifecycle(journal, runtime)
+			if err != nil {
+				t.Fatalf("NewLifecycle() error = %v", err)
+			}
+			err = lifecycle.Create(
+				context.Background(),
+				Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()},
+				test.token,
+			)
+			var domainError *errs.Error
+			if !errors.As(err, &domainError) || domainError.Detail != "registration_token_required" {
+				t.Fatalf("Create(without usable token) error = %v", err)
+			}
+			if len(runtime.steps) != 0 || journal.progress.Status != "" {
+				t.Fatalf("host steps = %v, progress = %#v", runtime.steps, journal.progress)
+			}
+			if test.token != nil && len(test.token.value) != 0 {
+				t.Fatal("rejected registration token bytes were not cleared")
+			}
+		})
 	}
 }
 

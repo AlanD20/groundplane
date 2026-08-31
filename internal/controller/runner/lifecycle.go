@@ -76,15 +76,22 @@ type RegistrationToken struct{ value []byte }
 
 func NewRegistrationToken(source []byte) (*RegistrationToken, error) {
 	defer clear(source)
-	if len(source) == 0 || len(source) > 4096 {
+	if !validRegistrationToken(source) {
 		return nil, errs.New(errs.KindValidationFailed, "runner registration token is invalid")
 	}
-	for _, character := range source {
+	return &RegistrationToken{value: append([]byte(nil), source...)}, nil
+}
+
+func validRegistrationToken(value []byte) bool {
+	if len(value) == 0 || len(value) > 4096 {
+		return false
+	}
+	for _, character := range value {
 		if character < 0x21 || character > 0x7e {
-			return nil, errs.New(errs.KindValidationFailed, "runner registration token is invalid")
+			return false
 		}
 	}
-	return &RegistrationToken{value: append([]byte(nil), source...)}, nil
+	return true
 }
 
 func (token *RegistrationToken) take() []byte {
@@ -114,10 +121,13 @@ func (lifecycle *Lifecycle) CreateWithEvidence(
 	attempt Attempt,
 	token *RegistrationToken,
 ) (RuntimeEvidence, error) {
-	if token == nil {
+	if token == nil || !validRegistrationToken(token.value) {
+		if token != nil {
+			token.clear()
+		}
 		return RuntimeEvidence{}, errs.New(
 			errs.KindValidationFailed,
-			"runner registration token is required",
+			"registration_token_required",
 		)
 	}
 	defer token.clear()
