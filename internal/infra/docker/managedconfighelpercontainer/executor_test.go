@@ -15,6 +15,42 @@ import (
 
 const pinnedValidatorImage = "coredns/coredns@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+// Rationale: low-port validation needs one capability without weakening any existing validator isolation control.
+func TestValidationCreateOptionsGrantOnlyNetBindService(t *testing.T) {
+	options := validationCreateOptions(pinnedValidatorImage, []string{"-conf", "/dev/stdin"})
+
+	if options.Config == nil {
+		t.Fatal("Config = nil")
+	}
+	if options.Config.User != "65534:65534" {
+		t.Fatalf("User = %q, want %q", options.Config.User, "65534:65534")
+	}
+	if !options.Config.NetworkDisabled {
+		t.Fatal("NetworkDisabled = false, want true")
+	}
+	if options.HostConfig == nil {
+		t.Fatal("HostConfig = nil")
+	}
+	if options.HostConfig.NetworkMode != "none" {
+		t.Fatalf("NetworkMode = %q, want %q", options.HostConfig.NetworkMode, "none")
+	}
+	if options.HostConfig.RestartPolicy.Name != "no" {
+		t.Fatalf("RestartPolicy.Name = %q, want %q", options.HostConfig.RestartPolicy.Name, "no")
+	}
+	if !options.HostConfig.ReadonlyRootfs {
+		t.Fatal("ReadonlyRootfs = false, want true")
+	}
+	if want := []string{"ALL"}; !reflect.DeepEqual(options.HostConfig.CapDrop, want) {
+		t.Fatalf("CapDrop = %#v, want %#v", options.HostConfig.CapDrop, want)
+	}
+	if want := []string{"NET_BIND_SERVICE"}; !reflect.DeepEqual(options.HostConfig.CapAdd, want) {
+		t.Fatalf("CapAdd = %#v, want %#v", options.HostConfig.CapAdd, want)
+	}
+	if want := []string{"no-new-privileges"}; !reflect.DeepEqual(options.HostConfig.SecurityOpt, want) {
+		t.Fatalf("SecurityOpt = %#v, want %#v", options.HostConfig.SecurityOpt, want)
+	}
+}
+
 // Rationale: a clean host must acquire the already-authorized immutable validator image before container creation.
 func TestExecutorValidatePullsMissingPinnedImageBeforeCreate(t *testing.T) {
 	engine := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, createErr: errors.New("stop after create")}

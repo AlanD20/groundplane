@@ -173,7 +173,8 @@ func validationCreateOptions(image string, arguments []string) client.ContainerC
 		HostConfig: &container.HostConfig{
 			NetworkMode:    container.NetworkMode("none"),
 			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyDisabled},
-			ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges"},
+			ReadonlyRootfs: true, CapDrop: []string{"ALL"}, CapAdd: []string{"NET_BIND_SERVICE"},
+			SecurityOpt: []string{"no-new-privileges"},
 		},
 	}
 }
