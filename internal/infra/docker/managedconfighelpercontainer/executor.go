@@ -33,6 +33,8 @@ const (
 )
 
 type Engine interface {
+	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
+	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error)
 	ContainerWait(context.Context, string, client.ContainerWaitOptions) client.ContainerWaitResult
@@ -58,6 +60,9 @@ func (executor *Executor) Validate(
 	if executor == nil || executor.engine == nil || ctx == nil || !imageref.IsDigestPinned(image) ||
 		len(arguments) == 0 || len(content) == 0 {
 		return errs.New(errs.KindValidationFailed, "managed-config validator configuration is invalid")
+	}
+	if err := executor.ensureImage(ctx, image); err != nil {
+		return err
 	}
 	created, err := executor.engine.ContainerCreate(ctx, validationCreateOptions(image, arguments))
 	if err != nil {
@@ -135,6 +140,27 @@ func (executor *Executor) Validate(
 		}
 		return ctx.Err()
 	}
+}
+
+func (executor *Executor) ensureImage(ctx context.Context, image string) error {
+	if _, err := executor.engine.ImageInspect(ctx, image); err == nil {
+		return nil
+	} else if !containerderrdefs.IsNotFound(err) {
+		return operationError(ctx, "inspect validator image", err)
+	}
+	pull, err := executor.engine.ImagePull(ctx, image, client.ImagePullOptions{})
+	if err != nil {
+		return operationError(ctx, "pull validator image", err)
+	}
+	waitErr := pull.Wait(ctx)
+	closeErr := pull.Close()
+	if waitErr != nil {
+		return operationError(ctx, "wait for validator image pull", errors.Join(waitErr, closeErr))
+	}
+	if closeErr != nil {
+		return operationError(ctx, "close validator image pull", closeErr)
+	}
+	return nil
 }
 
 func validationCreateOptions(image string, arguments []string) client.ContainerCreateOptions {

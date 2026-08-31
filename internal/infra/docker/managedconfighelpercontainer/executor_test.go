@@ -1,0 +1,247 @@
+package managedconfighelpercontainer
+
+import (
+	"context"
+	"errors"
+	"io"
+	"iter"
+	"reflect"
+	"testing"
+
+	containerderrdefs "github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/jsonstream"
+	"github.com/moby/moby/client"
+)
+
+const pinnedValidatorImage = "coredns/coredns@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+// Rationale: a clean host must acquire the already-authorized immutable validator image before container creation.
+func TestExecutorValidatePullsMissingPinnedImageBeforeCreate(t *testing.T) {
+	engine := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, createErr: errors.New("stop after create")}
+	executor := mustExecutor(t, engine)
+
+	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+
+	if err == nil {
+		t.Fatal("Validate() error = nil, want container create error")
+	}
+	wantEvents := []string{
+		"inspect:" + pinnedValidatorImage,
+		"pull:" + pinnedValidatorImage,
+		"pull-wait",
+		"pull-close",
+		"create:" + pinnedValidatorImage,
+	}
+	if !reflect.DeepEqual(engine.events, wantEvents) {
+		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
+	}
+}
+
+// Rationale: a cached immutable validator image must not incur a registry pull before validation.
+func TestExecutorValidateCreatesFromCachedPinnedImageWithoutPull(t *testing.T) {
+	engine := &fakeEngine{createErr: errors.New("stop after create")}
+	executor := mustExecutor(t, engine)
+
+	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+
+	if err == nil {
+		t.Fatal("Validate() error = nil, want container create error")
+	}
+	wantEvents := []string{"inspect:" + pinnedValidatorImage, "create:" + pinnedValidatorImage}
+	if !reflect.DeepEqual(engine.events, wantEvents) {
+		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
+	}
+}
+
+// Rationale: registry acquisition failure must fail validation without attempting to create an unavailable image.
+func TestExecutorValidateDoesNotCreateWhenPinnedImagePullFails(t *testing.T) {
+	pullErr := errors.New("registry unavailable")
+	engine := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, pullErr: pullErr}
+	executor := mustExecutor(t, engine)
+
+	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+
+	if !errors.Is(err, pullErr) {
+		t.Fatalf("Validate() error = %v, want cause %v", err, pullErr)
+	}
+	wantEvents := []string{"inspect:" + pinnedValidatorImage, "pull:" + pinnedValidatorImage}
+	if !reflect.DeepEqual(engine.events, wantEvents) {
+		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
+	}
+}
+
+// Rationale: a failed pull stream must still close its response and must prevent validator creation.
+func TestExecutorValidateDoesNotCreateWhenPinnedImagePullWaitFails(t *testing.T) {
+	waitErr := errors.New("pull stream failed")
+	closeErr := errors.New("pull response close failed")
+	engine := &fakeEngine{
+		inspectErr: containerderrdefs.ErrNotFound, pullWaitErr: waitErr, pullCloseErr: closeErr,
+	}
+	executor := mustExecutor(t, engine)
+
+	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+
+	if !errors.Is(err, waitErr) {
+		t.Fatalf("Validate() error = %v, want cause %v", err, waitErr)
+	}
+	if !errors.Is(err, closeErr) {
+		t.Fatalf("Validate() error = %v, want cleanup cause %v", err, closeErr)
+	}
+	wantEvents := []string{
+		"inspect:" + pinnedValidatorImage,
+		"pull:" + pinnedValidatorImage,
+		"pull-wait",
+		"pull-close",
+	}
+	if !reflect.DeepEqual(engine.events, wantEvents) {
+		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
+	}
+}
+
+// Rationale: successfully receiving an image is incomplete until the pull response closes cleanly.
+func TestExecutorValidateDoesNotCreateWhenPinnedImagePullCloseFails(t *testing.T) {
+	closeErr := errors.New("pull response close failed")
+	engine := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, pullCloseErr: closeErr}
+	executor := mustExecutor(t, engine)
+
+	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+
+	if !errors.Is(err, closeErr) {
+		t.Fatalf("Validate() error = %v, want cause %v", err, closeErr)
+	}
+	wantEvents := []string{
+		"inspect:" + pinnedValidatorImage,
+		"pull:" + pinnedValidatorImage,
+		"pull-wait",
+		"pull-close",
+	}
+	if !reflect.DeepEqual(engine.events, wantEvents) {
+		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
+	}
+}
+
+// Rationale: only typed image absence authorizes a pull; other inspect failures must fail closed.
+func TestExecutorValidateDoesNotPullOrCreateAfterImageInspectFailure(t *testing.T) {
+	inspectErr := errors.New("daemon unavailable")
+	engine := &fakeEngine{inspectErr: inspectErr}
+	executor := mustExecutor(t, engine)
+
+	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+
+	if !errors.Is(err, inspectErr) {
+		t.Fatalf("Validate() error = %v, want cause %v", err, inspectErr)
+	}
+	wantEvents := []string{"inspect:" + pinnedValidatorImage}
+	if !reflect.DeepEqual(engine.events, wantEvents) {
+		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
+	}
+}
+
+func mustExecutor(t *testing.T, engine Engine) *Executor {
+	t.Helper()
+	executor, err := NewWithEngine(engine, pinnedValidatorImage)
+	if err != nil {
+		t.Fatalf("NewWithEngine() error = %v", err)
+	}
+	return executor
+}
+
+type fakeEngine struct {
+	events       []string
+	inspectErr   error
+	pullErr      error
+	pullWaitErr  error
+	pullCloseErr error
+	createErr    error
+}
+
+func (engine *fakeEngine) ImageInspect(
+	_ context.Context,
+	image string,
+	_ ...client.ImageInspectOption,
+) (client.ImageInspectResult, error) {
+	engine.events = append(engine.events, "inspect:"+image)
+	return client.ImageInspectResult{}, engine.inspectErr
+}
+
+func (engine *fakeEngine) ImagePull(
+	_ context.Context,
+	image string,
+	_ client.ImagePullOptions,
+) (client.ImagePullResponse, error) {
+	engine.events = append(engine.events, "pull:"+image)
+	if engine.pullErr != nil {
+		return nil, engine.pullErr
+	}
+	return &fakeImagePullResponse{engine: engine}, nil
+}
+
+func (engine *fakeEngine) ContainerCreate(
+	_ context.Context,
+	options client.ContainerCreateOptions,
+) (client.ContainerCreateResult, error) {
+	engine.events = append(engine.events, "create:"+options.Config.Image)
+	return client.ContainerCreateResult{}, engine.createErr
+}
+
+func (*fakeEngine) ContainerAttach(
+	context.Context,
+	string,
+	client.ContainerAttachOptions,
+) (client.ContainerAttachResult, error) {
+	panic("unexpected ContainerAttach call")
+}
+
+func (*fakeEngine) ContainerWait(
+	context.Context,
+	string,
+	client.ContainerWaitOptions,
+) client.ContainerWaitResult {
+	panic("unexpected ContainerWait call")
+}
+
+func (*fakeEngine) ContainerStart(
+	context.Context,
+	string,
+	client.ContainerStartOptions,
+) (client.ContainerStartResult, error) {
+	panic("unexpected ContainerStart call")
+}
+
+func (*fakeEngine) ContainerStop(
+	context.Context,
+	string,
+	client.ContainerStopOptions,
+) (client.ContainerStopResult, error) {
+	panic("unexpected ContainerStop call")
+}
+
+func (*fakeEngine) ContainerRemove(
+	context.Context,
+	string,
+	client.ContainerRemoveOptions,
+) (client.ContainerRemoveResult, error) {
+	panic("unexpected ContainerRemove call")
+}
+
+func (*fakeEngine) Close() error { return nil }
+
+type fakeImagePullResponse struct {
+	engine *fakeEngine
+}
+
+func (*fakeImagePullResponse) Read([]byte) (int, error) { return 0, io.EOF }
+
+func (*fakeImagePullResponse) JSONMessages(context.Context) iter.Seq2[jsonstream.Message, error] {
+	return func(func(jsonstream.Message, error) bool) {}
+}
+
+func (response *fakeImagePullResponse) Wait(context.Context) error {
+	response.engine.events = append(response.engine.events, "pull-wait")
+	return response.engine.pullWaitErr
+}
+
+func (response *fakeImagePullResponse) Close() error {
+	response.engine.events = append(response.engine.events, "pull-close")
+	return response.engine.pullCloseErr
+}
