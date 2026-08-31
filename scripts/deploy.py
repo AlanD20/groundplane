@@ -885,6 +885,8 @@ class Deployment:
     @property
     def ssh_options(self) -> list[str]:
         options = [
+            "-F",
+            "/dev/null",
             "-o",
             "BatchMode=yes",
             "-o",

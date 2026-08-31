@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import ipaddress
 import os
 import re
 import shlex
@@ -30,6 +31,38 @@ def shell_function(name: str) -> str:
     if match is None:
         raise AssertionError(f"missing shell function: {name}")
     return match.group(0)
+
+
+class DeployConnectionArgumentsTest(unittest.TestCase):
+    def test_ssh_commands_ignore_workstation_and_system_configuration(self) -> None:
+        deployment = deploy.Deployment(
+            key=Path("/srv/keys/groundplane"),
+            ip=ipaddress.ip_address("192.0.2.42"),
+            version="v1.2.3",
+            setup=False,
+            expose_port=None,
+            known_hosts=Path("/etc/groundplane/known_hosts"),
+        )
+
+        commands = (
+            deployment.ssh_base,
+            deploy.console_tunnel_command(deployment, 8080),
+        )
+        for command in commands:
+            self.assertEqual(
+                command[:5],
+                ["ssh", "-i", "/srv/keys/groundplane", "-F", "/dev/null"],
+            )
+            self.assertEqual(command[-1], deployment.ssh_target)
+            for option in (
+                "BatchMode=yes",
+                "StrictHostKeyChecking=yes",
+                "ConnectTimeout=10",
+                "ConnectionAttempts=1",
+                "UserKnownHostsFile=/etc/groundplane/known_hosts",
+                "GlobalKnownHostsFile=/dev/null",
+            ):
+                self.assertIn(option, command)
 
 
 class DeployRollbackTest(unittest.TestCase):
