@@ -262,8 +262,16 @@ unresolved_task_state=unknown
 backup_path() {
     source=$1
     name=$2
+    if test -L "$source"; then
+        echo "$source must be a regular file or absent" >&2
+        return 1
+    fi
     if test -e "$source"; then
-        cp -a "$source" "$deploy_dir/backup-$name"
+        if ! test -f "$source"; then
+            echo "$source must be a regular file or absent" >&2
+            return 1
+        fi
+        cp -a -- "$source" "$deploy_dir/backup-$name"
         : > "$deploy_dir/had-$name"
     fi
 }
@@ -271,9 +279,49 @@ backup_path() {
 restore_path() {
     destination=$1
     name=$2
-    if test -e "$deploy_dir/had-$name"; then
-        cp -a "$deploy_dir/backup-$name" "$destination"
+    backup="$deploy_dir/backup-$name"
+    marker="$deploy_dir/had-$name"
+    staged="${destination}.groundplane-rollback-$deploy_id"
+    if test -L "$destination"; then
+        echo "$destination is not a regular rollback destination" >&2
+        return 1
+    fi
+    if test -e "$destination" && ! test -f "$destination"; then
+        echo "$destination is not a regular rollback destination" >&2
+        return 1
+    fi
+    if ! rm -f -- "$staged"; then
+        return 1
+    fi
+    if test -e "$marker" || test -L "$marker"; then
+        if test -L "$marker" || ! test -f "$marker";
+            then
+            echo "invalid rollback marker for $destination" >&2
+            return 1
+        fi
+        if test -L "$backup" || ! test -f "$backup"; then
+            echo "invalid rollback backup for $destination" >&2
+            return 1
+        fi
+        if cp -a -- "$backup" "$staged"; then
+            :
+        else
+            restore_status=$?
+            rm -f -- "$staged" || true
+            return "$restore_status"
+        fi
+        if mv -fT -- "$staged" "$destination"; then
+            :
+        else
+            restore_status=$?
+            rm -f -- "$staged" || true
+            return "$restore_status"
+        fi
     else
+        if test -e "$backup" || test -L "$backup"; then
+            echo "rollback backup exists without marker for $destination" >&2
+            return 1
+        fi
         rm -f -- "$destination"
     fi
 }
@@ -294,6 +342,9 @@ finish() {
         fi
         echo "deployment failed; restoring the previous Controller installation" >&2
         rollback_failed=0
+        if ! systemctl stop groundplane-controller.service; then
+            rollback_failed=1
+        fi
         if ! restore_path /usr/local/libexec/groundplane/controller controller; then
             rollback_failed=1
         fi
@@ -315,19 +366,25 @@ finish() {
         if ! systemctl daemon-reload; then
             rollback_failed=1
         fi
-        if test "$service_was_enabled" -eq 1; then
-            if ! systemctl enable groundplane-controller.service >/dev/null; then
-                rollback_failed=1
+        if test -e "$deploy_dir/had-controller-unit"; then
+            if test "$service_was_enabled" -eq 1; then
+                if ! systemctl enable groundplane-controller.service >/dev/null; then
+                    rollback_failed=1
+                fi
+            else
+                if ! systemctl disable groundplane-controller.service >/dev/null; then
+                    rollback_failed=1
+                fi
             fi
-        else
-            systemctl disable groundplane-controller.service >/dev/null 2>&1 || true
-        fi
-        if test "$service_was_active" -eq 1; then
-            if ! systemctl restart groundplane-controller.service; then
-                rollback_failed=1
+            if test "$service_was_active" -eq 1; then
+                if ! systemctl restart groundplane-controller.service; then
+                    rollback_failed=1
+                fi
+            else
+                if ! systemctl stop groundplane-controller.service >/dev/null; then
+                    rollback_failed=1
+                fi
             fi
-        else
-            systemctl stop groundplane-controller.service >/dev/null 2>&1 || true
         fi
         if test "$rollback_failed" -ne 0; then
             echo "rollback incomplete; recovery files retained in $deploy_dir" >&2
