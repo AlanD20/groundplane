@@ -251,96 +251,128 @@ func TestClientDoesNotLeakTokenFromTransportError(t *testing.T) {
 // loss, fully stop the old pool first, and execute Controller redispatch only
 // on the replacement pool without rereading or exposing its channel token.
 func TestClientReconnectsSameInstanceAndExecutesRedispatchOnReplacementPool(t *testing.T) {
-	token := bytes.Repeat([]byte{0x42}, agentprotocol.RawTokenBytes)
-	first := newFakeStream(configMessage(60, 1))
-	first.receiveErr = status.Error(codes.Unavailable, "test stream loss")
-	assignment := workerAssignment(workerTestTaskID, "plan-reconnect")
-	second := newFakeStream(
-		configMessage(60, 1),
-		&agentpb.ControllerMessage{
-			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
-				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
-				OperationId: assignment.OperationID,
-				Plan:        assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)),
-			}},
-		},
-	)
-	client := newTestClient(t, token, first)
-	connections := 0
-	client.connect = func(ctx context.Context, _ string) (agentStream, io.Closer, error) {
-		connections++
-		switch connections {
-		case 1:
-			first.ctx = ctx
-			return first, first.connection, nil
-		case 2:
-			select {
-			case <-client.workersDone:
-			default:
-				t.Fatal("replacement stream connected before the old worker pool stopped")
+	for _, streamCode := range []codes.Code{codes.Unavailable, codes.Internal, codes.Unknown} {
+		t.Run(streamCode.String(), func(t *testing.T) {
+			token := bytes.Repeat([]byte{0x42}, agentprotocol.RawTokenBytes)
+			first := newFakeStream(configMessage(60, 1))
+			first.receiveErr = status.Error(streamCode, "test stream loss")
+			assignment := workerAssignment(workerTestTaskID, "plan-reconnect")
+			second := newFakeStream(
+				configMessage(60, 1),
+				&agentpb.ControllerMessage{
+					Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
+						TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
+						OperationId: assignment.OperationID,
+						Plan:        assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)),
+					}},
+				},
+			)
+			client := newTestClient(t, token, first)
+			connections := 0
+			client.connect = func(ctx context.Context, _ string) (agentStream, io.Closer, error) {
+				connections++
+				switch connections {
+				case 1:
+					first.ctx = ctx
+					return first, first.connection, nil
+				case 2:
+					select {
+					case <-client.workersDone:
+					default:
+						t.Fatal("replacement stream connected before the old worker pool stopped")
+					}
+					second.ctx = ctx
+					return second, second.connection, nil
+				default:
+					t.Fatalf("connect call count = %d, want 2", connections)
+					return nil, nil, errors.New("unexpected reconnect")
+				}
 			}
-			second.ctx = ctx
-			return second, second.connection, nil
-		default:
-			t.Fatalf("connect call count = %d, want 2", connections)
-			return nil, nil, errors.New("unexpected reconnect")
-		}
-	}
-	var reconnectAttempts []uint
-	client.reconnect = func(_ context.Context, attempt uint) error {
-		reconnectAttempts = append(reconnectAttempts, attempt)
-		return nil
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	go func() { result <- client.Run(ctx) }()
-	select {
-	case <-second.taskAckSent:
-	case <-time.After(time.Second):
-		cancel()
-		t.Fatal("redispatched task did not execute on the replacement pool")
-	}
-	cancel()
-	if err := <-result; err != nil {
-		t.Fatalf("Run() after reconnect cancellation = %v, want nil", err)
-	}
-	if connections != 2 || len(reconnectAttempts) != 1 || reconnectAttempts[0] != 0 {
-		t.Fatalf("connections/attempts = %d/%v, want 2/[0]", connections, reconnectAttempts)
-	}
-	for index, stream := range []*fakeStream{first, second} {
-		sent := stream.sentMessages()
-		if len(sent) < 2 || sent[0].GetAuthenticate() == nil || sent[1].GetReady() == nil ||
-			!bytes.Equal(sent[0].GetAuthenticate().GetToken(), token) {
-			t.Fatalf("stream %d did not authenticate and become Ready with the process token", index)
-		}
-	}
-	if len(first.taskAcknowledgements()) != 0 || len(second.taskAcknowledgements()) != 1 {
-		t.Fatalf(
-			"TaskAck counts before/after reconnect = %d/%d, want 0/1",
-			len(first.taskAcknowledgements()),
-			len(second.taskAcknowledgements()),
-		)
+			var reconnectAttempts []uint
+			client.reconnect = func(_ context.Context, attempt uint) error {
+				reconnectAttempts = append(reconnectAttempts, attempt)
+				return nil
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			result := make(chan error, 1)
+			go func() { result <- client.Run(ctx) }()
+			select {
+			case <-second.taskAckSent:
+			case <-time.After(time.Second):
+				cancel()
+				t.Fatal("redispatched task did not execute on the replacement pool")
+			}
+			cancel()
+			if err := <-result; err != nil {
+				t.Fatalf("Run() after reconnect cancellation = %v, want nil", err)
+			}
+			if connections != 2 || len(reconnectAttempts) != 1 || reconnectAttempts[0] != 0 {
+				t.Fatalf("connections/attempts = %d/%v, want 2/[0]", connections, reconnectAttempts)
+			}
+			for index, stream := range []*fakeStream{first, second} {
+				sent := stream.sentMessages()
+				if len(sent) < 2 || sent[0].GetAuthenticate() == nil || sent[1].GetReady() == nil ||
+					!bytes.Equal(sent[0].GetAuthenticate().GetToken(), token) {
+					t.Fatalf("stream %d did not authenticate and become Ready with the process token", index)
+				}
+			}
+			secondAcknowledgements := second.taskAcknowledgements()
+			if len(first.taskAcknowledgements()) != 0 || len(secondAcknowledgements) != 1 ||
+				secondAcknowledgements[0].GetTerminal() != agentpb.TaskTerminal_TASK_TERMINAL_FAILED {
+				t.Fatalf(
+					"TaskAck before/after reconnect = %d/%#v, want no original and one terminal failed replacement ack",
+					len(first.taskAcknowledgements()),
+					secondAcknowledgements,
+				)
+			}
+		})
 	}
 }
 
 // Rationale: rejected authentication is permanent for the current runtime
 // material and must terminate without a retry loop or reflected server detail.
 func TestClientDoesNotReconnectPermanentAuthenticationFailure(t *testing.T) {
-	token := bytes.Repeat([]byte{'s'}, agentprotocol.RawTokenBytes)
-	stream := newFakeStream()
-	stream.receiveErr = status.Error(codes.Unauthenticated, "revoked secret detail")
-	client := newTestClient(t, token, stream)
+	for _, streamCode := range []codes.Code{codes.Unauthenticated, codes.PermissionDenied} {
+		t.Run(streamCode.String(), func(t *testing.T) {
+			token := bytes.Repeat([]byte{'s'}, agentprotocol.RawTokenBytes)
+			stream := newFakeStream()
+			stream.receiveErr = status.Error(streamCode, "revoked secret detail")
+			client := newTestClient(t, token, stream)
+			reconnectCalled := false
+			client.reconnect = func(context.Context, uint) error {
+				reconnectCalled = true
+				return nil
+			}
+			err := client.Run(context.Background())
+			if err == nil || reconnectCalled {
+				t.Fatalf("Run()/reconnect = %v/%t, want terminal error without reconnect", err, reconnectCalled)
+			}
+			if strings.Contains(err.Error(), "revoked secret detail") || bytes.Contains([]byte(err.Error()), token) {
+				t.Fatalf("authentication failure leaked private detail: %v", err)
+			}
+		})
+	}
+}
+
+// Rationale: a plain receive error has no authenticated gRPC status and must
+// terminate without retrying or reflecting private transport diagnostics.
+func TestClientAuthenticatedStreamPlainErrorIsTerminal(t *testing.T) {
+	privateCause := errors.New("private receive transport detail")
+	stream := newFakeStream(configMessage(60, 1))
+	stream.receiveErr = privateCause
+	client := newTestClient(t, bytes.Repeat([]byte{0x43}, agentprotocol.RawTokenBytes), stream)
 	reconnectCalled := false
 	client.reconnect = func(context.Context, uint) error {
 		reconnectCalled = true
-		return nil
+		return errors.New("unexpected reconnect")
 	}
+
 	err := client.Run(context.Background())
 	if err == nil || reconnectCalled {
 		t.Fatalf("Run()/reconnect = %v/%t, want terminal error without reconnect", err, reconnectCalled)
 	}
-	if strings.Contains(err.Error(), "revoked secret detail") || bytes.Contains([]byte(err.Error()), token) {
-		t.Fatalf("authentication failure leaked private detail: %v", err)
+	if strings.Contains(err.Error(), privateCause.Error()) {
+		t.Fatalf("authenticated stream failure leaked private detail: %v", err)
 	}
 }
 

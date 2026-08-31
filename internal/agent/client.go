@@ -255,7 +255,7 @@ func (c *Client) runSession(
 	defer cancel()
 	stream, connection, err := c.connect(streamCtx, c.socketPath)
 	if err != nil {
-		return agentChannelTransportResult(ctx, err, "agent: connect to Controller")
+		return agentChannelTransportResult(ctx, err, "agent: connect to Controller", false)
 	}
 	defer func() {
 		// Best effort: stream teardown cannot supersede the primary Run result.
@@ -270,14 +270,14 @@ func (c *Client) runSession(
 	if err := stream.Send(message); err != nil {
 		clear(authToken)
 		authenticate.Token = nil
-		return agentChannelTransportResult(ctx, err, "agent: send authentication")
+		return agentChannelTransportResult(ctx, err, "agent: send authentication", false)
 	}
 	clear(authToken)
 	authenticate.Token = nil
 
 	initial, err := stream.Recv()
 	if err != nil {
-		return agentChannelTransportResult(ctx, err, "agent: receive initial configuration")
+		return agentChannelTransportResult(ctx, err, "agent: receive initial configuration", false)
 	}
 	config := initial.GetConfigUpdate().GetAgentConfig()
 	if config == nil {
@@ -295,7 +295,7 @@ func (c *Client) runSession(
 		<-workersDone
 	}()
 	if err := c.sendReady(stream); err != nil {
-		return agentChannelTransportResult(ctx, err, "agent: send readiness")
+		return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
 	}
 
 	ticker := time.NewTicker(pullInterval)
@@ -308,11 +308,11 @@ func (c *Client) runSession(
 			return false, nil
 		case <-ticker.C:
 			if err := c.sendReady(stream); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send readiness")
+				return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
 			}
 		case result := <-received:
 			if result.err != nil {
-				return agentChannelTransportResult(ctx, result.err, "agent: receive Controller message")
+				return agentChannelTransportResult(ctx, result.err, "agent: receive Controller message", true)
 			}
 			if update := result.message.GetConfigUpdate(); update != nil {
 				next := update.GetAgentConfig()
@@ -333,11 +333,7 @@ func (c *Client) runSession(
 				ticker.Reset(pullInterval)
 				receiveNext(streamCtx, stream, received)
 				if err := c.sendReady(stream); err != nil {
-					return agentChannelTransportResult(
-						ctx,
-						err,
-						"agent: send readiness after configuration update",
-					)
+					return agentChannelTransportResult(ctx, err, "agent: send readiness after configuration update", false)
 				}
 				continue
 			}
@@ -369,7 +365,7 @@ func (c *Client) runSession(
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}
 				if err := c.sendScriptCheckpoint(stream, output.ScriptCheckpoint); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send Script checkpoint")
+					return agentChannelTransportResult(ctx, err, "agent: send Script checkpoint", false)
 				}
 				continue
 			}
@@ -378,7 +374,7 @@ func (c *Client) runSession(
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}
 				if err := c.sendBackupCheckpoint(stream, output.BackupCheckpoint); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send Backup checkpoint")
+					return agentChannelTransportResult(ctx, err, "agent: send Backup checkpoint", false)
 				}
 				continue
 			}
@@ -387,7 +383,7 @@ func (c *Client) runSession(
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}
 				if err := c.sendTaskEvent(stream, *output.Progress); err != nil {
-					return agentChannelTransportResult(ctx, err, "agent: send task event")
+					return agentChannelTransportResult(ctx, err, "agent: send task event", false)
 				}
 				continue
 			}
@@ -395,14 +391,14 @@ func (c *Client) runSession(
 				return false, errs.New(errs.KindInternal, "agent: worker returned an empty output")
 			}
 			if err := c.sendTaskAck(stream, *output.Result); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send task acknowledgement")
+				return agentChannelTransportResult(ctx, err, "agent: send task acknowledgement", false)
 			}
 			if err := c.sendReady(stream); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send readiness")
+				return agentChannelTransportResult(ctx, err, "agent: send readiness", false)
 			}
 		case message := <-c.logs.Outputs():
 			if err := stream.Send(message); err != nil {
-				return agentChannelTransportResult(ctx, err, "agent: send log message")
+				return agentChannelTransportResult(ctx, err, "agent: send log message", false)
 			}
 		}
 	}
@@ -661,21 +657,22 @@ func connectGRPC(ctx context.Context, socketPath string) (agentStream, io.Closer
 	return stream, connection, nil
 }
 
-func agentChannelTransportResult(ctx context.Context, cause error, message string) (bool, error) {
+func agentChannelTransportResult(ctx context.Context, cause error, message string, authenticatedReceive bool) (bool, error) {
 	if ctx.Err() != nil {
 		return false, nil
 	}
-	if errors.Is(cause, io.EOF) {
+	grpcStatus, hasGRPCStatus := status.FromError(cause)
+	code := grpcStatus.Code()
+	if errors.Is(cause, io.EOF) || authenticatedReceive && hasGRPCStatus && (code == codes.Internal || code == codes.Unknown) {
 		return true, nil
 	}
-	switch status.Code(cause) {
+	switch code {
 	case codes.Canceled, codes.DeadlineExceeded, codes.Unavailable:
 		return true, nil
 	default:
 		return false, errs.New(errs.KindInternal, message)
 	}
 }
-
 func waitForAgentChannelReconnect(ctx context.Context, attempt uint) error {
 	delay := agentChannelReconnectDelay(attempt, rand.Uint64())
 	timer := time.NewTimer(delay)
