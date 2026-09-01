@@ -6,6 +6,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+const maximumBackingServiceTransactionRequestOperations = 128
+
 // BackingServiceCreation is the complete durable input for one backing
 // facade. The repository publishes every public member and its first desired
 // revision in one transaction so readers can never observe a partial facade.
@@ -232,7 +234,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
+	if err := plan.enforceTransactionBounds(validateBackingServicePublicationBudget); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	idempotency, err := newIdempotencyRepository(repository.store)
@@ -240,6 +242,41 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, creation.Marker, plan)
+}
+
+func validateBackingServicePublicationBudget(
+	conditions []Condition,
+	mutations []Mutation,
+) error {
+	return validateBackingServicePublicationOperationCounts(
+		len(conditions),
+		len(mutations),
+		len(conditions),
+	)
+}
+
+func validateBackingServicePublicationOperationCounts(
+	comparisons int,
+	successMutations int,
+	failureReads int,
+) error {
+	selectedOperations := comparisons + successMutations
+	requestOperations := selectedOperations + failureReads
+	if selectedOperations > maximumTransactionOperations ||
+		requestOperations > maximumBackingServiceTransactionRequestOperations {
+		return errs.Newf(
+			errs.KindValidationFailed,
+			"Backing-service publication exceeds transaction bounds (%d/%d/%d; selected %d/%d; request %d/%d)",
+			comparisons,
+			successMutations,
+			failureReads,
+			selectedOperations,
+			maximumTransactionOperations,
+			requestOperations,
+			maximumBackingServiceTransactionRequestOperations,
+		)
+	}
+	return nil
 }
 
 func validateBackingServiceCreation(ctx context.Context, creation BackingServiceCreation) error {

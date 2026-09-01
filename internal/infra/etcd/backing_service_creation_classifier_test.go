@@ -35,6 +35,42 @@ func TestValidateBackingServiceComponentsRejectsNonEmpty(t *testing.T) {
 	}
 }
 
+// Rationale: backing bootstrap publishes the complete facade atomically. Its
+// selected branch must retain the store-wide limit while the compare, success,
+// and failure arms together remain within etcd's full request envelope.
+func TestBackingServicePublicationBudgetPreservesAtomicFacadeEnvelope(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		comparisons      int
+		successMutations int
+		failureReads     int
+		wantError        bool
+	}{
+		{name: "current facade", comparisons: 43, successMutations: 37, failureReads: 43},
+		{name: "exact selected and request bounds", comparisons: 32, successMutations: 64, failureReads: 32},
+		{name: "selected branch overflow", comparisons: 1, successMutations: 96, failureReads: 1, wantError: true},
+		{name: "full request overflow", comparisons: 43, successMutations: 43, failureReads: 43, wantError: true},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateBackingServicePublicationOperationCounts(
+				test.comparisons,
+				test.successMutations,
+				test.failureReads,
+			)
+			if test.wantError && !isKind(err, errs.KindValidationFailed) {
+				t.Fatalf("publication budget error = %v", err)
+			}
+			if !test.wantError && err != nil {
+				t.Fatalf("publication budget error = %v", err)
+			}
+		})
+	}
+}
+
 func TestBackingServiceCreationValidatesDesiredTopology(t *testing.T) {
 	t.Parallel()
 	const (
