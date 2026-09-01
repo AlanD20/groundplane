@@ -198,8 +198,10 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		}
 		next := hook.record
 		next.ActiveReference = false
-		next.AssignmentID = ""
 		next.UpdatedAt = terminalAt.UTC()
+		if validateScriptExecutionRecord(next) != nil {
+			return false, corruptReleaseRecord()
+		}
 		executionValue, encodeErr := encodeEnvelope("script-execution", next)
 		if encodeErr != nil {
 			return false, encodeErr

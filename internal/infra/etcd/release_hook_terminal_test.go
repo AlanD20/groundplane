@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,5 +170,129 @@ func TestFinalizeReleaseHookExecutionBatchReleasesSkippedReferences(t *testing.T
 	processed, err = repository.finalizeReleaseHookExecutionBatch(ctx, task, now.Add(2*time.Second), values.ReadRevision)
 	if err != nil || processed {
 		t.Fatalf("replay terminalization = %v, %v", processed, err)
+	}
+}
+
+func TestFinalizeReleaseHookExecutionBatchPreservesExecutedAssignmentForAcknowledgementReplay(t *testing.T) {
+	// Rationale: release acknowledgement is batched. Releasing a completed
+	// hook reference must not erase assignment evidence required to decode the
+	// execution when the next acknowledgement batch resumes.
+	ctx := context.Background()
+	now := time.Date(2026, 9, 1, 15, 0, 0, 0, time.UTC)
+	store := newMemoryHierarchyStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scripts, err := newScriptRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := scriptCheckpointTestRecord(now)
+	record.ScriptSetGeneration = record.EnvironmentID
+	record.CurrentTaskID = ids.NewAt(ids.KindTask, now, 20)
+	record.StepID = ids.NewAt(ids.KindStep, now, 21)
+	input := scriptCheckpointTestInput(record, now.Add(time.Second))
+	assignmentID := input.AssignmentID
+	input.State = ScriptExecutionStartAuthorized
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceStartAuthorized, StartAuthorized: &ScriptStartAuthorizedEvidence{},
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+	input.ExpectedState, input.State = record.State, ScriptExecutionBodyPrepared
+	input.PayloadSHA256 = strings.Repeat("2", 64)
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceBodyPrepared,
+		BodyPrepared: &ScriptBodyPreparedEvidence{
+			BodySHA256: record.BodySHA256, UID: 65534, GID: 65534, Device: 10, Inode: 20, Leaf: "body",
+		},
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+	input.ExpectedState, input.State = record.State, ScriptExecutionContainerCreated
+	input.PayloadSHA256 = strings.Repeat("3", 64)
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceContainerCreated,
+		ContainerCreated: &ScriptContainerCreatedEvidence{
+			ContainerID: strings.Repeat("a", 64), OwnershipLabelsSHA256: strings.Repeat("b", 64),
+		},
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+	input.ExpectedState, input.State = record.State, ScriptExecutionOutcomeRecorded
+	input.PayloadSHA256 = strings.Repeat("4", 64)
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceOutcome,
+		Outcome: &ScriptOutcomeEvidence{Reason: ScriptOutcomeRuntimeFailure, ObservedAt: now.Add(2 * time.Second)},
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+	input.ExpectedState, input.State = record.State, ScriptExecutionCleanupProven
+	input.PayloadSHA256 = strings.Repeat("5", 64)
+	input.Evidence = ScriptCheckpointEvidence{
+		Kind: ScriptCheckpointEvidenceCleanup,
+		Cleanup: &ScriptCleanupEvidence{
+			ContainerID: strings.Repeat("a", 64), BodyDevice: 10, BodyInode: 20, BodyLeaf: "body",
+			ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true,
+		},
+	}
+	record = advanceScriptCheckpointTest(t, record, input)
+
+	script, err := NewScriptRecord(record.EnvironmentID, record.ServiceID, core.Script{
+		ID: record.ScriptID, Slug: "migrate", ServiceName: "api", When: core.ScriptPostDeploy, Body: "exit 1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	script.ActiveReferences = 1
+	script.ScriptSetGeneration = record.ScriptSetGeneration
+	executionValue, err := encodeEnvelope("script-execution", record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptValue, err := encodeScriptRecord(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	referenceValue, err := encodeEnvelope("script-body-reference", struct {
+		ExecutionID         string `json:"script_execution_id"`
+		ScriptID            string `json:"script_id"`
+		Generation          uint64 `json:"generation"`
+		ScriptSetGeneration string `json:"script_set_generation"`
+	}{record.ID, record.ScriptID, record.ScriptGeneration, record.ScriptSetGeneration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := store.Transact(ctx, nil, []Mutation{
+		{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: executionValue},
+		{Type: MutationPut, Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID), Value: scriptValue},
+		{Type: MutationPut, Key: scriptSetBodyForwardReferenceKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID, record.ScriptGeneration, record.ID), Value: referenceValue},
+		{Type: MutationPut, Key: scriptBodyReverseReferenceKey(record.ID), Value: referenceValue},
+	})
+	if err != nil || !seeded.Succeeded {
+		t.Fatalf("seed executed release hook = %#v, %v", seeded, err)
+	}
+	task := TaskRecord{
+		ID: record.CurrentTaskID, OperationID: record.OperationID, PlanHash: record.PlanHash,
+		Type: TaskDeploy, Params: map[string]string{
+			TaskReleasePublicationParam:             ids.NewULID(),
+			ReleaseHookStepExecutionParam(record.StepID): record.ID,
+		},
+		Steps: []TaskStepRecord{{ID: record.StepID}},
+	}
+	read, err := store.Get(ctx, scriptExecutionKey(record.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	processed, err := repository.finalizeReleaseHookExecutionBatch(ctx, task, now.Add(3*time.Second), read.ReadRevision)
+	if err != nil || !processed {
+		t.Fatalf("finalize executed release hook = %v, %v", processed, err)
+	}
+	stored, err := scripts.GetScriptExecution(ctx, record.ID)
+	if err != nil || stored.Record.ActiveReference || stored.Record.AssignmentID != assignmentID {
+		t.Fatalf("round-tripped executed hook = %#v, %v", stored, err)
+	}
+	processed, err = repository.finalizeReleaseHookExecutionBatch(
+		ctx, task, now.Add(4*time.Second), stored.ReadRevision,
+	)
+	if err != nil || processed {
+		t.Fatalf("acknowledgement replay after hook release = %v, %v", processed, err)
 	}
 }
