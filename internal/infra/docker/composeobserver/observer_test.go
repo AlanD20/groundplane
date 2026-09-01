@@ -89,6 +89,47 @@ func TestObserveReportsProjectContainerWithIncompleteOwnershipAsCollision(t *tes
 	}
 }
 
+// Rationale: Docker reports transient lifecycle states while restart policies
+// converge. They are valid non-running evidence, not an observation failure.
+func TestContainerStateNormalizesTransientDockerStates(t *testing.T) {
+	for _, status := range []container.ContainerState{
+		container.StateCreated,
+		container.StatePaused,
+		container.StateRestarting,
+		container.StateRemoving,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			state, exitCode, err := containerState(&container.State{Status: status})
+			if err != nil {
+				t.Fatalf("containerState() error = %v", err)
+			}
+			if state != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_CREATED || exitCode != nil {
+				t.Fatalf("containerState() = %v/%v, want created/nil", state, exitCode)
+			}
+		})
+	}
+}
+
+// Rationale: the closed state contract remains fail-closed for new Docker
+// states until Groundplane explicitly defines their safe normalization.
+func TestContainerStateRejectsUnknownDockerState(t *testing.T) {
+	if _, _, err := containerState(&container.State{Status: container.ContainerState("unknown")}); err == nil {
+		t.Fatal("containerState() error = nil, want unsupported-state error")
+	}
+}
+
+// Rationale: Docker may explicitly report the absence of a healthcheck rather
+// than omitting its Health object; both representations mean typed none.
+func TestContainerHealthAcceptsExplicitNoHealthcheck(t *testing.T) {
+	health, err := containerHealth(&container.State{Health: &container.Health{Status: container.NoHealthcheck}})
+	if err != nil {
+		t.Fatalf("containerHealth() error = %v", err)
+	}
+	if health != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE {
+		t.Fatalf("containerHealth() = %v, want none", health)
+	}
+}
+
 func observerPlan(t *testing.T) *agentpb.ExecutionPlan {
 	t.Helper()
 	yaml := []byte("services:\n  api:\n    image: registry.example/api@sha256:digest\n")

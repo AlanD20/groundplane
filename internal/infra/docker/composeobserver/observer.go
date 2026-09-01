@@ -320,14 +320,14 @@ func containerState(
 	state *container.State,
 ) (agentpb.ObservedContainerState, *int32, error) {
 	var observed agentpb.ObservedContainerState
-	switch string(state.Status) {
-	case "created":
+	switch state.Status {
+	case container.StateCreated, container.StatePaused, container.StateRestarting, container.StateRemoving:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_CREATED
-	case "running":
+	case container.StateRunning:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING
-	case "exited":
+	case container.StateExited:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED
-	case "dead":
+	case container.StateDead:
 		observed = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_DEAD
 	default:
 		return 0, nil, errs.New(errs.KindInternal, "Compose observation container state is unsupported")
@@ -347,12 +347,14 @@ func containerHealth(state *container.State) (agentpb.ObservedContainerHealth, e
 	if state.Health == nil {
 		return agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE, nil
 	}
-	switch string(state.Health.Status) {
-	case "starting":
+	switch state.Health.Status {
+	case container.NoHealthcheck:
+		return agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE, nil
+	case container.Starting:
 		return agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_STARTING, nil
-	case "healthy":
+	case container.Healthy:
 		return agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY, nil
-	case "unhealthy":
+	case container.Unhealthy:
 		return agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY, nil
 	default:
 		return 0, errs.New(errs.KindInternal, "compose observation container health is unsupported")
