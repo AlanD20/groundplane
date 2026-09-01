@@ -792,12 +792,20 @@ and complete before serving-runtime mutation. A pre-hook failure leaves serving
 and last-successful state unchanged and needs no release compensation. Its
 runner must reach cleanup before `on-failure` may begin.
 
-After all pre hooks clean up, blue-green applies the inactive candidate, passes
-health, records `candidate_healthy`, switches alias and router, and records the
-serving checkpoint. Recreate performs targeted replacement and activation,
-records the serving checkpoint, and then passes health. Post hooks run as new
-one-off runners from the sealed newly serving release definition after the
-blue-green serving checkpoint or the recreate health gate.
+After all pre hooks clean up, blue-green applies and starts the inactive
+candidate, then runs matching post hooks before readiness observation, the
+alias/router switch, and the serving checkpoint. Recreate removes the prior
+workload, applies and starts the candidate, then runs matching post hooks before
+readiness observation and recreate acknowledgement. Post hooks run as new
+one-off runners from the sealed candidate release definition. This ordering
+permits a healthcheck to depend on a post-deploy migration without deadlocking
+the Release.
+
+Blueprint apply publishes Script resources as desired state but does not
+execute lifecycle hooks. Explicit Deploy and Rollback operations invoke the
+typed Release hook executor; manual Scripts remain explicit Run operations. A
+retry follows durable recovery probes and compensation and never repeats a
+post hook completed by the original attempt.
 
 For a failure after activation, urgent `switch_back` compensation completes
 before `on-failure`; a pre-activation or `leave_active` failure needs no switch.

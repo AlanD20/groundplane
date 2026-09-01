@@ -725,11 +725,12 @@ The blue-green deploy procedure is:
 
 1. Select the inactive slot and render its candidate image/tag.
 2. Start or recreate only that slot.
-3. Observe its exact Release labels and pass its sealed healthcheck.
-4. Atomically reload the stable proxy to the healthy slot and prove the sealed
+3. Run matching `post-deploy` Scripts through the typed Release hook executor.
+4. Observe its exact Release labels and pass its sealed healthcheck.
+5. Atomically reload the stable proxy to the healthy slot and prove the sealed
    config digest, generation, Release id, and upstream.
-5. Record the candidate as serving, then completed, for the logical Service.
-6. Retain the old healthy slot for rollback.
+6. Record the candidate as serving, then completed, for the logical Service.
+7. Retain the old healthy slot for rollback.
 
 If a pre-switch step fails, the stable proxy remains on the prior slot. If a
 later member or post-switch checkpoint fails, the release's `on_failure`
@@ -738,8 +739,12 @@ proxy to its exact prior healthy slot in reverse order or leaves the new slot
 active for an explicit rollback. The default is
 `switch_back`. Either outcome preserves the failed release record. Rollback
 uses the same procedure with the previous successful tag. No policy reverses
-database migrations automatically. Release hooks are not executable in the
-MVP; selecting one is a semantic `422` until the dedicated hook runner exists.
+database migrations automatically. Recreate uses the same hook boundary:
+remove the prior workload, apply and start the candidate, run matching
+`post-deploy` Scripts, observe readiness, then acknowledge the recreate.
+Blueprint apply publishes Script resources but does not execute hooks; an
+explicit Deploy, Rollback, or manual Run operation invokes the typed Script
+execution path.
 
 `x-gp-adapter` belongs on a backing service. Networks, healthcheck, resources,
 volumes, and restart policy remain native Compose fields. The managed

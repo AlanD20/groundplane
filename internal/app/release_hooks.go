@@ -50,6 +50,17 @@ func (service *releaseOperationService) prepareReleaseHooks(
 			if err != nil {
 				return preparedReleaseHooks{}, err
 			}
+			if sources.Script.Record.Desired.When == core.ScriptOnFailure {
+				targetReleaseID := domain.FailureHookTargetReleaseID(member.Intent)
+				if targetReleaseID != member.Intent.ID {
+					sources, err = service.scripts.LoadReleaseHookExecutionSources(
+						ctx, service.ledger, scriptID, targetReleaseID, revision,
+					)
+					if err != nil {
+						return preparedReleaseHooks{}, err
+					}
+				}
+			}
 			bindings, err := service.artifacts.BuildScriptEntryBindings(ctx, sources)
 			if err != nil {
 				return preparedReleaseHooks{}, err

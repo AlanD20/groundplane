@@ -124,6 +124,8 @@ func (runtime *DockerScriptRuntime) ExecuteScript(
 			if checkpointErr := checkpointOutcome(checkpoint, request, durable, reason, nil); checkpointErr != nil {
 				return result.ExitCode, errors.Join(runErr, checkpointErr)
 			}
+			exitCode, cleanupErr := runtime.cleanupAndReturn(checkpoint, request, durable)
+			return exitCode, errors.Join(runErr, cleanupErr)
 		} else if err := checkpointOutcome(
 			checkpoint, request, durable,
 			agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NORMAL_EXIT, &result.ExitCode,
@@ -132,6 +134,51 @@ func (runtime *DockerScriptRuntime) ExecuteScript(
 		}
 	}
 	return runtime.cleanupAndReturn(checkpoint, request, durable)
+}
+
+// CompleteScriptWithoutStart records a release hook that cannot safely select
+// a serving Release. It proves cleanup without authorizing body preparation or
+// container creation.
+func (runtime *DockerScriptRuntime) CompleteScriptWithoutStart(
+	ctx context.Context,
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+	reason agentpb.ScriptOutcomeReason,
+	checkpoint func(context.Context, *agentpb.ScriptCheckpointRequest) error,
+) error {
+	if reason != agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE &&
+		reason != agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE {
+		return errs.New(errs.KindValidationFailed, "agent: Script no-start outcome reason is invalid")
+	}
+	request, durable, err := scriptExecutionRequest(ctx, assignment, step, checkpoint)
+	if err != nil {
+		return err
+	}
+	defer clearScriptExecutionRequest(&request)
+	switch durable.State {
+	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED:
+		if err := checkpointOutcome(checkpoint, request, durable, reason, nil); err != nil {
+			return err
+		}
+	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED,
+		agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN:
+		if durable.GetOutcome().GetReason() != reason {
+			return errs.New(errs.KindStateConflict, "agent: recovered Script no-start outcome differs")
+		}
+		if durable.State == agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN {
+			return nil
+		}
+	default:
+		return errs.New(errs.KindStateConflict, "agent: Script already crossed its no-start boundary")
+	}
+	_, cleanupErr := runtime.cleanupAndReturn(checkpoint, request, durable)
+	if durable.State == agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN {
+		return nil
+	}
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	return errs.New(errs.KindInternal, "agent: Script no-start cleanup was not proven")
 }
 
 func scriptExecutionRequest(

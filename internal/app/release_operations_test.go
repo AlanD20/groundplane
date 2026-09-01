@@ -9,15 +9,34 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestReleaseImageWithTagRejectsDigestOnlyImageWithoutCurrentTag(t *testing.T) {
+func TestReleaseImageWithTagPreservesFirstDeployDigest(t *testing.T) {
+	// Rationale: the first Release has no current tag, but a bare digest is
+	// already immutable and can carry collision-free derived tag metadata.
 	t.Parallel()
+	digest := strings.Repeat("a", 64)
+	image := "registry.example.invalid/app@sha256:" + digest
 
-	_, _, _, err := releaseImageWithTag(
-		"registry.example.invalid/app@sha256:"+strings.Repeat("a", 64),
-		"",
-	)
-	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed {
-		t.Fatalf("releaseImageWithTag() error = %v, want validation_failed", err)
+	gotImage, gotTag, gotDigest, err := releaseImageWithTag(image, "", "")
+	if err != nil {
+		t.Fatalf("releaseImageWithTag() error = %v", err)
+	}
+	if gotImage != image || gotTag != "sha-"+digest || gotDigest != digest {
+		t.Fatalf("release image = %q/%q/%q", gotImage, gotTag, gotDigest)
+	}
+}
+
+func TestReleaseImageWithTagPreservesDigestPinnedRedeploy(t *testing.T) {
+	// Rationale: hook snapshots require the exact immutable candidate image;
+	// retaining the current operator tag must not turn it into a mutable tag.
+	t.Parallel()
+	image := "registry.example.invalid/app@sha256:" + strings.Repeat("a", 64)
+
+	gotImage, gotTag, gotDigest, err := releaseImageWithTag(image, "", "dev")
+	if err != nil {
+		t.Fatalf("releaseImageWithTag() error = %v", err)
+	}
+	if gotImage != image || gotTag != "dev" || gotDigest != strings.Repeat("a", 64) {
+		t.Fatalf("release image = %q/%q/%q", gotImage, gotTag, gotDigest)
 	}
 }
 

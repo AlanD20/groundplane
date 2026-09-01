@@ -116,6 +116,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			ServingProxyGeneration: member.Render.PriorProxyGeneration, Strategy: member.Render.Strategy,
 		}
 	}
+	releaseProjection := releaseWorkloadProjection(first.Projection)
 	artifact, err := resolver.renderPinnedEnvironmentArtifactWithReleases(
 		ctx, task,
 		pinnedEnvironmentIdentity{
@@ -124,8 +125,11 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			EnvironmentID: first.EnvironmentID, EnvironmentName: first.EnvironmentName,
 			AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 		},
-		first.Projection.RevisionID, first.ArtifactID, first.Projection,
+		first.Projection.RevisionID, first.ArtifactID, releaseProjection,
 		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
+			if err := projectReleaseWorkloadServices(project, releaseProjection); err != nil {
+				return nil, err
+			}
 			selected := make(map[string]struct{}, len(images))
 			for name := range images {
 				selected[name] = struct{}{}
@@ -193,8 +197,11 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 				EnvironmentID: first.EnvironmentID, EnvironmentName: first.EnvironmentName,
 				AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 			},
-			first.Projection.RevisionID, priorArtifactID, first.Projection,
+			first.Projection.RevisionID, priorArtifactID, releaseProjection,
 			func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
+				if err := projectReleaseWorkloadServices(project, releaseProjection); err != nil {
+					return nil, err
+				}
 				for name, image := range priorImages {
 					service, active := project.Services[name]
 					if !active {
@@ -380,10 +387,11 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			hookOperation = domain.OperationRollback
 		}
 		hooks, err := BuildReleaseHookPlan(ReleaseHookPlanInput{
-			Operation: hookOperation, ReleaseID: member.Intent.ID,
-			ServingStepID:      task.Steps[memberIndex*5+2].ID,
-			CompensationStepID: task.Steps[memberIndex*5+4].ID,
-			PreStepIDs:         preIDs, PostStepIDs: postIDs, FailureStepIDs: failureIDs,
+			Operation: hookOperation, CandidateReleaseID: member.Intent.ID,
+			FailureReleaseID:     domain.FailureHookTargetReleaseID(member.Intent),
+			PostHookAnchorStepID: releasePostHookAnchorStepID(task, memberIndex, member.Render.Strategy),
+			CompensationStepID:   task.Steps[memberIndex*5+4].ID,
+			PreStepIDs:           preIDs, PostStepIDs: postIDs, FailureStepIDs: failureIDs,
 			Hooks: member.Render.Hooks,
 		})
 		if err != nil {
@@ -404,11 +412,59 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	})
 }
 
+func releasePostHookAnchorStepID(task etcd.TaskRecord, memberIndex int, strategy domain.Strategy) string {
+	offset := 0
+	if strategy == domain.StrategyRecreate {
+		offset = 1
+	}
+	return task.Steps[memberIndex*5+offset].ID
+}
+
 func priorReleaseLabel(value string) string {
 	if value == "" {
 		return "baseline"
 	}
 	return value
+}
+
+// releaseWorkloadProjection narrows a Service release to durable workload
+// Services. Registered Component output is validated when the Environment
+// artifact is produced and is not part of a workload-targeted release.
+func releaseWorkloadProjection(projection etcd.EnvironmentComposeProjection) etcd.EnvironmentComposeProjection {
+	projection.Components = nil
+	return projection
+}
+
+func projectReleaseWorkloadServices(
+	project *composetypes.Project,
+	projection etcd.EnvironmentComposeProjection,
+) error {
+	if project == nil {
+		return errs.New(errs.KindInternal, "release workload Compose project is missing")
+	}
+	desired := make(map[string]struct{}, len(projection.DesiredServices))
+	for _, service := range projection.DesiredServices {
+		desired[service.Desired.Name] = struct{}{}
+	}
+	found := make(map[string]struct{}, len(desired))
+	for name := range project.Services {
+		if _, workload := desired[name]; workload {
+			found[name] = struct{}{}
+			continue
+		}
+		delete(project.Services, name)
+	}
+	for name := range project.DisabledServices {
+		if _, workload := desired[name]; workload {
+			found[name] = struct{}{}
+			continue
+		}
+		delete(project.DisabledServices, name)
+	}
+	if len(found) != len(desired) {
+		return errs.New(errs.KindInternal, "release workload Service is missing from frozen Blueprint")
+	}
+	return nil
 }
 
 func applyExternalReleaseDependencies(

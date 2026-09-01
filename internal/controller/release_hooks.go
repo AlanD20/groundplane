@@ -52,17 +52,18 @@ func BuildReleaseHookRenderInput(
 	}, nil
 }
 
-// ReleaseHookPlanInput supplies task-owned IDs around serving and
+// ReleaseHookPlanInput supplies task-owned IDs around candidate start and
 // compensation checkpoints. Automatic hooks remain steps in the parent task.
 type ReleaseHookPlanInput struct {
-	Operation          domain.OperationKind
-	ReleaseID          string
-	ServingStepID      string
-	CompensationStepID string
-	PreStepIDs         []string
-	PostStepIDs        []string
-	FailureStepIDs     []string
-	Hooks              []etcd.ReleaseHookRenderInput
+	Operation            domain.OperationKind
+	CandidateReleaseID   string
+	FailureReleaseID     string
+	PostHookAnchorStepID string
+	CompensationStepID   string
+	PreStepIDs           []string
+	PostStepIDs          []string
+	FailureStepIDs       []string
+	Hooks                []etcd.ReleaseHookRenderInput
 }
 
 // ReleaseHookPlan is typed plan material for BuildPlan.
@@ -101,10 +102,18 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 	if len(input.PreStepIDs) != len(pre) || len(input.PostStepIDs) != len(post) || len(input.FailureStepIDs) != len(failure) {
 		return output, errs.New(errs.KindValidationFailed, "release hook step IDs do not match selected hooks")
 	}
-	appendPhase := func(hooks []etcd.ReleaseHookRenderInput, stepIDs []string, firstPrerequisite string, target *[]*agentpb.ExecutionStep) error {
+	appendPhase := func(
+		hooks []etcd.ReleaseHookRenderInput,
+		stepIDs []string,
+		firstPrerequisite string,
+		releaseID string,
+		target *[]*agentpb.ExecutionStep,
+	) error {
 		prerequisite := firstPrerequisite
 		for index, hook := range hooks {
-			step, snapshot, projection, body, err := buildReleaseHookStep(hook, stepIDs[index], prerequisite, input.ReleaseID)
+			step, snapshot, projection, body, err := buildReleaseHookStep(
+				hook, stepIDs[index], prerequisite, releaseID,
+			)
 			if err != nil {
 				return err
 			}
@@ -116,13 +125,17 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 		}
 		return nil
 	}
-	if err := appendPhase(pre, input.PreStepIDs, "", &output.PreSteps); err != nil {
+	if err := appendPhase(pre, input.PreStepIDs, "", input.CandidateReleaseID, &output.PreSteps); err != nil {
 		return output, err
 	}
-	if err := appendPhase(post, input.PostStepIDs, input.ServingStepID, &output.PostSteps); err != nil {
+	if err := appendPhase(
+		post, input.PostStepIDs, input.PostHookAnchorStepID, input.CandidateReleaseID, &output.PostSteps,
+	); err != nil {
 		return output, err
 	}
-	if err := appendPhase(failure, input.FailureStepIDs, input.CompensationStepID, &output.FailureSteps); err != nil {
+	if err := appendPhase(
+		failure, input.FailureStepIDs, input.CompensationStepID, input.FailureReleaseID, &output.FailureSteps,
+	); err != nil {
 		return output, err
 	}
 	return output, nil

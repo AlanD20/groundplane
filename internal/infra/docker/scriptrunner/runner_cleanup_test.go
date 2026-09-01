@@ -129,6 +129,10 @@ func (engine *cleanupEngine) ContainerCreate(context.Context, client.ContainerCr
 	return client.ContainerCreateResult{}, nil
 }
 
+func (engine *cleanupEngine) NetworkConnect(context.Context, string, client.NetworkConnectOptions) (client.NetworkConnectResult, error) {
+	return client.NetworkConnectResult{}, nil
+}
+
 func (engine *cleanupEngine) ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error) {
 	return client.ContainerAttachResult{}, nil
 }

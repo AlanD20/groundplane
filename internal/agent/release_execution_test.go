@@ -93,8 +93,10 @@ func TestExecuteReleaseRecreateCompensatesSingletonReplacement(t *testing.T) {
 // Agent process executes only recover probes, then enabled compensation.
 func TestExecuteReleaseRetryAfterRestartRunsRecoveryOnly(t *testing.T) {
 	t.Parallel()
+	post := releaseHookStep("post-deploy-api", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK)
+	post.PrerequisiteStepId = "switch-api"
 	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK, Steps: []*agentpb.ExecutionStep{
-		releaseForwardSwitch("switch-api"), releaseProbe("probe-api"), releaseCompensate("compensate-api", "switch-api"),
+		releaseForwardSwitch("switch-api"), post, releaseProbe("probe-api"), releaseCompensate("compensate-api", "switch-api"),
 	}}
 	for _, taskID := range []string{"task-retry-one", "task-retry-two"} {
 		helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
@@ -109,6 +111,38 @@ func TestExecuteReleaseRetryAfterRestartRunsRecoveryOnly(t *testing.T) {
 			{taskID: taskID, stepID: "probe-api"}, {taskID: taskID, stepID: "compensate-api"},
 		})
 	}
+}
+
+func TestExecuteReleaseRetryCompensatesOnlyTouchedMember(t *testing.T) {
+	t.Parallel()
+	apiProbe := releaseProbe("probe-api")
+	workerProbe := releaseProbe("probe-worker")
+	workerProbe.GetServiceProxyProbe().ServiceId = "worker"
+	workerProbe.GetServiceProxyProbe().ExpectedTarget = "blue"
+	workerProbe.GetServiceProxyProbe().ReleaseId = "release-worker"
+	workerProbe.GetServiceProxyProbe().AlternateTarget = "green"
+	workerProbe.GetServiceProxyProbe().AlternateReleaseId = "candidate-worker"
+	apiCompensate := releaseCompensate("compensate-api", "switch-api")
+	workerCompensate := releaseCompensate("compensate-worker", "switch-worker")
+	workerCompensate.GetServiceProxyCompensate().ServiceId = "worker"
+	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
+		"probe-api":         releaseExecutionSuccess("api", false),
+		"probe-worker":      releaseExecutionSuccess("worker", false),
+		"compensate-api":    releaseExecutionSuccess("api", true),
+		"compensate-worker": releaseExecutionSuccess("worker", true),
+	}}
+	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
+		apiProbe, workerProbe, apiCompensate, workerCompensate,
+	}}
+	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-selective-recovery", "task-original", plan)
+	if result.Terminal != TaskTerminalCompleted || result.Compose.GetReconciliationRequired() {
+		t.Fatalf("selective recovery result = %#v", result)
+	}
+	assertReleaseExecutionCalls(t, helper, []releaseExecutionCall{
+		{taskID: "task-selective-recovery", stepID: "probe-api"},
+		{taskID: "task-selective-recovery", stepID: "probe-worker"},
+		{taskID: "task-selective-recovery", stepID: "compensate-api"},
+	})
 }
 
 func TestExecuteReleaseRestartCompensatesAfterAmbiguousTransitionProbe(t *testing.T) {
@@ -222,7 +256,10 @@ func releaseProbe(stepID string) *agentpb.ExecutionStep {
 	return &agentpb.ExecutionStep{
 		StepId: stepID, TimeoutSeconds: 5,
 		Policy:  agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-		Payload: &agentpb.ExecutionStep_ServiceProxyProbe{ServiceProxyProbe: &agentpb.ServiceProxyProbe{}},
+		Payload: &agentpb.ExecutionStep_ServiceProxyProbe{ServiceProxyProbe: &agentpb.ServiceProxyProbe{
+			ServiceId: "api", ExpectedTarget: "green", ReleaseId: "prior-api",
+			AlternateTarget: "blue", AlternateReleaseId: "release-api",
+		}},
 	}
 }
 
@@ -230,7 +267,7 @@ func releaseCompensate(stepID string, prerequisite string) *agentpb.ExecutionSte
 	return &agentpb.ExecutionStep{
 		StepId: stepID, PrerequisiteStepId: prerequisite, TimeoutSeconds: 5,
 		Policy:  agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-		Payload: &agentpb.ExecutionStep_ServiceProxyCompensate{ServiceProxyCompensate: &agentpb.ServiceProxyCompensate{Enabled: true}},
+		Payload: &agentpb.ExecutionStep_ServiceProxyCompensate{ServiceProxyCompensate: &agentpb.ServiceProxyCompensate{ServiceId: "api", Enabled: true}},
 	}
 }
 

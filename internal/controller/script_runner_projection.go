@@ -44,11 +44,8 @@ func BuildManualScriptPlan(
 		return nil, errs.New(errs.KindValidationFailed, "manual Script plan identity is invalid")
 	}
 	sources := input.Sources
-	if sources.RenderInput.Record.Image != sources.Release.Intent.Image ||
-		!imageref.IsDigestPinned(sources.Release.Intent.Image) ||
-		sources.RenderInput.Record.Projection.RevisionID == "" ||
-		sources.RenderInput.Record.Projection.RenderGeneration == 0 {
-		return nil, errs.New(errs.KindStateConflict, "successful Release cannot authorize a Script runner")
+	if err := validateScriptRunnerReleaseSource(sources); err != nil {
+		return nil, err
 	}
 	project, err := loadNormalizedEnvironmentProject(ctx, sources.RenderInput.Record.Projection)
 	if err != nil {
@@ -58,6 +55,8 @@ func BuildManualScriptPlan(
 	if err != nil || service.Name != sources.Service.Record.Desired.Name {
 		return nil, errs.New(errs.KindStateConflict, "successful Release service definition is missing")
 	}
+	// The remainder of the projection is shared by manual Scripts and staged
+	// lifecycle hooks. Source loading owns whether the Release is terminal.
 	desiredProject, err := loadNormalizedEnvironmentProject(ctx, sources.DesiredProjection.Record)
 	if err != nil {
 		return nil, err
@@ -155,6 +154,16 @@ func BuildManualScriptPlan(
 		}},
 	}
 	return executionplan.Seal(plan)
+}
+
+func validateScriptRunnerReleaseSource(sources etcd.ScriptExecutionSources) error {
+	if sources.RenderInput.Record.Image != sources.Release.Intent.Image ||
+		!imageref.IsDigestPinned(sources.Release.Intent.Image) ||
+		sources.RenderInput.Record.Projection.RevisionID == "" ||
+		sources.RenderInput.Record.Projection.RenderGeneration == 0 {
+		return errs.New(errs.KindStateConflict, "Release cannot authorize a Script runner")
+	}
+	return nil
 }
 
 func projectScriptRunner(
@@ -335,10 +344,8 @@ func projectScriptNetworks(
 		if config == nil {
 			config = &composetypes.ServiceNetworkConfig{}
 		}
-		if len(config.Aliases) != 0 || config.GatewayPriority != 0 || config.Ipv4Address != "" ||
-			config.Ipv6Address != "" || len(config.LinkLocalIPs) != 0 || config.MacAddress != "" ||
-			len(config.Extensions) != 0 {
-			return nil, errs.New(errs.KindValidationFailed, "Script runner network contains unsupported endpoint fields")
+		if len(config.Extensions) != 0 {
+			return nil, errs.New(errs.KindValidationFailed, "Script runner network contains unsupported extensions")
 		}
 		result = append(result, &agentpb.ScriptRunnerNetwork{
 			NetworkId: networkID, NetworkModRevision: uint64(revisionByID[networkID]),

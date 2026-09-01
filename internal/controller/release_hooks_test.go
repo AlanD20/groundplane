@@ -14,14 +14,15 @@ func TestBuildReleaseHookPlanKeepsClosedPhasesAndSlugOrder(t *testing.T) {
 	// Rationale: release hooks must not become ordinary forward steps because
 	// failure hooks execute only after compensation and never on success.
 	releaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	priorReleaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAT"
 	hooks := []etcd.ReleaseHookRenderInput{
 		releaseHookInput(t, releaseID, "z-post", core.ScriptPostDeploy, "01ARZ3NDEKTSV4RRFFQ69G5FAA", "01ARZ3NDEKTSV4RRFFQ69G5FAB"),
 		releaseHookInput(t, releaseID, "a-pre", core.ScriptPreDeploy, "01ARZ3NDEKTSV4RRFFQ69G5FAC", "01ARZ3NDEKTSV4RRFFQ69G5FAD"),
-		releaseHookInput(t, releaseID, "b-failure", core.ScriptOnFailure, "01ARZ3NDEKTSV4RRFFQ69G5FAE", "01ARZ3NDEKTSV4RRFFQ69G5FAF"),
+		releaseHookInput(t, priorReleaseID, "b-failure", core.ScriptOnFailure, "01ARZ3NDEKTSV4RRFFQ69G5FAE", "01ARZ3NDEKTSV4RRFFQ69G5FAF"),
 	}
 	plan, err := BuildReleaseHookPlan(ReleaseHookPlanInput{
-		Operation: domain.OperationDeploy, ReleaseID: releaseID,
-		ServingStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAG", CompensationStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAH",
+		Operation: domain.OperationDeploy, CandidateReleaseID: releaseID, FailureReleaseID: priorReleaseID,
+		PostHookAnchorStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAG", CompensationStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAH",
 		PreStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAJ"}, PostStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAK"},
 		FailureStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAM"}, Hooks: hooks,
 	})
@@ -39,6 +40,40 @@ func TestBuildReleaseHookPlanKeepsClosedPhasesAndSlugOrder(t *testing.T) {
 	if plan.PostSteps[0].GetPrerequisiteStepId() != "step_01ARZ3NDEKTSV4RRFFQ69G5FAG" ||
 		plan.FailureSteps[0].GetPrerequisiteStepId() != "step_01ARZ3NDEKTSV4RRFFQ69G5FAH" {
 		t.Fatalf("hook prerequisites = %q/%q", plan.PostSteps[0].GetPrerequisiteStepId(), plan.FailureSteps[0].GetPrerequisiteStepId())
+	}
+	if plan.PreSteps[0].GetRunScript().GetReleaseId() != releaseID ||
+		plan.PostSteps[0].GetRunScript().GetReleaseId() != releaseID ||
+		plan.FailureSteps[0].GetRunScript().GetReleaseId() != priorReleaseID {
+		t.Fatalf(
+			"hook Release ids = %q/%q/%q",
+			plan.PreSteps[0].GetRunScript().GetReleaseId(),
+			plan.PostSteps[0].GetRunScript().GetReleaseId(),
+			plan.FailureSteps[0].GetRunScript().GetReleaseId(),
+		)
+	}
+}
+
+func TestReleasePostHookAnchorFollowsCandidateStart(t *testing.T) {
+	// Rationale: post-deploy Scripts must run after candidate start and before
+	// readiness or strategy finalization.
+	task := etcd.TaskRecord{Steps: []etcd.TaskStepRecord{
+		{ID: "step-0"}, {ID: "step-1"}, {ID: "step-2"}, {ID: "step-3"}, {ID: "step-4"},
+	}}
+	tests := []struct {
+		name     string
+		strategy domain.Strategy
+		wantID   string
+	}{
+		{name: "blue-green", strategy: domain.StrategyBlueGreen, wantID: "step-0"},
+		{name: "recreate", strategy: domain.StrategyRecreate, wantID: "step-1"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotID := releasePostHookAnchorStepID(task, 0, test.strategy)
+			if gotID != test.wantID {
+				t.Fatalf("post-hook anchor = %q, want %q", gotID, test.wantID)
+			}
+		})
 	}
 }
 

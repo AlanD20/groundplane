@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -89,9 +90,134 @@ func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 	}
 }
 
+func TestDockerScriptRuntimePreservesRunFailureAfterTypedCheckpoint(t *testing.T) {
+	t.Parallel()
+	body := []byte("echo migration\n")
+	bodyDigest := sha256.Sum256(body)
+	planDigest := sha256.Sum256([]byte("sealed failure plan"))
+	executionID, snapshotID := ids.NewULID(), ids.NewULID()
+	scriptID, stepID := ids.New(ids.KindScript), ids.New(ids.KindStep)
+	assignment := Assignment{
+		AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
+		OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
+		Plan: &agentpb.ExecutionPlan{
+			PlanHash:                append([]byte(nil), planDigest[:]...),
+			ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID}},
+		},
+		ScriptArtifacts: &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{{
+			Metadata: &agentpb.ScriptBodyArtifactMetadata{
+				ScriptExecutionId: executionID, ScriptId: scriptID, Generation: 1,
+				Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
+			},
+			Body: append([]byte(nil), body...),
+		}}},
+		ScriptCheckpoints: []*agentpb.ScriptExecutionCheckpoint{{
+			ScriptExecutionId: executionID,
+			State:             agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
+		}},
+	}
+	step := &agentpb.ExecutionStep{StepId: stepID, Payload: &agentpb.ExecutionStep_RunScript{
+		RunScript: &agentpb.RunScript{
+			ScriptExecutionId: executionID, ScriptId: scriptID, ScriptGeneration: 1,
+			RunnerSnapshotId: snapshotID,
+		},
+	}}
+	sentinel := errors.New("connect secondary network gp_net_secondary: endpoint denied")
+	events := make([]string, 0, 10)
+	runtime, err := NewDockerScriptRuntime(&checkpointOrderScriptEngine{
+		events: &events, bodyDigest: bodyDigest, runErr: sentinel,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var outcome agentpb.ScriptOutcomeReason
+	checkpoint := func(_ context.Context, request *agentpb.ScriptCheckpointRequest) error {
+		if _, err := executionplan.ValidateScriptCheckpointRequest(request); err != nil {
+			return err
+		}
+		if request.State == agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED {
+			outcome = request.GetOutcome().GetReason()
+		}
+		return nil
+	}
+	_, err = runtime.ExecuteScript(context.Background(), assignment, step, checkpoint)
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("ExecuteScript() error = %v, want wrapped runtime cause", err)
+	}
+	if outcome != agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RUNTIME_FAILURE {
+		t.Fatalf("durable Script outcome = %s", outcome)
+	}
+}
+
+func TestDockerScriptRuntimeCompletesNoServingReleaseWithoutStarting(t *testing.T) {
+	t.Parallel()
+	body := []byte("echo never-started\n")
+	bodyDigest := sha256.Sum256(body)
+	planDigest := sha256.Sum256([]byte("sealed no-serving plan"))
+	executionID, snapshotID := ids.NewULID(), ids.NewULID()
+	scriptID, stepID := ids.New(ids.KindScript), ids.New(ids.KindStep)
+	assignment := Assignment{
+		AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
+		OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
+		Plan: &agentpb.ExecutionPlan{
+			PlanHash:                append([]byte(nil), planDigest[:]...),
+			ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID}},
+		},
+		ScriptArtifacts: &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{{
+			Metadata: &agentpb.ScriptBodyArtifactMetadata{
+				ScriptExecutionId: executionID, ScriptId: scriptID, Generation: 1,
+				Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
+			},
+			Body: append([]byte(nil), body...),
+		}}},
+		ScriptCheckpoints: []*agentpb.ScriptExecutionCheckpoint{{
+			ScriptExecutionId: executionID,
+			State:             agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
+		}},
+	}
+	step := &agentpb.ExecutionStep{StepId: stepID, Payload: &agentpb.ExecutionStep_RunScript{
+		RunScript: &agentpb.RunScript{
+			ScriptExecutionId: executionID, ScriptId: scriptID, ScriptGeneration: 1,
+			RunnerSnapshotId: snapshotID,
+		},
+	}}
+	events := []string{}
+	runtime, err := NewDockerScriptRuntime(&checkpointOrderScriptEngine{events: &events, bodyDigest: bodyDigest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var outcome agentpb.ScriptOutcomeReason
+	checkpoint := func(_ context.Context, request *agentpb.ScriptCheckpointRequest) error {
+		if _, err := executionplan.ValidateScriptCheckpointRequest(request); err != nil {
+			return err
+		}
+		events = append(events, "checkpoint:"+request.State.String())
+		if request.State == agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED {
+			outcome = request.GetOutcome().GetReason()
+		}
+		return nil
+	}
+	if err := runtime.CompleteScriptWithoutStart(
+		context.Background(), assignment, step,
+		agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE, checkpoint,
+	); err != nil {
+		t.Fatalf("CompleteScriptWithoutStart() error = %v", err)
+	}
+	want := []string{
+		"checkpoint:SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED",
+		"engine:cleanup",
+		"checkpoint:SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN",
+	}
+	if outcome != agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE ||
+		!slices.Equal(events, want) {
+		t.Fatalf("outcome/events = %s/%v, want no-serving/%v", outcome, events, want)
+	}
+}
+
 type checkpointOrderScriptEngine struct {
 	events     *[]string
 	bodyDigest [sha256.Size]byte
+	runErr     error
 }
 
 func (engine *checkpointOrderScriptEngine) PrepareBody(
@@ -132,7 +258,7 @@ func (engine *checkpointOrderScriptEngine) RunContainer(
 	scriptexecution.ContainerEvidence,
 ) (scriptexecution.RunResult, error) {
 	*engine.events = append(*engine.events, "engine:run")
-	return scriptexecution.RunResult{}, nil
+	return scriptexecution.RunResult{}, engine.runErr
 }
 
 func (engine *checkpointOrderScriptEngine) Cleanup(
@@ -141,10 +267,16 @@ func (engine *checkpointOrderScriptEngine) Cleanup(
 	container *scriptexecution.ContainerEvidence,
 ) (scriptexecution.CleanupProof, error) {
 	*engine.events = append(*engine.events, "engine:cleanup")
-	return scriptexecution.CleanupProof{
-		ContainerID: container.ID, BodyDevice: body.Device, BodyInode: body.Inode, BodyLeaf: body.Leaf,
+	proof := scriptexecution.CleanupProof{
 		ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true,
-	}, nil
+	}
+	if container != nil {
+		proof.ContainerID = container.ID
+	}
+	if body != nil {
+		proof.BodyDevice, proof.BodyInode, proof.BodyLeaf = body.Device, body.Inode, body.Leaf
+	}
+	return proof, nil
 }
 
 func (engine *checkpointOrderScriptEngine) Close() error { return nil }

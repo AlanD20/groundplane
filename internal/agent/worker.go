@@ -95,6 +95,13 @@ type ScriptRuntime interface {
 		*agentpb.ExecutionStep,
 		func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 	) (int32, error)
+	CompleteScriptWithoutStart(
+		context.Context,
+		Assignment,
+		*agentpb.ExecutionStep,
+		agentpb.ScriptOutcomeReason,
+		func(context.Context, *agentpb.ScriptCheckpointRequest) error,
+	) error
 }
 
 // WorkerPool reserves at most size queued or active assignments.

@@ -42,7 +42,12 @@ const (
 	stopSeconds    = 10
 )
 
+type networkConnector interface {
+	NetworkConnect(context.Context, string, client.NetworkConnectOptions) (client.NetworkConnectResult, error)
+}
+
 type engineClient interface {
+	networkConnector
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error)
 	ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error)
@@ -177,10 +182,18 @@ func (runner *Runner) CreateContainer(
 		return scriptexecution.ContainerEvidence{}, err
 	}
 	created, err := runner.client.ContainerCreate(ctx, options)
-	if created.ID == "" {
-		if err != nil {
-			return scriptexecution.ContainerEvidence{}, operationError(ctx, "create container", err)
+	if err != nil {
+		if created.ID != "" {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+			_, cleanupErr := runner.client.ContainerRemove(
+				cleanupCtx, created.ID, client.ContainerRemoveOptions{Force: true},
+			)
+			cancel()
+			err = errors.Join(err, cleanupErr)
 		}
+		return scriptexecution.ContainerEvidence{}, operationError(ctx, "create container", err)
+	}
+	if created.ID == "" {
 		return scriptexecution.ContainerEvidence{}, errs.New(errs.KindInternal, "Script runner: Docker returned an empty container id")
 	}
 	inspected, inspectErr := runner.inspectOwnedContainer(ctx, created.ID, request, prepared)
@@ -224,6 +237,15 @@ func (runner *Runner) RunContainer(
 	if inspected.Container.State.Status != container.StateCreated &&
 		inspected.Container.State.Status != container.StateRunning {
 		return result, errs.New(errs.KindStateConflict, "Script runner: captured container has an invalid runtime state")
+	}
+	if inspected.Container.State.Status == container.StateCreated {
+		var connected map[string]*network.EndpointSettings
+		if inspected.Container.NetworkSettings != nil {
+			connected = inspected.Container.NetworkSettings.Networks
+		}
+		if err := connectSecondaryNetworks(ctx, runner.client, evidence.ID, request.Projection.Networks, connected); err != nil {
+			return result, err
+		}
 	}
 
 	attached, err := runner.client.ContainerAttach(ctx, evidence.ID, client.ContainerAttachOptions{
@@ -408,19 +430,13 @@ func createOptions(request scriptexecution.Request, bodyPath string) (client.Con
 	if err != nil {
 		return client.ContainerCreateOptions{}, err
 	}
-	networks := make(map[string]*network.EndpointSettings, len(projection.Networks))
+	networks := make(map[string]*network.EndpointSettings, 1)
 	networkMode := container.NetworkMode("none")
-	for index, item := range projection.Networks {
-		options := pairMap(item.RenderedAttachment.DriverOptions)
-		if item.RenderedAttachment.InterfaceName != "" {
-			options["com.docker.network.endpoint.ifname"] = item.RenderedAttachment.InterfaceName
-		}
-		networks[item.RenderedAttachment.DockerNetworkName] = &network.EndpointSettings{
-			DriverOpts: options, GwPriority: int(item.RenderedAttachment.Priority),
-		}
-		if index == 0 {
-			networkMode = container.NetworkMode(item.RenderedAttachment.DockerNetworkName)
-		}
+	if len(projection.Networks) != 0 {
+		primary := projection.Networks[0]
+		name := primary.RenderedAttachment.DockerNetworkName
+		networkMode = container.NetworkMode(name)
+		networks[name] = scriptEndpointSettings(primary)
 	}
 	return client.ContainerCreateOptions{
 		Name: request.Projection.Name, Platform: platform,
@@ -443,6 +459,39 @@ func createOptions(request scriptexecution.Request, bodyPath string) (client.Con
 		},
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: networks},
 	}, nil
+}
+
+func connectSecondaryNetworks(
+	ctx context.Context,
+	connector networkConnector,
+	containerID string,
+	networks []*agentpb.ScriptRunnerNetwork,
+	connected map[string]*network.EndpointSettings,
+) error {
+	for _, item := range networks[1:] {
+		name := item.RenderedAttachment.DockerNetworkName
+		if _, exists := connected[name]; exists {
+			continue
+		}
+		if _, err := connector.NetworkConnect(ctx, name, client.NetworkConnectOptions{
+			Container: containerID, EndpointConfig: scriptEndpointSettings(item),
+		}); err != nil {
+			return operationError(ctx, "connect secondary network "+name, err)
+		}
+	}
+	return nil
+}
+
+func scriptEndpointSettings(item *agentpb.ScriptRunnerNetwork) *network.EndpointSettings {
+	attachment := item.RenderedAttachment
+	options := pairMap(attachment.DriverOptions)
+	if attachment.InterfaceName != "" {
+		if options == nil {
+			options = make(map[string]string, 1)
+		}
+		options["com.docker.network.endpoint.ifname"] = attachment.InterfaceName
+	}
+	return &network.EndpointSettings{DriverOpts: options, GwPriority: int(attachment.Priority)}
 }
 
 func dockerMounts(

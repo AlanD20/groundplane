@@ -99,6 +99,7 @@ The accepted commits landed on `main` in the current checkpoint are:
 - Console API task and Service-form parity hardening (`6f2e383d`)
 - Mandatory post-compaction pipeline restoration (`0fa72a09`)
 - Complete release Script hook runtime (`767f04c7`)
+- Release Script hook ordering, recovery compensation, and serving-state authority (this commit)
 - Bounded native private acceptance topology hosting driver (`4224df75`)
 - Target-registry pull for the bounded private workload `--skip-images` driver (this status-changing commit)
 - Zero-Component backing-service aggregate transaction shape (this status-changing commit)
@@ -255,6 +256,16 @@ Each row remains subject to its required evidence and the final MVP completion
 rule in `docs/capabilities.md`.
 
 ## Active implementation lanes and unfinished evidence
+
+Release post hooks now run from the sealed candidate after start and before
+readiness, so migration-dependent healthchecks do not deadlock. Retry probes
+compensate only candidate-touched members, compensation failure suppresses
+failure hooks, and `on-failure` runners start only when final Agent serving
+evidence matches their policy-selected candidate or predecessor Release. An
+absent or ambiguous serving identity completes the durable no-start path
+without guessing. Blueprint apply still publishes Script desired state without
+executing hooks; staged Blueprint post-deploy execution is the next C21 lane
+required by the private clean-start topology.
 
 The desired-topology landing candidate cleanly replaces the transitional flat
 Zone and topology projection authority. Environment revisions now carry the

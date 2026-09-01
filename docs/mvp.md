@@ -1532,9 +1532,14 @@ secrets, and the router): `{ slug, service, script, when }` under one immutable
 `x-gp-scripts` reconciliation key. The `script` field holds the **full script
 body** - one line or many, entered in a multi-line editor - executed against a
 singleton Service in a task-scoped one-off container. Scripts double as
-**hooks**: `migrate` is a `pre-deploy` Script, a `post-deploy` Script can run a
-preflight, and `pre/post-rollback` plus `on-failure` hooks cover rollbacks and
-failed deploys/rollbacks. ADR 0040 owns the execution, cleanup, and retry
+**hooks**: pre hooks finish before candidate mutation; post hooks run after the
+candidate is applied and started but before readiness observation and the
+strategy's proxy switch or recreate acknowledgement. This permits a
+migration-dependent healthcheck without deadlocking the Release.
+`pre/post-rollback` plus `on-failure` hooks cover rollbacks and failed
+deploys/rollbacks. Blueprint apply publishes Script desired state but does not
+execute hooks; explicit Deploy, Rollback, or manual Run operations use the typed
+Script execution machinery. ADR 0040 owns the execution, cleanup, and retry
 contract. ADR 0062 owns prepared immutable-input reference generations and
 their bounded release.
 

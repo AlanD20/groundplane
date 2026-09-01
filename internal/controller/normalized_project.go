@@ -132,12 +132,12 @@ func loadNormalizedEnvironmentProject(
 	}
 	for name, service := range project.Services {
 		stripControllerLabels(service.Labels)
-		delete(service.Extensions, composeResourceExtension)
+		service.Extensions = stripControllerServiceExtensions(service.Extensions)
 		project.Services[name] = service
 	}
 	for name, service := range project.DisabledServices {
 		stripControllerLabels(service.Labels)
-		delete(service.Extensions, composeResourceExtension)
+		service.Extensions = stripControllerServiceExtensions(service.Extensions)
 		project.DisabledServices[name] = service
 	}
 	ownedNetworks := make(map[string]struct{}, len(projection.DesiredZones))
@@ -171,6 +171,20 @@ func loadNormalizedEnvironmentProject(
 		project.Volumes[name] = volume
 	}
 	return project, nil
+}
+
+func stripControllerServiceExtensions(extensions composetypes.Extensions) composetypes.Extensions {
+	consumed := false
+	for _, key := range []string{composeResourceExtension, "x-gp-release"} {
+		if _, recognized := extensions[key]; recognized {
+			delete(extensions, key)
+			consumed = true
+		}
+	}
+	if consumed && len(extensions) == 0 {
+		return nil
+	}
+	return extensions
 }
 
 func stripControllerLabels(labels composetypes.Labels) {

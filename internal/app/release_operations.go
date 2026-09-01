@@ -335,15 +335,17 @@ func (service *releaseOperationService) deployCandidate(
 	if tag != requestedTag {
 		return releaseCandidateInput{}, errs.New(errs.KindValidationFailed, "release tag must not contain surrounding whitespace")
 	}
-	if tag == "" && hasServing {
-		tag = serving.Tag
+	currentTag := ""
+	if hasServing {
+		currentTag = serving.Tag
 	}
-	image, authoredTag, digest, err := releaseImageWithTag(planning.Service.Record.Desired.Image, tag)
+	image, tag, digest, err := releaseImageWithTag(
+		planning.Service.Record.Desired.Image,
+		tag,
+		currentTag,
+	)
 	if err != nil {
 		return releaseCandidateInput{}, err
-	}
-	if tag == "" {
-		tag = authoredTag
 	}
 	strategy, err := releaseStrategy(requestedStrategy, planning.Service.Record.Desired.Strategy)
 	if err != nil {
@@ -738,7 +740,7 @@ func releaseOperationResolution(
 	}
 }
 
-func releaseImageWithTag(value string, requested string) (string, string, string, error) {
+func releaseImageWithTag(value string, requested string, current string) (string, string, string, error) {
 	named, err := reference.ParseNormalizedNamed(value)
 	if err != nil {
 		return "", "", "", errs.New(errs.KindValidationFailed, "service image reference is invalid")
@@ -748,18 +750,31 @@ func releaseImageWithTag(value string, requested string) (string, string, string
 		digest = digested.Digest().Encoded()
 	}
 	tag := requested
+	preserveDigest := false
+	if tag == "" && current != "" {
+		tag = current
+		_, tagged := named.(reference.NamedTagged)
+		preserveDigest = digest != "" && !tagged
+	}
 	if tag == "" {
 		tagged, ok := named.(reference.NamedTagged)
-		if !ok {
+		if ok {
+			tag = tagged.Tag()
+		} else if digest != "" {
+			tag = "sha-" + digest
+			preserveDigest = true
+		} else {
 			return "", "", "", errs.New(
 				errs.KindValidationFailed,
 				"release tag is required when the Service image has no tag",
 			)
 		}
-		tag = tagged.Tag()
 	}
 	if strings.ContainsAny(tag, "@/\\") || strings.TrimSpace(tag) != tag || tag == "" {
 		return "", "", "", errs.New(errs.KindValidationFailed, "release image tag is invalid")
+	}
+	if preserveDigest {
+		return reference.FamiliarString(named), tag, digest, nil
 	}
 	tagged, err := reference.WithTag(reference.TrimNamed(named), tag)
 	if err != nil {

@@ -89,6 +89,16 @@ type Intent struct {
 	OriginatingTaskID        string        `json:"originating_task_id"`
 }
 
+// FailureHookTargetReleaseID returns the only sealed Release definition that
+// an on-failure Script may use for this operation. Runtime serving evidence
+// must still confirm this identity before the runner may start.
+func FailureHookTargetReleaseID(intent Intent) string {
+	if intent.OnFailure == OnFailureSwitchBack && intent.PriorServingReleaseID != "" {
+		return intent.PriorServingReleaseID
+	}
+	return intent.ID
+}
+
 type Attempt struct {
 	ID        string    `json:"id"`
 	TaskID    string    `json:"task_id"`

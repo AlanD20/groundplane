@@ -39,9 +39,9 @@ func (repository *ScriptRepository) LoadExecutionSources(
 	return repository.loadExecutionSources(ctx, ledger, scriptID, "", 0)
 }
 
-// LoadReleaseHookExecutionSources binds a Script to the staged candidate
-// Release at one exact revision. It never substitutes the currently serving
-// Release for an automatic hook.
+// LoadReleaseHookExecutionSources binds a Script to one policy-selected sealed
+// Release at one exact revision. It never substitutes mutable serving state or
+// desired image text for the supplied Release identity.
 func (repository *ScriptRepository) LoadReleaseHookExecutionSources(
 	ctx context.Context,
 	ledger *ReleaseLedger,

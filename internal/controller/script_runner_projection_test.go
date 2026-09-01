@@ -1,10 +1,33 @@
 package controller
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
+
+func TestValidateScriptRunnerReleaseSourceAllowsStagedPinnedCandidate(t *testing.T) {
+	// Rationale: lifecycle hooks are authorized from the staged candidate
+	// before it can become the current successful Release.
+	image := "registry.example.invalid/app@sha256:" + strings.Repeat("a", 64)
+	sources := etcd.ScriptExecutionSources{
+		Release: etcd.CurrentSuccessfulRelease{},
+		RenderInput: etcd.Versioned[etcd.ReleaseRenderInput]{Record: etcd.ReleaseRenderInput{
+			Image: image,
+			Projection: etcd.EnvironmentComposeProjection{
+				RevisionID: "task-staged", RenderGeneration: 1,
+			},
+		}},
+	}
+	sources.Release.Intent.Image = image
+
+	if err := validateScriptRunnerReleaseSource(sources); err != nil {
+		t.Fatalf("validateScriptRunnerReleaseSource() error = %v", err)
+	}
+}
 
 // Rationale: absent unsupported Compose fields are valid because they carry no
 // authored intent; a zero-value service and an empty deploy placement must pass.
@@ -28,6 +51,82 @@ func TestValidateScriptServiceDispositionAllowsMissingFields(t *testing.T) {
 				t.Fatalf("validateScriptServiceDisposition() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestStripControllerServiceExtensionsConsumesRecognizedMetadataOnly(t *testing.T) {
+	// Rationale: compose-go retains projected Groundplane metadata in its
+	// extension map; typed resource/release fields are already captured, while
+	// every unknown extension must remain visible to closed-runner validation.
+	service := composetypes.ServiceConfig{Extensions: composetypes.Extensions{
+		composeResourceExtension: map[string]any{"id": "svc_exact"},
+		"x-gp-release":          map[string]any{"default_strategy": "recreate"},
+	}}
+	service.Extensions = stripControllerServiceExtensions(service.Extensions)
+	if service.Extensions != nil {
+		t.Fatalf("normalized extensions = %#v, want nil", service.Extensions)
+	}
+	if err := validateScriptServiceDisposition(service); err != nil {
+		t.Fatalf("validateScriptServiceDisposition() error = %v", err)
+	}
+
+	withUnknown := composetypes.ServiceConfig{Extensions: composetypes.Extensions{
+		"x-gp-release": map[string]any{"default_strategy": "recreate"},
+		"x-authored":   map[string]any{},
+	}}
+	withUnknown.Extensions = stripControllerServiceExtensions(withUnknown.Extensions)
+	if withUnknown.Extensions == nil || len(withUnknown.Extensions) != 1 {
+		t.Fatalf("unknown extension normalized away: %#v", withUnknown.Extensions)
+	}
+	if err := validateScriptServiceDisposition(withUnknown); err == nil {
+		t.Fatal("validateScriptServiceDisposition() accepted unknown extension")
+	}
+}
+
+func TestProjectScriptNetworksOmitsServiceEndpointIdentity(t *testing.T) {
+	// Rationale: one-off runners join the Service's networks but must not claim
+	// its aliases, static addresses, link-local addresses, MAC, or gateway role.
+	const networkID = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	sources := etcd.ScriptExecutionSources{
+		DesiredProjection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
+			Record: etcd.EnvironmentComposeProjection{DesiredZones: []etcd.EnvironmentZoneProjection{{
+				Desired: core.Zone{ID: networkID, Name: "backend"},
+			}}},
+		},
+		Networks: []etcd.Versioned[etcd.ZoneRecord]{{
+			Record: etcd.ZoneRecord{Desired: core.Zone{ID: networkID, Name: "backend"}},
+			Revision: 7,
+		}},
+	}
+	config := &composetypes.ServiceNetworkConfig{
+		Aliases:         []string{"app-api"},
+		GatewayPriority: 100,
+		Ipv4Address:     "10.20.0.10",
+		Ipv6Address:     "fd00::10",
+		LinkLocalIPs:    []string{"169.254.10.10"},
+		MacAddress:      "02:42:ac:11:00:02",
+		DriverOpts:      map[string]string{"com.example.safe": "value"},
+		InterfaceName:   "eth9",
+		Priority:        25,
+	}
+	service := composetypes.ServiceConfig{Networks: map[string]*composetypes.ServiceNetworkConfig{
+		"backend": config,
+	}}
+
+	projected, err := projectScriptNetworks(service, sources)
+	if err != nil {
+		t.Fatalf("projectScriptNetworks() error = %v", err)
+	}
+	if len(projected) != 1 || projected[0].NetworkId != networkID ||
+		projected[0].RenderedAttachment.InterfaceName != "eth9" ||
+		projected[0].RenderedAttachment.Priority != 25 ||
+		len(projected[0].RenderedAttachment.DriverOptions) != 1 {
+		t.Fatalf("projected runner network = %#v", projected)
+	}
+
+	config.Extensions = composetypes.Extensions{"x-unsafe": map[string]any{}}
+	if _, err := projectScriptNetworks(service, sources); err == nil {
+		t.Fatal("projectScriptNetworks() accepted unknown endpoint extension")
 	}
 }
 
