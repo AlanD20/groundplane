@@ -406,8 +406,12 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			{Key: componentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
 			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
-			{Key: environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID), ModRevision: state.Values[2].ModRevision},
 		},
+	}
+	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
+		change.conditions = append(change.conditions, Condition{
+			Key: environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID), ModRevision: state.Values[2].ModRevision,
+		})
 	}
 	for index, candidate := range intent.Candidates {
 		value := state.Values[index+3]
@@ -566,6 +570,15 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		Mutation{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	)
 	return change, nil
+}
+
+func componentTaskAcknowledgementRequiresBlueprintRootCondition(
+	task TaskRecord,
+	terminalStatus TaskStatus,
+	environmentID string,
+) bool {
+	return terminalStatus != TaskStatusCompleted ||
+		task.Params[TaskMaterializationEnvironmentParam] != environmentID
 }
 
 func (repository *TaskRepository) validateComponentTaskAcknowledgementReplay(

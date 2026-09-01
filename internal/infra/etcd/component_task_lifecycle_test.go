@@ -611,3 +611,26 @@ func readComponentTaskRegistry(
 	}
 	return registry
 }
+
+func TestComponentTaskAcknowledgementProjectionRootConditionOwnership(t *testing.T) {
+	environmentID := "environment_01M1DRGWFJ7W02MY83A4XZ4R4F"
+	tests := []struct {
+		name          string
+		status        TaskStatus
+		materializes  string
+		wantCondition bool
+	}{
+		{name: "successful materialization delegates condition", status: TaskStatusCompleted, materializes: environmentID},
+		{name: "successful non-materialization retains condition", status: TaskStatusCompleted, wantCondition: true},
+		{name: "failed materialization retains condition", status: TaskStatusFailed, materializes: environmentID, wantCondition: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			task := TaskRecord{Params: map[string]string{TaskMaterializationEnvironmentParam: test.materializes}}
+			got := componentTaskAcknowledgementRequiresBlueprintRootCondition(task, test.status, environmentID)
+			if got != test.wantCondition {
+				t.Fatalf("componentTaskAcknowledgementRequiresBlueprintRootCondition() = %t, want %t", got, test.wantCondition)
+			}
+		})
+	}
+}
