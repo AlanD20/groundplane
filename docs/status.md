@@ -92,6 +92,7 @@ The accepted commits landed on `main` in the current checkpoint are:
 - Sealed inverse Compose lifecycle compensation (this status-changing commit)
 - CoreDNS effective parsed-configuration observation proof (this status-changing commit)
 - CoreDNS full-template authoring through the existing config vertical (this status-changing commit)
+- Host Console startup/runtime configuration boundary (this status-changing commit)
 - Blueprint Script apply-wins regression proof (`b71d6054`)
 - Fixed-snapshot HTTP Route provider planning (`3884d075`)
 - Console live release projection and task-state honesty (`11cfff96`)

@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeftRight, Clock, Cpu, Database, HardDrive, MemoryStick, Server } from 'lucide-react'
+import { ArrowLeftRight, Clock, Cpu, Database, HardDrive, MemoryStick, Server, Settings2 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -76,6 +76,27 @@ export default function PlatformHostPage() {
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings2 className="size-4 text-muted-foreground" /> Controller startup configuration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              <p className="text-muted-foreground">
+                Deployment-managed startup configuration is loaded from the Controller host when the Controller starts.
+              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+                <span className="font-mono text-xs">/etc/groundplane/controller.yaml</span>
+                <span className="text-xs text-muted-foreground">Controller restart required</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This configuration is not editable through the Console, API, or ordinary CLI in the MVP. Agent runtime
+                configuration is managed separately below.
+              </p>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -219,34 +240,6 @@ export default function PlatformHostPage() {
         </CardContent>
       </Card>
 
-      {/* Encryption at rest + DR */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Encryption at rest + disaster recovery</CardTitle>
-        </CardHeader>
-        <CardContent className="flex max-w-3xl flex-col gap-2 text-sm text-muted-foreground">
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="font-mono text-xs">/etc/groundplane/controller.age</span>
-            <span className="font-mono text-xs">0600 · root-only</span>
-          </div>
-          <p>
-            The Controller runs as root; this key wraps every secret value before it lands in etcd — no other user or
-            service on the host can read the secret store. Only a root compromise exposes it. Each environment
-            additionally gets its own age keypair for backup encryption (Backups tab): backups encrypt with the public
-            recipient, and the private identity is stored under this same wrap, revealed once and exported for disaster
-            recovery.
-          </p>
-          <div className="rounded-lg border border-border bg-surface px-3 py-2">
-            <p className="text-xs">
-              <span className="font-medium text-foreground">Everything is etcd.</span> Every source of truth lives in
-              etcd; Corefiles, Caddyfiles, env files, resolv.conf and compose projects are all re-rendered from it by
-              the reconcile loop. <span className="font-medium text-foreground">DR export = etcd snapshot +
-              controller.age</span> — importing both on a fresh host restores the entire host&apos;s state, secrets
-              included. The snapshot alone restores configs but none of the secret values.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
