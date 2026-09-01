@@ -439,7 +439,7 @@ func taskPruningAttachRenderInput(now time.Time, planID string) AttachTaskRender
 		BackingServiceID:    ids.NewAt(ids.KindService, now, 1714),
 		BackingProjectID:    ids.NewAt(ids.KindProject, now, 1718),
 		AdapterKey:          "manual",
-		BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 1715),
+		DesiredRevisionID:   ids.NewAt(ids.KindTask, now, 1715),
 		ArtifactID:          ids.NewAt(ids.KindConfig, now, 1716),
 		RenderGeneration:    1,
 		Services: []AttachTaskServiceSnapshot{

@@ -153,14 +153,14 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	pinned, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
 		ctx,
 		current.Record.EnvironmentID,
-		renderInput.Record.BlueprintRevisionID,
+		renderInput.Record.DesiredRevisionID,
 	)
 	if err != nil {
 		return nil, err
 	}
 	projection := pinned.Record
 	if !found || projection.EnvironmentID != current.Record.EnvironmentID ||
-		projection.RevisionID != renderInput.Record.BlueprintRevisionID ||
+		projection.RevisionID != renderInput.Record.DesiredRevisionID ||
 		projection.RenderGeneration != renderInput.Record.RenderGeneration ||
 		!slices.Equal(attachPlanServiceSnapshots(projection.DesiredServices), renderInput.Record.Services) ||
 		!slices.Equal(attachPlanOwnedNetworkSnapshots(projection.DesiredZones), renderInput.Record.Networks) ||
@@ -178,7 +178,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 			EnvironmentName:     renderInput.Record.EnvironmentName,
 			AuthorizedVolumeDir: renderInput.Record.AuthorizedVolumeDir,
 		},
-		renderInput.Record.BlueprintRevisionID,
+		renderInput.Record.DesiredRevisionID,
 		renderInput.Record.ArtifactID,
 		projection,
 		attachNetworkTransform(renderInput.Record),

@@ -50,7 +50,7 @@ func TestBuildAttachTaskRenderInputCreatesCompleteNetworkUnion(t *testing.T) {
 		input.NetworkJoins[0].ServiceIDs[1] != fixture.workerID {
 		t.Fatalf("buildAttachTaskRenderInput() joins = %#v", input.NetworkJoins)
 	}
-	if input.PlanID != fixture.createTask.PlanID || input.BlueprintRevisionID != fixture.revisionID ||
+	if input.PlanID != fixture.createTask.PlanID || input.DesiredRevisionID != fixture.revisionID ||
 		input.ArtifactID != fixture.artifactID || input.BackingServiceID != fixture.backingServiceID {
 		t.Fatalf("buildAttachTaskRenderInput() identity = %#v", input)
 	}

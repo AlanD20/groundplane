@@ -209,7 +209,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		BackingServiceID:    backingServiceID,
 		BackingProjectID:    record.BackingProjectID,
 		AdapterKey:          adapterKey,
-		BlueprintRevisionID: reader.revision.RevisionID,
+		DesiredRevisionID:   reader.revision.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, now, 21),
 		RenderGeneration:    reader.projection.RenderGeneration,
 		Services: []etcd.AttachTaskServiceSnapshot{{

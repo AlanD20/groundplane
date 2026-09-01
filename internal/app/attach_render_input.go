@@ -106,7 +106,7 @@ func buildAttachTaskRenderInput(
 		BackingServiceID:       record.BackingServiceID,
 		BackingProjectID:       record.BackingProjectID,
 		AdapterKey:             scope.BackingService.Record.Desired.Adapter,
-		BlueprintRevisionID:    scope.DesiredHead.Record.RevisionID,
+		DesiredRevisionID:      scope.DesiredHead.Record.RevisionID,
 		ArtifactID:             artifactID,
 		RenderGeneration:       scope.ComposeProjection.Record.RenderGeneration,
 		Services:               attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),

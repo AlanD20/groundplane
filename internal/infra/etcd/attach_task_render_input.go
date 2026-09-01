@@ -45,7 +45,7 @@ type AttachTaskRenderInput struct {
 	BackingServiceID    string                           `json:"backing_service_id"`
 	BackingProjectID    string                           `json:"backing_project_id"`
 	AdapterKey          string                           `json:"adapter_key"`
-	BlueprintRevisionID string                           `json:"blueprint_revision_id"`
+	DesiredRevisionID   string                           `json:"desired_revision_id"`
 	ArtifactID          string                           `json:"artifact_id"`
 	RenderGeneration    uint64                           `json:"render_generation"`
 	Services            []AttachTaskServiceSnapshot      `json:"services"`
@@ -118,7 +118,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 		validateStableID(ids.KindEnvironment, input.EnvironmentID) != nil ||
 		validateStableID(ids.KindService, input.BackingServiceID) != nil ||
 		validateStableID(ids.KindProject, input.BackingProjectID) != nil ||
-		validateStableID(ids.KindTask, input.BlueprintRevisionID) != nil ||
+		validateStableID(ids.KindTask, input.DesiredRevisionID) != nil ||
 		validateStableID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input identity is invalid")
 	}
@@ -219,7 +219,7 @@ func validateAttachTaskRenderInputScope(
 		input.BackingServiceID != scope.BackingService.Record.Desired.ID ||
 		input.BackingProjectID != record.BackingProjectID ||
 		input.AdapterKey != scope.BackingService.Record.Desired.Adapter ||
-		input.BlueprintRevisionID != scope.DesiredHead.Record.RevisionID ||
+		input.DesiredRevisionID != scope.DesiredHead.Record.RevisionID ||
 		input.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
 		input.RenderGeneration != uint64(task.RenderGeneration) ||
 		!slices.Equal(input.Services, attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices)) ||

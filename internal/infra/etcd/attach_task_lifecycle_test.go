@@ -861,7 +861,7 @@ func attachDetachRaceEnvelope(
 		BackingServiceID:    scope.BackingService.Record.Desired.ID,
 		BackingProjectID:    current.Record.BackingProjectID,
 		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
-		BlueprintRevisionID: scope.DesiredHead.Record.RevisionID,
+		DesiredRevisionID:   scope.DesiredHead.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, createdAt, 943),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
