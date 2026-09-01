@@ -373,10 +373,12 @@ The Controller parses the root envelope, resolves stable ownership, then loads
 the ordered sources through `compose-go` using only the closed namespace. It
 stages the canonical audit stream and lossless normalized projection as
 immutable `GDR1` chunks owned by one candidate revision. Publication changes
-only the Environment desired head and creates the revision-pinned Task and
-replay authority. Canonical Compose, generated files, and secret
-materializations are recreated from that revision and are never separate
-desired authority.
+the Environment desired head and creates one Environment update Task, one
+operation id, and one Agent assignment for the sealed candidate plan.
+Canonical Compose, generated files, and secret materializations are recreated
+from that revision and are never separate desired authority. The apply Task is
+the sole execution for the apply and creates no child Deploy Task, hidden
+Deploy request, second operation, or new operator action or endpoint.
 
 A Blueprint apply is non-destructive. If the submitted bundle omits a
 currently desired Service, Zone, Volume, or other owned resource, the candidate
@@ -386,6 +388,48 @@ Console actions. If the Controller cannot preserve an omitted resource without
 ambiguity, apply fails with `resource.in_use` and publishes nothing. Only the
 explicit Remove workflow for that resource may publish a revision without it.
 Omission never implies deletion or rename.
+
+### Apply execution contract
+
+The Controller derives candidate Releases only from the sealed candidate
+projection. Implicit candidate selection includes only newly introduced
+singleton Services and materially changed existing singleton Services whose
+effective `runtime_intent` is `running`. Stopped or absent existing Services
+remain stopped or absent, retain their desired changes for a later explicit
+Release action, and are not implicitly applied or hooked. A Service that is a
+Release Group member is excluded from implicit Blueprint candidate Release and
+hook execution; Blueprint publishes its desired change only, while explicit
+group Deploy/Rollback retains declared serial order and `on_failure` policy.
+
+Matching `post-deploy` Scripts are selected from the same sealed Service and
+Release inputs. Services execute in sealed dependency-topology order, breaking
+incomparable ties by current Service slug bytes; Scripts for each Service
+execute by current Script slug bytes. Manual Scripts never execute during
+Blueprint apply. The complete apply selection is limited to 16 hook executions
+and 1,048,576 aggregate UTF-8 body bytes; a violation is rejected before Task
+publication.
+
+The single Agent assignment carries these phases in order: materialize sealed
+files and entries; ensure candidate Volume leaves; provision or reconcile
+Attaches and external network joins; apply and start candidate workloads
+without readiness; execute `RunScript`; execute `WaitHealthy`; and execute the
+sealed registered Component action. Compose apply does not intrinsically wait.
+
+Only after the assignment succeeds does the Controller perform the
+Controller-only atomic promotion of candidate Releases, the applied projection,
+Component state, and Routes. A failure must prove exact predecessor restoration
+or exact first-candidate absence before terminalizing; the desired head is never
+rolled back, and an unproven candidate never becomes a serving Release or
+Route. If proof is unavailable, the Task remains nonterminal/recovery-required.
+Retry transfers the operation only when every selected Script execution is
+durably `not_started`; `start_authorized` or later, or unknown Script state,
+returns `script.retry_unsafe` through the existing retry action and recovery
+continues the authorized execution.
+
+The existing Task detail step projection records each selected Script's
+captured non-secret id and slug, while existing events carry its `step_id`
+transitions; the parent Task terminal state records success or failure. This is
+the durable evidence link, with no Script body or secret value exposed.
 
 ### Use native runtime primitives
 
@@ -425,10 +469,11 @@ configs:
 ```
 
 `deploy.replicas` is the native desired replica count. The Agent invokes
-Compose with that model and waits for the requested services to be running or
-healthy. The Controller still stores the desired count, observes each
-replica, and reconciles out-of-band removal because local Compose only
-converges when invoked; it is not a long-running replica controller.
+Compose with that model; Compose apply does not intrinsically wait for running
+or healthy state. A typed plan adds `WaitHealthy` when readiness is required.
+The Controller still stores the desired count, observes each replica, and
+reconciles out-of-band removal because local Compose only converges when
+invoked; it is not a long-running replica controller.
 
 Every replica receives service `labels`. Groundplane uses its own
 `com.groundplane.*` namespace for managed identity, logical service, slot,
@@ -742,9 +787,12 @@ uses the same procedure with the previous successful tag. No policy reverses
 database migrations automatically. Recreate uses the same hook boundary:
 remove the prior workload, apply and start the candidate, run matching
 `post-deploy` Scripts, observe readiness, then acknowledge the recreate.
-Blueprint apply publishes Script resources but does not execute hooks; an
-explicit Deploy, Rollback, or manual Run operation invokes the typed Script
-execution path.
+Blueprint apply uses the Apply execution contract above. The plan applies and
+starts each candidate without readiness, runs matching `post-deploy` Scripts,
+waits for health only at `WaitHealthy`, then performs Component actions before
+Controller-only atomic promotion. Explicit Deploy and Rollback retain their
+typed hook paths, and explicit group Deploy/Rollback retain declared serial
+order and `on_failure` policy.
 
 `x-gp-adapter` belongs on a backing service. Networks, healthcheck, resources,
 volumes, and restart policy remain native Compose fields. The managed
@@ -1203,6 +1251,12 @@ For each service, the Controller combines the desired service definition with
 the current successful release record. The final Compose `image` is therefore
 the current image name and tag, even when a deploy or rollback changed it.
 The release record remains the source used to render it.
+
+This is the steady-state rule. An active Deploy, Rollback, or Blueprint apply
+uses only its exact sealed candidate or predecessor Release and projection
+until terminal promotion; it never recomputes a plan from a moving current
+pointer. Successful or serving authority changes only in that terminal
+promotion.
 
 A Service first introduced by a bundle starts with the Controller-owned
 `runtime_intent` `running`. Reconciliation replaces only the desired Service

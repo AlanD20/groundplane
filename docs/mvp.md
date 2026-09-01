@@ -1440,6 +1440,66 @@ returns a typed create/update/retained diff without writing state, and `PUT
 reconcile Task. Validate and apply require `If-Match` from the loaded Blueprint
 revision so a stale editor never overwrites newer desired state.
 
+### Blueprint apply reconciliation
+
+A successful Blueprint apply is one Environment update Task with one operation
+id and one Agent assignment carrying the complete sealed execution plan. It is
+not a desired-state-only publication: the apply Task is the sole execution for
+that apply. It creates no child Deploy Task, hidden Deploy request, second
+operation, or new operator action or endpoint.
+
+From the sealed candidate projection, the Controller implicitly selects only
+newly introduced singleton Services and materially changed existing singleton
+Services whose effective `runtime_intent` is `running`, and derives their
+candidate Releases solely from that projection. An existing Service whose
+intent is `stopped` or `absent` remains stopped or absent: its desired change
+is retained for a later explicit Release action and is not implicitly applied
+or hooked. A Service that is a member of a Release Group is also excluded from
+implicit Blueprint candidate Release and hook execution; Blueprint publishes
+its desired change only, while explicit group Deploy/Rollback retains its
+declared serial order and `on_failure` policy.
+
+Matching `post-deploy` Scripts are selected against the sealed candidate
+Service and applicable Release inputs. Within the selected set, Services
+follow the sealed dependency topology with current Service slug bytes as the
+tie-break, and Scripts for each Service follow current Script slug bytes.
+Manual Scripts never execute during apply. The complete apply selection is
+limited to 16 hook executions and 1,048,576 aggregate UTF-8 body bytes; a
+violation is rejected before Task publication.
+
+The one Agent assignment executes these phases in order:
+
+1. materialize the sealed environment files and file entries;
+2. ensure the candidate Volume leaves;
+3. provision or reconcile Attach resources and external network joins;
+4. apply and start candidate workloads without a readiness gate;
+5. execute each selected `RunScript` step;
+6. execute `WaitHealthy` for each candidate;
+7. execute the sealed registered Component action.
+
+Compose apply does not intrinsically wait; readiness occurs only when the
+typed plan reaches its `WaitHealthy` step. Only after the assignment succeeds
+does the Controller perform the Controller-only atomic promotion. That
+transaction promotes the candidate Releases, applied Environment projection,
+Component state, and Routes together, then records the parent Task success.
+Before promotion, a failure must prove exact predecessor restoration, or exact
+first-candidate absence when no predecessor exists. The desired head is never
+rolled back, and no failed or unproven candidate may be published as a serving
+Release or Route. If the proof is not available, the Task remains
+nonterminal/recovery-required rather than claiming success or false serving
+state.
+
+Retry transfers the same operation only while every selected Script execution
+is durably `not_started`. If any Script reaches `start_authorized` or later, or
+its state is unknown, the existing retry action returns `script.retry_unsafe`;
+recovery continues the authorized execution instead of starting a replacement.
+
+The existing Task detail step projection records the captured non-secret Script
+id and Script slug for every selected `RunScript` step. Existing events carry
+that step's `step_id` transitions, and the same parent Task detail carries the
+terminal success or failure. This durable evidence joins each selected Script
+to its parent Blueprint Task without exposing bodies or secret values.
+
 Blueprint input is a closed bundle: one root envelope, ordered Compose source
 paths, a closed relative file namespace, and an explicit non-secret
 interpolation map. The Controller never reads an implicit `.env`, process
@@ -1537,11 +1597,33 @@ candidate is applied and started but before readiness observation and the
 strategy's proxy switch or recreate acknowledgement. This permits a
 migration-dependent healthcheck without deadlocking the Release.
 `pre/post-rollback` plus `on-failure` hooks cover rollbacks and failed
-deploys/rollbacks. Blueprint apply publishes Script desired state but does not
-execute hooks; explicit Deploy, Rollback, or manual Run operations use the typed
-Script execution machinery. ADR 0040 owns the execution, cleanup, and retry
-contract. ADR 0062 owns prepared immutable-input reference generations and
-their bounded release.
+deploys/rollbacks. One Blueprint apply publishes Script desired state and
+implicitly selects only a newly introduced singleton Service or a materially
+changed existing singleton Service whose effective `runtime_intent` is
+`running`; stopped or absent existing Services retain desired changes for a
+later explicit Release action and are not implicitly applied or hooked. Release
+Group members are excluded from implicit candidate Release and hook execution;
+explicit group Deploy/Rollback retains declared serial order and `on_failure`.
+For the remaining selected Services, the apply creates candidate Releases from
+the sealed candidate projection and executes matching `post-deploy` Scripts in
+the same Environment update Task, operation id, and Agent assignment. Services
+run in dependency-topological order with slug-byte ordering as the tie breaker;
+each Service's Scripts run in slug-byte order. Manual Scripts do not execute
+during apply. The complete apply selection is limited to 16 hook executions and
+1,048,576 aggregate UTF-8 body bytes, rejected before Task publication.
+
+The sealed Blueprint plan orders materialization, managed-Volume ensure, Attach
+procedures, candidate workload apply/start without readiness, `RunScript`,
+`WaitHealthy`, and Component actions. Success atomically promotes the candidate
+Releases, applied projection, Components, and Route observations. Failure never
+rolls back the desired head and is accepted only after proving exact predecessor
+restoration or first-candidate absence; it never publishes a false serving
+Release or served Route. Task detail and events expose non-secret durable Script
+identity and terminal metadata linked to the parent Blueprint Task. Retry may
+transfer the operation only while every selected execution is durably
+`not_started`; `start_authorized` or an unknown state rejects with
+`script.retry_unsafe`. ADR 0040 owns execution, cleanup, and retry. ADR 0062
+owns prepared immutable-input reference generations and their bounded release.
 
 Every prepared, active, retry-open, or releasing Script execution holds exact
 references to its body, runner snapshot, Service, Release, Networks, Volumes,
@@ -1551,10 +1633,13 @@ may publish a new immutable generation but never overwrites or prunes the
 referenced generation. This active-operation fence is distinct from an ordinary
 late-bound desired Secret reference, which remains non-blocking.
 
-Every Script runner consumes the successful Release's immutable image and
-Service definition plus typed env/file Entry bindings from one fixed-revision
-applied Environment projection. Private assignment artifacts carry the exact
-pinned Entry-generation bytes. The Controller durably acknowledges
+Every Script runner consumes the applicable sealed Release's immutable image
+and Service definition plus typed env/file Entry bindings from one fixed-
+revision projection. Manual runs use the current successful Release; active
+Deploy, Rollback, and Blueprint apply plans use their exact sealed candidate or
+predecessor Release and candidate or applied projection. Private assignment
+artifacts carry the exact pinned Entry-generation bytes. The Controller
+durably acknowledges
 `start_authorized`, `body_prepared`, `container_created`, `outcome_recorded`,
 and `cleanup_proven`; an Agent reconnect resumes that execution rather than
 starting a replacement. Recovery may inspect only the deterministic runner

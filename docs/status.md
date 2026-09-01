@@ -280,9 +280,13 @@ sealed `blueprint_apply` operation across the Controller/Agent boundary;
 ordinary reconciliation cannot authorize Script execution, and every
 Blueprint post-deploy Script must follow the exact candidate Compose apply with
 matching Service, Release, and image authority. Blueprint apply still publishes
-Script desired state without creating candidate Releases or executing hooks;
-candidate Release publication and staged Blueprint post-deploy execution are
-the next C21 lane required by the private clean-start topology.
+Script desired state without creating candidate Releases or executing hooks.
+The authoritative contract now requires the one Blueprint Environment update
+Task to publish and execute bounded post-deploy Scripts for eligible running
+singleton Services, while preserving stopped/absent intent and excluding
+Release Group members. Candidate Release/Script publication and terminal
+promotion, compensation, and retry remain the next C21 implementation lanes
+required by the private clean-start topology.
 
 The desired-topology landing candidate cleanly replaces the transitional flat
 Zone and topology projection authority. Environment revisions now carry the

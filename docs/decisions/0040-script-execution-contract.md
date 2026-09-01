@@ -172,12 +172,15 @@ changing the operation, execution ids, plan, or generation references.
 An Environment may own at most 64 non-tombstoned Scripts. Script creation and
 Blueprint apply reject a 65th Script before mutation.
 
-A release operation selects at most 16 hook executions in total across
+A release operation, including one Blueprint apply selection, selects at most
+16 hook executions in total across
 pre-operation, post-operation, and possible `on-failure` phases. The aggregate
 UTF-8 body bytes of all selected hook executions must not exceed 1,048,576
 bytes. A manual run selects exactly one execution. The deterministic serialized
 sealed execution plan, including private Script body artifacts, must not exceed
 4,194,304 bytes. A violated bound fails validation before Task publication.
+The same 16-execution and 1,048,576-byte limits apply to the complete Blueprint
+apply selection and reject an over-bound apply before Task publication.
 
 Blueprint reconciliation stages one complete next Script-set generation. It
 writes at most 16 Script or body-generation records per batch and limits every
@@ -235,8 +238,9 @@ The three run surfaces are exactly:
 - Console: the Script row Run action, which submits the same request and opens
   the ordinary Task detail surface.
 
-Automatic hooks are steps of their parent Deploy or Rollback Task, not
-secondary Tasks or additional operator actions.
+Automatic hooks are steps of their parent Deploy or Rollback Task, or of the
+one Blueprint Environment update Task, never secondary Tasks or additional
+operator actions.
 
 ### One typed plan payload
 
@@ -249,9 +253,11 @@ mutation methods against Script execution. Acceptance of this ADR explicitly
 and narrowly amends that accepted contract by adding `script` to
 `PlanOperation`, adding the `RunScript` oneof member below, and authorizing the
 exact task-scoped runner lifecycle in the next section. A manual run uses
-`PlanOperation.script`; lifecycle hooks remain `RunScript` steps inside the
-existing `deploy` or `rollback` operation. No Proposed implementation may use
-that authority before this ADR is Accepted.
+`PlanOperation.script`; explicit lifecycle hooks remain `RunScript` steps
+inside `deploy` or `rollback`, while Blueprint apply uses the distinct sealed
+`PlanOperation.blueprint_apply` inside its one Environment update Task. An
+ordinary `reconcile` plan never gains Script authority. No Proposed
+implementation may use that authority before this ADR is Accepted.
 
 The payload contains exactly:
 
@@ -307,11 +313,14 @@ Environment projection when their exposure is `all` or the target Service
 name. The snapshot also records that projection's immutable revision id,
 render generation, and etcd mod revision.
 
-The successful Release remains the sole image and normalized Service-definition
-authority. The applied Environment projection is the sole current Entry,
-Network, Volume, and mount-identity authority. Publication reads both at one
-fixed MVCC revision and compares every pointer and source revision; it never
-substitutes desired-head or current-generation values later.
+Steady-state rendering uses the current successful Release as the image and
+normalized Service-definition authority. An active Deploy, Rollback, or
+Blueprint apply instead uses only its exact sealed candidate or predecessor
+Release and candidate or applied projection until terminal promotion. Script
+snapshots bind to that applicable sealed Release and projection; no successful
+or serving authority changes before promotion. Publication reads the required
+inputs at one fixed MVCC revision and compares every pointer and source
+revision; it never substitutes desired-head or current-generation values later.
 
 Arrays use stable-id byte order. `rendered_attachment`, `rendered_mount`, and
 the runner projection are deterministic closed protobuf values, not YAML or
@@ -801,11 +810,32 @@ one-off runners from the sealed candidate release definition. This ordering
 permits a healthcheck to depend on a post-deploy migration without deadlocking
 the Release.
 
-Blueprint apply publishes Script resources as desired state but does not
-execute lifecycle hooks. Explicit Deploy and Rollback operations invoke the
-typed Release hook executor; manual Scripts remain explicit Run operations. A
-retry follows durable recovery probes and compensation and never repeats a
-post hook completed by the original attempt.
+Blueprint apply publishes Script desired state and executes matching
+`post-deploy` hooks only for a newly introduced singleton Service or a
+materially changed existing singleton Service whose effective
+`runtime_intent` is `running`. Stopped or absent existing Services retain their
+desired changes for a later explicit Release action and are not implicitly
+applied or hooked. Release Group members are excluded from implicit candidate
+Release and hook execution; Blueprint publishes their desired change only,
+while explicit group Deploy/Rollback retains declared serial order and
+`on_failure` policy. Candidate Releases come only from the sealed candidate
+projection. The one Environment update Task owns one operation id and one
+Agent assignment; it creates no child Deploy Task or hidden Deploy request.
+
+Services are ordered by dependency topology then slug bytes, and each
+Service's hooks by slug bytes. The complete apply selection is limited to 16
+hook executions and 1,048,576 aggregate UTF-8 body bytes, rejected before Task
+publication. The sealed plan runs materialization, managed Volume ensure,
+Attach procedures, candidate workload apply/start without readiness,
+`RunScript`, `WaitHealthy`, then Component actions. Compose apply does not
+intrinsically wait. Controller-only terminal publication atomically promotes
+Releases, the applied projection, Components, and Routes. Failure preserves the
+desired head and is accepted only with proven predecessor restoration or
+first-candidate absence, so no failed candidate becomes a serving Release or
+served Route. Manual Scripts do not execute during apply. Retry transfers only
+while every selected execution is durably `not_started`; `start_authorized` or
+an unknown state returns `script.retry_unsafe` and recovery continues the
+authorized execution.
 
 For a failure after activation, urgent `switch_back` compensation completes
 before `on-failure`; a pre-activation or `leave_active` failure needs no switch.
