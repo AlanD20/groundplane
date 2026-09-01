@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Database, HardDrive, Plug, Plus, RefreshCw } from 'lucide-react'
 import { useStore } from '@/lib/store'
+import { useLinkedSlug } from '@/lib/use-linked-slug'
 import { PageHeader } from '@/components/common/page-header'
 import { StatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
@@ -16,8 +17,7 @@ import { Drawer, DrawerContent } from '@/components/ui/drawer'
 export default function PlatformBackingServicesPage() {
   const store = useStore()
   const [createOpen, setCreateOpen] = useState(false)
-  const [slug, setSlug] = useState('')
-  const [name, setName] = useState('')
+  const { name, slug, setName, setSlug, reset: resetBackingIdentity } = useLinkedSlug()
   const [description, setDescription] = useState('')
   const [adapter, setAdapter] = useState<'postgres:16' | 'valkey:9'>('postgres:16')
   const [networkPool, setNetworkPool] = useState('10.200.0.0/16')
@@ -131,6 +131,7 @@ export default function PlatformBackingServicesPage() {
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="backing-slug">Slug</Label>
               <Input id="backing-slug" value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="primary-database" />
+              <p className="text-xs text-muted-foreground">Follows Name until edited.</p>
             </div>
             <div className="flex flex-col gap-1.5 sm:col-span-2">
               <Label htmlFor="backing-description">Description</Label>
@@ -183,8 +184,7 @@ export default function PlatformBackingServicesPage() {
                     zone: { name: zoneName.trim(), subnet: zoneSubnet.trim(), internal: zoneInternal },
                   })
                   setCreateOpen(false)
-                  setSlug('')
-                  setName('')
+                  resetBackingIdentity()
                   setDescription('')
                 } catch (error) {
                   setCreateError(error instanceof Error ? error.message : 'Unable to create backing service')

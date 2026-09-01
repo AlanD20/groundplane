@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useStore } from '@/lib/store'
+import { useLinkedSlug } from '@/lib/use-linked-slug'
 import { cn } from '@/lib/utils'
 
 function useWorkspace(pathname: string): { kind: 'platform' | 'tenant'; slug: string } {
@@ -43,22 +44,20 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   const [mobileOpen, setMobileOpen] = useState(false)
   const [newTenantOpen, setNewTenantOpen] = useState(false)
-  const [slug, setSlug] = useState('')
-  const [name, setName] = useState('')
+  const { name, slug, setName, setSlug, reset: resetTenantIdentity } = useLinkedSlug()
   const [description, setDescription] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
   async function createTenant() {
-    const s = slug.trim() || name.trim().toLowerCase().replace(/\s+/g, '-')
+    const s = slug.trim()
     if (!s) return
     setCreating(true)
     setCreateError(null)
     try {
       const tenant = await addTenant({ slug: s, name: name.trim() || s, description: description.trim() })
       setNewTenantOpen(false)
-      setSlug('')
-      setName('')
+      resetTenantIdentity()
       setDescription('')
       navigate(`/t/${tenant.slug}`)
     } catch (error) {
@@ -158,11 +157,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <Input
                 id="t-slug"
                 value={slug}
-                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                onChange={(e) => setSlug(e.target.value)}
                 placeholder="acme"
               />
               <p className="text-xs text-muted-foreground">
-                Isolation boundary. Projects, runners, and secrets live under this tenant.
+                Follows Display name until edited. Projects, runners, and secrets live under this isolation boundary.
               </p>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -175,7 +174,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <Button variant="outline" onClick={() => setNewTenantOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => void createTenant()} disabled={creating || (!name.trim() && !slug.trim())}>
+            <Button onClick={() => void createTenant()} disabled={creating || !name.trim() || !slug.trim()}>
               {creating ? 'Creating…' : 'Create tenant'}
             </Button>
           </DialogFooter>

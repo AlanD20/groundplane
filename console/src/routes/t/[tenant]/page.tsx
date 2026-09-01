@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { useRequiredParams } from '@/lib/router'
 import { ArrowRight, Blocks, Boxes, CalendarDays, Cpu, Layers, Plus, ShieldCheck } from 'lucide-react'
 import { useStore } from '@/lib/store'
+import { useLinkedSlug } from '@/lib/use-linked-slug'
 import { PageHeader } from '@/components/common/page-header'
 import { StatusDot } from '@/components/common/status-badge'
 import { MetaPill } from '@/components/common/meta-pill'
@@ -23,7 +24,7 @@ export default function TenantPage() {
   const runners = store.runners.filter((r) => r.tenantId === tenant?.id)
 
   const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
+  const { name, slug, setName, setSlug, reset: resetProjectIdentity } = useLinkedSlug()
   const [description, setDescription] = useState('')
   const [projectError, setProjectError] = useState<string | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
@@ -140,6 +141,11 @@ export default function TenantPage() {
               <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="checkout" autoFocus />
             </div>
             <div className="flex flex-col gap-1.5">
+              <Label htmlFor="p-slug">Slug</Label>
+              <Input id="p-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="checkout" />
+              <p className="text-xs text-muted-foreground">Follows Name until edited.</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="p-desc">Description</Label>
               <Input id="p-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this project is" />
             </div>
@@ -154,9 +160,8 @@ export default function TenantPage() {
               Cancel
             </Button>
             <Button
-              disabled={creatingProject || !name.trim()}
+              disabled={creatingProject || !name.trim() || !slug.trim()}
               onClick={() => void (async () => {
-                const slug = name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
                 setCreatingProject(true)
                 setProjectError(null)
                 try {
@@ -164,7 +169,7 @@ export default function TenantPage() {
                     tenantId: tenant.id, slug, name: name.trim(), description: description.trim(),
                   })
                   setOpen(false)
-                  setName('')
+                  resetProjectIdentity()
                   setDescription('')
                 } catch (error) {
                   setProjectError(error instanceof Error ? error.message : 'Unable to create project')
