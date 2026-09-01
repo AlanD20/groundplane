@@ -1141,9 +1141,13 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	}
 	return AttachCreateScope{
 		Tenant: tenantVersion, Project: project, Environment: environment,
-		BlueprintRevision: Versioned[EnvironmentBlueprintRevision]{
-			Record: serviceFixture.Blueprint.Record, Revision: serviceFixture.Blueprint.Revision,
-			ReadRevision: serviceFixture.Blueprint.ReadRevision,
+		DesiredHead: Versioned[EnvironmentBlueprintHead]{
+			Record: EnvironmentBlueprintHead{
+				EnvironmentID: environment.Record.ID,
+				RevisionID:    serviceFixture.Projection.Record.RevisionID,
+			},
+			Revision:     serviceFixture.Projection.Revision,
+			ReadRevision: serviceFixture.Projection.ReadRevision,
 		},
 		ComposeProjection: Versioned[EnvironmentComposeProjection]{
 			Record: serviceFixture.Projection.Record, Revision: serviceFixture.Projection.Revision,
@@ -1309,7 +1313,7 @@ func createTestAttach(
 		BackingServiceID:    scope.BackingService.Record.Desired.ID,
 		BackingProjectID:    record.BackingProjectID,
 		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
-		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
+		BlueprintRevisionID: scope.DesiredHead.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, record.CreatedAt, seed+2000),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
@@ -1396,7 +1400,7 @@ func publishTestDetach(
 		BackingServiceID:    scope.BackingService.Record.Desired.ID,
 		BackingProjectID:    current.Record.BackingProjectID,
 		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
-		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
+		BlueprintRevisionID: scope.DesiredHead.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, createdAt, 904),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),

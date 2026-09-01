@@ -158,8 +158,8 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 			},
 			Revision: 3,
 		},
-		BlueprintRevision: etcd.Versioned[etcd.EnvironmentBlueprintRevision]{
-			Record: etcd.EnvironmentBlueprintRevision{
+		DesiredHead: etcd.Versioned[etcd.EnvironmentBlueprintHead]{
+			Record: etcd.EnvironmentBlueprintHead{
 				EnvironmentID: fixture.environmentID, RevisionID: fixture.revisionID,
 			},
 			Revision: 4,

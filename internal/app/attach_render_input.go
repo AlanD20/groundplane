@@ -18,7 +18,7 @@ func buildAttachTaskRenderInput(
 	artifactID string,
 ) (etcd.AttachTaskRenderInput, error) {
 	if scope.Tenant.Revision <= 0 || scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 ||
-		scope.BlueprintRevision.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
+		scope.DesiredHead.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
 		scope.BackingProject.Revision <= 0 || scope.BackingEnvironment.Revision <= 0 ||
 		scope.BackingService.Revision <= 0 {
 		return etcd.AttachTaskRenderInput{}, errs.New(
@@ -38,9 +38,9 @@ func buildAttachTaskRenderInput(
 		scope.Project.Record.Kind != etcd.ProjectKindTenant ||
 		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID ||
-		scope.BlueprintRevision.Record.EnvironmentID != record.EnvironmentID ||
+		scope.DesiredHead.Record.EnvironmentID != record.EnvironmentID ||
 		scope.ComposeProjection.Record.EnvironmentID != record.EnvironmentID ||
-		scope.ComposeProjection.Record.RevisionID != scope.BlueprintRevision.Record.RevisionID ||
+		scope.ComposeProjection.Record.RevisionID != scope.DesiredHead.Record.RevisionID ||
 		scope.BackingProject.Record.Kind != etcd.ProjectKindBacking ||
 		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
@@ -106,7 +106,7 @@ func buildAttachTaskRenderInput(
 		BackingServiceID:       record.BackingServiceID,
 		BackingProjectID:       record.BackingProjectID,
 		AdapterKey:             scope.BackingService.Record.Desired.Adapter,
-		BlueprintRevisionID:    scope.BlueprintRevision.Record.RevisionID,
+		BlueprintRevisionID:    scope.DesiredHead.Record.RevisionID,
 		ArtifactID:             artifactID,
 		RenderGeneration:       scope.ComposeProjection.Record.RenderGeneration,
 		Services:               attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),

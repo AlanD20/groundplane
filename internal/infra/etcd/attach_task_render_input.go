@@ -202,13 +202,13 @@ func validateAttachTaskRenderInputScope(
 	task TaskRecord,
 	input AttachTaskRenderInput,
 ) error {
-	if scope.Tenant.Revision <= 0 || scope.BlueprintRevision.Revision <= 0 || scope.ComposeProjection.Revision <= 0 {
+	if scope.Tenant.Revision <= 0 || scope.DesiredHead.Revision <= 0 || scope.ComposeProjection.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach render scope records must be versioned")
 	}
 	if scope.Tenant.Record.ID != scope.Project.Record.TenantID ||
-		scope.BlueprintRevision.Record.EnvironmentID != record.EnvironmentID ||
+		scope.DesiredHead.Record.EnvironmentID != record.EnvironmentID ||
 		scope.ComposeProjection.Record.EnvironmentID != record.EnvironmentID ||
-		scope.ComposeProjection.Record.RevisionID != scope.BlueprintRevision.Record.RevisionID {
+		scope.ComposeProjection.Record.RevisionID != scope.DesiredHead.Record.RevisionID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach render hierarchy is invalid")
 	}
 	if input.PlanID != task.PlanID || input.AttachID != record.ID || input.AttachName != record.Name ||
@@ -219,7 +219,7 @@ func validateAttachTaskRenderInputScope(
 		input.BackingServiceID != scope.BackingService.Record.Desired.ID ||
 		input.BackingProjectID != record.BackingProjectID ||
 		input.AdapterKey != scope.BackingService.Record.Desired.Adapter ||
-		input.BlueprintRevisionID != scope.BlueprintRevision.Record.RevisionID ||
+		input.BlueprintRevisionID != scope.DesiredHead.Record.RevisionID ||
 		input.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
 		input.RenderGeneration != uint64(task.RenderGeneration) ||
 		!slices.Equal(input.Services, attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices)) ||

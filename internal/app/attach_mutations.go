@@ -703,23 +703,24 @@ func (service *attachMutationService) resolveAttachScope(
 			"Attach requires an applied Environment Blueprint",
 		)
 	}
-	revision, exists, err := service.repository.GetEnvironmentBlueprintRevision(
+	projection, exists, err := service.repository.GetEnvironmentComposeProjectionRevision(
 		ctx, environment.Record.ID, head.Record.RevisionID,
 	)
 	if err != nil {
 		return etcd.AttachCreateScope{}, nil, nil, err
 	}
 	if !exists {
-		return etcd.AttachCreateScope{}, nil, nil, errs.New(errs.KindInternal, "Attach Blueprint head is missing")
-	}
-	projection, exists, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
-	if err != nil {
-		return etcd.AttachCreateScope{}, nil, nil, err
-	}
-	if !exists || projection.Record.RevisionID != revision.Record.RevisionID {
 		return etcd.AttachCreateScope{}, nil, nil, errs.New(
 			errs.KindStateConflict,
-			"Attach requires the current Environment Compose projection",
+			"Attach requires the selected Environment Compose projection",
+		)
+	}
+	if head.Record.EnvironmentID != environment.Record.ID ||
+		projection.Record.EnvironmentID != environment.Record.ID ||
+		projection.Record.RevisionID != head.Record.RevisionID {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach selected Environment Compose projection is inconsistent",
 		)
 	}
 	grants := make([]etcd.Versioned[etcd.AttachRecord], 0, len(grantIDs))
@@ -762,7 +763,7 @@ func (service *attachMutationService) resolveAttachScope(
 	}
 	scope := etcd.AttachCreateScope{
 		Tenant: tenant, Project: project, Environment: environment,
-		BlueprintRevision: revision, ComposeProjection: projection,
+		DesiredHead: head, ComposeProjection: projection,
 		Services:       []etcd.Versioned[etcd.ServiceRecord]{consumer},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment,
 		BackingService: backingService, CredentialOwner: credentialOwner, Grants: grants,
@@ -1039,12 +1040,19 @@ func (repository *durableAttachMutationRepository) GetEnvironment(
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
-func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjectionRevision(
+func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
+) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error) {
+	return repository.hierarchy.GetEnvironmentBlueprintRevision(ctx, environmentID, revisionID)
+}
+
+func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjection(
+	ctx context.Context,
+	environmentID string,
 ) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
-	return repository.hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
+	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
 func (repository *durableAttachMutationRepository) GetService(
@@ -1061,19 +1069,12 @@ func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintHead(
 	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
 }
 
-func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintRevision(
+func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjectionRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
-) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error) {
-	return repository.hierarchy.GetEnvironmentBlueprintRevision(ctx, environmentID, revisionID)
-}
-
-func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjection(
-	ctx context.Context,
-	environmentID string,
 ) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
-	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+	return repository.hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 }
 
 func (repository *durableAttachMutationRepository) GetAttach(

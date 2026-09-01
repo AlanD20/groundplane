@@ -17,7 +17,7 @@ type AttachCreateScope struct {
 	Tenant             Versioned[TenantRecord]
 	Project            Versioned[ProjectRecord]
 	Environment        Versioned[EnvironmentRecord]
-	BlueprintRevision  Versioned[EnvironmentBlueprintRevision]
+	DesiredHead        Versioned[EnvironmentBlueprintHead]
 	ComposeProjection  Versioned[EnvironmentComposeProjection]
 	Services           []Versioned[ServiceRecord]
 	BackingProject     Versioned[ProjectRecord]
@@ -176,7 +176,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	defer clear(planReferenceValue)
 	desiredHeadConditions, err := attachDesiredHeadConditions(
 		record.EnvironmentID,
-		scope.ComposeProjection.Revision,
+		scope.DesiredHead.Revision,
 		scope.BackingService,
 		scope.Services,
 	)
@@ -211,7 +211,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
 			Key:         environmentBlueprintRootKey(record.EnvironmentID, renderInput.BlueprintRevisionID),
-			ModRevision: scope.BlueprintRevision.Revision,
+			ModRevision: scope.ComposeProjection.Revision,
 		},
 	}
 	conditions = append(conditions, desiredHeadConditions...)
@@ -516,7 +516,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	defer clear(planReferenceValue)
 	desiredHeadConditions, err := attachDesiredHeadConditions(
 		current.Record.EnvironmentID,
-		scope.ComposeProjection.Revision,
+		scope.DesiredHead.Revision,
 		scope.BackingService,
 		scope.Services,
 	)
@@ -548,7 +548,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
 			Key:         environmentBlueprintRootKey(current.Record.EnvironmentID, renderInput.BlueprintRevisionID),
-			ModRevision: scope.BlueprintRevision.Revision,
+			ModRevision: scope.ComposeProjection.Revision,
 		},
 	}
 	conditions = append(conditions, desiredHeadConditions...)
@@ -1228,7 +1228,7 @@ func validateAttachCreateScope(
 		return err
 	}
 	if scope.Tenant.Revision <= 0 || scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 ||
-		scope.BlueprintRevision.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
+		scope.DesiredHead.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
 		scope.BackingProject.Revision <= 0 ||
 		scope.BackingEnvironment.Revision <= 0 || scope.BackingService.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach scope records must be versioned")
@@ -1353,7 +1353,7 @@ func validateAttachDetachScope(
 		return errs.New(errs.KindStateConflict, "Attach is not eligible for initial detach")
 	}
 	if scope.Tenant.Revision <= 0 || scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 ||
-		scope.BlueprintRevision.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
+		scope.DesiredHead.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
 		scope.BackingProject.Revision <= 0 || scope.BackingEnvironment.Revision <= 0 ||
 		scope.BackingService.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach detach scope records must be versioned")
