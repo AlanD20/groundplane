@@ -6,13 +6,15 @@ const page = await readFile(
   new URL('../features/environment/environment-page.tsx', import.meta.url),
   'utf8',
 )
+const workspace = await readFile(
+  new URL('../features/blueprint/blueprint-workspace.tsx', import.meta.url),
+  'utf8',
+)
 
-test('desired Blueprint copies only keyed Blueprint-origin Scripts', () => {
-  const start = page.indexOf("'x-gp-scripts': Object.fromEntries(")
-  assert.notEqual(start, -1)
-  const scripts = page.slice(start, start + 600)
-  assert.match(scripts, /script\.origin === 'blueprint'/)
-  assert.match(scripts, /Boolean\(script\.reconciliationKey\)/)
-  assert.match(scripts, /\[script\.reconciliationKey!/)
-  assert.doesNotMatch(scripts, /reconciliationKey \?\? .*slug/)
+test('Blueprint workspace uses the canonical Controller authoring projection', () => {
+  assert.match(page, /<BlueprintWorkspace/)
+  assert.doesNotMatch(page, /'x-gp-scripts'/)
+  assert.match(workspace, /store\.getBlueprint\(/)
+  assert.match(workspace, /store\.validateBlueprint\(/)
+  assert.match(workspace, /store\.applyBlueprint\(/)
 })

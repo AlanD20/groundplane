@@ -204,7 +204,7 @@ export function BlueprintWorkspace({
           ]}
           review={
             <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border bg-surface p-3 text-xs">
-              {prepared.validation.changes.map((change) => (
+              {(prepared.validation.changes ?? []).map((change) => (
                 <div key={`${change.resource}:${change.key}:${change.action}`} className="flex gap-2">
                   <Badge variant="outline">{change.action}</Badge>
                   <code>{change.resource}/{change.key}</code>

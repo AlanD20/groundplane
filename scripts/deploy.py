@@ -99,7 +99,7 @@ registry_container_exists=0
 if docker container inspect groundplane-registry >/dev/null 2>&1; then
     registry_container_exists=1
     registry_container_image=$(docker container inspect \
-        --format '{{.Config.Image}}' groundplane-registry)
+        --format '{{{{.Config.Image}}}}' groundplane-registry)
     if test "$registry_container_image" != "{REGISTRY_IMAGE}"; then
         echo "groundplane-registry exists with an unexpected image; refusing replacement" >&2
         exit 1
@@ -107,7 +107,7 @@ if docker container inspect groundplane-registry >/dev/null 2>&1; then
 fi
 if ! curl -fsS http://127.0.0.1:5000/v2/ >/dev/null 2>&1; then
     if test "$registry_container_exists" -eq 1; then
-        if ! docker container inspect --format '{{.State.Running}}' groundplane-registry |
+        if ! docker container inspect --format '{{{{.State.Running}}}}' groundplane-registry |
             grep -qx true; then
             docker start groundplane-registry >/dev/null
         fi
