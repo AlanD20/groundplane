@@ -6,4 +6,6 @@ console/dist/
 /.tmp*
 /.codex*
 /.cache/
+__pycache__/
+*.py[cod]
 /.private/
