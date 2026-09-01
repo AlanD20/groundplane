@@ -219,6 +219,7 @@ type ComponentConfigInput =
       upstream_resolvers: string[]
       forwarders: { domain: string; resolvers: string[] }[]
       tailnet_delegation: boolean
+      corefile_template: string
     }
 type PendingConnectorRemoval = {
   connectorId: string

@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	CorefileTemplate  string
 	UpstreamAuto      bool
 	UpstreamResolvers []componentdns.ResolverEndpoint
 	Forwarders        []componentdns.Forwarder
@@ -30,14 +31,15 @@ func DecodeConfig(raw core.ComponentConfig) (Config, error) {
 			return Config{}, err
 		}
 		forwarders[index] = componentdns.Forwarder{
-			Domain: forwarder.Domain,
+			Domain:    forwarder.Domain,
 			Resolvers: resolvers,
 		}
 	}
 	config := Config{
-		UpstreamAuto: raw.CoreDNS.UpstreamAuto,
+		CorefileTemplate:  raw.CoreDNS.CorefileTemplate,
+		UpstreamAuto:      raw.CoreDNS.UpstreamAuto,
 		UpstreamResolvers: upstreamResolvers,
-		Forwarders: forwarders,
+		Forwarders:        forwarders,
 		TailnetDelegation: raw.CoreDNS.TailnetDelegation,
 	}
 	if err := config.validateMode(); err != nil {

@@ -1667,6 +1667,7 @@ export interface components {
         } | {
             secret_id: string;
         } | {
+            corefile_template: string;
             forwarders: {
                 domain: string;
                 resolvers: string[];
@@ -1697,6 +1698,7 @@ export interface components {
                     token: string;
                 };
             } | {
+                corefile_template: string;
                 forwarders: {
                     domain: string;
                     resolvers: string[];

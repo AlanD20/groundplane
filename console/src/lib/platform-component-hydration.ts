@@ -57,6 +57,7 @@ export function platformDNSFromComponent(item: ComponentResponse): PlatformInfra
     !('upstream_auto' in config) || typeof config.upstream_auto !== 'boolean' ||
     !('upstream_resolvers' in config) || !Array.isArray(config.upstream_resolvers) || config.upstream_resolvers.some((value) => typeof value !== 'string') ||
     !('tailnet_delegation' in config) || typeof config.tailnet_delegation !== 'boolean' ||
+    !('corefile_template' in config) || typeof config.corefile_template !== 'string' ||
     !('forwarders' in config) || !Array.isArray(config.forwarders) || config.forwarders.some((value) => (
       typeof value.domain !== 'string' || !Array.isArray(value.resolvers) || value.resolvers.some((resolver) => typeof resolver !== 'string')
     ))
@@ -72,6 +73,7 @@ export function platformDNSFromComponent(item: ComponentResponse): PlatformInfra
     upstream: config.upstream_resolvers.join(' '),
     upstreamAuto: config.upstream_auto,
     tailnetDelegation: config.tailnet_delegation,
+    corefileTemplate: config.corefile_template,
     forwarders,
   }
 }

@@ -7,22 +7,27 @@ import (
 	"net/netip"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 )
 
 const (
-	maxHostGroups        = 128
-	maxHostnames         = 1024
-	maxForwarders        = 8
-	maxResolverEndpoints = 15
-	ServiceName          = "coredns"
-	CorefileSource       = "coredns/Corefile"
-	CorefileTarget       = "/etc/groundplane/coredns/Corefile"
-	ConfigDirectory      = "/etc/groundplane/coredns"
-	ObserveServingAction = component.ActionID("observe-serving")
+	maxHostGroups            = 128
+	maxHostnames             = 1024
+	maxForwarders            = 8
+	maxResolverEndpoints     = 15
+	maxCorefileTemplateBytes = 32 << 10
+	groundplaneMarker        = "{groundplane}"
+	ServiceName              = "coredns"
+	CorefileSource           = "coredns/Corefile"
+	CorefileTarget           = "/etc/groundplane/coredns/Corefile"
+	ConfigDirectory          = "/etc/groundplane/coredns"
+	ObserveServingAction     = component.ActionID("observe-serving")
 )
+
+const DefaultCorefileTemplate = ". {\n    {groundplane}\n    prometheus 127.0.0.1:9153\n    log\n    errors\n}\n"
 
 var Image = component.OCIImage{
 	Repository:  "docker.io/coredns/coredns",
@@ -141,8 +146,7 @@ func (Renderer) Render(input dnsresolver.RenderInput) ([]byte, error) {
 		return nil, err
 	}
 	var output strings.Builder
-	output.WriteString(". {\n")
-	output.WriteString("    bind 127.0.0.1\n")
+	output.WriteString("bind 127.0.0.1\n")
 	if len(normalized.Hosts) > 0 {
 		output.WriteString("    hosts {\n")
 		for _, host := range normalized.Hosts {
@@ -162,12 +166,9 @@ func (Renderer) Render(input dnsresolver.RenderInput) ([]byte, error) {
 		writeForward(&output, forwarder.Domain, forwarder.Resolvers)
 	}
 	writeForward(&output, ".", normalized.CatchAll)
-	output.WriteString("    reload\n")
-	output.WriteString("    prometheus 127.0.0.1:9153\n")
-	output.WriteString("    log\n")
-	output.WriteString("    errors\n")
-	output.WriteString("}\n")
-	return []byte(output.String()), nil
+	output.WriteString("    reload")
+	rendered := strings.Replace(normalized.CorefileTemplate, groundplaneMarker, output.String(), 1)
+	return []byte(rendered), nil
 }
 
 func (Renderer) Digest(input dnsresolver.RenderInput) ([sha256.Size]byte, error) {
@@ -184,6 +185,14 @@ func (Renderer) Digest(input dnsresolver.RenderInput) ([sha256.Size]byte, error)
 
 func normalize(input dnsresolver.RenderInput) (dnsresolver.RenderInput, error) {
 	input = dnsresolver.CloneRenderInput(input)
+	if len(input.CorefileTemplate) == 0 || len(input.CorefileTemplate) > maxCorefileTemplateBytes ||
+		!utf8.ValidString(input.CorefileTemplate) || !strings.HasSuffix(input.CorefileTemplate, "\n") ||
+		strings.ContainsRune(input.CorefileTemplate, '\x00') || strings.ContainsRune(input.CorefileTemplate, '\r') ||
+		strings.Count(input.CorefileTemplate, groundplaneMarker) != 1 {
+		return dnsresolver.RenderInput{}, fmt.Errorf(
+			"coredns: corefile template must be bounded UTF-8 with LF endings and exactly one {groundplane} marker",
+		)
+	}
 	hosts, err := normalizeHosts(input.Hosts)
 	if err != nil {
 		return dnsresolver.RenderInput{}, err
@@ -196,7 +205,10 @@ func normalize(input dnsresolver.RenderInput) (dnsresolver.RenderInput, error) {
 	if err != nil {
 		return dnsresolver.RenderInput{}, err
 	}
-	return dnsresolver.RenderInput{Hosts: hosts, Forwarders: forwarders, CatchAll: catchAll}, nil
+	return dnsresolver.RenderInput{
+		CorefileTemplate: input.CorefileTemplate,
+		Hosts:            hosts, Forwarders: forwarders, CatchAll: catchAll,
+	}, nil
 }
 
 func normalizeHosts(input []dnsresolver.Host) ([]dnsresolver.Host, error) {

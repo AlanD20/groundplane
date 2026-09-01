@@ -825,7 +825,8 @@ type ComponentConfig1 struct {
 
 // ComponentConfig2 defines model for ComponentConfig.2.
 type ComponentConfig2 struct {
-	Forwarders []struct {
+	CorefileTemplate string `json:"corefile_template"`
+	Forwarders       []struct {
 		Domain    string   `json:"domain"`
 		Resolvers []string `json:"resolvers"`
 	} `json:"forwarders"`
@@ -880,7 +881,8 @@ type ComponentConfigMutationRequest_Config_1_Credential struct {
 
 // ComponentConfigMutationRequestConfig2 defines model for ComponentConfigMutationRequest.Config.2.
 type ComponentConfigMutationRequestConfig2 struct {
-	Forwarders []struct {
+	CorefileTemplate string `json:"corefile_template"`
+	Forwarders       []struct {
 		Domain    string   `json:"domain"`
 		Resolvers []string `json:"resolvers"`
 	} `json:"forwarders"`

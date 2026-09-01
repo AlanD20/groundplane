@@ -526,6 +526,7 @@ type CloudflareTunnelComponentConfig struct {
 }
 
 type CoreDNSComponentConfig struct {
+	CorefileTemplate  string                  `json:"corefile_template"`
 	UpstreamAuto      bool                    `json:"upstream_auto"`
 	UpstreamResolvers []string                `json:"upstream_resolvers"`
 	Forwarders        []ComponentDNSForwarder `json:"forwarders"`
@@ -557,6 +558,7 @@ type CloudflareTunnelComponentConfigMutationInput struct {
 }
 
 type CoreDNSComponentConfigMutationInput struct {
+	CorefileTemplate  *string                  `json:"corefile_template"`
 	UpstreamAuto      *bool                    `json:"upstream_auto"`
 	UpstreamResolvers *[]string                `json:"upstream_resolvers"`
 	Forwarders        *[]ComponentDNSForwarder `json:"forwarders"`

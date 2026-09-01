@@ -200,6 +200,14 @@ the operator can override it any time on Platform → CoreDNS. The
 **Agent** rewrites `/etc/resolv.conf` to point at `127.0.0.1` as
 materialization (see "Everything host-level is actioned by the Agent").
 
+The CoreDNS configuration includes one required operator-authored
+`corefile_template`. It is bounded UTF-8 with LF line endings, no NUL byte, a
+final LF, and exactly one `{groundplane}` marker. The registered renderer
+replaces that marker with Controller-owned bind, static-host, per-zone
+forwarder, catch-all forwarder, and reload directives; the surrounding
+Corefile remains the persisted operator decision. The canonical default keeps
+Prometheus, log, and errors enabled around the managed root server block.
+
 **Groundplane "zone" vs DNS "zone" (locked terminology).** The tool uses
 "zone" for two unrelated things and they never mix: a **network zone** is a
 docker network a service joins (the topology columns, `networks.<name>` in
@@ -261,6 +269,7 @@ Blueprint boundary. A disabled or unconfigured Component projects
 `config: null`; enabling or configuring it requires exactly one complete typed
 variant for Caddy, Cloudflare Tunnel, or CoreDNS. No flattened cross-kind
 configuration fields or compatibility shape is accepted. CoreDNS configuration
+requires `corefile_template` alongside its structured resolver fields and
 responses preserve empty resolver and forwarder collections as `[]`, never
 `null`; Tunnel credentials use an explicit `existing` or `new` mode and the
 corresponding fields are exclusive.

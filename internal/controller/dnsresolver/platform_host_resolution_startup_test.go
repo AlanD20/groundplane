@@ -58,7 +58,10 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 	component := core.Component{
 		ID: componentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
 		Enabled: true,
-		Config:  core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+			CorefileTemplate: testCorefileTemplate,
+			UpstreamAuto:     true,
+		}},
 	}
 	record, err := etcd.NewComponentRecord(component)
 	if err != nil {
@@ -105,7 +108,9 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 	task.PlanHash = input.ExecutionPlanSHA256
 	task.Params[etcd.TaskPlatformComponentDesiredSHA256Param] = input.DesiredSHA256
 	registeredPlan, err := environmentPlanner.Plan(
-		definition.Implementation(), input.GeneratedServiceID, componentdns.RenderInput{},
+		definition.Implementation(), input.GeneratedServiceID, componentdns.RenderInput{
+			CorefileTemplate: testCorefileTemplate,
+		},
 	)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)

@@ -418,9 +418,15 @@ func (c Component) Validate() error {
 		return fmt.Errorf("component %s: unknown owner %q", c.ID, c.Owner)
 	}
 	branches := 0
-	if c.Config.Caddy != nil { branches++ }
-	if c.Config.CloudflareTunnel != nil { branches++ }
-	if c.Config.CoreDNS != nil { branches++ }
+	if c.Config.Caddy != nil {
+		branches++
+	}
+	if c.Config.CloudflareTunnel != nil {
+		branches++
+	}
+	if c.Config.CoreDNS != nil {
+		branches++
+	}
 	if branches > 1 {
 		return fmt.Errorf("component %s: desired config has multiple variants", c.ID)
 	}
@@ -437,7 +443,8 @@ func (c Component) Validate() error {
 		}
 	case ComponentKindCoreDNS:
 		if c.Owner != ComponentOwnerPlatform || c.Config.Caddy != nil || c.Config.CloudflareTunnel != nil ||
-			(c.Enabled && c.Config.CoreDNS == nil) {
+			(c.Enabled && c.Config.CoreDNS == nil) ||
+			(c.Config.CoreDNS != nil && c.Config.CoreDNS.CorefileTemplate == "") {
 			return fmt.Errorf("component %s: CoreDNS ownership or config is invalid", c.ID)
 		}
 	default:

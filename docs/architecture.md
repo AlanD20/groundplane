@@ -843,6 +843,13 @@ configuration and Groundplane-owned capabilities. Registration declares its
 provided capabilities, grants, allowed owner scopes, definition digest, typed
 planner, and generic managed-configuration requirements.
 
+Implementation configuration may include an operator-authored managed-file
+template as a durable decision. CoreDNS carries the required full Corefile
+template through the generic Component config vertical; its SDK-only registered
+renderer validates the template and substitutes the single `{groundplane}`
+marker with Controller-owned directives. This does not add an
+implementation-named persistence route or Agent procedure.
+
 Groundplane constructs a fixed-revision capability-scoped planning session.
 The planner returns immutable intents for existing Service, Route, Volume,
 Secret, Script, Backup, Network, Entry, Task, and component-specific

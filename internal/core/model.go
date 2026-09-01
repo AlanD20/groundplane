@@ -349,6 +349,7 @@ type DNSForwarder struct {
 }
 
 type CoreDNSComponentConfig struct {
+	CorefileTemplate  string                `yaml:"corefile_template" json:"corefile_template"`
 	UpstreamAuto      bool                  `yaml:"upstream_auto" json:"upstream_auto"`
 	UpstreamResolvers []DNSResolverEndpoint `yaml:"upstream_resolvers" json:"upstream_resolvers"`
 	Forwarders        []DNSForwarder        `yaml:"forwarders" json:"forwarders"`

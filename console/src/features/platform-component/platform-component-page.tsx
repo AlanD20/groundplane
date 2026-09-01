@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 
 const kindIcon: Record<string, React.ReactNode> = {
   coredns: <Network className="size-4 text-muted-foreground" />,
@@ -31,11 +32,12 @@ export default function PlatformComponentPage() {
   const component = platform.components.find((c) => c.kind === params.component)
 
   const { unavailable: environmentsWithoutComponentProjection } = environmentPlatformIngress(tenantProjects)
-  const dnsConfig = platform.dns.upstream !== undefined && platform.dns.upstreamAuto !== undefined && platform.dns.tailnetDelegation !== undefined && platform.dns.forwarders !== undefined
+  const dnsConfig = platform.dns.upstream !== undefined && platform.dns.upstreamAuto !== undefined && platform.dns.tailnetDelegation !== undefined && platform.dns.forwarders !== undefined && platform.dns.corefileTemplate !== undefined
     ? {
         upstream: platform.dns.upstream,
         upstreamAuto: platform.dns.upstreamAuto,
         tailnetDelegation: platform.dns.tailnetDelegation,
+        corefileTemplate: platform.dns.corefileTemplate,
         forwarders: platform.dns.forwarders,
       }
     : undefined
@@ -43,6 +45,7 @@ export default function PlatformComponentPage() {
     upstream: '',
     upstreamAuto: false,
     tailnetDelegation: false,
+    corefileTemplate: '',
     forwarders: [],
   }
 
@@ -133,6 +136,7 @@ export default function PlatformComponentPage() {
           upstream={editableDNSConfig.upstream}
           upstreamAuto={editableDNSConfig.upstreamAuto}
           tailnetDelegation={editableDNSConfig.tailnetDelegation}
+          corefileTemplate={editableDNSConfig.corefileTemplate}
           forwarders={editableDNSConfig.forwarders}
           enabled={platform.dns.enabled}
           configured={dnsConfig !== undefined}
@@ -161,12 +165,12 @@ export default function PlatformComponentPage() {
             editableDNSConfig,
             { forwarders: editableDNSConfig.forwarders.filter((_, candidateIndex) => candidateIndex !== index) },
           )}
-          onSave={(upstream, upstreamAuto) => replaceCoreDNSConfig(
+          onSave={(upstream, upstreamAuto, corefileTemplate) => replaceCoreDNSConfig(
             updateComponentConfig,
             refreshPlatformComponents,
             component.id,
             editableDNSConfig,
-            { upstream, upstreamAuto },
+            { upstream, upstreamAuto, corefileTemplate },
           )}
         />
       </div>
@@ -185,6 +189,7 @@ type CoreDNSConfigUpdate = {
   upstream?: string
   upstreamAuto?: boolean
   tailnetDelegation?: boolean
+  corefileTemplate?: string
   forwarders?: { domain: string; upstream: string }[]
 }
 
@@ -196,6 +201,7 @@ async function replaceCoreDNSConfig(
     upstream: string
     upstreamAuto: boolean
     tailnetDelegation: boolean
+    corefileTemplate: string
     forwarders: { domain: string; upstream: string }[]
   },
   update: CoreDNSConfigUpdate,
@@ -209,6 +215,7 @@ async function replaceCoreDNSConfig(
       resolvers: resolverList(forwarder.upstream),
     })),
     tailnet_delegation: next.tailnetDelegation,
+    corefile_template: next.corefileTemplate,
   })
   await refreshPlatformComponents()
 }
@@ -221,6 +228,7 @@ function CoreDnsSettings({
   upstream,
   upstreamAuto,
   tailnetDelegation,
+  corefileTemplate,
   forwarders,
   enabled,
   configured,
@@ -233,6 +241,7 @@ function CoreDnsSettings({
   upstream: string
   upstreamAuto: boolean
   tailnetDelegation: boolean
+  corefileTemplate: string
   forwarders: { domain: string; upstream: string }[]
   enabled: boolean
   configured: boolean
@@ -240,10 +249,11 @@ function CoreDnsSettings({
   onTailnet: (v: boolean) => Promise<void>
   onAddForwarder: (domain: string, upstream: string) => Promise<void>
   onRemoveForwarder: (index: number) => Promise<void>
-  onSave: (upstream: string, upstreamAuto: boolean) => Promise<void>
+  onSave: (upstream: string, upstreamAuto: boolean, corefileTemplate: string) => Promise<void>
 }) {
   const [u, setU] = useState(upstream)
   const [auto, setAuto] = useState(upstreamAuto)
+  const [template, setTemplate] = useState(corefileTemplate)
   const [fwdDomain, setFwdDomain] = useState('')
   const [fwdUpstream, setFwdUpstream] = useState('')
   const [saving, setSaving] = useState(false)
@@ -318,6 +328,19 @@ function CoreDnsSettings({
           <Switch checked={tailnetDelegation} disabled={saving} onCheckedChange={(value) => void mutate(() => onTailnet(value))} />
         </div>
         <div className="flex flex-col gap-2">
+          <Label htmlFor="corefile-template">Corefile template</Label>
+          <Textarea
+            id="corefile-template"
+            value={template}
+            onChange={(event) => setTemplate(event.target.value)}
+            className="min-h-[18rem] font-mono text-xs"
+            spellCheck={false}
+          />
+          <span className="text-xs text-muted-foreground">
+            Include exactly one <span className="font-mono">{'{groundplane}'}</span> marker. The Controller replaces it with bind, hosts, forwarders, catch-all, and reload directives.
+          </span>
+        </div>
+        <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Domain forwarders</span>
           <span className="text-xs text-muted-foreground">
             per-zone routing: each domain is answered by its own resolvers (rendered as{' '}
@@ -376,7 +399,7 @@ function CoreDnsSettings({
           </div>
         </div>
         {error ? <p className="text-xs text-destructive" role="alert">{error}</p> : null}
-        <Button size="sm" disabled={saving} onClick={() => void mutate(() => onSave(u, auto))}>
+        <Button size="sm" disabled={saving} onClick={() => void mutate(() => onSave(u, auto, template))}>
           <Save className="size-4" /> Save
         </Button>
       </CardContent>

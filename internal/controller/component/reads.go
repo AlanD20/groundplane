@@ -152,6 +152,7 @@ func projectComponentConfig(component core.Component) *apiTypes.ComponentConfig 
 	tailnetDelegation := config.CoreDNS.TailnetDelegation
 	result := &apiTypes.ComponentConfig{
 		CoreDNS: &apiTypes.CoreDNSComponentConfig{
+			CorefileTemplate:  config.CoreDNS.CorefileTemplate,
 			UpstreamAuto:      upstreamAuto,
 			UpstreamResolvers: projectResolverEndpoints(config.CoreDNS.UpstreamResolvers),
 			Forwarders:        make([]apiTypes.ComponentDNSForwarder, len(config.CoreDNS.Forwarders)),

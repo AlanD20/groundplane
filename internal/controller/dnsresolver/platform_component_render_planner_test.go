@@ -126,7 +126,10 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 			component := core.Component{
 				ID: componentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
 				Enabled: test.currentEnabled,
-				Config:  core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+				Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+					CorefileTemplate: testCorefileTemplate,
+					UpstreamAuto:     true,
+				}},
 			}
 			if test.hasGeneratedService {
 				component.GeneratedServices = []string{ids.NewAt(ids.KindService, now, 8)}

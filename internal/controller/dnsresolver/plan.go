@@ -124,7 +124,10 @@ func buildRenderInput(hosts []componentdns.Host, config Config, baseline []compo
 			Domain: "ts.net", Resolvers: []componentdns.ResolverEndpoint{{Address: netip.MustParseAddr("100.100.100.100")}},
 		})
 	}
-	return componentdns.RenderInput{Hosts: cloneHosts(hosts), Forwarders: forwarders, CatchAll: catchAll}, nil
+	return componentdns.RenderInput{
+		CorefileTemplate: config.CorefileTemplate,
+		Hosts:            cloneHosts(hosts), Forwarders: forwarders, CatchAll: catchAll,
+	}, nil
 }
 
 func BuildRenderInput(

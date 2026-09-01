@@ -17,8 +17,8 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 	}{
 		{name: "caddy", json: `{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`, want: `{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`},
 		{name: "cloudflare", json: `{"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`, want: `{"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`},
-		{name: "coredns", json: `{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`, want: `{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`},
-		{name: "coredns-forwarder", json: `{"upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`, want: `{"upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`},
+		{name: "coredns", json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`, want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`},
+		{name: "coredns-forwarder", json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`, want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`},
 	}
 	for _, testCase := range valid {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 	for _, value := range []string{
 		`{}`,
 		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
-		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
 		`{"unknown":true}`,
 	} {
 		var config ComponentConfig
@@ -66,10 +66,10 @@ func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) 
 		`{}`,
 		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}}`,
 		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[]}`,
-		`{"upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[{}],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[null]}],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":true}],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{}],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[null]}],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":true}],"tailnet_delegation":false}`,
 	} {
 		var input ComponentConfigMutationInput
 		if err := json.Unmarshal([]byte(value), &input); err == nil {
@@ -89,12 +89,13 @@ func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T)
 		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","secret_id":null}`,
 		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","caddyfile_template":null}`,
 		`{"secret_id":"sec_invalid"}`,
-		`{"upstream_auto":true,"upstream_resolvers":null,"forwarders":[],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[null],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com"}],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":null}],"tailnet_delegation":false}`,
-		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":null}],"tailnet_delegation":false}`,
+		`{"corefile_template":null,"upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":null,"forwarders":[],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[null],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com"}],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":[],"unknown":null}],"tailnet_delegation":false}`,
+		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{"domain":"example.com","resolvers":null}],"tailnet_delegation":false}`,
 	} {
 		var config ComponentConfig
 		if err := json.Unmarshal([]byte(value), &config); err == nil {
@@ -105,6 +106,7 @@ func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T)
 		t.Fatal("Marshal accepted an invalid Caddy zone_id")
 	}
 	if _, err := json.Marshal(ComponentConfig{CoreDNS: &CoreDNSComponentConfig{
+		CorefileTemplate:  ". {\n    {groundplane}\n}\n",
 		UpstreamResolvers: nil, Forwarders: []ComponentDNSForwarder{},
 	}}); err == nil {
 		t.Fatal("Marshal accepted nil CoreDNS arrays")

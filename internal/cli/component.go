@@ -10,7 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const maxCaddyfileTemplateBytes = 32 << 10
+const (
+	maxCaddyfileTemplateBytes = 32 << 10
+	maxCorefileTemplateBytes  = 32 << 10
+)
 
 // component: list | show | enable | disable | config show | config set |
 // update. One noun spans environment and platform owners; each kind's
@@ -79,19 +82,52 @@ func newComponentCmd() *cobra.Command {
 	var forwarders []string
 	var tailnetDelegation bool
 	var configFile string
+	var templateFile string
 	var zoneID string
 	set := &cobra.Command{Use: "set <id>", Short: "Set a component's config", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		body := apiTypes.ComponentConfigMutationInput{}
 		flagConfig := cmd.Flags().Changed("upstream-auto") || cmd.Flags().Changed("upstream") ||
-			cmd.Flags().Changed("forward") || cmd.Flags().Changed("tailnet-delegation")
+			cmd.Flags().Changed("forward") || cmd.Flags().Changed("tailnet-delegation") ||
+			cmd.Flags().Changed("template-file")
 		app := fromContext(cmd)
 		componentFile := cmd.Flags().Changed("file")
+		componentTemplate := cmd.Flags().Changed("template-file")
 		componentZone := cmd.Flags().Changed("zone-id")
-		if componentFile || componentZone {
-			component, err := app.Client.ShowComponent(cmd.Context(), target(app, args[0]))
-			if err != nil {
-				return err
+		component, err := app.Client.ShowComponent(cmd.Context(), target(app, args[0]))
+		if err != nil {
+			return err
+		}
+		if component.Kind == "coredns" {
+			if !componentTemplate {
+				return fmt.Errorf("CoreDNS config requires --template-file PATH or --template-file -")
 			}
+			if componentFile || componentZone {
+				return fmt.Errorf("CoreDNS config accepts --template-file and resolver flags only")
+			}
+			current, currentErr := app.Client.ShowComponentConfig(cmd.Context(), target(app, args[0]))
+			if currentErr != nil {
+				return currentErr
+			}
+			coreDNS := apiTypes.CoreDNSComponentConfigMutationInput{}
+			if current != nil && current.CoreDNS != nil {
+				upstreamAutoValue := current.CoreDNS.UpstreamAuto
+				upstreamResolverValues := append([]string(nil), current.CoreDNS.UpstreamResolvers...)
+				forwarderValues := append([]apiTypes.ComponentDNSForwarder(nil), current.CoreDNS.Forwarders...)
+				tailnetValue := current.CoreDNS.TailnetDelegation
+				coreDNS.UpstreamAuto = &upstreamAutoValue
+				coreDNS.UpstreamResolvers = &upstreamResolverValues
+				coreDNS.Forwarders = &forwarderValues
+				coreDNS.TailnetDelegation = &tailnetValue
+			}
+			value, readErr := readValueFile(
+				templateFile, cmd.InOrStdin(), maxCorefileTemplateBytes, "Corefile template",
+			)
+			if readErr != nil {
+				return readErr
+			}
+			coreDNS.CorefileTemplate = &value
+			body.CoreDNS = &coreDNS
+		} else if componentFile || componentZone {
 			if component.Kind == "caddy" {
 				if flagConfig {
 					return fmt.Errorf("Caddy config accepts only --file and --zone-id")
@@ -134,6 +170,8 @@ func newComponentCmd() *cobra.Command {
 					return fmt.Errorf("component config file must contain one JSON object: %w", err)
 				}
 			}
+		} else if componentTemplate {
+			return fmt.Errorf("--template-file is valid only for CoreDNS")
 		}
 		if body.CoreDNS == nil && flagConfig {
 			body.CoreDNS = &apiTypes.CoreDNSComponentConfigMutationInput{}
@@ -170,6 +208,7 @@ func newComponentCmd() *cobra.Command {
 	set.Flags().StringArrayVar(&forwarders, "forward", nil, "repeatable DOMAIN=RESOLVER[,RESOLVER...]")
 	set.Flags().BoolVar(&tailnetDelegation, "tailnet-delegation", false, "delegate ts.net to the tailnet resolver")
 	set.Flags().StringVar(&configFile, "file", "", "read a Caddyfile template (Caddy) or complete JSON config (other kinds) from PATH, or -")
+	set.Flags().StringVar(&templateFile, "template-file", "", "read the required CoreDNS Corefile template from PATH, or -")
 	set.Flags().StringVar(&zoneID, "zone-id", "", "set the Caddy router Zone while preserving its current template")
 	config.AddCommand(set)
 	cmd.AddCommand(config)

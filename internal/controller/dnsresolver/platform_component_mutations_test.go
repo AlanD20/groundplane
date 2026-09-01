@@ -11,13 +11,15 @@ import (
 func TestCoreDNSConfigMutationCanonicalizesResolvers(t *testing.T) {
 	upstreamAuto := false
 	tailnetDelegation := true
+	corefileTemplate := testCorefileTemplate
 	upstreamResolvers := []string{"1.1.1.1:853", "8.8.8.8"}
 	forwarders := []apiTypes.ComponentDNSForwarder{{
 		Domain: "home.arpa", Resolvers: []string{"192.168.1.1:5353", "192.168.1.2"},
 	}}
 	config, err := coreDNSConfigMutation(apiTypes.ComponentConfigMutationInput{
 		CoreDNS: &apiTypes.CoreDNSComponentConfigMutationInput{
-			UpstreamAuto: &upstreamAuto, UpstreamResolvers: &upstreamResolvers,
+			CorefileTemplate: &corefileTemplate,
+			UpstreamAuto:     &upstreamAuto, UpstreamResolvers: &upstreamResolvers,
 			Forwarders: &forwarders, TailnetDelegation: &tailnetDelegation,
 		},
 	})

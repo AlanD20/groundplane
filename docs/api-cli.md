@@ -174,7 +174,7 @@ Command tree:
     │                    rotate-key | export-key [--file <path>|-]
     ├── component         list [--env NAME | --platform]
     │                    show <id> | enable <id> | disable <id>
-    │                    config show <id> | config set <id> | update <id>
+    │                    config show <id> | config set <id> [--template-file <path|->] | update <id>
     ├── backing-service (bs)
     │                    list | show
     │                    create --slug --name [--description]
@@ -700,8 +700,10 @@ Component reads include `config: null` while a Component is disabled or
 unconfigured. An enabled Component is configured and has a non-null `config`
 containing exactly one complete variant: Caddy (`zone_id` and optional
 `caddyfile_template`), Cloudflare Tunnel (`secret_id`), or CoreDNS
-(`upstream_auto`, `upstream_resolvers`, `forwarders`, and
-`tailnet_delegation`). CoreDNS resolver and forwarder arrays are always JSON
+(`upstream_auto`, `upstream_resolvers`, `forwarders`, `tailnet_delegation`, and
+required `corefile_template`). CoreDNS `component config set` requires
+`--template-file <path|->`; `-` reads bounded stdin. CoreDNS resolver and
+forwarder arrays are always JSON
 arrays, including when empty. The CLI prints the same union and does not
 canonicalize invalid input before the Controller validates it.
 

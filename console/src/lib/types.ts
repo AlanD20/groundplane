@@ -615,6 +615,7 @@ export type PlatformInfra = {
     upstream?: string
     upstreamAuto?: boolean
     tailnetDelegation?: boolean
+    corefileTemplate?: string
     // per-zone forwarders: domain routed to specific resolvers
     // (rendered as `forward <domain> <resolvers>` lines in the Corefile)
     forwarders?: { id?: string; domain: string; upstream: string }[]

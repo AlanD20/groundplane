@@ -26,9 +26,10 @@ type Forwarder struct {
 }
 
 type RenderInput struct {
-	Hosts      []Host
-	Forwarders []Forwarder
-	CatchAll   []ResolverEndpoint
+	CorefileTemplate string
+	Hosts            []Host
+	Forwarders       []Forwarder
+	CatchAll         []ResolverEndpoint
 }
 
 type Renderer interface {
@@ -38,9 +39,10 @@ type Renderer interface {
 
 func CloneRenderInput(input RenderInput) RenderInput {
 	cloned := RenderInput{
-		Hosts:      make([]Host, len(input.Hosts)),
-		Forwarders: make([]Forwarder, len(input.Forwarders)),
-		CatchAll:   append([]ResolverEndpoint(nil), input.CatchAll...),
+		CorefileTemplate: input.CorefileTemplate,
+		Hosts:            make([]Host, len(input.Hosts)),
+		Forwarders:       make([]Forwarder, len(input.Forwarders)),
+		CatchAll:         append([]ResolverEndpoint(nil), input.CatchAll...),
 	}
 	for index, host := range input.Hosts {
 		cloned.Hosts[index] = Host{

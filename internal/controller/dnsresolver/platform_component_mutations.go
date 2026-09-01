@@ -408,6 +408,7 @@ func platformComponentConfigIntent(
 		Query: idempotentintent.Object(),
 		Body: idempotentintent.JSONBody(idempotentintent.Object(
 			idempotentintent.Field{Name: "config", Value: idempotentintent.Object(
+				idempotentintent.Field{Name: "corefile_template", Value: idempotentintent.String(config.CorefileTemplate)},
 				idempotentintent.Field{Name: "forwarders", Value: idempotentintent.List(forwarders...)},
 				idempotentintent.Field{
 					Name:  "tailnet_delegation",
@@ -437,7 +438,7 @@ func platformComponentConfigIntent(
 }
 
 func coreDNSConfigMutation(input apiTypes.ComponentConfigMutationInput) (core.CoreDNSComponentConfig, error) {
-	if input.CoreDNS == nil || input.CoreDNS.UpstreamAuto == nil || input.CoreDNS.UpstreamResolvers == nil ||
+	if input.CoreDNS == nil || input.CoreDNS.CorefileTemplate == nil || input.CoreDNS.UpstreamAuto == nil || input.CoreDNS.UpstreamResolvers == nil ||
 		input.CoreDNS.Forwarders == nil || input.CoreDNS.TailnetDelegation == nil {
 		return core.CoreDNSComponentConfig{}, errs.New(
 			errs.KindValidationFailed,
@@ -458,7 +459,8 @@ func coreDNSConfigMutation(input apiTypes.ComponentConfigMutationInput) (core.Co
 	}
 	sort.Slice(forwarders, func(left int, right int) bool { return forwarders[left].Domain < forwarders[right].Domain })
 	return core.CoreDNSComponentConfig{
-		UpstreamAuto: *input.CoreDNS.UpstreamAuto, UpstreamResolvers: resolvers,
+		CorefileTemplate: *input.CoreDNS.CorefileTemplate,
+		UpstreamAuto:     *input.CoreDNS.UpstreamAuto, UpstreamResolvers: resolvers,
 		Forwarders: forwarders, TailnetDelegation: *input.CoreDNS.TailnetDelegation,
 	}, nil
 }
@@ -518,7 +520,8 @@ func publicCoreDNSConfig(config core.CoreDNSComponentConfig) apiTypes.ComponentC
 	}
 	return apiTypes.ComponentConfig{
 		CoreDNS: &apiTypes.CoreDNSComponentConfig{
-			UpstreamAuto: upstreamAuto, UpstreamResolvers: resolvers,
+			CorefileTemplate: config.CorefileTemplate,
+			UpstreamAuto:     upstreamAuto, UpstreamResolvers: resolvers,
 			Forwarders: forwarders, TailnetDelegation: tailnetDelegation,
 		},
 	}

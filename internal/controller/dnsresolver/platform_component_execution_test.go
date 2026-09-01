@@ -81,7 +81,10 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	component := core.Component{
 		ID: componentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
 		Enabled: true, GeneratedServices: []string{serviceID}, Healthy: true,
-		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+			CorefileTemplate: testCorefileTemplate,
+			UpstreamAuto:     true,
+		}},
 	}
 	record, err := etcd.NewComponentRecord(component)
 	if err != nil {

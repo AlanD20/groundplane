@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane-component-sdk/component"
@@ -15,6 +16,7 @@ import (
 func TestRendererIsDeterministic(t *testing.T) {
 	t.Parallel()
 	input := dnsresolver.RenderInput{
+		CorefileTemplate: DefaultCorefileTemplate,
 		Hosts: []dnsresolver.Host{
 			{Address: netip.MustParseAddr("10.200.40.7"), Hostnames: []string{"admin.example.com"}},
 			{Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"app.example.com", "api.example.com"}},
@@ -56,6 +58,7 @@ func TestRendererIsDeterministic(t *testing.T) {
 func TestRendererRejectsConflictingHosts(t *testing.T) {
 	t.Parallel()
 	input := dnsresolver.RenderInput{
+		CorefileTemplate: DefaultCorefileTemplate,
 		Hosts: []dnsresolver.Host{
 			{Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"api.example.com"}},
 			{Address: netip.MustParseAddr("10.200.40.7"), Hostnames: []string{"api.example.com"}},
@@ -76,7 +79,8 @@ func TestRendererKeepsValidationPortOverridable(t *testing.T) {
 	plan, err := Plan(PlanInput{
 		GeneratedServiceID: "svc_test",
 		Render: dnsresolver.RenderInput{
-			CatchAll: []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 53)},
+			CorefileTemplate: DefaultCorefileTemplate,
+			CatchAll:         []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 53)},
 		},
 	})
 	if err != nil {
@@ -98,7 +102,10 @@ func TestPlanPinsServingImageValidationAndHealthObservation(t *testing.T) {
 	t.Parallel()
 	plan, err := Plan(PlanInput{
 		GeneratedServiceID: "svc_test",
-		Render:             dnsresolver.RenderInput{CatchAll: []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 53)}},
+		Render: dnsresolver.RenderInput{
+			CorefileTemplate: DefaultCorefileTemplate,
+			CatchAll:         []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 53)},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
@@ -107,6 +114,51 @@ func TestPlanPinsServingImageValidationAndHealthObservation(t *testing.T) {
 		plan.Services[0].ObservationAction != ObserveServingAction ||
 		!slices.Equal(ValidateConfigCommand(), []string{"-conf", "/dev/stdin", "-dns.port", "0"}) {
 		t.Fatalf("Plan() serving recipe = %#v", plan.Services)
+	}
+}
+
+// Rationale: the canonical operator template must preserve the historical
+// Corefile shape while expanding only the Controller-owned marker.
+func TestRendererExpandsCanonicalTemplateExactly(t *testing.T) {
+	t.Parallel()
+	rendered, err := (Renderer{}).Render(dnsresolver.RenderInput{
+		CorefileTemplate: DefaultCorefileTemplate,
+		CatchAll:         []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 0)},
+	})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	want := []byte(". {\n    bind 127.0.0.1\n    forward . 1.1.1.1\n    reload\n    prometheus 127.0.0.1:9153\n    log\n    errors\n}\n")
+	if !bytes.Equal(rendered, want) {
+		t.Fatalf("Render() = %q, want %q", rendered, want)
+	}
+}
+
+// Rationale: malformed or unbounded operator templates must fail before any
+// Corefile bytes exist so the last-known-good serving configuration survives.
+func TestRendererRejectsInvalidCorefileTemplate(t *testing.T) {
+	t.Parallel()
+	tests := map[string]string{
+		"empty":            "",
+		"missing marker":   ". {\n    errors\n}\n",
+		"duplicate marker": ". {\n    {groundplane}\n    {groundplane}\n}\n",
+		"missing final LF": ". {\n    {groundplane}\n}",
+		"CRLF":             ". {\r\n    {groundplane}\r\n}\r\n",
+		"NUL":              ". {\n    {groundplane}\x00\n}\n",
+		"invalid UTF-8":    ". {\n    {groundplane}\n" + string([]byte{0xff}) + "}\n",
+		"too large":        "{groundplane}" + strings.Repeat("x", maxCorefileTemplateBytes) + "\n",
+	}
+	for name, template := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			rendered, err := (Renderer{}).Render(dnsresolver.RenderInput{
+				CorefileTemplate: template,
+				CatchAll:         []dnsresolver.ResolverEndpoint{resolver("1.1.1.1", 0)},
+			})
+			if err == nil || rendered != nil {
+				t.Fatalf("Render() = %q, %v, want nil bytes and an error", rendered, err)
+			}
+		})
 	}
 }
 

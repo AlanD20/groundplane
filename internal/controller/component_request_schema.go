@@ -62,7 +62,7 @@ func componentConfigMutationRequestSchema(registry huma.Registry) *huma.Schema {
 }
 
 func coreDNSComponentConfigSchema() *huma.Schema {
-	four := 4
+	five := 5
 	resolverList := &huma.Schema{
 		Type:  huma.TypeArray,
 		Items: &huma.Schema{Type: huma.TypeString},
@@ -80,14 +80,15 @@ func coreDNSComponentConfigSchema() *huma.Schema {
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
+			"corefile_template":  {Type: huma.TypeString},
 			"upstream_auto":      {Type: huma.TypeBoolean},
 			"upstream_resolvers": resolverList,
 			"forwarders":         {Type: huma.TypeArray, Items: forwarder},
 			"tailnet_delegation": {Type: huma.TypeBoolean},
 		},
-		Required:      []string{"upstream_auto", "upstream_resolvers", "forwarders", "tailnet_delegation"},
-		MinProperties: &four,
-		MaxProperties: &four,
+		Required:      []string{"corefile_template", "upstream_auto", "upstream_resolvers", "forwarders", "tailnet_delegation"},
+		MinProperties: &five,
+		MaxProperties: &five,
 	}
 }
 

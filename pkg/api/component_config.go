@@ -20,6 +20,7 @@ type componentConfigWire struct {
 	UpstreamResolvers json.RawMessage `json:"upstream_resolvers"`
 	Forwarders        json.RawMessage `json:"forwarders"`
 	TailnetDelegation json.RawMessage `json:"tailnet_delegation"`
+	CorefileTemplate  json.RawMessage `json:"corefile_template"`
 }
 
 func (config ComponentConfig) MarshalJSON() ([]byte, error) {
@@ -40,11 +41,13 @@ func (config ComponentConfig) MarshalJSON() ([]byte, error) {
 		// Do not use omitempty here: empty resolver and forwarder lists are
 		// meaningful configured state and must remain JSON arrays.
 		return json.Marshal(struct {
+			CorefileTemplate  string                  `json:"corefile_template"`
 			UpstreamAuto      bool                    `json:"upstream_auto"`
 			UpstreamResolvers []string                `json:"upstream_resolvers"`
 			Forwarders        []ComponentDNSForwarder `json:"forwarders"`
 			TailnetDelegation bool                    `json:"tailnet_delegation"`
 		}{
+			config.CoreDNS.CorefileTemplate,
 			config.CoreDNS.UpstreamAuto,
 			config.CoreDNS.UpstreamResolvers,
 			config.CoreDNS.Forwarders,
@@ -86,8 +89,12 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 		}
 		*config = ComponentConfig{CloudflareTunnel: &CloudflareTunnelComponentConfig{SecretID: secretID}}
 	default:
-		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.SecretID) || !present(wire.UpstreamAuto) || !present(wire.UpstreamResolvers) || !present(wire.Forwarders) || !present(wire.TailnetDelegation) {
+		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.SecretID) || !present(wire.CorefileTemplate) || !present(wire.UpstreamAuto) || !present(wire.UpstreamResolvers) || !present(wire.Forwarders) || !present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config CoreDNS variant is incomplete or mixed")
+		}
+		var corefileTemplate string
+		if err := decodeRequiredField(wire.CorefileTemplate, "corefile_template", &corefileTemplate); err != nil {
+			return err
 		}
 		var upstreamAuto, tailnetDelegation bool
 		if err := decodeRequiredField(wire.UpstreamAuto, "upstream_auto", &upstreamAuto); err != nil {
@@ -105,7 +112,8 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		*config = ComponentConfig{CoreDNS: &CoreDNSComponentConfig{
-			UpstreamAuto: upstreamAuto, UpstreamResolvers: upstreamResolvers,
+			CorefileTemplate: corefileTemplate,
+			UpstreamAuto:     upstreamAuto, UpstreamResolvers: upstreamResolvers,
 			Forwarders: forwarders, TailnetDelegation: tailnetDelegation,
 		}}
 	}
@@ -133,7 +141,7 @@ func (config ComponentConfig) validate() error {
 		return invalidComponentConfig("component config Cloudflare Tunnel secret_id is invalid")
 	}
 	if config.CoreDNS != nil {
-		if config.CoreDNS.UpstreamResolvers == nil || config.CoreDNS.Forwarders == nil {
+		if config.CoreDNS.CorefileTemplate == "" || config.CoreDNS.UpstreamResolvers == nil || config.CoreDNS.Forwarders == nil {
 			return invalidComponentConfig("component config CoreDNS arrays are required")
 		}
 		for _, forwarder := range config.CoreDNS.Forwarders {
@@ -155,7 +163,7 @@ func componentConfigBranches(wire componentConfigWire) int {
 	if present(wire.SecretID) {
 		branches++
 	}
-	if present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+	if present(wire.CorefileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
 		branches++
 	}
 	return branches
@@ -263,6 +271,7 @@ type componentConfigMutationWire struct {
 	UpstreamResolvers json.RawMessage `json:"upstream_resolvers"`
 	Forwarders        json.RawMessage `json:"forwarders"`
 	TailnetDelegation json.RawMessage `json:"tailnet_delegation"`
+	CorefileTemplate  json.RawMessage `json:"corefile_template"`
 }
 
 func (input ComponentConfigMutationInput) MarshalJSON() ([]byte, error) {
@@ -281,11 +290,13 @@ func (input ComponentConfigMutationInput) MarshalJSON() ([]byte, error) {
 		}{input.CloudflareTunnel.Credential})
 	default:
 		return json.Marshal(struct {
+			CorefileTemplate  string                  `json:"corefile_template"`
 			UpstreamAuto      bool                    `json:"upstream_auto"`
 			UpstreamResolvers []string                `json:"upstream_resolvers"`
 			Forwarders        []ComponentDNSForwarder `json:"forwarders"`
 			TailnetDelegation bool                    `json:"tailnet_delegation"`
 		}{
+			*input.CoreDNS.CorefileTemplate,
 			*input.CoreDNS.UpstreamAuto, *input.CoreDNS.UpstreamResolvers,
 			*input.CoreDNS.Forwarders, *input.CoreDNS.TailnetDelegation,
 		})
@@ -304,7 +315,7 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 	if present(wire.Credential) {
 		branches++
 	}
-	if present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+	if present(wire.CorefileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
 		branches++
 	}
 	if branches != 1 {
@@ -335,8 +346,12 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 		}
 		*input = ComponentConfigMutationInput{CloudflareTunnel: &CloudflareTunnelComponentConfigMutationInput{Credential: credential}}
 	default:
-		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.Credential) || !present(wire.UpstreamAuto) || !present(wire.UpstreamResolvers) || !present(wire.Forwarders) || !present(wire.TailnetDelegation) {
+		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.Credential) || !present(wire.CorefileTemplate) || !present(wire.UpstreamAuto) || !present(wire.UpstreamResolvers) || !present(wire.Forwarders) || !present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config mutation CoreDNS variant is incomplete or mixed")
+		}
+		var corefileTemplate string
+		if err := decodeRequiredField(wire.CorefileTemplate, "corefile_template", &corefileTemplate); err != nil {
+			return err
 		}
 		var upstreamAuto, tailnetDelegation bool
 		if err := decodeRequiredField(wire.UpstreamAuto, "upstream_auto", &upstreamAuto); err != nil {
@@ -354,7 +369,8 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		*input = ComponentConfigMutationInput{CoreDNS: &CoreDNSComponentConfigMutationInput{
-			UpstreamAuto: &upstreamAuto, UpstreamResolvers: &upstreamResolvers,
+			CorefileTemplate: &corefileTemplate,
+			UpstreamAuto:     &upstreamAuto, UpstreamResolvers: &upstreamResolvers,
 			Forwarders: &forwarders, TailnetDelegation: &tailnetDelegation,
 		}}
 	}
@@ -384,10 +400,10 @@ func (input ComponentConfigMutationInput) validate() error {
 		}
 	}
 	if input.CoreDNS != nil {
-		if input.CoreDNS.UpstreamAuto == nil || input.CoreDNS.UpstreamResolvers == nil || input.CoreDNS.Forwarders == nil || input.CoreDNS.TailnetDelegation == nil {
+		if input.CoreDNS.CorefileTemplate == nil || input.CoreDNS.UpstreamAuto == nil || input.CoreDNS.UpstreamResolvers == nil || input.CoreDNS.Forwarders == nil || input.CoreDNS.TailnetDelegation == nil {
 			return invalidComponentConfig("component config mutation CoreDNS variant requires every field")
 		}
-		if *input.CoreDNS.UpstreamResolvers == nil || *input.CoreDNS.Forwarders == nil {
+		if *input.CoreDNS.CorefileTemplate == "" || *input.CoreDNS.UpstreamResolvers == nil || *input.CoreDNS.Forwarders == nil {
 			return invalidComponentConfig("component config mutation CoreDNS arrays are required")
 		}
 		for _, forwarder := range *input.CoreDNS.Forwarders {

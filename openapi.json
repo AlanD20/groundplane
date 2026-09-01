@@ -762,9 +762,12 @@
           },
           {
             "additionalProperties": false,
-            "maxProperties": 4,
-            "minProperties": 4,
+            "maxProperties": 5,
+            "minProperties": 5,
             "properties": {
+              "corefile_template": {
+                "type": "string"
+              },
               "forwarders": {
                 "items": {
                   "additionalProperties": false,
@@ -801,6 +804,7 @@
               }
             },
             "required": [
+              "corefile_template",
               "upstream_auto",
               "upstream_resolvers",
               "forwarders",
@@ -910,9 +914,12 @@
               },
               {
                 "additionalProperties": false,
-                "maxProperties": 4,
-                "minProperties": 4,
+                "maxProperties": 5,
+                "minProperties": 5,
                 "properties": {
+                  "corefile_template": {
+                    "type": "string"
+                  },
                   "forwarders": {
                     "items": {
                       "additionalProperties": false,
@@ -949,6 +956,7 @@
                   }
                 },
                 "required": [
+                  "corefile_template",
                   "upstream_auto",
                   "upstream_resolvers",
                   "forwarders",

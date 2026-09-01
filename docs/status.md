@@ -91,6 +91,7 @@ The accepted commits landed on `main` in the current checkpoint are:
 - Post-authentication Agent stream fault recovery (this status-changing commit)
 - Sealed inverse Compose lifecycle compensation (this status-changing commit)
 - CoreDNS effective parsed-configuration observation proof (this status-changing commit)
+- CoreDNS full-template authoring through the existing config vertical (this status-changing commit)
 - Blueprint Script apply-wins regression proof (`b71d6054`)
 - Fixed-snapshot HTTP Route provider planning (`3884d075`)
 - Console live release projection and task-state honesty (`11cfff96`)
@@ -285,6 +286,13 @@ The remaining isolated implementation and acceptance lanes are:
 
 1. CoreDNS reference-host capability acceptance for the landed implementation.
 2. Backup terminal delivery, capture/upload, Restore, and runtime composition.
+
+CoreDNS now persists one required operator-authored full Corefile template,
+validates and substitutes its single `{groundplane}` marker in the registered
+SDK-only renderer, and exposes authoring through the existing API, CLI, and
+Console config action. Generic rendered-file preview is intentionally a
+separate unfinished slice; no new endpoint or CoreDNS-specific Agent procedure
+was added.
 
 The bounded native private acceptance topology journey completed on `the disposable QA host` on
 2026-09-01. The production Controller serves the embedded Console on the

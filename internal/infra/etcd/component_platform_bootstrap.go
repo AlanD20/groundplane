@@ -25,6 +25,7 @@ func DefaultPlatformComponents(tailnetDelegation bool) ([]ComponentRecord, error
 			Kind:    core.ComponentKindCoreDNS,
 			Enabled: true,
 			Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+				CorefileTemplate:  ". {\n    {groundplane}\n    prometheus 127.0.0.1:9153\n    log\n    errors\n}\n",
 				UpstreamAuto:      true,
 				TailnetDelegation: tailnetDelegation,
 			}},

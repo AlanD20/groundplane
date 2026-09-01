@@ -75,7 +75,8 @@ func TestBuildIntentIsDeterministic(t *testing.T) {
 		ID: "cmp_coredns", Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
 		Enabled: true, GeneratedServices: []string{"svc_coredns"},
 		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
-			UpstreamAuto: true, TailnetDelegation: true,
+			CorefileTemplate: testCorefileTemplate,
+			UpstreamAuto:     true, TailnetDelegation: true,
 		}},
 	}
 	hosts := []componentdns.Host{{Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"app.example.com"}}}
@@ -112,7 +113,10 @@ func TestBuildIntentRejectsChangedServiceReplay(t *testing.T) {
 	component := core.Component{
 		ID: "cmp_coredns", Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
 		Enabled: true, GeneratedServices: []string{"svc_coredns"},
-		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+			CorefileTemplate: testCorefileTemplate,
+			UpstreamAuto:     true,
+		}},
 	}
 	hosts := []componentdns.Host{{Address: netip.MustParseAddr("10.200.30.4"), Hostnames: []string{"app.example.com"}}}
 	baseline := []componentdns.ResolverEndpoint{{Address: netip.MustParseAddr("1.1.1.1")}}
@@ -159,7 +163,10 @@ func TestBuildIntentUsesRegisteredResolverImplementation(t *testing.T) {
 	component := core.Component{
 		ID: "cmp_alternate", Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKind("alternate-resolver"),
 		Enabled: true, GeneratedServices: []string{"svc_alternate"},
-		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{UpstreamAuto: true}},
+		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+			CorefileTemplate: testCorefileTemplate,
+			UpstreamAuto:     true,
+		}},
 	}
 	baseline, err := componentdns.NewResolverBaseline(
 		1,
