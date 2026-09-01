@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
+import { CopyButton } from '@/components/common/copy-button'
 import { useStore } from '@/lib/store'
 import type { TaskStep, TaskType } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -226,9 +227,13 @@ export function TaskRunnerDialog({
           </div>
           {confirmText && (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="task-confirm">
-                Type <span className="font-mono text-foreground">{confirmText}</span> to confirm
-              </Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="task-confirm">Type the required value to confirm</Label>
+                <CopyButton value={confirmText} label="copy required value" />
+              </div>
+              <code className="select-all rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-foreground">
+                {confirmText}
+              </code>
               <Input id="task-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus placeholder={confirmText} />
             </div>
           )}

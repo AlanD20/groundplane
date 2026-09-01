@@ -1,14 +1,19 @@
 'use client'
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Blocks, Boxes, Building2, Cpu, Layers } from 'lucide-react'
+import { Blocks, Boxes, Building2, Cpu, ExternalLink, Layers, Settings, Trash2 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
 import { MetaPill } from '@/components/common/meta-pill'
 import { EmptyState } from '@/components/common/empty-state'
+import { ResourceActionMenu } from '@/components/common/resource-action-menu'
+import { HierarchyDeleteDialog } from '@/components/common/hierarchy-delete-dialog'
 
 export default function PlatformTenantsPage() {
-  const { tenants, tenantsLoading, tenantError, tenantProjects, runners } = useStore()
+  const store = useStore()
+  const { tenants, tenantsLoading, tenantError, tenantProjects, runners } = store
+  const [removing, setRemoving] = useState<(typeof tenants)[number] | null>(null)
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,11 +46,8 @@ export default function PlatformTenantsPage() {
             )
             const rs = runners.filter((r) => r.tenantId === t.id)
             return (
-              <Link
-                key={t.id}
-                to={`/t/${t.slug}`}
-                className="group rounded-xl border border-border bg-card p-4 transition-colors hover:border-ring/50"
-              >
+              <div key={t.id} className="relative rounded-xl border border-border bg-card transition-colors hover:border-ring/50">
+                <Link to={`/t/${t.slug}`} className="group block p-4 pr-14">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:size-5">
@@ -58,7 +60,6 @@ export default function PlatformTenantsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">isolated</span>
-                    <ArrowRight className="size-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                   </div>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">{t.description}</p>
@@ -68,11 +69,42 @@ export default function PlatformTenantsPage() {
                   <MiniStat icon={<Blocks />} value={svcs} label="services" />
                   <MiniStat icon={<Cpu />} value={rs.length} label="runners" />
                 </div>
-              </Link>
+                </Link>
+                <div className="absolute right-3 top-3">
+                  <ResourceActionMenu
+                    label={`Actions for ${t.name}`}
+                    actions={[
+                      { label: 'Open tenant', icon: <ExternalLink />, href: `/t/${t.slug}` },
+                      { label: 'Tenant settings', icon: <Settings />, href: `/t/${t.slug}/settings` },
+                      { label: 'Delete tenant', icon: <Trash2 />, destructive: true, disabled: t.deletionTaskId !== null, onSelect: () => setRemoving(t) },
+                    ]}
+                  />
+                </div>
+              </div>
             )
           })}
         </div>
       )}
+
+      {removing ? (
+        <HierarchyDeleteDialog
+          open
+          onOpenChange={(open) => !open && setRemoving(null)}
+          kind="tenant"
+          name={removing.slug}
+          id={removing.id}
+          workspace={removing.slug}
+          description="Permanently removes this Tenant and every Project, Environment, workload, volume, Secret, Connector, and Runner it owns. Backing services survive."
+          steps={[
+            { label: 'Freeze Tenant membership', state: 'pending' },
+            { label: 'Remove child runtime and storage', state: 'pending' },
+            { label: 'Remove Projects and Environment state', state: 'pending' },
+            { label: 'Remove the Tenant', state: 'pending' },
+          ]}
+          onDispatch={() => store.removeTenant(removing.id)}
+          onCommit={() => setRemoving(null)}
+        />
+      ) : null}
     </div>
   )
 }

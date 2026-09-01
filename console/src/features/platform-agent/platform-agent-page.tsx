@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft, Settings2, Workflow } from 'lucide-react'
+import { ArrowLeft, Workflow } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { MetaPill } from '@/components/common/meta-pill'
@@ -8,6 +8,8 @@ import { StatusBadge } from '@/components/common/status-badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useStore } from '@/lib/store'
 import { formatAgentLabels, formatLastReportAt } from '@/lib/agent-read-model'
+import { AgentConfigCard } from '@/features/platform-agent/agent-config-card'
+import { PlatformAgentActions } from '@/features/platform-agent/platform-agent-actions'
 
 export default function PlatformAgentPage() {
   const { id } = useParams<{ id: string }>()
@@ -24,8 +26,8 @@ export default function PlatformAgentPage() {
         <p className={agentError ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
           {agentError ?? 'Unknown Agent.'}
         </p>
-        <Link to="/platform/components" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="size-4" /> Back to Components
+        <Link to="/platform/host" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+          <ArrowLeft className="size-4" /> Back to Host
         </Link>
       </div>
     )
@@ -33,8 +35,8 @@ export default function PlatformAgentPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link to="/platform/components" className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-        <ArrowLeft className="size-3.5" /> Components
+      <Link to="/platform/host" className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+        <ArrowLeft className="size-3.5" /> Host
       </Link>
 
       <PageHeader
@@ -48,12 +50,7 @@ export default function PlatformAgentPage() {
           </>
         }
         actions={
-          <Link
-            to="/platform/components/agent"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <Settings2 className="size-3.5" /> Agent settings
-          </Link>
+          <PlatformAgentActions agent={agent} allowRemove />
         }
       />
 
@@ -98,6 +95,8 @@ export default function PlatformAgentPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AgentConfigCard agentId={agent.id} />
     </div>
   )
 }

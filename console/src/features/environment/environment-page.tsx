@@ -93,7 +93,9 @@ export default function EnvironmentPage() {
   const [tab, setTab] = useState<EnvTab>('overview')
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
-    if (t && (t === 'tasks' || t === 'releases' || t === 'release-groups')) setTab(t as EnvTab)
+    if (t && ['overview', 'state', 'router', 'releases', 'release-groups', 'tasks', 'backups', 'volumes', 'environments', 'settings', 'scripts'].includes(t)) {
+      setTab(t as EnvTab)
+    }
   }, [])
   if (!env || !project) {
     if (store.tenantsLoading || store.projectsLoading) {
@@ -3089,9 +3091,13 @@ function SettingsCard({ env }: { env: Environment }) {
               secrets, backups, and recovery points. Cannot be undone.
             </p>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="del-confirm">
-                Type <span className="font-mono text-foreground">{env.name}</span> to confirm
-              </Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="del-confirm">Type the required value to confirm</Label>
+                <CopyButton value={env.name} label="copy required value" />
+              </div>
+              <code className="select-all rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-foreground">
+                {env.name}
+              </code>
               <Input id="del-confirm" placeholder={env.name} onChange={(e) => setConfirmTyped(e.target.value)} autoFocus />
             </div>
             {(deleteError ?? deletionFailure?.message) && <p className="text-xs text-destructive" role="alert">{deleteError ?? deletionFailure?.message}</p>}

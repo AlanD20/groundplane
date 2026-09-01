@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Server,
   Settings2,
-  Trash2,
   Workflow,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -24,6 +23,7 @@ import { MetaPill } from '@/components/common/meta-pill'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
+import { PlatformAgentActions } from '@/features/platform-agent/platform-agent-actions'
 import { TaskDetailDrawer as AuthoritativeTaskDrawer } from '@/components/common/task-detail-drawer'
 import type { ActivityEntry, TaskJournalScope } from '@/lib/types'
 
@@ -47,14 +47,10 @@ export default function PlatformInfraPage() {
     agentError,
     refreshAgents,
     joinAgent,
-    updateAgent,
-    removeAgent,
   } = store
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState<ActivityEntry | null>(null)
   const [joinOpen, setJoinOpen] = useState(false)
-  const [updatingAgent, setUpdatingAgent] = useState<(typeof platform.agents)[number] | null>(null)
-  const [removingAgent, setRemovingAgent] = useState<(typeof platform.agents)[number] | null>(null)
   const platformJournal = store.getTaskJournal(platformTaskScope)
   const platformTasks = platformJournal.entries
 
@@ -215,27 +211,7 @@ export default function PlatformInfraPage() {
                       </span>
                     </td>
                     <td className="py-2 text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          disabled={agentsLoading || a.inFlight > 0}
-                          className="text-muted-foreground"
-                          title={a.inFlight > 0 ? 'Agent update requires zero in-flight tasks' : `Update Agent on ${a.host}`}
-                          onClick={() => setUpdatingAgent(a)}
-                        >
-                          <RefreshCw className="size-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          className="text-muted-foreground hover:text-destructive"
-                          title={`Remove Agent on ${a.host}`}
-                          onClick={() => setRemovingAgent(a)}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </div>
+                      <PlatformAgentActions agent={a} compact allowRemove />
                     </td>
                   </tr>
                 ))}
@@ -293,61 +269,6 @@ export default function PlatformInfraPage() {
           { label: 'Wait for the first healthy report', state: 'pending' },
         ]}
         onDispatch={async () => (await joinAgent()).task_id}
-      />
-
-      <TaskRunnerDialog
-        open={!!updatingAgent}
-        onOpenChange={(next) => {
-          if (!next) {
-            setUpdatingAgent(null)
-            void refreshAgents()
-          }
-        }}
-        title={`Update Agent · ${updatingAgent?.host ?? ''}`}
-        description="Replaces this idle Agent with the digest-pinned agent.image configured on the Controller. No release file, tag, or URL is submitted. The Controller restores the previous digest if the replacement does not become Ready."
-        type="update"
-        target={updatingAgent?.id ?? host?.hostname ?? 'unavailable'}
-        workspace="platform"
-        startLabel="Update Agent"
-        executionCopy="The Controller will replace the selected local Agent:"
-        steps={[
-          { label: 'Fence assignments and verify the Agent is idle', state: 'pending' },
-          { label: 'Rotate Agent generation and channel token', state: 'pending' },
-          { label: 'Replace the container and wait for authenticated Ready', state: 'pending' },
-          { label: 'Restore the previous digest if readiness fails', state: 'pending' },
-        ]}
-        onDispatch={async () => {
-          if (!updatingAgent) throw new Error('Agent update target is unavailable')
-          return (await updateAgent(updatingAgent.id)).task_id
-        }}
-      />
-
-      <TaskRunnerDialog
-        open={!!removingAgent}
-        onOpenChange={(next) => {
-          if (!next) {
-            setRemovingAgent(null)
-            void refreshAgents()
-          }
-        }}
-        title={`Remove Agent · ${removingAgent?.host ?? ''}`}
-        description="Stops the Controller-managed Agent container and removes only this local Agent record after the task completes."
-        type="destroy"
-        target={removingAgent?.id ?? host?.hostname ?? 'unavailable'}
-        workspace="platform"
-        destructive
-        confirmText={removingAgent?.host ?? ''}
-        startLabel="Remove Agent"
-        executionCopy="The Controller will stop and remove the local Agent:"
-        steps={[
-          { label: 'Dispatch local Agent removal', state: 'pending' },
-          { label: 'Stop the Controller-managed Agent container', state: 'pending' },
-          { label: 'Remove the local Agent record', state: 'pending' },
-        ]}
-        onDispatch={async () => {
-          if (!removingAgent) throw new Error('Agent removal target is unavailable')
-          return (await removeAgent(removingAgent.id)).task_id
-        }}
       />
 
       {/* Platform component tasks */}

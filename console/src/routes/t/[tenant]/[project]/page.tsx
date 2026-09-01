@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useRequiredParams } from '@/lib/router'
-import { ArrowLeft, ArrowRight, Boxes, Building2, KeyRound, Layers, Plug, Plus, Router as RouterIcon } from 'lucide-react'
+import { ArrowLeft, Boxes, Building2, ExternalLink, KeyRound, Layers, Plug, Plus, Settings, Trash2, Router as RouterIcon } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
 import { StatusBadge, StatusDot } from '@/components/common/status-badge'
@@ -14,6 +14,9 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { EmptyState } from '@/components/common/empty-state'
+import { ResourceActionMenu } from '@/components/common/resource-action-menu'
+import { HierarchyDeleteDialog } from '@/components/common/hierarchy-delete-dialog'
+import type { Environment } from '@/lib/types'
 
 export default function TenantProjectPage() {
   const params = useRequiredParams('tenant', 'project')
@@ -23,6 +26,7 @@ export default function TenantProjectPage() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [networkPool, setNetworkPool] = useState('')
+  const [removingEnvironment, setRemovingEnvironment] = useState<Environment | null>(null)
 
   if (!tenant || !project || project.tenantId !== tenant.id) {
     return (
@@ -100,11 +104,11 @@ export default function TenantProjectPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {envs.map((e) => (
-            <Link
-              key={e.id}
-              to={`/t/${tenant.slug}/${project.slug}/${e.name}`}
-              className="group flex flex-col gap-4 rounded-xl border border-border bg-card p-4 transition-colors hover:border-ring/50 md:flex-row md:items-center md:justify-between"
-            >
+            <div key={e.id} className="relative rounded-xl border border-border bg-card transition-colors hover:border-ring/50">
+              <Link
+                to={`/t/${tenant.slug}/${project.slug}/${e.name}`}
+                className="group flex flex-col gap-4 p-4 pr-14 md:flex-row md:items-center md:justify-between"
+              >
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-primary [&_svg]:size-5">
                   <Layers />
@@ -129,9 +133,19 @@ export default function TenantProjectPage() {
 
               <div className="flex items-center gap-3 md:shrink-0">
                 <span className="hidden text-xs text-muted-foreground lg:block">deployed {e.lastDeployAt}</span>
-                <ArrowRight className="size-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
               </div>
-            </Link>
+              </Link>
+              <div className="absolute right-3 top-3">
+                <ResourceActionMenu
+                  label={`Actions for ${e.name}`}
+                  actions={[
+                    { label: 'Open environment', icon: <ExternalLink />, href: `/t/${tenant.slug}/${project.slug}/${e.name}` },
+                    { label: 'Environment settings', icon: <Settings />, href: `/t/${tenant.slug}/${project.slug}/${e.name}?tab=settings` },
+                    { label: 'Delete environment', icon: <Trash2 />, destructive: true, disabled: e.deletionTaskId !== null, onSelect: () => setRemovingEnvironment(e) },
+                  ]}
+                />
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -179,6 +193,26 @@ export default function TenantProjectPage() {
           </DialogFooter>
         </DrawerContent>
       </Drawer>
+
+      {removingEnvironment ? (
+        <HierarchyDeleteDialog
+          open
+          onOpenChange={(open) => !open && setRemovingEnvironment(null)}
+          kind="environment"
+          name={removingEnvironment.name}
+          id={removingEnvironment.id}
+          workspace={tenant.slug}
+          description="Permanently removes this Environment and every workload, volume, Entry, Attach, backup, recovery point, and Component state it owns."
+          steps={[
+            { label: 'Freeze Environment membership', state: 'pending' },
+            { label: 'Remove workload runtime and storage', state: 'pending' },
+            { label: 'Remove Environment-scoped state', state: 'pending' },
+            { label: 'Remove the Environment', state: 'pending' },
+          ]}
+          onDispatch={() => store.deleteEnvironment(removingEnvironment.id)}
+          onCommit={() => setRemovingEnvironment(null)}
+        />
+      ) : null}
     </div>
   )
 }

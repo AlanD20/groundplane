@@ -6,9 +6,11 @@ import { PageHeader } from '@/components/common/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge, StatusDot } from '@/components/common/status-badge'
 import { MetaPill } from '@/components/common/meta-pill'
+import { AgentConfigCard } from '@/features/platform-agent/agent-config-card'
+import { PlatformAgentActions } from '@/features/platform-agent/platform-agent-actions'
 
 export default function PlatformHostPage() {
-  const { host, hostLoading, hostError, tenantProjects, backingProjects } = useStore()
+  const { host, hostLoading, hostError, tenantProjects, backingProjects, platform } = useStore()
   if (!host) {
     return (
       <div className="flex flex-col gap-6">
@@ -25,6 +27,7 @@ export default function PlatformHostPage() {
       </div>
     )
   }
+  const agent = platform.agents[0]
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -40,6 +43,7 @@ export default function PlatformHostPage() {
             <MetaPill icon={<Clock />}>up {host.uptime}</MetaPill>
           </>
         }
+        actions={agent ? <PlatformAgentActions agent={agent} /> : undefined}
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -117,6 +121,8 @@ export default function PlatformHostPage() {
           </Card>
         </div>
       </div>
+
+      {agent ? <AgentConfigCard agentId={agent.id} /> : null}
 
       {/* Tenant projects */}
       <Card>

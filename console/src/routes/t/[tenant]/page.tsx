@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useRequiredParams } from '@/lib/router'
-import { ArrowRight, Blocks, Boxes, CalendarDays, Cpu, Layers, Plus, ShieldCheck } from 'lucide-react'
+import { Blocks, Boxes, CalendarDays, Cpu, ExternalLink, Layers, Plus, Settings, ShieldCheck, Trash2 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useLinkedSlug } from '@/lib/use-linked-slug'
 import { PageHeader } from '@/components/common/page-header'
@@ -15,6 +15,8 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { EmptyState } from '@/components/common/empty-state'
+import { ResourceActionMenu } from '@/components/common/resource-action-menu'
+import { HierarchyDeleteDialog } from '@/components/common/hierarchy-delete-dialog'
 
 export default function TenantPage() {
   const params = useRequiredParams('tenant')
@@ -28,6 +30,7 @@ export default function TenantPage() {
   const [description, setDescription] = useState('')
   const [projectError, setProjectError] = useState<string | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
+  const [removingProject, setRemovingProject] = useState<(typeof projects)[number] | null>(null)
 
   if (!tenant) {
     if (store.tenantsLoading) return <EmptyState icon={<Boxes />} title="Loading tenant" />
@@ -85,11 +88,8 @@ export default function TenantPage() {
             const envs = p.environments ?? []
             const svcCount = envs.reduce((n, e) => n + e.services.length, 0)
             return (
-              <Link
-                key={p.id}
-                to={`/t/${tenant.slug}/${p.slug}`}
-                className="group flex flex-col rounded-xl border border-border bg-card p-4 transition-colors hover:border-ring/50"
-              >
+              <div key={p.id} className="relative rounded-xl border border-border bg-card transition-colors hover:border-ring/50">
+                <Link to={`/t/${tenant.slug}/${p.slug}`} className="group flex h-full flex-col p-4 pr-14">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:size-5">
@@ -103,7 +103,6 @@ export default function TenantPage() {
                       {p.createdAt && <span className="font-mono text-xs text-muted-foreground">created {p.createdAt}</span>}
                     </div>
                   </div>
-                  <ArrowRight className="size-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                 </div>
                 <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.description}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border pt-3">
@@ -124,7 +123,18 @@ export default function TenantPage() {
                     ))}
                   </div>
                 )}
-              </Link>
+                </Link>
+                <div className="absolute right-3 top-3">
+                  <ResourceActionMenu
+                    label={`Actions for ${p.name}`}
+                    actions={[
+                      { label: 'Open project', icon: <ExternalLink />, href: `/t/${tenant.slug}/${p.slug}` },
+                      { label: 'Project settings', icon: <Settings />, href: `/t/${tenant.slug}/${p.slug}/settings` },
+                      { label: 'Delete project', icon: <Trash2 />, destructive: true, disabled: p.deletionTaskId !== null, onSelect: () => setRemovingProject(p) },
+                    ]}
+                  />
+                </div>
+              </div>
             )
           })}
         </div>
@@ -183,6 +193,26 @@ export default function TenantPage() {
           </DialogFooter>
         </DrawerContent>
       </Drawer>
+
+      {removingProject ? (
+        <HierarchyDeleteDialog
+          open
+          onOpenChange={(open) => !open && setRemovingProject(null)}
+          kind="project"
+          name={removingProject.slug}
+          id={removingProject.id}
+          workspace={tenant.slug}
+          description="Permanently removes this Project and every Environment, workload, volume, Secret, Connector, and project Runner it owns."
+          steps={[
+            { label: 'Freeze Project membership', state: 'pending' },
+            { label: 'Remove child runtime and storage', state: 'pending' },
+            { label: 'Remove Environment state', state: 'pending' },
+            { label: 'Remove the Project', state: 'pending' },
+          ]}
+          onDispatch={() => store.deleteProject(removingProject.id)}
+          onCommit={() => setRemovingProject(null)}
+        />
+      ) : null}
     </div>
   )
 }
