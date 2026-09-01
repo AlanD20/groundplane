@@ -302,8 +302,7 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 			expectedPreviousGeneration = observation.Record.DNSResolverProof.RenderGeneration
 		}
 	}
-	if ensureService && !observationFound && (len(current.Record.Runtime.GeneratedServices) != 0 ||
-		current.Record.Desired.Enabled && !planner.bootstrapProvenance) {
+	if ensureService && !observationFound && len(current.Record.Runtime.GeneratedServices) != 0 {
 		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
 			errs.KindStateConflict,
 			"platform Component serving predecessor observation is unavailable",

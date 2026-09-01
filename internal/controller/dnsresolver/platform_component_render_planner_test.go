@@ -108,7 +108,7 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 		wantConflict        bool
 	}{
 		{name: "clean enabled bootstrap", currentEnabled: true, bootstrapProvenance: true},
-		{name: "ambiguous enabled empty runtime", currentEnabled: true, wantConflict: true},
+		{name: "enabled initial activation", currentEnabled: true},
 		{
 			name: "serving predecessor without observation", currentEnabled: true,
 			hasGeneratedService: true, wantConflict: true,
@@ -174,12 +174,13 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 				},
 			}
 			current := etcd.Versioned[etcd.ComponentRecord]{Record: record}
+			var input etcd.PlatformComponentTaskRenderInput
 			if test.bootstrapProvenance {
-				_, err = planner.PrepareBootstrapConfigTaskAtProjection(
+				input, err = planner.PrepareBootstrapConfigTaskAtProjection(
 					context.Background(), current, desired, task, projection,
 				)
 			} else {
-				_, err = planner.PrepareConfigTask(context.Background(), current, desired, task)
+				input, err = planner.PrepareConfigTask(context.Background(), current, desired, task)
 			}
 			if test.wantConflict {
 				if err == nil {
@@ -193,6 +194,9 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 			}
 			if err != nil {
 				t.Fatalf("PrepareConfigTask() error = %v", err)
+			}
+			if input.RollbackComposeArtifact != nil {
+				t.Fatal("initial Component activation planned compensation to a missing predecessor")
 			}
 		})
 	}
