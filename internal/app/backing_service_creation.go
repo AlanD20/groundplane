@@ -320,9 +320,9 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	projection := desiredrevision.ComposeProjection(
-		environment.ID, task.ID, 1, identities, map[string]string{volume.Key: volume.Slug},
-		volumeMounts, artifactValue, normalizedCompose, nil, nil, nil, nil, entries,
+	projection := buildBackingServiceCreationProjection(
+		environment.ID, task.ID, identities, map[string]string{volume.Key: volume.Slug}, volumeMounts,
+		artifactValue, normalizedCompose, zone, serviceRecord, entries,
 	)
 	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
 	if err != nil {
