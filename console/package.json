@@ -1,0 +1,39 @@
+{
+  "name": "groundplane-console",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "npm@11.17.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test": "node --test src/lib/*.test.mjs",
+    "build": "tsc -b && vite build",
+    "generate:api": "openapi-typescript ../openapi.json -o src/lib/api.generated.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.5.0",
+    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/geist-mono": "^5.2.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.2",
+    "tailwind-merge": "^3.3.1",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^24",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.5",
+    "openapi-typescript": "7.13.0",
+    "shadcn": "^4.8.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.7.3",
+    "vite": "8.2.1"
+  }
+}
