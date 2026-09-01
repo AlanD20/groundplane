@@ -30,6 +30,16 @@ func prepareReleaseHookPublicationFragment(evidence ReleasePublicationEvidence) 
 	}
 	for _, hook := range evidence.Hooks {
 		sources, execution := hook.Sources, hook.Execution
+		generation := sources.Script.Record.ScriptSetGeneration
+		if execution.ScriptSetGeneration != "" && execution.ScriptSetGeneration != generation {
+			return releaseHookPublicationFragment{}, errs.New(
+				errs.KindValidationFailed, "release hook execution evidence is invalid",
+			)
+		}
+		// RunScript plans do not carry Script-set storage ownership. Bind it
+		// from the frozen source snapshot at the atomic publication boundary,
+		// as manual Script publication does before validating the record.
+		execution.ScriptSetGeneration = generation
 		if err := validateScriptExecutionSources(sources, execution); err != nil ||
 			validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != evidence.Task.ID ||
