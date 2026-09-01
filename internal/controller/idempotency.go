@@ -27,7 +27,44 @@ func (s *Server) serveAPIRequest(w http.ResponseWriter, r *http.Request) {
 	) {
 		return
 	}
-	s.Mux.ServeHTTP(w, r)
+	if s.controllerTaskWake == nil || !mayAcceptTask(r.Method) {
+		s.Mux.ServeHTTP(w, r)
+		return
+	}
+	response := &acceptedTaskResponseWriter{ResponseWriter: w}
+	s.Mux.ServeHTTP(response, r)
+	if response.status == http.StatusAccepted {
+		s.controllerTaskWake()
+	}
+}
+
+type acceptedTaskResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (writer *acceptedTaskResponseWriter) WriteHeader(status int) {
+	if writer.status != 0 {
+		return
+	}
+	writer.status = status
+	writer.ResponseWriter.WriteHeader(status)
+}
+
+func (writer *acceptedTaskResponseWriter) Write(body []byte) (int, error) {
+	if writer.status == 0 {
+		writer.WriteHeader(http.StatusOK)
+	}
+	return writer.ResponseWriter.Write(body)
+}
+
+func mayAcceptTask(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 func requiresIdempotencyKey(r *http.Request) bool {

@@ -36,6 +36,7 @@ type Runner struct {
 	interval time.Duration
 	logger   *slog.Logger
 	now      func() time.Time
+	wake     chan struct{}
 
 	mu     sync.Mutex
 	active *activeExecution
@@ -55,8 +56,21 @@ func New(store Store, handler Handler, interval time.Duration, logger *slog.Logg
 	}
 	return &Runner{
 		store: store, handler: handler, interval: interval, logger: logger,
-		now: time.Now,
+		now: time.Now, wake: make(chan struct{}, 1),
 	}, nil
+}
+
+// Wake requests an immediate durable queue scan. Signals coalesce so Task
+// publication never blocks on runner availability; the interval remains the
+// recovery path when a signal is lost across process failure.
+func (runner *Runner) Wake() {
+	if runner == nil || runner.wake == nil {
+		return
+	}
+	select {
+	case runner.wake <- struct{}{}:
+	default:
+	}
 }
 
 // Run executes immediately on startup and then waits only when no work was
@@ -86,6 +100,7 @@ func (runner *Runner) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-runner.wake:
 		case <-ticker.C:
 		}
 	}

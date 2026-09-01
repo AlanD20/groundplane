@@ -1353,6 +1353,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		AttachFacts:             attachFactReads,
 		TaskMutations:           taskMutations,
 		TaskAborts:              taskAborts,
+		ControllerTaskWake:      controllerTaskRunner.Wake,
 		TenantMutations:         tenantMutations,
 		TenantChanges:           tenantChanges,
 		Console:                 consoleAssets, Tasks: tasks, Logs: logService,

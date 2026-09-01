@@ -85,6 +85,7 @@ type Server struct {
 	attachFacts             AttachFactReader
 	taskMutations           TaskRetrier
 	taskAborts              TaskAborter
+	controllerTaskWake      func()
 	console                 fs.FS
 	tasks                   taskQueries
 	taskEventStreams        taskEventStreamOpener
@@ -147,6 +148,7 @@ type Options struct {
 	AttachFacts             AttachFactReader
 	TaskMutations           TaskRetrier
 	TaskAborts              TaskAborter
+	ControllerTaskWake      func()
 	Console                 fs.FS
 	Tasks                   *etcd.TaskRepository
 	Logs                    *LogService
@@ -222,6 +224,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		attachFacts:             options.AttachFacts,
 		taskMutations:           options.TaskMutations,
 		taskAborts:              options.TaskAborts,
+		controllerTaskWake:      options.ControllerTaskWake,
 		console:                 options.Console,
 		tasks:                   options.Tasks,
 		logs:                    options.Logs,

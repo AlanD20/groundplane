@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -58,6 +59,36 @@ func TestRunnerLeavesClaimRunningWhenControllerStops(t *testing.T) {
 	progressed, err := runner.runOne(ctx)
 	if !progressed || err == nil || store.ackCalls != 0 {
 		t.Fatalf("runOne(cancelled) = %v, %v, ack calls %d", progressed, err, store.ackCalls)
+	}
+}
+
+func TestRunnerWakeClaimsWorkBeforeRecoveryInterval(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	store := newWakeStore(controllerClaim(now, now.Add(time.Minute)))
+	runner, err := New(
+		store,
+		&fakeHandler{},
+		time.Hour,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.now = func() time.Time { return now }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go runner.Run(ctx)
+	select {
+	case <-store.emptyScan:
+	case <-time.After(time.Second):
+		t.Fatal("Controller Task runner did not perform its startup scan")
+	}
+	store.enqueue()
+	runner.Wake()
+	select {
+	case <-store.acknowledged:
+	case <-time.After(time.Second):
+		t.Fatal("Controller Task runner did not claim work after Wake")
 	}
 }
 
@@ -127,6 +158,56 @@ type fakeHandler struct {
 	calls               int
 	task                etcd.TaskRecord
 	waitForCancellation bool
+}
+
+type wakeStore struct {
+	mu           sync.Mutex
+	claim        etcd.TaskAssignment
+	queued       bool
+	emptyScan    chan struct{}
+	acknowledged chan struct{}
+	emptyOnce    sync.Once
+	ackOnce      sync.Once
+}
+
+func newWakeStore(claim etcd.TaskAssignment) *wakeStore {
+	return &wakeStore{
+		claim: claim, emptyScan: make(chan struct{}), acknowledged: make(chan struct{}),
+	}
+}
+
+func (store *wakeStore) enqueue() {
+	store.mu.Lock()
+	store.queued = true
+	store.mu.Unlock()
+}
+
+func (*wakeStore) ListControllerTaskClaims(context.Context) ([]etcd.TaskAssignment, error) {
+	return nil, nil
+}
+
+func (store *wakeStore) ClaimNextControllerTask(
+	context.Context,
+	time.Time,
+) (etcd.TaskAssignment, bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if !store.queued {
+		store.emptyOnce.Do(func() { close(store.emptyScan) })
+		return etcd.TaskAssignment{}, false, nil
+	}
+	store.queued = false
+	return store.claim, true, nil
+}
+
+func (store *wakeStore) AcknowledgeControllerTask(
+	context.Context,
+	string,
+	etcd.TaskStatus,
+	time.Time,
+) (etcd.Versioned[etcd.TaskRecord], error) {
+	store.ackOnce.Do(func() { close(store.acknowledged) })
+	return etcd.Versioned[etcd.TaskRecord]{}, nil
 }
 
 func (handler *fakeHandler) Execute(ctx context.Context, task etcd.TaskRecord) error {
