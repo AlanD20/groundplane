@@ -41,6 +41,7 @@ var fixedEnvironment = []string{
 	"HOME=/nonexistent",
 	"DOCKER_HOST=unix:///var/run/docker.sock",
 	"COMPOSE_DISABLE_ENV_FILE=1",
+	"COMPOSE_PARALLEL_LIMIT=1",
 }
 
 // MarshalRequest returns one complete request frame for helper stdin.

@@ -99,9 +99,16 @@ func TestExecuteApplyUsesExactComposeProcedure(t *testing.T) {
 		append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate"),
 		append(append([]string(nil), prefix...), "up", "--detach", "api"),
 	}
+	wantEnvironment := []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"HOME=/nonexistent",
+		"DOCKER_HOST=unix:///var/run/docker.sock",
+		"COMPOSE_DISABLE_ENV_FILE=1",
+		"COMPOSE_PARALLEL_LIMIT=1",
+	}
 	for index, call := range fake.Calls {
 		if call.Name != DockerExecutable || call.Dir != WorkDirectory || !call.ReplaceEnv ||
-			!reflect.DeepEqual(call.Env, fixedEnvironment) || !reflect.DeepEqual(call.Args, wantArgs[index]) ||
+			!reflect.DeepEqual(call.Env, wantEnvironment) || !reflect.DeepEqual(call.Args, wantArgs[index]) ||
 			!bytes.Equal(call.Stdin, request.Plan.Artifacts[0].CanonicalYaml) {
 			t.Fatalf("Runner call %d = %#v", index, call)
 		}

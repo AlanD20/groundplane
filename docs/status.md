@@ -90,6 +90,7 @@ The accepted commits landed on `main` in the current checkpoint are:
 - Least-privilege registered-validator execution capability (this status-changing commit)
 - Post-authentication Agent stream fault recovery (this status-changing commit)
 - Sealed inverse Compose lifecycle compensation (this status-changing commit)
+- Serialized Compose Engine calls for nested managed-Volume population (this commit)
 - CoreDNS effective parsed-configuration observation proof (this status-changing commit)
 - CoreDNS full-template authoring through the existing config vertical (this status-changing commit)
 - Host Console startup/runtime configuration boundary (this status-changing commit)
