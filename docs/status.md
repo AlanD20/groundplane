@@ -76,6 +76,7 @@ The accepted commits landed on `main` in the current checkpoint are:
 - Caddy template configuration (`c1f39188`)
 - Generic HTTP-router origin projection (`a7cd6d85`)
 - Prepared Script source-reference contract (`39e919e7`, `177e0913`)
+- Hardened prepared Script source publication authority (this commit)
 - Backup protocol contract (`31b80d82`)
 - Canonical Backup artifact foundation (`1397d587`)
 - Script materialization-proof foundation (`f9acf442`)
@@ -264,9 +265,13 @@ compensate only candidate-touched members, compensation failure suppresses
 failure hooks, and `on-failure` runners start only when final Agent serving
 evidence matches their policy-selected candidate or predecessor Release. An
 absent or ambiguous serving identity completes the durable no-start path
-without guessing. Blueprint apply still publishes Script desired state without
-executing hooks; staged Blueprint post-deploy execution is the next C21 lane
-required by the private clean-start topology.
+without guessing. Prepared Blueprint Script sources now use a bounded,
+restart-safe authority with exact existing-or-staged evidence, canonical owner
+and digest validation, atomic activation requirements, and idempotent
+abandonment of partial preparation. Blueprint apply still publishes Script
+desired state without executing hooks; candidate Release publication and
+staged Blueprint post-deploy execution are the next C21 lane required by the
+private clean-start topology.
 
 The desired-topology landing candidate cleanly replaces the transitional flat
 Zone and topology projection authority. Environment revisions now carry the

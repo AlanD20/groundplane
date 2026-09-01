@@ -1,0 +1,419 @@
+package etcd
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"github.com/oklog/ulid/v2"
+	"google.golang.org/protobuf/proto"
+)
+
+func TestScriptSourceReferenceAuthorityPrepareSealAndActivate(t *testing.T) {
+	store, authority, operationID, members := scriptSourceReferenceFixture(t)
+	prepared, err := authority.Prepare(context.Background(), operationID, members)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.IsZero() {
+		t.Fatal("Prepare() returned a zero token")
+	}
+	descriptorValue := store.valueAt(scriptSourcePreparationKey(operationID), store.revision)
+	if descriptorValue == nil || descriptorValue.ModRevision != prepared.descriptorRevision {
+		t.Fatalf("sealed descriptor = %#v, token revision = %d", descriptorValue, prepared.descriptorRevision)
+	}
+	descriptor, err := decodeScriptSourcePreparation(descriptorValue.Value)
+	if err != nil || descriptor.Phase != ScriptSourcePreparationSealed ||
+		descriptor.PreparationCursor != descriptor.MembershipCount || descriptor.MembershipCount != uint64(len(members)) {
+		t.Fatalf("sealed descriptor = %#v, %v", descriptor, err)
+	}
+	for _, member := range members {
+		forward := store.valueAt(scriptSourceForwardReferenceKey(member.Reference), store.revision)
+		reverse := store.valueAt(scriptSourceReverseReferenceKey(member.Reference), store.revision)
+		countValue := store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision)
+		if forward == nil || reverse == nil || countValue == nil || !bytes.Equal(forward.Value, reverse.Value) {
+			t.Fatalf("membership %s is incomplete", scriptSourceSuffix(member.Reference.Source))
+		}
+		count, decodeErr := decodeScriptSourceCount(countValue.Value)
+		if decodeErr != nil || count.ReferencedExecutionCount != 1 || count.Source != member.Reference.Source {
+			t.Fatalf("source count = %#v, %v", count, decodeErr)
+		}
+	}
+	fragment, err := authority.FinalPublicationFragment(context.Background(), prepared)
+	if err != nil {
+		t.Fatalf("FinalPublicationFragment() error = %v", err)
+	}
+	defer fragment.Clear()
+	if len(fragment.conditions) != 2 || len(fragment.mutations) != 2 || len(fragment.staged) != 0 ||
+		fragment.conditions[0] != (Condition{Key: scriptSourcePreparationKey(operationID), ModRevision: prepared.descriptorRevision}) ||
+		fragment.conditions[1] != (Condition{Key: scriptSourceRootKey(operationID)}) ||
+		fragment.mutations[0].Key != scriptSourceRootKey(operationID) ||
+		fragment.mutations[1].Type != MutationDelete || fragment.mutations[1].Key != scriptSourcePreparationKey(operationID) {
+		t.Fatalf("final publication fragment = %#v / %#v", fragment.conditions, fragment.mutations)
+	}
+	result, err := store.Transact(context.Background(), fragment.conditions, fragment.mutations)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("activate prepared source set = %#v, %v", result, err)
+	}
+	rootValue := store.valueAt(scriptSourceRootKey(operationID), store.revision)
+	root, err := decodeScriptOperationSourceRoot(rootValue.Value)
+	if err != nil || root.OperationID != operationID || root.Phase != ScriptOperationSourceActive ||
+		root.MembershipCount != descriptor.MembershipCount || root.MembershipSHA256 != descriptor.MembershipSHA256 {
+		t.Fatalf("active root = %#v, %v", root, err)
+	}
+}
+
+func TestScriptSourceReferenceAuthorityExactRetryDoesNotIncrementCounts(t *testing.T) {
+	store, authority, operationID, members := scriptSourceReferenceFixture(t)
+	members = append(members[:1:1], members[0])
+	first, err := authority.Prepare(context.Background(), operationID, members)
+	if err != nil {
+		t.Fatalf("Prepare(first) error = %v", err)
+	}
+	countKey := scriptSourceCountKey(members[0].Reference.Source)
+	countBefore := store.valueAt(countKey, store.revision)
+	forwardBefore := store.valueAt(scriptSourceForwardReferenceKey(members[0].Reference), store.revision)
+	second, err := authority.Prepare(context.Background(), operationID, members)
+	if err != nil {
+		t.Fatalf("Prepare(retry) error = %v", err)
+	}
+	countAfter := store.valueAt(countKey, store.revision)
+	forwardAfter := store.valueAt(scriptSourceForwardReferenceKey(members[0].Reference), store.revision)
+	if first.descriptorRevision != second.descriptorRevision || first.membershipSHA256 != second.membershipSHA256 ||
+		countBefore.ModRevision != countAfter.ModRevision || countBefore.Version != countAfter.Version ||
+		forwardBefore.ModRevision != forwardAfter.ModRevision || forwardBefore.Version != forwardAfter.Version {
+		t.Fatal("exact retry mutated durable source references")
+	}
+}
+
+func TestScriptSourceReferenceAuthorityRejectsConflictingOrForgedEvidence(t *testing.T) {
+	store, authority, operationID, members := scriptSourceReferenceFixture(t)
+	conflict := members[0]
+	conflict.Reference.SourceOwnerID = ids.NewAt(ids.KindEnvironment, scriptSourceReferenceTestTime(), 99)
+	_, err := authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{members[0], conflict})
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(conflicting owner) error = %v", err)
+	}
+
+	forged := members[0]
+	forged.Evidence.Existing = &ScriptExistingSourceEvidence{SourceKey: members[1].Evidence.Existing.SourceKey}
+	_, err = authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{forged})
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(unrelated same-revision key) error = %v", err)
+	}
+	forged = members[0]
+	forged.Reference.SourceDigest = scriptSourceReferenceDigest("wrong")
+	_, err = authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{forged})
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(mismatched digest) error = %v", err)
+	}
+	primary := scriptSetScriptKey(forged.Reference.Source.EnvironmentID, forged.Reference.Source.ScriptSetGeneration, forged.Reference.Source.ScriptID)
+	forged = members[0]
+	forged.Evidence.Existing = &ScriptExistingSourceEvidence{SourceKey: primary}
+	_, err = authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{forged})
+	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(mutable Script primary) error = %v", err)
+	}
+	_ = store
+}
+
+func TestScriptSourceReferenceAuthorityFailedFinalCASHasNoActiveRoot(t *testing.T) {
+	store, authority, operationID, members := scriptSourceReferenceFixture(t)
+	prepared, err := authority.Prepare(context.Background(), operationID, members[:1])
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	fragment, err := authority.FinalPublicationFragment(context.Background(), prepared)
+	if err != nil {
+		t.Fatalf("FinalPublicationFragment() error = %v", err)
+	}
+	defer fragment.Clear()
+	descriptor := store.valueAt(scriptSourcePreparationKey(operationID), store.revision)
+	raced, err := store.Transact(context.Background(), []Condition{{Key: descriptor.Key, ModRevision: descriptor.ModRevision}}, []Mutation{{Type: MutationPut, Key: descriptor.Key, Value: descriptor.Value}})
+	if err != nil || !raced.Succeeded {
+		t.Fatalf("race descriptor = %#v, %v", raced, err)
+	}
+	result, err := store.Transact(context.Background(), fragment.conditions, fragment.mutations)
+	if err != nil || result.Succeeded || store.valueAt(scriptSourceRootKey(operationID), store.revision) != nil {
+		t.Fatalf("stale final CAS = %#v, %v; root became visible", result, err)
+	}
+}
+
+func TestScriptSourceReferenceAuthorityBatchesAtMost16Memberships(t *testing.T) {
+	base, operationID, members := scriptSourceServiceMembers(t, 17)
+	store := &scriptSourceReferenceAuditStore{memoryHierarchyStore: base}
+	authority, err := newScriptSourceReferenceAuthority(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := authority.Prepare(context.Background(), operationID, members)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	nonempty := 0
+	for _, batch := range store.batches {
+		count := 0
+		for _, mutation := range batch {
+			if mutation.Type == MutationPut && strings.Contains(mutation.Key, "/executions/") {
+				count++
+			}
+		}
+		if count > 0 {
+			nonempty++
+		}
+		if count > 16 {
+			t.Fatalf("preparation batch memberships = %d", count)
+		}
+	}
+	if nonempty < 2 {
+		t.Fatalf("membership batches = %d, want multiple", nonempty)
+	}
+	fragment, err := authority.FinalPublicationFragment(context.Background(), prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fragment.Clear()
+	for _, mutation := range fragment.mutations {
+		if strings.HasPrefix(mutation.Key, scriptSourceForwardReferencePrefix) || strings.HasPrefix(mutation.Key, scriptSourceCountPrefix) || strings.Contains(mutation.Key, "/executions/") {
+			t.Fatalf("activation mutates membership/count: %#v", mutation)
+		}
+	}
+}
+
+func TestScriptSourceReferenceAuthorityAbandonsPartialPreparationAfterRestart(t *testing.T) {
+	base, operationID, members := scriptSourceServiceMembers(t, 12)
+	failing := &scriptSourceReferenceFailureStore{memoryHierarchyStore: base, failAt: 3}
+	authority, err := newScriptSourceReferenceAuthority(failing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = authority.Prepare(context.Background(), operationID, members); err == nil {
+		t.Fatal("Prepare() error = nil, want injected later-batch failure")
+	}
+	descriptorValue := base.valueAt(scriptSourcePreparationKey(operationID), base.revision)
+	descriptor, err := decodeScriptSourcePreparation(descriptorValue.Value)
+	if err != nil || descriptor.PreparationCursor == 0 || descriptor.PreparationCursor >= descriptor.MembershipCount {
+		t.Fatalf("partial descriptor = %#v, %v", descriptor, err)
+	}
+	restarted, err := newScriptSourceReferenceAuthority(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed := append([]ScriptSourcePreparationMember(nil), members...)
+	refreshed[0] = members[0]
+	refreshed[0].Evidence.Existing = &ScriptExistingSourceEvidence{SourceKey: members[1].Evidence.Existing.SourceKey}
+	if err = restarted.Abandon(context.Background(), operationID, refreshed); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("Abandon(refreshed evidence) error = %v", err)
+	}
+	if err = restarted.Abandon(context.Background(), operationID, members); err != nil {
+		t.Fatalf("Abandon(restart) error = %v", err)
+	}
+	if err = restarted.Abandon(context.Background(), operationID, members); err != nil {
+		t.Fatalf("Abandon(exact retry) error = %v", err)
+	}
+	if base.valueAt(scriptSourcePreparationKey(operationID), base.revision) != nil {
+		t.Fatal("abandonment retained the descriptor")
+	}
+	page, _ := base.Range(context.Background(), RangeRequest{Prefix: scriptSourceRootPrefix + operationID + "/executions/", Limit: 1})
+	if len(page.Values) != 0 {
+		t.Fatal("abandonment retained reverse memberships")
+	}
+	for _, member := range members[:int(descriptor.PreparationCursor)] {
+		if base.valueAt(scriptSourceForwardReferenceKey(member.Reference), base.revision) != nil ||
+			base.valueAt(scriptSourceCountKey(member.Reference.Source), base.revision) != nil {
+			t.Fatal("abandonment retained forward membership or count")
+		}
+	}
+}
+
+func TestScriptSourceReferenceAuthorityStagesSnapshotAndReleaseRequirements(t *testing.T) {
+	store := newMemoryHierarchyStore()
+	authority, _ := newScriptSourceReferenceAuthority(store)
+	at := scriptSourceReferenceTestTime()
+	operationID := ids.NewAt(ids.KindOperation, at, 70)
+	executionID := scriptSourceReferenceExecutionID(at, 71)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 72)
+	serviceID := ids.NewAt(ids.KindService, at, 73)
+	snapshotID := scriptSourceReferenceExecutionID(at, 74)
+	releaseID := ids.NewAt(ids.KindDeployment, at, 75)
+	payload, _ := proto.Marshal(&agentpb.ResolvedRunnerSnapshot{SnapshotId: snapshotID, EnvironmentId: environmentID})
+	snapshotDigest := scriptSourceReferenceBytesDigest(payload)
+	snapshotValue, _ := encodeEnvelope("script-runner-snapshot", storedScriptRunnerSnapshot{ExecutionID: executionID, SnapshotID: snapshotID, SHA256: snapshotDigest, Payload: payload})
+	releaseValue, _ := encodeEnvelope("release-intent", domain.Intent{
+		ID: releaseID, EnvironmentID: environmentID, ServiceID: serviceID, OperationID: operationID,
+		OperationKind: domain.OperationDeploy, Image: "registry.example/app", Tag: "v1",
+		Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureLeaveActive,
+		RenderInputID: ids.NewAt(ids.KindConfig, at, 77), RenderInputDigest: scriptSourceReferenceDigest("render"),
+		CreatedAt: at, Actor: "test", OriginatingTaskID: ids.NewAt(ids.KindTask, at, 78),
+		Workspace: domain.Workspace{Kind: domain.WorkspaceTenant, TenantID: ids.NewAt(ids.KindTenant, at, 79), ProjectID: ids.NewAt(ids.KindProject, at, 80), EnvironmentID: environmentID},
+	})
+	releaseDigest := scriptSourceReferenceBytesDigest(releaseValue)
+	members := []ScriptSourcePreparationMember{
+		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceRunnerSnapshot, SnapshotID: snapshotID}, SourceOwnerID: environmentID, SourceDigest: snapshotDigest}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: scriptRunnerSnapshotKey(snapshotID), Value: snapshotValue}}},
+		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceRelease, ReleaseID: releaseID}, SourceOwnerID: environmentID, SourceDigest: releaseDigest}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: releaseIntentStagingKey("", releaseID), Value: releaseValue}}},
+	}
+	prepared, err := authority.Prepare(context.Background(), operationID, members)
+	if err != nil {
+		t.Fatalf("Prepare(staged) error = %v", err)
+	}
+	fragment, err := authority.FinalPublicationFragment(context.Background(), prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fragment.Clear()
+	if len(fragment.conditions) != 4 || len(fragment.StagedRequirements()) != 2 {
+		t.Fatalf("staged fragment = %#v / %#v", fragment.conditions, fragment.StagedRequirements())
+	}
+	stagedMutations := []Mutation{{Type: MutationPut, Key: scriptRunnerSnapshotKey(snapshotID), Value: snapshotValue}, {Type: MutationPut, Key: releaseIntentStagingKey("", releaseID), Value: releaseValue}}
+	if err = fragment.ValidateStagedMutations(stagedMutations); err != nil {
+		t.Fatalf("ValidateStagedMutations(exact) error = %v", err)
+	}
+	stagedMutations[0].Value = []byte("changed")
+	if err = fragment.ValidateStagedMutations(stagedMutations); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("ValidateStagedMutations(changed) error = %v", err)
+	}
+	service := ScriptSourcePreparationMember{Reference: ScriptSourceReference{OperationID: ids.NewAt(ids.KindOperation, at, 76), ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: serviceID}, SourceOwnerID: environmentID}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: serviceRuntimeKey(serviceID), Value: []byte("absent")}}}
+	if _, err = authority.Prepare(context.Background(), service.Reference.OperationID, []ScriptSourcePreparationMember{service}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(arbitrary staged kind) error = %v", err)
+	}
+}
+
+type scriptSourceReferenceAuditStore struct {
+	*memoryHierarchyStore
+	batches [][]Mutation
+}
+
+func (store *scriptSourceReferenceAuditStore) Transact(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionResult, error) {
+	store.batches = append(store.batches, cloneMutations(mutations))
+	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+type scriptSourceReferenceFailureStore struct {
+	*memoryHierarchyStore
+	transacts int
+	failAt    int
+}
+
+func (store *scriptSourceReferenceFailureStore) Transact(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionResult, error) {
+	store.transacts++
+	if store.transacts == store.failAt {
+		return TransactionResult{}, errs.New(errs.KindInternal, "injected source preparation failure")
+	}
+	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+func scriptSourceReferenceFixture(t *testing.T) (*memoryHierarchyStore, *ScriptSourceReferenceAuthority, string, []ScriptSourcePreparationMember) {
+	t.Helper()
+	store := newMemoryHierarchyStore()
+	authority, _ := newScriptSourceReferenceAuthority(store)
+	at := scriptSourceReferenceTestTime()
+	operationID := ids.NewAt(ids.KindOperation, at, 1)
+	executionID := scriptSourceReferenceExecutionID(at, 2)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
+	scriptID := ids.NewAt(ids.KindScript, at, 5)
+	serviceID := ids.NewAt(ids.KindService, at, 6)
+	script, err := NewScriptRecord(environmentID, serviceID, core.Script{ID: scriptID, Slug: "prepared", ServiceName: "api", When: core.ScriptManual, Body: "exit 0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	script.ScriptSetGeneration = environmentID
+	scriptValue, _ := encodeScriptRecord(script)
+	body, _ := newScriptBodyGeneration(script)
+	bodyValue, _ := encodeScriptBodyGeneration(body)
+	serviceValue := scriptSourceServiceValue(t, environmentID, serviceID)
+	seed, err := store.Transact(context.Background(), nil, []Mutation{
+		{Type: MutationPut, Key: scriptSetScriptKey(environmentID, environmentID, scriptID), Value: scriptValue},
+		{Type: MutationPut, Key: scriptSetBodyGenerationKey(environmentID, environmentID, scriptID, 1), Value: bodyValue},
+		{Type: MutationPut, Key: serviceRuntimeKey(serviceID), Value: serviceValue},
+	})
+	if err != nil || !seed.Succeeded {
+		t.Fatalf("seed sources = %#v, %v", seed, err)
+	}
+	members := []ScriptSourcePreparationMember{
+		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceBody, EnvironmentID: environmentID, ScriptSetGeneration: environmentID, ScriptID: scriptID, BodyGeneration: 1}, SourceOwnerID: environmentID, SourceModRevision: seed.Revision, SourceDigest: body.BodySHA256}, Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: scriptSetBodyGenerationKey(environmentID, environmentID, scriptID, 1)}}},
+		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: serviceID}, SourceOwnerID: environmentID, SourceModRevision: seed.Revision}, Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: serviceRuntimeKey(serviceID)}}},
+	}
+	return store, authority, operationID, members
+}
+
+func scriptSourceServiceMembers(t *testing.T, count int) (*memoryHierarchyStore, string, []ScriptSourcePreparationMember) {
+	t.Helper()
+	store := newMemoryHierarchyStore()
+	at := scriptSourceReferenceTestTime()
+	operationID := ids.NewAt(ids.KindOperation, at, 100)
+	executionID := scriptSourceReferenceExecutionID(at, 101)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 102)
+	mutations := make([]Mutation, count)
+	members := make([]ScriptSourcePreparationMember, count)
+	for index := range members {
+		serviceID := ids.NewAt(ids.KindService, at, int64(index+120))
+		mutations[index] = Mutation{Type: MutationPut, Key: serviceRuntimeKey(serviceID), Value: scriptSourceServiceValue(t, environmentID, serviceID)}
+		members[index] = ScriptSourcePreparationMember{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: serviceID}, SourceOwnerID: environmentID}, Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: serviceRuntimeKey(serviceID)}}}
+	}
+	seed, err := store.Transact(context.Background(), nil, mutations)
+	if err != nil || !seed.Succeeded {
+		t.Fatal(err)
+	}
+	for index := range members {
+		members[index].Reference.SourceModRevision = seed.Revision
+	}
+	return store, operationID, members
+}
+
+func scriptSourceServiceValue(t *testing.T, environmentID, serviceID string) []byte {
+	t.Helper()
+	value, err := encodeServiceRuntimeRecord(ServiceRuntimeRecord{EnvironmentID: environmentID, ServiceID: serviceID, Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning}})
+	if err != nil {
+		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
+	}
+	return value
+}
+
+func scriptSourceReferenceTestTime() time.Time {
+	return time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+}
+
+func scriptSourceReferenceExecutionID(at time.Time, seed byte) string {
+	return ulid.MustNew(ulid.Timestamp(at), bytes.NewReader(bytes.Repeat([]byte{seed}, 16))).String()
+}
+
+func scriptSourceReferenceDigest(value string) string {
+	return scriptSourceReferenceBytesDigest([]byte(value))
+}
+func scriptSourceReferenceBytesDigest(value []byte) string {
+	digest := sha256.Sum256(value)
+	return hex.EncodeToString(digest[:])
+}
+
+func TestScriptSourceReferenceAuthorityAbandonRestoresScriptActiveReferencesExactlyOnce(t *testing.T) {
+	store, authority, operationID, members := scriptSourceReferenceFixture(t)
+	body := members[:1]
+	if _, err := authority.Prepare(context.Background(), operationID, body); err != nil {
+		t.Fatalf("Prepare(body) error = %v", err)
+	}
+	primaryKey := scriptSetScriptKey(body[0].Reference.Source.EnvironmentID, body[0].Reference.Source.ScriptSetGeneration, body[0].Reference.Source.ScriptID)
+	preparedPrimary, err := decodeScriptRecord(store.valueAt(primaryKey, store.revision).Value)
+	if err != nil || preparedPrimary.ActiveReferences != 1 {
+		t.Fatalf("prepared Script primary = %#v, %v", preparedPrimary, err)
+	}
+	if err = authority.Abandon(context.Background(), operationID, body); err != nil {
+		t.Fatalf("Abandon(body) error = %v", err)
+	}
+	if err = authority.Abandon(context.Background(), operationID, body); err != nil {
+		t.Fatalf("Abandon(body retry) error = %v", err)
+	}
+	restored, err := decodeScriptRecord(store.valueAt(primaryKey, store.revision).Value)
+	if err != nil || restored.ActiveReferences != 0 {
+		t.Fatalf("restored Script primary = %#v, %v", restored, err)
+	}
+}
