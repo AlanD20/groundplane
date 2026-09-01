@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// environment (env): list | show | create | edit | rename | apply | delete | logs
+// environment (env): list | show | create | edit | rename | blueprint | delete | logs
 // [--follow]. Environment ids are static; the name is only a human label
 // convenience — rename never breaks references. See mvp.md,
 // "Environment", and blueprint.md, "Identity and rename rules".
@@ -133,35 +133,7 @@ func newEnvironmentCmd() *cobra.Command {
 	_ = rename.MarkFlagRequired("name")
 	cmd.AddCommand(rename)
 
-	var bundleDirectory string
-	var rootPath string
-	var composeSources []string
-	var interpolation []string
-	apply := &cobra.Command{
-		Use:   "apply <name>",
-		Short: "Replace an environment's complete Blueprint desired state",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			id, err := resolveEnvironmentTarget(cmd, args[0])
-			if err != nil {
-				return err
-			}
-			body, contentType, err := buildBlueprintMultipart(
-				bundleDirectory, rootPath, composeSources, interpolation,
-			)
-			if err != nil {
-				return err
-			}
-			return runBlueprintApply(cmd, id, body, contentType)
-		},
-	}
-	apply.Flags().StringVar(&bundleDirectory, "bundle-dir", "", "directory containing the closed Blueprint file bundle")
-	apply.Flags().StringVar(&rootPath, "root", "", "relative path to the root Blueprint document")
-	apply.Flags().StringArrayVar(&composeSources, "compose-file", nil, "additional Compose source in layer order")
-	apply.Flags().StringArrayVar(&interpolation, "var", nil, "non-secret Compose interpolation KEY=VALUE")
-	_ = apply.MarkFlagRequired("bundle-dir")
-	_ = apply.MarkFlagRequired("root")
-	cmd.AddCommand(apply)
+	cmd.AddCommand(newEnvironmentBlueprintCmd())
 
 	var tail uint32
 	var follow bool

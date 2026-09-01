@@ -368,3 +368,15 @@ resolves the token transiently, starts or stops the connector, and reports
 health. Caddy enablement and health are no longer prerequisites. Tunnel DNS,
 public hostnames, ingress rules, origin targets, and protocol remain outside
 Groundplane authority. No old capability key or compatibility path remains.
+
+## Environment Blueprint authoring surface (2026-09-01)
+
+The write-only Environment Blueprint contract is replaced in source by a
+canonical authoring read, side-effect-free typed validation diff, and
+revision-fenced apply. The CLI now uses `environment blueprint
+show|validate|apply`, and the Console Blueprint tab loads Controller YAML
+instead of fabricating desired state from frontend projections. The authoring
+serializer excludes runtime identities and observations and emits multiline
+Script bodies as literal YAML blocks. Generated API artifacts and focused
+execution evidence remain required before this source slice changes C21 from
+`Scaffolded`.

@@ -121,12 +121,12 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Upload /> Apply Blueprint
+        <Upload /> Import bundle
       </Button>
       <Drawer open={open && !prepared} onOpenChange={(next) => { if (next) setOpen(true); else closeEditor() }}>
         <DrawerContent className="max-w-3xl">
           <DialogHeader className="pr-8">
-            <DialogTitle className="flex items-center gap-2"><FileArchive className="size-5 text-primary" /> Apply Blueprint</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><FileArchive className="size-5 text-primary" /> Import Blueprint bundle</DialogTitle>
             <DialogDescription>
               Submit one closed bundle. The root is always the first Compose source; additional sources apply in the order shown.
             </DialogDescription>

@@ -52,6 +52,7 @@ type environmentBlueprintRepository interface {
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
 	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ResolveBackingProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	ResolveEnvironment(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
@@ -363,9 +364,10 @@ func (service *environmentBlueprintService) ApplyBlueprint(
 	ctx context.Context,
 	environmentID string,
 	bundle core.BlueprintBundle,
+	expectedRevision string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey, false)
+	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, expectedRevision, idempotencyKey, false)
 }
 
 func (service *environmentBlueprintService) ApplyComponentBlueprint(
@@ -378,7 +380,7 @@ func (service *environmentBlueprintService) ApplyComponentBlueprint(
 	if ids.Validate(ids.KindComponent, componentID) != nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Component id is invalid")
 	}
-	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, idempotencyKey, true)
+	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, "", idempotencyKey, true)
 }
 
 func (service *environmentBlueprintService) applyBlueprint(
@@ -386,6 +388,7 @@ func (service *environmentBlueprintService) applyBlueprint(
 	environmentID string,
 	taskTarget string,
 	bundle core.BlueprintBundle,
+	expectedRevision string,
 	idempotencyKey string,
 	preserveRoutes bool,
 ) (etcd.IdempotencyResponse, error) {
@@ -399,7 +402,15 @@ func (service *environmentBlueprintService) applyBlueprint(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
 	}
 	for attempt := 0; attempt < maximumEnvironmentBlueprintAttempts; attempt++ {
-		response, err := service.applyBlueprintOnce(ctx, environmentID, taskTarget, bundle, idempotencyKey, preserveRoutes)
+		response, err := service.applyBlueprintOnce(
+			ctx,
+			environmentID,
+			taskTarget,
+			bundle,
+			expectedRevision,
+			idempotencyKey,
+			preserveRoutes,
+		)
 		if err == nil {
 			return response, nil
 		}
@@ -416,6 +427,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	environmentID string,
 	taskTarget string,
 	bundle core.BlueprintBundle,
+	expectedRevision string,
 	idempotencyKey string,
 	preserveRoutes bool,
 ) (etcd.IdempotencyResponse, error) {
@@ -480,6 +492,12 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	if expectedRevision != "" && expectedRevision != environmentBlueprintRevision(head, hasHead) {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Environment Blueprint changed after the authoring revision was loaded",
+		)
 	}
 	if generation > math.MaxInt32 {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment render generation is exhausted")

@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { MAXIMUM_BACKUP_POLICY_KEEP, isValidBackupPolicyKeep } from '@/lib/backup-policy-contract'
-import { BlueprintApplyAction } from '@/features/blueprint/blueprint-apply-action'
+import { BlueprintWorkspace } from '@/features/blueprint/blueprint-workspace'
 import { EnvironmentRouterUnavailable } from '@/lib/environment-router-unavailable'
 import { EnvironmentDeletionFence } from '@/lib/environment-deletion-fence'
 import { PageHeader } from '@/components/common/page-header'
@@ -68,7 +68,6 @@ import {
   ServiceStateBadges,
   type ServiceOperation,
 } from '@/features/service/service-runtime-actions'
-import { toYAML } from '@/lib/yaml'
 import { cn, newId } from '@/lib/utils'
 import type { ActivityEntry, Attach, BackupPolicyReplacement, BackupPolicySourceInput, BackupPolicySourceRecord, Environment, EnvironmentEntry, Route, Service, TaskJournalScope, TaskStep, Zone } from '@/lib/types'
 
@@ -172,7 +171,7 @@ export default function EnvironmentPage() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as EnvTab)}>
         <TabsList>
           <TabsTab value="overview">Overview</TabsTab>
-          <TabsTab value="state">Desired state</TabsTab>
+          <TabsTab value="state">Blueprint</TabsTab>
           <TabsTab value="router">Router</TabsTab>
           <TabsTab value="releases">Releases</TabsTab>
           <TabsTab value="release-groups">Release groups</TabsTab>
@@ -189,7 +188,7 @@ export default function EnvironmentPage() {
           <AttachesCard env={env} />
         </TabsPanel>
         <TabsPanel value="state" className="mt-6 flex flex-col gap-4">
-          <DesiredState env={env} />
+          <BlueprintState env={env} />
         </TabsPanel>
         <TabsPanel value="router" className="mt-6 flex flex-col gap-6">
           <RouterCard env={env} />
@@ -1258,127 +1257,11 @@ function AttachesCard({ env }: { env: Environment }) {
   )
 }
 
-// ---- Desired state ----
+// ---- Blueprint ----
 
-function DesiredState({ env }: { env: Environment }) {
-  const store = useStore()
+function BlueprintState({ env }: { env: Environment }) {
   const params = useRequiredParams('tenant')
-  const projectSlug = store.getProjectById(env.projectId)?.slug ?? env.projectId
-  const doc: Record<string, unknown> = {
-    kind: 'environment',
-    schema: 1,
-    metadata: {
-      tenant: params.tenant,
-      project: projectSlug,
-      environment: env.name,
-    },
-    zones: Object.fromEntries(env.zones.map((z) => [z.name, { subnet: z.subnet, internal: z.internal }])),
-    services: Object.fromEntries(
-      env.services.map((s) => [
-        s.name,
-        {
-          image: s.image,
-          strategy: s.strategy,
-          zones: s.zones,
-          env_files: s.envFiles,
-          healthcheck: s.healthcheck
-            ? { kind: s.healthcheck.kind, target: s.healthcheck.target, interval: s.healthcheck.interval, timeout: s.healthcheck.timeout, start_period: s.healthcheck.startPeriod, retries: s.healthcheck.retries }
-            : undefined,
-          resources: s.resources,
-          command: s.command,
-          mounts: s.mounts.map((m) => (m.type === 'volume' ? { volume: m.volume, mount: m.mount } : { file: m.file, mount: m.mount, ro: m.ro })),
-          aliases: s.aliases,
-          depends_on: s.dependsOn.map((d) => ({ service: d, condition: 'service_healthy' })),
-          expose: s.expose,
-          restart: s.restart,
-          replicas: s.replicas,
-        },
-      ]),
-    ),
-    backing: Object.fromEntries(
-      env.attaches.map((a) => [
-        a.name,
-        {
-          attach: true,
-          service: a.service,
-          credential: a.credential.mode === 'new' ? { mode: 'new' } : { mode: 'existing', attach: a.credential.attachId },
-          database: a.database !== '—' ? a.database : undefined,
-          role: a.role,
-          grants: a.grants,
-        },
-      ]),
-    ),
-    env_vars: Object.fromEntries(env.envVars.map((e) => [e.key, e.value])),
-    routes: env.routes.map((route) => ({
-	  host: route.host,
-	  path: route.path,
-	  to: route.targetServiceId,
-	  target_port: route.targetPort,
-	  exposure: route.exposure,
-	})),
-    'x-gp-components': Object.fromEntries(
-      env.components.map((component) => [
-        component.kind === 'caddy' ? 'http-router' : 'edge-tunnel',
-        {
-          implementation: component.kind,
-          enabled: component.enabled,
-          ...(component.config ? {
-            settings: component.kind === 'caddy'
-              ? { zone_id: component.config.zone_id }
-              : { secret_id: component.config.secret_id },
-          } : {}),
-          ...(component.kind === 'caddy' && component.config?.caddyfile_template !== undefined
-            ? { implementation_config: { caddyfile_template: component.config.caddyfile_template } }
-            : {}),
-        },
-      ]),
-    ),
-    volumes: Object.fromEntries(env.volumes.map((v) => [v.key, v.slug === v.key ? {} : { 'x-gp-slug': v.slug }])),
-    'x-gp-scripts': Object.fromEntries(
-      env.scripts
-        .filter((script) => script.origin === 'blueprint' && Boolean(script.reconciliationKey))
-        .map((script) => [script.reconciliationKey!, {
-          slug: script.slug, service: script.service, when: script.when, script: script.body,
-        }]),
-    ),
-    ...(env.backup
-      ? {
-          backup: {
-            frequency: env.backup.frequency,
-            retention: env.backup.keep,
-            encryption: { mode: env.backup.encryption, keyRef: env.age?.recipient },
-            ...(env.backup.connector ? { connector: env.backup.connector } : {}),
-          },
-        }
-      : {}),
-  }
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <FileCode2 className="size-4 text-muted-foreground" /> Desired state · the Groundplane Blueprint
-        </CardTitle>
-        <div className="flex items-center gap-2">
-          <BlueprintApplyAction environment={env} workspace={params.tenant} />
-          <CopyButton value={toYAML(doc)} label="copy" />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="font-mono text-xs text-muted-foreground">
-            environments/{projectSlug}/{env.name}.yaml
-          </span>
-        </div>
-        <pre className="overflow-x-auto rounded-lg border border-border bg-background p-4 font-mono text-xs leading-relaxed text-foreground">
-          {toYAML(doc)}
-        </pre>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Desired state the Controller stores. Validated against the schema on write; the Agent reconciles until observed
-          state matches.
-        </p>
-      </CardContent>
-    </Card>
-  )
+  return <BlueprintWorkspace environment={env} workspace={params.tenant} />
 }
 
 // ---- Router ----

@@ -1582,6 +1582,91 @@
         ],
         "type": "object"
       },
+      "EnvironmentBlueprintChange": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "update",
+              "retain"
+            ],
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource",
+          "key",
+          "action"
+        ],
+        "type": "object"
+      },
+      "EnvironmentBlueprintDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EnvironmentBlueprintDocument.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "document": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "environment_id",
+          "revision",
+          "document"
+        ],
+        "type": "object"
+      },
+      "EnvironmentBlueprintValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EnvironmentBlueprintValidation.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentBlueprintChange"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "changes"
+        ],
+        "type": "object"
+      },
       "EnvironmentCreate": {
         "additionalProperties": false,
         "properties": {
@@ -7790,12 +7875,66 @@
       }
     },
     "/environments/{id}/blueprint": {
-      "put": {
-        "operationId": "environment.apply",
+      "get": {
+        "operationId": "blueprint.show",
         "parameters": [
           {
             "in": "path",
             "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentBlueprintDocument"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show the current environment Blueprint",
+        "tags": [
+          "Blueprint"
+        ]
+      },
+      "put": {
+        "operationId": "blueprint.apply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
             "required": true,
             "schema": {
               "type": "string"
@@ -7858,6 +7997,68 @@
         "summary": "Apply an environment Blueprint",
         "tags": [
           "Environment"
+        ]
+      }
+    },
+    "/environments/{id}/blueprint/validate": {
+      "post": {
+        "operationId": "blueprint.validate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "description": "Deterministic Blueprint multipart stream: manifest first, then declared file parts in order.",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentBlueprintValidation"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Validate an environment Blueprint",
+        "tags": [
+          "Blueprint"
         ]
       }
     },

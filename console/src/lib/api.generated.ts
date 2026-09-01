@@ -536,10 +536,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Show the current environment Blueprint */
+        get: operations["blueprint.show"];
         /** Apply an environment Blueprint */
-        put: operations["environment.apply"];
+        put: operations["blueprint.apply"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/blueprint/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate an environment Blueprint */
+        post: operations["blueprint.validate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1881,6 +1899,33 @@ export interface components {
             project_id: string;
             provisioning_state: string;
             volume_dir: string;
+        };
+        EnvironmentBlueprintChange: {
+            /** @enum {string} */
+            action: "create" | "update" | "retain";
+            key: string;
+            resource: string;
+        };
+        EnvironmentBlueprintDocument: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EnvironmentBlueprintDocument.json
+             */
+            readonly $schema?: string;
+            document: string;
+            environment_id: string;
+            revision: string;
+        };
+        EnvironmentBlueprintValidation: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EnvironmentBlueprintValidation.json
+             */
+            readonly $schema?: string;
+            changes: components["schemas"]["EnvironmentBlueprintChange"][] | null;
+            revision: string;
         };
         EnvironmentCreate: {
             /**
@@ -4583,10 +4628,43 @@ export interface operations {
             };
         };
     };
-    "environment.apply": {
+    "blueprint.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentBlueprintDocument"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "blueprint.apply": {
         parameters: {
             query?: never;
             header: {
+                "If-Match": string;
                 "Idempotency-Key": string;
             };
             path: {
@@ -4608,6 +4686,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "blueprint.validate": {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": string;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentBlueprintValidation"];
                 };
             };
             /** @description Error */

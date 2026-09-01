@@ -249,9 +249,21 @@ func blueprintCLIFilePartName(index int) string {
 	return fmt.Sprintf("file-%06d", index+1)
 }
 
-func runBlueprintApply(cmd *cobra.Command, environmentID string, body []byte, contentType string) error {
+func runBlueprintApply(
+	cmd *cobra.Command,
+	environmentID string,
+	expectedRevision string,
+	body []byte,
+	contentType string,
+) error {
 	app := fromContext(cmd)
-	accepted, err := app.Client.ApplyEnvironmentBlueprint(cmd.Context(), environmentID, body, contentType)
+	accepted, err := app.Client.ApplyEnvironmentBlueprint(
+		cmd.Context(),
+		environmentID,
+		expectedRevision,
+		body,
+		contentType,
+	)
 	if err != nil {
 		return err
 	}

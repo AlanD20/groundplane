@@ -79,7 +79,7 @@ type Server struct {
 	volumeMutations         VolumeMutator
 	environmentMutations    EnvironmentMutator
 	environmentChanges      EnvironmentChanger
-	environmentBlueprints   EnvironmentBlueprintMutator
+	environmentBlueprints   EnvironmentBlueprintService
 	hierarchyDeletions      HierarchyDeletionService
 	attachMutations         AttachMutator
 	attachFacts             AttachFactReader
@@ -141,7 +141,7 @@ type Options struct {
 	VolumeMutations         VolumeMutator
 	EnvironmentMutations    EnvironmentMutator
 	EnvironmentChanges      EnvironmentChanger
-	EnvironmentBlueprints   EnvironmentBlueprintMutator
+	EnvironmentBlueprints   EnvironmentBlueprintService
 	HierarchyDeletions      HierarchyDeletionService
 	AttachMutations         AttachMutator
 	AttachFacts             AttachFactReader

@@ -1404,17 +1404,22 @@ Compose grammar. The Controller strips its document envelope, validates the
 Compose body and Groundplane extensions, then renders an executable Compose
 document and typed Agent procedure.
 
-An operator may replace one environment's complete desired state with the
-**Apply Blueprint** action. The Console exposes it from Environment Desired
-State as a right-side drawer with a directory picker and explicit root-file
-selection, a reorderable Compose-source list, and a non-secret interpolation
-key/value table. The CLI mirror is `environment apply <name> --bundle-dir DIR
---root RELATIVE_PATH [--compose-file RELATIVE_PATH]... [--var KEY=VALUE]...`;
-the root Compose body is always the first layer and repeatable Compose flags
-retain command-line order. The API mirror is the multipart singleton replacement
-`PUT /environments/{id}/blueprint`. Validation and the desired-state commit are
-atomic and side-effect free; only a successful commit creates the reconcile
-Task returned by the action.
+The Environment **Blueprint** surface shows the Controller's canonical
+authoring projection and supports edit, import, export, side-effect-free
+validation, and apply. The editable YAML contains decisions only: stable
+Environment and Task ids, generated paths and resource names, render
+generations, observations, and secret plaintext are absent. The Console keeps
+an edit as a local draft until Apply. Its bundle importer retains explicit
+root-file selection, reorderable Compose sources, and non-secret interpolation.
+The CLI mirrors are `environment blueprint show|validate|apply <name>`; validate
+and apply accept `--bundle-dir DIR --root RELATIVE_PATH [--compose-file
+RELATIVE_PATH]... [--var KEY=VALUE]...`. `GET
+/environments/{id}/blueprint` returns the canonical single-file authoring
+projection and its revision, `POST /environments/{id}/blueprint/validate`
+returns a typed create/update/retained diff without writing state, and `PUT
+/environments/{id}/blueprint` atomically publishes the desired revision and
+reconcile Task. Validate and apply require `If-Match` from the loaded Blueprint
+revision so a stale editor never overwrites newer desired state.
 
 Blueprint input is a closed bundle: one root envelope, ordered Compose source
 paths, a closed relative file namespace, and an explicit non-secret
@@ -1769,10 +1774,11 @@ inheriting environment materializes it inside its own volume folder.
 
 Understanding = validate then reconcile:
 
-Blueprint replacement never implies deletion. Omitting an existing owned
-service, zone/network, or volume fails with `resource.in_use`; the operator
-must complete that resource's explicit Remove action before applying the
-replacement. Renames are never inferred from one removed and one new name.
+Blueprint replacement never implies deletion. An existing owned resource
+omitted from the submitted Blueprint is retained and appears as `retain` in the
+validation diff. Destruction is available only through that resource's
+explicit protected Remove action. Renames are never inferred from one removed
+and one new name.
 
 1. **Validate** - a typed schema; malformed or unknown keys are rejected at
    write time in the Console.

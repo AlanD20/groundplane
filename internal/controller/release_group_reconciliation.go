@@ -123,6 +123,46 @@ func (planner *ReleaseGroupBlueprintPlanner) snapshot(
 	}
 }
 
+// AuthoringSpecs projects current Release Groups back to portable service
+// labels. Stable ids remain outside the authored Blueprint.
+func (planner *ReleaseGroupBlueprintPlanner) AuthoringSpecs(
+	ctx context.Context,
+	environmentID string,
+	serviceNames map[string]string,
+) (map[string]core.ReleaseGroupSpec, error) {
+	groups, _, err := planner.snapshot(ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	specs := make(map[string]core.ReleaseGroupSpec, len(groups))
+	for _, versioned := range groups {
+		group := versioned.Group
+		services := make([]string, len(group.ServiceIDs))
+		for index, id := range group.ServiceIDs {
+			name, found := serviceNames[id]
+			if !found {
+				return nil, errs.New(errs.KindInternal, "Release Group Blueprint service identity is missing")
+			}
+			services[index] = name
+		}
+		order := make([]string, len(group.Order))
+		for index, id := range group.Order {
+			name, found := serviceNames[id]
+			if !found {
+				return nil, errs.New(errs.KindInternal, "Release Group Blueprint order identity is missing")
+			}
+			order[index] = name
+		}
+		specs[group.Name] = core.ReleaseGroupSpec{
+			Services: services,
+			Order: order,
+			Tag: group.DefaultTag,
+			OnFailure: core.OnFailure(group.OnFailure),
+		}
+	}
+	return specs, nil
+}
+
 // ReleaseGroupIdentity is the stable identity retained from the previously
 // applied Blueprint. Names are labels and may be changed by an operator;
 // matching a current name is what permits ID reuse during reconciliation.

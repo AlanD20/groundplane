@@ -105,6 +105,33 @@ type EnvironmentEdit struct {
 	NetworkPool string `json:"network_pool"`
 }
 
+const EnvironmentBlueprintInitialRevision = "0"
+
+type EnvironmentBlueprintDocument struct {
+	EnvironmentID string `json:"environment_id"`
+	Revision      string `json:"revision"`
+	Document      string `json:"document"`
+}
+
+type BlueprintChangeAction string
+
+const (
+	BlueprintChangeCreate BlueprintChangeAction = "create"
+	BlueprintChangeUpdate BlueprintChangeAction = "update"
+	BlueprintChangeRetain BlueprintChangeAction = "retain"
+)
+
+type EnvironmentBlueprintChange struct {
+	Resource string                `json:"resource"`
+	Key      string                `json:"key"`
+	Action   BlueprintChangeAction `json:"action" enum:"create,update,retain"`
+}
+
+type EnvironmentBlueprintValidation struct {
+	Revision string                       `json:"revision"`
+	Changes  []EnvironmentBlueprintChange `json:"changes"`
+}
+
 type EnvironmentRename struct {
 	Name string `json:"name"`
 }

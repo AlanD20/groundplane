@@ -181,9 +181,78 @@ func (c *Client) DeleteEnvironment(ctx context.Context, id string) (apiTypes.Tas
 	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
 }
 
+func (c *Client) ShowEnvironmentBlueprint(
+	ctx context.Context,
+	id string,
+) (apiTypes.EnvironmentBlueprintDocument, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.EnvironmentBlueprintDocument{}, err
+	}
+	path := "/api/v1/environments/" + id + "/blueprint"
+	response, err := client.BlueprintShowWithResponse(ctx, id)
+	if err != nil {
+		return apiTypes.EnvironmentBlueprintDocument{}, generatedCallError(ctx, http.MethodGet, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodGet,
+		path,
+		response.HTTPResponse,
+		response.Body,
+		http.StatusOK,
+	); err != nil {
+		return apiTypes.EnvironmentBlueprintDocument{}, err
+	}
+	var document apiTypes.EnvironmentBlueprintDocument
+	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &document); err != nil {
+		return apiTypes.EnvironmentBlueprintDocument{}, err
+	}
+	return document, nil
+}
+
+func (c *Client) ValidateEnvironmentBlueprint(
+	ctx context.Context,
+	id string,
+	expectedRevision string,
+	body []byte,
+	contentType string,
+) (apiTypes.EnvironmentBlueprintValidation, error) {
+	client, err := c.generatedHumanClient()
+	if err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
+	path := "/api/v1/environments/" + id + "/blueprint/validate"
+	params := &generated.BlueprintValidateParams{IfMatch: quoteBlueprintRevision(expectedRevision)}
+	response, err := client.BlueprintValidateWithBodyWithResponse(
+		ctx,
+		id,
+		params,
+		contentType,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, generatedCallError(ctx, http.MethodPost, path, err)
+	}
+	if err := generatedResponseError(
+		http.MethodPost,
+		path,
+		response.HTTPResponse,
+		response.Body,
+		http.StatusOK,
+	); err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
+	var validation apiTypes.EnvironmentBlueprintValidation
+	if err := decodeSingleJSON(http.MethodPost, path, bytes.NewReader(response.Body), &validation); err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
+	return validation, nil
+}
+
 func (c *Client) ApplyEnvironmentBlueprint(
 	ctx context.Context,
 	id string,
+	expectedRevision string,
 	body []byte,
 	contentType string,
 ) (apiTypes.TaskAccepted, error) {
@@ -192,8 +261,11 @@ func (c *Client) ApplyEnvironmentBlueprint(
 		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/environments/" + id + "/blueprint"
-	params := &generated.EnvironmentApplyParams{IdempotencyKey: ids.NewULID()}
-	response, err := client.EnvironmentApplyWithBodyWithResponse(
+	params := &generated.BlueprintApplyParams{
+		IdempotencyKey: ids.NewULID(),
+		IfMatch: quoteBlueprintRevision(expectedRevision),
+	}
+	response, err := client.BlueprintApplyWithBodyWithResponse(
 		ctx, id, params, contentType, bytes.NewReader(body),
 	)
 	if err != nil {
@@ -212,6 +284,10 @@ func (c *Client) ApplyEnvironmentBlueprint(
 		}
 	}
 	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
+}
+
+func quoteBlueprintRevision(revision string) string {
+	return "\"" + revision + "\""
 }
 
 func environmentFromGenerated(environment generated.Environment) apiTypes.Environment {

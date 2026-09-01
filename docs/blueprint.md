@@ -129,6 +129,33 @@ stable tenant, project, and environment ids before storing it. A rename is an
 explicit Controller operation, not an accidental delete/create caused by a
 new path.
 
+### Canonical authoring projection
+
+`GET /environments/{id}/blueprint` reconstructs one canonical single-file YAML
+document from the selected immutable desired projection and current
+Blueprint-owned extensions. It is an authoring projection, never a runtime
+export. It includes only fields accepted back by the parser and therefore
+excludes stable Environment and Task ids, generated Docker names and paths,
+render generations, observations, Task state, and secret plaintext. Stable
+resource references that are themselves authored decisions, such as
+`secret_id` and `secret_ref`, remain present.
+
+The canonical projection preserves semantics, not the submitted source layout:
+comments, aliases, anchors, and multi-file boundaries are not reproduced.
+Import still accepts the closed multi-file bundle. Multiline Script bodies are
+emitted as YAML literal block scalars under `x-gp-scripts`.
+
+The response carries the selected desired revision and an equivalent `ETag`.
+Validation and apply require that revision through `If-Match`. Revision `0` is
+the explicit initial authoring revision before the first desired publication.
+A mismatch is `state.conflict` and performs no write.
+
+`POST /environments/{id}/blueprint/validate` parses the exact same closed
+bundle accepted by apply and returns a typed `create | update | retain` diff.
+`retain` means the submitted document omitted an existing resource and
+Groundplane will preserve it. Validation never publishes a desired revision,
+Task, marker, materialization, or runtime effect.
+
 ## Compose base document
 
 After the envelope, an environment Blueprint uses standard Compose keys for

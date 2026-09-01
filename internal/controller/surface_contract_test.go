@@ -30,6 +30,16 @@ func TestScaffoldRoutesMatchNormalizedHumanContract(t *testing.T) {
 			"POST /api/v1/environments/{id}/rename",
 		},
 		{
+			http.MethodGet,
+			"/api/v1/environments/env_1/blueprint",
+			"GET /api/v1/environments/{id}/blueprint",
+		},
+		{
+			http.MethodPost,
+			"/api/v1/environments/env_1/blueprint/validate",
+			"POST /api/v1/environments/{id}/blueprint/validate",
+		},
+		{
 			http.MethodPut,
 			"/api/v1/environments/env_1/blueprint",
 			"PUT /api/v1/environments/{id}/blueprint",

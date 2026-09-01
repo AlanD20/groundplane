@@ -190,6 +190,27 @@ func (e ComponentConfigMutationRequestConfig1Credential1Mode) Valid() bool {
 	}
 }
 
+// Defines values for EnvironmentBlueprintChangeAction.
+const (
+	EnvironmentBlueprintChangeActionCreate EnvironmentBlueprintChangeAction = "create"
+	EnvironmentBlueprintChangeActionRetain EnvironmentBlueprintChangeAction = "retain"
+	EnvironmentBlueprintChangeActionUpdate EnvironmentBlueprintChangeAction = "update"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentBlueprintChangeAction enum.
+func (e EnvironmentBlueprintChangeAction) Valid() bool {
+	switch e {
+	case EnvironmentBlueprintChangeActionCreate:
+		return true
+	case EnvironmentBlueprintChangeActionRetain:
+		return true
+	case EnvironmentBlueprintChangeActionUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LogEventSlot.
 const (
 	Blue      LogEventSlot = "blue"
@@ -1076,6 +1097,37 @@ type Environment struct {
 	ProjectId         string                     `json:"project_id"`
 	ProvisioningState string                     `json:"provisioning_state"`
 	VolumeDir         string                     `json:"volume_dir"`
+}
+
+// EnvironmentBlueprintChange defines model for EnvironmentBlueprintChange.
+type EnvironmentBlueprintChange struct {
+	Action   EnvironmentBlueprintChangeAction `json:"action"`
+	Key      string                           `json:"key"`
+	Resource string                           `json:"resource"`
+}
+
+// EnvironmentBlueprintChangeAction defines model for EnvironmentBlueprintChange.Action.
+type EnvironmentBlueprintChangeAction string
+
+// EnvironmentBlueprintDocument defines model for EnvironmentBlueprintDocument.
+type EnvironmentBlueprintDocument struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentBlueprintDocument.json
+	Schema        *string `json:"$schema,omitempty"`
+	Document      string  `json:"document"`
+	EnvironmentId string  `json:"environment_id"`
+	Revision      string  `json:"revision"`
+}
+
+// EnvironmentBlueprintValidation defines model for EnvironmentBlueprintValidation.
+type EnvironmentBlueprintValidation struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EnvironmentBlueprintValidation.json
+	Schema   *string                       `json:"$schema,omitempty"`
+	Changes  *[]EnvironmentBlueprintChange `json:"changes"`
+	Revision string                        `json:"revision"`
 }
 
 // EnvironmentCreate defines model for EnvironmentCreate.
@@ -2452,12 +2504,21 @@ type BackupRunParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
-// EnvironmentApplyMultipartBody defines parameters for EnvironmentApply.
-type EnvironmentApplyMultipartBody = openapi_types.File
+// BlueprintApplyMultipartBody defines parameters for BlueprintApply.
+type BlueprintApplyMultipartBody = openapi_types.File
 
-// EnvironmentApplyParams defines parameters for EnvironmentApply.
-type EnvironmentApplyParams struct {
+// BlueprintApplyParams defines parameters for BlueprintApply.
+type BlueprintApplyParams struct {
+	IfMatch        string `json:"If-Match"`
 	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// BlueprintValidateMultipartBody defines parameters for BlueprintValidate.
+type BlueprintValidateMultipartBody = openapi_types.File
+
+// BlueprintValidateParams defines parameters for BlueprintValidate.
+type BlueprintValidateParams struct {
+	IfMatch string `json:"If-Match"`
 }
 
 // EnvironmentLogsParams defines parameters for EnvironmentLogs.
@@ -2832,8 +2893,11 @@ type EnvironmentEditJSONRequestBody = EnvironmentEdit
 // BackupPolicySetJSONRequestBody defines body for BackupPolicySet for application/json ContentType.
 type BackupPolicySetJSONRequestBody = BackupPolicyReplacementRequest
 
-// EnvironmentApplyMultipartRequestBody defines body for EnvironmentApply for multipart/form-data ContentType.
-type EnvironmentApplyMultipartRequestBody = EnvironmentApplyMultipartBody
+// BlueprintApplyMultipartRequestBody defines body for BlueprintApply for multipart/form-data ContentType.
+type BlueprintApplyMultipartRequestBody = BlueprintApplyMultipartBody
+
+// BlueprintValidateMultipartRequestBody defines body for BlueprintValidate for multipart/form-data ContentType.
+type BlueprintValidateMultipartRequestBody = BlueprintValidateMultipartBody
 
 // EnvironmentRenameJSONRequestBody defines body for EnvironmentRename for application/json ContentType.
 type EnvironmentRenameJSONRequestBody = EnvironmentRename
@@ -3665,12 +3729,24 @@ type ClientInterface interface {
 	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
 	BackupRun(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// EnvironmentApplyWithBody Apply an environment Blueprint
+	// BlueprintShow Show the current environment Blueprint
+	//
+	// Corresponds with GET /environments/{id}/blueprint (the `BlueprintShow` operationId).
+	BlueprintShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BlueprintApplyWithBody Apply an environment Blueprint
 	//
 	// Takes any type of body and a specified content type.
 	//
-	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
-	EnvironmentApplyWithBody(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with PUT /environments/{id}/blueprint (the `BlueprintApply` operationId).
+	BlueprintApplyWithBody(ctx context.Context, id string, params *BlueprintApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// BlueprintValidateWithBody Validate an environment Blueprint
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /environments/{id}/blueprint/validate (the `BlueprintValidate` operationId).
+	BlueprintValidateWithBody(ctx context.Context, id string, params *BlueprintValidateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// BackupKeyExport Export the current backup age identity without storing it
 	//
@@ -5188,13 +5264,45 @@ func (c *Client) BackupRun(ctx context.Context, id string, params *BackupRunPara
 	return c.Client.Do(req)
 }
 
-// EnvironmentApplyWithBody Apply an environment Blueprint
+// BlueprintShow Show the current environment Blueprint
+//
+// Corresponds with GET /environments/{id}/blueprint (the `BlueprintShow` operationId).
+func (c *Client) BlueprintShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBlueprintShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BlueprintApplyWithBody Apply an environment Blueprint
 //
 // Takes any type of body and a specified content type.
 //
-// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
-func (c *Client) EnvironmentApplyWithBody(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewEnvironmentApplyRequestWithBody(c.Server, id, params, contentType, body)
+// Corresponds with PUT /environments/{id}/blueprint (the `BlueprintApply` operationId).
+func (c *Client) BlueprintApplyWithBody(ctx context.Context, id string, params *BlueprintApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBlueprintApplyRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// BlueprintValidateWithBody Validate an environment Blueprint
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /environments/{id}/blueprint/validate (the `BlueprintValidate` operationId).
+func (c *Client) BlueprintValidateWithBody(ctx context.Context, id string, params *BlueprintValidateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewBlueprintValidateRequestWithBody(c.Server, id, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9229,8 +9337,42 @@ func NewBackupRunRequest(server string, id string, params *BackupRunParams) (*ht
 	return req, nil
 }
 
-// NewEnvironmentApplyRequestWithBody constructs an http.Request for the EnvironmentApply method, with any body, and a specified content type
-func NewEnvironmentApplyRequestWithBody(server string, id string, params *EnvironmentApplyParams, contentType string, body io.Reader) (*http.Request, error) {
+// NewBlueprintShowRequest constructs an http.Request for the BlueprintShow method
+func NewBlueprintShowRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/blueprint", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewBlueprintApplyRequestWithBody constructs an http.Request for the BlueprintApply method, with any body, and a specified content type
+func NewBlueprintApplyRequestWithBody(server string, id string, params *BlueprintApplyParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -9266,12 +9408,70 @@ func NewEnvironmentApplyRequestWithBody(server string, id string, params *Enviro
 
 		var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("Idempotency-Key", headerParam0)
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewBlueprintValidateRequestWithBody constructs an http.Request for the BlueprintValidate method, with any body, and a specified content type
+func NewBlueprintValidateRequestWithBody(server string, id string, params *BlueprintValidateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/environments/%s/blueprint/validate", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
 
 	}
 
@@ -13923,12 +14123,26 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /environments/{id}/backup-run (the `BackupRun` operationId).
 	BackupRunWithResponse(ctx context.Context, id string, params *BackupRunParams, reqEditors ...RequestEditorFn) (*BackupRunResponse, error)
 
-	// EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
+	// BlueprintShowWithResponse Show the current environment Blueprint
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /environments/{id}/blueprint (the `BlueprintShow` operationId).
+	BlueprintShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BlueprintShowResponse, error)
+
+	// BlueprintApplyWithBodyWithResponse Apply an environment Blueprint
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
-	EnvironmentApplyWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentApplyResponse, error)
+	// Corresponds with PUT /environments/{id}/blueprint (the `BlueprintApply` operationId).
+	BlueprintApplyWithBodyWithResponse(ctx context.Context, id string, params *BlueprintApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BlueprintApplyResponse, error)
+
+	// BlueprintValidateWithBodyWithResponse Validate an environment Blueprint
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /environments/{id}/blueprint/validate (the `BlueprintValidate` operationId).
+	BlueprintValidateWithBodyWithResponse(ctx context.Context, id string, params *BlueprintValidateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BlueprintValidateResponse, error)
 
 	// BackupKeyExportWithResponse Export the current backup age identity without storing it
 	//
@@ -16975,39 +17189,39 @@ func (r BackupRunResponse) ContentType() string {
 	return ""
 }
 
-// EnvironmentApplyResponse202Headers the declared response headers of an HTTP 202 response for EnvironmentApply
-type EnvironmentApplyResponse202Headers struct {
-	ContentType *string
+// BlueprintShowResponse200Headers the declared response headers of an HTTP 200 response for BlueprintShow
+type BlueprintShowResponse200Headers struct {
+	ETag *string
 }
 
-type EnvironmentApplyResponse struct {
+type BlueprintShowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *TaskAccepted
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentBlueprintDocument
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Error
-	// Headers202 the parsed response headers for an HTTP 202 response
-	Headers202 *EnvironmentApplyResponse202Headers
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *BlueprintShowResponse200Headers
 }
 
-// GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r EnvironmentApplyResponse) GetJSON202() *TaskAccepted {
-	return r.JSON202
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BlueprintShowResponse) GetJSON200() *EnvironmentBlueprintDocument {
+	return r.JSON200
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r EnvironmentApplyResponse) GetApplicationproblemJSONDefault() *Error {
+func (r BlueprintShowResponse) GetApplicationproblemJSONDefault() *Error {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r EnvironmentApplyResponse) GetBody() []byte {
+func (r BlueprintShowResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r EnvironmentApplyResponse) Status() string {
+func (r BlueprintShowResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -17015,7 +17229,7 @@ func (r EnvironmentApplyResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r EnvironmentApplyResponse) StatusCode() int {
+func (r BlueprintShowResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -17023,7 +17237,110 @@ func (r EnvironmentApplyResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r EnvironmentApplyResponse) ContentType() string {
+func (r BlueprintShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// BlueprintApplyResponse202Headers the declared response headers of an HTTP 202 response for BlueprintApply
+type BlueprintApplyResponse202Headers struct {
+	ContentType *string
+}
+
+type BlueprintApplyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *BlueprintApplyResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r BlueprintApplyResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BlueprintApplyResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BlueprintApplyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BlueprintApplyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BlueprintApplyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BlueprintApplyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type BlueprintValidateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentBlueprintValidation
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r BlueprintValidateResponse) GetJSON200() *EnvironmentBlueprintValidation {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r BlueprintValidateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r BlueprintValidateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r BlueprintValidateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r BlueprintValidateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r BlueprintValidateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21751,17 +22068,43 @@ func (c *ClientWithResponses) BackupRunWithResponse(ctx context.Context, id stri
 	return ParseBackupRunResponse(rsp)
 }
 
-// EnvironmentApplyWithBodyWithResponse Apply an environment Blueprint
+// BlueprintShowWithResponse Show the current environment Blueprint
 //
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+// Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with PUT /environments/{id}/blueprint (the `EnvironmentApply` operationId).
-func (c *ClientWithResponses) EnvironmentApplyWithBodyWithResponse(ctx context.Context, id string, params *EnvironmentApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnvironmentApplyResponse, error) {
-	rsp, err := c.EnvironmentApplyWithBody(ctx, id, params, contentType, body, reqEditors...)
+// Corresponds with GET /environments/{id}/blueprint (the `BlueprintShow` operationId).
+func (c *ClientWithResponses) BlueprintShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*BlueprintShowResponse, error) {
+	rsp, err := c.BlueprintShow(ctx, id, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseEnvironmentApplyResponse(rsp)
+	return ParseBlueprintShowResponse(rsp)
+}
+
+// BlueprintApplyWithBodyWithResponse Apply an environment Blueprint
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /environments/{id}/blueprint (the `BlueprintApply` operationId).
+func (c *ClientWithResponses) BlueprintApplyWithBodyWithResponse(ctx context.Context, id string, params *BlueprintApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BlueprintApplyResponse, error) {
+	rsp, err := c.BlueprintApplyWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBlueprintApplyResponse(rsp)
+}
+
+// BlueprintValidateWithBodyWithResponse Validate an environment Blueprint
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /environments/{id}/blueprint/validate (the `BlueprintValidate` operationId).
+func (c *ClientWithResponses) BlueprintValidateWithBodyWithResponse(ctx context.Context, id string, params *BlueprintValidateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*BlueprintValidateResponse, error) {
+	rsp, err := c.BlueprintValidateWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseBlueprintValidateResponse(rsp)
 }
 
 // BackupKeyExportWithResponse Export the current backup age identity without storing it
@@ -24889,15 +25232,61 @@ func ParseBackupRunResponse(rsp *http.Response) (*BackupRunResponse, error) {
 	return response, nil
 }
 
-// ParseEnvironmentApplyResponse parses an HTTP response from a EnvironmentApplyWithResponse call
-func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyResponse, error) {
+// ParseBlueprintShowResponse parses an HTTP response from a BlueprintShowWithResponse call
+func ParseBlueprintShowResponse(rsp *http.Response) (*BlueprintShowResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
 	bodyBytes, err := problemresponse.Read(rsp)
 	if err != nil {
 		return nil, err
 	}
 
-	response := &EnvironmentApplyResponse{
+	response := &BlueprintShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentBlueprintDocument
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers BlueprintShowResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBlueprintApplyResponse parses an HTTP response from a BlueprintApplyWithResponse call
+func ParseBlueprintApplyResponse(rsp *http.Response) (*BlueprintApplyResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BlueprintApplyResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -24921,7 +25310,7 @@ func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyRespons
 
 	switch {
 	case rsp.StatusCode == 202:
-		var headers EnvironmentApplyResponse202Headers
+		var headers BlueprintApplyResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -24930,6 +25319,39 @@ func ParseEnvironmentApplyResponse(rsp *http.Response) (*EnvironmentApplyRespons
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseBlueprintValidateResponse parses an HTTP response from a BlueprintValidateWithResponse call
+func ParseBlueprintValidateResponse(rsp *http.Response) (*BlueprintValidateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &BlueprintValidateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentBlueprintValidation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

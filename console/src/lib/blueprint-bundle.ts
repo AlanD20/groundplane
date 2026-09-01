@@ -185,6 +185,14 @@ export function createBlueprintApplyRequest(
   }
 }
 
+export async function createBlueprintTextApplyRequest(document: string): Promise<BlueprintApplyRequest> {
+  const content = new File([document], 'blueprint.yaml', { type: 'application/yaml' })
+  const files = await inspectBlueprintFiles([content], false)
+  const errors = validateBlueprintSelection(files, 'blueprint.yaml', [], [])
+  if (errors.length > 0) throw new Error(errors.join(' '))
+  return createBlueprintApplyRequest(files, 'blueprint.yaml', [], [])
+}
+
 export async function createBlueprintMultipartBody(request: BlueprintApplyRequest) {
   const manifest = textEncoder.encode(JSON.stringify(request.manifest))
   const files = await Promise.all(
