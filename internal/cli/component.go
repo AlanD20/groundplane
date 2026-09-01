@@ -70,12 +70,14 @@ func newComponentCmd() *cobra.Command {
 	config := &cobra.Command{Use: "config", Short: "A component's kind-specific config"}
 	config.AddCommand(&cobra.Command{Use: "show <id>", Short: "Show a component's config", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		app := fromContext(cmd)
-		config, err := app.Client.ShowComponentConfig(cmd.Context(), target(app, args[0]))
+		response, err := app.Client.ShowComponentConfig(cmd.Context(), target(app, args[0]))
 		if err != nil {
 			return err
 		}
-		headers, rows := tabulateVia(app, []map[string]any{{"config": config}})
-		return app.Out.Render(headers, rows, config)
+		headers, rows := tabulateVia(app, []map[string]any{{
+			"config": response.Config, "managed_files": response.ManagedFiles,
+		}})
+		return app.Out.Render(headers, rows, response)
 	}})
 	var upstreamAuto bool
 	var upstreamResolvers []string
@@ -109,11 +111,11 @@ func newComponentCmd() *cobra.Command {
 				return currentErr
 			}
 			coreDNS := apiTypes.CoreDNSComponentConfigMutationInput{}
-			if current != nil && current.CoreDNS != nil {
-				upstreamAutoValue := current.CoreDNS.UpstreamAuto
-				upstreamResolverValues := append([]string(nil), current.CoreDNS.UpstreamResolvers...)
-				forwarderValues := append([]apiTypes.ComponentDNSForwarder(nil), current.CoreDNS.Forwarders...)
-				tailnetValue := current.CoreDNS.TailnetDelegation
+			if current.Config != nil && current.Config.CoreDNS != nil {
+				upstreamAutoValue := current.Config.CoreDNS.UpstreamAuto
+				upstreamResolverValues := append([]string(nil), current.Config.CoreDNS.UpstreamResolvers...)
+				forwarderValues := append([]apiTypes.ComponentDNSForwarder(nil), current.Config.CoreDNS.Forwarders...)
+				tailnetValue := current.Config.CoreDNS.TailnetDelegation
 				coreDNS.UpstreamAuto = &upstreamAutoValue
 				coreDNS.UpstreamResolvers = &upstreamResolverValues
 				coreDNS.Forwarders = &forwarderValues
@@ -137,9 +139,9 @@ func newComponentCmd() *cobra.Command {
 					return err
 				}
 				caddy := apiTypes.CaddyComponentConfigMutationInput{}
-				if current != nil && current.Caddy != nil {
-					caddy.ZoneID = current.Caddy.ZoneID
-					caddy.CaddyfileTemplate = current.Caddy.CaddyfileTemplate
+				if current.Config != nil && current.Config.Caddy != nil {
+					caddy.ZoneID = current.Config.Caddy.ZoneID
+					caddy.CaddyfileTemplate = current.Config.Caddy.CaddyfileTemplate
 				}
 				if componentZone {
 					caddy.ZoneID = zoneID

@@ -708,8 +708,15 @@ arrays, including when empty. The CLI prints the same union and does not
 canonicalize invalid input before the Controller validates it.
 
 The `GET /components/{id}/config` response is the generator-safe envelope
-`{config:<variant>|null}`; its nested `config` is null under the same disabled
-or unconfigured rule.
+`{config:<variant>|null,managed_files:[...]}`; its nested `config` is null under
+the same disabled or unconfigured rule, and `managed_files` is always an array.
+Each generic managed-file projection contains `path`, the durable authored
+`template`, and the Controller `rendered` output. CoreDNS returns
+`/etc/groundplane/coredns/Corefile`, derived side-effect-free from durable
+config, the already-persisted host resolver baseline, and current host
+resolution through the registered renderer. Other Components return `[]`
+until they provide the generic projection. `component config show` prints both
+fields; `component config set` and the existing PUT remain the sole mutation.
 
 Cloudflare Tunnel config reads return only `{secret_id}`. Config replacement
 accepts exactly one write shape: `{credential:{mode:"existing",secret_id}}` or

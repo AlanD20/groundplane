@@ -274,6 +274,16 @@ responses preserve empty resolver and forwarder collections as `[]`, never
 `null`; Tunnel credentials use an explicit `existing` or `new` mode and the
 corresponding fields are exclusive.
 
+`GET /components/{id}/config` also returns a non-null `managed_files` array of
+generic typed `{path, template, rendered}` projections. For CoreDNS the sole
+entry is `/etc/groundplane/coredns/Corefile`: `template` is the durable
+operator-authored Corefile and `rendered` is derived live by the registered
+renderer from that config, the already-persisted read-only host resolver
+baseline, and the current host-resolution projection. The GET is
+side-effect-free and never captures or persists a missing baseline. Components
+without a managed-file preview return `[]`. `PUT /components/{id}/config`
+remains the sole configuration mutation.
+
 **One backend, many frontends (locked).** The Controller is the single
 backend: it holds **all** logic — schema validation, action sequencing,
 config rendering (desired state → Corefile / Caddyfile / compose), task

@@ -82,26 +82,26 @@ func (c *Client) ShowComponent(ctx context.Context, id string) (apiTypes.Compone
 	return component, nil
 }
 
-func (c *Client) ShowComponentConfig(ctx context.Context, id string) (*apiTypes.ComponentConfig, error) {
+func (c *Client) ShowComponentConfig(ctx context.Context, id string) (apiTypes.ComponentConfigResponse, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return nil, err
+		return apiTypes.ComponentConfigResponse{}, err
 	}
 	path := "/api/v1/components/" + id + "/config"
 	response, err := client.ComponentConfigShowWithResponse(ctx, id)
 	if err != nil {
-		return nil, generatedCallError(ctx, http.MethodGet, path, err)
+		return apiTypes.ComponentConfigResponse{}, generatedCallError(ctx, http.MethodGet, path, err)
 	}
 	if err := generatedResponseError(
 		http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK,
 	); err != nil {
-		return nil, err
+		return apiTypes.ComponentConfigResponse{}, err
 	}
 	var envelope apiTypes.ComponentConfigResponse
 	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &envelope); err != nil {
-		return nil, err
+		return apiTypes.ComponentConfigResponse{}, err
 	}
-	return envelope.Config, nil
+	return envelope, nil
 }
 
 func (c *Client) SetComponentConfig(

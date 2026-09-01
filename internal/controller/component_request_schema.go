@@ -38,7 +38,12 @@ func componentConfigResponseSchema(registry huma.Registry) *huma.Schema {
 		return reference
 	}
 	configReference := openAPISchema[apiTypes.ComponentConfig](registry, "ComponentConfig")
+	managedFileReference := openAPISchema[apiTypes.ManagedConfigFile](registry, "ManagedConfigFile")
 	schema.Properties["config"] = nullableComponentConfigSchema(configReference.Ref)
+	schema.Properties["managed_files"] = &huma.Schema{
+		Type:  huma.TypeArray,
+		Items: &huma.Schema{Ref: managedFileReference.Ref},
+	}
 	return reference
 }
 

@@ -18,7 +18,7 @@ const maximumComponentPageSize = 200
 type ComponentReader interface {
 	ListComponents(context.Context, string, bool, string) ([]apiTypes.Component, error)
 	GetComponent(context.Context, string) (apiTypes.Component, error)
-	GetComponentConfig(context.Context, string) (*apiTypes.ComponentConfig, error)
+	GetComponentConfig(context.Context, string) (apiTypes.ComponentConfigResponse, error)
 	GetRouter(context.Context, string) (apiTypes.Router, error)
 }
 
@@ -168,11 +168,11 @@ func (s *Server) showComponentConfig(ctx context.Context, request *componentIDIn
 	if s.components == nil {
 		return nil, errs.New(errs.KindInternal, "Component reader is not configured")
 	}
-	config, err := s.components.GetComponentConfig(ctx, request.ID)
+	response, err := s.components.GetComponentConfig(ctx, request.ID)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &componentConfigOutput{Body: apiTypes.ComponentConfigResponse{Config: config}}, nil
+	return &componentConfigOutput{Body: response}, nil
 }
 
 func (s *Server) setComponentConfig(ctx context.Context, request *componentConfigInput) (*componentMutationOutput, error) {

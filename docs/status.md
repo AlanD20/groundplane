@@ -291,9 +291,12 @@ The remaining isolated implementation and acceptance lanes are:
 CoreDNS now persists one required operator-authored full Corefile template,
 validates and substitutes its single `{groundplane}` marker in the registered
 SDK-only renderer, and exposes authoring through the existing API, CLI, and
-Console config action. Generic rendered-file preview is intentionally a
-separate unfinished slice; no new endpoint or CoreDNS-specific Agent procedure
-was added.
+Console config action. The existing config GET now exposes the generic typed
+managed-file projection with the durable Template and registered-renderer
+Corefile output. It reads only the already-persisted resolver baseline and
+current host-resolution projection, has no capture or persistence authority,
+and adds no endpoint or CoreDNS-specific Agent procedure. API, CLI, and Console
+surface the same preview; reference-host acceptance remains pending.
 
 The bounded native private acceptance topology journey completed on `the disposable QA host` on
 2026-09-01. The production Controller serves the embedded Console on the

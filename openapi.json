@@ -1021,10 +1021,17 @@
                 "type": "null"
               }
             ]
+          },
+          "managed_files": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedConfigFile"
+            },
+            "type": "array"
           }
         },
         "required": [
-          "config"
+          "config",
+          "managed_files"
         ],
         "type": "object"
       },
@@ -2094,6 +2101,26 @@
           "timestamp",
           "line",
           "truncated"
+        ],
+        "type": "object"
+      },
+      "ManagedConfigFile": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "rendered": {
+            "type": "string"
+          },
+          "template": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "template",
+          "rendered"
         ],
         "type": "object"
       },

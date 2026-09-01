@@ -47,6 +47,7 @@ import type {
   VolumeDeletionImpactPage,
   Zone,
   PlatformInfra,
+  ManagedConfigFile,
   HostInfo,
 } from './types'
 import { createBlueprintMultipartBody, type BlueprintApplyRequest } from './blueprint-bundle'
@@ -189,6 +190,7 @@ type HierarchyTaskAccepted = { task_id: string }
 type ComponentPageResponse = operations['component.list']['responses'][200]['content']['application/json']
 type ComponentResponse = NonNullable<ComponentPageResponse['items']>[number]
 type ComponentTaskAccepted = operations['component.enable']['responses'][202]['content']['application/json']
+type ComponentConfigResponse = operations['component-config.show']['responses'][200]['content']['application/json']
 type ComponentConfigMutationResponse = operations['component-config.set']['responses'][200]['content']['application/json']
 
 type ReleaseGroupMutationAccepted = operations['release-group.remove']['responses'][202]['content']['application/json']
@@ -1478,6 +1480,9 @@ type State = {
   platform: PlatformInfra
   platformComponentsLoading: boolean
   platformComponentError: string | null
+  managedConfigFiles: ManagedConfigFile[]
+  managedConfigLoading: boolean
+  managedConfigError: string | null
   agentsLoading: boolean
   agentError: string | null
   agentConfig: AgentConfigResponse | null
@@ -1522,6 +1527,9 @@ function seed(): State {
     platform: { ...seedPlatform, components: [], agents: [] },
     platformComponentsLoading: true,
     platformComponentError: null,
+    managedConfigFiles: [],
+    managedConfigLoading: false,
+    managedConfigError: null,
     agentsLoading: true,
     agentError: null,
     agentConfig: null,
@@ -1540,6 +1548,7 @@ type StoreContext = State & {
   watchLogs: (target: LogTarget, options: { tail: number; follow: boolean; signal: AbortSignal }, onEvent: (event: TransientLogEvent) => void) => Promise<void>
   setRequireRevealConfirm: (v: boolean) => void
   refreshPlatformComponents: (signal?: AbortSignal) => Promise<PlatformInfra['components']>
+  refreshComponentConfig: (componentId: string, signal?: AbortSignal) => Promise<ManagedConfigFile[]>
   refreshEnvironmentComponents: (environmentId: string, signal?: AbortSignal) => Promise<EnvironmentComponent[]>
   refreshEnvironmentReleases: (environmentId: string, signal?: AbortSignal) => Promise<void>
   refreshAgents: (signal?: AbortSignal) => Promise<PlatformInfra['agents']>
@@ -2005,6 +2014,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       draft.platformComponentError = null
     })
     return hydrated.components
+  }, [update])
+
+  const refreshComponentConfig = useCallback(async (componentId: string, signal?: AbortSignal) => {
+    update((draft) => {
+      draft.managedConfigLoading = true
+      draft.managedConfigError = null
+    })
+    try {
+      const response = await tenantRequest<ComponentConfigResponse>(
+        `/components/${encodeURIComponent(componentId)}/config`,
+        200,
+        { signal },
+      )
+      const files = response.managed_files.map((file) => ({
+        path: file.path,
+        template: file.template,
+        rendered: file.rendered,
+      }))
+      update((draft) => {
+        draft.managedConfigFiles = files
+        draft.managedConfigLoading = false
+        draft.managedConfigError = null
+      })
+      return files
+    } catch (error) {
+      update((draft) => {
+        draft.managedConfigLoading = false
+        draft.managedConfigError = error instanceof Error
+          ? error.message
+          : 'Unable to load managed Component config'
+      })
+      throw error
+    }
   }, [update])
 
   const refreshEnvironmentComponents = useCallback(async (environmentId: string, signal?: AbortSignal) => {
@@ -2656,6 +2698,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
       },
       refreshPlatformComponents,
+    refreshComponentConfig,
       refreshEnvironmentComponents,
       refreshEnvironmentReleases,
       refreshAgents,
@@ -3692,7 +3735,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return result.reconcile_task_id
       },
     }
-  }, [state, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
+	}, [state, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

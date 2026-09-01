@@ -17,13 +17,22 @@ type readRepository interface {
 	ListPlatformComponents(context.Context, etcd.PageRequest) (etcd.Page[etcd.ComponentRecord], error)
 }
 
-type ReadService struct{ repository readRepository }
+// ManagedConfigProjector is the consumer-owned port for deriving generic
+// managed-file previews without teaching Component reads about implementations.
+type ManagedConfigProjector interface {
+	ProjectManagedConfigFiles(context.Context, core.Component) ([]apiTypes.ManagedConfigFile, error)
+}
 
-func NewReadService(repository readRepository) (*ReadService, error) {
-	if repository == nil {
-		return nil, errs.New(errs.KindInternal, "Component read repository is required")
+type ReadService struct {
+	repository             readRepository
+	managedConfigProjector ManagedConfigProjector
+}
+
+func NewReadService(repository readRepository, managedConfigProjector ManagedConfigProjector) (*ReadService, error) {
+	if repository == nil || managedConfigProjector == nil {
+		return nil, errs.New(errs.KindInternal, "Component read dependencies are required")
 	}
-	return &ReadService{repository: repository}, nil
+	return &ReadService{repository: repository, managedConfigProjector: managedConfigProjector}, nil
 }
 
 func (service *ReadService) ListComponents(
@@ -70,12 +79,28 @@ func (service *ReadService) GetComponent(ctx context.Context, id string) (apiTyp
 	return projectComponent(record.Record)
 }
 
-func (service *ReadService) GetComponentConfig(ctx context.Context, id string) (*apiTypes.ComponentConfig, error) {
-	component, err := service.GetComponent(ctx, id)
+func (service *ReadService) GetComponentConfig(
+	ctx context.Context,
+	id string,
+) (apiTypes.ComponentConfigResponse, error) {
+	record, err := service.repository.GetComponent(ctx, id)
 	if err != nil {
-		return nil, err
+		return apiTypes.ComponentConfigResponse{}, err
 	}
-	return component.Config, nil
+	component, err := etcd.ProjectComponentRecord(record.Record)
+	if err != nil {
+		return apiTypes.ComponentConfigResponse{}, err
+	}
+	managedFiles, err := service.managedConfigProjector.ProjectManagedConfigFiles(ctx, component)
+	if err != nil {
+		return apiTypes.ComponentConfigResponse{}, err
+	}
+	if managedFiles == nil {
+		managedFiles = []apiTypes.ManagedConfigFile{}
+	}
+	return apiTypes.ComponentConfigResponse{
+		Config: projectComponentConfig(component), ManagedFiles: managedFiles,
+	}, nil
 }
 
 func (service *ReadService) GetRouter(ctx context.Context, environmentID string) (apiTypes.Router, error) {

@@ -513,7 +513,16 @@ type ComponentConfig struct {
 // ComponentConfigResponse is the generator-safe response envelope for the
 // config singleton. Its nested config is null while disabled or unconfigured.
 type ComponentConfigResponse struct {
-	Config *ComponentConfig `json:"config"`
+	Config       *ComponentConfig    `json:"config"`
+	ManagedFiles []ManagedConfigFile `json:"managed_files"`
+}
+
+// ManagedConfigFile is a side-effect-free Controller projection of one
+// registered Component's authored template and current rendered content.
+type ManagedConfigFile struct {
+	Path     string `json:"path"`
+	Template string `json:"template"`
+	Rendered string `json:"rendered"`
 }
 
 type CaddyComponentConfig struct {

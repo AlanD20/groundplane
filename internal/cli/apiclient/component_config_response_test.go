@@ -16,7 +16,7 @@ func TestGeneratedComponentConfigResponsePreservesNullConfig(t *testing.T) {
 	response, err := generated.ParseComponentConfigShowResponse(&http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(`{"config":null}`)),
+		Body:       io.NopCloser(strings.NewReader(`{"config":null,"managed_files":[]}`)),
 	})
 	if err != nil {
 		t.Fatalf("ParseComponentConfigShowResponse() error = %v", err)
@@ -26,5 +26,8 @@ func TestGeneratedComponentConfigResponsePreservesNullConfig(t *testing.T) {
 	}
 	if response.JSON200.Config != nil {
 		t.Fatalf("generated response config = %#v, want nil", response.JSON200.Config)
+	}
+	if response.JSON200.ManagedFiles == nil || len(response.JSON200.ManagedFiles) != 0 {
+		t.Fatalf("generated response managed_files = %#v, want non-null empty array", response.JSON200.ManagedFiles)
 	}
 }

@@ -850,6 +850,16 @@ renderer validates the template and substitutes the single `{groundplane}`
 marker with Controller-owned directives. This does not add an
 implementation-named persistence route or Agent procedure.
 
+The existing generic Component read service owns a consumer-defined
+managed-config projector port. `GET /components/{id}/config` returns a typed,
+non-null managed-file array through that port; it contains the durable template
+and live rendered output but no planner or persistence record. The CoreDNS
+projector consumes only durable Component config, the already-persisted
+read-only host resolver baseline, the current host-resolution projection, and
+the registered renderer. It has no baseline capture/write capability, so GET
+cannot mutate state. Other implementations project an empty array. PUT remains
+the single configuration mutation and the Agent/protobuf contract is unchanged.
+
 Groundplane constructs a fixed-revision capability-scoped planning session.
 The planner returns immutable intents for existing Service, Route, Volume,
 Secret, Script, Backup, Network, Entry, Task, and component-specific

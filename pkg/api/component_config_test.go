@@ -113,6 +113,23 @@ func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T)
 	}
 }
 
+// Rationale: managed configuration previews are a generic read projection, so
+// every Component config response must preserve an array even when no provider
+// supplies a preview.
+func TestComponentConfigResponseAlwaysIncludesManagedFilesArray(t *testing.T) {
+	t.Parallel()
+	encoded, err := json.Marshal(ComponentConfigResponse{
+		Config:       nil,
+		ManagedFiles: []ManagedConfigFile{},
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if string(encoded) != `{"config":null,"managed_files":[]}` {
+		t.Fatalf("Marshal() = %s, want non-null managed_files", encoded)
+	}
+}
+
 // Rationale: existing and new credentials have different secret ownership
 // semantics; accepting unknown or mixed modes could expose write-only data.
 func TestCloudflareTunnelCredentialRequiresKnownExclusiveMode(t *testing.T) {

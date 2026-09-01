@@ -602,6 +602,12 @@ export type PlatformAgent = {
   inFlight: number
 }
 
+export type ManagedConfigFile = {
+  path: string
+  template: string
+  rendered: string
+}
+
 export type PlatformInfra = {
   project: string
   components: PlatformComponent[]

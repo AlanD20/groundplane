@@ -1726,6 +1726,7 @@ export interface components {
              */
             readonly $schema?: string;
             config: components["schemas"]["ComponentConfig"] | null;
+            managed_files: components["schemas"]["ManagedConfigFile"][];
         };
         ComponentProjection: {
             component_id: string;
@@ -2060,6 +2061,11 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             truncated: boolean;
+        };
+        ManagedConfigFile: {
+            path: string;
+            rendered: string;
+            template: string;
         };
         OptionalNullableString: {
             Present: boolean;

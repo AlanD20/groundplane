@@ -911,8 +911,9 @@ type ComponentConfigResponse struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ComponentConfigResponse.json
-	Schema *string          `json:"$schema,omitempty"`
-	Config *ComponentConfig `json:"config"`
+	Schema       *string             `json:"$schema,omitempty"`
+	Config       *ComponentConfig    `json:"config"`
+	ManagedFiles []ManagedConfigFile `json:"managed_files"`
 }
 
 // ComponentProjection defines model for ComponentProjection.
@@ -1273,6 +1274,13 @@ type LogEventSlot string
 
 // LogEventStream defines model for LogEvent.Stream.
 type LogEventStream string
+
+// ManagedConfigFile defines model for ManagedConfigFile.
+type ManagedConfigFile struct {
+	Path     string `json:"path"`
+	Rendered string `json:"rendered"`
+	Template string `json:"template"`
+}
 
 // OptionalNullableString defines model for OptionalNullableString.
 type OptionalNullableString struct {

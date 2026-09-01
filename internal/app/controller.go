@@ -319,11 +319,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component repository: %w", err)
 	}
-	componentReads, err := componentcapability.NewReadService(componentRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)
-	}
 	platformComponents, err := etcd.DefaultPlatformComponents(detectTailnetDelegationDefault())
 	if err != nil {
 		_ = store.Close()
@@ -332,6 +327,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if _, err := componentRecords.EnsurePlatformComponents(ctx, platformComponents); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: bootstrap platform Components: %w", err)
+	}
+	managedConfigProjector, err := newRegisteredCoreDNSManagedConfigProjector(componentRecords, componentRecords)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize managed Component config projection: %w", err)
+	}
+	componentReads, err := componentcapability.NewReadService(componentRecords, managedConfigProjector)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)
 	}
 	serviceReadRepository, err := newDurableServiceReadRepository(hierarchyRecords, serviceRecords)
 	if err != nil {

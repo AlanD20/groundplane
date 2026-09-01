@@ -4,12 +4,13 @@ import { useRequiredParams } from '@/lib/router'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
+  Copy,
   Network,
   Plus,
   RefreshCw,
   Save,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '@/lib/store'
 import { environmentPlatformIngress } from '@/lib/environment-platform-ingress'
 import { PageHeader } from '@/components/common/page-header'
@@ -28,8 +29,19 @@ const kindIcon: Record<string, React.ReactNode> = {
 
 export default function PlatformComponentPage() {
   const params = useRequiredParams('component')
-  const { platform, tenantProjects, platformComponentsLoading, platformComponentError, setComponentEnabled, updateComponentConfig, refreshPlatformComponents } = useStore()
+  const {
+    platform, tenantProjects, platformComponentsLoading, platformComponentError,
+    managedConfigFiles, managedConfigLoading, managedConfigError,
+    setComponentEnabled, updateComponentConfig, refreshPlatformComponents, refreshComponentConfig,
+  } = useStore()
   const component = platform.components.find((c) => c.kind === params.component)
+
+  useEffect(() => {
+    if (!component || component.kind !== 'coredns') return
+    const controller = new AbortController()
+    void refreshComponentConfig(component.id, controller.signal).catch(() => undefined)
+    return () => controller.abort()
+  }, [component, refreshComponentConfig])
 
   const { unavailable: environmentsWithoutComponentProjection } = environmentPlatformIngress(tenantProjects)
   const dnsConfig = platform.dns.upstream !== undefined && platform.dns.upstreamAuto !== undefined && platform.dns.tailnetDelegation !== undefined && platform.dns.forwarders !== undefined && platform.dns.corefileTemplate !== undefined
@@ -140,6 +152,10 @@ export default function PlatformComponentPage() {
           forwarders={editableDNSConfig.forwarders}
           enabled={platform.dns.enabled}
           configured={dnsConfig !== undefined}
+      managedFiles={managedConfigFiles}
+      managedConfigLoading={managedConfigLoading}
+      managedConfigError={managedConfigError}
+      onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
           onEnabled={async (enabled) => {
             await setComponentEnabled(component.id, enabled)
             await refreshPlatformComponents()
@@ -147,6 +163,7 @@ export default function PlatformComponentPage() {
           onTailnet={(tailnetDelegation) => replaceCoreDNSConfig(
             updateComponentConfig,
             refreshPlatformComponents,
+      refreshComponentConfig,
             component.id,
             editableDNSConfig,
             { tailnetDelegation },
@@ -154,6 +171,7 @@ export default function PlatformComponentPage() {
           onAddForwarder={(domain, upstream) => replaceCoreDNSConfig(
             updateComponentConfig,
             refreshPlatformComponents,
+      refreshComponentConfig,
             component.id,
             editableDNSConfig,
             { forwarders: [...editableDNSConfig.forwarders, { domain, upstream }] },
@@ -161,6 +179,7 @@ export default function PlatformComponentPage() {
           onRemoveForwarder={(index) => replaceCoreDNSConfig(
             updateComponentConfig,
             refreshPlatformComponents,
+      refreshComponentConfig,
             component.id,
             editableDNSConfig,
             { forwarders: editableDNSConfig.forwarders.filter((_, candidateIndex) => candidateIndex !== index) },
@@ -168,6 +187,7 @@ export default function PlatformComponentPage() {
           onSave={(upstream, upstreamAuto, corefileTemplate) => replaceCoreDNSConfig(
             updateComponentConfig,
             refreshPlatformComponents,
+      refreshComponentConfig,
             component.id,
             editableDNSConfig,
             { upstream, upstreamAuto, corefileTemplate },
@@ -196,6 +216,7 @@ type CoreDNSConfigUpdate = {
 async function replaceCoreDNSConfig(
   updateComponentConfig: ReturnType<typeof useStore>['updateComponentConfig'],
   refreshPlatformComponents: ReturnType<typeof useStore>['refreshPlatformComponents'],
+  refreshComponentConfig: ReturnType<typeof useStore>['refreshComponentConfig'],
   componentId: string,
   current: {
     upstream: string
@@ -218,6 +239,7 @@ async function replaceCoreDNSConfig(
     corefile_template: next.corefileTemplate,
   })
   await refreshPlatformComponents()
+  await refreshComponentConfig(componentId)
 }
 
 function resolverList(value: string): string[] {
@@ -232,6 +254,10 @@ function CoreDnsSettings({
   forwarders,
   enabled,
   configured,
+  managedFiles,
+  managedConfigLoading,
+  managedConfigError,
+  onRefreshManagedConfig,
   onEnabled,
   onTailnet,
   onAddForwarder,
@@ -245,6 +271,10 @@ function CoreDnsSettings({
   forwarders: { domain: string; upstream: string }[]
   enabled: boolean
   configured: boolean
+  managedFiles: ReturnType<typeof useStore>['managedConfigFiles']
+  managedConfigLoading: boolean
+  managedConfigError: string | null
+  onRefreshManagedConfig: () => Promise<unknown>
   onEnabled: (v: boolean) => Promise<void>
   onTailnet: (v: boolean) => Promise<void>
   onAddForwarder: (domain: string, upstream: string) => Promise<void>
@@ -258,6 +288,8 @@ function CoreDnsSettings({
   const [fwdUpstream, setFwdUpstream] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const managedCorefile = managedFiles.find((file) => file.path === '/etc/groundplane/coredns/Corefile')
 
   async function mutate(action: () => Promise<void>) {
     setSaving(true)
@@ -268,6 +300,16 @@ function CoreDnsSettings({
       setError(cause instanceof Error ? cause.message : 'Unable to update CoreDNS')
     } finally {
       setSaving(false)
+    }
+  }
+  async function copyRenderedCorefile() {
+    if (!managedCorefile) return
+    setError(null)
+    try {
+      await navigator.clipboard.writeText(managedCorefile.rendered)
+      setCopied(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to copy rendered Corefile')
     }
   }
   return (
@@ -328,7 +370,7 @@ function CoreDnsSettings({
           <Switch checked={tailnetDelegation} disabled={saving} onCheckedChange={(value) => void mutate(() => onTailnet(value))} />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="corefile-template">Corefile template</Label>
+          <Label htmlFor="corefile-template">Template</Label>
           <Textarea
             id="corefile-template"
             value={template}
@@ -340,6 +382,41 @@ function CoreDnsSettings({
             Include exactly one <span className="font-mono">{'{groundplane}'}</span> marker. The Controller replaces it with bind, hosts, forwarders, catch-all, and reload directives.
           </span>
         </div>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <Label htmlFor="rendered-corefile">Controller-rendered Corefile</Label>
+          <p className="text-xs text-muted-foreground">Derived live from durable config, the host resolver baseline, and current host resolution.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!managedCorefile || managedConfigLoading}
+          onClick={() => void copyRenderedCorefile()}
+        >
+          <Copy className="size-4" /> {copied ? 'Copied' : 'Copy'}
+        </Button>
+      </div>
+      {managedConfigLoading ? <p className="text-xs text-muted-foreground" role="status">Loading rendered Corefile…</p> : null}
+      {managedConfigError ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 px-3 py-2">
+          <p className="text-xs text-destructive" role="alert">{managedConfigError}</p>
+          <Button variant="outline" size="sm" onClick={() => void onRefreshManagedConfig()}>Retry</Button>
+        </div>
+      ) : null}
+      {!managedConfigLoading && !managedConfigError && managedCorefile ? (
+        <Textarea
+          id="rendered-corefile"
+          value={managedCorefile.rendered}
+          readOnly
+          className="min-h-[18rem] bg-muted/40 font-mono text-xs"
+          spellCheck={false}
+        />
+      ) : null}
+      {!managedConfigLoading && !managedConfigError && !managedCorefile ? (
+        <p className="text-xs text-muted-foreground">No managed file preview is available.</p>
+      ) : null}
+    </div>
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Domain forwarders</span>
           <span className="text-xs text-muted-foreground">
