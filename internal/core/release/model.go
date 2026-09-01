@@ -24,8 +24,9 @@ const (
 type OperationKind string
 
 const (
-	OperationDeploy   OperationKind = "deploy"
-	OperationRollback OperationKind = "rollback"
+	OperationDeploy         OperationKind = "deploy"
+	OperationRollback       OperationKind = "rollback"
+	OperationBlueprintApply OperationKind = "blueprint_apply"
 )
 
 type Strategy string
@@ -207,7 +208,8 @@ func ValidateIntent(value Intent) error {
 	} else if ids.Validate(ids.KindOperation, value.GroupOperationID) != nil || value.GroupMemberOrdinal == 0 || value.GroupMemberOrdinal > MaximumGroupMembers {
 		return invalid("release group identity or ordinal is invalid")
 	}
-	if value.OperationKind != OperationDeploy && value.OperationKind != OperationRollback {
+	if value.OperationKind != OperationDeploy && value.OperationKind != OperationRollback &&
+		value.OperationKind != OperationBlueprintApply {
 		return invalid("release operation kind is invalid")
 	}
 	if value.OperationKind == OperationRollback {

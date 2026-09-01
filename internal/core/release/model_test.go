@@ -83,6 +83,37 @@ func TestValidateIntentRejectsMutableStatusEraFieldsByConstruction(t *testing.T)
 	}
 }
 
+// Rationale: Blueprint reconciliation needs a distinct closed Release operation kind, while arbitrary kinds must remain invalid.
+func TestValidateIntentOperationKinds(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	intent := Intent{
+		ID: ids.NewAt(ids.KindDeployment, now, 1), EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
+		ServiceID: ids.NewAt(ids.KindService, now, 3), OperationID: ids.NewAt(ids.KindOperation, now, 4),
+		Image: "registry.invalid/app", Tag: "sha-123", Strategy: StrategyRecreate,
+		OnFailure: OnFailureSwitchBack, RenderInputID: ids.NewAt(ids.KindConfig, now, 5),
+		RenderInputDigest: strings.Repeat("a", 64), CreatedAt: now, Actor: "controller",
+		Workspace:         Workspace{Kind: WorkspaceTenant, TenantID: ids.NewAt(ids.KindTenant, now, 6), ProjectID: ids.NewAt(ids.KindProject, now, 7), EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2)},
+		OriginatingTaskID: ids.NewAt(ids.KindTask, now, 8),
+	}
+	for _, test := range []struct {
+		name    string
+		kind    OperationKind
+		wantErr bool
+	}{
+		{name: "blueprint apply", kind: OperationBlueprintApply},
+		{name: "unknown", kind: OperationKind("unknown"), wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			intent.OperationKind = test.kind
+			err := ValidateIntent(intent)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("ValidateIntent(%q) error = %v, wantErr %t", test.kind, err, test.wantErr)
+			}
+		})
+	}
+}
+
 func fixtureManifest(now time.Time) GroupManifest {
 	members := make([]GroupMember, 3)
 	for index := range members {
