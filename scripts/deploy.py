@@ -189,6 +189,7 @@ deploy_dir=$2
 version=$3
 source_agent_image=$4
 source_runner_image=$5
+listen_ip=$6
 
 deploy_id=${deploy_dir#/tmp/groundplane-deploy-}
 if test "$deploy_dir" != "/tmp/groundplane-deploy-$deploy_id" ||
@@ -228,7 +229,8 @@ mkdir -- "$deploy_dir"
 tar -xf - -C "$deploy_dir"
 trap - EXIT HUP INT TERM
 exec sh "$deploy_dir/remote-deploy.sh" \
-    "$setup" "$deploy_dir" "$version" "$source_agent_image" "$source_runner_image"
+    "$setup" "$deploy_dir" "$version" "$source_agent_image" "$source_runner_image" \
+    "$listen_ip"
 """
 
 REMOTE_INSTALL = r"""
@@ -238,6 +240,7 @@ deploy_dir=$1
 version=$2
 source_agent_image=$3
 source_runner_image=$4
+listen_ip=$5
 
 deploy_id=${deploy_dir#/tmp/groundplane-deploy-}
 if test "$deploy_dir" != "/tmp/groundplane-deploy-$deploy_id" ||
@@ -597,10 +600,40 @@ END {
     }
 }
 ' "$rendered_config" > "$rendered_runner_config"
-if ! cmp -s "$rendered_runner_config" /etc/groundplane/controller.yaml; then
+
+rendered_listen_config="$deploy_dir/controller.listen.yaml.rendered"
+awk -v endpoint="$listen_ip:8080" '
+BEGIN {
+    in_http = 0
+    saw_endpoint = 0
+    inserted = 0
+}
+$0 == "  http:" {
+    in_http = 1
+}
+in_http && $0 == "    - " endpoint {
+    saw_endpoint = 1
+}
+in_http && $0 != "  http:" && $0 !~ /^    - / && !inserted {
+    if (!saw_endpoint) {
+        print "    - " endpoint
+    }
+    inserted = 1
+    in_http = 0
+}
+{
+    print
+}
+END {
+    if (in_http && !saw_endpoint) {
+        print "    - " endpoint
+    }
+}
+' "$rendered_runner_config" > "$rendered_listen_config"
+if ! cmp -s "$rendered_listen_config" /etc/groundplane/controller.yaml; then
     runtime_changed=1
 fi
-install -m 0600 -o root -g root "$rendered_runner_config" /etc/groundplane/controller.yaml
+install -m 0600 -o root -g root "$rendered_listen_config" /etc/groundplane/controller.yaml
 
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/groundplane.conf
 if test "$runtime_changed" -eq 1; then
@@ -913,7 +946,11 @@ def parse_arguments() -> Deployment:
         description="Build and deploy Groundplane to an existing Ubuntu 24 host.",
     )
     parser.add_argument("--key", required=True, type=Path, help="SSH private key for root")
-    parser.add_argument("--ip", required=True, help="target host IP address")
+    parser.add_argument(
+        "--ip",
+        required=True,
+        help="target host IP address and explicit Controller LAN listener",
+    )
     parser.add_argument(
         "--setup",
         action="store_true",
@@ -1227,6 +1264,7 @@ def transfer_and_deploy(
             deployment.version,
             source_agent_image,
             source_runner_image,
+            deployment.ip.compressed,
         ],
     )
     command = [*deployment.ssh_base, remote_command]
