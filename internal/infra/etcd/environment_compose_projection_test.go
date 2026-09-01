@@ -12,6 +12,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestEnvironmentComposeProjectionRoundTripsLosslessDesiredTopology(t *testing.T) {
@@ -226,6 +228,101 @@ func TestEnvironmentComposeProjectionRejectsDuplicateGeneratedServiceOwnership(t
 		err, errs.New(errs.KindValidationFailed, ""),
 	) {
 		t.Fatalf("validateEnvironmentComposeProjection(duplicate owner) error = %v", err)
+	}
+}
+
+// Rationale: enabling Caddy adds a Component-owned runtime Service to the
+// normalized artifact without turning it into an authored or ordinary Service.
+func TestEnvironmentComposeProjectionValidatesGeneratedServiceArtifactCoverage(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 80)
+	authoredServiceID := ids.NewAt(ids.KindService, now, 81)
+	generatedServiceID := ids.NewAt(ids.KindService, now, 82)
+	caddy, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, now, 83), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
+		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
+			ZoneID: ids.NewAt(ids.KindNetwork, now, 84),
+		}},
+		GeneratedServices: []string{generatedServiceID},
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord(Caddy) error = %v", err)
+	}
+	tunnel, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, now, 85), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare,
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord(Tunnel) error = %v", err)
+	}
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 86), RenderGeneration: 1,
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID: environmentID,
+			Desired:       core.Service{ID: authoredServiceID, Name: "app", Image: "example/app:1"},
+		}},
+		Components: []ComponentRecord{caddy, tunnel},
+	})
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
+		t.Fatalf("unmarshal Compose artifact: %v", err)
+	}
+	artifact.Services = append(artifact.Services, &agentpb.ComposeService{
+		ServiceId: generatedServiceID, ComposeName: "caddy", OwnerComponentId: caddy.Desired.ID,
+	})
+	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal Compose artifact: %v", err)
+	}
+	encoded, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
+	}
+	decoded, err := decodeEnvironmentComposeProjection(encoded)
+	if err != nil || len(decoded.DesiredServices) != 1 ||
+		decoded.DesiredServices[0].Desired.ID != authoredServiceID {
+		t.Fatalf("decodeEnvironmentComposeProjection() = %#v, %v", decoded, err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*agentpb.ComposeArtifact)
+	}{
+		{name: "missing generated Service", mutate: func(value *agentpb.ComposeArtifact) {
+			value.Services = value.Services[:1]
+		}},
+		{name: "extra Service", mutate: func(value *agentpb.ComposeArtifact) {
+			value.Services = append(value.Services, &agentpb.ComposeService{
+				ServiceId: ids.NewAt(ids.KindService, now, 87), ComposeName: "extra",
+			})
+		}},
+		{name: "duplicate Service", mutate: func(value *agentpb.ComposeArtifact) {
+			value.Services[1] = &agentpb.ComposeService{ServiceId: authoredServiceID, ComposeName: "app"}
+		}},
+		{name: "wrong generated owner", mutate: func(value *agentpb.ComposeArtifact) {
+			value.Services[1].OwnerComponentId = tunnel.Desired.ID
+		}},
+		{name: "duplicate generated name", mutate: func(value *agentpb.ComposeArtifact) {
+			value.Services[1].ComposeName = "app"
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := cloneEnvironmentComposeProjection(projection)
+			mutated := proto.Clone(artifact).(*agentpb.ComposeArtifact)
+			test.mutate(mutated)
+			candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
+			if err != nil {
+				t.Fatalf("marshal mutated Compose artifact: %v", err)
+			}
+			if err := validateEnvironmentComposeProjection(candidate); !errors.Is(
+				err, errs.New(errs.KindValidationFailed, ""),
+			) {
+				t.Fatalf("validateEnvironmentComposeProjection() error = %v", err)
+			}
+		})
 	}
 }
 

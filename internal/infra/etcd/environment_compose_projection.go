@@ -427,13 +427,13 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentServiceVolumeMounts(projection); err != nil {
 		return err
 	}
+	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
+		return err
+	}
 	if err := validateEnvironmentProjectionArtifact(projection); err != nil {
 		return err
 	}
 	if err := validateEnvironmentRouteProjections(projection.EnvironmentID, projection.DesiredRoutes); err != nil {
-		return err
-	}
-	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
 		return err
 	}
 	return validateEnvironmentEntryProjection(projection.EnvironmentID, projection.Entries)
@@ -761,24 +761,50 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 	if subtle.ConstantTimeCompare(digest[:], artifact.GetYamlSha256()) != 1 {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact digest is invalid")
 	}
-	if len(artifact.GetServices()) != len(projection.DesiredServices) ||
-		len(artifact.GetVolumes()) != len(projection.Volumes) {
+	expectedServices := make(map[string]environmentArtifactServiceIdentity, len(projection.DesiredServices))
+	for _, service := range projection.DesiredServices {
+		expectedServices[service.Desired.ID] = environmentArtifactServiceIdentity{name: service.Desired.Name}
+	}
+	for _, component := range projection.Components {
+		if !component.Desired.Enabled {
+			continue
+		}
+		for _, serviceID := range component.Runtime.GeneratedServices {
+			if _, duplicate := expectedServices[serviceID]; duplicate {
+				return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service identity is duplicated")
+			}
+			expectedServices[serviceID] = environmentArtifactServiceIdentity{componentID: component.Desired.ID}
+		}
+	}
+	if len(artifact.GetServices()) != len(expectedServices) || len(artifact.GetVolumes()) != len(projection.Volumes) {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
 	}
 	services := make(map[string]string, len(artifact.GetServices()))
+	serviceNames := make(map[string]string, len(artifact.GetServices()))
 	for _, service := range artifact.GetServices() {
-		if service == nil {
+		if service == nil || service.GetComposeName() == "" {
 			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is invalid")
 		}
 		if _, duplicate := services[service.GetServiceId()]; duplicate {
 			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is duplicated")
 		}
-		services[service.GetServiceId()] = service.GetComposeName()
-	}
-	for _, service := range projection.DesiredServices {
-		if services[service.Desired.ID] != service.Desired.Name {
+		if _, duplicate := serviceNames[service.GetComposeName()]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is duplicated")
+		}
+		expected, covered := expectedServices[service.GetServiceId()]
+		if !covered {
+			return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
+		}
+		if (expected.name != "" && expected.name != service.GetComposeName()) ||
+			expected.componentID != service.GetOwnerComponentId() {
 			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service identity changed")
 		}
+		services[service.GetServiceId()] = service.GetComposeName()
+		serviceNames[service.GetComposeName()] = service.GetServiceId()
+		delete(expectedServices, service.GetServiceId())
+	}
+	if len(expectedServices) != 0 {
+		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
 	}
 	volumes := make(map[string]string, len(artifact.GetVolumes()))
 	for _, volume := range artifact.GetVolumes() {
@@ -797,6 +823,12 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 	}
 	return nil
 }
+
+type environmentArtifactServiceIdentity struct {
+	name        string
+	componentID string
+}
+
 func validateEnvironmentComposeProjectionAdvance(
 	previous EnvironmentComposeProjection,
 	hasPrevious bool,
