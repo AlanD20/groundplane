@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
@@ -20,6 +22,220 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
+
+type candidatePublicationRepository struct {
+	events           []string
+	taskPublications int
+	abandoned        []etcd.IdempotencyLocator
+}
+
+func (repository *candidatePublicationRepository) StageEnvironmentBlueprintRevision(
+	_ context.Context,
+	request etcd.EnvironmentBlueprintStageRequest,
+) (etcd.EnvironmentBlueprintSeal, error) {
+	projection, err := etcd.EncodeEnvironmentComposeProjectionStorage(request.Projection)
+	if err != nil {
+		return etcd.EnvironmentBlueprintSeal{}, err
+	}
+	repository.events = append(repository.events, "stage")
+	return etcd.EnvironmentBlueprintSeal{
+		EnvironmentID:        request.Claim.EnvironmentID,
+		RevisionID:           request.Claim.RevisionID,
+		SourceKind:           request.Claim.SourceKind,
+		RenderGeneration:     request.Claim.RenderGeneration,
+		ProjectionSchema:     request.Claim.ProjectionSchema,
+		BaselineHeadRevision: request.Claim.BaselineHeadRevision,
+		DependencyDigest:     request.DependencyDigest,
+		ProjectionBytes:      uint64(len(projection)),
+		ProjectionSHA256:     sha256.Sum256(projection),
+	}, nil
+}
+
+func (repository *candidatePublicationRepository) AbandonEnvironmentBlueprintStage(
+	_ context.Context,
+	claim etcd.EnvironmentBlueprintStageClaim,
+) error {
+	repository.events = append(repository.events, "abandon")
+	repository.abandoned = append(repository.abandoned, claim.Locator)
+	return nil
+}
+
+func (repository *candidatePublicationRepository) PublishEnvironmentBlueprintDesiredRevisionWithTask(
+	_ context.Context,
+	_ netip.Prefix,
+	_ string,
+	_ etcd.Versioned[etcd.ProjectRecord],
+	_ etcd.Versioned[etcd.EnvironmentRecord],
+	_ int64,
+	_ etcd.EnvironmentBlueprintStageClaim,
+	_ etcd.EnvironmentDesiredRevisionIdentity,
+	_ etcd.EnvironmentComposeProjection,
+	_ []etcd.EnvironmentBlueprintZoneChange,
+	_ []etcd.EnvironmentBlueprintServiceChange,
+	_ []etcd.EnvironmentBlueprintRouteChange,
+	_ etcd.ReleaseGroupBlueprintPreparedMutation,
+	_ etcd.ComponentTaskPreparation,
+	_ etcd.BlueprintAttachTaskPreparation,
+	task etcd.TaskRecord,
+	_ etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	repository.events = append(repository.events, "publish:"+task.ID)
+	repository.taskPublications++
+	return etcd.IdempotencyTransactionResult{}, nil
+}
+
+// Rationale: future Release-hook planning must observe a sealed candidate, while
+// Blueprint apply retains its single Task publication authority.
+func TestEnvironmentBlueprintApplyStagesCandidateProjectionBeforeReleaseHooksAndPublishesOneTask(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	taskID := ids.NewAt(ids.KindTask, now, 2)
+	serviceID := ids.NewAt(ids.KindService, now, 3)
+	yaml := []byte("services:\n  api:\n    image: example.invalid/api:1\n")
+	digest := sha256.Sum256(yaml)
+	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId:          ids.NewAt(ids.KindConfig, now, 4),
+		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:             environmentID,
+		ProjectName:         "candidate",
+		CanonicalYaml:       yaml,
+		YamlSha256:          digest[:],
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/candidate",
+		Services:            []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection := etcd.EnvironmentComposeProjection{
+		EnvironmentID:     environmentID,
+		RevisionID:        taskID,
+		RenderGeneration:  1,
+		ComposeArtifact:   artifact,
+		NormalizedCompose: []byte("services: {}\n"),
+		DesiredServices: []etcd.EnvironmentServiceProjection{{
+			EnvironmentID: environmentID,
+			Desired: core.Service{
+				ID: serviceID, Name: "api", Image: "example.invalid/api:1",
+				Strategy: core.StrategyRecreate, Replicas: 1,
+			},
+		}},
+	}
+	claim := etcd.EnvironmentBlueprintStageClaim{
+		EnvironmentID:    environmentID,
+		RevisionID:       taskID,
+		TaskID:           taskID,
+		SourceKind:       etcd.EnvironmentBlueprintSourceApply,
+		RenderGeneration: 1,
+		ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema,
+		CreatedAt:        now,
+	}
+	repository := &candidatePublicationRepository{}
+	staged, err := desiredrevision.Stage(ctx, repository, desiredrevision.StageInput{
+		Claim: claim, Projection: projection,
+	})
+	if err != nil {
+		t.Fatalf("desiredrevision.Stage() error = %v", err)
+	}
+	if staged.TaskID() != taskID || repository.taskPublications != 0 {
+		t.Fatalf("staged Task = %q, publications = %d", staged.TaskID(), repository.taskPublications)
+	}
+	repository.events = append(repository.events, "release-hooks")
+	if _, err := repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
+		ctx, netip.Prefix{}, "", etcd.Versioned[etcd.ProjectRecord]{},
+		etcd.Versioned[etcd.EnvironmentRecord]{}, 0, claim,
+		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: taskID},
+		projection, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
+		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{},
+		etcd.TaskRecord{ID: taskID}, etcd.IdempotencyMarker{},
+	); err != nil {
+		t.Fatalf("PublishEnvironmentBlueprintDesiredRevisionWithTask() error = %v", err)
+	}
+	wantEvents := []string{"stage", "release-hooks", "publish:" + taskID}
+	if !reflect.DeepEqual(repository.events, wantEvents) || repository.taskPublications != 1 {
+		t.Fatalf("events = %#v, publications = %d", repository.events, repository.taskPublications)
+	}
+}
+
+func TestEnvironmentBlueprintPostStagePreparationFailuresAbandonExactLocator(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	now := time.Date(2026, 9, 2, 9, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 51)
+	serviceID := ids.NewAt(ids.KindService, now, 52)
+	yaml := []byte("services:\n  api:\n    image: example.invalid/api:1\n")
+	digest := sha256.Sum256(yaml)
+	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId:          ids.NewAt(ids.KindConfig, now, 53),
+		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:             environmentID,
+		ProjectName:         "abandon-candidate",
+		CanonicalYaml:       yaml,
+		YamlSha256:          digest[:],
+		AuthorizedVolumeDir: "/var/lib/groundplane/vol/abandon-candidate",
+		Services:            []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failures := []string{"plan-build", "route-provider", "route-observation", "route-projection"}
+	for index, name := range failures {
+		t.Run(name, func(t *testing.T) {
+			taskID := ids.NewAt(ids.KindTask, now, int64(60+index))
+			locator := etcd.IdempotencyLocator{
+				ScopeKind: etcd.IdempotencyScopeEnvironment,
+				ScopeID:   environmentID,
+				Method:    "PUT",
+				Route:     environmentBlueprintRoute,
+				Key:       "post-stage-" + name,
+			}
+			claim := etcd.EnvironmentBlueprintStageClaim{
+				DescriptorID:     taskID,
+				EnvironmentID:    environmentID,
+				RevisionID:       taskID,
+				TaskID:           taskID,
+				Locator:          locator,
+				SourceKind:       etcd.EnvironmentBlueprintSourceApply,
+				RenderGeneration: 1,
+				ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema,
+				CreatedAt:        now,
+			}
+			projection := etcd.EnvironmentComposeProjection{
+				EnvironmentID:     environmentID,
+				RevisionID:        taskID,
+				RenderGeneration:  1,
+				ComposeArtifact:   artifact,
+				NormalizedCompose: []byte("services: {}\n"),
+				DesiredServices: []etcd.EnvironmentServiceProjection{{
+					EnvironmentID: environmentID,
+					Desired: core.Service{
+						ID: serviceID, Name: "api", Image: "example.invalid/api:1",
+						Strategy: core.StrategyRecreate, Replicas: 1,
+					},
+				}},
+			}
+			repository := &candidatePublicationRepository{}
+			staged, stageErr := desiredrevision.Stage(ctx, repository, desiredrevision.StageInput{
+				Claim: claim, Projection: projection,
+			})
+			if stageErr != nil {
+				t.Fatalf("desiredrevision.Stage() error = %v", stageErr)
+			}
+			cause := errors.New(name)
+			if abandonErr := desiredrevision.Abandon(ctx, repository, staged, cause); !errors.Is(abandonErr, cause) {
+				t.Fatalf("desiredrevision.Abandon() error = %v", abandonErr)
+			}
+			if len(repository.abandoned) != 1 || repository.abandoned[0] != locator ||
+				repository.taskPublications != 0 {
+				t.Fatalf(
+					"abandonment = %#v, publications = %d",
+					repository.abandoned, repository.taskPublications,
+				)
+			}
+		})
+	}
+}
 
 func TestEnvironmentBlueprintTopologyProjectionExcludesRuntimeAndObservation(t *testing.T) {
 	// Rationale: the sealed desired revision is assembled from validated

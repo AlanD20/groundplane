@@ -78,6 +78,7 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		etcd.EnvironmentBlueprintStageRequest,
 	) (etcd.EnvironmentBlueprintSeal, error)
+	AbandonEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaim) error
 	PublishEnvironmentBlueprintDesiredRevisionWithTask(
 		context.Context,
 		netip.Prefix,
@@ -232,6 +233,13 @@ func (repository *durableEnvironmentBlueprintRepository) StageEnvironmentBluepri
 	request etcd.EnvironmentBlueprintStageRequest,
 ) (etcd.EnvironmentBlueprintSeal, error) {
 	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
+}
+
+func (repository *durableEnvironmentBlueprintRepository) AbandonEnvironmentBlueprintStage(
+	ctx context.Context,
+	claim etcd.EnvironmentBlueprintStageClaim,
+) error {
+	return repository.desired.AbandonEnvironmentBlueprintStage(ctx, claim)
 }
 
 func (repository *durableEnvironmentBlueprintRepository) ListEntries(
@@ -931,76 +939,6 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	plan, err := controller.BuildPlan(controller.PlanBuildInput{
-		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: generation,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: environmentID,
-		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
-	})
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
-		service.componentCatalog,
-		componentEnvironment,
-		pinnedComponents,
-		componentPreparation.Intent.Candidates,
-		int64(generation),
-		generation,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	if routeProjection {
-		if routeProvider != nil {
-			provider := etcd.RouteProviderObservation{
-				ComponentID:      routeProvider.ComponentID,
-				DefinitionDigest: routeProvider.DefinitionDigest,
-				CatalogDigest:    routeProvider.CatalogDigest,
-				InputRevision:    routeProvider.InputRevision,
-				InputGeneration:  routeProvider.InputGeneration,
-			}
-			for index, change := range routeChanges {
-				change.Record, err = etcd.SetRouteObservation(change.Record, etcd.RouteObservation{
-					Status:            etcd.RouteObservedPending,
-					DesiredGeneration: change.Record.DesiredGeneration,
-					Provider:          provider,
-				})
-				if err != nil {
-					return etcd.IdempotencyResponse{}, err
-				}
-				routeChanges[index] = change
-			}
-		}
-		routeRecords := make([]etcd.RouteRecord, len(routeChanges))
-		for index, change := range routeChanges {
-			routeRecords[index] = change.Record
-		}
-		componentPreparation, err = etcd.WithComponentTaskRouteProjection(
-			componentPreparation, routeRecords, routeProvider,
-		)
-		if err != nil {
-			return etcd.IdempotencyResponse{}, err
-		}
-	}
-	params := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:         taskID,
-		etcd.TaskMaterializationEnvironmentParam:     environmentID,
-		controller.EnvironmentBlueprintArtifactParam: artifactID,
-	}
-	if len(managedVolumeIDs) != 0 {
-		params[controller.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
-		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
-	}
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
-		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: taskTarget,
-		Params: params,
-		Steps:  stepRecords, TimeoutSeconds: environmentBlueprintTimeoutSeconds,
-		Materializations: materializations,
-		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
-	}
 	dependencyPlans, err := buildEnvironmentDependencyPlans(renderIdentities.Services, serviceExtensions)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -1026,15 +964,90 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	)
 	projection = desiredrevision.WithDesiredTopology(projection, topologyZones, topologyServices, topologyRoutes)
 	projection.ServiceDependencyPlans = dependencyPlans.Clone()
-	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
+	stagedPublication, err := desiredrevision.Stage(ctx, service.repository, desiredrevision.StageInput{
+		Claim: claim, Blueprint: revision, Projection: projection,
+	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	plan, err := controller.BuildPlan(controller.PlanBuildInput{
+		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: generation,
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: environmentID,
+		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
+	})
+	if err != nil {
+		return etcd.IdempotencyResponse{}, desiredrevision.Abandon(ctx, service.repository, stagedPublication, err)
+	}
+	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
+		service.componentCatalog,
+		componentEnvironment,
+		pinnedComponents,
+		componentPreparation.Intent.Candidates,
+		int64(generation),
+		generation,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, desiredrevision.Abandon(ctx, service.repository, stagedPublication, err)
+	}
+	if routeProjection {
+		if routeProvider != nil {
+			provider := etcd.RouteProviderObservation{
+				ComponentID:      routeProvider.ComponentID,
+				DefinitionDigest: routeProvider.DefinitionDigest,
+				CatalogDigest:    routeProvider.CatalogDigest,
+				InputRevision:    routeProvider.InputRevision,
+				InputGeneration:  routeProvider.InputGeneration,
+			}
+			for index, change := range routeChanges {
+				change.Record, err = etcd.SetRouteObservation(change.Record, etcd.RouteObservation{
+					Status:            etcd.RouteObservedPending,
+					DesiredGeneration: change.Record.DesiredGeneration,
+					Provider:          provider,
+				})
+				if err != nil {
+					return etcd.IdempotencyResponse{}, desiredrevision.Abandon(
+						ctx, service.repository, stagedPublication, err,
+					)
+				}
+				routeChanges[index] = change
+			}
+		}
+		routeRecords := make([]etcd.RouteRecord, len(routeChanges))
+		for index, change := range routeChanges {
+			routeRecords[index] = change.Record
+		}
+		componentPreparation, err = etcd.WithComponentTaskRouteProjection(
+			componentPreparation, routeRecords, routeProvider,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, desiredrevision.Abandon(
+				ctx, service.repository, stagedPublication, err,
+			)
+		}
+	}
+	params := map[string]string{
+		etcd.EnvironmentDesiredRevisionParam:         taskID,
+		etcd.TaskMaterializationEnvironmentParam:     environmentID,
+		controller.EnvironmentBlueprintArtifactParam: artifactID,
+	}
+	if len(managedVolumeIDs) != 0 {
+		params[controller.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
+		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
+	}
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
+		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
+		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: taskTarget,
+		Params: params,
+		Steps:  stepRecords, TimeoutSeconds: environmentBlueprintTimeoutSeconds,
+		Materializations: materializations,
+		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	return desiredrevision.Publish(ctx, service.repository, service.idempotency, desiredrevision.PublishInput{
 		Project: project, Environment: environment, EnvironmentPool: service.environmentPool,
 		NetworkPool: desiredEnvironment.Record.NetworkPool, ExpectedHeadRevision: expectedHeadRevision,
-		Claim: claim, Evidence: evidence, Locator: locator, Blueprint: revision,
-		Projection: projection, DependencyDigest: projectionEvidence.DependencyDigest,
+		Staged: stagedPublication, Evidence: evidence, Locator: locator,
 		ZoneChanges: zoneChanges, ServiceChanges: serviceChanges, RouteChanges: routeChanges,
 		ReleaseGroupPreparation: releaseGroupPreparation,
 		ComponentPreparation:    componentPreparation,

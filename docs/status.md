@@ -268,10 +268,15 @@ absent or ambiguous serving identity completes the durable no-start path
 without guessing. Prepared Blueprint Script sources now use a bounded,
 restart-safe authority with exact existing-or-staged evidence, canonical owner
 and digest validation, atomic activation requirements, and idempotent
-abandonment of partial preparation. Blueprint apply still publishes Script
-desired state without executing hooks; candidate Release publication and
-staged Blueprint post-deploy execution are the next C21 lane required by the
-private clean-start topology.
+abandonment of partial preparation. Blueprint apply now seals its exact
+candidate projection before downstream planning and final publication consumes
+a locator-bound, copy-safe, single-use authority. Known prepublication failures
+abandon the exact staged claim with a bounded context independent of request
+cancellation; unknown publication outcomes remain unresolved until durable
+idempotency evidence identifies the winner. Blueprint apply still publishes
+Script desired state without executing hooks; candidate Release publication
+and staged Blueprint post-deploy execution are the next C21 lane required by
+the private clean-start topology.
 
 The desired-topology landing candidate cleanly replaces the transitional flat
 Zone and topology projection authority. Environment revisions now carry the
