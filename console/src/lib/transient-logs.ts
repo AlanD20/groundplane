@@ -37,13 +37,13 @@ export async function watchTransientLogs(
   while (true) {
     const result = await reader.read()
     pending += decoder.decode(result.value, { stream: !result.done })
-    let boundary = pending.indexOf('\n\n')
-    while (boundary >= 0) {
-      const frame = pending.slice(0, boundary).replaceAll('\r\n', '\n')
-      pending = pending.slice(boundary + 2)
+    let boundary = findEventBoundary(pending)
+    while (boundary !== null) {
+      const frame = pending.slice(0, boundary.index).replaceAll('\r\n', '\n')
+      pending = pending.slice(boundary.index + boundary.length)
       const lines = frame.split('\n')
       if (lines.every((line) => line.startsWith(':'))) {
-        boundary = pending.indexOf('\n\n')
+        boundary = findEventBoundary(pending)
         continue
       }
       if (lines[0] !== 'event: log' || lines.length !== 2 || !lines[1].startsWith('data: ')) {
@@ -51,13 +51,18 @@ export async function watchTransientLogs(
       }
       const event = parseLogEvent(JSON.parse(lines[1].slice(6)))
       onEvent(event)
-      boundary = pending.indexOf('\n\n')
+      boundary = findEventBoundary(pending)
     }
     if (result.done) {
       if (pending.trim() !== '') throw new Error('Controller ended with a partial log event')
       return
     }
   }
+}
+
+function findEventBoundary(value: string): { index: number; length: number } | null {
+  const match = /\r?\n\r?\n/.exec(value)
+  return match === null ? null : { index: match.index, length: match[0].length }
 }
 
 function parseLogEvent(value: unknown): TransientLogEvent {

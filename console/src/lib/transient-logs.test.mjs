@@ -41,3 +41,41 @@ test('watchTransientLogs ignores comment-only SSE frames between log events', as
     globalThis.fetch = originalFetch
   }
 })
+
+test('watchTransientLogs accepts CRLF-delimited log events', async () => {
+  const originalFetch = globalThis.fetch
+  const event = `event: log\r\ndata: ${JSON.stringify({
+    container_id: 'groundplane-api-blue-01',
+    container_name: 'groundplane-api-blue-01',
+    line: 'crlf-ready',
+    release_id: 'dep_01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    sequence: 1,
+    service_id: 'svc_01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    service_name: 'api',
+    slot: 'blue',
+    stream: 'stdout',
+    timestamp: '2026-08-30T12:00:00Z',
+    truncated: false,
+  })}\r\n\r\n`
+  globalThis.fetch = async () => new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(event))
+      controller.close()
+    },
+  }), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })
+
+  try {
+    const received = []
+    await watchTransientLogs(
+      { kind: 'service', id: 'svc_01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+      { tail: 1, follow: false, signal: new AbortController().signal },
+      (logEvent) => received.push(logEvent.line),
+    )
+    assert.deepEqual(received, ['crlf-ready'])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
